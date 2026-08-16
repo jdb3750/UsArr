@@ -1575,6 +1575,15 @@ treatment by media type.** Same slots, same positions, different values.
 - **A cell that renders one chip per related object caps at three plus `+N more`.** The Services
   screen's `Libraries` column is the live case: one Audiobookshelf feeding fifteen libraries makes
   that cell the tallest thing on the screen.
+- **An indexer-flag chip is a positive claim only. Its absence is rendered as nothing, never as a
+  negative.** No "not freeleech", no greyed-out chip, no empty slot holding the column open — a
+  release with no flags shows no flags. **The rule is stronger than "we might not have checked".**
+  Prowlarr's JSON surface derives the flags by exact equality on a volume factor, so a **partial
+  discount of 25% or 75% carries no flag at all** and is indistinguishable from a release at full
+  price on the surface UsArr reads. An absent `freeleech` chip therefore does not mean *not
+  freeleech*, and does not even mean *not discounted*. `reference/arr-apis.md` §7.2 owns that fact
+  and its primary sources — cite it, do not fork it. Nor is the chip actionable: there is no
+  per-request token instruction to attach a control to, which the same section establishes.
 - **A column picker labelled "Options", next to a control labelled "Filter".** Ship many columns,
   show few by default. This is verbatim the Prowlarr vocabulary — *"you can add or remove columns
   using the **Options** button, and you can sort and filter your results by either clicking on the

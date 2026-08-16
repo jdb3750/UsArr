@@ -2985,6 +2985,18 @@ one they are on until it matters:
    showing its protocol, indexer, category, size, seeders/age, and its derived tags. The primary
    action is **Grab**, which posts the release back to Prowlarr within the 30-minute cache window.
 
+   > 🚩 **An absent indexer flag means *unknown*, never *not set* — and the freeleech case is
+   > stronger than that.** The rule already held for protocol reasons: `indexerFlags` is populated
+   > for torrents only, so an empty array on a usenet release means *this field does not apply*
+   > ([`reference/tags.md`](./reference/tags.md)). **It now also holds within torrents.** Prowlarr's
+   > JSON surface derives its flags by exact equality on the volume factor — `0.0` is freeleech,
+   > `0.5` is halfleech — so a **partial promotion of 25% or 75% off arrives with no flag at all**
+   > and is byte-identical to a release at full price. So an absent `freeleech` flag does not even
+   > mean *not discounted*. Never render the absence as "full price", and never render it as a
+   > negative at all: the UI states what a flag says, and says nothing where there is none.
+   > `reference/arr-apis.md` §7.2 owns the API detail and the primary sources; do not restate them
+   > here, and re-read that section before changing this rule.
+
 They share one screen because they are one user intent. Which path is offered depends on what is
 configured — **and the v0.1 case is the free-text path standing alone, not accompanying anything.**
 With a library-bearing service *and* the request model (v0.2, §16), Add is primary and "search
