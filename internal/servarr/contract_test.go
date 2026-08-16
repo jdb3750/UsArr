@@ -5,9 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Contract tests against the VENDORED OpenAPI document.
@@ -240,6 +242,156 @@ func TestEndpointsExistInSpec(t *testing.T) {
 			for _, want := range tc.params {
 				if !have[want] {
 					t.Errorf("%s %s no longer accepts %q", tc.method, tc.path, want)
+				}
+			}
+		})
+	}
+}
+
+// resolve follows a $ref into components/schemas, once. The spec nests no deeper
+// for the properties this file checks.
+func (s openAPI) resolve(sch openAPISchema) openAPISchema {
+	if sch.Ref == "" {
+		return sch
+	}
+	name := strings.TrimPrefix(sch.Ref, "#/components/schemas/")
+	if target, ok := s.Components.Schemas[name]; ok {
+		return target
+	}
+	return sch
+}
+
+// TestOutboundBodiesAreSpecLegal validates every JSON body UsArr POSTs to an *Arr
+// against the schema the spec says that endpoint binds.
+//
+// THE RULE THIS ENFORCES: for these APIs, omitting a property and sending it empty
+// are different things. Prowlarr binds with System.Text.Json, so an absent property
+// leaves the C# member at its default, but a PRESENT property must convert to the
+// member's type. Go's zero values make "present and empty" the default for every
+// field without `omitempty`, which is how a grab body built by zeroing a
+// ReleaseResource came to send `"protocol":""` and take a 400 from every real
+// Prowlarr on every grab — while the hand-authored fixtures accepted it.
+//
+// The check is deliberately generic rather than a pin on `protocol`: the next
+// outbound body, and the Sonarr and Radarr write paths, fail the same way with a
+// different field name. Assert on the MARSHALLED BYTES; a zeroed struct field is
+// invisible until encoding/json has had it.
+func TestOutboundBodiesAreSpecLegal(t *testing.T) {
+	spec := loadSpec(t)
+
+	dcID := int32(4)
+	full := ReleaseResource{
+		GUID: "https://tracker.example/details/1234", IndexerID: 1, Title: "A.Release",
+		Protocol: ProtocolTorrent, PublishDate: time.Now().UTC(), DownloadClientID: &dcID,
+	}
+
+	for _, tc := range []struct {
+		name, endpoint, schema string
+		body                   any
+	}{
+		{
+			name: "grab", endpoint: "POST /api/v1/search", schema: "ReleaseResource",
+			body: full.GrabBody(),
+		},
+		{
+			// The minimum a caller can hand us: every optional field at its zero
+			// value. This is the case the live bug was in.
+			name: "grab/zero-valued", endpoint: "POST /api/v1/search", schema: "ReleaseResource",
+			body: ReleaseResource{GUID: "g", IndexerID: 1}.GrabBody(),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			schema, ok := spec.Components.Schemas[tc.schema]
+			if !ok {
+				t.Fatalf("%s is not in the vendored spec", tc.schema)
+			}
+			raw, err := json.Marshal(tc.body)
+			if err != nil {
+				t.Fatalf("marshalling the %s body: %v", tc.name, err)
+			}
+			var got map[string]any
+			if err := json.Unmarshal(raw, &got); err != nil {
+				t.Fatalf("re-decoding the %s body: %v", tc.name, err)
+			}
+
+			for prop, v := range got {
+				declared, ok := schema.Properties[prop]
+				if !ok {
+					t.Errorf("%s sends %q, which %s does not declare: the binder will ignore it at best",
+						tc.endpoint, prop, tc.schema)
+					continue
+				}
+				resolved := spec.resolve(declared)
+
+				if len(resolved.Enum) > 0 {
+					s, isString := v.(string)
+					if !isString || !slices.Contains(resolved.Enum, s) {
+						t.Errorf("%s sends %s=%#v, which is not one of %v — omit the field instead of "+
+							"sending a zero value; the converter rejects the empty string rather than "+
+							"treating it as absent (body: %s)",
+							tc.endpoint, prop, v, resolved.Enum, raw)
+					}
+				}
+
+				if resolved.Format == "date-time" {
+					s, isString := v.(string)
+					if !isString {
+						t.Errorf("%s sends %s=%#v for a date-time property", tc.endpoint, prop, v)
+						continue
+					}
+					ts, err := time.Parse(time.RFC3339, s)
+					if err != nil {
+						t.Errorf("%s sends %s=%q, which is not a bindable date-time: %v", tc.endpoint, prop, s, err)
+						continue
+					}
+					if ts.IsZero() {
+						t.Errorf("%s sends %s=%q — Go's zero time, marshalled because the field lacks "+
+							"omitempty. Omit it rather than asserting the release was published in year 1.",
+							tc.endpoint, prop, s)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestEnumFieldsCannotMarshalAsEmpty is the static half of the rule
+// TestOutboundBodiesAreSpecLegal enforces dynamically.
+//
+// The body is model-bound to a TYPED resource before the handler runs, so a field
+// the handler never reads can still fail the whole request — which is precisely
+// how a grab that only needed guid, indexerId and downloadClientId died on
+// `"protocol":""`. Every enum-kinded field must therefore be unable to marshal as
+// the empty string, whether or not anything sends it today: IndexerResource and
+// DownloadClientResource are read-only in v0.1, and the first PUT added to either
+// would otherwise ship the same 400 again under a different field name.
+func TestEnumFieldsCannotMarshalAsEmpty(t *testing.T) {
+	enumKinds := map[reflect.Type]bool{
+		reflect.TypeOf(DownloadProtocol("")): true,
+		reflect.TypeOf(IndexerPrivacy("")):   true,
+	}
+
+	for _, typ := range []reflect.Type{
+		reflect.TypeOf(ReleaseResource{}),
+		reflect.TypeOf(IndexerResource{}),
+		reflect.TypeOf(DownloadClientResource{}),
+		reflect.TypeOf(GrabRequest{}),
+	} {
+		t.Run(typ.Name(), func(t *testing.T) {
+			for i := range typ.NumField() {
+				f := typ.Field(i)
+				if !enumKinds[f.Type] {
+					continue
+				}
+				tag := f.Tag.Get("json")
+				if tag == "-" {
+					continue
+				}
+				if !slices.Contains(strings.Split(tag, ",")[1:], "omitempty") {
+					t.Errorf("%s.%s is an enum with `json:%q`: a zero value marshals as \"\", which "+
+						"System.Text.Json rejects rather than treating as absent. Add omitempty, or "+
+						"drop the field from the type that builds the request body.",
+						typ.Name(), f.Name, tag)
 				}
 			}
 		})

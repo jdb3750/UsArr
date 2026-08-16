@@ -2,6 +2,7 @@ package servarr
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -269,12 +270,29 @@ func TestSanitizeReleaseDropsTheEmbeddedAPIKey(t *testing.T) {
 	}
 
 	// GrabBody is what actually goes back over the wire, and it carries neither.
+	//
+	// Asserted on the MARSHALLED BYTES, not on the struct: the bug this pins was
+	// invisible at the struct level (a zeroed field looks like "not set") and only
+	// existed once encoding/json turned it into `"protocol":""`.
 	body := rel.GrabBody()
-	if body.DownloadURL != nil || body.MagnetURL != nil || body.FileName != "" {
-		t.Error("GrabBody must send only guid, indexerId and downloadClientId")
-	}
 	if body.GUID != rel.GUID || body.IndexerID != rel.IndexerID {
 		t.Error("GrabBody dropped a field grab validation requires")
+	}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshalling the grab body: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("re-decoding the grab body: %v", err)
+	}
+	// Prowlarr reads exactly these three. Anything else on the wire is at best
+	// noise and at worst a value its model binder rejects.
+	allowed := map[string]bool{"guid": true, "indexerId": true, "downloadClientId": true}
+	for k := range got {
+		if !allowed[k] {
+			t.Errorf("the grab body sends %q; Prowlarr reads only guid, indexerId and downloadClientId (got %s)", k, raw)
+		}
 	}
 }
 

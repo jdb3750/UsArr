@@ -139,30 +139,34 @@ type IndexerCapabilityResource struct {
 // Status is declared on this resource but is null in practice; read blocked
 // indexers from GET /api/v1/indexerstatus instead.
 type IndexerResource struct {
-	ID                 int32                     `json:"id"`
-	Name               string                    `json:"name"`
-	Fields             []Field                   `json:"fields,omitempty"` // CREDENTIALS — never serve to a client
-	ImplementationName string                    `json:"implementationName,omitempty"`
-	Implementation     string                    `json:"implementation,omitempty"`
-	ConfigContract     string                    `json:"configContract,omitempty"`
-	InfoLink           string                    `json:"infoLink,omitempty"`
-	Tags               []int32                   `json:"tags,omitempty"`
-	Presets            []IndexerResource         `json:"presets,omitempty"`
-	IndexerUrls        []string                  `json:"indexerUrls,omitempty"`
-	DefinitionName     string                    `json:"definitionName,omitempty"`
-	Description        string                    `json:"description,omitempty"`
-	Language           string                    `json:"language,omitempty"`
-	Encoding           string                    `json:"encoding,omitempty"`
-	Enable             bool                      `json:"enable"`
-	Redirect           bool                      `json:"redirect"`
-	SupportsRSS        bool                      `json:"supportsRss"`
-	SupportsSearch     bool                      `json:"supportsSearch"`
-	SupportsRedirect   bool                      `json:"supportsRedirect"`
-	SupportsPagination bool                      `json:"supportsPagination"`
-	AppProfileID       int32                     `json:"appProfileId"`
-	Protocol           DownloadProtocol          `json:"protocol"`
-	Privacy            IndexerPrivacy            `json:"privacy"`
-	Capabilities       IndexerCapabilityResource `json:"capabilities"`
+	ID                 int32             `json:"id"`
+	Name               string            `json:"name"`
+	Fields             []Field           `json:"fields,omitempty"` // CREDENTIALS — never serve to a client
+	ImplementationName string            `json:"implementationName,omitempty"`
+	Implementation     string            `json:"implementation,omitempty"`
+	ConfigContract     string            `json:"configContract,omitempty"`
+	InfoLink           string            `json:"infoLink,omitempty"`
+	Tags               []int32           `json:"tags,omitempty"`
+	Presets            []IndexerResource `json:"presets,omitempty"`
+	IndexerUrls        []string          `json:"indexerUrls,omitempty"`
+	DefinitionName     string            `json:"definitionName,omitempty"`
+	Description        string            `json:"description,omitempty"`
+	Language           string            `json:"language,omitempty"`
+	Encoding           string            `json:"encoding,omitempty"`
+	Enable             bool              `json:"enable"`
+	Redirect           bool              `json:"redirect"`
+	SupportsRSS        bool              `json:"supportsRss"`
+	SupportsSearch     bool              `json:"supportsSearch"`
+	SupportsRedirect   bool              `json:"supportsRedirect"`
+	SupportsPagination bool              `json:"supportsPagination"`
+	AppProfileID       int32             `json:"appProfileId"`
+	// Protocol and Privacy carry omitempty for the write path, not for this one:
+	// see GrabRequest. Both are C# enums, and an enum that marshals as "" is a 400
+	// from the model binder rather than a synonym for absent. Read-only today; the
+	// tags cost nothing now and are a live bug the day a PUT is added.
+	Protocol     DownloadProtocol          `json:"protocol,omitempty"`
+	Privacy      IndexerPrivacy            `json:"privacy,omitempty"`
+	Capabilities IndexerCapabilityResource `json:"capabilities"`
 	// Priority is 1-50 and LOWER WINS. It is the tiebreak Prowlarr itself uses when
 	// deduplicating results by guid across indexers, and UsArr matches that rule.
 	Priority         int32                  `json:"priority"`
@@ -209,7 +213,8 @@ type DownloadClientResource struct {
 	Tags               []int32                  `json:"tags,omitempty"`
 	Presets            []DownloadClientResource `json:"presets,omitempty"`
 	Enable             bool                     `json:"enable"`
-	Protocol           DownloadProtocol         `json:"protocol"`
+	// omitempty for the same reason as IndexerResource.Protocol.
+	Protocol           DownloadProtocol         `json:"protocol,omitempty"`
 	Priority           int32                    `json:"priority"`
 	Categories         []DownloadClientCategory `json:"categories,omitempty"`
 	SupportsCategories bool                     `json:"supportsCategories"`
@@ -286,7 +291,12 @@ type ReleaseResource struct {
 	Seeders  *int32  `json:"seeders,omitempty"`
 	Leechers *int32  `json:"leechers,omitempty"`
 
-	Protocol DownloadProtocol `json:"protocol"`
+	// omitempty because a DownloadProtocol that marshals as "" is rejected by any
+	// *Arr model binder. ReleaseResource is no longer an outbound body type — see
+	// GrabRequest — but it IS marshalled onto the persistence path, and the rule is
+	// worth applying to every enum-kinded field rather than to the ones that
+	// currently happen to leave the process.
+	Protocol DownloadProtocol `json:"protocol,omitempty"`
 
 	// FileName is readOnly/computed upstream. Never send it back — hence the
 	// omitempty and the fact that GrabBody clears it.
@@ -297,15 +307,48 @@ type ReleaseResource struct {
 	DownloadClientID *int32 `json:"downloadClientId,omitempty"`
 }
 
-// GrabBody returns the minimal, safe body for POST /api/v1/search.
+// GrabRequest is the body of POST /api/v1/search.
 //
-// Grab validation requires IndexerID > 0 and a non-empty GUID; everything else in
-// the body is ignored EXCEPT DownloadClientID. The handler then looks the release
-// up in its own in-process cache keyed "{indexerId}_{guid}" — so sending the
-// whole resource back buys nothing and would echo the embedded API key back over
-// the wire in DownloadURL/MagnetURL for no reason.
-func (r ReleaseResource) GrabBody() ReleaseResource {
-	return ReleaseResource{
+// It is a SEPARATE TYPE from ReleaseResource, and that is the whole point.
+//
+// OMITTING A FIELD AND SENDING IT EMPTY ARE DIFFERENT THINGS to these APIs, and
+// Go's zero values make "send it empty" the default. Prowlarr binds the body with
+// System.Text.Json: an absent property leaves the C# member at its default and is
+// fine, but a present property must be convertible to the member's type. `protocol`
+// is the DownloadProtocol enum, whose converter accepts only "unknown", "usenet",
+// "torrent" (or the integer) — an empty string is a hard 400, not a synonym for
+// absent.
+//
+// Building this body by zeroing a ReleaseResource emitted `"protocol":""` (plus
+// nine other fields Prowlarr never reads) and every grab failed with:
+//
+//	400 One or more validation errors occurred.: $.protocol The JSON value could
+//	not be converted to NzbDrone.Core.Indexers.DownloadProtocol.
+//	Path: $.protocol | LineNumber: 0 | BytePositionInLine: 202.
+//
+// A field-by-field `omitempty` pass would have fixed that one field while leaving
+// the next added field one missing tag away from the same 400 — and would have
+// changed how ReleaseResource marshals on the persistence path, which is a
+// different contract. A struct that can only express what the endpoint reads
+// cannot regress that way.
+//
+// Grab validation requires IndexerID > 0 and a non-empty GUID; the ONLY other
+// field the handler reads is DownloadClientID. Everything else about the release
+// comes from Prowlarr's own in-process cache, keyed "{indexerId}_{guid}" — so
+// sending the whole resource back buys nothing and would echo the embedded admin
+// API key over the wire in DownloadURL/MagnetURL for no reason.
+type GrabRequest struct {
+	GUID      string `json:"guid"`
+	IndexerID int32  `json:"indexerId"`
+
+	// DownloadClientID is a pointer so "Prowlarr, pick by protocol" (absent) stays
+	// distinguishable from client id 0. omitempty on a *int32 drops only nil.
+	DownloadClientID *int32 `json:"downloadClientId,omitempty"`
+}
+
+// GrabBody returns the minimal, safe body for POST /api/v1/search.
+func (r ReleaseResource) GrabBody() GrabRequest {
+	return GrabRequest{
 		GUID:             r.GUID,
 		IndexerID:        r.IndexerID,
 		DownloadClientID: r.DownloadClientID,

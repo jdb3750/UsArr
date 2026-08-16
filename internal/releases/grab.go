@@ -249,6 +249,13 @@ func (s *Service) grabError(err error) error {
 		return fmt.Errorf("%w: enable a matching download client in Prowlarr", ErrNoDownloadClient)
 	case errors.Is(err, servarr.ErrNotFound):
 		return ErrGrabCacheMiss
+	case errors.Is(err, servarr.ErrValidation):
+		// A 400 on a grab is UsArr's fault, not Prowlarr's: the body is built
+		// entirely server-side from a stored release, so nothing the user typed
+		// can reach it. Keep the upstream text — it names the property — but
+		// classify it so the caller does not report a healthy Prowlarr as a bad
+		// gateway. See ErrRequestRejected.
+		return fmt.Errorf("%w: %w", ErrRequestRejected, err)
 	}
 	return err
 }

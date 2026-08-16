@@ -37,4 +37,15 @@ var (
 
 	// ErrInvalidQuery is a client-side rejection before anything leaves the process.
 	ErrInvalidQuery = errors.New("releases: invalid query")
+
+	// ErrRequestRejected means the *Arr refused the request UsArr constructed —
+	// a 400 from its model binder or its validators.
+	//
+	// This is NOT an upstream failure and must not be reported as one. The service
+	// is up, the credential works, the user did nothing wrong: UsArr sent a body
+	// the other end would not bind. Mapping it to 502 tells the user their Prowlarr
+	// is broken and offers them a "Test connection" button for a connection that is
+	// working, which sends them looking in the one place the fault is not. That is
+	// what happened when the grab body carried `"protocol":""`.
+	ErrRequestRejected = errors.New("releases: the service rejected the request UsArr sent")
 )

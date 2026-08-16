@@ -188,6 +188,64 @@ when a query limit was hit, and upstream 429s surface only as generic connection
 Also: `posterUrl` on `ReleaseResource` is an **indexer-supplied URL from a response body** — the
 derived SSRF class (security.md §2), not a provider URL and not an admin-configured one.
 
+### 7.1 Outbound bodies: omitted and empty are different, and Go defaults to empty
+
+**The rule, before you write any request body to an \*Arr: build it from a type that can only
+express what the endpoint reads. Never by zeroing out a response type.**
+
+Every \*Arr binds request bodies with System.Text.Json, **into the fully typed resource, before the
+handler runs**. So the fields the handler reads are not the fields that have to be valid: *every*
+property you send is type-checked, including ones the endpoint ignores. An **absent** property
+leaves the C# member at its default and is accepted. A **present** property must convert to that
+member's type — and for an enum, a `DateTime`, or any other non-string member, the Go zero value
+does not convert. Go marshals every field without `omitempty`, so *sending it empty is what happens
+unless you deliberately prevent it*. That makes each such field a latent 400, and the failure mode
+is total: not a degraded result, every call rejected.
+
+This is not a Prowlarr quirk. The same shape is waiting on the Sonarr and Radarr write paths and on
+every catalogue source added later, with a different field name each time and the same cause.
+
+**Worked example — the grab that failed on every release (2026-08-16).** `GrabBody()` returned a
+`ReleaseResource` carrying only `guid`, `indexerId` and `downloadClientId`, which marshalled to
+**thirteen** properties. Prowlarr reads three. Of the ten it does not read:
+
+- **`"protocol":""` — fatal.** `DownloadProtocol` accepts `unknown`, `usenet`, `torrent` (or the
+  integer ordinal). The empty string is not a member name and is **rejected outright, not treated
+  as absent**: `400 One or more validation errors occurred. — $.protocol The JSON value could not
+  be converted to NzbDrone.Core.Indexers.DownloadProtocol. Path: $.protocol | LineNumber: 0 |
+  BytePositionInLine: 202.` The byte position lands on the opening quote of the empty value, which
+  is how a body this small gets a two-hundred-something offset.
+- **`"publishDate":"0001-01-01T00:00:00Z"` — bindable, and a lie.** Go's zero time parses as ISO
+  8601, so it binds *(inference: not observed failing against a live instance)* — it survived only
+  because Prowlarr ignores the field on this endpoint. On an endpoint that stores what it is sent,
+  the same field writes year 1 to the database and nothing errors.
+- The other eight were zero-valued numbers: harmless here, noise on the wire, and one schema change
+  away from being neither.
+
+So: one field rejected, one field wrong-but-accepted, eight riding along — and because binding is
+over the whole typed resource, the `omitempty` that silences the first one is not the fix.
+`GrabRequest` (`internal/servarr/resources.go`) is a three-field type that cannot carry a fourth.
+
+Three guards keep the class closed, none of which the old suite had:
+
+- `TestOutboundBodiesAreSpecLegal` (`internal/servarr/contract_test.go`) validates the **marshalled
+  bytes** of every outbound body against the vendored schema — enum membership, date-time
+  bindability, undeclared properties. A zeroed struct field is invisible until `encoding/json` has
+  had it, which is why the old `GrabBody` test passed: it asserted on Go fields and never marshalled.
+- `TestEnumFieldsCannotMarshalAsEmpty` requires `omitempty` on every enum-kinded field of every
+  resource, read-only ones included. `IndexerResource.Protocol`, `IndexerResource.Privacy` and
+  `DownloadClientResource.Protocol` were all bare; they are GET-only in v0.1, so they were not a
+  live bug, and they would have become one on the first PUT.
+- The fake Prowlarr in `cmd/usarr` now **model-binds** the grab body and returns ASP.NET's
+  `ValidationProblemDetails`. The old fixture accepted whatever it was sent, which is the actual
+  reason this reached a user: a test double that validates nothing turns an unshippable bug into a
+  green suite. Reverting the fix makes the end-to-end test fail with Joe's error verbatim, byte
+  position included.
+
+**A 400 from an \*Arr on a body UsArr constructed is UsArr's bug, not the upstream's**, and must not
+be reported as a bad gateway: the service answered correctly, and 502 sends the user to debug the
+one component that is working. See `releases.ErrRequestRejected`.
+
 ---
 
 ## 8. Newznab / Torznab categories

@@ -165,6 +165,13 @@ func (f *fakeClient) Search(ctx context.Context, req servarr.SearchRequest) ([]s
 	return f.searchByIndexer[id], nil
 }
 
+// Grab stands in for the client at the Go-interface boundary, so it sees the
+// ReleaseResource and NEVER the JSON body — GrabBody and encoding/json both run
+// inside the real client, below this seam. It therefore cannot catch a body that
+// marshals to something an *Arr rejects, and must not be assumed to: that is
+// covered at the boundary where the body is actually built, by
+// servarr.TestOutboundBodiesAreSpecLegal and, end to end, by the fake Prowlarr's
+// model binding in cmd/usarr.
 func (f *fakeClient) Grab(_ context.Context, rel servarr.ReleaseResource) (servarr.ReleaseResource, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -383,6 +383,48 @@ func TestGrabMapsUpstreamNoDownloadClientError(t *testing.T) {
 	}
 }
 
+// TestGrabClassifiesAValidationRejectionAsOurBug pins whose fault a 400 is.
+//
+// Nothing a user types reaches the grab body — it is built server-side from a
+// stored release — so a 400 from the model binder is always UsArr's own defect.
+// Reporting it as a bad gateway (which is what happened when the body carried
+// `"protocol":""`) blames a Prowlarr that answered correctly and offers a
+// "Test connection" button for a connection that works.
+func TestGrabClassifiesAValidationRejectionAsOurBug(t *testing.T) {
+	now := time.Unix(1_755_000_000, 0).UTC()
+	store := newFakeStore()
+	rel := release("g1", "A", 1, "Alpha", servarr.ProtocolTorrent, 2000)
+	id := storedCandidate(t, store, rel, now)
+
+	c := &fakeClient{
+		clients: enabledClients(),
+		grabResponses: []error{&servarr.APIError{
+			Op: "Grab", Method: "POST", Path: "/api/v1/search", Status: 400, Err: servarr.ErrValidation,
+			Message: "One or more validation errors occurred.",
+			Validation: []servarr.ValidationFailure{{
+				PropertyName: "$.protocol",
+				ErrorMessage: "The JSON value could not be converted to NzbDrone.Core.Indexers.DownloadProtocol.",
+			}},
+		}},
+	}
+	svc, err := NewService(Config{
+		InstanceID: testInstanceID, Client: c, Store: store,
+		Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	_, err = svc.Grab(context.Background(), ownerScope, id)
+	if !errors.Is(err, ErrRequestRejected) {
+		t.Fatalf("err = %v, want ErrRequestRejected", err)
+	}
+	// The upstream text survives: it names the property, which is the only part
+	// of the message that says where to look.
+	if !strings.Contains(err.Error(), "$.protocol") {
+		t.Errorf("the upstream detail was dropped: %v", err)
+	}
+}
+
 func TestGrabEnforcesTheAccessScope(t *testing.T) {
 	now := time.Unix(1_755_000_000, 0).UTC()
 	store := newFakeStore()
