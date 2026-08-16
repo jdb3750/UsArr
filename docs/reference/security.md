@@ -311,6 +311,30 @@ UsArr's own inbound URLs — which is exactly where the northbound credential li
 - **Recommend TLS for the OpenSubsonic and OPDS surfaces** (tsnet certificates or a proxy) and warn
   that plain HTTP exposes the credential on every request.
 
+> 🚩 **A query-parameter deny-list plus two headers does not cover two secret locations that
+> genuinely exist southbound (added 2026-08-16, from the comics research). Both are one-line
+> additions now and expensive to discover from a leaked support bundle later.**
+>
+> 1. **Secrets in a response *body*.** **Mylar3's `listProviders` command returns its configured
+>    indexer API keys in the response body.** A deny-list over the request URL never sees them, and
+>    UsArr logs upstream response bodies on error by design — §17.3's "Problem" column is **verbatim
+>    upstream text** by requirement. So the redaction middleware must also run over **upstream
+>    response bodies before they are logged, stored in `sync_report`, shown in the Services column or
+>    put in a support bundle**, keyed on the field names a provider declares as secret. This is the
+>    same class as `Field.privacy` and must not be left to the request path alone.
+> 2. **Secrets in a URL *path segment*.** **Kavita carries its API key in the path**, not the query
+>    string: `/api/Opds/{apiKey}/…`, and the same for its KOReader routes. A query-parameter
+>    deny-list catches nothing, and the key then lands in proxy logs, browser history and
+>    `Referer` headers. **Redaction must operate on the path as well as the query**, using each
+>    provider's declared credential placement rather than a fixed parameter list — and UsArr must
+>    **never** copy this pattern on its own surfaces (its OPDS credential is HTTP Basic, and its
+>    OpenSubsonic key is a query parameter the spec fixes).
+>
+> Related, and already covered correctly by the existing rules — noted because it is a live example
+> of the class the earlier threat model omitted: **Kavita exposes `GET /api/Image/web-link?url=…`**,
+> an image proxy taking an arbitrary URL. Any cover URL UsArr follows from a Kavita response is
+> origin class **`derived`** (§2) and is allowlisted to Kavita's own resolved host.
+
 ---
 
 ## 6. Sessions, CSRF, rate limiting, audit

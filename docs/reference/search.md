@@ -55,17 +55,22 @@ zero-results screen says so rather than leaving the user guessing.
 movie, series, artist, album, book, comic, game
 ```
 
-`season`, `episode` and `track` are **excluded**. The reference library is ~400k episode rows
+`season`, `episode`, `track` and **`comic_issue`** are **excluded**. The reference library is ~400k episode rows
 against ~13k top-level works; indexing episode titles means a corpus of "Pilot", "Part One" and
 "The Beginning" swamps every query, and the `title_idf` penalty was tuned for short *movie* titles,
 not for that. Episodes and tracks are reachable by **scoped search from within a parent's detail
 view**, which queries `work` by `parent_work_id` directly and never touches FTS.
 
-CI asserts `SELECT COUNT(*) FROM search_doc WHERE kind IN ('season','episode','track')` is 0.
+A large manga library does to the corpus with chapter titles exactly what episode titles do
+(ADR-0030), which is why `comic_issue` is a kind at all.
 
-**Permission filtering happens in the join, not after it.** `search_doc.instance_scope` carries the
-instances a row is visible through; the fusion query joins against the caller's access scope
-(ARCHITECTURE §1.3 rule 2). Post-filtering FTS hits silently breaks keyset page sizes and leaks
+CI asserts `SELECT COUNT(*) FROM search_doc WHERE kind IN ('season','episode','track','comic_issue')`
+is 0.
+
+**Permission filtering happens in the join, not after it.** `search_doc.library_scope` (renamed from
+`instance_scope`, ADR-0026 — a library can be a *subset* of an instance, so instance-level scoping is
+too coarse and leaks existence) carries the libraries a row is visible through; the fusion query
+joins against the caller's access scope (ARCHITECTURE §1.3 rule 2). Post-filtering FTS hits silently breaks keyset page sizes and leaks
 existence through result counts and ranking positions.
 
 ---

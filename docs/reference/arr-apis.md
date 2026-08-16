@@ -203,8 +203,29 @@ floor(cat/1000)*1000 →
 
 Categories ≥ 100000 are site-specific and need the indexer's `t=caps` to resolve; fall back to the
 parent cat Prowlarr also emits. **Category `3030` is the only reliable machine signal separating
-audiobook from music at acquisition time, and `7030` likewise for comics.** Capture the raw array;
-never collapse it.
+audiobook from music at acquisition time.** Capture the raw array; never collapse it.
+
+> 🚩 **Two corrections, both verified against `NewznabStandardCategory.cs` on `develop` and both live
+> bugs in the mapping above as it was previously used (2026-08-16).**
+>
+> 1. **`floor(cat/1000)*1000` is not sufficient, and the parent rule must not run first.**
+>    **Audiobooks are `3030`, under `Audio` (3000), not under `Books` (7000)** — so a `type:` tag
+>    derived from the *parent* category labels every audiobook release `type:audio`. The special
+>    cases (`3030`, `5070`, `7020`, `7030`, `7010`) are consulted **before** the parent rule, not
+>    after it. `ARCHITECTURE.md` §8.5 carried the parent-first wording and is corrected.
+> 2. **`7030 → comic` returns zero manga, because there is no manga category in the Newznab
+>    standard.** `7030 Books/Comics` is the only comics category anywhere in the tree, and
+>    **Nyaa — the dominant public manga tracker — maps its `Literature` categories (`3_0`, `3_1`,
+>    `3_2`, `3_3`) to `Books` (7000), not to `Books/Comics`**, verified in
+>    `Prowlarr/Indexers/definitions/v11/nyaasi.yml`. **A comics-and-manga search therefore filters on
+>    the parent `7000`**, accepting that it also returns ebooks, magazines and technical books, and
+>    uses `7030` only as a **ranking** signal for western comics.
+>
+> Scale, for expectations rather than for the mapping: of 543 definitions in `definitions/v11`, **88
+> declare `Books/Comics`** and 288 declare some `Books` category, but **only three are comic- or
+> manga-specific** (`comicat.yml`, `nyaasi.yml`, `sukebeinyaasi.yml`). And **GetComics — the dominant
+> DDL source for western comics, and the only source Kapowarr searches — is not a Prowlarr indexer at
+> all**, nor is any other comics DDL site.
 
 ---
 

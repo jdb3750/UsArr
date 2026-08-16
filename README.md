@@ -51,9 +51,11 @@ Nothing below is built. Status reflects **planned milestone**, not progress.
 
 | Feature | Status |
 |---|---|
-| Unified library across **movies and TV** (Sonarr + Radarr) | 📋 Planned — v0.1 |
+| Unified library across **six media types** — movies, TV, music, ebooks, audiobooks, comics | 📋 Planned — v0.1 |
+| Read-only catalogue sources: **Navidrome, Audiobookshelf, Komga, Kavita** (plus Sonarr + Radarr) | 📋 Planned — v0.1 |
+| **User-defined libraries**, configured separately from services, with a correction layer | 📋 Planned — v0.1 (correction UI v0.3) |
 | Local-first reads; no upstream call on any render path | 📋 Planned — v0.1 |
-| **Search-and-Grab mode** — free-text indexer search and grab via Prowlarr, with no library | 📋 Planned — v0.1 |
+| **Search-and-Grab mode** — free-text indexer search and grab via Prowlarr, **for all six types** | 📋 Planned — v0.1 |
 | Instant search: client prefix index → FTS5 hybrid (prefix + substring; **no typo tolerance**) | 📋 Planned — v0.1 |
 | Source tagging: **usenet / torrent**, first-class and filterable | 📋 Planned — v0.1 |
 | Minimal write path — monitor, unmonitor, delete, add — on a durable command queue | 📋 Planned — v0.1 |
@@ -71,11 +73,11 @@ Nothing below is built. Status reflects **planned milestone**, not progress.
 | One search box spanning owned **and** unowned (out-of-band provider search, streamed) | 📋 Planned — v0.2 |
 | **Cross-media linking** via a prebuilt Wikidata CC0 edge artifact — *Train Dreams* end to end | 📋 Planned — v0.3 |
 | Declarative YAML service manifests (add a service without code) | 📋 Planned — v0.3 |
-| **OpenSubsonic server** — 13-endpoint read-only subset, `apiKeyAuthentication` only, one Navidrome | 📋 Planned — v0.4 |
+| **OpenSubsonic server** — ~20-method read-only subset, `apiKeyAuthentication` only, one Navidrome | 📋 Planned — v0.4 |
 | Stable IDs so client playlists survive re-syncs | 📋 Planned — v0.4 |
-| **OPDS 2.0 catalogue** (+1.2 fallback) | 📋 Planned — v1.0 |
+| **OPDS catalogue — 1.2 first**, 2.0 second (KOReader does not speak 2.0) | 📋 Planned — v1.0 |
 | Multi-instance aggregation; favourites / ratings / scrobbles written back | 📋 Planned — v1.0 |
-| Music, books, audiobooks and comics: Lidarr, Kavita, Calibre-Web, Audiobookshelf, Komga, Jellyfin | 📋 Planned — v1.0 |
+| **Request sinks**: Lidarr, LazyLibrarian, Mylar3, Kapowarr — plus Jellyfin and a Calibre `metadata.db` adapter | 📋 Planned — v1.0 |
 | Source tagging: **irc / direct** (LazyLibrarian) | 📋 Planned — v1.0 |
 | Namespaced tags: aliases, virtual parents, rule engine, saved filters | 📋 Planned — v1.0 |
 | Multi-user: roles, named permissions, library visibility, user import | 📋 Planned — v1.0 |

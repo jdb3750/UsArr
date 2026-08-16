@@ -26,9 +26,14 @@ CREATE TABLE work (
   kind              TEXT NOT NULL CHECK (kind IN (
                       'movie','series','season','episode',
                       'artist','album','track',
-                      'book','comic','game')),
+                      'book','comic','comic_issue','game')),
                     -- NOTE: 'audiobook' is deliberately NOT a kind. An audiobook is an
                     -- edition of a 'book' work (edition.format='audiobook'). See §2.
+                    -- NOTE: 'comic' is the SERIES; 'comic_issue' is the issue or chapter,
+                    -- and it is excluded from the search corpus exactly as episode/track are
+                    -- (ADR-0030). There is no 'manga' kind and no Volume level; manga is
+                    -- work_comic.reading_direction plus a derived type:manga tag, and Kavita's
+                    -- Volume is work_comic_issue.volume_label + volume_sort.
   parent_work_id    INTEGER REFERENCES work(id) ON DELETE CASCADE,
                     -- series→season→episode; artist→album→track; book series→book.
   title             TEXT NOT NULL,
@@ -118,17 +123,29 @@ CREATE TABLE work_album (
   album_type TEXT, disambiguation TEXT, track_count INTEGER
 ) STRICT;
 
+-- ADR-0031: position is a property of the (track-work, edition) pair, NOT of the track work.
+-- The same recording is track 4 on the original CD and track 6 on the 2017 reissue, with a
+-- different track MBID each. edition_id in migration 0001 costs 8 bytes a row; adding it later
+-- is a backfill over the largest table in the schema.
 CREATE TABLE work_track (
-  work_id       INTEGER PRIMARY KEY REFERENCES work(id) ON DELETE CASCADE,
-  disc_number   INTEGER NOT NULL DEFAULT 1,
-  track_number  INTEGER NOT NULL,
-  duration_secs INTEGER,
-  isrc          TEXT
+  work_id        INTEGER NOT NULL REFERENCES work(id) ON DELETE CASCADE,
+  edition_id     INTEGER NOT NULL REFERENCES edition(id) ON DELETE CASCADE,
+  disc_number    INTEGER NOT NULL DEFAULT 1,
+  disc_title     TEXT,
+  track_number   TEXT NOT NULL,      -- TEXT: real values are 'A1', 'B2', '1.01' (Lidarr ships
+                                     -- a string plus a separate int; an INTEGER column sorts a
+                                     -- double LP randomly)
+  track_position INTEGER NOT NULL,   -- derived sort key for track_number
+  title          TEXT,               -- edition-local display text; two releases carry one
+                                     -- recording as 'Idioteque' and 'Idioteque (Album Version)'
+  duration_secs  INTEGER,
+  isrc           TEXT,
+  PRIMARY KEY (work_id, edition_id)
 ) STRICT;
--- A track's position must be unique within its parent album. The parent lives on
+-- A track's position must be unique within its parent album, per edition. The parent lives on
 -- work.parent_work_id, so the constraint is expressed as a unique index over the join key
 -- maintained by the importer (SQLite cannot express it declaratively across tables):
-CREATE UNIQUE INDEX ux_track_pos ON work_track(work_id);
+CREATE UNIQUE INDEX ux_track_pos ON work_track(edition_id, disc_number, track_position);
 --   plus an application-enforced invariant, asserted in CI over a fixture:
 --   UNIQUE(parent_work_id, disc_number, track_number) via
 --   SELECT w.parent_work_id, t.disc_number, t.track_number FROM work_track t
@@ -140,11 +157,35 @@ CREATE TABLE work_book (
   series_name TEXT, series_position REAL
 ) STRICT;
 
+-- ADR-0030: the subtype splits with the kind. work_comic is SERIES level.
 CREATE TABLE work_comic (
-  work_id      INTEGER PRIMARY KEY REFERENCES work(id) ON DELETE CASCADE,
-  issue_number REAL,
-  volume       TEXT
+  work_id                INTEGER PRIMARY KEY REFERENCES work(id) ON DELETE CASCADE,
+  volume_label           TEXT,      -- 'Vol. 3' / '(2012)' — a label, never a node
+  volume_year            INTEGER,
+  reading_direction      TEXT,      -- ltr|rtl|vertical|webtoon; the manga axis, not a kind
+  publisher              TEXT,
+  total_issues_declared  INTEGER,   -- a DECLARATION, not a fact — see total_issues_source
+  total_issues_source    TEXT       -- comicinfo|comicvine|kavitaplus|null
 ) STRICT;
+
+-- ISSUE level. number_text is TEXT and number_sort is REAL because real issue numbers are
+-- '1.MU', '-1', '0', 'Annual 1', '1A'. Komga models a string plus a float sort key; Kavita
+-- models min/max floats plus a string plus a range. Any INTEGER column here is wrong.
+CREATE TABLE work_comic_issue (
+  work_id         INTEGER PRIMARY KEY REFERENCES work(id) ON DELETE CASCADE,
+  number_text     TEXT,
+  number_sort     REAL,
+  volume_label    TEXT,     -- Kavita's Volume, carried as an attribute (ADR-0030)
+  volume_sort     REAL,
+  is_special      INTEGER NOT NULL DEFAULT 0,
+  is_oneshot      INTEGER NOT NULL DEFAULT 0,
+  special_version TEXT,     -- tpb|hard-cover|omnibus|one-shot|volume-as-issue|cover
+  page_count      INTEGER
+) STRICT;
+CREATE INDEX ix_comic_issue_sort ON work_comic_issue(number_sort);
+--   ix_comic_issue_sort is what makes the contiguity report cheap: '43 issues · #7, #12 and
+--   #30-32 missing' is computed locally with no upstream help, and is the only always-honest
+--   completeness number in the domain (ARCHITECTURE §6.1).
 
 CREATE TABLE work_alt_title (
   id         INTEGER PRIMARY KEY,
@@ -173,13 +214,22 @@ CREATE TABLE edition (
   label        TEXT,      -- "Director's Cut" | "2013 Granta pb" | "Remastered"
   format       TEXT CHECK (format IN (
                  'print','ebook','audiobook','comic',
+                 'cbz','cbr','pdf',
                  'bluray','web','remux','dvd',
-                 'vinyl','cd','flac','lossy')),
+                 'vinyl','cd','cassette','digital','flac','lossy')),
+                 -- format carries the MEDIUM, never the codec: a 2000 UK CD release can be on
+                 -- disk as FLAC, so the codec lives on media_file (ADR-0031). The comic file
+                 -- shapes are added because ARCHITECTURE §6.1's prose already listed cbz.
   language     TEXT,
   quality_tier TEXT,      -- 2160p|1080p|720p|lossless|lossy
   is_primary   INTEGER NOT NULL DEFAULT 0,
   published_at TEXT,
-  publisher    TEXT
+  publisher    TEXT,
+  -- ADR-0031: audiobook production properties. Not work properties (different productions have
+  -- different narrators) and not media_file properties (a 30-file audiobook has one runtime).
+  narrators    TEXT,       -- JSON array
+  duration_seconds INTEGER,
+  abridged     INTEGER     -- nullable: unknown is distinct from 'unabridged'
 ) STRICT;
 CREATE INDEX ix_edition_work ON edition(work_id, is_primary DESC);
 ```
@@ -450,8 +500,14 @@ CREATE TABLE search_doc (
   rowid        INTEGER PRIMARY KEY,     -- THE allocator for all three tables
   work_id      INTEGER NOT NULL REFERENCES work(id) ON DELETE CASCADE,
   kind         TEXT NOT NULL,           -- top-level kinds only; see the CI assertion below
-  instance_scope TEXT NOT NULL DEFAULT '', -- JSON array of service_instance_ids that can see it;
-                                        -- filtered IN THE JOIN, never post-filtered
+  library_scope TEXT NOT NULL DEFAULT '',  -- JSON array of library ids that can see it; filtered
+                                        -- IN THE JOIN, never post-filtered. Renamed from
+                                        -- instance_scope (ADR-0026): a library can be a SUBSET
+                                        -- of an instance, so instance-level scoping is too
+                                        -- coarse and would leak existence. With one auto-created
+                                        -- library per instance the two sets are identical in
+                                        -- v0.1, so the rename is free now and a full-corpus
+                                        -- backfill later.
   popularity   REAL NOT NULL DEFAULT 0,
   in_library   INTEGER NOT NULL DEFAULT 0,
   title_idf    REAL NOT NULL DEFAULT 0,
@@ -469,7 +525,11 @@ CREATE INDEX ix_sd_work ON search_doc(work_id);
    title change issues the matching FTS `DELETE` in the same transaction. Without
    `contentless_delete=1` this is impossible — a plain contentless table answers
    `cannot DELETE from contentless fts5 table`.
-3. `SELECT COUNT(*) FROM search_doc WHERE kind IN ('season','episode','track')` is **0**.
+3. `SELECT COUNT(*) FROM search_doc WHERE kind IN ('season','episode','track','comic_issue')` is
+   **0**. `comic_issue` is in the list for the same reason as the other three: a large manga
+   library's chapter titles would swamp every query (ADR-0030).
+4. **No query in the identity path references `library_member` or `library_source`** (ADR-0026).
+   Library membership is never an input to identity — jellyfin#10985 is what happens when it is.
 
 ---
 
