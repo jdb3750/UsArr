@@ -519,3 +519,145 @@ Everything else in this log is either applied or recorded. These need him.
 | **5** | **The two missing token roles** (D-27): add `--bg-inset` and a `--bg-hover` distinct from `--bg-raised` to `tokens.css`, or accept a hovered row painted the same colour as the sticky header above it | `tokens.css` is the single source of truth and the first real screen could not be built from it alone |
 | **6** | **The cold-boot shell** (D-20): inline a static app shell into the built fallback document, so a cold first visit paints chrome instead of white | It is the visit that forms the speed opinion, and it is a build-config decision under ADR-0025 |
 | **7** | **The Settings sub-tree in the sidebar** (D-15) and, behind it, whether §8.1's "and nothing more" list is the real v0.1 navigation | OQ-2 is still open, and this is the same question in smaller print |
+
+---
+
+# UsArr — Round 3: corrections the six-media-type research forced
+
+**Date:** 2026-08-16. **Input:** five deep-research passes — user-defined libraries
+(`R-lib`), multi-type information architecture (`R-ia`), books/ebooks/audiobooks (`R-book`), music
+(`R-music`) and comics/manga (`R-comic`) — read against `CLAUDE.md`, then `ARCHITECTURE.md` §16/§17,
+`DECISIONS.md` and `FUTURE.md`, in that order of authority.
+
+**This is not an adversarial review.** It is the disposition log for research findings that **overturn
+claims already committed to this repository**, which `CLAUDE.md` requires to be applied or rebutted in
+writing rather than silently dropped. Every finding below was checked against the citation in the
+research file before it was written here; where a research report could not verify something, the
+caveat is carried rather than tidied away.
+
+## Counts
+
+| Disposition | Count |
+|---|---|
+| **Applied in full** | **11** |
+| Applied, with the research's own caveat carried forward | 3 |
+| **Two research reports contradicted each other; resolved in writing** (§R2.1) | 1 |
+| Recorded for Joe — a decision this log may not take | 4 |
+
+---
+
+## R1. Corrections to claims already in the repository
+
+| # | Finding, and the source that overturns it | Disposition |
+|---|---|---|
+| **R-01** | **MusicBrainz's Live Data Feed is CC BY-NC-SA 3.0, not CC0.** `RESEARCH.md` §5.2 recorded *"CC0 core data… Offers a Live Data Feed + full local replica — the escape hatch from 1 req/s"*. Per the MusicBrainz Data License page, **core data is CC0 but supplementary data and the Live Data Feed replication packets are CC BY-NC-SA 3.0**. So the local-replica escape hatch is not unencumbered: it is non-commercial-licensed. For an AGPL hobby project the practical risk is low; the cell was still wrong | **Applied.** `RESEARCH.md` §5.2 cell rewritten, with the licence split stated per component and the correction dated. Also added from the same page, because both change the design: exceeding 1 req/s declines **100% of requests, not the excess** — a burst does not degrade, it stops — and MusicBrainz asks explicitly that applications **not poll** and that calls be made at **random intervals**, so the provider scheduler needs jitter, not a cron |
+| **R-02** | **Last.fm publishes no numeric rate limit, and is non-commercial only.** `RESEARCH.md` §5.2 recorded *"≤5 req/s per IP averaged over 5 min 📄"* — with a **primary-source marker**. That number is not in the Last.fm API Terms of Service, which say limits are set and enforced *"in our sole discretion"*. §3.1–3.2 restrict use to **non-commercial purposes** | **Applied.** Cell rewritten to ⚠️, the folklore provenance stated, and the non-commercial restriction added — which the earlier cell omitted entirely |
+| **R-03** | **`reference/gateway.md` §2 gives the wrong OpenSubsonic error codes.** It specified **error 40** both for "`apiKey` and `u` both present" and for "salt/token without `apiKey`". The apiKeyAuth extension spec: *"passing in `u` must be treated as an **error 43**"*; *"If multiple conflicting authentication parameters are passed in, the server must return an **error 43**"*; *"If a server removes support for token-based authentication, it must return **error 41**… for any other particular authentication mechanism… an **error 42**"* | **Applied.** 43 for `apiKey`+`u`, 42 for an unsupported mechanism, 41 for the removed-token-auth case. The consequence is user-visible and is why it matters: the wrong code makes a client show "wrong password" instead of "this server needs an API key" — the exact confusion the hard-rejection policy exists to prevent |
+| **R-04** | **`reference/gateway.md` omits `helpUrl`.** The same spec: *"it is recommended that the server provide a meaningful url… in the `helpUrl`"* — a field introduced precisely for an auth refusal | **Applied.** Populating `helpUrl` with UsArr's own API-key page is now normative on every auth refusal |
+| **R-05** | **Two of the three named OpenSubsonic reference clients cannot authenticate to UsArr at all.** `ARCHITECTURE.md` §3's diagram names *"Symfonium · Amperfy · Feishin"*. Read from source: **Amperfy** has **zero** occurrences of `apiKey` in its entire Swift source and builds `u` + `t`/`s`; **Feishin**'s Subsonic controller has no `apiKey` path. Both are salt/token only | **Applied. The policy is right and the matrix was wrong** — which is a `CLAUDE.md` "no invented status" issue, because it applies to capability claims too. §3 now carries the caveat, `gateway.md` §2 repeats it, and §16's v0.4 states the matrix as *Symfonium works; Amperfy and Feishin do not, and that is the price of refusing to store recoverable passwords* |
+| **R-06** | **Audiobooks are Newznab category `3030`, under `Audio` (3000), not under `Books` (7000)** — verified in `NewznabStandardCategory.cs`. `ARCHITECTURE.md` §8.5 derives the `type:` tag from the **parent** category, so **every audiobook release would be tagged `type:audio`** | **Applied as a bug fix, not a footnote.** §8.5 now derives `type:` from the category with the special cases (`3030`, `5070`, `7020`, `7030`, `7010`) consulted **before** the parent rule, and `reference/arr-apis.md` §8 carries the same correction. The research called this "a bug waiting to happen and it should be fixed in the tag derivation, not papered over"; it is |
+| **R-07** | **`7030 Books/Comics` is the only comics category in the Newznab standard, there is no manga category, and Nyaa maps manga to `7000`** — verified in `NewznabStandardCategory.cs` and in `Prowlarr/Indexers/definitions/v11/nyaasi.yml`, where Nyaa's `Literature` categories (`3_0`…`3_3`) map to `Books`. So `reference/arr-apis.md` §8's `7030→comic` mapping **returns zero manga** | **Applied.** A comics-and-manga search filters on the parent **`7000`** and uses `7030` only as a *ranking* signal for western comics. Scale added for expectations: of 543 definitions in `definitions/v11`, 88 declare `Books/Comics` and only **three** are comic- or manga-specific — and **GetComics, the dominant western-comics DDL source and the only one Kapowarr searches, is not a Prowlarr indexer at all** |
+| **R-08** | **`reference/security.md` §5's redaction rule misses two real secret locations.** It is a query-parameter deny-list plus two headers. **Mylar3's `listProviders` returns configured indexer API keys in the *response body*** — and UsArr logs upstream response text **by requirement**, since §17.3's "Problem" column is verbatim. **Kavita carries its API key in a *URL path segment*** (`/api/Opds/{apiKey}/…`), not the query string, so it lands in proxy logs, browser history and `Referer` | **Applied.** Redaction must also run over upstream **response bodies** before they are logged, stored in `sync_report`, shown on Services or put in a support bundle; and it must operate on the **path** as well as the query, driven by each provider's declared credential placement rather than a fixed parameter list. Both were one-line additions now and would have been discovered from a leaked support bundle later. Noted alongside: **Kavita's `GET /api/Image/web-link?url=…`** is a live example of the `derived` SSRF class the earlier threat model omitted — already covered correctly by §2's per-row origin rule |
+| **R-09** | **`ARCHITECTURE.md` §11.2 lists Calibre-Web as manifest-covered, and it has no REST API.** It exposes OPDS (Atom) and `/ajax/listbooks`, which is session-cookie authenticated. Neither is a manifest target, and reconstructing a library by parsing Atom on a schedule is slow, fragile and lossy — no identifiers survive the feed | **Applied.** Calibre-Web removed from the manifest list; the right adapter is **Tier 0 Go code opening Calibre's own `metadata.db` read-only**, which is the best ebook data most self-hosters own (`identifiers(book, type, val)` is a native typed external-id table, `books.uuid` is durable, `data(book, format)` is genuinely multi-format, `series_index REAL` sorts correctly, `last_modified` is a real delta key). **That is a filesystem read and is written down as an explicit exception** — a read-only handle on one SQLite file, not a scanner. Calibre-Web stays as the link-out target and byte server. Suwayomi removed from the same list for a different reason: it is GraphQL |
+| **R-10** | **`work.kind` has one comic member where it needs two**, and its `work_comic` subtype describes an *issue* while the corpus rule, the prefix index, the `kind_byte` map and the grid treat `comic` as top-level — the same shape of contradiction as the `audiobook` kind-vs-edition one (C-10) | **Applied in migration 0001, which is the only cheap moment.** ADR-0030. Fixing it later means a CHECK-constraint change (a SQLite table rebuild), an FTS re-index, a rebuild of every client prefix index, and a change to the `kind_byte` codec that §5.3 calls **unchangeable once clients cache ids** |
+| **R-11** | **`work_track` is work-scoped and track position is edition-scoped.** MusicBrainz: a recording is *"distinct audio"*; a track is *"the way a recording is represented on a particular release (or, more exactly, on a particular medium)"*. The same recording is track 4 on the original CD and track 6 on the 2017 reissue, with a different track MBID each | **Applied.** ADR-0031: `work_track` gains `edition_id`, `track_number` becomes `TEXT` with an integer sort key (Lidarr ships exactly this pair, because real values are `A1`, `B2`, `1.01`), and attribution becomes an M:N `work_credit` rather than a scalar `artist_id`. All are migration-0001 or they are backfills over the largest tables in the schema |
+| **R-12** | **`edition` is missing the three columns every audiobook authority puts on it** — narrators, duration and abridgement. Chaptarr's `EditionResource` carries `Narrator`, `NarratorNames[]`, `DurationSeconds`, `ChapterCount`; Audiobookshelf carries `Book.narrators`, `Book.duration`, `Book.abridged` | **Applied.** `edition` gains `narrators`, `duration_seconds`, `abridged`. Also applied from the same source: the `edition.format` CHECK list lacked `cbz`/`cbr`/`pdf` while `ARCHITECTURE.md` §6.1's prose already listed `cbz` — an inconsistency that had to be resolved before migration 0001, not after |
+| **R-13** | **ISBN and ASIN must never satisfy `ux_extid_work_strong`**, and book tier-3 matching needs the author. An ISBN is per-edition, per-format and per-territory; the same audiobook usually has an ASIN and no ISBN; publishers reuse ISBNs and put one on an omnibus. Book titles collide far more than film titles | **Applied** to §6.4, with the Open Library redirect rule beside it: a merged work becomes a `/type/redirect` record, so **an OLID stored last month can resolve to a redirect today** — adapters must follow `location` before writing the id. This is why `work_merge` moves forward to the first music milestone rather than waiting for identity tiers 2–5 |
+| **R-14** | **A user correction must survive an upstream rescan, and LazyLibrarian proves it does not by default.** Books marked ignored are re-added after an author rescan because the rescan returns the book with a different provider id (LazyLibrarian GitLab issue #2407, ⚠️ no maintainer resolution shown) | **Applied** as the load-bearing rule of ADR-0026: a correction is keyed to **UsArr's** identity (`work_id`/`link_id` + `target_identity_hash`) and is **never cleared** by a sync, a sweep, a tombstone expiry or an id resurrection |
+
+## R1.2 Caveats carried forward rather than tidied away
+
+`CLAUDE.md` requires that where a research report says something could not be verified, the caveat
+travels with the claim. Three are load-bearing:
+
+1. ⚠️ **Symfonium's `apiKeyAuthentication` support is unverified**, and **v0.4's entire success
+   criterion depends on it** — *"Symfonium connects to UsArr with one API key, browses, searches and
+   plays"*. Its documentation does not mention API keys, its changelog is on a forum that could not
+   be enumerated, and the app is closed-source. The research called this the highest-risk unverified
+   item in its report. **Recorded in §16 and in `gateway.md` §2: verify against a live Symfonium
+   before writing a line of gateway code.**
+2. ⚠️ **Komga's delta strategy rests on an unverified probe.** Neither Komga nor Kavita has a
+   "changed since" endpoint, so delta is sort-by-modified plus paginate — and **whether Komga accepts
+   `sort=lastModified,desc` on `POST /series/list` could not be determined from the spec**, because
+   Spring `Pageable` sort properties are not enumerated and the DTO field name may not be the entity
+   property name. The research named it "the single highest-value thing to probe against a live
+   instance". Recorded in ADR-0032.
+3. 🔍 **No research exists on carousels in media libraries.** Every carousel finding cited in
+   ADR-0028 measures marketing or ecommerce contexts. The transfer argument is that the *interaction*
+   is identical and that the content here is weaker than a marketing hero, not stronger. **It is
+   reasoning, and ADR-0028 marks it as such rather than quoting it as a finding.** The decisive
+   argument there is UsArr's own above-the-fold arithmetic, which needs no external source at all.
+
+---
+
+## R2. Where two research reports disagreed
+
+### R2.1 Home: sectioned by library, or a unified table? — resolved toward the IA report.
+
+`research-libraries.md` §11 proposes that **"Home changes from 'one section per media type present' to
+'one section per enabled library with `include_on_home`'"**, arguing it is a replacement rather than
+an addition and therefore nearly free. `research-multitype-ia.md` §4 proposes the opposite: **home
+becomes three fixed blocks whose height is O(1) in the number of types**, and libraries never appear
+as sections at all.
+
+**The IA report wins, and the reason is a cardinality argument rather than a preference.** A media
+type is a closed enum of six; a library is user-defined and unbounded. Sectioning Home by library
+reproduces, one screen over, exactly the failure the same report documents in Jellyfin's shipping
+code — `loadRecentlyAdded` iterating `userViews` and emitting one carousel per library, unbounded,
+inside a single home slot. A user with fifteen libraries would get fifteen home sections. The
+libraries report's own framing is what makes the resolution clean: it argues Home-by-library is free
+*because in the default topology one library per kind makes the two identical* — which is true, and
+is precisely why nothing is lost by keeping the axis that stays bounded when the topology is not
+default.
+
+**What is kept from the libraries report:** `include_on_home` remains a `library` column (it is also
+Kavita's dashboard opt-out and Plex's *Visibility*), and it feeds the **scope**, not a section list.
+Both reports agree on the rule that decides most of the rest — a type, section, group or control with
+no content is not rendered at all.
+
+**Recorded in ADR-0027 and ADR-0028.**
+
+### R2.2 Two smaller disagreements, both resolved without a rebuttal
+
+- **The correction surface's milestone.** `research-libraries.md` §12 recommends schema-and-screen in
+  v0.1 and the correction UI in v0.3, and explicitly recommends *against* trading Search-and-Grab out
+  of v0.1 to pull corrections forward. ADR-0032 takes that recommendation, and the reason strengthens
+  it: under the amended roadmap, Search-and-Grab is the **only** request path for four of the six
+  media types, so cutting it would remove the thing that makes deferring the command sinks
+  affordable.
+- **Whether Navidrome belongs in v0.1 or v0.4.** `research-music.md` §8(d) argues Navidrome should be
+  a **read** source in the milestone *preceding* the gateway, marking it 🔍 as a scoping observation
+  rather than a verified fact. ADR-0032 adopts it and carries the inference marker.
+
+---
+
+## R3. Where the research contradicts a decision the owner has already made
+
+Two, and both are recorded rather than acted on, because they are his to settle.
+
+1. **Manga titles and the font subset.** The owner confirmed IBM Plex, and OQ-3's remaining half is
+   `latin` (103.6 KB) versus `latin`+`latin-ext` (177.2 KB). The six-type expansion **pushes against
+   the cheaper answer**: a manga, classical-music or translated-fiction library is full of accented
+   and transliterated titles, and romaji/native/English alternate titles are the strongest
+   alternate-title matching case in the whole project (*Shingeki no Kyojin* / *Attack on Titan* /
+   *進撃の巨人*). `latin-ext` does not cover CJK either way, so the honest statement is that neither
+   subset renders native manga titles and `latin-ext` merely covers the transliterations. Recorded in
+   the narrowed OQ-3.
+2. **The achromatic-chrome cost got slightly larger.** D-24 recorded that with no accent hue, two
+   dense table screens do not differ at thumbnail scale. Six media types add more table screens, so
+   the cost compounds. **This is not a reason to reopen the decision** — the owner confirmed it, and
+   the type chip is deliberately neutral because a type is data, not status. Recorded so it is not
+   rediscovered as a new finding.
+
+---
+
+## R4. What still needs Joe
+
+Everything above is applied or recorded. These are not ours to take.
+
+| # | Decision | Why it cannot be settled below him |
+|---|---|---|
+| **1** | **OQ-3, narrowed: the font subset.** Family settled; `latin` vs `latin`+`latin-ext` is a 73.6 KB first-paint cost against accented and transliterated titles across four of the six types | It is the only remaining decision here that costs bytes on first paint, and two documents still disagree about whether the specific face matters (D-30, D-32) |
+| **2** | **Verify Symfonium's API-key support before v0.4 is scoped.** Not a judgement call so much as an errand only he can run — install it, point it at a stub, read the query string | v0.4's success criterion is written in terms of a capability nobody has confirmed exists |
+| **3** | **Whether Prowlarr-only remains an honest v0.1 story for *music*.** The best music trackers are private and invite-only, so "runs over just Prowlarr" is materially weaker for music than for film | It is a positioning claim, not an implementation detail |
+| **4** | **The five earlier round-2 items in §D3 are unaffected and still open** — the 2160p column (D-05), §5.3 versus the busy screens (D-17), the two missing token roles (D-27), the cold-boot shell (D-20) and the Settings sub-tree (D-15) | Unchanged by this round; listed so they are not lost behind it |
