@@ -347,23 +347,38 @@ than no statistics, because people believe them.
 
 ---
 
-## 11. slskd as a music request sink
+## 11. Soulseek as a provider — and the several services it can be made of
 
-**What.** Soulseek acquisition through `slskd`'s REST API: start a search, poll it, pick a user, and
-enqueue the download. slskd fetches the bytes, exactly as qBittorrent does for Sonarr.
+> **The owner's framing, 2026-08-16, verbatim:** *"soulseek would be a provider (which could be
+> materialized in soulseek or soulbeet or lidarr + slskd or just pure slskd)."*
 
-**Why deferred.** It is the single best-fit non-\*Arr acquisition integration surfaced in the whole
-research pass — AGPL-3.0 (the licence UsArr itself now carries), a clean REST API, an `X-API-Key`
-**request header** which is precisely the credential shape UsArr already handles for the \*Arrs, and
-**no byte involvement for UsArr at all**. It is deferred because it is a *second* request path with a
-*different shape*: slskd search is **two-phase and asynchronous** (start → poll → choose a user →
-enqueue), where Prowlarr is a one-shot fan-out. That is the whole integration cost, and *cut before
-you add* applies.
+**What.** Soulseek acquisition for music. Not "add slskd" — **one logical provider, `soulseek`, with
+several possible concrete materialisations on a real install:**
 
-**What it would cost.** A provider with `Caps.MediaKinds = [(album, *), (track, *)]` and **no
-catalogue role** — slskd has no library to replicate. A durable-command-queue verb that can express
-"search, then enqueue from a chosen result". Queue polling on the delta channel. Nothing else: no byte
-proxying, no import engine, no new protocol surface, no metadata provider.
+| Materialisation | What UsArr actually talks to | What it holds |
+|---|---|---|
+| **pure slskd** | one slskd instance | search and transfers, no catalogue |
+| **soulbeet** (slskd + beets post-processing) | one soulbeet instance | the same, plus tagged output |
+| **Lidarr + slskd** | **Lidarr** — slskd is *Lidarr's download client*, invisible to UsArr exactly as qBittorrent is | catalogue, monitoring, and an \*Arr-shaped `Add` |
+| **the Soulseek client itself** | nothing UsArr can address | out of scope until it grows an API |
+
+**The point that generalises past music, and the reason this entry was rewritten:** *a request
+destination must not assume an \*Arr shape.* Three of the four rows above are the same user asking
+for the same album from the same network, and UsArr sees three different services with three
+different interaction models — one of which is a plain \*Arr `Add` and two of which are not. A
+design that reaches for `PUT /api/v3/…` because the destination is "a sink" has already lost.
+
+**Why deferred.** It is still the best-fit non-\*Arr acquisition integration in the whole research
+pass — AGPL-3.0 (the licence UsArr itself now carries), a clean REST API, an `X-API-Key` **request
+header** which is precisely the credential shape UsArr already handles for the \*Arrs, and **no byte
+involvement for UsArr at all**. It is deferred because **no write-capable service ships in v0.1 at
+all** (§16), not because Soulseek is exotic. It joins Lidarr, LazyLibrarian and Mylar3 in that
+bucket.
+
+**What it would cost.** A provider with `Caps.MediaKinds = [(album, ""), (track, "")]` and **no
+catalogue role** — slskd has no library to replicate. A queue verb that can express "search, then
+enqueue from a chosen result". Queue polling on the delta channel. Nothing else: no byte proxying,
+no import engine, no new protocol surface, no metadata provider.
 
 **What it cannot do, stated so nobody expects it to.** slskd results are **filenames from strangers'
 shares** — a path, a size, a bitrate hint and a queue position. There is no release group, no MBID and
@@ -371,13 +386,89 @@ no structured metadata, so **UsArr cannot turn a slskd result into a catalogue r
 record "you asked for X, slskd fetched these files", and any album-completeness claim after a Soulseek
 grab is guesswork until Navidrome re-scans.
 
-**The seam.** The provider registry plus the durable command queue (ADR-0012a). **The one property to
-protect is that the queue's verb model can express a two-phase asynchronous operation** — if every
-verb is assumed to be a single request with a single outcome, this becomes a rewrite rather than a
-provider.
+---
 
-**Trigger.** A user who actually runs slskd asks, *and* the request path (v0.2) has shipped and
-settled.
+### 11.1 Does the `sink_service_instance_id` seam actually hold? — tested, and the answer is split
+
+This entry used to assert a seam (*"the queue's verb model can express a two-phase asynchronous
+operation"*) without checking whether the v0.1 schema provides it. It was checked against
+[`reference/schema.md`](./reference/schema.md) §10 and §13.1 and
+[`reference/sync.md`](./reference/sync.md) §5. **Two of the three seams hold and one does not**, and
+the one that does not sits in migration 0001, which is the expensive place for it to be wrong.
+
+**✅ 1. `library.sink_service_instance_id` HOLDS, and it holds for the right reason.** It is a
+pointer to a `service_instance` row and nothing more. It encodes *which instance*, never *what shape
+of conversation*. Every one of the owner's four materialisations resolves to **exactly one instance
+row** — pure slskd is one, soulbeet is one, and *Lidarr + slskd* is one (Lidarr; slskd is Lidarr's
+download client and UsArr never sees it). The thing that decides what a sink can do is the **live
+capability probe**, which `reference/providers.md` §2 already forbids inferring from the service
+kind: *"Never inferred from `kind` — a Sonarr fork, an old version, or a manifest-described service
+may differ."* ARCHITECTURE §8.3's rule that the sink is *"a pin inside the capability filter, not a
+bypass"* does the rest. **No widening needed. The column is materialisation-agnostic by
+construction.**
+
+**✅ 2. The provider interface HOLDS, and the two-phase interface already ships.** `Requester.Add`
+returns `(remoteID string, err error)` — a single-shot signature that a two-phase destination cannot
+implement honestly. But it does not have to: **`Grabber` is the two-phase interface**, and it is
+already in v0.1 for Prowlarr Search-and-Grab —
+
+```go
+type Grabber interface {
+    Releases(ctx, inst, q SearchQuery) ([]Release, error)   // phase 1: candidates
+    Grab(ctx, inst, rel Release) error                      // phase 2: the chosen one
+}
+```
+
+Soulseek is a `Grabber`, not a `Requester`. `Releases` maps to `POST /api/v0/searches` plus its poll;
+`Grab` maps to `POST /api/v0/transfers/downloads/{username}`. The optional-interface set is doing
+exactly the job it was designed for.
+
+**❌ 3. `write_queue` DOES NOT HOLD.** Three specific things, in ascending order of cost:
+
+1. **The verb vocabulary is free — that half is fine.** `write_queue.kind` is
+   `TEXT NOT NULL` with `add|delete|monitor|unmonitor|grab|tag_add|refresh` in a **comment**, not a
+   `CHECK`. A new verb costs nothing. Good.
+2. **There is nowhere to put the candidate set, and `payload` is the wrong place.** A slskd search
+   returns per-user file lists of arbitrary size that must survive between phase 1 and phase 2, be
+   rendered on Requests, and expire. `write_queue.payload` is JSON and could physically hold it, but
+   it is the hot queue table that `ix_wq_runnable` scans. This costs a table later and **no seam
+   now** — a queue row can carry a reference as easily as a blob, so nothing needs deciding today.
+3. **🚩 The `state` CHECK has no state for "waiting for a human", and it is in migration 0001.**
+   This is the finding.
+
+   ```sql
+   state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN (
+             'pending','inflight','verifying','done','failed')),
+   ```
+
+   A two-phase request whose search has completed and which is waiting for the user to choose a
+   candidate is **none of those five**. It is not `pending` (no worker should pick it up), not
+   `inflight` (no request is outstanding), and emphatically not `verifying` — `verifying` means *"it
+   might have landed"* and carries a **15-minute TTL** (`verify_until`), after which
+   `reference/sync.md` §5 forces one final refetch and then `done` or `failed`. A user who is asleep
+   would have their request resolved to `unknown` by a timer. There is no legal state to park in, so
+   the two-phase verb cannot be expressed at all — which is the precise failure this entry's old
+   "seam" paragraph said must not happen, written down as a protected property but never actually
+   protected.
+
+   **Why this one is expensive and the other two are not.** `CLAUDE.md`: *a merged migration is never
+   edited.* Widening a `CHECK` on a shipped table means a new migration, a table rebuild (SQLite
+   cannot `ALTER` a `CHECK`), and a rewrite of `ix_wq_runnable`'s partial-index predicate
+   (`WHERE state IN ('pending','inflight','verifying')`) — for a one-word change that costs a single
+   string literal if it is in 0001.
+
+**The seam to add now, and it is one word.** `write_queue.state`'s `CHECK` gains
+**`awaiting_choice`** in migration 0001, and `ix_wq_runnable`'s predicate deliberately **excludes**
+it: a row waiting on a human is not runnable, must not be swept, and must not be TTL'd. That is the
+whole change. Nothing implements it in v0.1, no verb produces it, and the Requests screen has no
+state for it — *the seam ships, the feature does not.* Recorded against
+[`reference/schema.md`](./reference/schema.md) §10.
+
+**The seam.** The provider registry, `Grabber`'s two-phase pair, `library.sink_service_instance_id`'s
+indifference to service shape — and the one word above, which is the only part that was missing.
+
+**Trigger.** A user who actually runs one of the four materialisations asks, *and* the request path
+(v0.2) has shipped and settled.
 
 ---
 
