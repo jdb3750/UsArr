@@ -895,6 +895,26 @@ export interface NewService {
 	name: string;
 	baseUrl: string;
 	apiKey: string;
+	/**
+	 * The sub-path a reverse proxy serves this instance under — Prowlarr's own
+	 * `URL Base`, e.g. `/prowlarr` for an instance reachable at
+	 * `https://host/prowlarr`. It is a SEPARATE column from base_url on purpose:
+	 * crypto.NormalizeHostPort discards the path, so the stored credential is
+	 * bound to scheme://host:port and moving a service to a different sub-path
+	 * does not move the credential (internal/crypto/derive.go).
+	 *
+	 * Sent only when non-empty. The server applies no validation beyond
+	 * strings.TrimSpace, so it travels as typed for the same reason base_url's
+	 * trailing slash does: a second normaliser here would be one that could
+	 * quietly disagree with the server's.
+	 */
+	urlBase?: string;
+}
+
+/** `url_base` for a request body, or nothing at all when there is no sub-path. */
+function urlBaseField(urlBase: string | undefined): { url_base?: string } {
+	const value = urlBase?.trim() ?? '';
+	return value === '' ? {} : { url_base: value };
 }
 
 /**
@@ -908,6 +928,7 @@ export async function testNewService(input: NewService): Promise<ConnectionTestR
 		await postJson(`${SERVICES_URL}/test`, {
 			kind: input.kind,
 			base_url: input.baseUrl.trim(),
+			...urlBaseField(input.urlBase),
 			api_key: input.apiKey
 		})
 	);
@@ -924,6 +945,7 @@ export async function createService(input: NewService): Promise<ServiceInstance>
 			kind: input.kind,
 			name: input.name.trim(),
 			base_url: input.baseUrl.trim(),
+			...urlBaseField(input.urlBase),
 			api_key: input.apiKey
 		})
 	);
@@ -936,6 +958,16 @@ export async function createService(input: NewService): Promise<ServiceInstance>
 export interface ServiceEdit {
 	name?: string;
 	baseUrl?: string;
+	/**
+	 * The reverse-proxy sub-path, as NewService.urlBase describes it.
+	 *
+	 * On PATCH this field is present-means-set: supplying `''` CLEARS the stored
+	 * sub-path, which is the only way to undo one, so it is sent whenever the
+	 * caller passes it and omitted only when the caller does not. That differs
+	 * from create and from the connection tests, where an empty value carries no
+	 * information and is left off the wire entirely.
+	 */
+	urlBase?: string;
 	apiKey?: string;
 	enabled?: boolean;
 	/**
@@ -961,6 +993,12 @@ export async function updateService(id: number, edit: ServiceEdit): Promise<Serv
 	const body: Record<string, unknown> = {};
 	if (edit.name !== undefined) body.name = edit.name.trim();
 	if (edit.baseUrl !== undefined) body.base_url = edit.baseUrl.trim();
+	// No re-entry check for this one, deliberately. handleUpdateService derives
+	// hostChanged from crypto.NormalizeOrigin(base_url) alone, and NormalizeOrigin
+	// discards the path — so a sub-path edit on the same scheme, host and port
+	// leaves the AAD, and therefore the stored credential, untouched. Demanding
+	// the key back for it would be a rule this codebase does not have.
+	if (edit.urlBase !== undefined) body.url_base = edit.urlBase.trim();
 	if (edit.enabled !== undefined) body.enabled = edit.enabled;
 	if (key !== '') body.api_key = edit.apiKey;
 
@@ -978,7 +1016,7 @@ export async function updateService(id: number, edit: ServiceEdit): Promise<Serv
  */
 export async function testService(
 	id: number,
-	edit: Pick<ServiceEdit, 'baseUrl' | 'apiKey' | 'currentBaseUrl'> = {}
+	edit: Pick<ServiceEdit, 'baseUrl' | 'urlBase' | 'apiKey' | 'currentBaseUrl'> = {}
 ): Promise<ConnectionTestResult> {
 	const url = `${SERVICES_URL}/${encodeURIComponent(String(id))}/test`;
 	const key = edit.apiKey?.trim() ?? '';
@@ -993,6 +1031,10 @@ export async function testService(
 
 	const body: Record<string, unknown> = {};
 	if (edit.baseUrl !== undefined && edit.baseUrl.trim() !== '') body.base_url = edit.baseUrl.trim();
+	// Omitted when empty, and not as a style choice: handleTestService reads this
+	// through stringOr(), where an empty string means "use the stored sub-path".
+	// Sending "" could not clear it and would only look as if it might.
+	Object.assign(body, urlBaseField(edit.urlBase));
 	if (key !== '') body.api_key = edit.apiKey;
 	return toTestResult(await postJson(url, body));
 }

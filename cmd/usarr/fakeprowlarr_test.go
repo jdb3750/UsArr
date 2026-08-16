@@ -24,6 +24,12 @@ type fakeProwlarr struct {
 	t      *testing.T
 	apiKey string
 
+	// urlBase is the reverse-proxy sub-path this instance is served under, or ""
+	// for the root. Every route is registered under it and NOTHING is registered
+	// at the root, so a client that ignores url_base gets a 404 from the mux
+	// rather than quietly passing against a fixture that answers both ways.
+	urlBase string
+
 	mu sync.Mutex
 	// grabbed records every POST /api/v1/search body, so a test can assert
 	// what UsArr actually sent upstream.
@@ -42,40 +48,62 @@ type fakeProwlarr struct {
 
 func newFakeProwlarr(t *testing.T, apiKey string) *fakeProwlarr {
 	t.Helper()
-	f := &fakeProwlarr{t: t, apiKey: apiKey, searched: map[string]int{}}
+	return newFakeProwlarrAt(t, apiKey, "")
+}
+
+// newFakeProwlarrAt serves the same fixture behind a reverse-proxy sub-path,
+// which is what a `https://host/prowlarr` deployment looks like from UsArr's
+// side: the base URL is the origin, and Prowlarr's own `URL Base` is the prefix
+// every route hangs off. urlBase must be "" or a leading-slash path with no
+// trailing slash — the shape UsArr concatenates onto base_url.
+func newFakeProwlarrAt(t *testing.T, apiKey, urlBase string) *fakeProwlarr {
+	t.Helper()
+	f := &fakeProwlarr{t: t, apiKey: apiKey, urlBase: urlBase, searched: map[string]int{}}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /ping", func(w http.ResponseWriter, _ *http.Request) {
+	// handle registers "METHOD /path" under the sub-path, so the routing table
+	// below reads as Prowlarr's own and the prefix is applied in exactly one
+	// place.
+	handle := func(pattern string, h http.HandlerFunc) {
+		method, path, ok := strings.Cut(pattern, " ")
+		if !ok {
+			t.Fatalf("fake prowlarr: %q is not a %q pattern", pattern, "METHOD /path")
+		}
+		mux.HandleFunc(method+" "+urlBase+path, h)
+	}
+
+	handle("GET /ping", func(w http.ResponseWriter, _ *http.Request) {
 		// [AllowAnonymous] upstream: no key required, on purpose.
 		writeJSONTest(w, map[string]string{"status": "OK"})
 	})
-	mux.HandleFunc("GET /api", func(w http.ResponseWriter, _ *http.Request) {
+	handle("GET /api", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSONTest(w, map[string]any{"current": "v1", "deprecated": []string{}})
 	})
-	mux.HandleFunc("GET /api/v1/system/status", f.authed(func(w http.ResponseWriter, _ *http.Request) {
+	handle("GET /api/v1/system/status", f.authed(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSONTest(w, map[string]any{
 			"appName": "Prowlarr", "instanceName": "Prowlarr", "version": "2.1.3.5150",
 			"isProduction": true, "isDocker": true, "branch": "master",
-			"authentication": "forms", "urlBase": "", "runtimeVersion": "8.0.10",
+			// Prowlarr reports its OWN url base here, so the fixture does too.
+			"authentication": "forms", "urlBase": urlBase, "runtimeVersion": "8.0.10",
 			"databaseType": "sqLite", "databaseVersion": "3.46.0", "migrationVersion": 45,
 			"startTime": time.Now().UTC().Add(-3 * time.Hour).Format(time.RFC3339),
 		})
 	}))
-	mux.HandleFunc("GET /api/v1/health", f.authed(func(w http.ResponseWriter, _ *http.Request) {
+	handle("GET /api/v1/health", f.authed(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSONTest(w, []map[string]any{{
 			"id": 1, "source": "IndexerStatusCheck", "type": "warning",
 			"message": "Indexers unavailable due to failures: Broken Tracker",
 			"wikiUrl": "https://wiki.servarr.com/prowlarr/system#indexers-are-unavailable-due-to-failures",
 		}})
 	}))
-	mux.HandleFunc("GET /api/v1/indexer", f.authed(func(w http.ResponseWriter, _ *http.Request) {
+	handle("GET /api/v1/indexer", f.authed(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSONTest(w, []map[string]any{
 			indexerJSON(1, "Working Tracker", "torrent", "private", 25, true),
 			indexerJSON(2, "Broken Tracker", "torrent", "public", 30, true),
 			indexerJSON(3, "Disabled Tracker", "usenet", "private", 40, false),
 		})
 	}))
-	mux.HandleFunc("GET /api/v1/indexerstatus", f.authed(func(w http.ResponseWriter, _ *http.Request) {
+	handle("GET /api/v1/indexerstatus", f.authed(func(w http.ResponseWriter, _ *http.Request) {
 		f.mu.Lock()
 		blocked := f.blockedIndexerID
 		f.mu.Unlock()
@@ -92,21 +120,27 @@ func newFakeProwlarr(t *testing.T, apiKey string) *fakeProwlarr {
 			"initialFailure":    time.Now().UTC().Add(-2 * time.Hour).Format(time.RFC3339),
 		}})
 	}))
-	mux.HandleFunc("GET /api/v1/downloadclient", f.authed(func(w http.ResponseWriter, _ *http.Request) {
+	handle("GET /api/v1/downloadclient", f.authed(func(w http.ResponseWriter, _ *http.Request) {
 		writeJSONTest(w, []map[string]any{{
 			"id": 1, "name": "qBittorrent", "implementation": "QBittorrent",
 			"enable": true, "protocol": "torrent", "priority": 1, "supportsCategories": true,
 		}})
 	}))
-	mux.HandleFunc("GET /api/v1/search", f.authed(f.handleSearch))
-	mux.HandleFunc("POST /api/v1/search", f.authed(f.handleGrab))
+	handle("GET /api/v1/search", f.authed(f.handleSearch))
+	handle("POST /api/v1/search", f.authed(f.handleGrab))
 
 	f.srv = httptest.NewServer(mux)
 	t.Cleanup(f.srv.Close)
 	return f
 }
 
+// URL is the ORIGIN only, never the sub-path: UsArr stores the two in separate
+// columns (base_url and url_base) because the credential's AAD is bound to the
+// origin and must survive a move to a different sub-path.
 func (f *fakeProwlarr) URL() string { return f.srv.URL }
+
+// URLBase is what belongs in the service row's url_base column.
+func (f *fakeProwlarr) URLBase() string { return f.urlBase }
 
 // authed records the key and enforces it, exactly as Prowlarr does: the key
 // travels in X-Api-Key, never in the query string.
@@ -182,8 +216,11 @@ func (f *fakeProwlarr) releaseJSON(indexerID int32, indexerName, query string) m
 		"commentUrl": "https://tracker.example/details/1234#comments",
 		"posterUrl":  "https://tracker.example/poster/1234.jpg",
 		// THE CREDENTIAL. Prowlarr really does this on every search result.
-		"downloadUrl": fmt.Sprintf("%s/1/download?apikey=%s&link=abc123", f.srv.URL, f.apiKey),
-		"magnetUrl":   fmt.Sprintf("magnet:?xt=urn:btih:0123456789abcdef&tr=%s/1/announce?apikey=%s", f.srv.URL, f.apiKey),
+		// {serverUrl}{urlBase}/{indexerId}/download?apikey=… — the sub-path is part
+		// of what Prowlarr builds, so the fixture builds it the same way.
+		"downloadUrl": fmt.Sprintf("%s%s/1/download?apikey=%s&link=abc123", f.srv.URL, f.urlBase, f.apiKey),
+		"magnetUrl": fmt.Sprintf("magnet:?xt=urn:btih:0123456789abcdef&tr=%s%s/1/announce?apikey=%s",
+			f.srv.URL, f.urlBase, f.apiKey),
 	}
 }
 

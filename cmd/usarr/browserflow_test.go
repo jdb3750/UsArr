@@ -630,6 +630,203 @@ func TestBrowserFirstRunConfiguresAServiceAndSearches(t *testing.T) {
 	assertNoSecret(t, "process log", env.logs(), apiKey)
 }
 
+// TestBrowserAddsAProwlarrBehindASubPath is the reverse-proxy deployment, from
+// the SPA's side.
+//
+// `https://host/prowlarr` is an ordinary way to run this stack and it was
+// unreachable from the UI: the server has taken `url_base` on create, on PATCH
+// and on both connection tests since the first migration, and the Services
+// screen simply never offered the field — so the only address a user could enter
+// was the origin, where nothing answers.
+//
+// The fixture here is registered ONLY under the sub-path, so this is not field
+// plumbing: a request that drops url_base 404s, and the mandatory connection
+// test that create runs turns that into a refusal. Reaching 201 means the client
+// actually spoke to an instance behind a prefix.
+func TestBrowserAddsAProwlarrBehindASubPath(t *testing.T) {
+	const apiKey = "prowlarrKEY7f3c9a2b5e8d1046c7b2f9e3"
+	const password = "correct horse battery"
+	const subPath = "/prowlarr"
+
+	prowlarr := newFakeProwlarrAt(t, apiKey, subPath)
+	env := newTestApp(t)
+	b := newBrowserClient(t, env.srv.URL, env.base)
+
+	var boot sessionBody
+	b.mustGet("/api/v1/auth/session", &boot)
+	b.mustPost("/api/v1/auth/setup", map[string]any{"username": "joe", "password": password}, &boot)
+
+	// ── 1. the origin alone is not the service ──────────────────────────────
+	//
+	// This is the state the old form could only ever produce. It must fail, and
+	// it must fail with the connection test's own words rather than by storing a
+	// row that never works.
+	var probe testBody
+	b.mustPost("/api/v1/services/test", map[string]any{
+		"kind": "prowlarr", "base_url": prowlarr.URL(), "api_key": apiKey,
+	}, &probe)
+	if probe.OK {
+		t.Fatal("the fixture answers only under " + subPath + ", so a test against the origin " +
+			"must fail; if it passes, the sub-path is not actually being exercised")
+	}
+	t.Logf("origin without the sub-path: ok=%v %q", probe.OK, probe.Message)
+
+	rootOnly := b.postJSON("/api/v1/services", map[string]any{
+		"kind": "prowlarr", "name": "Prowlarr", "base_url": prowlarr.URL(), "api_key": apiKey,
+	})
+	if rootOnly.status == http.StatusCreated {
+		t.Fatalf("a service that fails the mandatory connection test must not be stored: %s", rootOnly.body)
+	}
+
+	// ── 2. the body testNewService() builds with the sub-path filled in ─────
+	b.mustPost("/api/v1/services/test", map[string]any{
+		"kind": "prowlarr", "base_url": prowlarr.URL(), "url_base": subPath, "api_key": apiKey,
+	}, &probe)
+	if !probe.OK {
+		t.Fatalf("the unsaved test with the sub-path must pass: %+v", probe)
+	}
+
+	// ── 3. the body createService() builds ──────────────────────────────────
+	//
+	// decodeJSON runs with DisallowUnknownFields, so this also pins the spelling:
+	// a client sending `urlBase` or `url-base` would be a 400 here.
+	var svc serviceBody
+	created := b.postJSON("/api/v1/services", map[string]any{
+		"kind": "prowlarr", "name": "Prowlarr", "base_url": prowlarr.URL(),
+		"url_base": subPath, "api_key": apiKey,
+	})
+	if created.status != http.StatusCreated {
+		t.Fatalf("POST /api/v1/services with url_base = %d, want 201: %s", created.status, created.body)
+	}
+	created.decode(t, &svc)
+	if svc.ID == 0 || svc.URLBase != subPath {
+		t.Fatalf("the create response must echo the sub-path back: %+v", svc)
+	}
+
+	// ── 4. it round-trips on the list the screen renders from ───────────────
+	var listed servicesListBody
+	b.mustGet("/api/v1/services", &listed)
+	if len(listed.Services) != 1 {
+		t.Fatalf("expected one configured service, got %d", len(listed.Services))
+	}
+	if got := listed.Services[0].URLBase; got != subPath {
+		t.Fatalf("url_base did not round-trip on the list: %q, want %q — the screen has no other "+
+			"way to show a misconfigured sub-path", got, subPath)
+	}
+	if got := listed.Services[0].BaseURL; got != prowlarr.URL() {
+		t.Fatalf("base_url = %q, want the origin %q: the two are separate columns and the "+
+			"credential's AAD is bound to the origin", got, prowlarr.URL())
+	}
+
+	// ── 5. re-testing the saved instance uses the stored sub-path ───────────
+	var retest testBody
+	b.mustPost(fmt.Sprintf("/api/v1/services/%d/test", svc.ID), map[string]any{}, &retest)
+	if !retest.OK {
+		t.Fatalf("re-testing the saved instance behind %s failed: %+v", subPath, retest)
+	}
+
+	// ── 6. moving the sub-path needs NO credential re-entry ─────────────────
+	//
+	// handleUpdateService derives hostChanged from crypto.NormalizeOrigin(base_url)
+	// alone, and NormalizeOrigin discards the path — so the AAD is unchanged and
+	// the stored key still opens. The edit form must not demand the key back for
+	// this, and this is the assertion that says so.
+	moved := b.patchJSON(fmt.Sprintf("/api/v1/services/%d", svc.ID), map[string]any{"url_base": "/elsewhere"})
+	if moved.status != http.StatusOK {
+		t.Fatalf("PATCH url_base alone = %d, want 200 with no key re-entry: %s", moved.status, moved.body)
+	}
+	var repathed serviceBody
+	moved.decode(t, &repathed)
+	if repathed.URLBase != "/elsewhere" {
+		t.Fatalf("the sub-path edit did not stick: %+v", repathed)
+	}
+	if !repathed.HasCredential {
+		t.Error("moving the sub-path must not invalidate the stored key: the AAD is bound to " +
+			"scheme://host:port, which did not change")
+	}
+
+	// And an empty string CLEARS it, which is the only way back to the root and
+	// the reason the edit form sends this field even when it is blank.
+	//
+	// Decoded into a FRESH value, deliberately: serviceResponse.URLBase is
+	// `omitempty`, so a cleared sub-path is absent from the body rather than
+	// present as "". Reusing the struct above would leave the old value in place
+	// and the assertion would fail for a reason that has nothing to do with the
+	// server. web/src/lib/api.ts already reads it that way — str() answers
+	// undefined for a field that is not there.
+	var afterClear serviceBody
+	cleared := b.patchJSON(fmt.Sprintf("/api/v1/services/%d", svc.ID), map[string]any{"url_base": ""})
+	if cleared.status != http.StatusOK {
+		t.Fatalf("PATCH url_base to empty = %d, want 200: %s", cleared.status, cleared.body)
+	}
+	cleared.decode(t, &afterClear)
+	if afterClear.URLBase != "" {
+		t.Fatalf("an empty url_base must clear the sub-path, got %q", afterClear.URLBase)
+	}
+
+	// The instance is now pointed at the root, where nothing answers — so the
+	// clear really took effect upstream and not just in the response body.
+	var afterClearTest testBody
+	b.mustPost(fmt.Sprintf("/api/v1/services/%d/test", svc.ID), map[string]any{}, &afterClearTest)
+	if afterClearTest.OK {
+		t.Fatal("with the sub-path cleared the instance must be unreachable; if this passes, " +
+			"the clear was cosmetic")
+	}
+
+	// Put it back, and prove the round trip left a working instance.
+	restored := b.patchJSON(fmt.Sprintf("/api/v1/services/%d", svc.ID), map[string]any{"url_base": subPath})
+	if restored.status != http.StatusOK {
+		t.Fatalf("PATCH url_base back = %d, want 200: %s", restored.status, restored.body)
+	}
+
+	// ── 7. and the thing the user came for, over the prefix ─────────────────
+	//
+	// Search touches GET /api/v1/indexer and GET /api/v1/search, neither of which
+	// the connection test reaches. Results arriving means the whole client stack
+	// — not just the wizard's ping — is talking to the sub-path.
+	stream := b.openStream(t)
+	defer stream.close()
+
+	var accepted searchAcceptedBody
+	b.mustGet("/api/v1/search?query=Test+Release&type=search&category=2000", &accepted)
+	if accepted.SearchID == "" {
+		t.Fatal("the search must return a search id immediately")
+	}
+
+	var (
+		results []releaseBody
+		report  reportBody
+	)
+	deadline := time.After(30 * time.Second)
+	for report.Summary == "" {
+		select {
+		case <-deadline:
+			t.Fatalf("timed out waiting for search.done; %d results so far", len(results))
+		case ev := <-stream.events:
+			switch ev.name {
+			case httpapi.EventSearchResults:
+				var payload struct {
+					Results []releaseBody `json:"results"`
+				}
+				mustUnmarshal(t, ev.data, &payload)
+				results = append(results, payload.Results...)
+			case httpapi.EventSearchDone:
+				var payload struct {
+					Report reportBody `json:"report"`
+				}
+				mustUnmarshal(t, ev.data, &payload)
+				report = payload.Report
+			}
+		}
+	}
+	if len(results) == 0 {
+		t.Fatal("no results reached the browser from the Prowlarr behind " + subPath)
+	}
+	t.Logf("searched a Prowlarr behind %s: %d results — %s", subPath, len(results), report.Summary)
+
+	assertNoSecret(t, "everything this browser was served", b.everythingSeen(), apiKey)
+}
+
 // TestSPARequestsSatisfyTheMiddleware sweeps every endpoint web/src/lib/api.ts
 // calls, issued the way that file issues it, and fails if the middleware in
 // front of it refuses the request.

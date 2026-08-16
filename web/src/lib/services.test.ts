@@ -218,6 +218,100 @@ describe('adding a service', () => {
 		expect(created.hasCredential).toBe(true);
 	});
 
+	/**
+	 * A Prowlarr behind a reverse proxy at `https://host/prowlarr`. The origin and
+	 * the sub-path are separate columns server-side, because crypto.NormalizeHostPort
+	 * discards the path and the credential's AAD is bound to the origin alone.
+	 */
+	it('sends url_base for an instance behind a reverse-proxy sub-path', async () => {
+		stubFetch((url) =>
+			url === '/api/v1/auth/session'
+				? jsonResponse(sessionBody)
+				: jsonResponse({ ...serviceBody, url_base: '/prowlarr' }, 201)
+		);
+
+		const created = await createService({
+			kind: 'prowlarr',
+			name: 'Prowlarr',
+			baseUrl: 'https://host',
+			urlBase: '  /prowlarr  ',
+			apiKey: API_KEY
+		});
+
+		const body = JSON.parse(calls.find((c) => c.url === '/api/v1/services')!.init.body as string);
+		expect(body).toEqual({
+			kind: 'prowlarr',
+			name: 'Prowlarr',
+			base_url: 'https://host',
+			url_base: '/prowlarr',
+			api_key: API_KEY
+		});
+		// The base URL stays the ORIGIN. A client that folded the sub-path into it
+		// would move the instance out from under its own credential.
+		expect(body.base_url).toBe('https://host');
+		expect(created.urlBase).toBe('/prowlarr');
+	});
+
+	it('leaves url_base off the wire entirely when there is no sub-path', async () => {
+		stubFetch((url) =>
+			url === '/api/v1/auth/session' ? jsonResponse(sessionBody) : jsonResponse(serviceBody, 201)
+		);
+
+		// What the add form submits when the optional field is untouched, and when
+		// it holds nothing but whitespace.
+		for (const urlBase of ['', '   ', undefined]) {
+			await createService({
+				kind: 'prowlarr',
+				name: 'Prowlarr',
+				baseUrl: 'http://prowlarr:9696',
+				urlBase,
+				apiKey: API_KEY
+			});
+		}
+
+		for (const call of calls.filter((c) => c.url === '/api/v1/services')) {
+			const body = JSON.parse(call.init.body as string);
+			// Not `url_base: ""`. The empty string carries no information the server
+			// does not already have, and createServiceRequest's other optional
+			// fields are omitted rather than zeroed for the same reason.
+			expect(Object.keys(body).sort()).toEqual(['api_key', 'base_url', 'kind', 'name']);
+		}
+	});
+
+	it('tests an unsaved instance against the sub-path, and omits it when blank', async () => {
+		stubFetch((url) =>
+			url === '/api/v1/auth/session'
+				? jsonResponse(sessionBody)
+				: jsonResponse({ ok: true, reachable: true, key_proven_valid: true, message: 'connected' })
+		);
+
+		await testNewService({
+			kind: 'prowlarr',
+			name: 'Prowlarr',
+			baseUrl: 'https://host',
+			urlBase: '/prowlarr',
+			apiKey: API_KEY
+		});
+		await testNewService({
+			kind: 'prowlarr',
+			name: 'Prowlarr',
+			baseUrl: 'http://prowlarr:9696',
+			urlBase: '',
+			apiKey: API_KEY
+		});
+
+		const [withSubPath, without] = calls
+			.filter((c) => c.url === '/api/v1/services/test')
+			.map((c) => JSON.parse(c.init.body as string));
+		expect(withSubPath).toEqual({
+			kind: 'prowlarr',
+			base_url: 'https://host',
+			url_base: '/prowlarr',
+			api_key: API_KEY
+		});
+		expect(Object.keys(without)).not.toContain('url_base');
+	});
+
 	it('surfaces the mandatory connection test’s verbatim failure', async () => {
 		stubFetch((url) =>
 			url === '/api/v1/auth/session'
@@ -393,6 +487,91 @@ describe('changing a base URL requires re-entering the key', () => {
 		expectCsrfShape(call, 'POST');
 		expect(JSON.parse(call.init.body as string)).toEqual({});
 		expect(result.ok).toBe(true);
+	});
+});
+
+/**
+ * The sub-path on an EXISTING instance. It is the one editable field that is
+ * present-means-set rather than omit-when-empty, because clearing it is the only
+ * way to move an instance back to the root of its host.
+ */
+describe('editing the reverse-proxy sub-path', () => {
+	it('does NOT require the key back: url_base is not part of the AAD', async () => {
+		stubFetch((url) =>
+			url === '/api/v1/auth/session'
+				? jsonResponse(sessionBody)
+				: jsonResponse({ ...serviceBody, url_base: '/prowlarr' })
+		);
+
+		// handleUpdateService derives hostChanged from NormalizeOrigin(base_url)
+		// alone, and NormalizeOrigin discards the path. Same scheme, host and port
+		// means the stored ciphertext still opens, so demanding re-entry here would
+		// be a rule the server does not have.
+		expect(requiresCredentialReentry('https://host', 'https://host')).toBe(false);
+
+		const updated = await updateService(4, {
+			baseUrl: 'https://host',
+			urlBase: '/prowlarr',
+			currentBaseUrl: 'https://host'
+		});
+
+		const call = calls.find((c) => c.url === '/api/v1/services/4')!;
+		expectCsrfShape(call, 'PATCH');
+		const body = JSON.parse(call.init.body as string);
+		expect(body).toEqual({ base_url: 'https://host', url_base: '/prowlarr' });
+		expect(Object.keys(body)).not.toContain('api_key');
+		expect(updated.urlBase).toBe('/prowlarr');
+	});
+
+	it('sends an empty url_base to clear one, and omits it when not editing it', async () => {
+		stubFetch((url) =>
+			url === '/api/v1/auth/session' ? jsonResponse(sessionBody) : jsonResponse(serviceBody)
+		);
+
+		// The edit form always supplies this field, blank included — otherwise a
+		// service that left its proxy could never be pointed back at the root.
+		await updateService(4, { name: 'Prowlarr', urlBase: '  ' });
+		// A caller that is not editing the sub-path at all omits it, and the stored
+		// value is left alone.
+		await updateService(4, { name: 'Prowlarr' });
+
+		const [cleared, untouched] = calls
+			.filter((c) => c.url === '/api/v1/services/4')
+			.map((c) => JSON.parse(c.init.body as string));
+		expect(cleared).toEqual({ name: 'Prowlarr', url_base: '' });
+		expect(untouched).toEqual({ name: 'Prowlarr' });
+	});
+
+	it('reads a cleared sub-path back as undefined, because the server omits it', async () => {
+		// serviceResponse.URLBase is `url_base,omitempty`, so an instance served
+		// from the root has no such field at all. The screen must render nothing
+		// rather than an empty sub-path line.
+		stubFetch(() =>
+			jsonResponse({ services: [serviceBody, { ...serviceBody, id: 5, url_base: '' }] })
+		);
+		const services = await listServices();
+		expect(services[0].urlBase).toBeUndefined();
+		expect(services[1].urlBase).toBeUndefined();
+	});
+
+	it('carries the sub-path into a connection test, and omits an empty one', async () => {
+		stubFetch((url) =>
+			url === '/api/v1/auth/session'
+				? jsonResponse(sessionBody)
+				: jsonResponse({ ok: true, reachable: true, key_proven_valid: true, message: 'connected' })
+		);
+
+		await testService(4, { urlBase: '/prowlarr' });
+		// handleTestService reads url_base through stringOr(), where "" means "use
+		// the stored sub-path" — so sending "" could not clear it and would only
+		// look as though it might.
+		await testService(4, { urlBase: '' });
+
+		const [withSubPath, without] = calls
+			.filter((c) => c.url === '/api/v1/services/4/test')
+			.map((c) => JSON.parse(c.init.body as string));
+		expect(withSubPath).toEqual({ url_base: '/prowlarr' });
+		expect(without).toEqual({});
 	});
 });
 

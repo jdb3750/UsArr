@@ -603,6 +603,7 @@ type serviceBody struct {
 	Role          string `json:"role"`
 	Name          string `json:"name"`
 	BaseURL       string `json:"base_url"`
+	URLBase       string `json:"url_base"`
 	APIVersion    string `json:"api_version"`
 	Enabled       bool   `json:"enabled"`
 	HasCredential bool   `json:"has_credential"`

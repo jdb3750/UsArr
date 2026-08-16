@@ -64,12 +64,14 @@
 	// The edit form, one row at a time.
 	let editName = $state('');
 	let editBaseUrl = $state('');
+	let editUrlBase = $state('');
 	let editApiKey = $state('');
 	let editOriginalBaseUrl = $state('');
 
 	// The add form.
 	let addName = $state('');
 	let addBaseUrl = $state('');
+	let addUrlBase = $state('');
 	let addApiKey = $state('');
 	let addBusy = $state(false);
 	let addProblem = $state('');
@@ -161,6 +163,9 @@
 		editName = row.health.name;
 		editBaseUrl = row.health.baseUrl;
 		editOriginalBaseUrl = row.health.baseUrl;
+		// The health row carries no sub-path; GET /api/v1/services does. Blank
+		// when the instance is served from the root, which is the common case.
+		editUrlBase = row.instance?.urlBase ?? '';
 		editApiKey = '';
 	}
 
@@ -180,6 +185,10 @@
 				await updateService(id, {
 					name: editName,
 					baseUrl: editBaseUrl,
+					// Always sent, blank included: on PATCH the field is
+					// present-means-set, so emptying it is how a sub-path is
+					// removed once it is no longer behind a proxy.
+					urlBase: editUrlBase,
 					apiKey: editApiKey,
 					currentBaseUrl: editOriginalBaseUrl
 				});
@@ -213,7 +222,13 @@
 	}
 
 	function newServiceInput() {
-		return { kind: 'prowlarr', name: addName, baseUrl: addBaseUrl, apiKey: addApiKey };
+		return {
+			kind: 'prowlarr',
+			name: addName,
+			baseUrl: addBaseUrl,
+			urlBase: addUrlBase,
+			apiKey: addApiKey
+		};
 	}
 
 	async function testBeforeAdd() {
@@ -245,6 +260,7 @@
 				addMessage = `Added ${created.name}.`;
 				addName = '';
 				addBaseUrl = '';
+				addUrlBase = '';
 				addApiKey = '';
 				await load();
 			});
@@ -349,6 +365,15 @@
 					<div class="result-meta">
 						<span>{health.kind}</span>
 						<span>{health.baseUrl}</span>
+						<!--
+							The sub-path, when there is one. It is not on the health row —
+							only GET /api/v1/services carries it — and it is shown because a
+							wrong one is otherwise invisible: the address above looks right
+							while every request goes to the wrong path.
+						-->
+						{#if row.instance?.urlBase}
+							<span>sub-path {row.instance.urlBase}</span>
+						{/if}
 						{#if row.instance}
 							<span>{row.instance.hasCredential ? 'API key stored' : 'no API key stored'}</span>
 						{/if}
@@ -421,6 +446,22 @@
 							<input id={`base-${health.id}`} type="text" required bind:value={editBaseUrl} />
 						</div>
 						<div class="field">
+							<label for={`urlbase-${health.id}`}>Sub-path (optional)</label>
+							<input
+								id={`urlbase-${health.id}`}
+								type="text"
+								autocomplete="off"
+								placeholder="/prowlarr"
+								bind:value={editUrlBase}
+							/>
+							<p class="field-hint">
+								Needed only behind a reverse proxy, for a Prowlarr reachable at
+								<code>https://host/prowlarr</code> rather than at the root. It is Prowlarr's own Settings
+								→ General → URL Base. Clear it to go back to the root. Changing only the sub-path does
+								not require the API key again.
+							</p>
+						</div>
+						<div class="field">
 							<label for={`key-${health.id}`}>API key</label>
 							<!--
 								type=password, and empty on open. The server never returns the
@@ -486,6 +527,21 @@
 			required
 			bind:value={addBaseUrl}
 		/>
+	</div>
+	<div class="field">
+		<label for="add-urlbase">Sub-path (optional)</label>
+		<input
+			id="add-urlbase"
+			type="text"
+			autocomplete="off"
+			placeholder="/prowlarr"
+			bind:value={addUrlBase}
+		/>
+		<p class="field-hint">
+			Needed only behind a reverse proxy, for a Prowlarr reachable at
+			<code>https://host/prowlarr</code> rather than at the root. It is Prowlarr's own Settings → General
+			→ URL Base. Leave it blank if the base URL above is the whole address.
+		</p>
 	</div>
 	<div class="field">
 		<label for="add-key">API key</label>
