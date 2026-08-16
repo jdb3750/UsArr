@@ -150,7 +150,7 @@ func TestForwardedHeadersAreOnlyBelievedFromTrustedProxies(t *testing.T) {
 				t.Error("X-Forwarded-For reached the handler; it must be stripped")
 			}
 		}))
-		r := httptest.NewRequest(http.MethodGet, "/api/health/live", nil)
+		r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/health/live", nil)
 		r.RemoteAddr = "192.0.2.10:5000"
 		r.Header.Set("X-Forwarded-For", "203.0.113.99, 192.0.2.10")
 		h.ServeHTTP(httptest.NewRecorder(), r)

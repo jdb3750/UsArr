@@ -102,7 +102,7 @@ func TestServiceURLBaseRejections(t *testing.T) {
 // the router so the test is about validation and not about cookies.
 func asOwner(t *testing.T, s *Server, h handler, method, target, body string, id int64) (int, string) {
 	t.Helper()
-	r := httptest.NewRequest(method, target, strings.NewReader(body))
+	r := httptest.NewRequestWithContext(t.Context(), method, target, strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 	if id != 0 {
 		r.SetPathValue("id", strconv.FormatInt(id, 10))

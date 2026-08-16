@@ -27,6 +27,17 @@ linters:
       - path: _test\.go
         linters:
           - gosec
+# A gate that hides findings is a gate nobody can trust. golangci-lint defaults
+# to max-same-issues: 3 and max-issues-per-linter: 50, so a repeated finding is
+# reported a few times and the rest are dropped SILENTLY — no "N more" line, no
+# non-zero difference in the summary. That is not hypothetical here: this repo
+# carried 7 noctx findings that a default run displayed as 3, so fixing the three
+# on screen would have looked like finishing the job while four remained. 0 means
+# unlimited. Do not restore the defaults to make the output shorter.
+issues:
+  max-same-issues: 0
+  max-issues-per-linter: 0
+
 formatters:
   enable:
     - gofumpt
