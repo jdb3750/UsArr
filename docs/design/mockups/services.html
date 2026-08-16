@@ -47,7 +47,7 @@
       <label class="sr" for="density">Row density</label>
       <select id="density" class="select" data-act="density">
         <option value="compact">Compact</option>
-        <option value="default">Default</option>
+        <option value="standard">Standard</option>
         <option value="relaxed">Relaxed</option>
       </select>
       <button type="button" class="btn btn--icon" data-act="theme" aria-label="Switch the theme">
@@ -65,7 +65,8 @@
       <li><a class="nav__link" href="index.html#tv" data-route="home">TV</a></li>
       <li><a class="nav__link" href="search.html" data-route="search" data-primary>Search</a></li>
       <li><a class="nav__link" href="requests.html" data-route="requests" data-primary>Requests</a></li>
-      <li><a class="nav__link" href="services.html" data-route="services" data-primary aria-current="page">Services</a></li>
+      <li><a class="nav__link" href="services.html" data-route="services" data-primary aria-current="page">Services
+        <span class="nav__count nav__count--err" title="2 errors">2</span></a></li>
     </ul>
     <ul class="nav__group">
       <li><a class="nav__link" href="services.html#settings" data-route="services">Settings</a></li>
@@ -74,13 +75,9 @@
       <li><a class="nav__link nav__link--sub" href="services.html#settings" data-route="services">UI</a></li>
     </ul>
     <ul class="nav__group">
-      <li><a class="nav__link" href="services.html#system" data-route="services">System
-        <span class="nav__count nav__count--err" title="2 errors">2</span></a></li>
+      <li><a class="nav__link" href="services.html#system" data-route="services">System</a></li>
       <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Status</a></li>
-      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Tasks</a></li>
       <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Backup</a></li>
-      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Events</a></li>
-      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Log files</a></li>
     </ul>
   </nav>
   <!-- SIDEBAR END -->
@@ -148,7 +145,7 @@
     </div>
 
     <div class="tablewrap">
-      <table class="tbl tbl--stack" data-roving="tbody tr[data-row]" aria-label="Configured services">
+      <table class="tbl tbl--stack tbl--services" data-roving="tbody tr[data-row]" aria-label="Configured services">
         <thead>
           <tr>
             <th scope="col">Service</th>
@@ -213,7 +210,7 @@
               </div>
             </td>
             <td data-label="Items" class="is-num">1,204</td>
-            <td data-label="Problem"><div class="verbatim">Get "http://10.0.0.4:7878/api/v3/movie?page=1&amp;pageSize=250": dial tcp 10.0.0.4:7878: connect: connection refused</div></td>
+            <td data-label="Problem"><div class="verbatim">Get "http://10.0.0.4:7878/api/v3/movie": dial tcp 10.0.0.4:7878: connect: connection refused</div></td>
             <td data-label="Action"><button type="button" class="btn">Test connection</button></td>
           </tr>
           <tr id="x-radarr" hidden><td colspan="6">
@@ -287,7 +284,7 @@ delta polling uses this host's clock, so recent changes can be missed</div></td>
           <tr id="x-anime" hidden><td colspan="6">
             <div class="detail">
               <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">CLOSED</span></li><li>Consecutive failures <span class="num">0</span></li></ul></div>
-              <div><h4>Health warnings from Sonarr Anime</h4><ul><li><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span> System time is off by more than 1 day</li><li><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span> Indexers are unavailable due to failures</li></ul></div>
+              <div><h4>Health warnings from Sonarr Anime</h4><ul><li><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span> Indexers unavailable due to failures: Nyaa</li><li><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span> Enable Completed Download Handling</li></ul></div>
               <div><h4>Recent sync reports</h4><ul><li><span class="num">14:01</span> delta, 2 changed</li><li><span class="num">13:01</span> delta, 0 changed</li><li><span class="num">12:01</span> delta, 4 changed</li></ul></div>
               <div><h4>Clock skew</h4><ul><li><span class="num">+212 s</span>, warned above 60 s</li></ul></div>
             </div>
@@ -390,7 +387,7 @@ delta polling uses this host's clock, so recent changes can be missed</div></td>
             <div class="field">
               <label class="field__label" for="f-url">Base URL</label>
               <input class="input" id="f-url" type="text" value="10.0.0.4:7879" aria-invalid="true" aria-describedby="f-url-err f-url-help" data-act="host">
-              <span class="field__err" id="f-url-err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>Base URL must include a scheme, for example http:// or https://</span>
+              <span class="field__err" id="f-url-err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg><span class="sr">Error:</span>Base URL must include a scheme, for example http:// or https://</span>
               <span class="field__help" id="f-url-help">The address this host can reach, not the one your browser uses. UsArr resolves it once and pins the address for the life of the request, so a rebinding DNS answer cannot redirect the call.</span>
             </div>
 
@@ -398,7 +395,7 @@ delta polling uses this host's clock, so recent changes can be missed</div></td>
               <label class="field__label" for="f-apikey">API key</label>
               <input class="input" id="f-apikey" type="password" value="••••••1a2b" aria-describedby="apikey-reentry f-apikey-help">
               <span class="field__help" id="f-apikey-help">Stored encrypted and never sent back to the browser. An *Arr API key is a full-admin credential.</span>
-              <span class="field__err" id="apikey-reentry" hidden><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>The host changed, so the stored key was cleared. Enter it again before saving.</span>
+              <span class="field__err" id="apikey-reentry" hidden><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg><span class="sr">Error:</span>The host changed, so the stored key was cleared. Enter it again before saving.</span>
             </div>
 
             <div class="field advanced">
@@ -439,8 +436,8 @@ delta polling uses this host's clock, so recent changes can be missed</div></td>
     </div>
   </section>
 
-  <dialog class="dialog" id="add-service">
-    <div class="dialog__head">Add service</div>
+  <dialog class="dialog" id="add-service" aria-labelledby="add-service-title">
+    <h2 class="dialog__head" id="add-service-title">Add service</h2>
     <div class="dialog__body">
       <form class="form">
         <div class="field">

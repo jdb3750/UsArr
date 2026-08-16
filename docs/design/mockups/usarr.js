@@ -61,11 +61,21 @@
   /* ---- sidebar -------------------------------------------------------- */
   var app = document.querySelector('.app');
   var sideBtn = document.querySelector('[data-act="sidebar"]');
+  /* On a phone the sidebar starts closed. Shipping it open is the Sonarr
+     #7757 / Prowlarr #2431 failure: the nav covers the thing you came for. */
+  if (app && window.matchMedia('(max-width: 900px)').matches) {
+    app.setAttribute('data-sidebar', 'collapsed');
+    if (sideBtn) {
+      sideBtn.setAttribute('aria-expanded', 'false');
+      sideBtn.setAttribute('aria-label', 'Show the sidebar');
+    }
+  }
   if (app && sideBtn) {
     sideBtn.addEventListener('click', function () {
       var collapsed = app.getAttribute('data-sidebar') === 'collapsed';
       app.setAttribute('data-sidebar', collapsed ? 'open' : 'collapsed');
       sideBtn.setAttribute('aria-expanded', collapsed ? 'true' : 'false');
+      sideBtn.setAttribute('aria-label', collapsed ? 'Hide the sidebar' : 'Show the sidebar');
     });
   }
 
@@ -188,9 +198,13 @@
   for (var g = 0; g < grids.length; g++) {
     (function (grid) {
       var sel = grid.getAttribute('data-roving');
+      /* Reading offsetParent forces a synchronous layout, and this runs once
+         per candidate on every arrow key: at 10,000 rows that is 10,000 forced
+         reflows per keypress. closest() answers the same question from the DOM
+         tree without touching layout. */
       function items() {
         return Array.prototype.filter.call(grid.querySelectorAll(sel), function (el) {
-          return !el.hidden && el.offsetParent !== null;
+          return !el.hidden && el.closest('[hidden]') === null;
         });
       }
       var initial = Array.prototype.slice.call(grid.querySelectorAll(sel));
@@ -231,10 +245,14 @@
     el.className = 'toast';
     el.setAttribute('role', 'alert');
     el.innerHTML =
-      '<div class="toast__title"><svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>' + title + '</div>' +
-      '<div class="toast__body"><div class="verbatim">' + verbatim + '</div></div>' +
+      '<div class="toast__title"><svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg><span data-slot="title"></span></div>' +
+      '<div class="toast__body"><div class="verbatim" data-slot="verbatim"></div></div>' +
       '<div class="toast__foot"><button type="button" class="btn btn--sm" data-toast="retry">Retry</button>' +
       '<button type="button" class="btn btn--sm" data-toast="dismiss">Dismiss</button></div>';
+    /* Upstream error text is a remote string. It is set as text, never parsed
+       as HTML: "render the upstream error verbatim" must not mean innerHTML. */
+    el.querySelector('[data-slot="title"]').textContent = title;
+    el.querySelector('[data-slot="verbatim"]').textContent = verbatim;
     el.addEventListener('click', function (ev) {
       var act = ev.target.closest('[data-toast]');
       if (!act) return;
@@ -247,7 +265,10 @@
   function setChip(row, kind, text) {
     var cell = row.querySelector('[data-slot="grabstate"]');
     if (!cell) return;
-    cell.innerHTML = '<span class="chip chip--' + kind + '">' + text + '</span>';
+    var chip = document.createElement('span');
+    chip.className = 'chip chip--' + kind;
+    chip.textContent = text;
+    cell.replaceChildren(chip);
   }
 
   document.addEventListener('click', function (ev) {

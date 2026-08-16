@@ -326,10 +326,12 @@ would work. It is simply the one choice guaranteed to read as defaulted.
 **`system-ui` alone is the tempting alternative and it has a specific, disqualifying cost for this
 app.** It is free — zero bytes, zero FOUT, zero layout shift, correct hinting for the OS's own
 rasteriser, correct fallback for every script the OS supports
-(<https://developer.mozilla.org/en-US/docs/Web/CSS/font-family>). But San Francisco, Segoe UI and
-Roboto have **different x-heights and different advance widths**, so the layout is not reproducible
-across platforms: a title that fits a 32 px row on macOS may wrap on Windows. MDN also warns
-explicitly that `system-ui` "may cause the displayed typeface to be undesirable for some users —
+(<https://developer.mozilla.org/en-US/docs/Web/CSS/font-family>). **INFERENCE, and it must be marked as one because it is the claim that decides OQ-3:** San
+Francisco, Segoe UI and Roboto have different x-heights and different advance widths, so the layout
+is not reproducible across platforms — a title that fits a 32 px row on macOS may wrap on Windows.
+No source is cited for that, because none was found that measures it; it is a typographic
+commonplace, not a finding, and the magnitude of the drift for *this* design has never been
+measured. MDN does warn explicitly that `system-ui` "may cause the displayed typeface to be undesirable for some users —
 for example, the default Windows CJK font may render Latin scripts poorly." For a design whose
 whole premise is fixed row heights and a dense grid, metric drift is not cosmetic.
 
@@ -338,11 +340,23 @@ family, large x-height, true tabular figures, and a mono companion that pairs wi
 anybody's tell list, it is not fashionable, and it will not be fashionable next year either —
 which is the point.
 
-**The cost, stated honestly.** Two subset WOFF2 faces at two weights each (400/600 sans, 400 mono)
-is realistically **~120–180 KB** total added to the binary and to first paint. **INFERENCE — this
-is an estimate from typical Latin-subset WOFF2 sizes, not a measured figure; it must be measured
-before the fonts are committed, and if it lands materially above ~200 KB, drop the mono weight
-count before dropping the family.** Mitigations: the font is served from the same box over a LAN,
+**The cost, now measured rather than estimated.** The three faces (IBM Plex Sans 400 and 600, IBM
+Plex Mono 400), taken as the WOFF2 subsets Google Fonts actually serves and measured by
+`Content-Length` on 2026-08-16:
+
+| Subset | Sans 400 | Sans 600 | Mono 400 | Total |
+|---|---|---|---|---|
+| `latin` only | 44.6 KB | 44.6 KB | 14.4 KB | **103.6 KB** |
+| `latin` + `latin-ext` | 74.8 KB | 74.8 KB | 27.4 KB | **177.2 KB** |
+
+So the earlier ~120–180 KB estimate was right for `latin` + `latin-ext` and **pessimistic by about
+40% for `latin` alone**, which is what "subset to Latin" in ADR-0024 actually means. At 103.6 KB
+over a LAN this is a single-digit-millisecond cost, and WOFF2 is already Brotli-compressed
+internally so the build-time precompression adds nothing here. The number that would have failed
+the ~200 KB trigger is the one that includes `latin-ext`; a self-hoster with an accented library
+will want it, so **decide the subset, not just the family** (OQ-3). If it must be cut, drop
+`latin-ext` before dropping a weight, and drop a weight before dropping the family.
+Mitigations: the font is served from the same box over a LAN,
 it is content-hashed and immutable, and it is precompressed at build time (`statigz`, see
 ADR-0024). Set `font-display: block` with a short block period, or `optional` — on a LAN the font
 always wins the race and `swap` risks a visible reflow for no benefit.
@@ -508,8 +522,13 @@ only 200 or 250 ms to disappear"; and *"at 500 ms, animations start to feel like
 
 Hard rules:
 
-- **Only `opacity` and `transform` may be transitioned.** Never `height`, `width`, `top`, `left`,
-  `background-position` or `box-shadow`.
+- **Only `opacity`, `transform` and `color` / `background-color` may be transitioned**, and the
+  colour pair only for the 80 ms hover/focus row above. Never `height`, `width`, `top`, `left`,
+  `background-position`, `box-shadow`, `border-width`, `text-decoration-thickness` or any other
+  property that moves geometry. *(The earlier form of this rule said "only `opacity` and
+  `transform`", which forbade the hover-colour change the table two rows up requires and which the
+  mockup stylesheet necessarily broke six times. A rule the reference implementation cannot obey is
+  a rule nobody will obey.)*
 - **One easing, `ease-out`.** No overshoot — no `cubic-bezier` with a control point outside 0..1 on
   Y — no spring, no bounce, no elastic.
 - **No scroll-triggered reveals.** (`IntersectionObserver` for lazy *loading* is a different call
@@ -638,6 +657,17 @@ phase A commits.
 The research position is: **"Load more" plus `content-visibility: auto` with
 `contain-intrinsic-size`** as the default, reaching for virtualization only above ~1,000 rows.
 
+⚠️ **`contain-intrinsic-size` has no value anywhere in this document, and it is the whole risk.**
+The browser uses that number as the placeholder height for every skipped element; when it is wrong
+the scrollbar jumps as content scrolls into view, which reads as *slowness* — the precise failure
+this section exists to avoid. It cannot be one constant, because the density control (§5.3) moves
+the row height across 28 / 32 / 36 px and the two-line and thumbnail rows across three more values.
+Whatever ships must derive it from the same custom property the row height reads
+(`contain-intrinsic-size: auto var(--row-h)`, with `auto` letting the browser remember the last
+real measurement), and it must be tested with the density control while scrolling. **Until that is
+specified with a value and a test, §7.4 is a direction, not an implementable rule** — which is one
+more reason OQ-1 needs settling rather than deferring.
+
 The reasons are concrete. `content-visibility: auto` skips rendering of off-screen content but,
 unlike `display: none`, "the skipped contents must still be available as normal to user-agent
 features such as find-in-page, tab order navigation, etc."
@@ -655,10 +685,14 @@ search results" (<https://www.nngroup.com/articles/infinite-scrolling/>), and Ba
 (<https://baymard.com/blog/external-load-more-vs-pagination-vs-infinite-scrolling>). UsArr is a
 retrieval tool, not a discovery feed.
 
-> ⚠️ **This contradicts the repository, and it is not resolved here.**
-> [`ARCHITECTURE.md`](../ARCHITECTURE.md) §4.5 says **"Virtualize everything over ~200 rows"**, and
-> §16 lists "Library grid, **virtualized**, keyset pagination" as a v0.1 line item. §4.5 is
-> authoritative and this document does not overrule it. The conflict is recorded as **open
+> ⚠️ **This contradicts the repository in three places, and it is not resolved here.**
+> [`ARCHITECTURE.md`](../ARCHITECTURE.md) §4.5 says **"Virtualize everything over ~200 rows"**;
+> §16 lists "Library grid, **virtualized**, keyset pagination" as a v0.1 line item; and
+> **ADR-0003 — an accepted ADR — rejects HTMX partly on the grounds that "a 10k-item virtualized
+> poster grid with instant client-side filter/sort *is* a rich client-state problem"**, so
+> virtualization is load-bearing in the reasoning that chose the framework. §4.5 is authoritative
+> and this document does not overrule it. Settling OQ-1 against virtualization therefore means
+> amending three documents, one of them an ADR, not one line. The conflict is recorded as **open
 > question OQ-1 in §15**, for Joe to settle — either by amending §4.5's threshold, or by accepting
 > the Ctrl+F loss deliberately and saying so in §4.5 rather than by omission.
 > Note the two positions are closer than they look: keyset windows of ~100 rows with ±2 pages
@@ -1070,13 +1104,27 @@ AI-generated" an actual gate rather than a vibe.
 - `[grep]` Banned words across all UI strings: seamlessly, effortlessly, powerful, simply, unlock,
   empower, elevate, streamline, supercharge, robust, leverage, intuitive, blazing, world-class,
   comprehensive, "AI-powered".
-- `[grep]` No `—` (U+2014) in any string under 15 words.
+- `[grep]` No `—` (U+2014) in any string under 15 words, **except where
+  [`ARCHITECTURE.md`](../ARCHITECTURE.md) §17.7 fixes the wording**: its degraded-instance banner
+  is quoted verbatim as *"Radarr 4K is unreachable — showing cached data from 14:02"*, which is
+  eight words. §17 wins over this checklist, so the rule carries the exception rather than the
+  banner carrying a rewrite.
 - `[grep]` No `!` in UI strings.
 - `[grep]` Buttons and labels are sentence case (proper nouns like Sonarr, Prowlarr, Navidrome
   excepted).
 - `[review]` No first-person plural.
 - `[review]` Every error string names the component, the observed symptom and the next action.
-- `[review]` No fabricated data anywhere — including screenshots, docs and empty states.
+- `[review]` No fabricated data **in any shipped product surface** — no placeholder rows, no
+  invented counts in an empty state, no seeded demo library, no screenshot in the README that shows
+  data no user has. **A design mockup is the one exception and must be labelled as one**, because a
+  mockup with no data shows nothing: `docs/design/mockups/` uses sample data throughout and says so
+  in its first paragraph. *(The earlier form of this rule — "no fabricated data anywhere, including
+  screenshots, docs and empty states" — forbade the mockup that exists to make the rest of this
+  document reviewable.)*
+- `[review]` Sample data in a mockup is still checked against reality: real episode counts, release
+  names a scene group would actually produce, sizes in the right order of magnitude, indexer and
+  category names that exist. Implausible sample data reads as generated even when the layout does
+  not.
 
 **States**
 - `[review]` Every component demonstrates the §10 state set. A component with only a happy path
@@ -1095,7 +1143,7 @@ AI-generated" an actual gate rather than a vibe.
 |---|---|---|
 | **OQ-1** | **Virtualization threshold.** ARCHITECTURE §4.5 says "virtualize everything over ~200 rows"; §7.4 above argues for "Load more" + `content-visibility: auto` below ~1,000 rows, because virtualization breaks Ctrl+F in a **library browser**. Amend §4.5, or accept the Ctrl+F loss explicitly? | §4.5 is authoritative and this document does not overrule it. It is a real functional trade, not a style preference |
 | **OQ-2** | **Navigation.** §17.2 named two options (home sections / top-navbar type tabs); §8.1 picks a **left sidebar** carrying both. Does that count as resolving §17.2, or does §17.2 exclude a third option? | §17.2 says "pick one and do not relitigate", so this needs settling once |
-| **OQ-3** | **Font budget.** IBM Plex Sans + Mono, Latin-subset, ~120–180 KB estimated (**unmeasured**). Ship it, or fall back to the zero-webfont system stack and accept cross-OS metric drift? | It is the only decision here that costs bytes on first paint, which §17.1 calls the honest lever |
+| **OQ-3** | **Font budget — now measured, and the question has changed.** IBM Plex Sans 400/600 + Mono 400 is **103.6 KB for `latin` alone, 177.2 KB with `latin-ext`** (§4.1). Neither trips the ~200 KB trigger, so the real question is the **subset**: ship `latin` only and let an accented library fall back mid-string, or pay the extra 73.6 KB? And the argument that beat the system stack — cross-OS metric drift — is inference, uncited, and unmeasured for this design (§4.1) | It is the only decision here that costs bytes on first paint. The mockup makes it live: it loads **no** webfont, so on any machine without Plex installed it renders in the system stack — and its README calls that "the correct and expected result", which is the opposite of ADR-0024's reason for rejecting that stack. Those two statements cannot both stand |
 | **OQ-4** | **13 px base type.** That is the Linear/dense register. If it reads small to you, move base to 14 and shift the whole scale up one step — **do not add a seventh step** | Personal legibility; you are the only user in v0.1 |
 | **OQ-5** | **Radius 0 or 2 px** on inputs and buttons. Both are within the budget; 0 is more committed | Taste, and it should be decided once and applied without exception |
 | **OQ-6** | **Theme default.** Auto (Sonarr's default) or Dark (Navidrome's)? | Navidrome is the stated reference point, but Auto is the *Arr convention and UsArr sits next to three of them |

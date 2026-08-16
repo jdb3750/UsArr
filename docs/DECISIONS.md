@@ -1516,10 +1516,13 @@ through `@theme inline`. No literal colour, size, radius or duration in any comp
 - **CSS ships small.** Tailwind's v4 material puts a representative purged production build at
   ~18 KB uncompressed; with a deliberately reduced token set, 🔍 well under 10 KB brotli is the
   expectation. CSS is not where this app's bytes go — the JS bundle and the fonts are.
-- **The fonts are the real byte cost.** Two subset WOFF2 families at three faces is 🔍 an estimated
-  ~120–180 KB, **unmeasured**, and it must be measured before the fonts are committed. If it lands
-  materially above ~200 KB, drop a weight before dropping the family; if it still does not fit, the
-  zero-webfont fallback below is the answer.
+- **The fonts are the real byte cost, and it is now measured.** Three faces (Sans 400/600, Mono
+  400) as WOFF2 subsets, by `Content-Length` on 2026-08-16: **103.6 KB for `latin` alone**
+  (44.6 + 44.6 + 14.4) and **177.2 KB with `latin-ext`**. The earlier 🔍 ~120–180 KB estimate was
+  correct for `latin` + `latin-ext` and pessimistic by ~40% for `latin` alone. Neither figure trips
+  the ~200 KB trigger, so the decision stands on its own terms — but **the subset, not just the
+  family, is the thing to decide** (OQ-3): drop `latin-ext` before dropping a weight, and a weight
+  before the family.
 - **Native controls stay native**, so the surface Bits UI covers is small — which also keeps the
   dependency footprint small.
 - **Both themes are audited independently.** Every contrast ratio in `tokens.css` is computed and
@@ -1554,7 +1557,10 @@ enforcement is the reason Tailwind is chosen — so this is a fallback, not a pr
 - **The system font stack with no webfont** — the recorded typographic alternative. Zero bytes,
   zero FOUT, zero layout shift, native feel. Rejected as the default because San Francisco, Segoe
   UI and Roboto have different x-heights and advance widths, so **the layout is not reproducible
-  across platforms** — a title that fits a 32px row on macOS may wrap on Windows — and MDN warns
+  across platforms** — a title that fits a 32px row on macOS may wrap on Windows. 🔍 **That last
+  claim is inference, not a citation**: it is a typographic commonplace and the drift has never
+  been measured for this design, which matters because it is the sole reason the system stack lost.
+  MDN separately warns
   that `system-ui` "may cause the displayed typeface to be undesirable for some users"
   (<https://developer.mozilla.org/en-US/docs/Web/CSS/font-family>). For a design built on fixed row
   heights that is not cosmetic. It remains the answer if the font budget in OQ-3 fails.

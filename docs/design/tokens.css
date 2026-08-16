@@ -307,7 +307,10 @@
   --radius-max: 6px; /* documented ceiling. Nothing may exceed it.             */
 
   /* The only shadow in the system. Neutral, tight, no hue. */
-  --shadow-overlay: 0 2px 8px rgb(0 0 0 / 0.18), 0 0 0 1px var(--border-strong);
+  /* rgb(0 0 0 / a) is still #000: it fails this file's own no-pure-black
+   * rule, which a grep for "#000" does not catch. The shadow is the warm
+   * near-black --n-8 instead, so the ramp has no exception. */
+  --shadow-overlay: 0 2px 8px rgb(28 26 23 / 0.18), 0 0 0 1px var(--border-strong);
 
   --z-overlay: 100; /* popover, dropdown, menu, tooltip, sticky header         */
   --z-top:     200; /* dialog and its scrim; toast                            */

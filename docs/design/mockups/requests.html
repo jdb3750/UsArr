@@ -47,7 +47,7 @@
       <label class="sr" for="density">Row density</label>
       <select id="density" class="select" data-act="density">
         <option value="compact">Compact</option>
-        <option value="default">Default</option>
+        <option value="standard">Standard</option>
         <option value="relaxed">Relaxed</option>
       </select>
       <button type="button" class="btn btn--icon" data-act="theme" aria-label="Switch the theme">
@@ -65,7 +65,8 @@
       <li><a class="nav__link" href="index.html#tv" data-route="home">TV</a></li>
       <li><a class="nav__link" href="search.html" data-route="search" data-primary>Search</a></li>
       <li><a class="nav__link" href="requests.html" data-route="requests" data-primary aria-current="page">Requests</a></li>
-      <li><a class="nav__link" href="services.html" data-route="services" data-primary>Services</a></li>
+      <li><a class="nav__link" href="services.html" data-route="services" data-primary>Services
+        <span class="nav__count nav__count--err" title="2 errors">2</span></a></li>
     </ul>
     <ul class="nav__group">
       <li><a class="nav__link" href="services.html#settings" data-route="services">Settings</a></li>
@@ -74,13 +75,9 @@
       <li><a class="nav__link nav__link--sub" href="services.html#settings" data-route="services">UI</a></li>
     </ul>
     <ul class="nav__group">
-      <li><a class="nav__link" href="services.html#system" data-route="services">System
-        <span class="nav__count nav__count--err" title="2 errors">2</span></a></li>
+      <li><a class="nav__link" href="services.html#system" data-route="services">System</a></li>
       <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Status</a></li>
-      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Tasks</a></li>
       <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Backup</a></li>
-      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Events</a></li>
-      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Log files</a></li>
     </ul>
   </nav>
   <!-- SIDEBAR END -->
@@ -190,23 +187,22 @@
   <div class="fanout" data-when="partial" role="status" hidden>
     <span class="fanout__count">4 of 9</span> indexers responded
     <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:44%"></span></span>
-    <span>47 releases so far, all of them grabbable now</span>
+    <span>47 releases so far, 5 shown after de-duplication, all of them grabbable now</span>
     <span class="fanout__failed">TorrentDay timed out after 30 s</span>
     <div class="toolbar__spacer"></div>
     <button type="button" class="btn btn--sm">Stop waiting</button>
   </div>
 
   <div class="fanout" data-when="live" role="status">
-    <span class="fanout__count">8 of 9</span> indexers responded
-    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:89%"></span></span>
+    <span class="fanout__count">9 of 9</span> indexers responded
+    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:100%"></span></span>
     <span>112 releases, 10 shown after de-duplication</span>
-    <span class="fanout__failed">HDBits returned 429 and was skipped</span>
   </div>
 
   <div class="fanout" data-when="denied" role="status" hidden>
     <span class="fanout__count">8 of 9</span> indexers responded
     <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:89%"></span></span>
-    <span>96 releases, 10 shown after de-duplication</span>
+    <span>96 releases, 9 shown after de-duplication</span>
     <span class="fanout__failed">PassThePopcorn refused the account</span>
   </div>
 
@@ -250,7 +246,7 @@
         </thead>
         <tbody>
 
-          <tr>
+          <tr data-when="live partial denied">
             <td data-label="Select"><label class="sr" for="r1">Select this release</label><input type="checkbox" id="r1" data-act="rowselect"></td>
             <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
             <td data-label="Age" class="is-num">2 days</td>
@@ -267,7 +263,7 @@
             </div></td>
           </tr>
 
-          <tr>
+          <tr data-when="live partial denied">
             <td data-label="Select"><label class="sr" for="r2">Select this release</label><input type="checkbox" id="r2" data-act="rowselect"></td>
             <td data-label="Protocol"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
             <td data-label="Age" class="is-num">3 days</td>
@@ -284,7 +280,7 @@
             </div></td>
           </tr>
 
-          <tr>
+          <tr data-when="live denied">
             <td data-label="Select"><label class="sr" for="r3">Select this release</label><input type="checkbox" id="r3" data-act="rowselect"></td>
             <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
             <td data-label="Age" class="is-num">4 days</td>
@@ -301,11 +297,11 @@
             </div></td>
           </tr>
 
-          <tr>
+          <tr data-when="live partial denied">
             <td data-label="Select"><label class="sr" for="r4">Select this release</label><input type="checkbox" id="r4" data-act="rowselect"></td>
             <td data-label="Protocol"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
             <td data-label="Age" class="is-num">6 days</td>
-            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.1080p.BluRay.DDP5.1.x264-PTer</span><div data-slot="grabstate"></div></td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.1080p.BluRay.DDP5.1.x264-NTb</span><div data-slot="grabstate"></div></td>
             <td data-label="Indexer" class="mono">DrunkenSlug</td>
             <td data-label="Size" class="is-num">14.9 GB</td>
             <td data-label="Grabs" class="is-num">306</td>
@@ -320,7 +316,7 @@
 
           <!-- Already acknowledged: the write queue holds it, and the chip
                says so rather than claiming the grab has landed. -->
-          <tr>
+          <tr data-when="live partial denied">
             <td data-label="Select"><label class="sr" for="r5">Select this release</label><input type="checkbox" id="r5" data-act="rowselect"></td>
             <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
             <td data-label="Age" class="is-num">8 days</td>
@@ -338,7 +334,7 @@
           </tr>
 
           <!-- verifying: it might have landed. Distinct from failed. -->
-          <tr>
+          <tr data-when="live">
             <td data-label="Select"><label class="sr" for="r6">Select this release</label><input type="checkbox" id="r6" data-act="rowselect"></td>
             <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
             <td data-label="Age" class="is-num">11 days</td>
@@ -355,16 +351,16 @@
             </div></td>
           </tr>
 
-          <tr>
+          <tr data-when="live denied">
             <td data-label="Select"><label class="sr" for="r7">Select this release</label><input type="checkbox" id="r7" data-act="rowselect"></td>
             <td data-label="Protocol"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
             <td data-label="Age" class="is-num">14 days</td>
             <td data-label="Title"><span class="mono">Dune.Part.Two.2024.720p.WEBRip.x264-GalaxyRG</span><div data-slot="grabstate"></div></td>
             <td data-label="Indexer" class="mono">NZBFinder</td>
-            <td data-label="Size" class="is-num">3.4 GB</td>
+            <td data-label="Size" class="is-num">1.4 GB</td>
             <td data-label="Grabs" class="is-num">41</td>
             <td data-label="Peers" class="is-num muted">n/a</td>
-            <td data-label="Category">Movies/SD</td>
+            <td data-label="Category">Movies/HD</td>
             <td data-label="Indexer flags" class="muted">None</td>
             <td data-label="Actions"><div class="cell-actions">
               <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
@@ -372,7 +368,7 @@
             </div></td>
           </tr>
 
-          <tr>
+          <tr data-when="live partial denied">
             <td data-label="Select"><label class="sr" for="r8">Select this release</label><input type="checkbox" id="r8" data-act="rowselect"></td>
             <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
             <td data-label="Age" class="is-num">21 days</td>
@@ -390,11 +386,11 @@
           </tr>
 
           <!-- Grabbing this row fails, so the failure path is reachable. -->
-          <tr data-demo="fail">
+          <tr data-demo="fail" data-when="live denied">
             <td data-label="Select"><label class="sr" for="r9">Select this release</label><input type="checkbox" id="r9" data-act="rowselect"></td>
             <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
             <td data-label="Age" class="is-num">26 days</td>
-            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.Hybrid.2160p.BluRay.REMUX.HDR.DV.HEVC.DTS-HD.MA.5.1-playBD</span><div data-slot="grabstate"></div></td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.Hybrid.2160p.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-playBD</span><div data-slot="grabstate"></div></td>
             <td data-label="Indexer" class="mono">HDBits</td>
             <td data-label="Size" class="is-num">74.9 GB</td>
             <td data-label="Grabs" class="is-num">12</td>
@@ -407,11 +403,11 @@
             </div></td>
           </tr>
 
-          <tr>
+          <tr data-when="live denied">
             <td data-label="Select"><label class="sr" for="r10">Select this release</label><input type="checkbox" id="r10" data-act="rowselect"></td>
             <td data-label="Protocol"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
             <td data-label="Age" class="is-num">31 days</td>
-            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.PROPER.1080p.BluRay.x265-RARBG</span><div data-slot="grabstate"></div></td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.PROPER.1080p.BluRay.DDP5.1.x265.10bit-QxR</span><div data-slot="grabstate"></div></td>
             <td data-label="Indexer" class="mono">abNZB</td>
             <td data-label="Size" class="is-num">6.1 GB</td>
             <td data-label="Grabs" class="is-num">155</td>
@@ -428,9 +424,9 @@
       </table>
     </div>
 
-    <p class="section muted">A grab is acknowledged, not applied optimistically. The button writes a queued command and the row shows <span class="chip chip--pending">pending</span> until Prowlarr answers. A failure changes that chip on the same visible row and raises a message carrying the upstream text verbatim, with Retry and Dismiss. The row never silently reverts. Grabbing the 26-day-old HDBits release above is wired to fail, so that path is reachable from this page.</p>
+    <p class="section note"><span class="statebar__tag">mockup</span> A grab is acknowledged, not applied optimistically. The button writes a queued command and the row shows <span class="chip chip--pending">pending</span> until Prowlarr answers. A failure changes that chip on the same visible row and raises a message carrying the upstream text verbatim, with Retry and Dismiss. The row never silently reverts. Grabbing the 26-day-old HDBits release above is wired to fail, so that path is reachable from this page.</p>
 
-    <p class="section muted">Grabs are recorded in <span class="mono">provenance</span>, so if a Sonarr or Radarr is added later and imports the file, the download id joins back to the release these indexers returned. UsArr does not track what happens to the download, and does not talk to a download client itself.</p>
+    <p class="section note"><span class="statebar__tag">mockup</span> Grabs are recorded in <span class="mono">provenance</span>, so if a Sonarr or Radarr is added later and imports the file, the download id joins back to the release these indexers returned. UsArr does not track what happens to the download, and does not talk to a download client itself.</p>
   </div>
 
 </main>

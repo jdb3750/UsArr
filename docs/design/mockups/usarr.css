@@ -7,6 +7,19 @@
    This file carries its own copy of the token values on purpose. The
    canonical token file is docs/design/tokens.css, owned separately; this
    mockup is meant to open from disk with a single stylesheet and no imports.
+
+   Every value below that tokens.css also defines is copied from it verbatim,
+   so the two files cannot drift. Two roles exist here that tokens.css does
+   not yet define -- --inset (the interior of an input, one step away from the
+   page ground) and a --hover fill distinct from --surface. Both were needed by
+   the first real screen; both are recorded as an open question against
+   tokens.css rather than invented silently. Their ratios are measured below on
+   the same basis as the rest.
+
+   CONTRAST. Every foreground is measured against every ground it can land on:
+   --bg, --surface, --hover, --selected and --inset. The worst of those five is
+   what is quoted. Quoting the best ground is how a table passes on paper and
+   fails on screen.
    ========================================================================== */
 
 /* ==========================================================================
@@ -16,25 +29,26 @@
 :root {
   /* --- Neutral ramp: warm grey. Achromatic chrome. No brand accent hue. ---
      Never pure white, never pure black: near-white and near-black only. */
-  --bg:          #faf9f7;  /* page ground */
-  --surface:     #f2f0ec;  /* toolbars, table head, sidebar, dialog body */
-  --inset:       #fdfcfb;  /* input / textarea interior */
-  --hover:       #eceae5;  /* row hover, button hover */
-  --selected:    #e0ddd6;  /* selection is a filled neutral step */
-  --border:      #dad6cf;  /* hairline dividers (decorative) */
-  --border-hi:   #857f75;  /* control boundaries: >= 3.2:1 */
-  --fg:          #1b1917;  /* primary text: >= 12:1 */
-  --fg-muted:    #5e5951;  /* metadata: >= 5.5:1 */
-  --fg-faint:    #736d63;  /* placeholders, disabled label: >= 4.5:1 */
-  --focus:       #14120f;  /* max-contrast focus ring */
+  --bg:          #faf9f7;  /* page ground.            tokens.css --n-0       */
+  --surface:     #f2f0ec;  /* toolbars, table head, sidebar.          --n-1  */
+  --inset:       #fdfcfb;  /* input interior. Mockup-local, see the header.   */
+  --hover:       #eceae5;  /* row/button hover fill. Mockup-local.            */
+  --selected:    #e7e3dd;  /* selected row.                           --n-2  */
+  --border:      #d8d3cb;  /* hairline dividers (decorative).         --n-3  */
+  --border-hi:   #807869;  /* control boundary.  4.15 3.84 3.63 3.42 4.26    */
+  --fg:          #1c1a17;  /* primary text.     16.50 15.25 14.51 13.58 16.94 */
+  --fg-muted:    #5a534a;  /* metadata.          7.20 6.66 6.30 5.93 7.40    */
+  --fg-faint:    #6b6355;  /* placeholder.       5.64 5.21 4.93 4.64 5.79    */
+  --focus:       #1c1a17;  /* focus ring = --n-8, maximum contrast.          */
 
   /* --- Status semantics. The only saturated colour in the chrome.
      Always rendered as icon + text + colour, never colour alone.
-     Grey is a legitimate status: it means "not configured". --- */
-  --st-ok:       #166534;
-  --st-warn:     #7a5200;
-  --st-err:      #a01b1b;
-  --st-none:     #5e5951;
+     Grey is a legitimate status: it means "not configured".
+     Ratios: bg / surface / hover / selected / inset. --- */
+  --st-ok:       #1c6b3a;  /*                    6.21 5.74 5.43 5.11 6.38    */
+  --st-warn:     #8a5300;  /*                    6.02 5.56 5.26 4.95 6.18    */
+  --st-err:      #b3251c;  /*                    6.24 5.77 5.46 5.14 6.41    */
+  --st-none:     #5a534a;  /*                    7.20 6.66 6.30 5.93 7.40    */
 
   /* --- Protocol chips. The hues come from the *Arrs' own theme file, so a
      self-hoster reads them without a legend:
@@ -93,7 +107,7 @@
   --ease: ease-out;
 
   /* Elevation exists only on genuinely floating layers, and it is neutral. */
-  --shadow-float: 0 2px 8px rgba(27, 25, 23, 0.18);
+  --shadow-float: 0 2px 8px rgba(28, 26, 23, 0.18);
 
   color-scheme: light dark;
 }
@@ -103,7 +117,7 @@
    want otherwise"). */
 :root,
 :root[data-density="compact"]  { --row-h: 28px; --row-py: var(--sp-2); }
-:root[data-density="default"]  { --row-h: 32px; --row-py: var(--sp-3); }
+:root[data-density="standard"] { --row-h: 32px; --row-py: var(--sp-3); }
 :root[data-density="relaxed"]  { --row-h: 36px; --row-py: var(--sp-4); }
 
 /* Dark theme. Defined twice on purpose: once behind the media query for
@@ -111,21 +125,21 @@
    in-page toggle wins in both directions. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg:        #161513;
+    --bg:        #171614;
     --surface:   #1e1d1a;
     --inset:     #100f0e;
     --hover:     #26241f;
-    --selected:  #2a2823;
-    --border:    #34322d;
-    --border-hi: #7a756c;
-    --fg:        #eeeae4;
-    --fg-muted:  #a8a299;
-    --fg-faint:  #928c82;
-    --focus:     #f8f5f0;
-    --st-ok:     #5cbc85;
-    --st-warn:   #e0a63f;
-    --st-err:    #f2796f;
-    --st-none:   #a8a299;
+    --selected:  #2a2824;
+    --border:    #39362f;
+    --border-hi: #7d7568;   /* 3.98 3.71 3.41 3.23 4.21 */
+    --fg:        #efece5;   /* 15.33 14.29 13.16 12.47 16.23 */
+    --fg-muted:  #b0a89b;   /* 7.68 7.16 6.59 6.25 8.13 */
+    --fg-faint:  #9a9284;   /* 5.87 5.47 5.03 4.78 6.22 */
+    --focus:     #efece5;
+    --st-ok:     #5cba7d;   /* 7.56 7.04 6.48 6.15 8.00 */
+    --st-warn:   #e0a33a;   /* 8.15 7.60 6.99 6.63 8.63 */
+    --st-err:    #f0837a;   /* 7.09 6.61 6.08 5.77 7.51 */
+    --st-none:   #b0a89b;
     /* Protocol hues retuned for the dark ground; see the note in §1. */
     --proto-torrent: #4fb377;
     --proto-usenet:  #4ec3e0;
@@ -134,21 +148,21 @@
 }
 
 :root[data-theme="dark"] {
-  --bg:        #161513;
+  --bg:        #171614;
   --surface:   #1e1d1a;
   --inset:     #100f0e;
   --hover:     #26241f;
-  --selected:  #2a2823;
-  --border:    #34322d;
-  --border-hi: #7a756c;
-  --fg:        #eeeae4;
-  --fg-muted:  #a8a299;
-  --fg-faint:  #928c82;
-  --focus:     #f8f5f0;
-  --st-ok:     #5cbc85;
-  --st-warn:   #e0a63f;
-  --st-err:    #f2796f;
-  --st-none:   #a8a299;
+  --selected:  #2a2824;
+  --border:    #39362f;
+  --border-hi: #7d7568;   /* 3.98 3.71 3.41 3.23 4.21 */
+  --fg:        #efece5;   /* 15.33 14.29 13.16 12.47 16.23 */
+  --fg-muted:  #b0a89b;   /* 7.68 7.16 6.59 6.25 8.13 */
+  --fg-faint:  #9a9284;   /* 5.87 5.47 5.03 4.78 6.22 */
+  --focus:     #efece5;
+  --st-ok:     #5cba7d;   /* 7.56 7.04 6.48 6.15 8.00 */
+  --st-warn:   #e0a33a;   /* 8.15 7.60 6.99 6.63 8.63 */
+  --st-err:    #f0837a;   /* 7.09 6.61 6.08 5.77 7.51 */
+  --st-none:   #b0a89b;
   /* Protocol hues retuned for the dark ground; see the note in §1. */
   --proto-torrent: #4fb377;
   --proto-usenet:  #4ec3e0;
@@ -194,7 +208,10 @@ a {
   text-underline-offset: 2px;
   text-decoration-thickness: 1px;
 }
-a:hover { text-decoration-thickness: 2px; }
+/* Hover changes colour only, never geometry: a thickness change on hover
+   is a geometry change, which DESIGN-DIRECTION.md 6 forbids. Links are
+   already underlined, so the affordance does not depend on hover. */
+a:hover { color: var(--fg); }
 
 button, input, select, textarea { font: inherit; color: inherit; }
 
@@ -451,7 +468,15 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 .segment button:hover { background: var(--hover); }
 .segment button[aria-pressed="true"] { background: var(--selected); font-weight: 600; }
 
-/* Mockup-only affordance. Marked as such on every screen. */
+/* Mockup-only affordances. Marked as such wherever they appear, so design
+   commentary is never mistaken for product chrome. */
+.note {
+  color: var(--fg-muted);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+}
+.note .statebar__tag { margin-right: var(--sp-3); }
+
 .statebar {
   display: flex;
   align-items: center;
@@ -617,8 +642,14 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 .tbl td > * + * { margin-top: var(--sp-1); }
 .tbl .cell-title { font-weight: 600; }
 /* Release names have no spaces, so without this a single cell sets the
-   table's min-content width and the page scrolls sideways. */
+   table's min-content width and the page scrolls sideways. A base URL is not
+   a release name: breaking "http://10.0.0.4:8989" across ":898 / 9" reads as
+   damage, so the sub-line breaks at word boundaries and the column that holds
+   it is given room instead. */
 .tbl td .mono { overflow-wrap: anywhere; }
+.tbl .cell-sub.mono { overflow-wrap: break-word; word-break: normal; }
+.tbl--services td:first-child { min-width: 240px; }
+.tbl--services .verbatim { max-width: 38ch; }
 .tbl .cell-sub { color: var(--fg-muted); font-size: var(--fs-sm); line-height: var(--lh-sm); }
 .tbl .cell-actions { display: flex; gap: var(--sp-3); align-items: center; }
 .tbl tr.is-expand > td { background: var(--surface); }
@@ -731,7 +762,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
   max-width: 460px;
   width: calc(100vw - var(--sp-8));
 }
-.dialog::backdrop { background: rgba(27, 25, 23, 0.42); }
+.dialog::backdrop { background: rgba(28, 26, 23, 0.42); }
 .dialog__head { padding: var(--sp-5) var(--sp-6) var(--sp-3); font-size: var(--fs-lg); line-height: var(--lh-lg); font-weight: 600; }
 .dialog__body { padding: 0 var(--sp-6) var(--sp-5); }
 .dialog__foot { display: flex; gap: var(--sp-4); justify-content: flex-end; padding: var(--sp-4) var(--sp-6) var(--sp-5); border-top: 1px solid var(--border); }
@@ -765,13 +796,14 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 .fanout {
   display: flex;
   align-items: center;
-  gap: var(--sp-4);
+  flex-wrap: wrap;
+  gap: var(--sp-3) var(--sp-4);
   padding: var(--sp-3) var(--sp-6);
   border-bottom: 1px solid var(--border);
   font-size: var(--fs-sm);
   color: var(--fg-muted);
 }
-.fanout__count { font-variant-numeric: tabular-nums; color: var(--fg); font-weight: 600; }
+.fanout__count { font-variant-numeric: tabular-nums; color: var(--fg); font-weight: 600; white-space: nowrap; }
 .fanout__meter {
   flex: 0 0 120px;
   height: 4px;
@@ -786,10 +818,25 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 /* --- 2.11 Responsive: the same layout, degraded. No second design. ------- */
 
 @media (max-width: 900px) {
-  .app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "topbar" "main"; }
+  /* The sidebar overlays the content, it does not take a column from it.
+     Sonarr #7757 and Prowlarr #2431 are both this bug: on a 390px phone a
+     208px sidebar leaves 182px of content and the page reads as broken.
+     usarr.js also starts collapsed below this width. */
+  .app,
+  .app[data-sidebar="open"],
+  .app[data-sidebar="collapsed"] { grid-template-columns: minmax(0, 1fr); grid-template-areas: "topbar" "main"; }
   .sidebar { display: none; }
-  .app[data-sidebar="open"] { grid-template-columns: var(--sidebar-w) minmax(0, 1fr); grid-template-areas: "topbar topbar" "sidebar main"; }
-  .app[data-sidebar="open"] .sidebar { display: block; }
+  .app[data-sidebar="open"] .sidebar {
+    display: block;
+    position: fixed;
+    top: var(--toolbar-h);
+    left: 0;
+    width: var(--sidebar-w);
+    max-width: 80vw;
+    height: calc(100vh - var(--toolbar-h));
+    z-index: 40;
+    box-shadow: var(--shadow-float);
+  }
   .settings { grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); }
   .subnav { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--border); padding: 0 0 var(--sp-3); }
 }
