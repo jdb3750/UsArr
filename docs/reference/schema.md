@@ -58,7 +58,7 @@ CREATE TABLE work (
   size_on_disk      INTEGER NOT NULL DEFAULT 0,
   monitored         INTEGER NOT NULL DEFAULT 0,
   rollup_dirty      INTEGER NOT NULL DEFAULT 0,   -- set by a child write; cleared by the flush
-  availability      TEXT,   -- JSON {"1080p":{"have":250,"total":300}, ...}  see ARCHITECTURE §6.3
+  availability      TEXT,   -- JSON, POLYMORPHIC by medium — see "The availability blob" below
   added_at          TEXT,
   created_at        TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
@@ -78,6 +78,43 @@ CREATE INDEX ix_work_dirty     ON work(rollup_dirty) WHERE rollup_dirty = 1;
 NULL` the "recently added" and "popular" grids read soft-deleted rows from the index and filter them
 afterwards, so the 7-day tombstone window degrades exactly those two views. `ix_work_kind_sort`
 already had it; the other two were inconsistent.
+
+### The availability blob, per medium
+
+ADR-0031 decision #5 (*"the availability rollup is edition-keyed for music"*) and ARCHITECTURE §6.1
+(*"the rollup gains a `total_source` field"*) are both normative and neither had a representation
+here, so an implementer coding from this file would have written the tier shape for all six types.
+**The blob carries a `"k"` discriminator as its first key and a renderer switches on it.** Without
+one, a renderer cannot tell a tier key from an edition key in the same object.
+
+```jsonc
+// k=tier — video. total is a property of the parent work. (ARCHITECTURE §6.3)
+{"k":"tier","1080p":{"have":250,"total":300},"2160p":{"have":40,"total":300}}
+
+// k=edition — music. total is a property of the EDITION: choosing the 2017 remaster over the
+// 2000 original changes the track list, the count and the durations, so a bare fraction is a
+// guess. `label` is what the renderer puts beside the fraction. (ADR-0031)
+{"k":"edition",
+ "edition:mbz_release:def-456":{"have":0,"total":22,"label":"2017 remaster (2CD)"},
+ "edition:mbz_release:abc-123":{"have":12,"total":12,"label":"2000 original"}}
+
+// k=count — comics, and anything else with no honest denominator. `total` is present ONLY when
+// the series status is ENDED/Completed/Cancelled AND a total is declared; total_source names
+// where the declaration came from, because every "total" in the domain is a declaration
+// (ComicInfo `Count`, whose own spec concedes it "could be different on each book in a series").
+// `missing` is the number that is always honest — contiguity, computed locally from
+// work_comic_issue.number_sort with no upstream help. (ARCHITECTURE §6.1)
+{"k":"count","have":43,"total":60,"total_source":"komga:totalBookCount",
+ "missing":["7","12","30-32"]}
+{"k":"count","have":43,"total":null,"total_source":null,"missing":["7","12"]}
+```
+
+Three rules the shape imposes. **`k` is required on every non-null blob**, so a v0.1 writer that
+only ever emits `k:"tier"` still produces forward-compatible rows. **`total: null` is not
+`total: 0`** — the first means "nobody honestly knows", the second means "the series is empty", and
+§6.3's render rule (`have == total && total > 0` → ✓) must never fire on the first. And **the
+250 ms dirty-flush batch (§6.3) is unchanged by any of this** — the blob is opaque to the flush,
+which recomputes and rewrites it whole.
 
 **`ix_work_kind_sort` serves the keyset query; it does not cover it.** `EXPLAIN QUERY PLAN` on the
 §13 grid query yields `SEARCH work USING INDEX ix_work_kind_sort (kind=? AND sort_title>?)` — a
@@ -129,7 +166,12 @@ CREATE TABLE work_album (
 -- is a backfill over the largest table in the schema.
 CREATE TABLE work_track (
   work_id        INTEGER NOT NULL REFERENCES work(id) ON DELETE CASCADE,
-  edition_id     INTEGER NOT NULL REFERENCES edition(id) ON DELETE CASCADE,
+  edition_id     INTEGER NOT NULL REFERENCES edition(id) ON DELETE RESTRICT,
+                                     -- RESTRICT, not CASCADE: deleting an edition must not
+                                     -- silently destroy its track rows. An adapter that
+                                     -- re-synthesises the primary edition on every sync would
+                                     -- otherwise delete the album's whole track set. See the
+                                     -- mandatory-edition rule below.
   disc_number    INTEGER NOT NULL DEFAULT 1,
   disc_title     TEXT,
   track_number   TEXT NOT NULL,      -- TEXT: real values are 'A1', 'B2', '1.01' (Lidarr ships
@@ -142,14 +184,81 @@ CREATE TABLE work_track (
   isrc           TEXT,
   PRIMARY KEY (work_id, edition_id)
 ) STRICT;
--- A track's position must be unique within its parent album, per edition. The parent lives on
--- work.parent_work_id, so the constraint is expressed as a unique index over the join key
--- maintained by the importer (SQLite cannot express it declaratively across tables):
+-- A track's position must be unique within one edition. That IS the constraint under ADR-0031,
+-- and it is declarable:
 CREATE UNIQUE INDEX ux_track_pos ON work_track(edition_id, disc_number, track_position);
---   plus an application-enforced invariant, asserted in CI over a fixture:
---   UNIQUE(parent_work_id, disc_number, track_number) via
---   SELECT w.parent_work_id, t.disc_number, t.track_number FROM work_track t
---     JOIN work w ON w.id = t.work_id GROUP BY 1,2,3 HAVING COUNT(*) > 1  →  must be empty.
+```
+
+> **`work_track.edition_id NOT NULL` makes an `edition` row mandatory for every album, and that
+> requirement is stated here rather than left to be discovered.** Three rules, all normative, all
+> consequences of the NOT NULL:
+>
+> 1. **Every album work has exactly one synthetic primary `edition` from migration 0001**, created
+>    in the same transaction as the album, `is_primary = 1`, `label = NULL`. Lidarr and Navidrome
+>    report no release concept, so the adapter synthesises it; v0.x models only the active edition,
+>    which is what Lidarr does (ADR-0031).
+> 2. **Its identity is derived, not allocated per sync.** The adapter resolves the primary edition
+>    by `SELECT id FROM edition WHERE work_id = ? AND is_primary = 1` and inserts only when that
+>    returns nothing. Allocating a fresh edition per sync would duplicate the whole track set on
+>    every re-import, and with `ON DELETE CASCADE` (the earlier shape) it would have destroyed the
+>    previous one instead — which is why the cascade is now `RESTRICT`.
+> 3. **`work_track.edition_id` must belong to the track's parent album.** SQLite cannot express it
+>    (the parent is `work.parent_work_id`, one join away), so it is an application-enforced
+>    invariant with a CI assertion over a fixture:
+>
+> ```sql
+> -- must return no rows
+> SELECT t.work_id, t.edition_id FROM work_track t
+>   JOIN work w ON w.id = t.work_id
+>   JOIN edition e ON e.id = t.edition_id
+>  WHERE e.work_id IS NOT w.parent_work_id;
+> ```
+>
+> The pre-ADR-0031 note here asserted `UNIQUE(parent_work_id, disc_number, track_number)` as a
+> second invariant. **That is withdrawn**: under edition scoping it is either redundant with
+> `ux_track_pos` or actively wrong, because it forbids the same recording sitting at the same
+> position on two editions of one album — the exact case ADR-0031 exists for.
+
+```sql
+-- ADR-0031 decision #3: attribution is M:N. There is no artist_id column on an album.
+-- The moment attribution is a scalar, Various-Artists compilations, collaborations and
+-- classical roles are unrepresentable — which is Lidarr's own limitation
+-- (AlbumResource.artistId is singular) and there is no reason to inherit it.
+CREATE TABLE work_credit (
+  work_id        INTEGER NOT NULL REFERENCES work(id) ON DELETE CASCADE,
+  artist_work_id INTEGER NOT NULL REFERENCES work(id) ON DELETE CASCADE,
+                                     -- a work of kind 'artist'. See the note below: books and
+                                     -- comics have no person kind, and that is a stated loss.
+  role           TEXT NOT NULL CHECK (role IN (
+                   -- music
+                   'primary','featured','composer','conductor','performer','remixer','producer',
+                   -- books
+                   'author','translator','editor','illustrator','narrator',
+                   -- comics
+                   'writer','penciller','inker','colorist','letterer','cover_artist')),
+  position       INTEGER NOT NULL DEFAULT 0,   -- billing order within (work, role)
+  credited_as    TEXT,               -- the string this release printed, when it differs from
+                                     -- the artist work's title ("Sting" on a Police reissue)
+  PRIMARY KEY (work_id, role, position, artist_work_id)
+) STRICT, WITHOUT ROWID;
+CREATE INDEX ix_credit_artist ON work_credit(artist_work_id, role);
+```
+
+**The PK leads with `(work_id, role, position)`** because the only hot read is *"give me this
+album's credits in billing order"*, which is then a single covered range scan. `artist_work_id`
+trails it to make the row unique when two artists share a role and a position (a co-credit).
+`ix_credit_artist` serves the reverse — an artist page listing everything they are credited on.
+
+⚠️ **`artist_work_id` points at a `work` of kind `artist`, and `work.kind` has no `person`,
+`author` or `creator` member.** So a book's author and a comic's writer are stored as `artist`-kind
+works. That is a deliberate v0.1 loss with two visible consequences: an author appears in the
+`artist` navigation type unless filtered out, and the Tier 1 prefix index (ARCHITECTURE §4.5)
+counts them as top-level works. **The alternative — a `person` kind — is a `kind_byte` allocation
+and a CHECK-constraint change, which §5.3 states is unchangeable once clients cache ids**, so if it
+is wanted it has to be decided in migration 0001 like `comic_issue` was. Recorded here rather than
+discovered later; it is not resolved.
+
+```sql
 
 CREATE TABLE work_book (
   work_id     INTEGER PRIMARY KEY REFERENCES work(id) ON DELETE CASCADE,
@@ -250,8 +359,15 @@ CREATE TABLE media_file (
   work_id             INTEGER NOT NULL REFERENCES work(id) ON DELETE CASCADE,
   edition_id          INTEGER REFERENCES edition(id) ON DELETE SET NULL,
   service_instance_id INTEGER NOT NULL REFERENCES service_instance(id) ON DELETE CASCADE,
-                      -- instance 0 is a reserved sentinel row meaning
-                      -- "discovered on the filesystem, not owned by any service".
+                      -- instance 0 is a reserved sentinel row meaning "not reported by any
+                      -- networked service instance". Its ONE current use is the Tier 0 Calibre
+                      -- adapter (ARCHITECTURE §11.2, v1.0), which opens Calibre's own
+                      -- metadata.db read-only — a single-file read that §11.2 records as an
+                      -- explicit exception. It does NOT mean "found by scanning a filesystem":
+                      -- ADR-0026 decides that UsArr never touches a filesystem and refuses
+                      -- alternative (C) on those grounds, and nothing in any milestone scans.
+                      -- (The earlier comment said "discovered on the filesystem", which
+                      -- contradicted ADR-0026 outright.)
   remote_file_id      TEXT,
   provenance_id       INTEGER REFERENCES provenance(id),
   path                TEXT NOT NULL,
@@ -388,6 +504,13 @@ CREATE TABLE service_item_link (
   monitored           INTEGER NOT NULL DEFAULT 0,
   quality_profile_id  INTEGER,
   root_folder_path    TEXT,
+  -- The three container-predicate inputs that library_source.container_kind needs and that this
+  -- table previously could not hold. Without them, `remote_library`, `tag` and `series_type` are
+  -- CHECK values with no storage behind them — and `remote_library` is the ONLY container kind
+  -- available for Navidrome, Audiobookshelf and Komga, i.e. for three of the six media types.
+  remote_library_id   TEXT,          -- the upstream's own library/collection id, verbatim
+  remote_tag_ids      TEXT,          -- JSON array of *Arr tag ids, verbatim
+  remote_subtype      TEXT,          -- the upstream's own sub-classification, verbatim
   is_authoritative    INTEGER NOT NULL DEFAULT 0,
   is_northbound_canonical INTEGER NOT NULL DEFAULT 0,   -- the pin; see ARCHITECTURE §5.3
   has_file            INTEGER NOT NULL DEFAULT 0,
@@ -400,6 +523,10 @@ CREATE TABLE service_item_link (
 ) STRICT;
 CREATE UNIQUE INDEX ux_sil ON service_item_link(service_instance_id, remote_kind, remote_id);
 CREATE INDEX ix_sil_work ON service_item_link(work_id) WHERE deleted_at IS NULL;
+-- The membership derivation (§13) walks links per instance per container. Without this it is a
+-- full scan of every link on the instance for every library the instance feeds.
+CREATE INDEX ix_sil_container ON service_item_link(service_instance_id, remote_library_id)
+  WHERE deleted_at IS NULL AND remote_library_id IS NOT NULL;
 
 -- Alias rows keep old northbound IDs resolvable when a pinned instance is deleted.
 CREATE TABLE service_item_alias (
@@ -420,6 +547,26 @@ and every `getCoverArt`.
 
 **Authority rule when instances disagree on shared metadata:** highest `priority` among
 `is_authoritative` links wins; otherwise most-recently-synced. Log divergences.
+
+**Which upstream field populates each container column, per adapter.** All three are stored
+**verbatim, as the upstream reported them** — this table never parses, derives or normalises a
+container value, which is what keeps membership a deterministic predicate rather than a guess
+(ARCHITECTURE §6.5 rule 3). A blank cell means the service has no such concept and the
+corresponding `container_kind` is not offered for it.
+
+| Instance kind | `remote_library_id` | `remote_tag_ids` | `remote_subtype` | `root_folder_path` |
+|---|---|---|---|---|
+| Sonarr | — | `SeriesResource.tags[]` | `SeriesResource.seriesType` (`standard\|daily\|anime`) | `SeriesResource.rootFolderPath` |
+| Radarr | — | `MovieResource.tags[]` | — | `MovieResource.rootFolderPath` |
+| Navidrome | `libraryId` on the album/artist row (ND's native API) | — | — | — |
+| Audiobookshelf | `LibraryItem.libraryId` | — | `Library.mediaType` (`book\|podcast`) | `LibraryItem.folderId` ⚠️ a folder **id**, not a path — never prefix-compared |
+| Komga | `SeriesDto.libraryId` | — | — | — |
+| Kavita (v0.2) | `Series.libraryId` | — | `Library.type` (`LibraryType` enum) | — |
+
+⚠️ **Audiobookshelf's `folderId` is an opaque id, not a filesystem path.** It is stored in
+`remote_library_id`-adjacent form only as an id and is **never** used with the `root_folder`
+container kind, whose predicate is a string prefix on a path. Getting that wrong would be UsArr
+comparing paths it did not receive — the one thing §6.5 rule 3 forbids.
 
 ---
 
@@ -500,23 +647,42 @@ CREATE TABLE search_doc (
   rowid        INTEGER PRIMARY KEY,     -- THE allocator for all three tables
   work_id      INTEGER NOT NULL REFERENCES work(id) ON DELETE CASCADE,
   kind         TEXT NOT NULL,           -- top-level kinds only; see the CI assertion below
-  library_scope TEXT NOT NULL DEFAULT '',  -- JSON array of library ids that can see it; filtered
-                                        -- IN THE JOIN, never post-filtered. Renamed from
-                                        -- instance_scope (ADR-0026): a library can be a SUBSET
-                                        -- of an instance, so instance-level scoping is too
-                                        -- coarse and would leak existence. With one auto-created
-                                        -- library per instance the two sets are identical in
-                                        -- v0.1, so the rename is free now and a full-corpus
-                                        -- backfill later.
   popularity   REAL NOT NULL DEFAULT 0,
   in_library   INTEGER NOT NULL DEFAULT 0,
   title_idf    REAL NOT NULL DEFAULT 0,
   norm_title   TEXT NOT NULL
 ) STRICT;
 CREATE INDEX ix_sd_work ON search_doc(work_id);
+
+-- Library visibility is a JUNCTION TABLE, not a column on search_doc.
+CREATE TABLE search_doc_library (
+  library_id INTEGER NOT NULL REFERENCES library(id)      ON DELETE CASCADE,
+  doc_rowid  INTEGER NOT NULL REFERENCES search_doc(rowid) ON DELETE CASCADE,
+  PRIMARY KEY (library_id, doc_rowid)
+) WITHOUT ROWID;
+CREATE INDEX ix_sdl_doc ON search_doc_library(doc_rowid);
 ```
 
-**Three invariants, all CI-asserted, all silent-corruption sources if broken:**
+> 🚩 **This replaces `search_doc.library_scope TEXT`, a JSON array, and the replacement is
+> load-bearing rather than tidy-minded.** ARCHITECTURE §8.2 and §1 of this file both require that
+> permission filtering happens **in the index join, never after it**, and both state the reason: a
+> post-filter silently breaks keyset page sizes and leaks existence through result counts and
+> ranking positions. **A JSON array in a `TEXT` column cannot participate in an index join.**
+> Filtering it needs `json_each(library_scope)` or `LIKE '%"7"%'`; both are scans, neither is
+> seekable, and no index on the column would help. So the column bought a full scan of the fused
+> candidate set on the hot search path for all six media types — to satisfy a requirement it could
+> not satisfy.
+>
+> With the junction table the scoped query is
+> `… JOIN search_doc_library sdl ON sdl.doc_rowid = sd.rowid AND sdl.library_id IN (…)`, which is a
+> covered index seek per scoped library. **CI asserts the plan** (§7 invariant 6) so it can never
+> silently regress to a scan.
+>
+> The `WITHOUT ROWID` primary key is `(library_id, doc_rowid)` in that order because the scope is
+> the outer filter and the doc set is the inner range. `ix_sdl_doc` serves the reverse — deleting a
+> `search_doc` row, and answering "which libraries can see this" for the item detail page.
+
+**Six invariants, all CI-asserted, all silent-corruption sources if broken:**
 
 1. `search_fts.rowid == search_trgm.rowid == search_doc.rowid`. The id is allocated by inserting
    into `search_doc` first, then inserted **explicitly** into both FTS tables in the same
@@ -528,8 +694,23 @@ CREATE INDEX ix_sd_work ON search_doc(work_id);
 3. `SELECT COUNT(*) FROM search_doc WHERE kind IN ('season','episode','track','comic_issue')` is
    **0**. `comic_issue` is in the list for the same reason as the other three: a large manga
    library's chapter titles would swamp every query (ADR-0030).
-4. **No query in the identity path references `library_member` or `library_source`** (ADR-0026).
-   Library membership is never an input to identity — jellyfin#10985 is what happens when it is.
+4. **No query in the identity path references `library_member`, `library_source` **or
+   `library_override`** (ADR-0026). Library membership is never an input to identity —
+   jellyfin#10985 is what happens when it is. `library_override` is named explicitly because it is
+   the one library-named table that, by design, *does* feed identity: its `relink` verb repoints a
+   `service_item_link`. The assertion therefore reads: the identity **cascade** (§6.4 tiers 1–5)
+   references none of the three; the correction **applier**, which runs after the cascade and
+   overrides its output, references `library_override` and nothing else. Two code paths, one
+   assertion each.
+5. **Every `search_doc` row has at least one `search_doc_library` row.** A row visible through no
+   library matches no scope and is invisible in search to every user *including the owner* — a
+   disappearance the old `instance_scope` could not produce, because every replicated row came from
+   some instance. The invariant is upheld by reserved `library.id = 0`, *Unfiled* (§13).
+   `SELECT COUNT(*) FROM search_doc sd WHERE NOT EXISTS (SELECT 1 FROM search_doc_library sdl
+   WHERE sdl.doc_rowid = sd.rowid)` must be **0**.
+6. **The scoped search plan is a seek, not a scan.** `EXPLAIN QUERY PLAN` on the scoped fusion
+   query must contain `SEARCH sdl USING PRIMARY KEY (library_id=? AND doc_rowid=?)` and must not
+   contain `SCAN search_doc_library`.
 
 ---
 
@@ -759,6 +940,297 @@ metadata. Deleting it costs a re-sync, not data.
 
 ---
 
+## 13. Libraries — the user's organisation · **v0.1, migration 0001**
+
+Design and reasoning: [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §6.5 and ADR-0026. **All four
+tables are in migration 0001**, which `CLAUDE.md` says can never be edited, so everything an
+implementer needs is here rather than in prose: types, CHECK lists with their real allowed values,
+keys, `ON DELETE` behaviour, indexes, and the `user_id` principle 4 requires.
+
+### 13.1 `library`
+
+```sql
+CREATE TABLE library (
+  id            INTEGER PRIMARY KEY,
+  -- Principle 4 / ADR-0019 / ARCHITECTURE §1.3 rule 1: a user-scoped row carries user_id from
+  -- migration 0001. A library IS user-scoped — ADR-0026 calls it "user-owned" and §6.5 rule 5
+  -- says it "carries a user's name, corrections and access grants". Sentinel 0 is the owner,
+  -- exactly as tag_assignment and library_override use it. See "Who owns a library" below.
+  user_id       INTEGER NOT NULL DEFAULT 0 REFERENCES user(id) ON DELETE CASCADE,
+  name          TEXT NOT NULL,
+  slug          TEXT NOT NULL,        -- URL identity for ?lib= (ARCHITECTURE §17.2). Allocated
+                                      -- once from the name at creation and then DURABLE:
+                                      -- renaming a library must not change its permalink.
+  kind          TEXT NOT NULL CHECK (kind IN (
+                  'movie','series','artist','album','book','comic','game')),
+                                      -- Exactly one, required, and EDITABLE (§6.5 rule 4).
+                                      -- Only top-level kinds: a library of episodes or tracks is
+                                      -- not a thing, and the search corpus rule (§7) filters the
+                                      -- same set. 'season','episode','track','comic_issue' are
+                                      -- deliberately absent.
+  formats       TEXT,                 -- JSON array over edition.format, or NULL for "any".
+                                      -- ["ebook"] and ["audiobook"] over one Audiobookshelf
+                                      -- library are the flagship case (§17.8).
+  icon          TEXT,
+  sort_order    INTEGER NOT NULL DEFAULT 0,   -- 'order' is a SQLite keyword
+  enabled       INTEGER NOT NULL DEFAULT 1,
+  include_in_search INTEGER NOT NULL DEFAULT 1,
+  default_sort  TEXT NOT NULL DEFAULT 'sort_title'
+                  CHECK (default_sort IN ('sort_title','added_at','year','popularity')),
+  -- The declared request sink (ARCHITECTURE §8.3). A PIN INSIDE the capability filter, never a
+  -- bypass: an instance that does not probe Caps.MediaKinds ∋ (kind, format) and advertise Add
+  -- cannot be chosen. NULL sink is a first-class state, not an error.
+  sink_service_instance_id INTEGER REFERENCES service_instance(id) ON DELETE SET NULL,
+  sink_quality_profile_id  INTEGER,   -- upstream's own id, verbatim; fetched live when the
+                                      -- settings panel opens, never on a render path
+  sink_root_folder_path    TEXT,
+  sink_tag_ids             TEXT,      -- JSON array of upstream tag ids
+  managed_by    TEXT NOT NULL DEFAULT 'auto' CHECK (managed_by IN ('auto','user')),
+                                      -- 'auto' = created by the proposal flow and still tracking
+                                      -- its source; 'user' = the user edited it, so the proposal
+                                      -- flow never rewrites it again.
+  orphaned_at   TEXT,                 -- set when the last library_source goes away; the row is
+                                      -- RETAINED and shown with its reason (§6.5 rule 5)
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+
+CREATE UNIQUE INDEX ux_library_slug ON library(user_id, slug);
+CREATE UNIQUE INDEX ux_library_name ON library(user_id, name);
+CREATE INDEX ix_library_kind ON library(user_id, kind) WHERE enabled = 1;
+```
+
+**Who owns a library — the question §6.5 left with two live readings, settled here.** ADR-0026 and
+§6.5 call a library *user-owned*; §12.2 names `user_library_access` (v1.0) as the mechanism for
+library visibility. Read literally those are two different schemas. **The resolution is that both
+exist and they mean different things:** `library.user_id` records the **owner**, the user who
+created it and whose name, ordering and corrections it carries; `user_library_access` (v1.0)
+records a **grant** of read access to a *different* user. That is Plex's shape, it satisfies
+principle 4, and it makes `sort_order` and ADR-0028's per-user media-type ordering per-user by
+construction rather than by a second table. In v0.1 there is one user and every row is `user_id 0`.
+
+**`include_on_home` is not a column here, and that is a deletion rather than an omission.** §R2.1
+of the review log kept it from the libraries research, and under ADR-0028's three-fixed-block Home
+nothing consumes it: Block A is per media *type*, Block C is unified across all types, and the
+scope is driven by the `?lib=` chip. ADR-0028 separately pre-wires a per-type `show_on_home`
+boolean, which is the flag that has a consumer. Two overlapping flags where one has no reader is
+how a schema accumulates dead columns in the one migration that can never be edited.
+
+**Reserved row: `library.id = 0`, *Unfiled*.** Inserted by migration 0001, `user_id 0`,
+`managed_by 'auto'`, `kind` irrelevant (the CHECK is satisfied with `'movie'` and the row is never
+rendered). It exists to uphold §7 invariant 5: a work that the derivation would otherwise place in
+**no** library is a member of Unfiled, which keeps it visible in search to its owner and nobody
+else. It is never listed on the Libraries screen, never offered in the scope chip, and never
+proposed. Reachable states that need it: a `root_folder`-scoped library covering only part of an
+instance, and an `exclude` correction against a work's last remaining library.
+
+### 13.2 `library_source`
+
+```sql
+CREATE TABLE library_source (
+  id                  INTEGER PRIMARY KEY,
+  library_id          INTEGER NOT NULL REFERENCES library(id) ON DELETE CASCADE,
+  service_instance_id INTEGER NOT NULL REFERENCES service_instance(id) ON DELETE CASCADE,
+  container_kind      TEXT NOT NULL CHECK (container_kind IN (
+                        'instance','root_folder','remote_library','tag','series_type')),
+  container_ref       TEXT NOT NULL DEFAULT '',
+                      -- The container the UPSTREAM ITSELF reported, verbatim. Matched against
+                      -- service_item_link per container_kind — see the predicate table below.
+                      -- '' for container_kind='instance', which has no ref.
+  container_identity  TEXT,          -- a stable property of the container (its name, or its own
+                                     -- reported uuid) recorded at bind time, so an upstream that
+                                     -- reuses ids does not silently rebind the library to a
+                                     -- different folder. Same idea as remote_identity_hash.
+  is_metadata_authority INTEGER NOT NULL DEFAULT 0,
+  missing_since       TEXT,          -- the upstream stopped reporting this container; the source
+                                     -- row is retained and shown, never silently dropped
+  created_at          TEXT NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (library_id, service_instance_id, container_kind, container_ref)
+) STRICT;
+
+CREATE INDEX ix_libsrc_instance ON library_source(service_instance_id);
+-- At most one metadata authority per library, enforced declaratively rather than in code:
+CREATE UNIQUE INDEX ux_libsrc_authority ON library_source(library_id)
+  WHERE is_metadata_authority = 1;
+```
+
+**Every `container_kind` now has storage on both sides of the predicate**, which was the defect:
+three of the five values could not be derived from any column in the schema, and `remote_library`
+is the *only* container available for Navidrome, Audiobookshelf and Komga — three of the six media
+types.
+
+| `container_kind` | `container_ref` holds | Membership predicate against `service_item_link` |
+|---|---|---|
+| `instance` | `''` | `service_instance_id = ?` |
+| `root_folder` | the path the upstream reported | `root_folder_path` **prefix** match, on a value the upstream itself reported — the only path comparison UsArr ever performs (§6.5 rule 3) |
+| `remote_library` | the upstream library id | `remote_library_id = ?` |
+| `tag` | one \*Arr tag id | `EXISTS (SELECT 1 FROM json_each(remote_tag_ids) WHERE value = ?)` |
+| `series_type` | e.g. `anime` | `remote_subtype = ?` |
+
+⚠️ **The `tag` predicate is the one that is not a seek.** `json_each` over a per-row JSON array
+cannot use an index, so a `tag`-scoped library re-derives by scanning the instance's links. That is
+acceptable because it runs on the membership *derivation* path (a background 250 ms flush batch),
+never on a render path — but it is the reason `tag` is the last container kind to be offered in the
+UI, and it must not be copied onto a query path. Recorded rather than discovered.
+
+### 13.3 `library_member`
+
+```sql
+CREATE TABLE library_member (
+  library_id  INTEGER NOT NULL REFERENCES library(id) ON DELETE CASCADE,
+  sort_title  TEXT    NOT NULL,      -- DENORMALISED from work.sort_title. See below.
+  work_id     INTEGER NOT NULL REFERENCES work(id) ON DELETE CASCADE,
+  edition_id  INTEGER NOT NULL DEFAULT 0,
+                                     -- 0 = "the whole work, format-independent". See below.
+  added_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (library_id, sort_title, work_id, edition_id)
+) STRICT, WITHOUT ROWID;
+
+-- Identity, for upsert and for "is this work in this library":
+CREATE UNIQUE INDEX ux_libmem_identity ON library_member(library_id, work_id, edition_id);
+-- Reverse: "which libraries is this work in", for the item detail page and for the
+-- search_doc_library rebuild.
+CREATE INDEX ix_libmem_work ON library_member(work_id);
+```
+
+**Membership is edition-grained, and it has to be.** §17.8's flagship demonstration is
+Audiobookshelf offered as **two** libraries — Ebooks and Audiobooks — over its one `mediaType=book`
+library, which ABS itself cannot do because it distinguishes the two only at item level. But
+`library.formats` filters `edition.format` while `library.kind` filters `work.kind`, and a `book`
+work with an EPUB edition *and* an M4B edition is **one `work` row**. A `(library_id, work_id)` key
+therefore cannot express the case at all: a work with only an audiobook edition is still a
+legitimate `(Ebooks, work_id)` row unless the `formats` filter is re-evaluated against `edition` at
+query time — which defeats the materialisation, and makes the row count on the Libraries screen and
+the sidebar either wrong or dependent on the un-materialised join anyway. Keying
+`(library_id, work_id, edition_id)` is what makes *"it costs one `formats` column"* true.
+
+**`edition_id = 0` is a sentinel, not a foreign key, and here is why there is no FK.** A
+`WITHOUT ROWID` table's primary-key columns are implicitly `NOT NULL`, so "no edition, the whole
+work" cannot be `NULL`. `0` carries it, matching the sentinel pattern already used for `user_id` and
+`service_instance_id`. The cost is that referential integrity for the non-zero case is maintained by
+the derivation rather than by SQLite, so it is a CI assertion instead:
+
+```sql
+-- must return no rows
+SELECT m.library_id, m.work_id, m.edition_id FROM library_member m
+ WHERE m.edition_id <> 0
+   AND NOT EXISTS (SELECT 1 FROM edition e WHERE e.id = m.edition_id AND e.work_id = m.work_id);
+```
+
+Libraries whose `kind` has no format axis (`movie`, `series`) write `edition_id = 0` for every row.
+A library with a non-null `formats` writes one row per matching edition.
+
+**`sort_title` is denormalised into the key, and that is the fix for the one performance risk §6.5
+flags.** The available index is `ix_work_kind_sort ON work(kind, sort_title, id)`, which §13 of
+ARCHITECTURE correctly says *serves* rather than covers. §6.5's stated mitigation — *"a library is
+single-kind and the default topology is one library per kind, so the common case is
+`work.kind = ?` with membership as a one-row lookup"* — **is false in the design's own flagship
+example**: the reference install in the mockups has seven libraries over six kinds, including two
+`book` libraries (the ABS split this feature exists to demonstrate) and two `comic` libraries. For a
+1%-selective library the keyset page must either seek `ix_work_kind_sort` and probe membership per
+candidate (≈18 index rows scanned per row returned), or seek `library_member`, which without a sort
+key must fetch and sort every member before the window can be cut. 🔍 *That is inference from the
+standard shape rather than a measurement, which is exactly why §6.5 flagged it.*
+
+With `sort_title` leading the key after `library_id`, the scoped keyset query is a single covered
+seek regardless of selectivity:
+
+```sql
+EXPLAIN QUERY PLAN
+SELECT m.work_id FROM library_member m
+ WHERE m.library_id = ? AND (m.sort_title, m.work_id) > (?, ?)
+ ORDER BY m.sort_title, m.work_id LIMIT 100;
+--  → SEARCH m USING PRIMARY KEY (library_id=? AND sort_title>?)
+```
+
+**CI asserts that plan for both topologies — one library per kind *and* two libraries over one
+kind — because only the second is the interesting one.** The write cost is one extra column on a
+table that is already materialised and already flushed on the 250 ms batch, plus one rule: **a title
+or sort-title change rewrites the member rows for that work**, since the sort key is now duplicated.
+A `field` override on `sort_title` dirties them the same way. That is the price of the seek and it
+is stated rather than assumed.
+
+### 13.4 `library_override`
+
+```sql
+CREATE TABLE library_override (
+  id          INTEGER PRIMARY KEY,
+  user_id     INTEGER NOT NULL DEFAULT 0 REFERENCES user(id) ON DELETE CASCADE,
+  verb        TEXT NOT NULL CHECK (verb IN ('exclude','include','relink','field')),
+  -- SCOPE. NOT NULL for the two library-scoped verbs, NULL for the two global ones. See below.
+  library_id  INTEGER REFERENCES library(id) ON DELETE CASCADE,
+  -- TARGETS. Deliberately NOT foreign keys — see "why no FK" below.
+  work_id     INTEGER,
+  link_id     INTEGER,
+  target_identity_hash TEXT NOT NULL,
+  -- field verb only
+  field_name  TEXT CHECK (field_name IN (NULL,'title','sort_title','year','cover')),
+  field_value TEXT,
+  -- relink verb only
+  relink_to_work_id INTEGER,
+  reason      TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+
+  -- exclude/include are library-scoped; relink/field are global. Enforced, not documented.
+  CHECK ( (verb IN ('exclude','include')) = (library_id IS NOT NULL) ),
+  CHECK ( (verb = 'field')  = (field_name IS NOT NULL) ),
+  CHECK ( (verb = 'relink') = (link_id IS NOT NULL AND relink_to_work_id IS NOT NULL) ),
+  CHECK ( verb = 'relink' OR work_id IS NOT NULL )
+) STRICT;
+
+CREATE UNIQUE INDEX ux_ovr_member ON library_override(library_id, work_id, verb, user_id)
+  WHERE verb IN ('exclude','include');
+CREATE UNIQUE INDEX ux_ovr_field  ON library_override(work_id, field_name, user_id)
+  WHERE verb = 'field';
+CREATE UNIQUE INDEX ux_ovr_relink ON library_override(link_id, user_id)
+  WHERE verb = 'relink';
+CREATE INDEX ix_ovr_hash ON library_override(target_identity_hash);
+CREATE INDEX ix_ovr_user ON library_override(user_id, created_at DESC);
+```
+
+**Two of the four verbs are not library-scoped concepts, and the schema now says so rather than
+implying the opposite.** `relink` changes which `work` a `service_item_link` points at — that is
+UsArr's identity graph, global by construction. `field` overrides title, sort title, year or cover
+on a `work`; if work W is in libraries A and B and the user renames it in A, either the override is
+global or the same work renders under two names in two scopes, and nothing said which. ADR-0026's
+own three-axis table puts *display identity* and *"is this link really this work"* in a row whose
+owner is *"upstream by default, an explicit user correction"* — **with no mention of a library at
+all**. So the axis table and the storage disagreed, and the `CHECK` above resolves it toward the
+axis table: `library_id IS NULL` for both, and the effect is global.
+
+The consequence is the one that matters for the delete-confirmation copy (§17.8): **deleting a
+library cascades away its `exclude`/`include` rows and nothing else.** Corrections to identity and
+display survive it.
+
+**Why no foreign key on `work_id` or `link_id`.** §6.5 rule 1 is that *a correction is never
+cleared by a sync, a reconciliation sweep, a tombstone expiry or an id resurrection* — the rule that
+exists because LazyLibrarian's ignored books come back after an author rescan (⚠️ GitLab issue
+#2407; see the caveat in §6.5). An `ON DELETE CASCADE` would let a tombstone expiry destroy the
+correction, which is that failure reproduced; an `ON DELETE SET NULL` would orphan it silently.
+`target_identity_hash` — the hash of the target's external identity at the moment the correction was
+made — is the durable key, and `ix_ovr_hash` is how a resurrected or re-imported row re-attaches to
+it. The columns are integers with no FK on purpose, and a nightly job that reports overrides whose
+target has been absent for >90 days is the honest garbage-collection story, not a cascade.
+
+**`field_name` cannot be `kind`.** Changing a work's kind is not a display correction — §6.4 states
+that `work.kind` is derived from the library's declared kind and never inherited from a backend, so
+the way to change it is to change the library's `kind` (§6.5 rule 4), which re-derives membership.
+Allowing both would give two mechanisms for one fact.
+
+### 13.5 The four tables' one CI assertion set
+
+```sql
+-- 1. Identity never reads library state (ADR-0026; see §7 invariant 4 for the two-path form).
+-- 2. Every search_doc row is visible through ≥1 library (§7 invariant 5).
+-- 3. Scoped keyset is a seek in both topologies (§13.3).
+-- 4. edition_id ≠ 0 always resolves to an edition of the same work (§13.3).
+-- 5. At most one metadata authority per library (declarative: ux_libsrc_authority).
+-- 6. A library_override row with library_id IS NOT NULL has verb IN ('exclude','include')
+--    (declarative: the CHECK) — asserted anyway, because it is the C-16 regression guard.
+```
+
+---
+
 ## Appendix — later tables
 
 Present in the design, **not in migration 0001**, added with the milestone named:
@@ -769,9 +1241,23 @@ Present in the design, **not in migration 0001**, added with the milestone named
 | `work_merge` | v1.0 | Lands with identity cascade tiers 2–5; nothing in v0.1 merges |
 | `tag_alias`, `tag_implies`, `tag_rule`, `saved_filter` | v1.0 | The full tag system |
 | `role`, `role_permission`, `user_role`, `user_permission`, `user_library_access` | v1.0 | RBAC tables. The `user_id` columns and the access-scope parameter land in 0001; these do not |
-| `playback_state`, `play_history` | v1.0 | Northbound write-back |
+| `playback_state`, `play_history` | v1.0 | Northbound write-back. **Both keys are edition-scoped — see below** |
 | `playlist`, `playlist_item` | v1.0 | See the note below |
 | `sync_report` | v0.1 | Emitted by the sweep; a plain append-only log |
+
+**`playback_state` is keyed `(user_id, work_id, edition_id)` and `play_history` is
+`UNIQUE (user_id, work_id, edition_id, started_at)` — a correction ADR-0031 forced and nobody
+propagated.** `FUTURE.md` §9 and §10 name the *work*-keyed forms as the seams that keep per-user
+statistics and the cross-media "continue" row cheap. ADR-0031 made position edition-scoped, and
+§6.1 makes an audiobook an `edition` of a `book` work. Combining the two: the EPUB and the M4B of
+*Piranesi* are two editions of **one** work, so a `(user_id, work_id)` key cannot represent "40%
+through the ebook, 12% through the audiobook" — **which is the entire content of the deferred
+feature §10 describes**. The same collapse breaks §9's play-event uniqueness for two editions
+consumed on the same day. `CLAUDE.md`'s rule is *the seam ships, the feature does not*; a seam that
+cannot express the feature is not a seam. Eight bytes a row when the tables land, against a backfill
+over the largest tables in the schema afterwards — which is ADR-0031's own argument applied
+consistently. `edition_id` uses the same `0` sentinel as `library_member` for kinds with no edition
+axis.
 
 **`playlist_item`, when it lands, references a link and not a work**, and does not use a dense
 integer position:
