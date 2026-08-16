@@ -1,9 +1,11 @@
 # UsArr Development Guide
 
-> **Status: pre-alpha, zero lines of application code.** This document describes the intended
-> toolchain, layout, and workflows. Commands that reference files or packages which do not exist yet
-> are marked **(not yet)**. Nothing here is a description of working software; it is the contract
-> the first commits are expected to satisfy.
+> **Status: pre-alpha, zero lines of application code.** This describes the intended toolchain,
+> layout and workflows. Commands referencing files that do not exist yet are marked **(not yet)**.
+> Nothing here describes working software; it is the contract the first commits must satisfy.
+>
+> Roadmap shorthand: **v0.1** unified library + search · **v0.2** requests · **v0.3** cross-media ·
+> **v0.4** gateway · **v1.0** breadth. `docs/ARCHITECTURE.md` §16 is authoritative.
 
 ---
 
@@ -11,38 +13,55 @@
 
 | Tool | Version | Why this floor | Install |
 |---|---|---|---|
-| **Go** | **1.24+** | The toolchain in the reference container is `go1.24.7`. Uses `go tool` directives, `embed.FS`, and generics-heavy driver code. | <https://go.dev/dl/> or your package manager |
-| **Node.js** | **22+ (LTS)** | SvelteKit 2 + Vite 5/6 baseline. Verified in-container: `v22.22.2`. | <https://nodejs.org/> or `fnm`/`nvm` |
+| **Go** | **1.25+** | `ncruces/go-sqlite3` v0.35 declares `go 1.25.0`, so it is the real floor. Uses `go tool` directives, `embed.FS`, generics-heavy driver code. | <https://go.dev/dl/> |
+| **Node.js** | **22+ (LTS)** | SvelteKit 2 + Vite baseline. Verified in-container: `v22.22.2`. | <https://nodejs.org/> or `fnm`/`nvm` |
 | **pnpm** | **10+** | Package manager for `web/`. Verified in-container: `10.33.0`. | `corepack enable && corepack prepare pnpm@latest --activate` |
 | `git` | any recent | — | — |
-| `make` | GNU make | The `Makefile` uses GNU-isms (`.PHONY`, `?=`). BSD make will not work. | — |
+| `make` | GNU make | The `Makefile` uses GNU-isms (`.PHONY`, `?=`, `define`). BSD make will not work. | — |
 
-Optional, installed on demand by `make tools` **(not yet)**:
+Installed by `make tools` **(not yet)**, all **version-pinned in the Makefile**:
 
 | Tool | Purpose |
 |---|---|
-| `gofumpt` | Stricter `gofmt`. The formatting gate. |
+| `gofumpt` | Stricter `gofmt`. The formatting authority. |
 | `golangci-lint` v2 | Meta-linter. **v2 config format** — `.golangci.yml` must start with `version: "2"`; v2 binaries cannot parse v1 configs. |
 | `goose` | SQL migration runner (`github.com/pressly/goose/v3`). |
-| `govulncheck` | Vulnerability scan against the Go vuln DB. Advisory in CI, not a gate. |
+| `govulncheck` | Vulnerability scan. **Gating, and part of `make check`.** Not advisory. |
+| `gitleaks` | Secret scan of the working tree. **Gating, and part of `make check`.** |
 
-**There is no FFmpeg dependency, and there never will be.** UsArr does not stream, transcode,
-remux, or serve media bytes — it routes clients to the backend that owns them (Jellyfin, Navidrome,
-Audiobookshelf, Komga/Kavita). Do not add a media-processing dependency, a `ffmpeg`/`ffprobe` shell
-out, or a codec library. If a feature seems to need one, it belongs in a backend, not here. (FFmpeg
-is also absent from the agent container, so such a dependency would break the build immediately —
-but the reason it is banned is architectural, not environmental.)
+`@latest` is forbidden in the `Makefile`. `make tools` runs `go install`, which executes module build
+logic on a machine that may hold a master key and *Arr admin credentials in `.env`; a floating
+version there is a supply-chain hole, not merely a flaky gate.
+
+**There is no FFmpeg dependency, and there never will be.** UsArr does not stream, transcode, remux
+or serve media bytes — it routes clients to the backend that owns them. Do not add a media-processing
+dependency, an `ffmpeg`/`ffprobe` shell-out, or a codec library. FFmpeg is also absent from the CI
+container, so such a dependency breaks the build immediately — but the reason it is banned is
+architectural, not environmental.
 
 **No CGO, ever.** UsArr builds with `CGO_ENABLED=0` and produces a static binary.
-`ncruces/go-sqlite3` is a WebAssembly build of SQLite executed by a pure-Go runtime, which is
-precisely why it was chosen over `mattn/go-sqlite3`. If you find yourself needing a C toolchain,
-something has gone wrong — stop and raise it.
 
-⚠️ **Watch item:** `ncruces/go-sqlite3` currently runs its SQLite Wasm on **wazero**, but upstream
-has signalled a move to `wasm2go` in a future release. That is a transitive-dependency change, not
-an API change, but it may affect binary size and startup cost. Track
-<https://github.com/ncruces/go-sqlite3/discussions/361>. Note this is *separate* from UsArr's own
-use of wazero/Extism to host WASM plugins — that stays.
+### The SQLite driver, stated correctly
+
+`ncruces/go-sqlite3` **no longer uses wazero.** It moved to the maintainer's own `wasm2go`
+translator: the upstream SQLite C source is compiled to Wasm and then *translated to Go*, so the
+shipped artifact is pure Go with no Wasm runtime in the graph. Verified against
+`github.com/ncruces/go-sqlite3@v0.35.3`'s `go.mod` (2026-08-16), whose requires are
+`github.com/ncruces/go-sqlite3-wasm/v3`, `julianday`, `sort`, `wbt` and `golang.org/x/sys` — **no
+`tetratelabs/wazero` at any version**.
+
+Three consequences, because earlier drafts of several documents got this wrong:
+
+* Any claim that UsArr gets wazero "for free, already a dependency" is **false**. Adopting wazero for
+  anything would be a new dependency with its own cost. (This is moot for plugins — WASM plugins are
+  cut from the project entirely — but it also removes the argument, so nobody should re-derive it.)
+* "Bit-for-bit upstream SQLite behaviour" needs its own evidence under a compile-then-translate
+  pipeline. Do not assert it; assert "the upstream C source, not a Go reimplementation", which is
+  what is actually true and is the property that mattered.
+* Memory behaviour is a **different** profile from a cgo driver, not necessarily a smaller one.
+  Navidrome idling at ~50 MB is evidence about cgo SQLite, and it does not transfer. Measure before
+  quoting an idle-RSS number: a one-day spike (500k-row fixture, WAL, the intended pragmas, arm64)
+  belongs before the schema work, not after.
 
 ---
 
@@ -51,67 +70,64 @@ use of wazero/Extism to host WASM plugins — that stays.
 ```
 UsArr/
 ├── cmd/
-│   └── usarr/                  # main package. Flag parsing, wiring, graceful shutdown.
+│   └── usarr/                  # main package. Flags, wiring, graceful shutdown, --env-file.
 ├── internal/
-│   ├── config/                 # env/file/flag loading + precedence (docs/CONFIGURATION.md §1)
+│   ├── config/                 # env + flag loading, two-level precedence (CONFIGURATION.md §1)
 │   ├── crypto/                 # AES-256-GCM envelope encryption, key wrap/rotate, Argon2id
 │   ├── db/
 │   │   ├── migrations/         # NNNN_name.sql, goose format, embedded via embed.FS
 │   │   └── sqlite.go           # open + PRAGMA journal_mode=WAL, busy_timeout, foreign_keys
-│   ├── httpapi/                # REST handlers, middleware (auth, CSRF, rate limit, trusted proxy)
+│   ├── httpapi/                # REST handlers, middleware (auth, CSRF, rate limit, redaction)
 │   ├── servarr/                # ONE client for Sonarr/Radarr/Lidarr/Readarr/Prowlarr/Whisparr
-│   │   └── mapping/            # per-media-type mapping onto the unified schema
-│   ├── lazylibrarian/          # separate: cmd= RPC, HTTP 200 + {"Success":false} errors
-│   ├── jellyfin/               # video playback handoff + identity delegation
-│   ├── navidrome/              # music, over OpenSubsonic (apiKeyAuthentication ONLY)
-│   ├── audiobookshelf/         # audiobooks; ABS owns listening position, UsArr mirrors it
-│   ├── komga/                  # comics/manga; X-API-Key, OPDS 1.2 + 2.0
-│   ├── kavita/                 # comics/ebooks
-│   ├── downloadclient/         # sabnzbd, nzbget, qbittorrent, transmission, deluge
-│   ├── requests/               # request → route to the right *Arr by media type
-│   ├── tsnet/                  # embedded Tailscale node + WhoIs-based identity
-│   ├── metadata/               # tmdb, tvmaze, musicbrainz, openlibrary, wikidata, anilist
-│   ├── search/                 # unified search; FTS5 default, meilisearch plugin
-│   ├── tagging/                # namespaced tags, aliases, virtual parents, rule engine
-│   ├── plugin/                 # wazero/Extism host, capability grants, sandboxing
-│   ├── ssrf/                   # outbound HTTP policy: DNS pinning, no redirects, range denial
+│   │   └── mapping/            # per-resource mapping onto the unified schema
+│   ├── search/                 # unified search: SQLite FTS5 + a Go re-rank. No second engine.
+│   ├── requests/               # v0.2 — request → route to the right *Arr by media type
+│   ├── crossmedia/             # v0.3 — Wikidata edge resolution
+│   ├── metadata/               # v0.2+ — tmdb, tvmaze, musicbrainz, openlibrary, wikidata
+│   ├── jellyfin/ navidrome/ audiobookshelf/ komga/ kavita/    # v1.0 southbound adapters
+│   ├── lazylibrarian/          # v1.0 — separate: cmd= RPC, HTTP 200 + {"Success":false} errors
+│   ├── tagging/                # namespaced derived tags
+│   ├── ssrf/                   # outbound HTTP policy: DNS pinning, hop revalidation, caps
 │   └── web/                    # embed.FS wrapper over web/build
 ├── api/
-│   └── specs/                  # VENDORED upstream OpenAPI specs — see §7.3
-│       ├── sonarr.v3.json  radarr.v3.json  lidarr.v1.json
-│       ├── readarr.v1.json prowlarr.v1.json whisparr.v3.json
+│   └── specs/                  # VENDORED upstream OpenAPI specs — see §7.2
+│       ├── sonarr.v3.json  radarr.v3.json  prowlarr.v1.json
+│       ├── lidarr.v1.json  readarr.v1.json whisparr.v3.json
 │       └── SOURCES.md          # URL + commit/date each spec was pulled from
 ├── web/                        # SvelteKit, adapter-static, SPA fallback
-│   ├── src/
-│   ├── static/
-│   └── build/                  # pnpm build output -> embedded by internal/web (gitignored)
+│   └── build/                  # pnpm output -> embedded by internal/web (gitignored)
 ├── testdata/
-│   ├── cassettes/              # go-vcr recordings, secrets scrubbed (§7.2)
+│   ├── cassettes/              # go-vcr recordings, secrets scrubbed (§7.1)
 │   └── releases/               # real release-name corpus for the parser tests
 ├── deploy/
-│   ├── Dockerfile
+│   ├── Dockerfile              # digest-pinned distroless base, non-root 65532
 │   └── compose/
 │       ├── usarr.yml           # UsArr alone
-│       └── dev-stack.yml       # full *Arr stack for RECORDING fixtures (§7.1)
+│       └── dev-stack.yml       # *Arr stack for RECORDING fixtures (§7.3). Never in CI.
 ├── docs/
 ├── Makefile
 ├── .env.example
 └── .gitignore
 ```
 
-Two rationales worth stating once, because they are design decisions and not conventions.
+There is **no `internal/plugin/`**. WASM plugins are cut from the project — a sandbox executing
+third-party code inside the process that holds every one of the user's admin-grade API keys is a
+security-critical subsystem this project cannot staff a review capacity for. Service breadth comes
+from compiled-in Go providers plus declarative YAML manifests, and the manifests are **not** "fully
+sandboxed": a manifest is a server-side HTTP request generator that runs with the instance's stored
+credential. Treat it accordingly.
 
-**UsArr is northbound-thin and southbound-wide.** `internal/{jellyfin,navidrome,audiobookshelf,
-komga,kavita}` are read + handoff adapters: they populate the unified library and produce a playback
-URL or a deep link. None of them proxy media bytes in v0.1. `internal/requests` is the write path —
-it takes "I want this" and routes it to Sonarr/Radarr/Lidarr/LazyLibrarian by media type, which is
-why the *Arr clients are the ones with real write coverage.
+Two rationales worth stating once, because they are decisions and not conventions.
 
-**`internal/servarr` is one client, not six.** Sonarr, Radarr, Lidarr, Readarr, Prowlarr, and
-Whisparr are forks of the same codebase; auth, paging, tags, commands, SignalR, `/ping`, and
-`system/status` are byte-for-byte identical contracts. What differs is the API version path
-(`/api/v3` vs `/api/v1`) and the resource shapes, which belong in `mapping/`. Writing six clients
-would be six times the maintenance for one contract.
+**UsArr is northbound-thin and southbound-wide.** The media-server packages are read + handoff
+adapters: they populate the unified library and produce a deep link. **None of them proxy media
+bytes, ever** — if a backend cannot issue a scoped credential for a stream, UsArr catalogues and
+links it rather than carrying the bytes. `internal/requests` is the write path.
+
+**`internal/servarr` is one client, not six.** Sonarr, Radarr, Lidarr, Readarr, Prowlarr and Whisparr
+are forks of one codebase; auth, paging, tags, commands, `/ping` and `system/status` are identical
+contracts. What differs is the API version path (`/api/v3` vs `/api/v1`) and the resource shapes,
+which belong in `mapping/`. Six clients would be six times the maintenance for one contract.
 
 ---
 
@@ -119,37 +135,32 @@ would be six times the maintenance for one contract.
 
 ```bash
 git clone <repo> && cd UsArr
-cp .env.example .env
-# Generate a real master key — .env.example ships a placeholder that will not work:
-printf 'USARR_SECRET_KEY=%s\n' "$(openssl rand -base64 32)" >> .env
+cp .env.example .env       # optional — every value has a working default
 
-make tools          # install gofumpt, golangci-lint, goose  (not yet)
-make dev            # backend on :8484 with the SPA proxied   (not yet)
+make tools                 # install the pinned toolchain      (not yet)
+make dev                   # backend on :8484                  (not yet)
 ```
+
+**Do not put a master key in `.env`.** On first run UsArr generates one into
+`$USARR_CONFIG_DIR/keys/secret.key` at mode `0600` and logs a line saying so. That path has real
+entropy and cannot accidentally be a string copied out of a public file. `.env.example` ships **no**
+uncommented key for exactly that reason (`docs/CONFIGURATION.md` §3.2).
+
+`.env` is **data, not shell**. `make dev` passes `--env-file .env` to the binary's own parser rather
+than `source`-ing it, because bash performs expansion and command substitution while Docker Compose's
+`env_file` parser does neither — the same file would otherwise mean two different things, on a file
+that can hold the master key.
 
 ### Two-process dev loop (the normal one)
 
-The backend and the frontend run separately in development, and are only combined at build time.
-
 ```bash
-# Terminal 1 — Go backend, hot reload on .go changes
-make dev            # -> http://localhost:8484
-
-# Terminal 2 — Vite dev server with HMR
-make web-dev        # -> http://localhost:5173, proxies /api -> :8484
+make dev            # Terminal 1 — Go backend, hot reload -> http://localhost:8484
+make web-dev        # Terminal 2 — Vite with HMR -> :5173, proxies /api -> :8484
 ```
 
-In this mode `internal/web` serves nothing; you develop against Vite on :5173 and it forwards API
-calls to :8484. The SPA is only baked into the binary by `make build`, which runs `make web-build`
-first and embeds `web/build` through `embed.FS`. **Consequence: `make build` without a prior
-`web-build` produces a binary that serves a 404 for `/`.** The Makefile wires the dependency so this
-does not happen by accident, but it will bite you if you run `go build ./cmd/usarr` by hand.
-
-### First run
-
-With no `USARR_SECRET_KEY` and an empty database, UsArr generates a key, writes
-`$USARR_CONFIG_DIR/secret.key` at mode 0600, and prints it once. In dev, set the key in `.env`
-instead so it is stable across `rm -rf ./config`.
+In this mode `internal/web` serves nothing. The SPA is baked in only by `make build`, which runs
+`web-build` first and embeds `web/build`. **Consequence: `go build ./cmd/usarr` by hand produces a
+binary that 404s on `/`.** The Makefile wires the dependency; running `go build` directly bypasses it.
 
 ---
 
@@ -157,22 +168,29 @@ instead so it is stable across `rm -rf ./config`.
 
 | Target | Does |
 |---|---|
-| `make dev` | Run the backend with live reload, reading `.env`. |
-| `make web-dev` | Run the SvelteKit dev server with HMR. |
+| `make dev` | Run the backend, loading `.env` through the binary's own parser. |
+| `make web-dev` | SvelteKit dev server with HMR. |
 | `make build` | `web-build`, then a static `CGO_ENABLED=0` binary at `./usarr` with the SPA embedded. |
-| `make web-build` | `pnpm build` in `web/` → `web/build`. |
-| `make test` | `go test ./... -race` plus `pnpm test` in `web/`. No network, no Docker. |
-| `make test-integration` | Tests behind the `integration` build tag. Requires a live stack; **not run in CI**. |
+| `make test` | `go test ./... -race -shuffle=on` plus `pnpm test`. No network, no Docker. |
+| `make test-integration` | Behind the `integration` build tag. Needs a live stack; **never in CI**. |
+| `make bench` | Wall-clock performance harness. A **release** gate on named hardware, never a merge gate. |
 | `make lint` | `golangci-lint run`, `svelte-check`, `eslint`. |
-| `make fmt` | `gofumpt -w`, `prettier --write`. Mutates files. |
-| `make migrate` | Apply pending migrations to the dev database. |
-| `make migrate-new name=add_tag_rules` | Scaffold a timestamped migration pair. |
-| `make docker` | Build the container image locally. Needs a Docker daemon — see §8. |
-| `make clean` | Remove `./usarr`, `web/build`, `web/.svelte-kit`, coverage output. |
-| `make check` | **The pre-commit gate**: `fmt-check` + `lint` + `test`. Must pass before every commit. |
+| `make fmt` / `fmt-check` | Rewrite / verify formatting. |
+| `make secrets` | `gitleaks dir .` over the working tree. **Gating.** |
+| `make modverify` | `go mod verify` against `go.sum`. |
+| `make vuln` | `govulncheck` + `pnpm audit`. **Gating.** The only step that touches the network. |
+| `make migrate`, `migrate-new name=…` | Migration authoring against the dev DB. |
+| `make docker` | Build the image. Digest-pinned base enforced; `--provenance` + `--sbom`. Needs a daemon — §8. |
+| `make check-offline` | `fmt-check` + `lint` + `modverify` + `secrets` + `test`. Fully hermetic. |
+| `make check` | **The pre-commit gate**: `check-offline` + `vuln`. |
 
-`make check` runs `fmt-check` (verify-only), not `fmt` (rewrite), so it never mutates your tree
-while telling you it passed.
+`check` runs `fmt-check` (verify-only), not `fmt` (rewrite), so it never mutates your tree while
+telling you it passed.
+
+`check` makes **exactly one network call**, govulncheck's query to `vuln.go.dev`. That is a
+deliberate exception to the otherwise-hermetic rule: a project that stores a dozen full-admin
+credentials cannot ship a known-vulnerable crypto or HTTP dependency because the scan was advisory.
+Use `check-offline` when you have no network; run `check` before you push.
 
 ---
 
@@ -184,11 +202,13 @@ while telling you it passed.
 |---|---|---|---|
 | Unit | `*_test.go` beside the code | No | Yes |
 | Golden/table (parsers, mappers, tag rules) | `testdata/` | No | Yes |
-| Replayed HTTP (go-vcr cassettes) | `testdata/cassettes/` | No | Yes |
-| Contract (vendored OpenAPI specs) | `api/specs/` | No | Yes |
+| Replayed HTTP (go-vcr cassettes) | `testdata/cassettes/` | No | **Yes — the primary path** |
+| Contract (vendored OpenAPI specs) | `api/specs/` | No | **Yes — the counterweight to stale cassettes** |
+| Query-plan and row-count assertions | `internal/db` | No | Yes |
 | Migration round-trip | `internal/db` | No | Yes |
-| Integration (live services) | `//go:build integration` | Yes | **No** |
 | Frontend unit | `web/src/**/*.test.ts` (Vitest) | No | Yes |
+| Integration (live services) | `//go:build integration` | Yes | **No** |
+| Wall-clock benchmarks | `//go:build bench`, `make bench` | No | **No — release gate only** |
 
 ```bash
 make test                                  # everything CI runs
@@ -197,38 +217,86 @@ go test ./... -race -coverprofile=cover.out && go tool cover -html=cover.out
 USARR_INTEGRATION=1 make test-integration  # only with a live stack
 ```
 
-Always `-race` for the backend. UsArr holds long-lived SignalR connections, a webhook receiver, and
-background sync jobs writing the same SQLite handle; data races are the expected failure mode.
+Always `-race` for the backend. UsArr holds a webhook receiver and background sync jobs writing the
+same SQLite handle; data races are the expected failure mode.
+
+### Performance: what CI enforces and what it does not
+
+**In CI, because they are deterministic and hardware-independent:**
+
+* `EXPLAIN QUERY PLAN` assertions on every hot query. ~30 lines that catch an index regression
+  forever. Assert the *plan string*, and fail on `SCAN` where a `SEARCH … USING INDEX` is required.
+* **Row-count assertions** — "the library page query reads ≤ 200 rows", "resolving one northbound ID
+  reads ≤ 3 rows". A better proxy for the thing being protected than wall-clock time, and it does not
+  flake.
+* Index-integrity assertions: `count(search_fts) == count(search_doc)`, no `search_doc` row whose
+  `kind` is outside the indexed set.
+
+**Not in CI, in `make bench`:** every p50/p99 latency budget. Enforcing millisecond gates needs either
+a self-hosted single-point-of-failure runner or emulation whose numbers mean nothing, and latency
+gates on shared CI are flake generators — the predictable outcome is that they get disabled in month
+two, but only after blocking real work first. Record `make bench` output in `docs/BENCHMARKS.md`
+with the hardware and commit named, and treat regressions as a release conversation.
 
 ### Rules
 
-* **A test that needs the network is not a unit test.** If it reaches the internet, it is behind the
+* **A test that needs the network is not a unit test.** If it reaches the internet it is behind the
   `integration` tag or it uses a cassette.
 * **Never commit a real API key.** Cassettes are scrubbed by a recorder hook before they touch disk
-  (§7.2). The pre-commit gate should grep cassettes for 32-hex-character strings.
+  (§7.1); `make secrets` is the mechanical backstop.
 * **Test the error envelopes, not just the happy path.** This ecosystem's failure modes are unusual
   and are where integrations actually break:
-  * *Arr: bad key returns **401**, never 403 — the handler returns `NoResult()`, not `Fail()`.
-  * *Arr: `Accept: text/html` returns **406** (`ReturnHttpNotAcceptable = true`). Send
-    `Accept: application/json` or nothing.
+  * *Arr: a bad key returns **401**, never 403 — the handler returns `NoResult()`, not `Fail()`.
+  * *Arr content negotiation: `ReturnHttpNotAcceptable = true` is confirmed in the shipped Servarr
+    `Startup.cs`, so `Accept: text/html` gets a 406. But the shipped specs declare several of the
+    **largest** endpoints as `text/plain` only — `radarr /api/v3/movie`, `lidarr /api/v1/album` and
+    `/track`, `readarr /api/v1/author`, `/book`, `/history/since`. Sending a bare
+    `Accept: application/json` may therefore 406 the single most important endpoint in the import
+    path. **Send `Accept: application/json, text/plain;q=0.9, */*;q=0.1` and parse the body as JSON
+    regardless of the returned `Content-Type`**, and have the connection wizard record what each
+    instance actually returns. ⚠️ Not yet exercised against a live Radarr.
+  * *Arr child endpoints **require a parent id**. `GET /api/v3/episode` with none of
+    `seriesId`/`episodeIds`/`episodeFileId` throws
+    `BadRequestException("seriesId or episodeIds must be provided")` in `EpisodeController` — the
+    OpenAPI spec marks them `required: false`, so the spec is *wrong* here and the controller is
+    right. Same for `/api/v3/episodefile` and Radarr's `/api/v3/moviefile`. Any "never fetch children
+    per-parent" rule is unimplementable; the achievable rule is one call per parent, 4–8 concurrent,
+    jittered, behind a per-instance token bucket. Pin it with a test.
   * Prowlarr: query/grab limit breaches have historically returned **HTTP 200 with an error in the
     body**; upstream indexer 429s surface as generic connection failures. Treat Prowlarr search
     failures as soft and read `indexerstatus.disabledTill`.
   * Prowlarr: grabbable releases are cached server-side for **30 minutes**. A test that persists a
     release and grabs it later must assert the failure, not the success.
+  * Prowlarr history is **indexer telemetry**, not entity change: `HistoryEventType` is
+    `unknown|releaseGrabbed|indexerQuery|indexerRss|indexerAuth|indexerInfo`, and `HistoryResource`
+    carries no `movieId`/`seriesId`. Never treat it as a delta-sync cursor.
   * LazyLibrarian: returns **HTTP 200 with `{"Success": false, "Error": {...}}`**. Inspect the body,
-    never the status code. Keys must be exactly 32 chars or you get `503 Invalid API key`.
-  * Transmission: first RPC call returns **409 + `X-Transmission-Session-Id`** and must be retried
+    never the status. Keys must be exactly 32 chars or you get `503 Invalid API key`.
+  * Transmission: the first RPC call returns **409 + `X-Transmission-Session-Id`** and must be retried
     with that header. Bake the handshake into the client's test.
   * qBittorrent: cookie session that expires; assert re-login on 403.
   * Sonarr webhooks: `eventType: "Download"` has **two different body shapes** (single import vs
     import-complete). Discriminate on `episodeFile` vs `episodeFiles`. Both shapes need a fixture.
-* **Type normalisation deserves its own tests.** `imdbId` is a string `"tt0117951"` in Sonarr/Radarr
-  and an int `117951` in Prowlarr. `indexerFlags` is an int bitmask in Sonarr/Radarr and a
-  `string[]` in Prowlarr. `tags` are `int[]` in the REST API and **string labels** in webhooks.
-  `Protocol` in *Arr history `data` is the **integer** enum value (`0` unknown, `1` usenet,
-  `2` torrent) while every REST resource uses the string form. Each of these is a one-line bug and a
-  one-line test.
+* **Type normalisation deserves its own tests, and the axis is `(app, resource)` — not app.**
+  Verified against the vendored specs:
+
+  | Field | Shape |
+  |---|---|
+  | `Sonarr.SeriesResource.imdbId` | `string` |
+  | `Radarr.MovieResource.imdbId` | `string` |
+  | `Sonarr.ReleaseResource.imdbId` | `string` |
+  | `Radarr.ReleaseResource.imdbId` | **`int32`** |
+  | `Prowlarr.ReleaseResource.imdbId` | `int32` |
+  | `Radarr.MovieFileResource.indexerFlags` | `int32` bitmask |
+  | `Radarr.ReleaseResource.indexerFlags` | **untyped in the spec — parse defensively as int or `string[]`** |
+  | `Prowlarr.ReleaseResource.indexerFlags` | `string[]` |
+  | `Quality.source` | Exists only in **Sonarr, Radarr and Whisparr**, a different enum in each (all begin with `unknown`; Whisparr adds `vr`). **Lidarr and Readarr's `Quality` carries only `{id, name}`.** Store `quality.id` + `quality.name` + the emitting app. |
+
+  Also: `tags` are `int[]` in REST and **string labels** in webhooks; `Protocol` inside *Arr history
+  `data` is the **integer** enum (`0` unknown, `1` usenet, `2` torrent) while every REST resource uses
+  the string form. Each is a one-line bug and a one-line test.
+* **Assert the SSRF policy, not just the happy fetch.** A handler that 302-redirects to
+  `169.254.169.254` must be refused, and the test asserts the request never left the process.
 
 ---
 
@@ -243,8 +311,12 @@ PRAGMA foreign_keys = ON;
 PRAGMA synchronous = NORMAL;
 ```
 
-`foreign_keys` is off by default in SQLite and is per-connection, so it must be set on **every**
+`foreign_keys` is off by default in SQLite and is **per-connection**, so it must be set on every
 connection in the pool, not once at startup.
+
+⚠️ The SQLite floor is **3.43**, not 3.37. 3.37 is only what `STRICT` requires; `contentless_delete=1`
+on an FTS5 table — without which a contentless index can never `DELETE` or `UPDATE`, so deleted works
+haunt search results forever — arrived in **3.43.0**.
 
 ### Workflow
 
@@ -257,104 +329,72 @@ make test               # migration round-trip test runs here
 
 Rules:
 
-* Migrations are **embedded** (`//go:embed migrations/*.sql`) and applied automatically at startup.
-  A binary is always able to bring its own database forward without an external tool.
+* Migrations are **embedded** (`//go:embed migrations/*.sql`) and applied automatically at startup, so
+  a binary can always bring its own database forward without an external tool.
 * Migrations are **forward-only (proposed)**. Write a `-- +goose Down` block anyway — it is the
-  cheapest way to test a migration locally — but downgrades are not a supported user path, and the
-  restore procedure in `docs/CONFIGURATION.md §7` says so.
+  cheapest way to test locally — but downgrades are not a supported user path, and
+  `docs/CONFIGURATION.md` §6.3 says so.
 * **Never edit a migration that has shipped.** Add a new one.
-* SQLite cannot drop or retype a column in older versions and its `ALTER TABLE` support is narrow.
-  For anything beyond `ADD COLUMN`/`RENAME`, use the 12-step table rebuild
-  (create new → copy → drop old → rename), inside a transaction, with `PRAGMA foreign_keys=OFF`
-  around it. Write the rebuild explicitly; do not hope.
-* The round-trip test runs every migration against an empty in-memory DB, then asserts the resulting
-  schema matches a checked-in `schema.sql` snapshot. This catches "works on my dev DB because it was
-  created three migrations ago" drift.
+* SQLite's `ALTER TABLE` support is narrow. For anything beyond `ADD COLUMN`/`RENAME`, write the
+  12-step table rebuild explicitly (create new → copy → drop old → rename), inside a transaction,
+  with `PRAGMA foreign_keys=OFF` around it. Do not hope.
+* The round-trip test runs every migration against an empty in-memory DB and asserts the result
+  matches a checked-in `schema.sql` snapshot. This catches "works on my dev DB because it was created
+  three migrations ago" drift.
+* `cache.db` is a second database and is **never `ATTACH`ed inside a `usarr.db` write transaction** —
+  cross-database locking reintroduces the `SQLITE_BUSY` class the single-writer design exists to
+  avoid.
 
 ---
 
-## 7. Testing against real services without owning an *Arr stack
+## 7. Developing with no *Arr stack at all
 
-This is the hard part of this project, and there is no single answer. Four mechanisms, in the order
-you should reach for them.
+**This is the normal case, not the degraded one.** The project owner runs no Sonarr, Radarr or
+Lidarr; CI has no Docker daemon and no FFmpeg. So the two offline mechanisms below are the *primary*
+path, and the live stack exists only to record into them.
 
-### 7.1 Docker Compose fixture stack — for *recording*, not for CI
+State it plainly so nobody spends an afternoon looking: **there is no public demo instance of Sonarr,
+Radarr, Lidarr, Prowlarr, Readarr or Whisparr with API access.** Searched 2026-08-16; none official,
+none community-run. Jellyfin publishes one (`https://demo.jellyfin.org/stable`, user `demo`, empty
+password) and Navidrome is 📄 widely referenced at `demo.navidrome.org` (⚠️ unverified in this pass) —
+both are for eyeballing response shapes by hand, never for automated tests: read-only, shared,
+rate-limited by circumstance, and their uptime is nobody's commitment to you.
 
-`deploy/compose/dev-stack.yml` **(not yet)** brings up the ecosystem on a developer workstation:
+### 7.1 Recorded HTTP fixtures (go-vcr) — mechanism one
 
-```yaml
-# sketch — ports match the defaults UsArr assumes
-services:
-  sonarr:     { image: lscr.io/linuxserver/sonarr:latest,     ports: ["8989:8989"] }
-  radarr:     { image: lscr.io/linuxserver/radarr:latest,     ports: ["7878:7878"] }
-  lidarr:     { image: lscr.io/linuxserver/lidarr:latest,     ports: ["8686:8686"] }
-  prowlarr:   { image: lscr.io/linuxserver/prowlarr:latest,   ports: ["9696:9696"] }
-  jellyfin:   { image: lscr.io/linuxserver/jellyfin:latest,   ports: ["8096:8096"] }
-  navidrome:  { image: deluan/navidrome:latest,               ports: ["4533:4533"] }
-  audiobookshelf: { image: ghcr.io/advplyr/audiobookshelf:latest, ports: ["13378:80"] }
-  komga:      { image: gotson/komga:latest,                   ports: ["25600:25600"] }
-  kavita:     { image: jvmilazz0/kavita:latest,               ports: ["5000:5000"] }
-  sabnzbd:    { image: lscr.io/linuxserver/sabnzbd:latest,    ports: ["8080:8080"] }
-  qbittorrent:{ image: lscr.io/linuxserver/qbittorrent:latest,ports: ["8081:8080"] }
-```
-
-⚠️ Image names and internal port mappings for the four southbound backends are from general
-knowledge, not verified in this pass — check each project's own compose example before committing
-this file.
-
-The awkward part is **seeding**. A fresh *Arr has an empty library and a random API key, so the
-stack is not reproducible on its own. Two ways to fix that, both worth having:
-
-1. **Commit seeded config volumes.** Start each app once, disable authentication, set a *known
-   fixture* API key in `config.xml`, add a handful of series/movies, then commit the resulting
-   `config/` directories under `deploy/compose/seed/`. The key is fake and public **by design**, and
-   the seed dirs must never be mounted anywhere real. `config.xml`'s element names are stable
-   (`ApiKey`, `Port`, `UrlBase`, `AuthenticationMethod`, `AuthenticationRequired`), so this is
-   scriptable.
-2. **A `make seed` script** that drives each app's own API to add a fixed set of items after
-   startup, so the seed is regenerable rather than a binary blob.
-
-Because *Arr apps disable Swagger outside debug builds (`app.UseSwagger()` is guarded by
-`if (BuildInfo.IsDebug)`), you **cannot** fetch `/docs/v3/openapi.json` from a running production
-instance. The specs must be vendored (§7.3).
-
-**This stack never runs in CI.** See §8.
-
-### 7.2 Recorded HTTP fixtures (go-vcr) — the default for everyday work
-
-[`dnaeon/go-vcr`](https://github.com/dnaeon/go-vcr) v4 (`gopkg.in/dnaeon/go-vcr.v4`) records real
-HTTP interactions to a YAML "cassette" and replays them offline. This is how the *Arr, Jellyfin, and
-metadata-provider clients get tested with zero infrastructure.
+[`gopkg.in/dnaeon/go-vcr.v4`](https://github.com/dnaeon/go-vcr) records real HTTP interactions to a
+YAML "cassette" and replays them offline. Every *Arr, media-server and metadata-provider client is
+tested this way, with zero infrastructure.
 
 Loop:
 
-1. Bring up the compose stack (§7.1), or point at your own homelab.
-2. Run the test with `USARR_RECORD=1`. The recorder is in record mode; real calls go out; a cassette
-   lands in `testdata/cassettes/`.
-3. Run it again without the flag. Replay mode. No network.
-4. Commit the cassette. CI and every other contributor now run that test with no stack at all.
+1. Point at a stack — the compose fixture (§7.3), or a contributor's homelab.
+2. Run the test with `USARR_RECORD=1`. Real calls go out; a cassette lands in `testdata/cassettes/`.
+3. Run it again without the flag. Replay. No network.
+4. Commit the cassette. CI and every contributor now run that test with no stack at all.
 
 **Scrubbing is mandatory and must be a recorder hook, not a manual step.** *Arr keys appear in three
 places — the `X-Api-Key` header, an `Authorization: Bearer` header, and the `?apikey=` /
 `?access_token=` query parameters. SABnzbd's key is *only* ever a query parameter. Jellyfin's token
-sits inside a structured `Authorization: MediaBrowser Token="…"` header. Register a `BeforeSave`
-hook that rewrites all of them to a fixed placeholder, plus any `Set-Cookie` (qBittorrent's
-`SID`/`QBT_SID_*`) and the `X-Transmission-Session-Id` value.
+sits inside a structured `Authorization: MediaBrowser Token="…"` header. Register a `BeforeSave` hook
+rewriting all of them to a fixed placeholder, plus any `Set-Cookie` (qBittorrent's `SID`/`QBT_SID_*`)
+and the `X-Transmission-Session-Id` value.
 
 Cassette hygiene:
 
-* One cassette per test, named after it. Cassettes are test fixtures, not a shared corpus.
-* Re-record when the upstream contract changes; a stale cassette will happily pass forever against a
-  contract that no longer exists. This is go-vcr's real failure mode, and §7.3 is the counterweight.
-* Keep them small. Do not record `GET /series` against a 5 000-item library — these endpoints are
-  **not paged** and serialise the whole object graph. Seed a handful of items.
-* Metadata providers get cassettes too, and there it is not optional: MusicBrainz allows **1 req/s**
-  and returns 503 above it, so a test suite that hits it live is a test suite that gets you blocked.
+* One cassette per test, named after it. Cassettes are fixtures, not a shared corpus.
+* Re-record when the upstream contract changes. A stale cassette passes forever against a contract
+  that no longer exists — go-vcr's real failure mode, and §7.2 is the counterweight.
+* Keep them small. Never record `GET /series` against a 5 000-item library: these endpoints are **not
+  paged** and serialise the whole object graph. Seed a handful of items.
+* Metadata providers get cassettes too, and there it is not optional — MusicBrainz allows 1 req/s and
+  returns 503 above it, so a suite that hits it live is a suite that gets you blocked.
 
-### 7.3 Vendored OpenAPI specs as contract-test sources
+### 7.2 Contract tests against vendored OpenAPI specs — mechanism two
 
-Every Servarr app ships an OpenAPI document in its repo. Vendor them into `api/specs/` with a
-`SOURCES.md` recording the URL and the date/commit pulled:
+Every Servarr app ships an OpenAPI document in its repo. All six were retrieved during research
+(2026-08-16) and must be vendored verbatim into `api/specs/` in an early commit, with a `SOURCES.md`
+recording the URL and the date/commit pulled:
 
 ```
 https://raw.githubusercontent.com/Sonarr/Sonarr/develop/src/Sonarr.Api.V3/openapi.json
@@ -365,89 +405,90 @@ https://raw.githubusercontent.com/Prowlarr/Prowlarr/develop/src/Prowlarr.Api.V1/
 https://raw.githubusercontent.com/Whisparr/Whisparr/develop/src/Whisparr.Api.V3/openapi.json
 ```
 
-Three distinct uses, all offline:
+They must be vendored rather than fetched, because *Arr apps guard `app.UseSwagger()` behind
+`if (BuildInfo.IsDebug)` — you **cannot** pull `/docs/v3/openapi.json` from a running production
+instance.
+
+Three uses, all offline:
 
 1. **Schema validation of cassettes.** Replay a cassette and assert each recorded response body
    validates against the spec's schema for that path. This is what makes a stale cassette detectable
    without a live server: if the vendored spec moves and the cassette does not, the test fails.
-2. **Struct-coverage tests.** Assert that UsArr's Go structs cover every field the spec marks
-   required for the resources UsArr consumes, and that enum-typed fields accept every documented
-   value. `DownloadProtocol` (`unknown|usenet|torrent`) is identical across Sonarr, Radarr, and
-   Prowlarr and is the backbone of source tagging — pin it with a test.
-3. **Drift detection.** A scheduled job (not the PR gate — it needs network) re-downloads the specs,
-   diffs them against `api/specs/`, and opens an issue on change. Upstream `develop` moves; UsArr
-   should learn about a renamed field from a bot, not from a user's bug report.
+2. **Struct-coverage tests.** Assert UsArr's Go structs cover every field the spec marks required for
+   the resources UsArr consumes, and that enum-typed fields accept every documented value.
+   `DownloadProtocol` (`unknown|usenet|torrent`) is identical across Sonarr, Radarr and Prowlarr and
+   is the backbone of source tagging — pin it.
+3. **Drift detection.** A scheduled job — *not* the PR gate, it needs network — re-downloads the
+   specs, diffs them against `api/specs/`, and opens an issue on change. Upstream `develop` moves;
+   UsArr should hear about a renamed field from a bot, not from a user's bug report.
 
-Caveats worth knowing before relying on this: Jellyfin also publishes an OpenAPI spec, but the 10.11
-schema was reported invalid (malformed 503 response headers), which breaks naive codegen — generate
-*types* if useful, but hand-write the ~25 Jellyfin endpoints UsArr actually needs rather than
-depending on a generated client. LazyLibrarian has no spec at all: it is a single CherryPy endpoint
-with 184 `cmd=` values and an untyped response envelope, so it gets hand-written fixtures and a
-hand-written contract test.
+⚠️ **The spec is not always right** (see `/api/v3/episode` in §5). Where a controller enforces
+something the schema does not express, the contract test encodes the controller's behaviour and a
+comment says why.
 
-### 7.4 Fake servers, for the paths a cassette cannot reach
+Caveats: Jellyfin publishes an OpenAPI spec, but the 10.11 schema was reported invalid (malformed 503
+response headers), which breaks naive codegen — generate *types* if useful, but hand-write the ~25
+endpoints UsArr needs. LazyLibrarian has no spec at all: a single CherryPy endpoint with 184 `cmd=`
+values and an untyped envelope, so it gets hand-written fixtures and a hand-written contract test.
+
+### 7.3 The compose fixture stack — for *recording only*, never CI
+
+`deploy/compose/dev-stack.yml` **(not yet)** brings the ecosystem up on a developer workstation
+(Sonarr 8989, Radarr 7878, Lidarr 8686, Prowlarr 9696, plus the media servers). ⚠️ Image names and
+internal port mappings were not verified in this pass — check each project's own compose example
+before committing the file.
+
+The awkward part is **seeding**: a fresh *Arr has an empty library and a random API key.
+
+**Seed with a script, never with committed config volumes.** An earlier draft proposed committing
+seeded `config/` directories with "intentionally fake" API keys under `deploy/compose/seed/`. That is
+now gitignored and the approach is rejected: a generated 32-hex key is indistinguishable from a real
+one to a reviewer *and* to a secret scanner, so the first person who regenerates the seed from a
+working stack commits a live full-admin credential, and `make secrets` cannot tell the difference.
+
+Instead, `make seed` **(not yet)** drives each app's own API after startup:
+
+* Write a fixed, structurally-obvious fake key into `config.xml` before first start —
+  `0000000000000000000000000000dead`. Its element names are stable (`ApiKey`, `Port`, `UrlBase`,
+  `AuthenticationMethod`, `AuthenticationRequired`), so this is scriptable, and the constant is
+  exact-matchable in a `.gitleaksignore` entry.
+* Add a fixed handful of series/movies through the API.
+* The result is regenerable rather than a binary blob, and nothing under `deploy/compose/` is ever
+  committed.
+
+**This stack never runs in CI.** See §8.
+
+### 7.4 Fake servers, for what a cassette cannot reach
 
 `httptest.Server` implementations of the handful of endpoints UsArr calls. These prove nothing about
-the real world, so use them only where reality is hard to provoke:
-
-* Auth failures (401 with a bad key, 403), 406 on a wrong `Accept`.
-* Timeouts, truncated bodies, connection resets, slow-loris responses.
-* Transmission's 409 challenge and qBittorrent's session expiry.
-* Prowlarr's HTTP-200-with-an-error body; LazyLibrarian's `Success: false`.
-* SSRF policy tests: a handler that 302-redirects to `169.254.169.254` must be refused by the
-  outbound client, and the test asserts the request never left.
-
-### 7.5 Public demo instances
-
-| Service | Public demo | Usable for tests? |
-|---|---|---|
-| **Jellyfin** | `https://demo.jellyfin.org/stable` — username `demo`, **empty password**. An `unstable` demo also exists. Status is tracked at <https://status.jellyfin.org/service/stable-demo>. | **Manual exploration only.** Good for eyeballing response shapes and sanity-checking the `Authorization: MediaBrowser` header. Never in automated tests: it is read-only, shared, rate-limited by circumstance, and its uptime is nobody's commitment to you. Do a manual pass, then record a cassette against your own Jellyfin. |
-| **Sonarr / Radarr / Lidarr / Prowlarr / Whisparr** | **None found.** Searched 2026-08-16; no official or community public demo with API access exists. | n/a — compose fixtures + cassettes are the only path. |
-| **LazyLibrarian** | None found. | n/a |
-| **Navidrome** | `https://demo.navidrome.org` — 📄 widely referenced with credentials `demo` / `demo`; ⚠️ **not verified in this pass**. | Manual exploration only, same caveats as Jellyfin. Useful for confirming whether an OpenSubsonic server advertises `apiKeyAuthentication` via `getOpenSubsonicExtensions`. |
-| **Audiobookshelf / Komga / Kavita** | ⚠️ Not checked in this pass. Komga and Kavita both ship Swagger UI on a local instance (`/swagger-ui.html` for Komga), which is a better reference than a demo anyway. | Compose fixtures + cassettes. |
-| Metadata providers (TMDB, Open Library, MusicBrainz, Wikidata, TVmaze) | Their production APIs are the "demo" — public and reachable. | Use them **once**, to record cassettes, with a compliant `User-Agent`. Never in the normal test loop; MusicBrainz's 1 req/s and Wikidata's `api.php` throttle make live testing actively hostile. |
-
-**Recommended path if you own no *Arr stack at all:** work entirely from committed cassettes and the
-vendored specs (§7.2, §7.3), and ask a contributor with a real stack to re-record when you touch a
-client. That is a supported workflow, not a degraded one — it is why the cassettes are committed.
-
-### 7.6 Testing the Tailscale path
-
-`tsnet` joins a real tailnet, so it cannot be exercised in a hermetic test. Split it:
-
-* **Unit-testable, and where the bugs will be:** the identity mapping. Given a `WhoIs` result (or its
-  absence, for a tagged device), does UsArr resolve the right user, and does it correctly refuse when
-  `USARR_TSNET_AUTH_ALLOWED_LOGINS` does not contain the login? Put `WhoIs` behind a small interface
-  and test the mapping against fixtures. Same for the `Tailscale-User-Login` header path — including
-  the case that matters most: **a request carrying `Tailscale-User-Login` that did not arrive through
-  the trusted path must be rejected**, not honoured.
-* **Not unit-testable:** actually joining a tailnet. That lives behind the `integration` tag and runs
-  on a developer machine with a real (ideally throwaway) tailnet and a non-reusable auth key.
-* Default `USARR_TSNET_ENABLED=false` in dev so the normal loop binds an ordinary TCP port.
+the real world, so use them only where reality is hard to provoke: auth failures, 406 on a wrong
+`Accept`, timeouts, truncated bodies, connection resets, Transmission's 409 challenge, qBittorrent
+session expiry, Prowlarr's HTTP-200-with-an-error body, LazyLibrarian's `Success: false`, and the
+SSRF redirect cases.
 
 ---
 
-## 8. CI and the agent container: no Docker daemon
+## 8. CI: no Docker daemon, no FFmpeg, one network call
 
-**The Docker daemon is unavailable in the current CI/agent container.** Verified: `docker info`
-fails in this environment.
+**The Docker daemon is unavailable in the CI/agent container.** Verified: `docker info` fails. FFmpeg
+is absent too, and stays absent.
 
 Therefore:
 
-* `make test`, `make lint`, `make check`, and `make build` **must not require Docker**, a live
-  service, or network access. If any of them ever does, that is a bug in the target, not an
+* `make test`, `make lint`, `make check-offline` and `make build` **must not require Docker, a live
+  service, or network access.** If any of them ever does, that is a bug in the target, not an
   environment problem to work around.
-* Testcontainers, dockertest, and "spin up a real Postgres/Sonarr in a test" patterns are **out of
-  bounds** for the default test suite. This is also why UsArr uses SQLite rather than anything
-  needing a server.
+* `make check` adds exactly one network call — govulncheck against `vuln.go.dev`. Nothing else in the
+  gate touches the network, and no target may add a second without a stated reason.
+* Testcontainers, dockertest and "spin up a real Postgres/Sonarr in a test" are **out of bounds** for
+  the default suite. This is also why UsArr uses SQLite rather than anything needing a server.
 * Anything requiring the stack goes behind `//go:build integration`, is gated on
   `USARR_INTEGRATION=1`, and runs only under `make test-integration` on a developer machine.
-* `make docker` exists for humans and for release pipelines that do have a daemon. It is not part of
-  `make check` and CI must not call it.
+* `make docker` exists for humans and for release pipelines that do have a daemon. It is never part
+  of `check` and CI must not call it.
 
-A `make check` that passes on a machine with no daemon, no *Arr stack, and no network is the bar. If
-you cannot get a test to that bar, it belongs in the integration tag.
+A `make check-offline` that passes on a machine with no daemon, no *Arr stack and no network is the
+bar. If you cannot get a test to that bar, it belongs behind the integration tag.
 
 ---
 
@@ -486,56 +527,73 @@ formatters:
     - goimports
 ```
 
-`noctx` and `bodyclose` are not stylistic here. UsArr fans out to a dozen services on every page
-load; a request without a timeout or a body that is never closed becomes a hung dashboard.
+`noctx` and `bodyclose` are not stylistic here. UsArr fans out to a dozen services; a request without
+a timeout or a body that is never closed becomes a hung dashboard.
 
 ### Frontend
 
 ```bash
 pnpm -C web lint          # eslint
 pnpm -C web format        # prettier --write
-pnpm -C web check         # svelte-check --tsconfig ./tsconfig.json  (types + a11y + unused CSS)
+pnpm -C web check         # svelte-check (types + a11y + unused CSS)
 ```
 
 `svelte-check` is part of `make lint`, not an afterthought — with `adapter-static` a type error in a
-route only shows up at build time otherwise.
+route only surfaces at build time otherwise.
 
 ### Pre-commit
 
 ```bash
-make check    # fmt-check + lint + test
+make check
 ```
 
-Run it before every commit. Wire it as a git hook if you like; do not wire it as a hook that
-auto-formats, because a hook that rewrites your files mid-commit produces commits you did not read.
+Wire it as a git hook if you like; do not wire it as a hook that auto-formats, because a hook that
+rewrites your files mid-commit produces commits you did not read.
 
 ---
 
 ## 10. Conventions
 
-* **Errors**: wrap with `%w` and context (`fmt.Errorf("sonarr %s: fetch series: %w", inst.Name, err)`).
-  Never log a secret in an error path — the *Arr key is often in the URL you are tempted to include.
-* **Contexts**: every outbound call takes a `context.Context` with a deadline. A slow Sonarr must not
-  hang a page.
+* **Errors**: wrap with `%w` and context
+  (`fmt.Errorf("sonarr %s: fetch series: %w", inst.Name, err)`). Never log a secret in an error path —
+  the *Arr key is often in the URL you are tempted to include.
+* **Contexts**: every outbound call takes a `context.Context` with a deadline.
 * **Outbound HTTP goes through `internal/ssrf`**, never `http.DefaultClient`. That package resolves
-  the hostname, validates the resulting IP against the policy for that request class, connects to
-  the pinned IP, refuses redirects, denies non-HTTP(S) schemes, and caps response size. Integration
-  fetches may reach RFC1918 (that is the whole point of a homelab hub); metadata/image fetches may
-  not, including `169.254.169.254` **and the Tailscale CGNAT range `100.64.0.0/10`** — UsArr's
-  default deployment is a tailnet, so "private space" is larger than RFC1918. Bypassing this package
-  is a review-blocking change.
-* **UsArr never invokes a media processing tool.** No `exec.Command("ffmpeg", …)`, ever. Playback is
-  delegated; see §1.
+  the hostname, validates the IP against the policy **for that request's class**, dials the pinned IP
+  while keeping the original hostname for `Host`/SNI/certificate verification, revalidates on **every**
+  hop of a redirect (max 3, no cross-scheme, no downgrade to `http`, never carrying credentials
+  across), denies non-HTTP(S) schemes, and caps response size and time. Bypassing it is a
+  review-blocking change.
+  There are **three** request classes, not two, and the third is the biggest:
+  1. **configured** — an admin-entered service URL. May reach private space; that is the whole point
+     of a homelab hub.
+  2. **provider** — a metadata/artwork URL for a known public provider. Strict public-only deny-list.
+  3. **derived** — *a URL read out of an upstream response body*: `MediaCover.remoteUrl`, a media
+     server's cover field, a manifest's `posterUrl`. **No admin configured these.** Policy: strict
+     public-only deny-list, *unless* the URL is host-and-port-identical to the originating instance's
+     `base_url`, in which case it is an integration fetch to that one host. Nothing in between. This
+     is the shape of CVE-2021-29490 with the attacker moved one hop upstream, and it is the class
+     that carries indexer- and NFO-supplied strings.
+* **Credentials never appear in a stored URL.** Strip credential query parameters before writing any
+  URL to `image_asset.source_url`, to the HTTP cache, or to a log. Derive cache keys from the
+  stripped URL so rotating a provider key does not invalidate the whole image cache. TMDB v3,
+  Fanart.tv and Comic Vine all authenticate by query parameter, and those columns are not encrypted.
+* **UsArr never invokes a media processing tool.** No `exec.Command("ffmpeg", …)`, ever.
+* **UsArr never carries media bytes.** No proxy mode, no `Range` handling, no `206`. A backend that
+  cannot issue a scoped credential is catalogued and deep-linked.
 * **Never join on an *Arr's local `id`.** Those integers are per-instance and unrelated across
   instances — the same is true of *Arr tag IDs, where instance A's tag `3` has nothing to do with
   instance B's tag `3`. Join on external IDs (tvdb/tmdb/imdb/MBID/OLID/ISBN) or on
-  `(instance_id, remote_id)`.
+  `(instance_id, remote_kind, remote_id)`. Note the `remote_kind`: Sonarr series 42 and episode 42
+  both exist, so a two-part key is ambiguous.
+* **`id` reuse is real.** *Arr primary keys are not `AUTOINCREMENT`, so a deleted movie's id is
+  handed to the next one. Before resurrecting a tombstoned link, compare a stable external identity;
+  on mismatch, hard-delete the tombstone and create a new link rather than rebinding the old work.
 * **Store raw release names verbatim, forever.** Every parsed field is re-derivable if the parser
   improves; the raw name is not recoverable once discarded.
 * **Do not write a release-name parser from scratch.** Port or vendor an existing one and use
   Sonarr's regex corpus (158 regexes in `Parser.cs`) and its test fixtures as the oracle.
-* **Commits**: imperative subject, ≤72 chars, body explains *why*. Conventional Commits prefixes are
-  fine but not enforced.
+* **Commits**: imperative subject, ≤72 chars, body explains *why*.
 
 ---
 
@@ -543,14 +601,19 @@ auto-formats, because a hook that rewrites your files mid-commit produces commit
 
 An agent working in this repo should assume:
 
-* `make check` is the definition of done for a code change, and it must pass **offline**.
-* No Docker. No network in tests. If a task seems to need either, the task is misframed — reach for
-  a cassette or the vendored spec instead.
-* `docs/CONFIGURATION.md` is the contract for anything config-shaped. New settings go in the table
-  there, in `.env.example`, and in `internal/config` in the same commit — a setting that exists in
-  only two of the three is a bug.
-* Facts about upstream APIs come from `api/specs/` or from the research notes, not from memory. This
-  ecosystem has many near-miss details (`/api/v1` vs `/api/v3`, `imdbId` as string vs int, 401 vs
+* `make check` is the definition of done for a code change. It must pass with no Docker and no live
+  services; `make check-offline` must pass with no network at all.
+* No Docker. No stack. If a task seems to need either, the task is misframed — reach for a cassette
+  (§7.1) or the vendored spec (§7.2).
+* `docs/CONFIGURATION.md` is the contract for anything config-shaped, and §5 of it is authoritative
+  for on-disk layout for the whole project. A new setting goes in the §2 table, in `.env.example`, and
+  in `internal/config` in the same commit — one that exists in two of the three is a bug.
+  **Adding an environment variable is a decision to defend, not a default.** The surface is
+  deliberately fourteen variables; services are configured in the UI and stored in the database, and
+  there is no env channel, no config file and no provisioning file for them.
+* Facts about upstream APIs come from `api/specs/` or the research notes, **not from memory** — and
+  where the spec and the controller disagree, from a test that says which won. This ecosystem has
+  many near-miss details (`/api/v1` vs `/api/v3`, `imdbId` string vs int *within one app*, 401 vs
   403, PascalCase webhook `eventType` against camelCase REST) that are easy to get plausibly wrong.
-* When something is unverified, say so in the code comment or the doc. This repo marks uncertainty
-  rather than papering over it, and reviewers rely on that.
+* When something is unverified, say so in the comment or the doc, with the date. This repo marks
+  uncertainty rather than papering over it, and reviewers rely on that.

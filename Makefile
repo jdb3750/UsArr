@@ -7,11 +7,17 @@
 # created. That is intentional — this file is the build contract the first
 # commits are written against, not a description of a working build.
 #
-# Two rules this file must keep obeying as code lands:
-#   1. `make check` (fmt-check + lint + test) must pass with NO Docker daemon,
-#      NO live services and NO network. The CI/agent container has none of them.
+# Three rules this file must keep obeying as code lands:
+#   1. `make check` is the pre-commit gate. It must pass with NO Docker daemon
+#      and NO live services. It makes exactly ONE network call — govulncheck's
+#      query to vuln.go.dev. `make check-offline` drops that one step and is the
+#      target to use on a plane. Everything else is hermetic.
 #   2. `make docker` is the ONLY target allowed to require a Docker daemon, and
 #      it is never part of `check`.
+#   3. `make bench` holds every wall-clock performance measurement. Wall-clock
+#      numbers are a release gate on named hardware, never a merge gate — see
+#      docs/DEVELOPMENT.md §5. What CI does enforce is `EXPLAIN QUERY PLAN` and
+#      row-count assertions, which are deterministic and live in `make test`.
 #
 # Reference: docs/DEVELOPMENT.md
 # ─────────────────────────────────────────────────────────────────────────────
@@ -37,9 +43,13 @@ LDFLAGS     := -s -w \
 	-X main.commit=$(COMMIT) \
 	-X main.buildDate=$(BUILD_DATE)
 
-# Static binary. No CGO — SQLite is a pure-Go Wasm build (ncruces/go-sqlite3).
-# If this ever needs a C toolchain, something has gone wrong. See DEVELOPMENT.md §1.
+# Static binary. No CGO — SQLite is pure Go (ncruces/go-sqlite3 ships a
+# wasm2go-translated SQLite; there is no Wasm runtime in the dependency graph).
+# If this ever needs a C toolchain, something has gone wrong. DEVELOPMENT.md §1.
 export CGO_ENABLED := 0
+
+# Dependency integrity: never let a build silently mutate go.mod/go.sum.
+export GOFLAGS := -mod=readonly
 
 GO          ?= go
 GOTESTFLAGS ?= -race -shuffle=on
@@ -49,11 +59,25 @@ PNPM        ?= pnpm
 DEV_CONFIG_DIR ?= ./.dev/config
 DEV_DB         ?= $(DEV_CONFIG_DIR)/usarr.db
 
-# Pinned tool versions. Bump deliberately; a floating linter is a flaky gate.
-GOFUMPT_VERSION       ?= latest
+# ─── Pinned tool versions ────────────────────────────────────────────────────
+# `@latest` is FORBIDDEN in this file. `make tools` runs `go install`, which
+# executes the installed module's build on a developer machine that may hold a
+# master key and *Arr admin credentials in .env. A floating version there is a
+# supply-chain hole, not just a flaky gate. Bump these deliberately, in a commit
+# that says why. Resolved from proxy.golang.org on 2026-08-16.
+GOFUMPT_VERSION       ?= v0.11.0
 GOLANGCI_VERSION      ?= v2.12.2
-GOOSE_VERSION         ?= latest
-GOVULNCHECK_VERSION   ?= latest
+GOOSE_VERSION         ?= v3.27.3
+GOVULNCHECK_VERSION   ?= v1.7.0
+GITLEAKS_VERSION      ?= v8.30.1
+
+# ─── Container base image ────────────────────────────────────────────────────
+# Digest-pinned, always. A floating tag means the image you ship is not the
+# image you tested. This is `gcr.io/distroless/static-debian12:nonroot` as
+# resolved on 2026-08-16 — no shell, no package manager, a fixed non-root
+# 65532:65532, and tzdata for TZ. It cannot run a chowning PUID/PGID entrypoint,
+# which is deliberate: see docs/CONFIGURATION.md §2.4.
+BASE_IMAGE ?= gcr.io/distroless/static-debian12:nonroot@sha256:1b7b9f0f0e0a1d2155f531db587cc48ec26aaf97ab64364225f5bf18a054e66a
 
 # ─── Help ────────────────────────────────────────────────────────────────────
 
@@ -68,9 +92,14 @@ help: ## Show this help
 # ─── Development ─────────────────────────────────────────────────────────────
 
 .PHONY: dev
-dev: ## Run the backend against .env (SPA served separately by `make web-dev`)
-	@test -f .env || { echo "no .env — run: cp .env.example .env && edit it"; exit 1; }
-	set -a; . ./.env; set +a; $(GO) run $(MAIN_PKG)
+dev: ## Run the backend (loads .env through the binary's own parser, if present)
+	@test -f .env || echo "note: no .env — using defaults; a master key is generated on first run"
+	$(GO) run $(MAIN_PKG) --env-file .env
+
+# `.env` is DATA, not shell. It is deliberately not sourced with `. ./.env`:
+# bash performs expansion and command substitution, Docker Compose's env_file
+# parser does neither, so the same file would mean two different things — on a
+# file that can hold the master key. The binary's own loader is the one parser.
 
 .PHONY: web-dev
 web-dev: web-deps ## Run the SvelteKit dev server with HMR (proxies /api to the backend)
@@ -118,7 +147,7 @@ endef
 test: test-go test-web ## Run all tests (offline; no Docker, no network)
 
 .PHONY: test-go
-test-go: ## Go tests with the race detector
+test-go: ## Go tests with the race detector. Includes the EXPLAIN QUERY PLAN gates.
 	$(GO) test $(GOTESTFLAGS) ./...
 
 .PHONY: test-web
@@ -131,6 +160,15 @@ test-integration: ## Tests behind the `integration` tag. Needs a live stack. NEV
 		echo "refusing: set USARR_INTEGRATION=1 and have a live stack up"; \
 		echo "see docs/DEVELOPMENT.md §7.1"; exit 1; }
 	$(GO) test -tags=integration $(GOTESTFLAGS) ./...
+
+.PHONY: bench
+bench: ## Wall-clock performance harness. A RELEASE gate on named hardware, never a merge gate.
+	@echo "bench: generating the reference fixture (10k movies / 2k series / ~400k episodes)"
+	$(GO) test -tags=bench -run '^$$' -bench . -benchmem -benchtime 10x ./...
+	@echo ""
+	@echo "record the numbers, the hardware and the commit in docs/BENCHMARKS.md."
+	@echo "these are NOT enforced in CI: a p99 latency gate on shared runners is a"
+	@echo "flake generator, and on emulated arm64 it measures nothing. See DEVELOPMENT.md §5."
 
 .PHONY: cover
 cover: ## Coverage report -> cover.html
@@ -163,9 +201,35 @@ fmt-check: ## Verify formatting without modifying files (used by `make check`)
 	if [ -n "$$out" ]; then echo "not gofumpt-formatted:"; echo "$$out"; exit 1; fi
 	$(call pnpm_if_web,format:check)
 
+# ─── Supply chain ────────────────────────────────────────────────────────────
+
+.PHONY: secrets
+secrets: ## Scan the working tree for committed credentials. GATING, part of `check`.
+	@command -v gitleaks >/dev/null 2>&1 || { \
+		echo "gitleaks not installed — run: make tools"; exit 1; }
+	gitleaks dir . --redact=100 --no-banner --exit-code 1
+
+# A gitignore is a request; this is enforcement. UsArr's repo carries *Arr admin
+# keys in every developer's .env and fixture keys in testdata — the one thing
+# that must never reach a commit is exactly the thing a human reviewer skims
+# past. Waive a known-safe finding by id in .gitleaksignore, never by dropping
+# the step. Fixture credentials must be structurally impossible to mistake for
+# real ones (docs/DEVELOPMENT.md §7.1).
+
+.PHONY: modverify
+modverify: ## Verify downloaded module contents against go.sum
+	$(GO) mod verify
+
 .PHONY: vuln
-vuln: ## govulncheck — advisory, not a gate
-	govulncheck ./... || true
+vuln: ## govulncheck + pnpm audit. GATING, part of `check`. THE ONE NETWORK STEP.
+	govulncheck ./...
+	$(call pnpm_if_web,audit)
+
+# `|| true` used to live on the line above. It meant a known-vulnerable
+# dependency in the crypto, HTTP or SQLite path shipped with a green build, in a
+# project whose own security chapter opens "it is a credential vault for a dozen
+# services". If a specific advisory genuinely must be waived, waive it by ID in
+# a checked-in file so the waiver is reviewable — do not ignore the exit code.
 
 # ─── Migrations ──────────────────────────────────────────────────────────────
 # Migrations are embedded (//go:embed migrations/*.sql) and applied at startup,
@@ -200,11 +264,26 @@ docker: ## Build the container image. THE ONLY TARGET THAT NEEDS A DOCKER DAEMON
 		echo "no Docker daemon reachable."; \
 		echo "this is expected in the CI/agent container — see docs/DEVELOPMENT.md §8."; \
 		exit 1; }
-	docker build \
+	@case '$(BASE_IMAGE)' in \
+		*@sha256:*) : ;; \
+		*) echo "BASE_IMAGE is not digest-pinned: $(BASE_IMAGE)"; \
+		   echo "resolve it with: docker buildx imagetools inspect <tag>"; exit 1 ;; \
+	esac
+	docker buildx build \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT=$(COMMIT) \
+		--build-arg BASE_IMAGE=$(BASE_IMAGE) \
+		--provenance=true \
+		--sbom=true \
 		-f deploy/Dockerfile \
 		-t usarr:$(VERSION) -t usarr:latest .
+
+# `--provenance` and `--sbom` require buildx and are attached as OCI attestations
+# to the pushed image, so "what is in this image, and what built it" is answerable
+# without trusting the maintainer's memory. Signing is the missing third piece:
+# a `sign` target (cosign keyless against the registry digest) must land before
+# the first published tag, or ARCHITECTURE.md §14.7's "signed, reproducible
+# container images" is a promise with no mechanism behind it.
 
 # ─── Housekeeping ────────────────────────────────────────────────────────────
 
@@ -214,6 +293,7 @@ tools: ## Install the pinned dev tools into $GOBIN
 	$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
 	$(GO) install github.com/pressly/goose/v3/cmd/goose@$(GOOSE_VERSION)
 	$(GO) install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+	$(GO) install github.com/zricethezav/gitleaks/v8@$(GITLEAKS_VERSION)
 
 .PHONY: clean
 clean: ## Remove build artifacts and the dev database
@@ -221,5 +301,9 @@ clean: ## Remove build artifacts and the dev database
 	rm -rf $(DIST_DIR) $(WEB_DIR)/build $(WEB_DIR)/.svelte-kit ./.dev
 
 .PHONY: check
-check: fmt-check lint test ## THE PRE-COMMIT GATE. Must pass offline, with no Docker.
+check: check-offline vuln ## THE PRE-COMMIT GATE. No Docker. One network call (vuln.go.dev).
 	@echo "check: OK"
+
+.PHONY: check-offline
+check-offline: fmt-check lint modverify secrets test ## Everything in `check` except the vuln scan.
+	@echo "check-offline: OK"

@@ -1,15 +1,24 @@
 # ─── Secrets and local environment ───────────────────────────────────────────
-# The single most important block in this file. UsArr's config carries *Arr API
-# keys (full admin on those instances), Jellyfin tokens, Tailscale auth keys and
-# the master encryption key.
+# The single most important block in this file, and the only one with a gate
+# behind it: `make check` runs `make secrets` (gitleaks) so this is enforced,
+# not merely requested. A .gitignore alone has never stopped a `git add -f`.
+#
+# UsArr's config carries *Arr API keys (full admin on those instances), media
+# server tokens, and the master encryption key that opens all of them.
 .env
 .env.*
 !.env.example
 *.env
+.envrc
 secrets/
 secret.key
+secret.key.new
+keys/
 *.pem
 *.key
+*.p12
+*.pfx
+# Test fixtures may legitimately carry throwaway key material.
 !**/testdata/**/*.pem
 !**/testdata/**/*.key
 
@@ -52,9 +61,9 @@ yarn-error.log*
 *.tsbuildinfo
 
 # ─── SQLite ──────────────────────────────────────────────────────────────────
-# WAL mode produces -wal and -shm alongside the database. All three are runtime
-# state; never commit any of them, and never back up the .db alone while running
-# (use `VACUUM INTO` — see docs/CONFIGURATION.md §7).
+# WAL mode produces -wal and -shm alongside every database. All three are
+# runtime state; never commit any of them, and never back up the .db alone while
+# running (use `VACUUM INTO` — docs/CONFIGURATION.md §6).
 *.db
 *.db-wal
 *.db-shm
@@ -63,24 +72,30 @@ yarn-error.log*
 *.sqlite3
 *.sqlite3-wal
 *.sqlite3-shm
+usarr.db*
+cache.db*
 
 # ─── Runtime data directories ────────────────────────────────────────────────
-# Local bind mounts and dev state. `/config` also holds the Tailscale node
-# identity (config/tsnet/) and the master key file.
+# Local bind mounts and dev state. `/config` holds keys/, providers/, backups/
+# and the database; `/data` holds the caches and logs. Neither ever goes in git.
 /config/
 /data/
 /.dev/
 /logs/
-/plugins/data/
+/backups/
 /tmp/
 
-# ─── Test fixtures that must NOT be committed ────────────────────────────────
-# Seeded *Arr config volumes for the local compose stack contain generated API
-# keys. The intentionally-fake seed set lives under deploy/compose/seed/ and is
-# committed on purpose; anything else generated locally is not.
-deploy/compose/*/config/
+# ─── Local compose stacks and their seeded state ─────────────────────────────
+# NOTHING under deploy/compose/ that contains an *Arr config volume is
+# committed — not even "intentionally fake" seed directories. A generated 32-hex
+# API key is indistinguishable from a real one to a reviewer and to a secret
+# scanner, so the first person to regenerate a seed from a working stack commits
+# a live credential. The reproducible path is `make seed`, a script that drives
+# each app's own API with fixed, obviously-fake constants at run time.
+# See docs/DEVELOPMENT.md §7.1.
+deploy/compose/**/config/
 deploy/compose/**/appdata/
-!deploy/compose/seed/
+deploy/compose/seed/
 
 # go-vcr cassettes ARE committed (scrubbed by a recorder hook), but unscrubbed
 # in-progress recordings are not.
