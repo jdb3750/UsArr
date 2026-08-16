@@ -329,14 +329,47 @@ between "fast" and "broken" on the only run most evaluators ever do. Budget rows
 ### 4.5 Web client
 
 SvelteKit `adapter-static`, embedded via `embed.FS`, no Node in production. UI philosophy in §17.1.
-**Virtualize everything over ~200 rows**; **never load full item records** (keyset windows of ~100,
-prefetching ±2 pages); **service worker** stale-while-revalidate for `/api/*` and cache-first for
-`/img/*`; **prefetch on intent**; and **pending-write chips** keyed by the ULID idempotency key that
-resolve from SSE — a chip, not an optimistic overlay (§7.6).
+**Keyset-paginated "Load more" plus `content-visibility: auto` is the default list renderer**
+(revised — see below); **never load full item records** (keyset windows of ~100, prefetching ±2
+pages); **service worker** stale-while-revalidate for `/api/*` and cache-first for `/img/*`;
+**prefetch on intent**; and **pending-write chips** keyed by the ULID idempotency key that resolve
+from SSE — a chip, not an optimistic overlay (§7.6).
+
+**List rendering, revised — this replaces "virtualize everything over ~200 rows" (ADR-0028).**
+That earlier rule was written before anyone costed what virtualization takes away. Virtualization
+removes off-screen rows from the DOM, and *"accessible landmark navigation, find in page, or
+intra-page anchor navigation are based solely on DOM structure, and virtualized content is by
+definition not in the DOM"* (<https://github.com/WICG/virtual-scroller>). **Ctrl+F for the album is
+exactly what a power user does in a library browser**, so that is a functional regression, not a
+theoretical one. `content-visibility: auto` skips *rendering* without removing content: *"the
+skipped contents must still be available as normal to user-agent features such as find-in-page, tab
+order navigation, etc."* (<https://developer.mozilla.org/en-US/docs/Web/CSS/content-visibility>,
+Baseline September 2024). Infinite scroll is refused outright — NN/g finds it *"can be downright
+harmful to usability — in particular, for search results"*, and Baymard measured "Load more" plus
+lazy loading as the best-performing pattern. Three consequences, all normative:
+
+1. **The default is "Load more" over keyset pages, with `content-visibility: auto` on rows.** The
+   two positions are closer than they look: with ~100-row windows and ±2 pages prefetched the
+   *mounted* set is small either way; what differs is whether unmounted rows are absent from the DOM
+   or present-but-unpainted.
+2. **Virtualization is an escalation, not a default, and its threshold is set from a benchmark that
+   does not exist yet.** No number is chosen here, deliberately: the earlier "~200" had no
+   measurement behind it and inventing a replacement would repeat the mistake. **`make bench` gains
+   a required line** — render and scroll a `content-visibility` list at 1k / 5k / 25k rows on the
+   §13 reference hardware, in both themes and at all three densities, measuring frame time and
+   scrollbar drift. The threshold is whatever that measurement says, recorded here when it exists.
+3. ⚠️ **`contain-intrinsic-size` has no value anywhere yet, and it is the whole risk.** The browser
+   uses it as the placeholder height for skipped elements; when it is wrong the scrollbar jumps as
+   content scrolls in, which reads as *slowness* — the exact failure this rule exists to prevent. It
+   **cannot be a constant**, because the density control moves row height across 28 / 32 / 36 px
+   plus three more values for two-line and thumbnail rows. It must derive from the same custom
+   property the row height reads (`contain-intrinsic-size: auto var(--row-h)`) and be tested with
+   the density control while scrolling. Until that exists, this section is a direction, not an
+   implementable rule.
 
 The one deliberate exception to "never load the whole library" is the **client-side prefix index,
 over *top-level works only*** (`movie, series, artist, album, book, comic, game`) — never seasons,
-episodes or tracks. For the §13 reference library that is ~13k rows, not the ~412k `work` rows it
+episodes, tracks or comic issues. For the §13 reference library that is ~13k rows, not the ~412k `work` rows it
 actually contains. Fields `{id, title, year, kind, availability_state}` in a columnar payload plus
 ThumbHashes as raw bytes in a side `ArrayBuffer` (~25 B each, not ~34 base64 chars) →
 **~1.5–2.1 MB at 13k items** at a realistic 110–160 B/item. **Hard cap 25,000 items:** above it the
@@ -518,7 +551,38 @@ book". And the UI can say **"Based on the novella by Denis Johnson"** instead of
 2013 Granta paperback, **the audiobook**, the Portuguese translation) → `media_file` (concrete
 bytes).
 
-**`work.kind` is:** `movie, series, season, episode, artist, album, track, book, comic, game`.
+**`work.kind` is:** `movie, series, season, episode, artist, album, track, book, comic, comic_issue,
+game`.
+
+> **`comic_issue` is new in this revision, and migration 0001 is the only cheap moment to add it
+> (ADR-0029).** Every other multi-level medium got its levels — TV has `series`/`season`/`episode`,
+> music has `artist`/`album`/`track` — and comics had exactly one member, `comic`, with a
+> `work_comic` subtype whose columns (`issue_number`, `volume`) describe an *issue* while the search
+> corpus, the Tier 1 prefix index, the `kind_byte` map and the grid all treat `comic` as
+> **top-level**. Those two readings are inconsistent in precisely the way the `audiobook`
+> kind-vs-edition contradiction was. With one member you either lose issues entirely (no "43 of 60",
+> no per-issue availability, no read progress) or you put series and issues in one kind and
+> distinguish on `parent_work_id IS NULL` — which breaks §8.2's corpus rule, because that rule
+> filters on `kind`, so every chapter title enters the FTS corpus and a large manga library swamps
+> every query. Fixing it now is one line. Fixing it later is a CHECK-constraint change (a SQLite
+> table rebuild), an FTS re-index, a rebuild of every client prefix index, and a change to the
+> `kind_byte` codec, which §5.3 states is **unchangeable once clients cache ids**. `comic` is the
+> series; `comic_issue` is the issue or chapter, excluded from the corpus. Both bytes are allocated
+> in the same commit, before any client caches anything.
+>
+> **There is no third level for Kavita's Volume, and no `manga` kind.** Kavita has a Volume node;
+> Komga, Mylar3 and Kapowarr do not, so a third tier would be empty on four backends out of five and
+> would render "Volume 1 › Chapter 1" for one of them over the same files. It is carried as
+> `work_comic_issue.volume_label` + `volume_sort` — a grouping attribute, not a node, and a
+> deliberate loss of fidelity against Kavita that is written down as one. Manga is not a separate
+> kind either: Komga models no manga/comic distinction at all (only `ReadingDirection`), and
+> Kavita's `LibraryType` members `Manga` / `Comic (Flexible)` / `Comic (ComicVine)` are
+> filename-parsing modes over one identical entity tree. Splitting the kind would also make §6.4's
+> "never auto-merge across `kind`" a liability: the same series in Komga (undifferentiated) and
+> Kavita (in a Manga library) would land in two kinds and could never be merged. The real
+> differences live where they cost nothing: `work_comic.reading_direction`, `external_id.source`
+> (AniList/MAL/MangaBaka vs Comic Vine/Metron), routing caps, the Newznab category (§8.5), and a
+> derived `type:manga` system tag.
 
 > **`audiobook` is not a `work.kind`. An audiobook is an `edition` of a `book` work**
 > (`edition.format = 'audiobook'`). The earlier draft asserted both readings in one document, which
@@ -530,14 +594,69 @@ bytes).
 > `format:` namespace and `type:audiobook` is gone; `Caps.MediaKinds` becomes a list of
 > `(kind, format)` pairs (§11).
 
-**The `edition` table stays**, against a review recommendation to cut it: books, audiobooks and
-ebooks genuinely need it — it is what makes the Portuguese translation *Sonhos e Comboios* the same
-work as *Train Dreams*, and what makes ebook-vs-audiobook routing a schema property rather than
-adapter special-casing. One narrow table and a foreign key.
+**The `edition` table stays**, against a review recommendation to cut it, and the six-media-type
+expansion turned that from a defensible call into an obvious one. Books, audiobooks and ebooks
+genuinely need it — it is what makes the Portuguese translation *Sonhos e Comboios* the same work as
+*Train Dreams*, and what makes ebook-vs-audiobook routing a schema property rather than adapter
+special-casing. Three independent confirmations arrived with the expansion: **Chaptarr**, the only
+new \*Arr-lineage book manager, converged on exactly `Book` → `Edition[]` with `IsEbook`,
+`Narrator`, `DurationSeconds` and `ChapterCount` on the edition; **MusicBrainz** defines a remaster
+as *"produced solely through … mastering"*, explicitly **not** a new recording — so a remaster is the
+same album work, the same track works and a new `edition`, which is the split doing its job; and
+**five scanlations of one manga chapter** are five `edition` rows on one issue work, `label` = group,
+`language`, `published_at` each. One narrow table and a foreign key.
 
-**Every kind has a subtype table or a stated reason not to.** `work_track` carries `disc_number` and
-`track_number` — without them a multi-disc album is unrepresentable and `getAlbum` cannot order
-tracks, which blocks the whole OpenSubsonic surface. `work_comic` carries `issue_number`.
+**Three `edition` columns the books and music work adds**, all of them properties of a production
+rather than of a work or of a file: **`narrators` (a list)**, **`duration_seconds`** and
+**`abridged`**. A 30-file audiobook has one runtime, different productions have different narrators,
+and an abridged reading is a materially different thing users care about. Chaptarr, Audiobookshelf
+(`Book.narrators`, `Book.duration`, `Book.abridged`) and Audnexus all put them at this level.
+**`edition.format` carries the medium, never the codec** — a 2000 UK CD release can be on disk as
+FLAC, so the medium belongs to the release and the codec to `media_file`. 🔍 That separation is
+inference from the two models, not a cited rule, and it is the one place `edition.format` is easy to
+overload. The `format` CHECK list must also agree with this document's prose: it needs `cbz`, `cbr`
+and `pdf` as comic/ebook file shapes, which the DDL currently lacks.
+
+**Every kind has a subtype table or a stated reason not to.**
+
+- **`work_track` is edition-scoped, not work-scoped, and that is a correction.** The earlier text
+  hung `disc_number` and `track_number` off a `work`. But the same recording is track 4 on the
+  original CD and track 6 on the 2017 deluxe reissue, with a different track MBID each time:
+  **position is a property of the (track-work, edition) pair.** So `work_track` carries
+  `edition_id`, keyed `(work_id, edition_id)`. Adding that column later is a backfill over the
+  largest table in the schema; adding it in migration 0001 costs eight bytes a row. **The seam ships
+  in 0001; the multi-edition UI does not.**
+- **`track_number` is `TEXT`, with a derived `track_position INTEGER` sort key.** Lidarr ships it as
+  a string and keeps a separate integer alongside, because real track numbers are `A1`, `B2`,
+  `1.01`. An integer column sorts a double LP randomly. The same rule holds one level down for
+  comics: `work_comic_issue.number_text TEXT` plus `number_sort REAL`, because issue numbers are
+  `1.MU`, `-1`, `0`, `Annual 1`, `1A`.
+- **Artist attribution is an M:N `work_credit`, never an `artist_id` column on the album.** The
+  moment attribution is a scalar, Various-Artists compilations, collaborations and classical roles
+  are unrepresentable — which is Lidarr's own limitation (`AlbumResource.artistId` is singular) and
+  there is no reason to inherit it. This mirrors MusicBrainz artist credits and Navidrome's
+  `Participants` model.
+- **`work_comic` splits with the kind.** Series level: `volume_label`, `volume_year`,
+  `reading_direction`, `publisher`, `total_issues_declared`, `total_issues_source`. Issue level
+  (`work_comic_issue`): `number_text`, `number_sort`, `volume_label`, `volume_sort`, `is_special`,
+  `is_oneshot`, `special_version`, `page_count`.
+
+**The availability rollup is keyed by whatever the medium's denominator actually is** (§6.3), and
+for two of the six types the denominator is not a quality tier:
+
+- **Music: the rollup is edition-keyed.** Choosing the 2017 remaster over the 2000 original changes
+  the track list, the count and the durations, so `total` is a property of the edition, not of the
+  album work. Render the edition label beside the fraction or the fraction is a guess.
+- **Comics: there is usually no honest denominator at all, and UsArr must say so.** Every "total" in
+  the domain is a *declaration* — Komga's `totalBookCount` and Kavita's `totalCount` both derive
+  from ComicInfo `Count`, and the Anansi specification itself concedes *"The `Count` could be
+  different on each book in a series"*; Mylar3's total comes from Comic Vine, whose own code
+  comments that *"comicvine isn't as up-to-date with issue counts"*. *One Piece* has no total. So:
+  show `43 / 60` **only** when the series status is `ENDED`/`Completed`/`Cancelled` **and** a total
+  is declared — both Komga and Kavita report status, so the gate is cheap — and otherwise show
+  `43 issues` with no denominator. The rollup gains a `total_source` field so the provenance is
+  visible. The number that is *always* honest is **contiguity**, computed locally from `number_sort`
+  with no upstream help: *"43 issues · #7, #12 and #30–32 missing"* is more useful than any fraction.
 
 **File identity.** `media_file` rows are **per-instance observations**, so the unique index is
 `(service_instance_id, path)`, never `path` alone — a unique index on `path` makes it impossible for
@@ -606,6 +725,128 @@ locale-dependent bugs (Turkish dotless ı among them).
 Three rules that prevent the classic disasters: **never auto-merge across `kind`** (the film and the
 novella are linked, never merged); **merges are recorded and reversible**; **`normalized_title` is
 deterministic and versioned**, so `norm_version` tells you which rows are stale.
+
+**Four amendments the six-type expansion forces, each because a medium breaks an assumption the
+video-only cascade could make:**
+
+1. **Tier 3 takes the primary author for books, not just the year.** Book titles collide far more
+   than film titles — *The Gift*, *Home*, *Origin* — so `normalized_title` + year ±1 + kind is not
+   discriminating enough on its own.
+2. **`work_merge` ships with the first music milestone, not with tiers 2–5.** MBIDs are
+   redirect-capable — the Servarr metadata server carries `oldids` for exactly this — and Open
+   Library merges leave a `/type/redirect` record behind, so **an OLID stored last month can resolve
+   to a redirect today**. Any Open Library adapter must detect `"type": {"key": "/type/redirect"}`
+   and follow `location` **before** writing the id. Upstream renames the key; UsArr has to survive
+   it, and that is tier-1 work, not fuzzy-tier work.
+3. **Identity parsed out of a free-text field is never strong.** Komga supplies no external
+   identifiers at all; the only ids available from it are whatever a user typed into
+   `metadata.links[]`. Those get confidence 0.90, never 1.00, because a confidence-1.00 write hits
+   `ux_extid_work_strong` and *merges works* — a mistyped link must not be able to do that. This is
+   §11.2's manifest rule generalised. Related, and concrete: **strip a trailing parenthesised
+   4-digit year from a Komga series title into `year` before normalising**, or *Saga (2012)* never
+   matches Kavita's *Saga* + `releaseYear 2012`.
+4. **An ISBN or an ASIN must never satisfy `ux_extid_work_strong`.** Both are edition identifiers —
+   a hardback, its paperback, its EPUB and its US and UK printings all carry different ISBNs, and
+   the audiobook usually has an ASIN and no ISBN at all. Writing either as a work id silently claims
+   a paperback and an audiobook are the same edition. Publishers also reuse ISBNs and put one on an
+   omnibus, so **two works are never merged on ISBN agreement alone.** Work-strong book sources are
+   `openlibrary_work`, `hardcover_book` and `goodreads_work`, and nothing else.
+
+**The kind decision is UsArr's, made once at ingest.** A graphic novel with an ISBN sits in a Komga
+library and in a Calibre library; if one is ingested as `comic` and the other as `book` the cascade
+forbids them ever merging. The rule that resolves it is that `work.kind` is derived from a rule UsArr
+controls — the library's declared kind (§6.5) — and never inherited from whichever backend answered
+first.
+
+---
+
+### 6.5 Libraries: the user's organisation, which upstream never owned
+
+> **A UsArr library is a user-owned, named, single-kind, format-filtered *binding* to containers the
+> upstream services already computed — a whole instance, a root folder, an upstream library id or an
+> \*Arr tag — with materialised membership, one declared request sink, and a narrow user-owned
+> correction layer. UsArr never reads a filesystem.** (ADR-0025.)
+
+The motivating problem is not storage control. It is that **an upstream service's own idea of a
+library is often wrong, and the user wants UsArr's organisation to be better than the service's.**
+LazyLibrarian is the worked example and the evidence is in its source rather than in an opinion: a
+file its fuzzy matcher cannot bind to a provider record has **no row written at all** — the failure
+is recorded in a local dict used only for a summary log line — so its library view is its *provider's*
+view intersected with what a threshold accepted. Its own documentation sets match ratios at
+*"somewhere around 80% to 90%"* and warns that looser matching *"will get matches against the wrong
+books"*.
+
+**Three ownership axes, and keeping them apart is the whole design.**
+
+| Axis | Owner | Wins on divergence |
+|---|---|---|
+| **State** — does the remote item exist, is it monitored, is there a file, which quality profile, which root folder | The \*Arr / backend | **Upstream, always.** No override exists. These are the inputs to the write queue (§7.6); a user-editable copy means the UI shows "monitored" while Sonarr disagrees, the queue issues commands against a fiction, and the sweep fights the user forever. |
+| **Organisation** — which library a work is in, what it is called, what kind it is, what feeds it, where its requests go | **UsArr (the user)** | **UsArr, always.** Upstream never had an opinion about this, or had a bad one. |
+| **Display identity** — title, sort title, year, cover, and "is this link really this work" | Upstream by default | **An explicit user correction**, then §6.3's authority rule. Both values are retained; the override never writes back upstream. |
+
+That table is the refinement ADR-0004 needs, and it is narrow: *the \*Arr owns the truth about the
+\*Arr's own state; it never owned the truth about the user's organisation.* A replica that can be
+more correct than its source is still a replica — it is one with an owned overlay, which §2.2 already
+grants for tags, requests and playback position. Corrections join that list.
+
+**Four tables, all in migration 0001.** Full DDL in [`reference/schema.md`](./reference/schema.md).
+
+| Table | What it holds |
+|---|---|
+| `library` | name, slug, **exactly one `work.kind`**, a `formats` filter over `edition.format`, icon, order, enabled, `include_on_home`, `include_in_search`, default sort, the `sink_*` columns (§8.3), `managed_by ∈ {auto,user}` |
+| `library_source` | M:N to `service_instance`, plus `container_kind ∈ {instance, root_folder, remote_library, tag, series_type}` and `container_ref` — **the container is always one the upstream itself reported**, `container_identity` to survive id reuse, `is_metadata_authority`, `missing_since` |
+| `library_member` | **materialised** membership, `(library_id, work_id)`, written in the link-write transaction and dirty-marked/flushed per 250 ms batch exactly like the availability rollup (§6.3) |
+| `library_override` | the correction layer: four verbs — `exclude`, `include`, `relink`, `field` — with `user_id NOT NULL DEFAULT 0` on the sentinel pattern §10 already uses |
+
+**Five rules that are the whole value of the feature:**
+
+1. **A correction is keyed to UsArr identity (`work_id` / `link_id` + `target_identity_hash`) and is
+   never cleared by a sync, a reconciliation sweep, a tombstone expiry or an id resurrection.** This
+   rule exists for a specific documented failure: LazyLibrarian GitLab issue #2407 — books marked
+   ignored **come back after an author rescan**, because the rescan returns the book with a different
+   provider id. Storing the correction upstream, or keying it to the upstream's id, reproduces that
+   exactly.
+2. **Library membership is never an input to identity.** jellyfin#10985 is the counter-example: the
+   same film in three per-language libraries collapsed into one item and watch state leaked across
+   all three (closed as not planned). UsArr's identity is `external_id` plus the §6.4 cascade,
+   computed with no knowledge of libraries. **CI asserts that no query in the identity path
+   references `library_member` or `library_source`.**
+3. **Membership is a deterministic predicate, never a similarity score**, and the container is always
+   an object the upstream named. UsArr compares exactly one path — `root_folder_path`, as a prefix,
+   on a value the upstream itself reported — and never parses a filename. That is the whole
+   difference between this and a scanner, and the scanner is the component whose misidentification
+   failures fill this section's citations: Jellyfin's own documentation calls its mixed library type
+   *"broken and deprecated"*, and its removal proposal says the detector is *"very poorly
+   implemented"*.
+4. **A library's kind is required and editable.** Every tool that scans disk types its libraries and
+   is right to; UsArr can additionally let the user *change* the type, which Plex cannot, precisely
+   because nothing is parsed from a path — changing it re-derives membership from typed API
+   resources and no rescan exists.
+5. **A library with zero sources is retained, marked orphaned, and shown with its reason.** It
+   carries a user's name, corrections and access grants; auto-deleting owned data to tidy up
+   replicated data is the wrong trade.
+
+**What this is not.** A library is not a tag (tags are cross-kind labels) and not a saved filter
+(v1.0, a query). Cross-kind grouping — "Kids", "Christmas" — is a tag or a saved filter, never a
+library. And **libraries are not navigation**: they are unbounded in number, so they are a scope, not
+a sidebar entry (§17.2, ADR-0026).
+
+**It supplies three referents the design had already promised and left dangling**, which is why it is
+smaller than it looks: `user_library_access` (§12.2 names it with no `library` table to point at),
+§8.3's *"a routing rule"* (named, never defined), and v0.4's `getMusicFolders` (an endpoint with
+nothing to return without a library concept). One existing column changes with it:
+**`search_doc.instance_scope` becomes `search_doc.library_scope`** (§8.2), because a library can be a
+*subset* of an instance and instance-level scoping would then leak the existence of items a user
+cannot see — the existence-oracle risk §1.3 exists to prevent. With one auto-created library per
+instance the two sets are identical in v0.1, so the change costs nothing now and is a full-corpus
+backfill later.
+
+⚠️ **The one performance risk, stated rather than assumed.** The grid query becomes
+`library_member ⋈ work` with keyset pagination, and §13 already notes that `ix_work_kind_sort`
+*serves* rather than covers it. **Unmeasured.** Mitigation in order: a library is single-kind and the
+default topology is one library per kind, so the common case is `work.kind = ?` with membership as a
+one-row lookup; if measurement disagrees, denormalise the sort key onto `library_member`. This is a
+CI `EXPLAIN QUERY PLAN` + row-count assertion and a `make bench` line, not an assumption.
 
 ---
 
@@ -825,11 +1066,14 @@ statistics sweeps the list. Four things previously implicit, each a correctness 
   is an FTS5 syntax error. Queries under 3 characters skip the trigram leg, which requires ≥3
   characters.
 - **The corpus is top-level works only** (`movie, series, artist, album, book, comic, game`).
-  `season`, `episode` and `track` are excluded — a 400k-row corpus of episode titles swamps every
-  query — and are reachable by scoped search from a parent's detail view. CI asserts it.
+  `season`, `episode`, `track` **and `comic_issue`** are excluded — a 400k-row corpus of episode
+  titles swamps every query, and a large manga library does the same with chapter titles — and are
+  reachable by scoped search from a parent's detail view. CI asserts it.
 
-Permission filtering happens **in the index join, not after it**: `search_doc` carries the instance
-scope, so a filtered search cannot silently break page sizes or leak existence through result counts.
+Permission filtering happens **in the index join, not after it**: `search_doc` carries
+`library_scope` (§6.5 — renamed from `instance_scope`, because a library can be a subset of an
+instance), so a filtered search cannot silently break page sizes or leak existence through result
+counts.
 
 **There is no Tier 3 today.** An external engine is **deferred, not rejected** (FUTURE.md §2). The
 `SearchProvider` interface boundary stays, and — the part that actually matters — **retrieval is
@@ -847,6 +1091,27 @@ Open; `partial` (some editions or children present) → **"1080p ✓ / 4K ✗"**
 **Routing**, first match wins: explicit user choice → a routing rule → capability filter (instances
 whose probed `Caps.MediaKinds` contain this `(kind, format)` and that advertise `Add`) → highest
 `priority` among healthy survivors → `unroutable` **with the reason surfaced**. Never silently drop.
+
+> **The library *is* the routing rule** (§6.5) — the object this list named and never defined. A
+> library declares one request sink, and that sink is a **pin inside the capability filter, not a
+> bypass**: an instance that does not probe `Caps.MediaKinds ∋ (kind, format)` and advertise `Add`
+> cannot be chosen, is not offered in the UI, and if its capabilities change underneath, the library
+> says *"Ebooks: LazyLibrarian no longer advertises Add"* rather than failing silently. The sink is
+> single-valued **because the format filter exists**: "ebooks here, audiobooks there" is two
+> libraries, not a second table. (*Cut before you add.*)
+
+**Catalogue source and request sink are separate bindings, and that is the normal case rather than
+the books exception.** Navidrome is an excellent music catalogue and cannot accept a request; Lidarr
+or Prowlarr takes the request. Audiobookshelf or a Calibre library catalogues books; LazyLibrarian
+takes the request and its catalogue is ignored — which is the direct expression of the owner's
+point, because without the split, adding LazyLibrarian to get requests would import its bad catalogue
+as the price. Komga and Kavita both catalogue comics and **nothing** downstream of them accepts a
+release at all. So:
+
+- **A library may have no sink, and that is a first-class state, not an error.** `unroutable` becomes
+  specific — *"Comics has no request destination. Add a service that accepts comic requests, or use
+  indexer search."* — instead of the generic refusal.
+- **A sink is never a catalogue source unless the user also adds it as one.**
 
 **Single-user mode:** the owner holds `requests.autoapprove.*`, so Add → routed immediately and the
 approval UI is hidden. The rows and the state machine still exist — §1.3 in practice. Per-season TV
@@ -886,13 +1151,45 @@ Sonarr, Radarr or media server to get a library."*
   download-client integration**, which is what makes the mode affordable in v0.1.
 - **Results carry derived tags immediately, with no library behind them:** `source:` from
   `ReleaseResource.protocol` (byte-identical across the Prowlarr, Sonarr and Radarr specs), `type:`
-  from the Newznab parent category, `indexer:`, `indexer-privacy:`, and `flag:` from `indexerFlags`.
+  from the Newznab category, `indexer:`, `indexer-privacy:`, and `flag:` from `indexerFlags`.
   The source-tagging differentiator working with zero library.
+
+  > 🚩 **Deriving `type:` from the *parent* category is a live bug for two of the six media types,
+  > and it is fixed here rather than papered over.** Verified against Prowlarr's
+  > `NewznabStandardCategory.cs`: **audiobooks are `3030`, under `Audio` (3000), not under `Books`
+  > (7000)** — so a parent-category rule tags every audiobook release `type:audio`. And **there is no
+  > manga category in the Newznab standard at all**: `7030 Books/Comics` is the only comics
+  > category, and Nyaa — the dominant public manga tracker — maps its Literature categories to
+  > `7000 Books`, so a search filtered on `7030` returns **zero manga**. The rules: `3030` maps to
+  > `(book, audiobook)` before the parent rule is consulted; a comics search filters on **`7000`**
+  > and uses `7030` only as a *ranking* signal; `7020` (plus `7000/7040/7060`) is the ebook filter.
+  > Capture the raw category array; never collapse it.
+
+- **Prowlarr search is free text and nothing more, and the UI must say so.** `SearchResource` carries
+  only `query`, `type`, `indexerIds`, `categories`, `limit`, `offset` — there is **no `author` and no
+  `title` field** — and `SearchController` only ever populates `q`, `t`, `cat`, `limit`, `offset`.
+  So even against an indexer that advertises `book-search: [q, title, author]`, Prowlarr's own HTTP
+  API can send free text only. That is not a simplification in UsArr's `SearchQuery{Text: …}` shape
+  (§11); it is the whole of what Prowlarr offers.
 - Grabbed releases are recorded in `provenance`, so when a library-bearing service is later added and
   imports the file, the provenance join (§10) has something to attach to.
 
 **What it is not:** not a library, no import, no tracking of what happened to the download — and the
 UI says so. Grid, catalogue search, requests and cross-media are hidden, because they would be empty.
+
+**And that caveat is per media type, because for some of them it is the entire outcome rather than a
+footnote.** For a movie the user probably has Radarr and the gap is a moment. For comics **nothing
+downstream can accept the release**: Mylar3 needs the indexer configured inside Mylar3 and operates
+on issues it already knows from Comic Vine, Kapowarr has no indexer concept at all, and Komga and
+Kavita are libraries rather than importers — they pick a file up only if it lands inside a library
+root and the filename parses. Books are the same shape unless LazyLibrarian is present, whose
+`forceProcess` + `getDownloadProgress` genuinely close the loop and are the strongest argument for
+keeping it as a sink after demoting its catalogue. So the grab confirmation is type-specific and
+literal — *"Sent to \<download client\>. UsArr does not import downloads."*, naming the watched
+folder when a library-bearing service is configured — and **UsArr never renders a progress bar or a
+"Downloading" state for a Prowlarr grab**, because it cannot know. `Grabbed <timestamp>` and stop.
+The `provenance` row is the whole of what UsArr knows, and for comics it is the *only* trace the
+acquisition ever leaves.
 
 ### 8.6 Where unowned results come from
 
