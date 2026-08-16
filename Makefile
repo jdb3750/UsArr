@@ -385,12 +385,24 @@ fmt-check: ## Verify formatting without modifying files (used by `make check`)
 #   1. It needs a Playwright Chromium. The gate's whole contract is that it runs
 #      on a machine carrying Go and pnpm and nothing else; a ~150 MB browser
 #      download is a large new prerequisite for every developer and every runner.
-#   2. There is nothing to pin, and this file forbids `@latest` for a reason.
-#      check.mjs resolves Playwright at run time — bare specifier first, then
-#      web/node_modules, then the npm global root — so it runs wherever the
-#      module happens to be, but nothing declares WHICH version. Until a pinned
-#      devDependency lands in web/package.json there is no version to gate on,
-#      and a gate step that accepts whatever is installed is not a gate.
+#   2. The pin, and it is now HALF discharged. This reason has been wrong twice
+#      in two directions, so both are recorded. It first said check.mjs imports
+#      Playwright from an absolute path outside the repo, which stopped being
+#      true when the file grew a resolution ladder — bare specifier first, then
+#      web/node_modules, then the npm global root. It then said nothing declared
+#      WHICH version, and that is the half now closed: web/package.json pins
+#      `playwright-core` at 1.56.1, exact, no caret — the version whose
+#      browsers.json declares chromium revision 1194, which is the build in this
+#      container's cache and the one `make design` was observed driving. It
+#      declares no install script and downloads no browser, so a fresh install
+#      pays nothing for it.
+#      What is NOT closed: the ladder asks for the specifier `playwright`, and
+#      the pinned package is `playwright-core`, so the pin does not satisfy it
+#      and a fresh machine still falls through to the fallbacks. Finishing this
+#      is a change to docs/design/check.mjs, not to this file.
+#      Reason (1) is untouched by any of it: the ~150 MB of browser binaries is
+#      still a prerequisite the gate's contract does not carry, and on its own
+#      it is still enough to keep `design` out of `check`.
 #   3. It guards docs/design/ — prose, tokens and mockups, none of which is a
 #      shipping artifact. Token drift in a mockup cannot break the binary.
 #

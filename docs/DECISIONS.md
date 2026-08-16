@@ -48,7 +48,7 @@ distinctions now matter and are used consistently below:
 | [0022](#adr-0022) | v1 authentication is local-only; external identity deferred | **Accepted** (rev 2) |
 | [0023](#adr-0023) | UsArr coexists with the ecosystem rather than replacing it | **Accepted** (rev 2) |
 | [0024](#adr-0024) | AGPL-3.0 is the licence | **Accepted** — owner-confirmed 2026-08-16 |
-| [0025](#adr-0025) | Styling and typography: Tailwind v4 with the default theme deleted, Bits UI, Tabler, self-hosted IBM Plex | **Accepted** |
+| [0025](#adr-0025) | Styling and typography: Tailwind v4 with the default theme deleted, Bits UI, Tabler, self-hosted IBM Plex | **Accepted** — ⚠️ **amended 2026-08-16**: **Tailwind is not used**; the styling layer is hand-written CSS in `web/src/app.css`. Bits UI, Tabler and IBM Plex are unaffected |
 | [0026](#adr-0026) | A library is a user-owned binding to upstream containers, with a correction layer | **Accepted** — refines ADR-0004, extends ADR-0014 |
 | [0027](#adr-0027) | Two axes: media type is navigation, a library is scope | **Accepted** — settles §17.2's open question |
 | [0028](#adr-0028) | Home is three fixed blocks, not one strip per media type | **Accepted** — **amends** ARCHITECTURE §17.2 |
@@ -1598,6 +1598,56 @@ considered as the patent-grant variant of the same choice, and falls to the same
 styling layer. Full rationale, with citations, in
 [`design/DESIGN-DIRECTION.md`](./design/DESIGN-DIRECTION.md); the canonical values are in
 [`design/tokens.css`](./design/tokens.css).
+
+### ⚠️ Amendment, 2026-08-16 — Tailwind is not used, and the enforcement it was chosen for is gone with it
+
+**The styling layer that shipped is hand-written CSS.** `web/src/app.css` is ported from
+[`design/mockups/usarr.css`](./design/mockups/usarr.css), carrying the token layer from
+[`design/tokens.css`](./design/tokens.css) under its canonical names. There is no
+`@tailwindcss/vite`, no `@theme`, no utility class anywhere in `web/`. Owner-confirmed on
+2026-08-16: *"if custom css is what it wants that's probably fine; I only suggested tailwind for
+speed"*. Decision points **1** and **5** above are replaced by this; **2** (Bits UI), **3** (Tabler)
+and **4** (IBM Plex) are untouched, and **6** (serving) was always about `embed.FS` rather than about
+the CSS engine.
+
+**What is lost, stated as a loss.** Tailwind was never wanted for utility classes — the Decision
+above is explicit that `@theme { --*: initial; }` is *"mandatory and load-bearing"*, and the
+Consequences lead with *"the generic look is unavailable rather than discouraged"*. That is the whole
+argument, and it rests on a mechanism hand-written CSS does not have: with the default theme deleted,
+`bg-indigo-500` and `rounded-2xl` are **structurally nonexistent**, so a contributor cannot type them
+and a reviewer cannot forget to look. The replacement is
+[`design/check.mjs`](./design/check.mjs)'s §13 ban list, and it is a **weaker guarantee than "the
+class does not exist"**. A grep can be evaded, and worse, it can silently match nothing while
+printing `ok` — which is not hypothetical: two of `check.mjs`'s own rules were found matching zero
+things and reporting a pass, which is why the file now prints what it *checked* rather than only what
+failed. **This is not parity and must not be recorded as parity.** The enforcement dropped from
+compile-time impossibility to a lint that has already been observed to have blind spots.
+
+**What is gained.**
+
+1. **The token layer is unchanged, because it never depended on Tailwind.** `tokens.css` is plain
+   custom properties; it was consumed through `@theme inline` and is now consumed directly. This is
+   exactly the seam the Consequences named — *"swapping the utility engine later touches the token
+   file and the class attributes, not the component logic"* — being used for what it was left for.
+2. **`usarr.css` was already hand-written**, so the design system ports across with its measured
+   values intact — the row-height bands, the contrast-audited pairs, the density steps — instead of
+   being re-derived as a utility vocabulary and re-measured. The port is a move, not a translation.
+3. **The build loses a native Rust dependency whose postinstall fetches a binary.** That is the ADR's
+   own recorded strongest argument against Tailwind, and it is discharged rather than mitigated. It
+   is also the closest thing here to the pre-agreed Open Props fallback's trigger, though the route
+   taken is the *"Hand-rolled CSS with a custom token layer"* alternative rather than Open Props.
+
+**One correction worth recording, because it was nearly generalised into a rule.** The
+`@tailwindcss/oxide` objection is real and was re-verified: it declares a fetching postinstall. It
+**does not generalise to native-adjacent packages by reputation**. `playwright` was suspected of the
+same shape and is not guilty — its install script was removed upstream in 1.38.0, and
+`playwright-core`, the package `web/package.json` now pins at 1.56.1, declares no scripts at all and
+downloads nothing on install (observed directly, not assumed). The objection applies to packages that
+actually declare a fetching postinstall, and to those only.
+
+**Bits UI and Tabler icons are unaffected** by this amendment and stand as originally decided; neither
+depends on the CSS engine. **Self-hosted IBM Plex has now shipped** and is verified rendering, which
+`check.mjs` asserts as a standing check rather than a one-off observation.
 
 ### Context
 ADR-0003 chose SvelteKit `adapter-static` embedded via `embed.FS`. It left the CSS approach, the
