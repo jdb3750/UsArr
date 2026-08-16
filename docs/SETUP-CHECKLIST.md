@@ -28,7 +28,7 @@ Nothing can be written until these are fixed. They cost a choice, not money.
 | # | Decision | Why it blocks | Notes |
 |---|---|---|---|
 | 1.1 | **Go module path** — e.g. `github.com/joe/UsArr` | `go mod init` needs it and every import bakes it in. Changing it later is a repo-wide rewrite. | Must match the eventual GitHub owner/repo exactly. Decide the owner and repo name now, even if the repo stays private for a while. This also settles the public project name. |
-| 1.2 | **License** | Contributions into a repo with no LICENSE have undefined terms, and retro-licensing means chasing every contributor. The README agrees: confirmation is needed **before the first PR is accepted**, not before the first release. | AGPL-3.0 is the self-hosted-media norm (Jellyfin) and blocks a hosted-SaaS fork; MIT/Apache-2.0 is friendlier to embedding. Either is fine. Deferring is not. **Put the file in the first commit.** |
+| 1.2 | ~~**License**~~ — **settled: AGPL-3.0** | ~~Contributions into a repo with no LICENSE have undefined terms.~~ No longer blocking. | ✅ **Confirmed by the owner on 2026-08-16.** The verbatim FSF text is in `LICENSE` at the repo root; the reasoning and the rejected MIT alternative are in [ADR-0024](./DECISIONS.md#adr-0024). No per-file headers. |
 | 1.3 | **Default HTTP port** — proposed `8484` | Goes in the docs, the compose file, the Dockerfile `EXPOSE` and every example. Cheap now, annoying later. | Chosen to avoid every ecosystem default (8989/7878/8686/8787/9696/6969/5299/8096/32400/8080/6789/9091/8112/6767/5055). Confirm or replace. |
 
 That is the whole blocking list. Note what is **not** on it: no API keys, no accounts, no tailnet, no
@@ -187,8 +187,8 @@ but are on no milestone and need nothing from you now (`docs/FUTURE.md`).
 
 **Three things and development is unblocked:**
 
-1. **Decide the module path, the license and the port** (§1). Costs ten minutes, blocks the first
-   commit.
+1. **Decide the module path and the port** (§1). Costs ten minutes, blocks the first commit. The
+   licence is already settled — AGPL-3.0, confirmed 2026-08-16, `LICENSE` is in the repo.
 2. **Stand up Prowlarr** (§2.1) and send me `kind | url | api key` through a secret channel.
 3. **Stand up one *Arr — Radarr is easiest** (§2.2) and send the same. This is the thing that makes
    v0.1 have anything to show.
