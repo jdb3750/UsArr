@@ -1807,6 +1807,15 @@ recovery action is reachable:
   grammar is normalised with it, because six rows carried six grammars for one fact
   (`X have · Y wanted`, `X / Y episodes`, `X albums · Y tracks`, `X have · Y h`, `X have`,
   `X issues · Y with gaps`) and no two of them can be compared.
+- 🚩 **A confirmed grab is a NEUTRAL chip, and this rule caught the mockup breaking it.** The
+  Requests screen painted a successful `sent` chip green (`--status-ok`) while Recent grabs rendered
+  the identical stored fact neutral — two renderings of one state in two colours, on one screen.
+  The rule above already decides it: a successful handoff is not something wrong, so it takes no
+  chroma. **The app shipped it neutral first** (`web/src/routes/requests`, merged `db93781`) and the
+  mockup now follows. ⚠️ **The withdrawal is success, not status.** `pending` keeps the warm-orange
+  warn role and `failed` keeps the error red, because both mark something the user may need to act
+  on — and the ambiguous *sent, outcome unknown* row moves **from green to warn** for the same
+  reason, which is where the shipped screen already had it.
 - System tags render as chips you can filter by but not delete (`is_system`, ADR-0015). Tag chips
   are neutral; `tag.color` is the only colour field in the data model and is user-controlled, not
   chrome.
