@@ -496,13 +496,23 @@ type WriteMethod = 'POST' | 'PATCH' | 'DELETE';
  * a working click rather than an error the user cannot act on. A second 403 is
  * real and is surfaced.
  */
-async function sendJson(method: WriteMethod, url: string, body: unknown = {}): Promise<unknown> {
+async function sendJson(
+	method: WriteMethod,
+	url: string,
+	body: unknown = {},
+	signal?: AbortSignal
+): Promise<unknown> {
 	const send = async (token: string) =>
 		requestJson(url, {
 			method,
 			headers: { 'content-type': 'application/json', [CSRF_HEADER]: token },
 			// decodeJSON rejects an empty body with 400, so there is always one.
-			body: JSON.stringify(body ?? {})
+			body: JSON.stringify(body ?? {}),
+			// Only the connection tests pass one. §17.3 requires the `testing`
+			// state to be CANCELLABLE, and a cancel that only stops listening
+			// leaves a full-admin credential in flight to a host the user has just
+			// decided against — so the abort is real and reaches fetch.
+			signal
 		});
 
 	try {
@@ -548,8 +558,22 @@ function isRetryableCsrfFailure(error: ApiError): boolean {
 	return error.code === 'csrf';
 }
 
-async function postJson(url: string, body: unknown = {}): Promise<unknown> {
-	return sendJson('POST', url, body);
+async function postJson(url: string, body: unknown = {}, signal?: AbortSignal): Promise<unknown> {
+	return sendJson('POST', url, body, signal);
+}
+
+/**
+ * True for the ApiError a caller's own `AbortController.abort()` produced.
+ *
+ * requestJson wraps every fetch rejection into an ApiError with status 0, which
+ * is the right shape for a screen — but an abort the USER asked for is not a
+ * failure and must not be rendered as one. The DOMException's name survives in
+ * the wrapped message, and the caller's own `signal.aborted` is the second
+ * check, so a coincidental message cannot be mistaken for a cancellation.
+ */
+export function wasAborted(error: unknown, signal?: AbortSignal): boolean {
+	if (signal?.aborted !== true) return false;
+	return error instanceof ApiError && error.status === 0;
 }
 
 /** True when /api/health/ready answers 200. Any other outcome throws. */
@@ -972,14 +996,21 @@ function urlBaseField(urlBase: string | undefined): { url_base?: string } {
  * save a service that fails it, so this endpoint is the "check before I commit"
  * affordance, not the thing that makes the save safe.
  */
-export async function testNewService(input: NewService): Promise<ConnectionTestResult> {
+export async function testNewService(
+	input: NewService,
+	signal?: AbortSignal
+): Promise<ConnectionTestResult> {
 	return toTestResult(
-		await postJson(`${SERVICES_URL}/test`, {
-			kind: input.kind,
-			base_url: input.baseUrl.trim(),
-			...urlBaseField(input.urlBase),
-			api_key: input.apiKey
-		})
+		await postJson(
+			`${SERVICES_URL}/test`,
+			{
+				kind: input.kind,
+				base_url: input.baseUrl.trim(),
+				...urlBaseField(input.urlBase),
+				api_key: input.apiKey
+			},
+			signal
+		)
 	);
 }
 
@@ -1065,7 +1096,8 @@ export async function updateService(id: number, edit: ServiceEdit): Promise<Serv
  */
 export async function testService(
 	id: number,
-	edit: Pick<ServiceEdit, 'baseUrl' | 'urlBase' | 'apiKey' | 'currentBaseUrl'> = {}
+	edit: Pick<ServiceEdit, 'baseUrl' | 'urlBase' | 'apiKey' | 'currentBaseUrl'> = {},
+	signal?: AbortSignal
 ): Promise<ConnectionTestResult> {
 	const url = `${SERVICES_URL}/${encodeURIComponent(String(id))}/test`;
 	const key = edit.apiKey?.trim() ?? '';
@@ -1085,7 +1117,7 @@ export async function testService(
 	// Sending "" could not clear it and would only look as if it might.
 	Object.assign(body, urlBaseField(edit.urlBase));
 	if (key !== '') body.api_key = edit.apiKey;
-	return toTestResult(await postJson(url, body));
+	return toTestResult(await postJson(url, body, signal));
 }
 
 /**
