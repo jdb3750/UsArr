@@ -45,13 +45,17 @@
 			neither reports a violation nor risks being blocked, and put everything
 			else in a class. `$lib/list.ts` says the same thing at the call site.
 
-			TWO METHOD NOTES, because they cost two attempts each. The policy carries
-			no `report-sample`, so a violation record has an empty sample, no
-			`sourceFile`, and line numbers that move with unrelated script length —
-			the console HASH was the only usable identifier. And a `setAttribute`
-			hook or a `MutationObserver` with `attributeFilter: ['style']` reads as
-			ABSENCE on the clone path, which is why an early probe returned a count
-			and no element.
+			TWO METHOD NOTES, because they cost two attempts each. Identifying WHICH
+			declaration a violation record belongs to is harder than it looks:
+			`sourceFile` is populated, but it carries a content-hashed chunk path
+			with a line and column into minified output, so it names a file that
+			will not exist under that name after the next build; `lineNumber` and
+			`columnNumber` drift with unrelated changes; and `sample` was empty,
+			because the policy carried no `report-sample` at the time (it has one
+			now, truncating at 40 characters). Chromium's style HASH was the only
+			usable identifier. And a `setAttribute` hook or a `MutationObserver`
+			with `attributeFilter: ['style']` reads as ABSENCE on the clone path,
+			which is why an early probe returned a count and no element.
 		-->
 		<div id="usarr-root">%sveltekit.body%</div>
 	</body>
