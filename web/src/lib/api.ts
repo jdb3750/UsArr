@@ -13,17 +13,31 @@
  * upstream text, never a blank screen and never "an error occurred".
  * ARCHITECTURE.md §17.3 and §17.7 make that a product rule.
  *
- * The SSE envelope is deliberately accepted in two shapes: a named SSE event
- * (`search.result`, `search.status`, `search.done`) or a default `message`
- * event whose JSON payload carries an equivalent `type` field, tolerating
- * unknown fields. `normalizeStreamEvent` is the one place that changes.
+ * THE SERVER IS THE CONTRACT. Every event name and every payload field below is
+ * the one internal/httpapi actually puts on the wire: the names are the
+ * constants in internal/httpapi/events.go, the payloads are the structs in
+ * internal/httpapi/search.go. The server always writes an `event:` line, so
+ * there is no default `message` frame to fall back to; and it marshals Go
+ * structs with fixed json tags, so there is no alternative spelling of a field
+ * to guess at. Both are gone from this file on purpose — a tolerated second
+ * spelling is what let the two sides disagree unnoticed in the first place.
  *
- * MISMATCH, not yet reconciled: internal/httpapi/events.go emits
- * `search.started`, `search.indexer`, `search.results`, `search.done` and
- * `search.failed`. Only `search.done` is a name this file listens for, so
- * results do not currently reach the page. Fixing it is a change to these
- * names, not to the shape.
+ * STREAM_EVENT_NAMES is the contract. web/src/lib/api.test.ts pins it from this
+ * side and internal/httpapi/events_test.go pins it from the other, so renaming
+ * an event on either side fails a test instead of silently emptying the screen.
  */
+
+/** Every SSE event name this client understands, exactly as the server emits it. */
+export const STREAM_EVENT_NAMES = [
+	'search.started',
+	'search.indexer',
+	'search.results',
+	'search.done',
+	'search.failed',
+	'stream.missed'
+] as const;
+
+export type StreamEventName = (typeof STREAM_EVENT_NAMES)[number];
 
 export class ApiError extends Error {
 	readonly status: number;
@@ -37,15 +51,52 @@ export class ApiError extends Error {
 	}
 }
 
+/**
+ * One grabbable release, as `search.results` carries it.
+ *
+ * candidateId is the server-side id and the only handle a grab takes; there is
+ * deliberately no download or magnet url on the wire, because Prowlarr embeds
+ * its full admin API key in both (internal/httpapi/search.go).
+ */
 export interface Release {
-	id: string;
+	candidateId: number;
+	guid: string;
 	title: string;
-	indexer?: string;
+	indexerName?: string;
 	protocol?: string;
-	size?: number;
+	sizeBytes?: number;
 	seeders?: number;
-	age?: string;
-	category?: string;
+	ageDays?: number;
+	infoUrl?: string;
+	expiresAt?: string;
+	/** The candidate this result replaces, when a higher-priority indexer answered later. */
+	supersedesCandidateId?: number;
+}
+
+/** One indexer's outcome, as `search.indexer` and the `search.done` report carry it. */
+export interface IndexerOutcome {
+	indexerId: number;
+	name: string;
+	status: string;
+	answered: boolean;
+	count: number;
+	reason?: string;
+	blockedUntil?: string;
+	durationMs?: number;
+}
+
+/** The closing report on `search.done`. */
+export interface SearchReport {
+	instanceId: number;
+	query: string;
+	totalIndexers: number;
+	answered: number;
+	failed: number;
+	skipped: number;
+	results: number;
+	degraded: boolean;
+	summary: string;
+	indexers: IndexerOutcome[];
 }
 
 /** One indexer that did not answer. Shown as a banner; results keep rendering. */
@@ -54,29 +105,33 @@ export interface IndexerProblem {
 	error: string;
 }
 
-export interface SearchStarted {
-	searchId?: string;
-	/** Some backends answer the first page inline; treat it as a bonus, not a contract. */
-	releases: Release[];
-	problems: IndexerProblem[];
-	indexersTotal?: number;
-	indexersDone?: number;
+/** What GET /api/v1/search answers with — 202, before any indexer has been asked. */
+export interface SearchAccepted {
+	searchId: string;
+	instanceId?: number;
+	query: string;
+	type: string;
+	eventsUrl?: string;
+	message?: string;
 }
 
 export type StreamEvent =
-	| { kind: 'result'; searchId?: string; release: Release }
 	| {
-			kind: 'status';
+			kind: 'started';
 			searchId?: string;
-			problems: IndexerProblem[];
-			indexersTotal?: number;
-			indexersDone?: number;
+			instanceId?: number;
+			query?: string;
+			searchType?: string;
 	  }
-	| { kind: 'done'; searchId?: string }
+	| { kind: 'indexer'; searchId?: string; phase: string; indexer: IndexerOutcome }
+	| { kind: 'results'; searchId?: string; releases: Release[] }
+	| { kind: 'done'; searchId?: string; report?: SearchReport }
+	| { kind: 'failed'; searchId?: string; message: string; action?: string }
+	| { kind: 'missed'; message: string; action?: string }
 	| { kind: 'unknown' };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null;
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function str(value: unknown): string | undefined {
@@ -87,31 +142,80 @@ function num(value: unknown): number | undefined {
 	return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function bool(value: unknown): boolean {
+	return value === true;
+}
+
+/**
+ * One release off the wire. candidate_id and title are the two fields nothing
+ * can be rendered or grabbed without, so a frame missing either is dropped
+ * rather than rendered as a row with a dead Grab button.
+ */
 export function toRelease(value: unknown): Release | undefined {
 	if (!isRecord(value)) return undefined;
-	const id = str(value.id) ?? (num(value.id) !== undefined ? String(value.id) : undefined);
+	const candidateId = num(value.candidate_id);
 	const title = str(value.title);
-	if (!id || !title) return undefined;
+	if (candidateId === undefined || candidateId <= 0 || !title) return undefined;
 	return {
-		id,
+		candidateId,
+		guid: str(value.guid) ?? '',
 		title,
-		indexer: str(value.indexer),
+		indexerName: str(value.indexer_name),
 		protocol: str(value.protocol),
-		size: num(value.size),
+		sizeBytes: num(value.size_bytes),
 		seeders: num(value.seeders),
-		age: str(value.age) ?? (num(value.age) !== undefined ? String(value.age) : undefined),
-		category: str(value.category)
+		ageDays: num(value.age_days),
+		infoUrl: str(value.info_url),
+		expiresAt: str(value.expires_at),
+		supersedesCandidateId: num(value.supersedes_candidate_id)
 	};
 }
 
-export function toProblems(value: unknown): IndexerProblem[] {
-	if (!Array.isArray(value)) return [];
+export function toIndexerOutcome(value: unknown): IndexerOutcome | undefined {
+	if (!isRecord(value)) return undefined;
+	const indexerId = num(value.indexer_id);
+	if (indexerId === undefined) return undefined;
+	return {
+		indexerId,
+		// `name` is omitempty upstream. Falling back to the id keeps a problem
+		// banner nameable rather than blank; it is not a second field spelling.
+		name: str(value.name) ?? `indexer ${indexerId}`,
+		status: str(value.status) ?? 'unknown',
+		answered: bool(value.answered),
+		count: num(value.count) ?? 0,
+		reason: str(value.reason),
+		blockedUntil: str(value.blocked_until),
+		durationMs: num(value.duration_ms)
+	};
+}
+
+export function toReport(value: unknown): SearchReport | undefined {
+	if (!isRecord(value)) return undefined;
+	const raw = Array.isArray(value.indexers) ? value.indexers : [];
+	return {
+		instanceId: num(value.instance_id) ?? 0,
+		query: str(value.query) ?? '',
+		totalIndexers: num(value.total_indexers) ?? 0,
+		answered: num(value.answered) ?? 0,
+		failed: num(value.failed) ?? 0,
+		skipped: num(value.skipped) ?? 0,
+		results: num(value.results) ?? 0,
+		degraded: bool(value.degraded),
+		summary: str(value.summary) ?? '',
+		indexers: raw.map(toIndexerOutcome).filter((o): o is IndexerOutcome => o !== undefined)
+	};
+}
+
+/**
+ * The indexers that did not answer, as banner lines. The server's own `reason`
+ * is used verbatim where it has one; `status` is the fallback so a skipped or
+ * blocked indexer still says something rather than showing an empty banner.
+ */
+export function problemsFrom(outcomes: IndexerOutcome[]): IndexerProblem[] {
 	const out: IndexerProblem[] = [];
-	for (const entry of value) {
-		if (!isRecord(entry)) continue;
-		const indexer = str(entry.indexer) ?? str(entry.name);
-		const error = str(entry.error) ?? str(entry.message);
-		if (indexer && error) out.push({ indexer, error });
+	for (const outcome of outcomes) {
+		if (outcome.answered) continue;
+		out.push({ indexer: outcome.name, error: outcome.reason ?? outcome.status });
 	}
 	return out;
 }
@@ -129,24 +233,42 @@ export function normalizeStreamEvent(eventName: string, rawData: string): Stream
 	}
 	if (!isRecord(payload)) return { kind: 'unknown' };
 
-	const name = eventName === 'message' ? (str(payload.type) ?? '') : eventName;
-	const searchId = str(payload.searchId) ?? str(payload.search_id);
+	const searchId = str(payload.search_id);
 
-	switch (name) {
-		case 'search.result': {
-			const release = toRelease(payload.release ?? payload);
-			return release ? { kind: 'result', searchId, release } : { kind: 'unknown' };
-		}
-		case 'search.status':
+	switch (eventName) {
+		case 'search.started':
 			return {
-				kind: 'status',
+				kind: 'started',
 				searchId,
-				problems: toProblems(payload.problems ?? payload.degradedIndexers ?? payload.warnings),
-				indexersTotal: num(payload.indexersTotal),
-				indexersDone: num(payload.indexersDone)
+				instanceId: num(payload.instance_id),
+				query: str(payload.query),
+				searchType: str(payload.type)
 			};
+		case 'search.indexer': {
+			const indexer = toIndexerOutcome(payload.indexer);
+			if (!indexer) return { kind: 'unknown' };
+			return { kind: 'indexer', searchId, phase: str(payload.phase) ?? '', indexer };
+		}
+		case 'search.results': {
+			const raw = Array.isArray(payload.results) ? payload.results : [];
+			const releases = raw.map(toRelease).filter((r): r is Release => r !== undefined);
+			return { kind: 'results', searchId, releases };
+		}
 		case 'search.done':
-			return { kind: 'done', searchId };
+			return { kind: 'done', searchId, report: toReport(payload.report) };
+		case 'search.failed':
+			return {
+				kind: 'failed',
+				searchId,
+				message: str(payload.message) ?? 'the search stopped before it finished',
+				action: str(payload.action)
+			};
+		case 'stream.missed':
+			return {
+				kind: 'missed',
+				message: str(payload.message) ?? 'some events were dropped',
+				action: str(payload.action)
+			};
 		default:
 			return { kind: 'unknown' };
 	}
@@ -192,22 +314,31 @@ export async function checkReady(): Promise<void> {
 	await requestJson('/api/health/ready');
 }
 
-export async function startSearch(query: string): Promise<SearchStarted> {
+/**
+ * Start a search. This returns as soon as the fan-out has been handed off — it
+ * carries NO releases, by design (internal/httpapi/search.go): every result
+ * arrives on the SSE stream as each indexer answers.
+ */
+export async function startSearch(query: string): Promise<SearchAccepted> {
 	const url = `/api/v1/search?query=${encodeURIComponent(query)}`;
 	const payload = await requestJson(url);
-	if (!isRecord(payload)) return { releases: [], problems: [] };
-	const rawReleases = Array.isArray(payload.releases) ? payload.releases : [];
+	if (!isRecord(payload)) {
+		throw new ApiError('the backend accepted the search without a search id', 200, url);
+	}
 	return {
-		searchId: str(payload.searchId) ?? str(payload.search_id) ?? str(payload.id),
-		releases: rawReleases.map(toRelease).filter((r): r is Release => r !== undefined),
-		problems: toProblems(payload.problems ?? payload.degradedIndexers ?? payload.warnings),
-		indexersTotal: num(payload.indexersTotal),
-		indexersDone: num(payload.indexersDone)
+		searchId: str(payload.search_id) ?? '',
+		instanceId: num(payload.instance_id),
+		query: str(payload.query) ?? query,
+		type: str(payload.type) ?? '',
+		eventsUrl: str(payload.events_url),
+		message: str(payload.message)
 	};
 }
 
-export async function grabRelease(id: string): Promise<void> {
-	await requestJson(`/api/v1/releases/${encodeURIComponent(id)}/grab`, { method: 'POST' });
+export async function grabRelease(candidateId: number): Promise<void> {
+	await requestJson(`/api/v1/releases/${encodeURIComponent(String(candidateId))}/grab`, {
+		method: 'POST'
+	});
 }
 
 export interface StreamHandles {
@@ -223,11 +354,9 @@ export function openEventStream(
 	onConnectionChange: (connected: boolean) => void
 ): StreamHandles {
 	const source = new EventSource('/api/events');
-	const names = ['search.result', 'search.status', 'search.done'];
 
 	const handle = (event: MessageEvent) => onEvent(normalizeStreamEvent(event.type, event.data));
-	for (const name of names) source.addEventListener(name, handle as EventListener);
-	source.addEventListener('message', handle as EventListener);
+	for (const name of STREAM_EVENT_NAMES) source.addEventListener(name, handle as EventListener);
 	source.addEventListener('open', () => onConnectionChange(true));
 	source.addEventListener('error', () => onConnectionChange(false));
 

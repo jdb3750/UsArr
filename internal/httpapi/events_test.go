@@ -5,6 +5,41 @@ import (
 	"time"
 )
 
+// TestEventNamesAreTheWireContract pins the event names as literal strings.
+//
+// These names are a contract with the SPA, which registers an EventSource
+// listener per name and drops anything it was not told about. The SPA pins the
+// same list from its side in web/src/lib/api.test.ts ("the SSE event-name
+// contract"). Renaming an event here without renaming it there — or the reverse
+// — must fail a test, because the failure mode when it does not is a search
+// screen that stays empty forever with nothing logged anywhere.
+func TestEventNamesAreTheWireContract(t *testing.T) {
+	for _, tc := range []struct{ got, want string }{
+		{EventSearchStarted, "search.started"},
+		{EventSearchIndexer, "search.indexer"},
+		{EventSearchResults, "search.results"},
+		{EventSearchDone, "search.done"},
+		{EventSearchFailed, "search.failed"},
+		{EventServiceHealth, "service.health"},
+		{EventStreamMissedEvents, "stream.missed"},
+	} {
+		if tc.got != tc.want {
+			t.Errorf("event name = %q, want %q — web/src/lib/api.ts must be updated in the same commit", tc.got, tc.want)
+		}
+	}
+
+	// The full set, so an ADDED name is caught too: a new event nothing listens
+	// for is a feature that silently does nothing.
+	names := map[string]bool{
+		EventSearchStarted: true, EventSearchIndexer: true, EventSearchResults: true,
+		EventSearchDone: true, EventSearchFailed: true,
+		EventServiceHealth: true, EventStreamMissedEvents: true,
+	}
+	if len(names) != 7 {
+		t.Fatalf("the event-name set has %d distinct names, want 7", len(names))
+	}
+}
+
 func TestHubDeliversOnlyToTheOwningUser(t *testing.T) {
 	h := NewHub(16, time.Now)
 	defer h.Close()

@@ -4,12 +4,14 @@
 		ApiError,
 		grabRelease,
 		openEventStream,
+		problemsFrom,
 		startSearch,
-		type IndexerProblem,
+		type IndexerOutcome,
 		type Release,
+		type SearchReport,
 		type StreamHandles
 	} from '$lib/api';
-	import { formatSize, protocolClass } from '$lib/format';
+	import { formatAge, formatSize, protocolClass } from '$lib/format';
 
 	type GrabState = { state: 'idle' | 'grabbing' | 'grabbed' | 'failed'; detail: string };
 
@@ -19,35 +21,82 @@
 	let searching = $state(false);
 	let finished = $state(false);
 	let searchError = $state('');
+	let streamGap = $state('');
 	let streamConnected = $state(false);
 
 	let releases = $state<Release[]>([]);
-	let problems = $state<IndexerProblem[]>([]);
-	let indexersTotal = $state<number | undefined>(undefined);
-	let indexersDone = $state<number | undefined>(undefined);
-	let grabs = $state<Record<string, GrabState>>({});
+	// Every indexer the server has told us about, and the ones that have reported
+	// a final outcome. Until the closing report lands these are the only honest
+	// answer to "how much of this search is in".
+	let indexersSeen = $state<number[]>([]);
+	let outcomes = $state<IndexerOutcome[]>([]);
+	let report = $state<SearchReport | undefined>(undefined);
+	let grabs = $state<Record<number, GrabState>>({});
+
+	// The report supersedes the running tally once it arrives: it is the server's
+	// own accounting, including indexers that were skipped without ever starting.
+	const problems = $derived(problemsFrom(report ? report.indexers : outcomes));
+	const indexersTotal = $derived(report?.totalIndexers ?? (indexersSeen.length || undefined));
+	const indexersDone = $derived(report ? report.totalIndexers : outcomes.length);
 
 	let stream: StreamHandles | undefined;
+
+	// Results stream as indexers answer, so the cross-indexer dedupe cannot be
+	// done up front: a later, higher-priority indexer names the candidate it
+	// replaces and this drops the superseded row (internal/httpapi/search.go).
+	function mergeReleases(incoming: Release[]) {
+		let next = releases;
+		for (const release of incoming) {
+			if (next.some((r) => r.candidateId === release.candidateId)) continue;
+			if (release.supersedesCandidateId !== undefined) {
+				next = next.filter((r) => r.candidateId !== release.supersedesCandidateId);
+			}
+			next = [...next, release];
+		}
+		releases = next;
+	}
+
+	function noteIndexer(outcome: IndexerOutcome, phase: string) {
+		if (!indexersSeen.includes(outcome.indexerId)) {
+			indexersSeen = [...indexersSeen, outcome.indexerId];
+		}
+		if (phase !== 'indexer_done') return;
+		outcomes = [...outcomes.filter((o) => o.indexerId !== outcome.indexerId), outcome];
+	}
 
 	// One stream for the whole page, opened once. Results are appended as they
 	// arrive per indexer — that progressive render is the point of the SSE design.
 	onMount(() => {
 		stream = openEventStream(
 			(event) => {
-				// A frame from an older search is ignored, not rendered late.
-				if (event.kind !== 'unknown' && searchId && event.searchId && event.searchId !== searchId) {
+				if (event.kind === 'unknown') return;
+				if (event.kind === 'missed') {
+					streamGap = event.action ? `${event.message} — ${event.action}` : event.message;
 					return;
 				}
-				if (event.kind === 'result') {
-					if (releases.some((r) => r.id === event.release.id)) return;
-					releases = [...releases, event.release];
-				} else if (event.kind === 'status') {
-					if (event.problems.length > 0) problems = event.problems;
-					indexersTotal = event.indexersTotal ?? indexersTotal;
-					indexersDone = event.indexersDone ?? indexersDone;
-				} else if (event.kind === 'done') {
-					searching = false;
-					finished = true;
+				// A frame from an older search is ignored, not rendered late.
+				if (searchId && event.searchId && event.searchId !== searchId) return;
+
+				switch (event.kind) {
+					case 'started':
+						// The stream can beat the 202 that carries the same id.
+						if (!searchId) searchId = event.searchId;
+						break;
+					case 'results':
+						mergeReleases(event.releases);
+						break;
+					case 'indexer':
+						noteIndexer(event.indexer, event.phase);
+						break;
+					case 'done':
+						report = event.report;
+						searching = false;
+						finished = true;
+						break;
+					case 'failed':
+						searchError = event.action ? `${event.message} — ${event.action}` : event.message;
+						searching = false;
+						break;
 				}
 			},
 			(connected) => (streamConnected = connected)
@@ -64,21 +113,18 @@
 		submitted = trimmed;
 		searchId = undefined;
 		releases = [];
-		problems = [];
-		indexersTotal = undefined;
-		indexersDone = undefined;
+		indexersSeen = [];
+		outcomes = [];
+		report = undefined;
 		grabs = {};
 		searchError = '';
+		streamGap = '';
 		finished = false;
 		searching = true;
 
 		try {
-			const started = await startSearch(trimmed);
-			searchId = started.searchId;
-			if (started.releases.length > 0) releases = started.releases;
-			if (started.problems.length > 0) problems = started.problems;
-			indexersTotal = started.indexersTotal;
-			indexersDone = started.indexersDone;
+			const accepted = await startSearch(trimmed);
+			if (accepted.searchId) searchId = accepted.searchId;
 		} catch (error) {
 			searching = false;
 			searchError = error instanceof ApiError ? error.message : String(error);
@@ -86,14 +132,15 @@
 	}
 
 	async function grab(release: Release) {
-		grabs = { ...grabs, [release.id]: { state: 'grabbing', detail: '' } };
+		const id = release.candidateId;
+		grabs = { ...grabs, [id]: { state: 'grabbing', detail: '' } };
 		try {
-			await grabRelease(release.id);
-			grabs = { ...grabs, [release.id]: { state: 'grabbed', detail: '' } };
+			await grabRelease(id);
+			grabs = { ...grabs, [id]: { state: 'grabbed', detail: '' } };
 		} catch (error) {
 			grabs = {
 				...grabs,
-				[release.id]: {
+				[id]: {
 					state: 'failed',
 					detail: error instanceof ApiError ? error.message : String(error)
 				}
@@ -126,8 +173,15 @@
 
 {#if searchError}
 	<div class="banner banner-error" role="alert">
-		The search could not be started.
+		The search did not complete.
 		<p class="banner-detail">{searchError}</p>
+	</div>
+{/if}
+
+{#if streamGap}
+	<div class="banner banner-warn">
+		Some events were missed while the connection was down, so this list may be incomplete.
+		<p class="banner-detail">{streamGap}</p>
 	</div>
 {/if}
 
@@ -153,16 +207,24 @@
 		<span>Query: {submitted}</span>
 		<span>{releases.length} {releases.length === 1 ? 'result' : 'results'}</span>
 		{#if indexersTotal !== undefined}
-			<span>{indexersDone ?? 0} of {indexersTotal} indexers reported</span>
+			<span>{indexersDone} of {indexersTotal} indexers reported</span>
 		{/if}
 		<span>{searching ? 'Searching' : finished ? 'Finished' : 'Idle'}</span>
 	</div>
+	{#if report?.summary}
+		<!--
+			Prowlarr answers 200 with `[]` for "every indexer failed", "all
+			rate-limited" and "nothing matched" alike, so this sentence is the only
+			thing that tells them apart — ARCHITECTURE.md §17.7.
+		-->
+		<p class="status-line">{report.summary}</p>
+	{/if}
 {/if}
 
 {#if releases.length > 0}
 	<ul class="results">
-		{#each releases as release (release.id)}
-			{@const grabState = grabs[release.id] ?? { state: 'idle', detail: '' }}
+		{#each releases as release (release.candidateId)}
+			{@const grabState = grabs[release.candidateId] ?? { state: 'idle', detail: '' }}
 			<li class="result">
 				<div class="result-main">
 					<div class="result-title">{release.title}</div>
@@ -170,11 +232,10 @@
 						{#if release.protocol}<span class={protocolClass(release.protocol)}
 								>{release.protocol}</span
 							>{/if}
-						{#if release.indexer}<span>{release.indexer}</span>{/if}
-						{#if release.category}<span>{release.category}</span>{/if}
-						{#if release.size !== undefined}<span>{formatSize(release.size)}</span>{/if}
+						{#if release.indexerName}<span>{release.indexerName}</span>{/if}
+						{#if release.sizeBytes !== undefined}<span>{formatSize(release.sizeBytes)}</span>{/if}
 						{#if release.seeders !== undefined}<span>{release.seeders} seeders</span>{/if}
-						{#if release.age}<span>{release.age}</span>{/if}
+						{#if formatAge(release.ageDays)}<span>{formatAge(release.ageDays)}</span>{/if}
 					</div>
 				</div>
 				<div class="result-action">

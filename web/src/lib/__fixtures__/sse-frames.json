@@ -1,0 +1,153 @@
+[
+	{
+		"name": "search.started",
+		"data": {
+			"instance_id": 1,
+			"query": "Test Release",
+			"search_id": "SEARCH_ID",
+			"type": "search"
+		}
+	},
+	{
+		"name": "search.indexer",
+		"data": {
+			"indexer": {
+				"answered": false,
+				"blocked_until": "2026-08-16T00:00:00Z",
+				"count": 0,
+				"indexer_id": 2,
+				"name": "Broken Tracker",
+				"reason": "Prowlarr has this indexer blocked until 2026-08-16T08:37:53Z",
+				"status": "blocked"
+			},
+			"phase": "indexer_done",
+			"search_id": "SEARCH_ID"
+		}
+	},
+	{
+		"name": "search.indexer",
+		"data": {
+			"indexer": {
+				"answered": false,
+				"count": 0,
+				"indexer_id": 3,
+				"name": "Disabled Tracker",
+				"reason": "indexer is disabled in Prowlarr",
+				"status": "disabled"
+			},
+			"phase": "indexer_done",
+			"search_id": "SEARCH_ID"
+		}
+	},
+	{
+		"name": "search.indexer",
+		"data": {
+			"indexer": {
+				"answered": false,
+				"count": 0,
+				"indexer_id": 1,
+				"name": "Working Tracker",
+				"status": ""
+			},
+			"phase": "indexer_started",
+			"search_id": "SEARCH_ID"
+		}
+	},
+	{
+		"name": "search.results",
+		"data": {
+			"results": [
+				{
+					"age_days": 2.1041666666666665,
+					"candidate_id": 1,
+					"categories": [2000, 2040],
+					"comment_url": "https://tracker.example/details/1234#comments",
+					"expires_at": "2026-08-16T00:00:00Z",
+					"guid": "https://tracker.example/details/1234",
+					"indexer_flags": ["freeleech", "internal"],
+					"indexer_id": 1,
+					"indexer_name": "Working Tracker",
+					"indexer_priority": 25,
+					"indexer_privacy": "private",
+					"info_hash": "0123456789abcdef0123456789abcdef01234567",
+					"info_url": "https://tracker.example/details/1234?apikey=REDACTED",
+					"leechers": 3,
+					"poster_url": "https://tracker.example/poster/1234.jpg",
+					"protocol": "torrent",
+					"published_at": "2026-08-16T00:00:00Z",
+					"seeders": 42,
+					"size_bytes": 2147483648,
+					"tags": [
+						"source:torrent",
+						"type:movie",
+						"indexer:working-tracker",
+						"indexer-privacy:private",
+						"flag:freeleech",
+						"flag:internal"
+					],
+					"title": "Test.Release.2026.1080p.WEB-DL.x264-USARR"
+				}
+			],
+			"search_id": "SEARCH_ID"
+		}
+	},
+	{
+		"name": "search.indexer",
+		"data": {
+			"indexer": {
+				"answered": true,
+				"count": 1,
+				"indexer_id": 1,
+				"name": "Working Tracker",
+				"status": "ok"
+			},
+			"phase": "indexer_done",
+			"search_id": "SEARCH_ID"
+		}
+	},
+	{
+		"name": "search.done",
+		"data": {
+			"report": {
+				"answered": 1,
+				"degraded": true,
+				"failed": 0,
+				"finished_at": "2026-08-16T00:00:00Z",
+				"indexers": [
+					{
+						"answered": false,
+						"blocked_until": "2026-08-16T00:00:00Z",
+						"count": 0,
+						"indexer_id": 2,
+						"name": "Broken Tracker",
+						"reason": "Prowlarr has this indexer blocked until 2026-08-16T08:37:53Z",
+						"status": "blocked"
+					},
+					{
+						"answered": false,
+						"count": 0,
+						"indexer_id": 3,
+						"name": "Disabled Tracker",
+						"reason": "indexer is disabled in Prowlarr",
+						"status": "disabled"
+					},
+					{
+						"answered": true,
+						"count": 1,
+						"indexer_id": 1,
+						"name": "Working Tracker",
+						"status": "ok"
+					}
+				],
+				"instance_id": 1,
+				"query": "Test Release",
+				"results": 1,
+				"skipped": 2,
+				"started_at": "2026-08-16T00:00:00Z",
+				"summary": "1 of 3 indexers answered — 0 failed, 2 skipped; these results are incomplete",
+				"total_indexers": 3
+			},
+			"search_id": "SEARCH_ID"
+		}
+	}
+]

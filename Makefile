@@ -131,16 +131,12 @@ build: web-build ## Build the static binary with the SPA embedded -> ./usarr
 web-build: web-deps ## Build the SvelteKit SPA -> web/build (embedded by `make build`)
 	$(call pnpm_if_web,build)
 
-# Frontend dependency guard.
-# web/package.json now exists, so the guard branch below is no longer taken on a
-# normal checkout; it survives only so a web-less tree no-ops loudly instead of
-# dying with a cryptic "No rule to make target". Safe to delete outright.
+# web/package.json is committed (since a279517), so the "no frontend yet" guard
+# that used to wrap this line was dead code on every checkout. A missing
+# package.json is now a hard failure, which is the right answer: it means the
+# tree is broken, not that the frontend has not been written yet.
 .PHONY: web-deps
 web-deps:
-	@if [ ! -f $(WEB_DIR)/package.json ]; then \
-		echo "SKIP: $(WEB_DIR)/package.json not present — skipping frontend step"; \
-		exit 0; \
-	fi; \
 	$(PNPM) -C $(WEB_DIR) install --frozen-lockfile
 
 # Wrapper so web targets skip cleanly while web/ does not exist.
