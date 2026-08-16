@@ -911,14 +911,45 @@ two.** That is not bad luck. A fix is written under the assumption that the fail
 understood, and that is precisely the moment people stop checking for it. Treat a guard you just
 repaired as the least trustworthy thing in the file, not the most.
 
-**Two mechanical notes when gathering lint evidence:**
+**A rule, and a mechanical note, when gathering lint evidence:**
 
-* **`golangci-lint cache clean` first.** Cached diagnostics have been observed replaying results
-  against paths from a *different clone* of this repo, which produces findings that cannot be
-  reproduced and, worse, silences ones that can.
+* **Run `golangci-lint cache clean` before trusting any gate result from a tree where worktrees have
+  come and gone, and say in the report that you did.** Cached diagnostics replay against paths from
+  other trees — a different clone of this repo, or a worktree that no longer exists. Two threads hit
+  it independently on 2026-08-16 with two different linters: four gosec findings against the deleted
+  sibling worktree `../wt-flake/`, and errcheck at `../merge-wt/internal/db/sqlite.go` where the real
+  tree's copy already carries `//nolint:errcheck`. Both cleared on `cache clean`, and both real runs
+  then reported 0 issues — two linters, so the cache keys on paths rather than on anything
+  linter-specific. Both were false *reds*, and that is the whole of the observed evidence. **A stale
+  red is annoying, but a stale green is invisible** — nothing in the output distinguishes a replayed
+  result from a fresh one, so the failure you would never notice is the one that matters. That
+  second half is inference from the same mechanism, not a case anyone has caught here, and it is why
+  this is a rule rather than a note.
 * **A bare `golangci-lint` resolves to whatever is on `PATH`, which is a stale version.** Only
   `make check` (or `make lint`) is authoritative, because only those go through `require_tool` and
   assert the pin. Quote the tool line it prints alongside any claim of green.
+
+### Consistency is a property of the read, not only of the write
+
+**A writer's transaction guarantees only what a reader takes in one statement, or in one
+`db.ReadTx`.** `store.ReplaceIndexers` writes `indexers_fetched_at` and the `indexer_catalog` rows
+in a single transaction so that no reader can see one without the other, and it is right to. But
+`GET /api/v1/indexers` then asked for them with two statements off the read pool — and two
+statements on the pool are **two WAL snapshots**. A replication commit landing between them
+returned a NULL stamp to the first and the fresh rows to the second, so the endpoint rendered
+"UsArr has not yet read the indexer list from Prowlarr" while listing three indexers: a state the
+database never held, at 1.2% of requests. `db.ReadTx` existed for exactly this, with a correct doc
+comment, and had **no production caller at all**.
+
+This is easy to miss because the write side looks careful and *is* careful — so the pair reads as
+solved, and attention stops at the transaction that is already there. Ask the question at the read
+instead: **do these two results have to agree?** A parent row and its children, a count and the rows
+it counts, a status field and the data it describes, a stamp and the thing it stamps. If they do,
+pair them under `db.ReadTx`, and pair them **in the store**, because the invariant belongs to the
+pair rather than to whichever handler noticed first. If they do not, leave them alone and say why —
+an unnecessary read transaction is noise that hides the necessary ones, and every one of them is a
+lock the WAL checkpointer has to wait behind. The full sweep of this codebase's read paths, with the
+reason each one is safe, is the consistency audit in `docs/REVIEW-LOG.md`.
 
 ### Working alongside other threads
 
