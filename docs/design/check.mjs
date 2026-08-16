@@ -49,12 +49,18 @@
  *   1  §13 ban list                     — static, over stripped sources
  *   2  token drift                      — tokens.css vs the mockup's copy
  *   3  contrast                         — worst of all five grounds, both themes
- *   4  overflow                         — 5 widths x 5 screens x every state
+ *   1c install invariant               — data-when and data-inst never collide
+ *   4  overflow                         — 5 widths x 5 screens x every state x 2 installs
  *   5  row heights                      — against the three density bands
  *   6  availability accessible names    — no silent ✓/✗
  *   7  one tab stop per list            — roving tabindex, or a declared opt-out
  *   8  containment is live              — the content-visibility-on-<tr> guard
+ *   8b install switcher                 — two installs, and every screen answers
  *   9  webfont                          — IBM Plex actually resolves
+ *
+ * EVERY RENDERED SWEEP RUNS OVER BOTH INSTALLS. The mockups draw a full stack
+ * (six populated media types) and the v0.1 install (Sonarr, Radarr, Prowlarr),
+ * and half the layouts this file protects only exist on one of the two.
  * ============================================================================= */
 
 import { readFileSync, readdirSync } from 'node:fs';
@@ -78,76 +84,203 @@ const URL = 'file://' + join(MOCKUPS, 'prototype.html');
  * Makefile's "@latest is FORBIDDEN, pin everything" rule forbids on its own.
  *
  * The primary path is now the BARE specifier, which is what a pinned
- * `playwright` devDependency gives you. Two fallbacks exist because this file
- * lives in docs/design/ and the dependency belongs in web/package.json: ESM
- * resolves a bare specifier by walking up from the IMPORTING file, which never
- * reaches web/node_modules, so that location is probed explicitly. The npm
- * global root is probed last, which is what this repo's agent container has.
+ * devDependency gives you. Fallbacks exist because this file lives in
+ * docs/design/ and the dependency belongs in web/package.json: ESM resolves a
+ * bare specifier by walking up from the IMPORTING file, which never reaches
+ * web/node_modules, so that location is probed explicitly. The npm global root
+ * is probed last, which is what this repo's agent container has.
  *
- * If every candidate fails the script says so in one sentence with the install
- * command and exits 1. It never throws a module-not-found at the user.
+ * EVERY LOCATION IS PROBED FOR BOTH PACKAGE NAMES. `web/package.json` pins
+ * `playwright-core`, not `playwright`, and a ladder that only ever asked for
+ * `playwright` walked straight past it — the pin was decorative, and the check
+ * ran on whatever the machine happened to have globally, which is the opposite
+ * of what pinning is for. `playwright-core` is the right dependency here: it
+ * exports the same `chromium` and omits the test runner and the browser
+ * downloader this file has no use for. It also does not fetch a browser on
+ * install, which is why the two failure modes below are genuinely distinct.
+ *
+ * TWO FAILURE MODES, TWO MESSAGES. They have nothing in common but the word
+ * "playwright", and one message covering both sent people to the expensive fix
+ * for the cheap problem:
+ *
+ *   · THE MODULE IS MISSING. Catchable only with a dynamic `await import()`
+ *     inside try/catch — a static `import` is hoisted and throws before any
+ *     handler in this file exists, so the user gets a raw
+ *     ERR_MODULE_NOT_FOUND. The fix is `pnpm -C web install`.
+ *   · THE BROWSER IS ABSENT OR MISMATCHED. Thrown later, from
+ *     `chromium.launch()`, and identified by "Executable doesn't exist at".
+ *     The likely cause is named first and it is NOT "you never downloaded it":
+ *     it is that the module version and the browser cache disagree, because
+ *     each Playwright release pins its own browser revision and a cache filled
+ *     by a different release satisfies neither. `npx playwright install` does
+ *     make the symptom go away, expensively, by fetching a second browser
+ *     build — and it hides the version skew that caused it, so it is mentioned
+ *     last and with that caveat attached.
  * ------------------------------------------------------------------------- */
+
+/* Kept beside the messages it is printed in, so the two cannot drift. This is
+   the version the check is known to pass against; it is what web/package.json
+   should pin, exactly, with no caret. */
+const PLAYWRIGHT_VERSION = '1.56.1';
+
+/* Both names, in this order. `playwright` is a superset, so if a machine has
+   it there is no reason to prefer the core package; if it does not, the pin
+   in web/package.json is found on the very next attempt. */
+const PW_PACKAGES = ['playwright', 'playwright-core'];
+
 async function loadChromium() {
   const req = createRequire(import.meta.url);
-  const globalRoot = join(dirname(process.execPath), '..', 'lib', 'node_modules', 'playwright');
+  const nodeRoot = join(dirname(process.execPath), '..', 'lib', 'node_modules');
   const attempts = [];
 
-  const candidates = [
+  /* Each location is expanded across both package names below, so adding a
+     third name here needs no new rung. */
+  const locations = [
     // An explicit override, for a machine that keeps Playwright somewhere else.
-    process.env.PLAYWRIGHT_MODULE && { how: '$PLAYWRIGHT_MODULE', spec: process.env.PLAYWRIGHT_MODULE },
+    // This one is a full module path, so it is not expanded.
+    process.env.PLAYWRIGHT_MODULE &&
+      { how: '$PLAYWRIGHT_MODULE', spec: process.env.PLAYWRIGHT_MODULE, exact: true },
     // The portable path: a pinned devDependency resolvable from this file.
-    { how: "bare specifier 'playwright'", spec: 'playwright' },
+    { how: 'bare specifier', bare: true },
     // web/package.json is where the pinned devDependency lives; ESM will not
     // walk into it from docs/design/, so resolve it the way web/ itself would.
     { how: 'web/node_modules', resolveFrom: join(ROOT, 'web', 'package.json') },
     // The npm global root, which is what the agent container preinstalls.
-    { how: 'npm global root', spec: globalRoot },
+    { how: 'npm global root', root: nodeRoot },
   ].filter(Boolean);
+
+  const candidates = [];
+  for (const loc of locations) {
+    if (loc.exact) { candidates.push(loc); continue; }
+    for (const pkg of PW_PACKAGES) {
+      candidates.push({
+        how: `${loc.how} '${pkg}'`,
+        pkg,
+        spec: loc.bare ? pkg : (loc.root ? join(loc.root, pkg) : undefined),
+        resolveFrom: loc.resolveFrom,
+      });
+    }
+  }
 
   for (const c of candidates) {
     try {
       let spec = c.spec;
-      if (c.resolveFrom) spec = createRequire(c.resolveFrom).resolve('playwright');
+      if (c.resolveFrom) spec = createRequire(c.resolveFrom).resolve(c.pkg);
       // A filesystem path has to become a URL before import() will take it.
       const url = /^[./]|^[A-Za-z]:\\/.test(spec) ? pathToFileURL(req.resolve(spec)).href : spec;
+      // Dynamic, and inside the try, on purpose: this is the ONLY form that
+      // turns a missing module into a message instead of an uncaught throw.
       const mod = await import(url);
       // A CJS entry point arrives as a default-wrapped namespace, so both
       // shapes are accepted rather than only the ESM one.
       const chromium = mod?.chromium || mod?.default?.chromium;
-      if (chromium) return chromium;
+      if (chromium) {
+        console.log(`      playwright resolved via ${c.how}`);
+        return chromium;
+      }
       attempts.push(c.how + ': loaded but exports no chromium');
     } catch (err) {
       attempts.push(c.how + ': ' + (err?.code || err?.message || String(err)));
     }
   }
 
-  console.log('FAIL  playwright is not installed, so the design check cannot run.');
+  console.log('FAIL  the playwright module is not installed, so the design check cannot run.');
+  console.log('');
+  console.log('      This is the MODULE, not the browser. Nothing was launched and no');
+  console.log('      browser cache was consulted; the import itself found nothing.');
   console.log('');
   console.log('      docs/design/check.mjs drives a real Chromium; there is no static fallback.');
-  console.log('      Install it as a pinned devDependency and fetch the browser:');
+  console.log('      web/package.json already pins the dependency, so the fix is usually just:');
   console.log('');
-  console.log('          pnpm --dir web add -D --save-exact playwright@' + PLAYWRIGHT_VERSION);
-  console.log('          pnpm --dir web exec playwright install chromium');
+  console.log('          pnpm -C web install');
+  console.log('');
+  console.log('      If the pin is genuinely absent, add it exactly, with no caret:');
+  console.log('');
+  console.log('          pnpm -C web add -D --save-exact playwright-core@' + PLAYWRIGHT_VERSION);
   console.log('');
   console.log('      Then re-run `make design`. If Playwright lives somewhere else on this');
-  console.log('      machine, point PLAYWRIGHT_MODULE at it and PLAYWRIGHT_BROWSERS_PATH at');
-  console.log('      its browser cache.');
+  console.log('      machine, point PLAYWRIGHT_MODULE at its module entry point.');
   console.log('');
   console.log('      Resolution attempts, in order:');
   for (const a of attempts) console.log('        - ' + a);
   process.exit(1);
 }
 
-/* Kept beside the message it is printed in, so the two cannot drift. This is
-   the version the check is known to pass against; it is what web/package.json
-   should pin, exactly, with no caret. */
-const PLAYWRIGHT_VERSION = '1.56.1';
-
 const chromium = await loadChromium();
+
+/* Launch, and separate a missing/mismatched browser from every other launch
+ * failure. Also records which binary was actually spawned: Playwright picks
+ * the headless shell for a plain `launch()` but `executablePath()` keeps
+ * reporting the full build, so the only honest way to know what ran is to
+ * watch the spawn. The child_process module object is patched rather than the
+ * ESM import, because Playwright is CJS internally and `require`s it. */
+async function launchChromium() {
+  const cp = createRequire(import.meta.url)('node:child_process');
+  const origSpawn = cp.spawn;
+  const spawned = [];
+  cp.spawn = function (cmd, ...rest) { spawned.push(String(cmd)); return origSpawn.call(this, cmd, ...rest); };
+  try {
+    const browser = await chromium.launch();
+    return { browser, spawned };
+  } catch (err) {
+    const msg = String(err?.message || err);
+    if (!/Executable doesn't exist at/.test(msg)) throw err;
+    const cache = process.env.PLAYWRIGHT_BROWSERS_PATH || '(unset — Playwright default cache)';
+    console.log('FAIL  the playwright module loaded, but the Chromium build it wants is not in the cache.');
+    console.log('');
+    console.log('      This is the BROWSER, not the module. The import succeeded.');
+    console.log('');
+    console.log('      The likely cause is a VERSION MISMATCH, not a missing download. Each');
+    console.log('      Playwright release pins one browser revision, and a cache populated by');
+    console.log('      a different release satisfies none of it — the cache can be full of');
+    console.log('      Chromium and still be the wrong Chromium. Check these two agree first:');
+    console.log('');
+    console.log('          the resolved module   expected playwright ' + PLAYWRIGHT_VERSION);
+    console.log('          the browser cache     ' + cache);
+    console.log('');
+    console.log('      If they disagree, fix the disagreement: match the pin in');
+    console.log('      web/package.json to the release that filled the cache, or point');
+    console.log('      PLAYWRIGHT_BROWSERS_PATH at the cache belonging to the pinned version.');
+    console.log('');
+    console.log('      Only once they agree, and the revision is genuinely absent, download it:');
+    console.log('');
+    console.log('          pnpm -C web exec playwright install chromium');
+    console.log('');
+    console.log('      Running that first does make the error go away, by fetching a SECOND');
+    console.log('      browser build alongside the one already there. It also buries the');
+    console.log('      version skew that caused this, so the next upgrade fails the same way.');
+    console.log('');
+    console.log('      Playwright said:');
+    for (const line of msg.split('\n').slice(0, 6)) console.log('        ' + line.trim());
+    process.exit(1);
+  } finally {
+    cp.spawn = origSpawn;
+  }
+}
 
 const SCREENS = ['home', 'services', 'libraries', 'search', 'requests'];
 const WIDTHS = [390, 1280, 1440, 1680, 1920];
 const DENSITIES = ['compact', 'standard', 'relaxed'];
+
+/* The mockups draw two installs and every rendered sweep below covers both.
+ *
+ * This is not "run it twice for luck". The v0.1 install is where four of the
+ * six media types have no catalogue source, so it is the only place several
+ * layouts exist at all — a Home Block A row carrying a state and an action
+ * instead of a count, a two-library scope chip, a services table with the
+ * media servers cut out of it — and a sweep that only ever saw the full stack
+ * was blind to every one of them. `full` is first because it is the default
+ * the page loads in.
+ *
+ * Cost: the screen×state corpus roughly doubles, and every floor below is
+ * restated against the doubled figure rather than left at a number the new
+ * reality satisfies without trying. A floor that cannot fail is the silent
+ * pass these floors exist to convert into a failure. */
+const INSTALLS = ['full', 'v01'];
+const setInstall = async (page, install) => {
+  await page.selectOption('#install', install);
+  await page.waitForTimeout(40);
+};
 
 let failures = 0;
 const fail = (msg) => { failures++; console.log('FAIL  ' + msg); };
@@ -255,11 +388,15 @@ function scan(re, filter = () => true) {
  *    zero hits and some minimum amount of material scanned.
  * ========================================================================== */
 
-/* The whole stripped corpus is ~600k characters across 8 files. 200k is a
- * deliberately slack floor: it is far below today's figure, so ordinary editing
- * never trips it, and far above zero, so losing a file or breaking the glob
- * does. A rule that narrows the corpus with `filter` states its own floor. */
-const CORPUS_FLOOR = 200000;
+/* The whole stripped corpus is ~700k characters across 9 files, and it grew by
+ * roughly a third when the mockups gained their second install: the five screen
+ * files each carry the v0.1 variant of everything that differs. The floor moves
+ * with it. 200k was slack against the old corpus and is trivial against this
+ * one, and a floor that cannot fail is the silent pass these floors exist to
+ * convert into a failure. 480k is still far below today's figure, so ordinary
+ * editing never trips it, and far above what losing a whole screen file would
+ * leave. A rule that narrows the corpus with `filter` states its own floor. */
+const CORPUS_FLOOR = 480000;
 
 /* Assert that a static check actually looked at something. `n` is what it
  * examined, `floor` the least that is credible. */
@@ -529,6 +666,55 @@ rule('§13 controls: everything that navigates is an <a href>', /<div[^>]*\soncl
 })();
 
 /* =============================================================================
+ * 1c. The two-install invariant
+ *
+ * Two attributes own the `hidden` flag on these screens and they must never
+ * both own it on the same element: `applyState` writes `hidden` on every
+ * `[data-when]` in the current screen, and `paintInstall` writes it on every
+ * `[data-inst]` in the document. An element carrying both has two writers and
+ * one attribute, and the symptom is not a crash — it is a block that quietly
+ * reappears in a state it does not belong to, which is exactly the class of
+ * defect a reader of a mockup cannot distinguish from a design decision.
+ *
+ * They compose by NESTING instead, which costs one wrapper and is checkable
+ * here in six lines. The floor is on the number of `data-inst` elements found:
+ * if the mechanism is ever renamed, this rule finds nothing and would pass in
+ * silence.
+ * ========================================================================== */
+head('1c. data-when and data-inst never write hidden on the same element');
+(function installInvariant() {
+  const html = FILES.filter((f) => f.kind === 'html');
+  const tags = [];
+  for (const f of html) {
+    for (const m of f.src.matchAll(/<[a-zA-Z][^>]*>/g)) {
+      if (/\bdata-inst=/.test(m[0])) tags.push({ file: rel(f.path), tag: m[0] });
+    }
+  }
+  if (!floorOk('install invariant', tags.length, 60, 'data-inst element(s)')) return;
+  const both = tags.filter((t) => /\bdata-when=/.test(t.tag));
+  if (both.length) {
+    fail(`install invariant: ${both.length} element(s) carry both data-when and data-inst`);
+    both.slice(0, 6).forEach((t) => note(`${t.file}  ${t.tag.slice(0, 110)}`));
+  } else {
+    ok(`install invariant: ${tags.length} data-inst elements (floor 60), none of them also carrying data-when`);
+  }
+  /* Every install-scoped element must name an install the switcher offers, or
+   * it renders in neither and is dead markup nobody will ever see fail. */
+  const VALID = new Set(['full', 'v01']);
+  const wrong = tags.filter((t) => {
+    const v = /\bdata-inst="([^"]*)"/.exec(t.tag);
+    return !v || !v[1].split(/\s+/).filter(Boolean).length ||
+      v[1].split(/\s+/).filter(Boolean).some((x) => !VALID.has(x));
+  });
+  if (wrong.length) {
+    fail(`install invariant: ${wrong.length} data-inst value(s) name no install the switcher offers`);
+    wrong.slice(0, 6).forEach((t) => note(`${t.file}  ${t.tag.slice(0, 110)}`));
+  } else {
+    ok(`install invariant: every data-inst value is one of ${[...VALID].join(', ')}`);
+  }
+})();
+
+/* =============================================================================
  * 2. Token drift — tokens.css is canonical, the mockup carries a copy
  * ========================================================================== */
 head('2. Token drift: docs/design/tokens.css vs the mockup copy');
@@ -629,7 +815,29 @@ for (const [theme, vars] of [['light', mockLight], ['dark', mockDark]]) {
 /* =============================================================================
  * The rendered checks. One browser, reused.
  * ========================================================================== */
-const browser = await chromium.launch();
+const { browser, spawned: launchedBinaries } = await launchChromium();
+
+/* --- 0. the build that actually launched --------------------------------- */
+head('0. chromium.launch() resolves the headless shell, not the full browser');
+/* `chromium.executablePath()` reports the FULL build no matter what, so it
+ * cannot answer this — it reports chromium-<rev>/chrome-linux/chrome while the
+ * process that starts is chromium_headless_shell-<rev>/chrome-linux/
+ * headless_shell. The distinction is not cosmetic: the shell is the build with
+ * no window, no compositor surface and no GPU path, and it is the one every
+ * measurement in this file assumes. A run that silently fell back to the full
+ * browser would measure a different renderer from CI and from every other
+ * machine, and nothing else here would notice. */
+{
+  const chrome = launchedBinaries.filter((p) => /chrom|headless_shell/i.test(p));
+  if (!chrome.length) {
+    fail(`headless shell: no chromium-looking binary was spawned at all (saw ${launchedBinaries.length} spawn(s))`);
+  } else if (chrome.every((p) => /chromium_headless_shell/.test(p))) {
+    ok(`headless shell: launch() spawned ${chrome[0]}`);
+  } else {
+    fail('headless shell: launch() spawned the full browser build, not chromium_headless_shell\n' +
+      chrome.map((p) => '        ' + p).join('\n'));
+  }
+}
 
 async function statesOf(page, screen) {
   return page.$$eval('#pg-' + screen + ' [data-act="state"] option', (os) => os.map((o) => o.value));
@@ -637,11 +845,17 @@ async function statesOf(page, screen) {
 
 /* --- 4. overflow --------------------------------------------------------- */
 head('4. Overflow: nothing past the viewport, nothing past its own .tablewrap');
+/* 5 screens × 37 states × 2 installs = 74 combinations per width. The floor is
+ * 70: below that a state option has gone missing, an install stopped switching,
+ * or the sweep silently ran over one install twice. */
+const COMBO_FLOOR = 70;
 for (const width of WIDTHS) {
   const ctx = await browser.newContext({ viewport: { width, height: 900 } });
   const page = await ctx.newPage();
   await page.goto(URL);
   let worstOver = 0, worstWhere = '', combos = 0;
+  for (const install of INSTALLS) {
+  await setInstall(page, install);
   for (const screen of SCREENS) {
     await page.evaluate((s) => { window.location.hash = '#' + s; }, screen);
     await page.waitForTimeout(60);
@@ -673,16 +887,19 @@ for (const width of WIDTHS) {
         });
         return { over, worst: Math.round(worst), ex, clip, doc: document.documentElement.scrollWidth };
       }, screen);
-      if (r.clip.length) fail(`${width}px ${screen}/${state}: sheared by overflow-x:clip on .tablewrap\n        ` + r.clip.join('\n        '));
+      if (r.clip.length) fail(`${width}px ${install}/${screen}/${state}: sheared by overflow-x:clip on .tablewrap\n        ` + r.clip.join('\n        '));
       if (r.over) {
         worstOver = Math.max(worstOver, r.worst - width);
-        worstWhere = `${width}px ${screen}/${state}: ${r.over} over, worst right=${r.worst}\n        ${r.ex.join('\n        ')}`;
+        worstWhere = `${width}px ${install}/${screen}/${state}: ${r.over} over, worst right=${r.worst}\n        ${r.ex.join('\n        ')}`;
       }
-      if (r.doc > width) fail(`${width}px ${screen}/${state}: document scrolls sideways (${r.doc})`);
+      if (r.doc > width) fail(`${width}px ${install}/${screen}/${state}: document scrolls sideways (${r.doc})`);
     }
   }
-  if (worstOver > 0) fail('overflow ' + worstWhere);
-  else ok(`overflow at ${width}px: ${combos} screen×state combinations, nothing past the viewport or its wrapper`);
+  }
+  if (!floorOk(`overflow at ${width}px`, combos, COMBO_FLOOR, 'screen×state×install combination(s)')) {
+    /* already failed */
+  } else if (worstOver > 0) fail('overflow ' + worstWhere);
+  else ok(`overflow at ${width}px: ${combos} screen×state×install combinations (floor ${COMBO_FLOOR}), nothing past the viewport or its wrapper`);
   await ctx.close();
 }
 
@@ -726,66 +943,87 @@ if (!Number.isFinite(COMPACT_ROW_H) || COMPACT_ROW_H <= 0) {
     `CEILING_COMPACT is written against`);
 }
 
+/* Rows measured per screen, over both installs and every state. The floor is
+ * per screen because the screens differ by an order of magnitude — Home renders
+ * hundreds of rows across its states, Libraries tens — and one global floor
+ * would be satisfied by Home alone while Libraries silently measured nothing. */
+const ROW_FLOOR = { home: 180, services: 55, libraries: 24, search: 60, requests: 145 };
+
 for (const density of DENSITIES) {
   await page.evaluate((d) => { document.documentElement.setAttribute('data-density', d); }, density);
   const rowH = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--row-h')));
   const shift = rowH - COMPACT_ROW_H;
   for (const screen of SCREENS) {
-    await page.evaluate((s) => { window.location.hash = '#' + s; }, screen);
-    await page.waitForTimeout(50);
-    const states = await statesOf(page, screen);
     const hs = [];
-    for (const state of states) {
-      if (state === 'annex') continue; /* labelled as documentation for services v0.1 lacks */
-      await page.selectOption('#pg-' + screen + ' [data-act="state"]', state);
-      await page.waitForTimeout(30);
-      hs.push(...await page.evaluate((s) => [...document.querySelectorAll('#pg-' + s + ' tbody tr')]
-        .filter((r) => !r.hidden && !r.closest('[hidden]') && r.offsetParent)
-        .map((r) => Math.round(r.getBoundingClientRect().height)).filter((h) => h > 0), screen));
+    for (const install of INSTALLS) {
+      await setInstall(page, install);
+      await page.evaluate((s) => { window.location.hash = '#' + s; }, screen);
+      await page.waitForTimeout(50);
+      const states = await statesOf(page, screen);
+      for (const state of states) {
+        if (state === 'annex') continue; /* labelled as documentation for services neither install has */
+        await page.selectOption('#pg-' + screen + ' [data-act="state"]', state);
+        await page.waitForTimeout(30);
+        hs.push(...await page.evaluate((s) => [...document.querySelectorAll('#pg-' + s + ' tbody tr')]
+          .filter((r) => !r.hidden && !r.closest('[hidden]') && r.offsetParent)
+          .map((r) => Math.round(r.getBoundingClientRect().height)).filter((h) => h > 0), screen));
+      }
+      await page.selectOption('#pg-' + screen + ' [data-act="state"]', states[0]);
     }
     hs.sort((a, b) => a - b);
     const ceiling = CEILING_COMPACT[screen] + shift;
     const line = `rows ${density.padEnd(9)} ${screen.padEnd(10)} n=${String(hs.length).padStart(3)}  ` +
       `min=${hs[0]}  median=${hs[Math.floor(hs.length / 2)]}  max=${hs[hs.length - 1]}  ` +
-      `band ${rowH}–${ceiling}px`;
+      `band ${rowH}–${ceiling}px  floor n≥${ROW_FLOOR[screen]}`;
+    if (!floorOk(`rows ${density} ${screen}`, hs.length, ROW_FLOOR[screen], 'rendered row(s)')) continue;
     if (hs[hs.length - 1] > ceiling) fail(line + `   <-- above the ${ceiling}px ceiling`);
     else if (hs[0] < rowH - 0.5) fail(line + `   <-- below the ${rowH}px --row-h floor`);
     else ok(line);
-    await page.selectOption('#pg-' + screen + ' [data-act="state"]', states[0]);
   }
 }
+await setInstall(page, 'full');
 await page.evaluate(() => { document.documentElement.setAttribute('data-density', 'compact'); });
 
 /* --- 6. availability accessible names ------------------------------------ */
 head('6. Availability glyphs carry a word');
 {
   let bad = 0, total = 0;
-  for (const screen of SCREENS) {
-    await page.evaluate((s) => { window.location.hash = '#' + s; }, screen);
-    await page.waitForTimeout(50);
-    for (const state of await statesOf(page, screen)) {
-      await page.selectOption('#pg-' + screen + ' [data-act="state"]', state);
-      await page.waitForTimeout(30);
-      const r = await page.evaluate((s) => {
-        let bad = 0, total = 0;
-        document.querySelectorAll('#pg-' + s + ' .avail').forEach((el) => {
-          if (el.closest('[hidden]')) return;
-          total++;
-          if (!el.textContent.trim()) bad++;
-        });
-        return { bad, total };
-      }, screen);
-      bad += r.bad; total += r.total;
+  const AVAIL_FLOOR = 165;
+  for (const install of INSTALLS) {
+    await setInstall(page, install);
+    for (const screen of SCREENS) {
+      await page.evaluate((s) => { window.location.hash = '#' + s; }, screen);
+      await page.waitForTimeout(50);
+      for (const state of await statesOf(page, screen)) {
+        await page.selectOption('#pg-' + screen + ' [data-act="state"]', state);
+        await page.waitForTimeout(30);
+        const r = await page.evaluate((s) => {
+          let bad = 0, total = 0;
+          document.querySelectorAll('#pg-' + s + ' .avail').forEach((el) => {
+            if (el.closest('[hidden]')) return;
+            total++;
+            if (!el.textContent.trim()) bad++;
+          });
+          return { bad, total };
+        }, screen);
+        bad += r.bad; total += r.total;
+      }
     }
   }
+  await setInstall(page, 'full');
   if (bad) fail(`${bad} of ${total} .avail elements have an empty accessible name`);
-  else ok(`availability: all ${total} rendered .avail elements carry a word`);
+  else if (floorOk('availability', total, AVAIL_FLOOR, 'rendered .avail element(s)')) {
+    ok(`availability: all ${total} rendered .avail elements carry a word (floor ${AVAIL_FLOOR}, both installs)`);
+  }
 }
 
 /* --- 7. one tab stop per list -------------------------------------------- */
 head('7. One tab stop per list (roving tabindex, or a declared opt-out)');
 {
   let checked = 0, bad = 0;
+  const LIST_FLOOR = 78;
+  for (const install of INSTALLS) {
+  await setInstall(page, install);
   for (const screen of SCREENS) {
     await page.evaluate((s) => { window.location.hash = '#' + s; }, screen);
     await page.waitForTimeout(50);
@@ -812,13 +1050,17 @@ head('7. One tab stop per list (roving tabindex, or a declared opt-out)');
       for (const l of r) {
         checked++;
         if (l.optout) continue;
-        if (l.inner > 0 && !l.roving) { bad++; fail(`roving: ${screen}/${state} "${l.label}" has ${l.inner} focusable descendants, no data-roving and no declared opt-out`); }
-        else if (l.roving && l.zero !== 1) { bad++; fail(`roving: ${screen}/${state} "${l.label}" has ${l.zero} rows at tabindex 0`); }
+        if (l.inner > 0 && !l.roving) { bad++; fail(`roving: ${install}/${screen}/${state} "${l.label}" has ${l.inner} focusable descendants, no data-roving and no declared opt-out`); }
+        else if (l.roving && l.zero !== 1) { bad++; fail(`roving: ${install}/${screen}/${state} "${l.label}" has ${l.zero} rows at tabindex 0`); }
       }
     }
     await page.selectOption('#pg-' + screen + ' [data-act="state"]', states[0]);
   }
-  if (!bad) ok(`roving: every rendered list is one tab stop or declares why not (${checked} list renderings checked)`);
+  }
+  await setInstall(page, 'full');
+  if (!bad && floorOk('roving', checked, LIST_FLOOR, 'list rendering(s)')) {
+    ok(`roving: every rendered list is one tab stop or declares why not (${checked} list renderings checked, floor ${LIST_FLOOR}, both installs)`);
+  }
 }
 
 /* --- 8. containment is live on the row primitive ------------------------- */
@@ -912,6 +1154,101 @@ head('8. content-visibility actually does something on a row');
   }
 }
 
+/* --- 8b. the install switcher actually switches --------------------------- */
+head('8b. The install switcher: two installs, and every screen answers to it');
+/* Without this, every sweep above could run twice over an identical page and
+ * report double the coverage for none. It asserts three separate things:
+ *
+ *   · the switcher is in the SHARED CHROME, so it survives a hash route and
+ *     exists on all five screens rather than on whichever one drew it;
+ *   · `full` is the state the page LOADS in, because the default view has to
+ *     be the six-populated-type stack the design is judged on;
+ *   · switching changes the rendered text of every one of the five screens.
+ *     A screen that does not move is a screen the second sweep did not test.
+ */
+{
+  const sel = await page.$('#install');
+  if (!sel) fail('install: no #install switcher in the shared chrome');
+  else {
+    const opts = await page.$$eval('#install option', (os) => os.map((o) => ({ v: o.value, t: o.textContent.trim() })));
+    const values = opts.map((o) => o.v);
+    if (values.join(',') !== INSTALLS.join(',')) {
+      fail(`install: the switcher offers [${values.join(', ')}], the sweeps run [${INSTALLS.join(', ')}]`);
+    } else {
+      ok(`install: the switcher offers exactly the two installs the sweeps run — ` +
+        opts.map((o) => `${o.v} "${o.t}"`).join(', '));
+    }
+    /* The switcher is not a product control and there is no setting it
+     * corresponds to, so it has to sit INSIDE the mockup notice. Drawn in the
+     * top bar proper it would fabricate a product affordance, which is the one
+     * thing the notice exists to stop the rest of the prototype doing. */
+    const inNotice = await page.$eval('#install', (s) => !!s.closest('.mocknote'));
+    if (!inNotice) fail('install: the switcher sits outside the mockup notice, so it reads as a product control');
+    else ok('install: the switcher sits inside the mockup notice, not in the product chrome');
+
+    /* The milestone has to be in the LABEL, not only in the notice: the label
+     * is what a reader sees while looking at the screen it describes. */
+    const unlabelled = opts.filter((o) => !/v0\.1|milestone/i.test(o.t));
+    if (unlabelled.length) {
+      fail(`install: ${unlabelled.length} option label(s) name a stack without naming a milestone: ` +
+        unlabelled.map((o) => `"${o.t}"`).join(', '));
+    } else {
+      ok('install: both option labels place their stack against a milestone rather than naming it alone');
+    }
+
+    await page.reload();
+    await page.waitForTimeout(200);
+    const loaded = await page.$eval('#install', (s) => s.value);
+    if (loaded !== 'full') fail(`install: the page loads in "${loaded}", but the default view must be the full stack`);
+    else ok('install: the page loads in the full stack, which is the default the design is judged on');
+
+    let moved = 0;
+    for (const screen of SCREENS) {
+      /* Over EVERY state, not only the one the screen loads in. Requests
+       * differs between the two installs inside `nosink` and nowhere else, so
+       * a probe that read the default state alone declared a screen carrying
+       * six install-scoped strings "identical" — which is the false reassurance
+       * this whole check exists to remove. */
+      const read = async (install) => {
+        await setInstall(page, install);
+        await page.evaluate((s) => { window.location.hash = '#' + s; }, screen);
+        await page.waitForTimeout(60);
+        const states = await statesOf(page, screen);
+        let all = '';
+        for (const state of states) {
+          await page.selectOption('#pg-' + screen + ' [data-act="state"]', state);
+          await page.waitForTimeout(25);
+          all += state + '\u0000' + await page.$eval('#pg-' + screen, (m) => m.innerText.replace(/\s+/g, ' ')) + '\u0000';
+        }
+        return all;
+      };
+      const a = await read('full');
+      const b = await read('v01');
+      if (a === b) fail(`install: ${screen} renders identically in both installs across all its states, so the second sweep tested nothing new`);
+      else moved++;
+    }
+    await setInstall(page, 'full');
+    if (moved === SCREENS.length) ok(`install: all ${moved} screens render differently in the two installs`);
+
+    /* The mockup notice is the labelled-mockup exception DESIGN-DIRECTION rule
+     * 13 grants, so it has to stay true of whichever install is selected. */
+    for (const install of INSTALLS) {
+      await setInstall(page, install);
+      /* The long form of the notice, not the whole .mocknote — the switcher
+       * itself lives inside the notice, so reading the container would compare
+       * the option list rather than the sentence. */
+      const notice = await page.$eval('.mocknote__long:not([hidden])', (n) => n.innerText.replace(/\s+/g, ' '));
+      const claimsFull = /every catalogue source/.test(notice);
+      if (install === 'full' ? !claimsFull : claimsFull) {
+        fail(`install: the permanent mockup notice does not describe the ${install} install — "${notice.slice(0, 120)}"`);
+      } else {
+        ok(`install: the mockup notice describes the ${install} install — "${notice.slice(0, 96)}…"`);
+      }
+    }
+    await setInstall(page, 'full');
+  }
+}
+
 /* --- 9. webfont ---------------------------------------------------------- */
 head('9. The webfont actually resolves');
 {
@@ -974,7 +1311,84 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
     return false;
   };
 
+  /* ---------------------------------------------------------------------
+   * The corpus, and the hole that used to be in it.
+   *
+   * This rule read RENDERED TEXT, so it saw only strings that lay out as a
+   * block. Every user-visible string that is not laid out at all was outside
+   * it, and "outside it" meant §13 had never once been enforced on them:
+   *
+   *   · document.title — the browser tab, the bookmark, the history entry.
+   *     Unreachable from a DOM walk by construction, and it was carrying an
+   *     em dash in a nine-word string the whole time.
+   *   · aria-label — the accessible NAME. For an icon-only control it is the
+   *     entire user-visible string, and the one a screen-reader user hears
+   *     instead of the copy this rule was checking.
+   *   · title — the tooltip a mouse user gets.
+   *   · placeholder — visible until the moment the field is typed into.
+   *   · <option> text — an option has no layout box until the menu opens, so
+   *     `display` is never blockish and the walk skipped every one of them.
+   *     This is how the install switcher's own labels sat outside the sweep.
+   *
+   * Each source carries its own floor, because one combined floor would be
+   * satisfied by aria-label alone while document.title silently contributed
+   * nothing — which is precisely the failure that let the title drift.
+   *
+   * The structural exclusions are the SAME ones the rendered walk uses, and
+   * for the same reason: an attribute inside a <td> is data (a release name,
+   * a timestamp), and .statebar is the mockup's own scaffolding. Applying a
+   * different exclusion set to attributes would make the two halves of one
+   * rule disagree about what counts as the product's voice.
+   * ------------------------------------------------------------------- */
+  const ATTRS = ['aria-label', 'title', 'placeholder', 'alt', 'aria-description',
+    'aria-roledescription', 'aria-valuetext', 'aria-placeholder'];
+  /* Floors are per source and set below today's figures, so ordinary editing
+   * never trips one but losing a whole source does. document.title's floor is
+   * 1 because there is exactly one document; it is the smallest floor here and
+   * the one that matters most, since 0 was the status quo. */
+  const CORPUS_FLOORS = {
+    'document.title': 1,
+    'aria-label': 240,   /* 286 today */
+    'title': 60,         /* 74 today, and low BY DESIGN: most title= in these
+                            screens sits inside a <td> -- a release name, a
+                            timestamp -- and is excluded as data, same as the
+                            rendered walk excludes cell text. */
+    'placeholder': 130,  /* 156 today */
+    'option': 1150,      /* 1298 today */
+  };
+  const seenBySource = {};
+  const countSource = (src, n) => { seenBySource[src] = (seenBySource[src] || 0) + n; };
+
   let strings = 0, exempted = 0; const bad = [];
+  const STRING_FLOOR = 2000;
+
+  /* One place the three §13 rules are applied, so the rendered walk and the
+     attribute sweep cannot drift into checking different things. */
+  const checkCopy = (where, t) => {
+    strings++;
+    const low = t.toLowerCase();
+    for (const w of BANNED_WORDS) {
+      if (new RegExp('\\b' + w.replace('-', '[- ]') + '\\b').test(low)) {
+        bad.push(`${where}: banned word "${w}" in "${t.slice(0, 70)}"`);
+      }
+    }
+    if (t.includes('!')) bad.push(`${where}: "!" in "${t.slice(0, 70)}"`);
+    if (t.includes('—') && t.split(/\s+/).length < 15) {
+      if (exempt(t)) exempted++;
+      else bad.push(`${where}: em dash in a string under 15 words — "${t.slice(0, 70)}"`);
+    }
+  };
+
+  /* Read once: it is a property of the document, not of a screen or a state,
+     and reading it inside the loop would multiply one string by 74. */
+  {
+    const t = await page.evaluate(() => document.title.replace(/\s+/g, ' ').trim());
+    countSource('document.title', t ? 1 : 0);
+    if (t) checkCopy('document.title', t);
+  }
+
+  for (const install of INSTALLS) {
+  await setInstall(page, install);
   for (const screen of SCREENS) {
     await page.evaluate((s) => { window.location.hash = '#' + s; }, screen);
     await page.waitForTimeout(50);
@@ -982,6 +1396,40 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
     for (const state of states) {
       await page.selectOption('#pg-' + screen + ' [data-act="state"]', state);
       await page.waitForTimeout(20);
+      /* The invisible-to-layout half of the corpus, gathered under exactly the
+       * structural exclusions the rendered walk uses. `<option>` is collected
+       * from a closed menu on purpose: that is the only state it is ever in
+       * during this sweep, and it is why the walk could not see it. */
+      const attrs = await page.evaluate(({ s, ATTRS }) => {
+        const out = [];
+        const root = document.querySelector('#pg-' + s);
+        const chrome = [root, document.querySelector('.topbar'), document.querySelector('.sidebar')]
+          .filter(Boolean);
+        for (const scope of chrome) {
+          scope.querySelectorAll('*').forEach((el) => {
+            if (el.closest('[hidden]')) return;
+            if (el.closest('td')) return;            /* data, not copy */
+            if (el.closest('.statebar')) return;     /* the mockup's own scaffolding */
+            for (const a of ATTRS) {
+              const v = el.getAttribute(a);
+              if (v == null) continue;
+              const t = v.replace(/\s+/g, ' ').trim();
+              if (t) out.push({ src: a, text: t });
+            }
+            if (el.tagName === 'OPTION' || el.tagName === 'OPTGROUP') {
+              const t = (el.tagName === 'OPTION' ? el.textContent : el.label || '')
+                .replace(/\s+/g, ' ').trim();
+              if (t) out.push({ src: 'option', text: t });
+            }
+          });
+        }
+        return out;
+      }, { s: screen, ATTRS });
+      for (const a of attrs) {
+        countSource(a.src, 1);
+        checkCopy(`${install}/${screen}/${state} [${a.src}]`, a.text);
+      }
+
       const r = await page.evaluate((s) => {
         /* The unit is a STRING, not a text node. A sentence interrupted by an
          * inline <a> or <code> is one string that happens to be three nodes,
@@ -1004,25 +1452,26 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
         });
         return out;
       }, screen);
-      for (const t of r) {
-        strings++;
-        const low = t.toLowerCase();
-        for (const w of BANNED_WORDS) {
-          if (new RegExp('\\b' + w.replace('-', '[- ]') + '\\b').test(low)) bad.push(`${screen}/${state}: banned word "${w}" in "${t.slice(0, 70)}"`);
-        }
-        if (t.includes('!')) bad.push(`${screen}/${state}: "!" in "${t.slice(0, 70)}"`);
-        if (t.includes('—') && t.split(/\s+/).length < 15) {
-          if (exempt(t)) exempted++;
-          else bad.push(`${screen}/${state}: em dash in a string under 15 words — "${t.slice(0, 70)}"`);
-        }
-      }
+      for (const t of r) checkCopy(`${install}/${screen}/${state}`, t);
     }
     await page.selectOption('#pg-' + screen + ' [data-act="state"]', states[0]);
   }
+  }
+  await setInstall(page, 'full');
   const uniq = [...new Set(bad)];
-  if (uniq.length) { fail(`§13 copy: ${uniq.length} violation(s) in rendered chrome text`); uniq.slice(0, 10).forEach((b) => note(b)); }
-  else ok(`§13 copy: ${strings} rendered chrome strings clean of banned words, "!" and short-string em dashes ` +
-    `(${exempted} short em-dash string(s) exempt because ARCHITECTURE §17 fixes their wording verbatim)`);
+  if (uniq.length) { fail(`§13 copy: ${uniq.length} violation(s) in user-visible text`); uniq.slice(0, 10).forEach((b) => note(b)); }
+  else if (floorOk('§13 copy', strings, STRING_FLOOR, 'user-visible string(s)')) {
+    ok(`§13 copy: ${strings} user-visible strings clean of banned words, "!" and short-string em dashes ` +
+      `(floor ${STRING_FLOOR} over both installs; ${exempted} short em-dash string(s) exempt because ARCHITECTURE §17 fixes their wording verbatim)`);
+  }
+  /* Each non-layout source is floored on its own. A source that stops being
+   * collected -- an attribute renamed, a selector narrowed, a <title> dropped
+   * by the generator -- fails here instead of quietly contributing nothing. */
+  for (const [src, floor] of Object.entries(CORPUS_FLOORS)) {
+    if (floorOk(`§13 copy corpus ${src}`, seenBySource[src] || 0, floor, 'string(s) read')) {
+      ok(`§13 copy corpus: ${seenBySource[src]} ${src} string(s) read (floor ${floor}), a source the rendered walk cannot see`);
+    }
+  }
 }
 
 await browser.close();

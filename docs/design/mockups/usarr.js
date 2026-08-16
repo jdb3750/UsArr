@@ -59,6 +59,57 @@
     });
   }
 
+  /* ---- the install switcher (a mockup affordance, labelled as one) ------
+     These screens are drawn over two different installs, because a design
+     that is only ever drawn over one cannot be judged on the thing UsArr
+     claims -- that every feature degrades honestly when a service is absent.
+
+       full  Sonarr, Radarr, Prowlarr, Navidrome, Audiobookshelf and Kavita.
+             All six media types have a catalogue source. This is the DEFAULT,
+             because six populated types is what the layout has to survive.
+       v01   Sonarr, Radarr and Prowlarr, which is every service v0.1
+             connects. Movies and TV have a source; music, audiobooks, ebooks
+             and comics do not, and each says which service will populate it.
+
+     The v0.1 numbers are DERIVED from the full-stack ones by removing what
+     the absent services contributed -- they are not a second invented data
+     set, so the two installs reconcile against each other row by row.
+
+     `full` is deliberately NOT persisted. The default view has to be the full
+     stack on every load, and a switcher that remembers "v0.1" from a previous
+     visit would show a reviewer a different screen from the one being
+     discussed.
+
+     The visibility rule is one line, and the invariant it rests on is that
+     `data-inst` and `data-when` NEVER appear on the same element: `applyState`
+     owns `hidden` on the first, this owns it on the second, and an element
+     carrying both would have two writers and one attribute. They compose by
+     nesting instead, which is what check.mjs asserts. */
+  var install = 'full';
+  var repaintScope = null;
+
+  function paintInstall() {
+    var els = document.querySelectorAll('[data-inst]');
+    for (var i = 0; i < els.length; i++) {
+      els[i].hidden = els[i].getAttribute('data-inst').split(/\s+/).indexOf(install) === -1;
+    }
+    root.setAttribute('data-install', install);
+    /* The scope chip's library list is install-scoped, so its total, its
+       label and the ?lib= string all move with the switch. */
+    if (repaintScope) repaintScope();
+    /* A list this just revealed needs its tab stop assigned. */
+    if (typeof refreshRoving === 'function') refreshRoving();
+  }
+
+  var installSel = document.querySelector('[data-act="install"]');
+  if (installSel) {
+    installSel.value = install;
+    installSel.addEventListener('change', function () {
+      install = installSel.value;
+      paintInstall();
+    });
+  }
+
   /* ---- sidebar -------------------------------------------------------- */
   var app = document.querySelector('.app');
   var sideBtn = document.querySelector('[data-act="sidebar"]');
@@ -184,20 +235,40 @@
     var topScope = document.querySelector('[data-slot="topscope"]');
     var scopeLive = document.querySelector('[data-slot="scope-live"]');
 
+    /* The library list is install-scoped: the v0.1 install has two libraries,
+       not eight, because the six the media servers supply do not exist on it.
+       Every count the chip states is therefore computed over the boxes this
+       install actually has, never over the markup's total -- otherwise the
+       chip would read "All libraries (8)" over an install with two. */
+    /* The test is [data-inst][hidden] and not a bare [hidden], because the
+       popover these boxes live in is itself [hidden] whenever it is closed --
+       which is nearly always. A bare test read every library as absent on load
+       and put the whole mockup into the scope-empty state before a user had
+       touched anything. */
+    function activeBoxes() {
+      var out = [];
+      for (var i = 0; i < libBoxes.length; i++) {
+        if (libBoxes[i].closest('[data-inst][hidden]')) continue;
+        out.push(libBoxes[i]);
+      }
+      return out;
+    }
+
     function paintScope() {
-      var total = libBoxes.length;
+      var boxes = activeBoxes();
+      var total = boxes.length;
       var on = 0;
       var slugs = [];
       var names = [];
-      for (var i = 0; i < libBoxes.length; i++) {
-        if (!libBoxes[i].checked) continue;
+      for (var i = 0; i < boxes.length; i++) {
+        if (!boxes[i].checked) continue;
         on++;
         /* The slug is stored on the library, never derived from the rendered
            label: the name is user-editable and the URL is durable state, so
            slugifying the label would change a permalink when a library is
            renamed. */
-        slugs.push(libBoxes[i].getAttribute('data-slug'));
-        names.push(libBoxes[i].parentNode.textContent.trim());
+        slugs.push(boxes[i].getAttribute('data-slug'));
+        names.push(boxes[i].parentNode.textContent.trim());
       }
       allBox.checked = on === total;
       allBox.indeterminate = on > 0 && on < total;
@@ -248,9 +319,12 @@
     scopeBtn.addEventListener('click', function () {
       openScope(scopePop.hidden);
     });
+    repaintScope = paintScope;
+
     scopePop.addEventListener('change', function (ev) {
       if (ev.target === allBox) {
-        for (var i = 0; i < libBoxes.length; i++) libBoxes[i].checked = allBox.checked;
+        var boxes = activeBoxes();
+        for (var i = 0; i < boxes.length; i++) boxes[i].checked = allBox.checked;
       }
       paintScope();
     });
@@ -260,7 +334,8 @@
       var act = ev.target.closest('[data-scope-act]');
       if (!act) return;
       var want = act.getAttribute('data-scope-act') === 'all';
-      for (var i = 0; i < libBoxes.length; i++) libBoxes[i].checked = want;
+      var boxes = activeBoxes();
+      for (var i = 0; i < boxes.length; i++) boxes[i].checked = want;
       paintScope();
     });
     /* Below 900px the sidebar is display:none, so the chip in it is not a
@@ -713,21 +788,52 @@
      client, Radarr never requested that release and has no record of it. The
      failure is silent and cumulative, so the sentence names what will pick the
      file up and what will not, for every type, and the type is a property of
-     the table the row is in. */
+     the table the row is in.
+
+     These strings are ALSO install-scoped, and they are the same strings the
+     "Post-grab behaviour by media type" table renders, verbatim. Two reasons
+     they cannot be one install-blind map:
+
+       · it named Komga for comics, which ADR-0035 replaced with Kavita. The
+         table was updated and this was not, so the same screen stated two
+         different comics servers depending on whether you read a row or
+         grabbed one.
+       · every sentence here names a service. On the v0.1 install Navidrome,
+         Audiobookshelf and Kavita are not connected, so "Audiobookshelf
+         watches /media/books and will show it once the file is there" is this
+         mockup asserting a service the selected install does not have -- the
+         precise failure the two-install switcher exists to expose.
+
+     `both` is not laziness: Radarr and Sonarr are connected on either install,
+     so those two sentences genuinely do not move, and writing them twice would
+     invite them to drift apart. */
   var SINK_NOTE = {
-    movie: 'UsArr does not import downloads. Radarr did not request this release, so Radarr will not import it either — the file stays in your download client until you move it into /media/movies yourself.',
-    series: 'UsArr does not import downloads. Sonarr did not request this release, so Sonarr will not import it either — the file stays in your download client until you move it into /media/tv yourself.',
-    music: 'UsArr does not import downloads, and no connected service accepts a music request. Navidrome shows what is already inside the folder it scans, so the file stays in your download client until you move it there.',
-    audiobook: 'UsArr does not import downloads. Audiobookshelf watches /media/books and will show it once the file is there.',
-    ebook: 'UsArr does not import downloads, and Readarr — the *Arr that used to own books — was archived on 27 June 2025. Audiobookshelf watches /media/books and will show it once the file is there.',
-    comic: 'UsArr does not import downloads, and no connected service accepts a comic request. Komga shows what is already inside the folder it scans, so the file stays in your download client until you move it there.'
+    movie: { both: 'UsArr does not import downloads. Radarr did not request this release, so Radarr will not import it either — the file stays in your download client until you move it into /media/movies yourself.' },
+    series: { both: 'UsArr does not import downloads. Sonarr did not request this release, so Sonarr will not import it either — the file stays in your download client until you move it into /media/tv yourself.' },
+    music: {
+      full: 'UsArr does not import downloads, and no connected service accepts a music request. Navidrome shows what is already inside the folder it scans, so the file stays in your download client until you move it there.',
+      v01: 'UsArr does not import downloads, and no connected service accepts a music request. A music server would show the file once it were inside the folder it scans; this install has none yet, so the file stays in your download client.'
+    },
+    audiobook: {
+      full: 'UsArr does not import downloads. Audiobookshelf watches /media/books and will show it once the file is there.',
+      v01: 'UsArr does not import downloads, and no connected service catalogues audiobooks. Audiobookshelf would show the file once it were inside the folder it watches; connecting it is what makes that true.'
+    },
+    ebook: {
+      full: 'UsArr does not import downloads, and Readarr — the *Arr that used to own books — was archived on 27 Jun 2025. Audiobookshelf watches /media/books and will show it once the file is there.',
+      v01: 'UsArr does not import downloads, and Readarr — the *Arr that used to own books — was archived on 27 Jun 2025. No connected service catalogues ebooks either, so the file stays in your download client and no library row appears for it.'
+    },
+    comic: {
+      full: 'UsArr does not import downloads, and no connected service accepts a comic request. Kavita shows what is already inside the folder it scans, so the file stays in your download client until you move it there.',
+      v01: 'UsArr does not import downloads, and no connected service accepts a comic request. A comics server would show the file once it were inside the folder it scans; this install has none yet, so the file stays in your download client.'
+    }
   };
 
   function grabbedNote(row) {
     var table = row.closest('table');
     var type = (row.getAttribute('data-media') ||
       (table && table.getAttribute('data-media')) || '').trim();
-    return SINK_NOTE[type] || SINK_NOTE.movie;
+    var entry = SINK_NOTE[type] || SINK_NOTE.movie;
+    return entry.both || entry[install];
   }
 
   /* Every message about a grab names the release. Two identical toasts after a
@@ -1007,17 +1113,24 @@
   }
 
   /* ---- the library detail form declares its save model ------------------ */
+  /* Both installs draw this screen, over different libraries, so there are two
+     of every one of these elements in the document and exactly one of each is
+     rendered. Every lookup below is therefore per-bar rather than a single
+     document.querySelector, which used to bind the whole save model to
+     whichever copy happened to come first in source order. */
   var editForms = document.querySelectorAll('[data-act="editform"]');
+  var saveBars = document.querySelectorAll('[data-slot="savebar"]');
   if (editForms.length) {
     var dirty = {};
-    var bar = document.querySelector('[data-slot="savebar"]');
     var paintSave = function () {
       var n = Object.keys(dirty).length;
-      if (!bar) return;
-      bar.querySelector('[data-slot="dirty"]').textContent =
-        n === 0 ? 'No unsaved changes' : (n === 1 ? '1 unsaved change' : n + ' unsaved changes');
-      bar.querySelector('[data-act="save-lib"]').disabled = n === 0;
-      bar.querySelector('[data-act="discard-lib"]').disabled = n === 0;
+      for (var b = 0; b < saveBars.length; b++) {
+        var bar = saveBars[b];
+        bar.querySelector('[data-slot="dirty"]').textContent =
+          n === 0 ? 'No unsaved changes' : (n === 1 ? '1 unsaved change' : n + ' unsaved changes');
+        bar.querySelector('[data-act="save-lib"]').disabled = n === 0;
+        bar.querySelector('[data-act="discard-lib"]').disabled = n === 0;
+      }
     };
     var mark = function (ev) {
       var t = ev.target;
@@ -1027,9 +1140,10 @@
       /* Changing the kind re-derives membership for every work in the library
          from what the services report. A bare <select> changes value on one
          arrow keypress with no menu open, so the consequence is stated the
-         moment it is chosen rather than after Save. */
+         moment it is chosen rather than after Save. The warning is the one
+         belonging to THIS field, not the first in the document. */
       if (t.getAttribute('data-act') === 'kind') {
-        var warn = document.querySelector('[data-slot="kind-warn"]');
+        var warn = t.parentNode.querySelector('[data-slot="kind-warn"]');
         if (warn) warn.hidden = false;
       }
     };
@@ -1037,13 +1151,13 @@
       editForms[e].addEventListener('input', mark);
       editForms[e].addEventListener('change', mark);
     }
-    if (bar) {
-      bar.addEventListener('click', function (ev) {
+    for (var sb = 0; sb < saveBars.length; sb++) {
+      saveBars[sb].addEventListener('click', function (ev) {
         if (!ev.target.closest('[data-act="discard-lib"]')) return;
         dirty = {};
         paintSave();
-        var warn = document.querySelector('[data-slot="kind-warn"]');
-        if (warn) warn.hidden = true;
+        var warns = document.querySelectorAll('[data-slot="kind-warn"]');
+        for (var w = 0; w < warns.length; w++) warns[w].hidden = true;
         announce('Changes discarded.');
       });
     }
@@ -1056,9 +1170,15 @@
      to produce two identically named rows, both ticked, with the banner and
      both buttons still counting four. Match is case- and whitespace-
      insensitive, and that is stated on the row. */
-  var propTable = document.querySelector('[data-act="proposals"]');
-  if (propTable) {
+  var propTables = document.querySelectorAll('[data-act="proposals"]');
+  for (var pt = 0; pt < propTables.length; pt++) (function (propTable) {
     var names = propTable.querySelectorAll('[data-act="propname"]');
+    /* The buttons, the running count and the declined tally all belong to THIS
+       proposal table. Each install proposes a different set over a different
+       pair of services, so a document-wide lookup would have one install's
+       banner counting the other install's rows. */
+    var block = propTable.closest('[data-inst]') || document;
+    var declined = propTable.querySelectorAll('tbody .st--none').length;
     var repaintProposals = function () {
       var seen = {}, merged = 0, kept = 0;
       for (var i = 0; i < names.length; i++) {
@@ -1076,18 +1196,25 @@
         }
       }
       var label = kept === 1 ? 'Accept 1 proposal' : 'Accept ' + kept + ' proposals';
-      var btns = document.querySelectorAll('[data-act="accept-props"]');
+      var btns = block.querySelectorAll('[data-act="accept-props"]');
       for (var b = 0; b < btns.length; b++) btns[b].textContent = label;
-      var count = document.querySelector('[data-slot="propcount"]');
+      var count = block.querySelector('[data-slot="propcount"]');
       if (count) {
+        var tail = declined === 1
+          ? ' and declines 1 thing it cannot model.'
+          : ' and declines ' + declined + ' things it cannot model.';
         count.textContent = merged
           ? 'UsArr proposes ' + kept + ' libraries, joins ' + merged + ' container' +
-            (merged === 1 ? '' : 's') + ' into one of them, and declines 1 thing it cannot model.'
-          : 'UsArr proposes ' + kept + ' libraries and declines 1 thing it cannot model.';
+            (merged === 1 ? '' : 's') + ' into one of them,' + tail
+          : 'UsArr proposes ' + kept + ' libraries' + tail;
       }
     };
     propTable.addEventListener('input', repaintProposals);
     propTable.addEventListener('change', repaintProposals);
     repaintProposals();
-  }
+  })(propTables[pt]);
+
+  /* Last, because it repaints the scope chip and re-assigns every list's tab
+     stop, and both of those have to exist before it runs. */
+  paintInstall();
 })();

@@ -1,9 +1,9 @@
-# UsArr v0.1 screen mockups
+# UsArr screen mockups
 
-A static, clickable HTML prototype of the five screens this design has to carry in v0.1:
-**home, services, libraries, search, requests**.
+A static, clickable HTML prototype of the five screens this design has to carry:
+**home, services, libraries, search, requests** — drawn over **two installs**, switchable.
 
-**This is a mockup, not the application.** Every page now says so itself, permanently, in the top
+**This is a mockup, not the application.** Every page says so itself, permanently, in the top
 bar: `mockup — Static design mockup of UsArr, which is pre-alpha software: none of these screens
 is implemented and every value on them is invented.` That notice is not dismissible, it is in
 the shared chrome rather than on one page, and it therefore survives into `prototype.html`, which is
@@ -19,6 +19,155 @@ narrator, issue number, seeder count, timestamp and error string on these pages 
 sample data chosen to look like the real thing so the layout can be judged, and none of it should
 be read as evidence that anything is implemented. There are no benchmark numbers anywhere,
 deliberately: this prototype cannot make a claim about speed.
+
+## Two installs, one switcher, and why the label carries a milestone
+
+**The switcher is the first control in the top bar, inside the mockup notice.** It has two
+positions, and every screen, count, caption and service row answers to it.
+
+| | **Full stack** — the default | **v0.1** |
+|---|---|---|
+| Services | Sonarr, Sonarr Anime, Radarr, Radarr 4K *(named, never connected)*, Prowlarr, Navidrome, Audiobookshelf, **Kavita** | Sonarr, Sonarr Anime, Radarr, Radarr 4K, Prowlarr |
+| Service rows | 8 | 5 |
+| Libraries | 8 | 2 |
+| Scope chip | `All libraries (8)` | `All libraries (2)` |
+| Media types in the sidebar | 6 | 2 |
+| Home Block A | 6 rows, all counted | 6 rows: 2 counted, 4 with no catalogue source |
+| Home Block B | 4 items | 3 items |
+| Home Block C | 26 rows across 6 types | 8 rows across 2 types |
+| Search `dune` | 31 results in 6 groups | 5 results in 2 groups |
+
+**The full stack is the default, and that is a deliberate choice about what is being judged.** Six
+populated media types is the case the layout has to survive — the unified recently-added table, the
+six-group search, the 40-row budget divided six ways, the sidebar row budget. A design reviewed only
+over two types has not been reviewed.
+
+**Which is exactly why the label has to carry a milestone.** A reader who lands on six populated
+types and is told only that the data is invented has been told the *numbers* are made up and left to
+assume the *stack* is what v0.1 ships. That is `CLAUDE.md`'s "no invented status" rule broken by
+omission rather than by assertion, and it is the failure this switcher would otherwise introduce. So
+the option labels are:
+
+```
+Full stack: a later milestone
+v0.1: Sonarr, Radarr, Prowlarr
+```
+
+The separator is a colon and not an em dash, and that is not a style preference. Both labels are
+short strings, §13 bans U+2014 in a string under fifteen words, and `<option>` text has no layout
+box until the menu opens — so the rendered-text sweep in `check.mjs` §1b walked straight past them
+for as long as they existed. They were caught the moment that sweep's corpus was widened (below),
+and rewriting them was the right fix rather than exempting them: nothing about the milestone
+labelling needs an em dash to survive.
+
+**"A later milestone" rather than "v0.2" is the point.** ARCHITECTURE §16 is authoritative for
+milestones and, per [ADR-0035](../../DECISIONS.md#adr-0035)'s amendment, **v0.1 ships no catalogue
+source at all**: Navidrome, Audiobookshelf and Kavita arrive **one at a time, after it**, in an order
+that ADR-0035 §2's watermark spike has not yet decided. So the full stack is not v0.2 — it is the
+state after *all three* have landed, and naming a release here would invent the very status the
+label exists to prevent. `Full stack — a later milestone` is the strongest statement that is true
+today and stays true whatever §16 fixes.
+
+Three more things follow from the same rule, and `check.mjs` §8b asserts all of them:
+
+- **The switcher lives *inside* the mockup notice**, not beside it in the product chrome. It is not
+  a UsArr control and there is no setting it corresponds to; drawing it in the top bar proper would
+  fabricate a product affordance. Inside the label it reads as part of the label.
+- **The notice itself changes with the selection** — *"Drawn over an install with every catalogue
+  source connected, which is later than v0.1"* against *"Drawn over the three services v0.1
+  connects"* — so the labelled-mockup exception in `DESIGN-DIRECTION.md` §9.6 stays true of whichever
+  install is on screen, not of one of them.
+- **The page loads in `full` and the switcher is not persisted.** A control that remembered `v0.1`
+  from a previous visit would show a reviewer a different screen from the one being discussed.
+
+### The v0.1 numbers are derived, not invented a second time
+
+Every v0.1 figure is the full stack's own figure with the absent services' contribution removed.
+That is what makes the two installs reconcile against each other rather than merely each being
+internally plausible, and it is what a reviewer checks first:
+
+- **Comics 553** = Kavita `Comics` 512 + Kavita `Manga` 0 + orphaned `Ongoing comics` 41.
+- **Audiobookshelf 2,260 items** = Audiobooks 418 + Ebooks 1,842, one upstream library split by
+  edition format into two UsArr libraries.
+- **TV 275** = Sonarr 214 + Sonarr Anime 61 — which is also what the v0.1 proposal flow's
+  rename-to-merge demonstration produces, so the Libraries screen's two states agree with each
+  other and with the sidebar.
+- **Comics issues 7,891** = Kavita 7,204 + Ongoing comics 687.
+- **Home Block B falls 4 → 3** because the Kavita identifier warning is the one attention item
+  belonging to a service v0.1 does not have — which then makes it equal Services' own System-status
+  count of 3, as it should, since the other three are service-health items and that one is not.
+- **Search falls 31 → 5**, and this is the one figure naive subtraction gets wrong. `Dune` is one
+  linked work across the 1965 novel, its M4B and the 2021 film, and §17.4 rule 4 renders it **once**,
+  in the group of its best-scoring medium. On the full stack that is Ebooks, and the Movies group
+  carries a one-line pointer at it (`1 more film is on a linked row in the Ebooks group`). Delete the
+  Ebooks group and the row does **not** vanish — the same work's best *available* medium becomes the
+  film, so it moves into Movies. Subtracting the four absent groups gives 4; the correct answer is
+  **5**: Movies 4, TV 1. The chips, the group header count, the scoped state's excluded total and the
+  posters grid all follow it.
+- **The per-group cap moves with the group count.** §17.4's budget is `clamp(floor(40/g), 3, 10)`, so
+  six groups get six rows each and two groups get ten. Nothing is truncated on the v0.1 install and
+  there is no `Show all N` row on it at all — the two `Show all` rows on the full stack are a
+  consequence of splitting one budget six ways, which is worth being able to see both halves of.
+
+### What each install is *for*
+
+They are not the same drawing twice. Each reaches states the other cannot:
+
+- **Only the full stack** can show six populated types on one screen, a group set large enough to
+  truncate, an Audiobookshelf library split by edition format into two UsArr libraries, a source
+  reporting zero items while healthy, an orphaned library whose service was removed, and
+  `matched by title` — which §17.3 marks as unreachable in v0.1, because Radarr and Sonarr carry TMDB
+  and TVDB ids.
+- **Only the v0.1 install** can show a media type that exists with no catalogue source behind it, a
+  scope chip at the two-library minimum Navidrome's `LibrarySelector` renders at all, a library over
+  two instances of one service with one of them degraded, a metadata-authority radio that is a real
+  choice rather than a cell reading *"the only source"*, and an identity panel where **nothing** is
+  matched by title.
+
+### The mechanism, for anyone editing these files
+
+`data-inst="full"` or `data-inst="v01"` on an element; `paintInstall()` in `usarr.js` sets `hidden`
+on everything that does not match. An element with no `data-inst` renders in both.
+
+**The one invariant: `data-when` and `data-inst` never appear on the same element.** `applyState`
+owns `hidden` on the first and `paintInstall` owns it on the second, and an element carrying both has
+two writers and one attribute — whose symptom is not a crash but a block quietly reappearing in a
+state it does not belong to, which a reader of a mockup cannot tell from a design decision. They
+compose by **nesting** instead, which costs one wrapper. `check.mjs` §1c asserts it, and also asserts
+that every `data-inst` value names an install the switcher actually offers, so a typo is dead markup
+that fails rather than dead markup nobody sees.
+
+Where a whole table differs, there are **two tables**, not one table with rows switched off: a table
+whose row set changes needs its own `aria-rowindex` run and its own `aria-rowcount`, and rows hidden
+out of the middle of one leave gaps in both. Derived copies carry a `-v01` id suffix so the expander
+a row opens is its own.
+
+## Kavita, not Komga
+
+[ADR-0035](../../DECISIONS.md#adr-0035) replaced Komga with Kavita as the comics-and-books catalogue
+source, because Kavita is the install the owner actually runs. The mockups drew Komga; they now draw
+Kavita, and the **reason** copy changed with the name rather than only the label:
+
+- *"Komga's API exposes no external identifier of any kind"* → **"`aniListId`, `malId` and
+  `comicVineId` are null on every series: those fields are a Kavita+ feature and this instance has
+  not supplied them."** Per ADR-0035 §1 this is the **ordinary** case on a free Kavita, not an edge
+  case, so it is drawn as a plain row on the health table and a plain badge on a search row. It must
+  never read as a defect in UsArr and never as nagware: the copy says what is missing and why, and
+  stops.
+- The delta-strategy note no longer says *"whether Komga accepts `sort=lastModified,desc` could not
+  be verified"*. Verified against Kavita `main` (ADR-0035 §2): `SortField.LastModifiedDate` exists but
+  **`SeriesDto` carries no such property**, so Kavita can sort by a field it does not return and there
+  is no watermark to resume a page walk from. The probe named on the row is the real one —
+  `POST /api/Series/all-v2` ordered by `LastChapterAdded`.
+- **Komga is now the annex row**, marked `after Kavita`, and it rests on Komga's own sourced
+  behaviour: no library type, no comic/manga distinction beyond `ReadingDirection`, and no external
+  identifier of any kind — which is why free Kavita loses nothing against it. Only paid Kavita beats
+  either.
+
+⚠️ The withdrawn `LibraryType 3 (Image)` claim is gone from here too. Re-checked against Kavita
+`main`, `LibraryType.cs` declares exactly `Manga=0`, `Comic=1`, `Book=2` and no `Image` member. It
+had been removed from `ARCHITECTURE.md` and `DESIGN-DIRECTION.md` in an earlier pass and missed here.
+
 
 ## Files
 
@@ -46,6 +195,81 @@ list, and the containment assertion. Run it from the repo root:
 ```
 PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node docs/design/check.mjs
 ```
+
+**Every rendered sweep now runs over both installs**, which roughly doubles the screen×state corpus,
+and **every floor in the file was restated against the doubled figure** rather than left at a number
+the new reality satisfies without trying. A floor that cannot fail is the silent pass those floors
+exist to convert into a failure.
+
+### How Playwright is found, and the two ways it fails
+
+The ladder asks for **both `playwright` and `playwright-core`**, at every location it probes.
+`web/package.json` pins `playwright-core`, not `playwright`; a ladder that only ever asked for the
+bare name walked straight past the pin, so the pin was **decorative** and the check silently ran on
+whatever the machine happened to have installed globally — the exact opposite of what pinning is
+for. `playwright-core` is the right dependency for this file: it exports the same `chromium` and
+omits the test runner and the browser downloader nothing here uses.
+
+The two failure modes have nothing in common but the word *playwright*, and one message covering
+both sent people to the expensive fix for the cheap problem. They are now two branches:
+
+| | Module missing | Browser absent or mismatched |
+|---|---|---|
+| Detected | `await import()` inside try/catch — a **static** `import` is hoisted and throws `ERR_MODULE_NOT_FOUND` before any handler in the file exists, so the user gets a raw stack | thrown from `chromium.launch()`, matched on `/Executable doesn't exist at/` |
+| Says | this is the module, nothing was launched | this is the browser, the import succeeded |
+| Advises | `pnpm -C web install` | **check the module version against the cache first** |
+
+The second message names a **version mismatch** as the likely cause *before* it mentions any
+download, and that ordering is the whole point. Each Playwright release pins one browser revision,
+so a cache filled by a different release satisfies none of it — the cache can be full of Chromium
+and still be the wrong Chromium. `npx playwright install` does make the symptom go away, by fetching
+a *second* browser build alongside the one already there, and in doing so buries the skew that
+caused it so the next upgrade fails identically. It is mentioned last, with that caveat attached.
+
+Both branches were exercised deliberately rather than reasoned about — the module moved aside for
+the first, `PLAYWRIGHT_BROWSERS_PATH` pointed at a cache holding a deliberately wrong revision for
+the second — and each prints its own message and exits non-zero.
+
+**Check 0 asserts that `chromium.launch()` resolves the `chromium_headless_shell` build**, not the
+full browser. `chromium.executablePath()` cannot answer this: it reports
+`chromium-<rev>/chrome-linux/chrome` no matter what, while the process that actually starts is
+`chromium_headless_shell-<rev>/chrome-linux/headless_shell`. The only honest way to know is to watch
+the spawn, so the check patches the `child_process` module object around the launch and reads back
+the binary. The distinction is not cosmetic — the shell has no window, no compositor surface and no
+GPU path, and it is the renderer every measurement in the file assumes.
+
+### What the copy check can and cannot see
+
+`check.mjs` §1b enforces §13's copy rules — banned words, `!`, and U+2014 in a string under fifteen
+words. It read **rendered chrome text**, which meant it only ever saw strings that lay out as a
+block, and every user-visible string that is not laid out at all was outside it. Outside it meant
+those rules had **never once been enforced** on:
+
+| Source | Why the walk could not see it | Floor |
+|---|---|---|
+| `document.title` | not in the DOM at all; it is the tab, the bookmark and the history entry | 1 |
+| `aria-label` | for an icon-only control it *is* the whole user-visible string | 240 |
+| `title` | the tooltip a mouse user gets | 60 |
+| `placeholder` | visible until the moment the field is typed into | 130 |
+| `<option>` text | an option has no layout box until the menu opens, so `display` is never blockish | 1150 |
+
+Each source carries **its own floor**, because one combined floor would be satisfied by `aria-label`
+alone while `document.title` silently contributed nothing — which is precisely how the title was
+free to drift. The structural exclusions are the same ones the rendered walk uses: an attribute
+inside a `<td>` is data (a release name, a timestamp), and `.statebar` is the mockup's own
+scaffolding. `title`'s floor is low **by design** for that reason — most `title=` in these screens
+sits in a cell and is excluded as data.
+
+**Widening it caught three things immediately, all of them in text nobody had been able to lint:**
+
+1. `prototype.html`'s `<title>` read *"UsArr v0.1 screen mockup — static, invented data, nothing
+   implemented"* — an em dash in a nine-word string, **and** a v0.1 claim over a page whose default
+   view is the full stack, which §16 sequences *after* v0.1. It had been the browser tab, the
+   bookmark and the history entry for every reader of the published file. It is now
+   *"UsArr screen mockups: static, invented data, nothing implemented"*; the milestone belongs to
+   the install switcher, which can state it truthfully per install, and a fixed title cannot.
+2. and 3. Both install-switcher `<option>` labels carried an em dash in a short string, and are now
+   colon-separated. Rewriting beat exempting: nothing about milestone labelling needs an em dash.
 
 ## The typeface actually ships now
 
@@ -229,23 +453,30 @@ compressing type below the legibility floor.
 
 ## Measured: row heights
 
-Chromium, 1440×900, compact density, over every state of every screen. The band is the design's
-own: a compact row is 28px, and the ceiling is 48px of content, which is two lines of body text
-plus the row padding.
+Chromium, 1440×900, compact density, over every state of every screen **and both installs**. The
+band is the design's own: a compact row is 28px, and the ceiling is 48px of content, which is two
+lines of body text plus the row padding.
 
-| Screen | rows measured | min | median | max | was |
-| --- | --- | --- | --- | --- | --- |
-| Home | 140 | 28 | 28 | 45 | 28–46 |
-| **Services** | 32 | **45** | **48** | **48** | **103–119** |
-| **Libraries** | 18 | **33** | **46** | **49** | **80–160** |
-| Search | 59 | 28 | 28 | 78 | 28–78 |
-| Requests | 85 | 28 | 47 | 79 | 33–68 |
+| Screen | rows measured | min | median | max | one install | before the row-height work |
+| --- | --- | --- | --- | --- | --- | --- |
+| Home | 205 | 28 | 28 | 48 | 140 | 28–46 |
+| **Services** | 65 | **45** | **48** | **48** | 32 | **103–119** |
+| **Libraries** | 29 | **28** | **45** | **48** | 18 | **80–160** |
+| Search | 76 | 28 | 28 | 78 | 59 | 28–78 |
+| Requests | 170 | 28 | 47 | 79 | 85 | 33–68 |
 
 `../check.mjs` holds Services and Libraries to 49px (48 of content plus the 1px row rule) and the
 other three to a looser ceiling: their tallest rows are a track listing and a release row carrying
 a two-line post-grab sentence, which is content doing work rather than prose that escaped into a
 cell. The Services **annex** is excluded by name — it is explicitly labelled as documentation for
-services v0.1 does not have, and its rows are essays by design.
+services neither install has, and its rows are essays by design.
+
+**Both new row shapes hit the ceiling and were cut back rather than exempted**, which is the band
+doing its job. Home Block A's four sourceless rows on the v0.1 install ran to 80px — three lines in a
+half-width column — until the cause line was compressed to `Navidrome · after v0.1 · Add`, which says
+no less than the sentence it replaced. The v0.1 Libraries edit screen's two catalogue-source rows ran
+to 61px, because the metadata-authority radio had grown a per-row explanation of what the radio does;
+the explanation is a property of the control, not of the row, so it is stated once under the table.
 
 What actually changed, on both screens: every explanation moved into the row expander that already
 existed and was barely used; the `Problem` column carries one line plus **Show detail**, which
@@ -326,8 +557,8 @@ Drawn in three states:
   `podcast` and the ebook/audiobook difference is a per-item field. That is the clearest case of
   UsArr's organisation being better than the service's own, and it is why the concept earns its
   place.
-- **The auto-proposal.** Connecting Audiobookshelf and Komga proposes four libraries behind one
-  Accept, all pre-selected and editable in place. Komga's second upstream library answers with **0
+- **The auto-proposal.** On the full stack, connecting Audiobookshelf and Kavita proposes four libraries behind one
+  Accept, all pre-selected and editable in place. Kavita's second upstream library answers with **0
   series** and is proposed anyway, because "the source reports nothing" is not the same fact as
   "we have not read the source yet" and conflating them is how a user concludes the import is
   broken. Renaming it to `Comics` is what makes it **join** the existing library as a second source
@@ -361,7 +592,7 @@ UsArr, is keyed to UsArr's identity, and is never cleared by a sync or a tombsto
 LazyLibrarian re-adding books you marked ignored, because a rescan returned them with one piece of
 metadata different, is what happens when corrections are keyed to the upstream's id.
 
-An **orphaned library** — Ongoing comics, whose only source was a Komga instance that was removed —
+An **orphaned library** — Ongoing comics, whose only source was a Kavita instance that was removed —
 is retained with its reason, still browsable, still in the scope chip, with Delete offered and
 never taken automatically. A library carries a name you chose, corrections and tags; deleting owned
 data to tidy up replicated data is the wrong trade.
@@ -374,13 +605,13 @@ reachable from a states switcher:
 | State | Where | Why it is drawn |
 | --- | --- | --- |
 | A comics series with a **gap list**, not a fraction | Search, comics group | Issue totals are declarations, and the ComicInfo spec concedes "the `Count` could be different on each book in a series". `11 · #7 missing` is computed from numbers UsArr already holds and is always true. Home's type summary says `7,891 issues · 34 with gaps` for the same reason. |
-| A work with **no work-level identity** | Search, ebooks and comics groups | Komga's API exposes no external identifier of any kind, so a Komga series is matched by title and says so; an ebook added from a file with no ISBN is in the same position. |
+| A work with **no work-level identity** | Search, ebooks and comics groups | Kavita returns null identifier fields without Kavita+, so a series with no identifier is matched by title and says so; an ebook added from a file with no ISBN is in the same position. |
 | **All sources down, fully browsable** | Libraries, Movies row | Radarr is Movies' only source and its breaker is open. Every one of the 1,204 rows still renders, sorts and searches, because nothing on a render path talks to Radarr. §17.8 calls this the replica principle's demonstration; it had never been drawn. |
-| **Sources healthy, zero items** | Libraries, Manga row | Komga answers and reports 0 series. §17.8 contrasts this explicitly with "not synced yet", and the copy says which one it is: the last page walk finished at 13:31 and returned nothing. |
+| **Sources healthy, zero items** | Libraries, Manga row | Kavita answers and reports 0 series. §17.8 contrasts this explicitly with "not synced yet", and the copy says which one it is: the last page walk finished at 13:31 and returned nothing. |
 | **One source degraded** | Libraries, TV row | Two Sonarrs feed one library and the anime instance's clock is 212 seconds ahead, so delta polling can miss changes inside the skew window. One row, both instances. |
 | **No request destination at all** | Libraries, four rows | v0.1 has no command sinks. Music, Audiobooks, Ebooks and Comics each say `none` with the reason, and the Comics reason is scoped and true rather than an overclaimed impossibility: Mylar3 and Kapowarr exist and can accept a comic request, but neither imports a Prowlarr grab. |
 | **Classical is not solvable** | Search, type-scoped state | Neither Navidrome nor any *Arr models a composition, so nine recordings of the Goldberg Variations are nine unrelated albums and a composer renders as an artist. UsArr will not invent a work tier by matching titles, and it says so on the screen rather than looking quietly wrong to the person who owns that library. |
-| **An orphaned item's provenance** | Search, comics group | A row in Ongoing comics, whose only source was removed, names `Komga "garage" (removed)` rather than asserting a live link to a service that is not there. |
+| **An orphaned item's provenance** | Search, comics group | A row in Ongoing comics, whose only source was removed, names `Kavita "garage" (removed)` rather than asserting a live link to a service that is not there. |
 | **A grab with nothing to import it** | Requests, audiobook state | Readarr was archived on 2025-06-27 and nothing on this install accepts an audiobook, so the row reads `grabbed 14:07 · sent to qBittorrent` and **stops**. No progress bar, no percentage, no "importing" step, because UsArr would have nothing to measure. |
 | **Every indexer failed** | Requests | Prowlarr answers a search where every indexer failed with HTTP 200 and an empty array — byte-identical to a genuine no-results response. UsArr correlates against `/api/v1/indexerstatus`, so this is a **different screen** from "nothing matched", and both are in the switcher. |
 | **The grab window closed** | Requests | Prowlarr serves a grab from a 30-minute in-process cache that a restart wipes, so a results page left open outlives it. The rows say so and the control becomes `Search again` rather than a button that throws when pressed. |
@@ -418,6 +649,51 @@ the ones integrations get wrong:
 
 Prowlarr's search types are Basic, Movie, TV, Music and Book. There is no comic type, which is why
 comics go through Basic on the Books tree, and the screen says so rather than inventing one.
+
+## Indexer flags: an open vocabulary, and what an empty one means
+
+The `Indexer flags` column on Requests renders **whatever string Prowlarr sends, as an opaque tag**.
+There is no allowlist and there must not be one.
+
+`IndexerFlag` is a **class, not an enum**. Prowlarr's own base type declares seven —
+`internal`, `exclusive`, `freeleech`, `neutralleech`, `halfleech`, `scene`, `doubleupload`
+(`src/NzbDrone.Core/Indexers/IndexerFlag.cs`) — and `PassThePopcornFlag : IndexerFlag` subclasses it
+to add `golden` and `approved`
+(`src/NzbDrone.Core/Indexers/Definitions/PassThePopcorn/PassThePopcorn.cs`, lines 85–88). That is
+nine today, and any future indexer definition can add a tenth without a line of UsArr changing.
+
+A seven-name allowlist would therefore drop `golden` today and every later indexer's flags forever
+— and drop them **invisibly**, because the row would simply show fewer chips than the indexer sent
+with nothing indicating anything had been discarded. So the sample data draws `golden` on the
+PassThePopcorn row: an open-vocabulary path nobody exercises is not a designed one.
+
+**Two names get one step of visual emphasis, and not because they matter more.** `freeleech` and
+`halfleech` are the only two that are *derived* rather than sent as strings, and the only two that
+change what a download costs your ratio. `TorznabRssParser.GetFlags` computes them:
+
+```csharp
+if (downloadFactor == 0.5) flags.Add(IndexerFlag.HalfLeech);
+if (downloadFactor == 0.0) flags.Add(IndexerFlag.FreeLeech);
+```
+
+The emphasis is weight and fill, never a hue — a colour would have to clear the contrast sweep on
+all five grounds in both themes to buy a distinction the design does not need, and the obvious hue
+is a green sitting two columns from the torrent protocol dot's green.
+
+**An absent flag means unknown. It never means "not freeleech".** Those comparisons are exact
+equality against `0.0` and `0.5` on a double defaulting to `1`, so a 25% or a 75% promotion produces
+no flag at all. And `GetFlags` runs only inside `if (torrentInfo != null)`; `NewznabRssParser` never
+touches an `IndexerFlag`, so every usenet result yields an empty array whatever the indexer is
+offering. The column therefore reads **`not reported`** on a usenet row and **`none reported`** on a
+torrent row with an empty list, and **`None`** on neither, because `None` is read as the
+ratio-safe claim it is not.
+
+**What is no longer drawn: `repack` and `proper`.** Both were in this column and neither is ever
+emitted from this field — they are release-title qualifiers the \*Arrs parse out of the *name*. The
+titles below still carry `REPACK` and `PROPER` exactly where they belong, which is the honest
+contrast. Drawing them as indexer flags invented a status our own artefact then taught to a reader,
+and `docs/reference/tags.md`'s `flag:` line is the source they came from — see the routing note at
+the end of this file.
 
 ## The list primitive is a grid, not a table layout
 
@@ -732,19 +1008,25 @@ this mockup differed, §17 won:
 Every screen carries a small control marked `mockup` that switches it between the states the design
 has to cover. **That control is not part of the product.** It exists because the non-happy paths are
 the thing worth reviewing, and a mockup that only draws the happy path is not showing you the hard
-part. There are **35 distinct states across the five screens**: home 7, services 7, libraries 4,
-search 8, requests 9 — counted from the `option` values of each screen's own state `<select>`,
+part. There are **37 distinct states across the five screens**: home 7, services 8, libraries 4,
+search 8, requests 10 — counted from the `option` values of each screen's own state `<select>`,
 which is what `../check.mjs` enumerates, so the number and the tests cannot disagree. (Two earlier
 versions of this line were wrong in different ways — one said 28 over a breakdown adding to 31, the
 next said 32 over a breakdown that had stopped matching the markup — which is the wrong error to
 have in a document whose value rests on precise counting.)
 
-The last Services state is an **annex**, labelled as one: Lidarr, LazyLibrarian and Kavita are a
-later milestone than v0.1, so they are not drawn as configured services on the v0.1 screens. The
-behaviours they demonstrate are worth keeping — Lidarr's `status: deleted` on an MBID 404,
-LazyLibrarian's probed capabilities and untagged `master` version, Kavita's paywalled identifier
-matching and its `LibraryType 3 (Image)` decline — so they live in the annex with their milestone on
-every row.
+**The state axis and the install axis are orthogonal, and the check sweeps their product**: 5 screens
+× 37 states × 2 installs = **74 combinations**, at each of five viewport widths. Every state is
+reachable on both installs, drawn over that install's own data — there is no state that exists on one
+and is silently missing on the other, which would have made the second sweep a coverage claim rather
+than coverage.
+
+The last Services state is an **annex**, labelled as one: Lidarr, LazyLibrarian and Komga are later
+than **either** install draws, so they are not on the health table of either — and the annex does not
+change with the switcher, because "not in this install" is true of it twice. The behaviours they
+demonstrate are worth keeping — Lidarr's `status: deleted` on an MBID 404, LazyLibrarian's probed
+capabilities and untagged `master` version, Komga's absent library type and absent external
+identifiers — so they live in the annex with their standing on every row.
 
 On the requests screen the grab button is live. Grabbing any row writes a `pending` chip. Grabbing
 the 26-day-old HDBits release is wired to fail, so the failure path — a status change on the same
@@ -827,9 +1109,45 @@ the dialog the button opens and were the empty state doing the dialog's job.
 | `g`-prefixed go-to-screen keybindings | proposed in research, not implemented here |
 | A `permission-denied` state on a search, library or item surface | specified from day one (`DESIGN-DIRECTION.md` §10) and **not drawn**: v0.1 has one account, and the §14 rule-6 behaviour is that a library the user cannot see renders as *absent*, which is indistinguishable from an empty scope in a static mockup. The Services `denied` state is a sudo re-auth state, which is a different thing and is not a substitute. |
 | An `importing` and a `needs re-identification` per-library state (§17.8) | v0.1, not drawn here — the four §17.8 states that are drawn are *all sources down*, *sources healthy zero items*, *one source degraded* and *orphaned* |
-| Lidarr, LazyLibrarian and Kavita as configured services | v1.0, **v0.3** and v0.2 — drawn in the Services **annex** state, labelled with their milestone, and nowhere in the v0.1 screens. LazyLibrarian is v0.3, not v1.0: ARCHITECTURE §16 ships it as the first Tier 1 manifest, request sink only |
+| Lidarr, LazyLibrarian and Komga as configured services | v1.0, **v0.3** and after Kavita — drawn in the Services **annex** state, labelled with their milestone, and configured on neither install. LazyLibrarian is v0.3, not v1.0: ARCHITECTURE §16 ships it as the first Tier 1 manifest, request sink only. **Kavita is no longer in this row**: ADR-0035 made it the comics-and-books catalogue source, so it is a configured service on the full-stack install and its absence is drawn on the v0.1 one. Its milestone is stated as *after v0.1*, never as v0.2 — §16 has not fixed which release it lands in, and naming one here would invent exactly the status this table exists to avoid |
 
 Also absent, and permanently: any in-app player, any transcoding path, any FFmpeg dependency.
 
 Because v0.1 is single-user, the approval queue and all user-management surfaces are hidden
 entirely rather than shown disabled.
+
+## Routed elsewhere: three changes this thread found and did not make
+
+These are outside `docs/design/`, so they are stated here with exact text rather than edited.
+
+**1. `docs/reference/tags.md` line 54 is where the invented indexer flags came from.** It reads:
+
+```
+flag:            freeleech | internal | scene | proper | repack | nuked
+```
+
+`proper`, `repack` and `nuked` are **not** indexer flags. `proper` and `repack` are release-title
+qualifiers the \*Arrs parse out of the name, and `nuked` is not in Prowlarr's `IndexerFlag` at all.
+The line also presents a closed set, which the field is not. Suggested replacement, which keeps the
+tag namespace open and stops it teaching a fixed list:
+
+```
+flag:            <indexer flag verbatim>   ← Prowlarr IndexerFlag.Name, an open set
+                 e.g. freeleech | halfleech | internal | exclusive | neutralleech |
+                      scene | doubleupload | golden | approved
+```
+
+A note worth adding beside it: `indexerFlags` is emitted for **torrents only**, so a usenet release
+carries an empty array and the absence of `flag:freeleech` never means the download counts fully
+toward ratio.
+
+**2. `docs/ARCHITECTURE.md` §8 (around line 1490) derives `flag:` from `indexerFlags`** and inherits
+the same closed-set reading from `tags.md`. It needs one clause saying the vocabulary is open,
+because `IndexerFlag` is a subclassable class rather than an enum, so the tag layer must pass flag
+names through rather than validate them against a list.
+
+**3. `web/package.json` pins `playwright-core@1.56.1`, and `check.mjs` now actually resolves it** —
+the ladder asks for both `playwright` and `playwright-core` at every location. No change is needed
+in `web/`; this is recorded only so that whoever owns that file knows the pin is now load-bearing
+rather than decorative, and that **changing the pinned version without refilling
+`PLAYWRIGHT_BROWSERS_PATH` is now a failure `check.mjs` diagnoses by name.**

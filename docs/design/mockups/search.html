@@ -46,11 +46,32 @@
          shares. DESIGN-DIRECTION.md 13 forbids fabricated data in a shipped
          surface and makes a labelled mockup the one exception; this is the
          label. -->
-    <p class="mocknote">
+    <!-- The install switcher lives INSIDE the mockup notice, not beside it in
+         the product chrome. It is not a UsArr control and there is no setting
+         it corresponds to; putting it in the top bar proper would draw a
+         product affordance that does not exist. Inside the label, it reads as
+         part of the label — "this is a mockup, and here is which install it is
+         drawn over" — which is also the only place a control that changes the
+         sidebar, the counts and the notice itself can honestly sit.
+
+         Both options name a milestone rather than only a stack, because the
+         default view is six populated media types and a reader who takes that
+         for v0.1 has been misled by the drawing. "A later milestone" is the
+         strongest true statement available: §16 sequences the catalogue
+         sources one at a time after v0.1 and has not fixed which lands in
+         which release, so naming v0.2 here would invent a status. -->
+    <div class="mocknote">
       <span class="statebar__tag">mockup</span>
-      <span class="mocknote__long">Static design mockup of UsArr, which is pre-alpha software: none of these screens is implemented and every value on them is invented.</span>
-      <span class="mocknote__short">Pre-alpha mockup, invented data</span>
-    </p>
+      <label class="sr" for="install">Which install these screens are drawn over</label>
+      <select id="install" class="select mocknote__install" data-act="install">
+        <option value="full">Full stack — a later milestone</option>
+        <option value="v01">v0.1 — Sonarr, Radarr, Prowlarr</option>
+      </select>
+      <span class="mocknote__long" data-inst="full">Static design mockup of UsArr, which is pre-alpha software: none of these screens is implemented and every value on them is invented. Drawn over an install with every catalogue source connected, which is later than v0.1.</span>
+      <span class="mocknote__long" data-inst="v01" hidden>Static design mockup of UsArr, which is pre-alpha software: none of these screens is implemented and every value on them is invented. Drawn over the three services v0.1 connects.</span>
+      <span class="mocknote__short" data-inst="full">Pre-alpha mockup, invented data, full stack</span>
+      <span class="mocknote__short" data-inst="v01" hidden>Pre-alpha mockup, invented data, v0.1 install</span>
+    </div>
     <div class="searchbox">
       <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
       <label class="sr" for="topsearch">Search your library</label>
@@ -126,8 +147,10 @@
 
     <!-- Navidrome's LibrarySelector model, including the part that matters:
          the component renders nothing at all when the user has 0 or 1 library,
-         so no control appears for a distinction they do not have. This install
-         has eight, so it appears. -->
+         so no control appears for a distinction they do not have. The full
+         stack has eight libraries and the v0.1 install has two, so the chip
+         appears on both — and every number it states is counted over the
+         libraries the selected install actually has, never over the markup. -->
     <div class="scope">
       <button type="button" class="scope__btn" data-act="scope" aria-expanded="false" aria-haspopup="dialog" aria-controls="scope-pop" data-scoped="false">
         <span data-slot="scope-label">All libraries (8)</span>
@@ -148,12 +171,16 @@
           <label class="check"><input type="checkbox" data-act="scope-all" checked> Everything</label>
           <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="movies" checked> Movies</label>
           <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="tv" checked> TV</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="music" checked> Music</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="audiobooks" checked> Audiobooks</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="ebooks" checked> Ebooks</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="comics" checked> Comics</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="manga" checked> Manga</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="comics-ongoing" checked> Ongoing comics</label>
+          <!-- Six of the eight libraries are made of containers Navidrome,
+               Audiobookshelf and Kavita named, so on the v0.1 install they do
+               not exist to be scoped. The chip's total falls to two with them,
+               which is what "All libraries (2)" is counted from. -->
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="music" checked> Music</label>
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="audiobooks" checked> Audiobooks</label>
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="ebooks" checked> Ebooks</label>
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="comics" checked> Comics</label>
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="manga" checked> Manga</label>
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="comics-ongoing" checked> Ongoing comics</label>
         </fieldset>
         <!-- Libraries are unbounded, which is why they are a scope chip and
              not a nav list, so ticking twenty of them one at a time is a real
@@ -168,7 +195,7 @@
     </div>
 
     <ul class="nav__group">
-      <li><a class="nav__link" href="index.html" data-route="home" data-primary aria-current="page">Home</a></li>
+      <li><a class="nav__link" href="index.html" data-route="home" data-primary>Home</a></li>
     </ul>
 
     <!-- Media types: a closed enum, hard maximum six, and a type with no items
@@ -176,14 +203,24 @@
          The unit is not the same word for every type -- music counts artists
          and comics counts series -- so each number carries its unit, silently
          for a sighted reader who has the type name beside it and explicitly
-         for a screen reader, which reads the number on its own. -->
+         for a screen reader, which reads the number on its own.
+
+         On the v0.1 install four of the six are absent HERE and present in
+         Home's Block A, which is not two rules fighting: the bound is content,
+         not items. A nav entry can carry a name and a number and nothing else,
+         so a nav entry for a type with no catalogue source would be a link to
+         an empty screen with no cause and no action attached to it. A Block A
+         row carries a state, a cause, the service that will populate it and an
+         action, which is the most useful thing the product can say. Same rule,
+         and the difference is what the two surfaces can hold.
+         ARCHITECTURE.md 17.2, DESIGN-DIRECTION rule 13. -->
     <ul class="nav__group">
       <li><a class="nav__link" href="search.html?type=movie" data-route="search">Movies <span class="nav__num">1,204<span class="sr"> films</span></span></a></li>
       <li><a class="nav__link" href="search.html?type=series" data-route="search">TV <span class="nav__num">275<span class="sr"> series</span></span></a></li>
-      <li><a class="nav__link" href="search.html?type=music" data-route="search">Music <span class="nav__num">612<span class="sr"> artists</span></span></a></li>
-      <li><a class="nav__link" href="search.html?type=audiobook" data-route="search">Audiobooks <span class="nav__num">418<span class="sr"> books</span></span></a></li>
-      <li><a class="nav__link" href="search.html?type=ebook" data-route="search">Ebooks <span class="nav__num">1,842<span class="sr"> books</span></span></a></li>
-      <li><a class="nav__link" href="search.html?type=comic" data-route="search">Comics <span class="nav__num">553<span class="sr"> series</span></span></a></li>
+      <li data-inst="full"><a class="nav__link" href="search.html?type=music" data-route="search">Music <span class="nav__num">612<span class="sr"> artists</span></span></a></li>
+      <li data-inst="full"><a class="nav__link" href="search.html?type=audiobook" data-route="search">Audiobooks <span class="nav__num">418<span class="sr"> books</span></span></a></li>
+      <li data-inst="full"><a class="nav__link" href="search.html?type=ebook" data-route="search">Ebooks <span class="nav__num">1,842<span class="sr"> books</span></span></a></li>
+      <li data-inst="full"><a class="nav__link" href="search.html?type=comic" data-route="search">Comics <span class="nav__num">553<span class="sr"> series</span></span></a></li>
     </ul>
 
     <ul class="nav__group">
@@ -216,11 +253,11 @@
        that is reassuring and wrong is worse than no number. -->
   <div class="pagehead">
     <h1>Search</h1>
-    <span class="pagehead__meta" data-when="live stale">31 results in 6 of 6 media types.</span>
-    <span class="pagehead__meta" data-when="typed" hidden>Geogaddi, 23 tracks, all held.</span>
-    <span class="pagehead__meta" data-when="scoped" hidden>2 results in 2 of 8 libraries. 29 more in the six the scope excludes.</span>
-    <span class="pagehead__meta" data-when="filtered" hidden>31 results, all hidden by the filter.</span>
-    <span class="pagehead__meta" data-when="empty" hidden>No results for <span class="mono">duen</span> in 8 libraries.</span>
+    <span class="pagehead__meta" data-when="live stale"><span data-inst="full">31 results in 6 of 6 media types.</span><span data-inst="v01" hidden>5 results in 2 of 2 media types.</span></span>
+    <span class="pagehead__meta" data-when="typed" hidden><span data-inst="full">Geogaddi, 23 tracks, all held.</span><span data-inst="v01" hidden>Dune: Prophecy season 1, 6 episodes, all held.</span></span>
+    <span class="pagehead__meta" data-when="scoped" hidden><span data-inst="full">2 results in 2 of 8 libraries. 29 more in the six the scope excludes.</span><span data-inst="v01" hidden>1 result in 1 of 2 libraries. 4 more in the one the scope excludes.</span></span>
+    <span class="pagehead__meta" data-when="filtered" hidden><span data-inst="full">31 results, all hidden by the filter.</span><span data-inst="v01" hidden>5 results, all hidden by the filter.</span></span>
+    <span class="pagehead__meta" data-when="empty" hidden>No results for <span class="mono">duen</span> in <span data-inst="full">8</span><span data-inst="v01" hidden>2</span> libraries.</span>
     <span class="pagehead__meta" data-when="scope-empty" hidden>No library is in scope, so nothing is searched.</span>
     <span class="pagehead__meta" data-when="unconfigured" hidden>No library-bearing service is connected.</span>
   </div>
@@ -270,13 +307,21 @@
          filters rather than destinations, so they do not claim to be the
          current page: the sidebar's Search entry already does that, and two
          elements claiming aria-current="page" at once is a contradiction. -->
-    <div class="typechips" role="group" aria-label="Filter results by media type">
+    <div class="typechips" data-inst="full" role="group" aria-label="Filter results by media type">
       <a href="search.html" aria-current="true" aria-label="Showing all 31 results">All <span class="num">31</span></a>
       <a href="search.html?type=ebook" aria-label="Show only the 14 ebook results">Ebooks <span class="num">14</span></a>
       <a href="search.html?type=audiobook" aria-label="Show only the 9 audiobook results">Audiobooks <span class="num">9</span></a>
       <a href="search.html?type=movie" aria-label="Show only the 3 film results">Movies <span class="num">3</span></a>
       <a href="search.html?type=comic" aria-label="Show only the 2 comic results">Comics <span class="num">2</span></a>
       <a href="search.html?type=music" aria-label="Show only the 2 music results">Music <span class="num">2</span></a>
+      <a href="search.html?type=series" aria-label="Show only the 1 series result">TV <span class="num">1</span></a>
+    </div>
+    <!-- The same chip row on the v0.1 install. Rule 1 does the work: a type
+         with no hits is not a chip, and four of the six have no catalogue
+         source to have hits in. Two chips, and their numbers add to All. -->
+    <div class="typechips" role="group" aria-label="Filter results by media type" data-inst="v01" hidden>
+      <a href="search.html" aria-current="true" aria-label="Showing all 5 results">All <span class="num">5</span></a>
+      <a href="search.html?type=movie" aria-label="Show only the 4 film results">Movies <span class="num">4</span></a>
       <a href="search.html?type=series" aria-label="Show only the 1 series result">TV <span class="num">1</span></a>
     </div>
     <div class="toolbar__spacer"></div>
@@ -324,7 +369,8 @@
   <div class="section" data-when="empty" hidden>
     <div class="empty">
       <h2 class="empty__title">No results for <span class="mono">duen</span></h2>
-      <p class="empty__text">Nothing in your eight libraries starts with or contains that string, and search does not correct typos.</p>
+      <p class="empty__text" data-inst="full">Nothing in your eight libraries starts with or contains that string, and search does not correct typos.</p>
+      <p class="empty__text" data-inst="v01" hidden>Nothing in your two libraries starts with or contains that string, and search does not correct typos.</p>
       <div class="empty__actions">
         <button type="button" class="btn btn--primary">Clear the query</button>
         <a class="btn" href="requests.html?q=duen">Search indexers instead</a>
@@ -356,7 +402,8 @@
     </div>
     <div class="empty">
       <h2 class="empty__title">All results are hidden by the applied filter</h2>
-      <p class="empty__text">31 items match <span class="mono">dune</span> across six media types, and the filter removes all of them, because no result is both a FLAC album and a 2160p file.</p>
+      <p class="empty__text" data-inst="full">31 items match <span class="mono">dune</span> across six media types, and the filter removes all of them, because no result is both a FLAC album and a 2160p file.</p>
+      <p class="empty__text" data-inst="v01" hidden>5 items match <span class="mono">dune</span> across two media types, and the filter removes all of them: none of the four is a FLAC album, and the one 2160p profile on this install is a Radarr instance that has never been connected.</p>
       <div class="empty__actions">
         <button type="button" class="btn btn--primary">Clear filter</button>
       </div>
@@ -393,7 +440,7 @@
          is in it: the 1965 novel, an exact title match. Group order is
          computed once per query and then frozen; nothing arriving later moves
          a group under the cursor. -->
-    <section class="section section--group" style="z-index:6">
+    <section data-inst="full" class="section section--group" style="z-index:6">
       <div class="section__head">
         <h2>Ebooks <span class="section__count num">14</span></h2>
         <span class="section__count">all in the <strong>Ebooks</strong> library · all from Audiobookshelf</span>
@@ -446,7 +493,7 @@
       </div>
     </section>
 
-    <section class="section section--group" style="z-index:5">
+    <section data-inst="full" class="section section--group" style="z-index:5">
       <div class="section__head">
         <h2>Audiobooks <span class="section__count num">9</span></h2>
         <span class="section__count">all in the <strong>Audiobooks</strong> library · all from Audiobookshelf · all <span class="mono">M4B</span> except where noted</span>
@@ -479,11 +526,11 @@
          cross: nothing was asked, so nothing can be reported missing. -->
     <section class="section section--group" style="z-index:4">
       <div class="section__head">
-        <h2>Movies <span class="section__count num">3</span></h2>
+        <h2>Movies <span class="section__count num" data-inst="full">3</span><span class="section__count num" data-inst="v01" hidden>4</span></h2>
         <span class="section__count">all in the <strong>Movies</strong> library · all from Radarr · <span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>2160p not configured</span></span>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="4" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Movie results" style="--cols: minmax(0,2.6fr) 52px 60px minmax(0,1fr) 80px minmax(max-content,auto); --row-lines: 1.11" aria-colcount="6" role="table">
+        <table data-inst="full" aria-rowcount="4" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Movie results" style="--cols: minmax(0,2.6fr) 52px 60px minmax(0,1fr) 80px minmax(max-content,auto); --row-lines: 1.11" aria-colcount="6" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Title</th>
@@ -507,17 +554,43 @@
             <tr role="row" aria-rowindex="4"><td data-col="title" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Title</span>Jodorowsky's Dune</td><td data-col="year" class="num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Year</span>2013</td><td data-col="1080p" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">1080p</span><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg><span class="sr">Missing</span></span></td><td data-col="quality" class="muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Quality</span>No file</td><td data-col="size" class="is-num muted" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Size</span>—</td><td data-col="action" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Action</span><a href="requests.html?q=Jodorowsky%27s+Dune&amp;type=movie&amp;cat=2000">Search indexers →</a></td></tr>
           </tbody>
         </table>
+        <table data-inst="v01" hidden aria-rowcount="5" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Movie results" style="--cols: minmax(0,2.6fr) 52px 60px minmax(0,1fr) 80px minmax(max-content,auto); --row-lines: 1.11" aria-colcount="6" role="table">
+          <thead role="rowgroup">
+            <tr role="row" aria-rowindex="1">
+              <th scope="col" role="columnheader" aria-colindex="1">Title</th>
+              <th scope="col" role="columnheader" aria-colindex="2">Year</th>
+              <th scope="col" role="columnheader" aria-colindex="3">1080p</th>
+              <th scope="col" role="columnheader" aria-colindex="4">Quality</th>
+              <th scope="col" class="is-num" role="columnheader" aria-colindex="5">Size</th>
+              <th scope="col" role="columnheader" aria-colindex="6">Action</th>
+            </tr>
+          </thead>
+          <tbody role="rowgroup">
+            <tr role="row" aria-rowindex="2"><td data-col="title" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Title</span>Dune<div class="cell-sub">One linked work. Its novel and its M4B are on this install’s wanted list, not in it, so the film is the row.</div></td><td data-col="year" class="num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Year</span>2021</td><td data-col="1080p" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">1080p</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="quality" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Quality</span><span class="mono">Bluray-1080p</span></td><td data-col="size" class="is-num" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Size</span>21.6 GB</td><td data-col="action" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Action</span>—</td></tr>
+            <tr role="row" aria-rowindex="3"><td data-col="title" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Title</span>Dune: Part Two</td><td data-col="year" class="num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Year</span>2024</td><td data-col="1080p" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">1080p</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="quality" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Quality</span><span class="mono">Bluray-1080p</span></td><td data-col="size" class="is-num" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Size</span>14.2 GB</td><td data-col="action" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Action</span>—</td></tr>
+            <tr role="row" aria-rowindex="4"><td data-col="title" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Title</span>Dune</td><td data-col="year" class="num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Year</span>1984</td><td data-col="1080p" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">1080p</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="quality" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Quality</span><span class="mono">Bluray-1080p</span></td><td data-col="size" class="is-num" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Size</span>17.9 GB</td><td data-col="action" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Action</span>—</td></tr>
+            <!-- The row the whole screen exists to produce, and until now the
+                 one row with nowhere to go. Search tells the user, correctly
+                 and prominently, that they do not have this film, and the only
+                 route to the one request mechanism v0.1 ships was to notice
+                 the cross, navigate to Requests and retype the title. The
+                 action carries the query and the Newznab category, so the
+                 destination arrives already searched. -->
+            <tr role="row" aria-rowindex="5"><td data-col="title" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Title</span>Jodorowsky's Dune</td><td data-col="year" class="num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Year</span>2013</td><td data-col="1080p" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">1080p</span><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg><span class="sr">Missing</span></span></td><td data-col="quality" class="muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Quality</span>No file</td><td data-col="size" class="is-num muted" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Size</span>—</td><td data-col="action" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Action</span><a href="requests.html?q=Jodorowsky%27s+Dune&amp;type=movie&amp;cat=2000">Search indexers →</a></td></tr>
+          </tbody>
+        </table>
       </div>
       <!-- A linked work is counted in exactly one group, which is right and is
            also why clicking "Movies 3" does not show Dune (2021): it renders
            once, in Ebooks, carrying an "also film, 2021" chip. Saying so costs
            one line and the link data is already there. -->
-      <p class="note" style="padding-top:8px">1 more film is on a linked row in the <strong>Ebooks</strong> group: <a href="search.html?type=ebook">Dune (2021)</a>.</p>
+      <p class="note" style="padding-top:8px" data-inst="full">1 more film is on a linked row in the <strong>Ebooks</strong> group: <a href="search.html?type=ebook">Dune (2021)</a>.</p>
+      <p class="note" style="padding-top:8px" data-inst="v01" hidden>The linked work renders here rather than in Ebooks, because on this install the film is the only medium of it there is. The rule did not change; the library did.</p>
     </section>
 
     <!-- Two distinct libraries in this group, so Library stays a column here.
          The rule is per group, not per screen. -->
-    <section class="section section--group" style="z-index:3">
+    <section data-inst="full" class="section section--group" style="z-index:3">
       <div class="section__head">
         <h2>Comics <span class="section__count num">2</span></h2>
       </div>
@@ -542,15 +615,15 @@
                  numbers it already holds. -->
             <tr role="row" aria-rowindex="2">
               <td data-col="series" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Series</span>Dune: House Atreides <span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>matched by title</span>
-                <div class="cell-sub">Komga exposes no external identifier, so this series was matched by title alone.</div></td>
+                <div class="cell-sub">Kavita returns null identifier fields without Kavita+, so this series was matched by title alone.</div></td>
               <td data-col="publisher" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Publisher</span>BOOM! Studios</td>
               <td data-col="year" class="num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Year</span>2020</td>
               <td data-col="issues" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Issues</span><span class="avail avail--part">11 issues · #7 missing</span></td>
               <td data-col="library" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Library</span>the <strong>Comics</strong> library</td>
-              <td data-col="instance" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Instance</span>Komga</td>
+              <td data-col="instance" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Instance</span>Kavita</td>
               <td data-col="action" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Action</span><a href="requests.html?q=Dune+House+Atreides+007&amp;type=basic&amp;cat=7030">Search indexers →</a></td>
             </tr>
-            <!-- Ongoing comics has no sources: its only one, the Komga
+            <!-- Ongoing comics has no sources: its only one, the Kavita
                  instance named "garage", was removed on 12 Aug 2026. So the
                  Instance cell cannot name a live service without asserting a
                  link that does not exist. It names the removed one, which is
@@ -562,7 +635,7 @@
               <td data-col="year" class="num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Year</span>2020</td>
               <td data-col="issues" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Issues</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>1 volume</span></td>
               <td data-col="library" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Library</span>the <strong>Ongoing comics</strong> library</td>
-              <td data-col="instance" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Instance</span><span class="muted">Komga "garage" (removed)</span><div class="cell-sub">Last seen 12 Aug 2026. Kept under the 7-day tombstone rule.</div></td>
+              <td data-col="instance" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Instance</span><span class="muted">Kavita "garage" (removed)</span><div class="cell-sub">Last seen 12 Aug 2026. Kept under the 7-day tombstone rule.</div></td>
               <td data-col="action" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Action</span>—</td>
             </tr>
           </tbody>
@@ -570,7 +643,7 @@
       </div>
     </section>
 
-    <section class="section section--group" style="z-index:2">
+    <section data-inst="full" class="section section--group" style="z-index:2">
       <div class="section__head">
         <h2>Music <span class="section__count num">2</span></h2>
         <span class="section__count">all in the <strong>Music</strong> library · all from Navidrome · all <span class="mono">FLAC</span></span>
@@ -616,13 +689,14 @@
       </div>
     </section>
 
-    <p class="section note"><span class="statebar__tag">mockup</span> Group order is by the best hit in each group, not a fixed type order, and it is frozen for the life of the query. The per-group cap is a 40-row budget divided by the six groups that have hits, so six rows each, and a truncated group's last row carries the real total. A group with no hits does not render at all: there is no empty Music heading on a query that found no music.</p>
-    <p class="section note"><span class="statebar__tag">mockup</span> <span class="mono">Dune</span> is one row rather than four. The novel, its M4B edition and the 2021 film are one linked work, so it renders in the group of its best-scoring medium with the other media as chips on the title. Cross-media linking itself is v0.3; the rendering rule is drawn here so the six-type search can be reviewed against it.</p>
+    <p class="section note" data-inst="full"><span class="statebar__tag">mockup</span> Group order is by the best hit in each group, not a fixed type order, and it is frozen for the life of the query. The per-group cap is a 40-row budget divided by the six groups that have hits, so six rows each, and a truncated group's last row carries the real total. A group with no hits does not render at all: there is no empty Music heading on a query that found no music.</p>
+    <p class="section note" data-inst="v01" hidden><span class="statebar__tag">mockup</span> The same rules, two groups. The cap is the 40-row budget divided by the two groups with hits — ten each — so neither group is truncated and no <span class="mono">Show all</span> row is needed; the full stack, which splits the same budget six ways, truncates two of its groups. A group with no hits does not render at all, so the four types with no catalogue source produce no headings here rather than four empty ones — and Home says why, which is the part a search screen cannot.</p>
+    <p class="section note" data-inst="full"><span class="statebar__tag">mockup</span> <span class="mono">Dune</span> is one row rather than four. The novel, its M4B edition and the 2021 film are one linked work, so it renders in the group of its best-scoring medium with the other media as chips on the title. Cross-media linking itself is v0.3; the rendering rule is drawn here so the six-type search can be reviewed against it.</p>
   </div>
 
   <!-- posters ----------------------------------------------------------- -->
   <div data-panel-for="viewmode" data-panel-name="posters" hidden>
-    <section class="section section--group">
+    <section data-inst="full" class="section section--group">
       <div class="section__head"><h2>Ebooks <span class="section__count num">14</span></h2></div>
       <div class="grid" data-roving=".card" data-roving-axis="horizontal" aria-label="Ebook results">
         <a class="card" href="#" data-dc="#7d6a4f"><span class="card__art"><span class="card__t">Dune</span><span class="card__y">1965</span></span><span class="card__meta">ebook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
@@ -633,7 +707,21 @@
         <a class="card" href="#" data-dc="#5a4038"><span class="card__art"><span class="card__t">Chapterhouse: Dune</span><span class="card__y">1985</span></span><span class="card__meta">ebook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
       </div>
     </section>
-    <p class="section note"><span class="statebar__tag">mockup</span> Posters is one wrapping grid per group, with the aspect taken from each item's own art — 2:3 for a book, film, series or comic cover, 1:1 for an album. Only the ebooks group is drawn in full here; the table mode is the one drawn in full on this screen.</p>
+    <p class="section note" data-inst="full"><span class="statebar__tag">mockup</span> Posters is one wrapping grid per group, with the aspect taken from each item's own art — 2:3 for a book, film, series or comic cover, 1:1 for an album. Only the ebooks group is drawn in full here; the table mode is the one drawn in full on this screen.</p>
+    <!-- The v0.1 install's biggest group is Movies with three hits, so that
+         is the group drawn in full here. Three cards is what three results
+         looks like: the grid does not pad, and a poster wall over an install
+         with two catalogue sources is smaller than one over six. -->
+    <section data-inst="v01" hidden class="section section--group">
+      <div class="section__head"><h2>Movies <span class="section__count num">4</span></h2></div>
+      <div class="grid" data-roving=".card" data-roving-axis="horizontal" aria-label="Movie results">
+        <a class="card" href="#" data-dc="#7d6a4f"><span class="card__art"><span class="card__t">Dune</span><span class="card__y">2021</span></span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#" data-dc="#55483a"><span class="card__art"><span class="card__t">Dune: Part Two</span><span class="card__y">2024</span></span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#" data-dc="#4a3b30"><span class="card__art"><span class="card__t">Dune</span><span class="card__y">1984</span></span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#" data-dc="#3f4a3c"><span class="card__art"><span class="card__t">Jodorowsky&rsquo;s Dune</span><span class="card__y">2013</span></span><span class="card__meta">movie <span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg><span class="sr">Wanted, not held</span></span></span></a>
+      </div>
+    </section>
+    <p class="section note" data-inst="v01" hidden><span class="statebar__tag">mockup</span> Posters is one wrapping grid per group, with the aspect taken from each item's own art. The table mode is the one drawn in full on this screen.</p>
   </div>
   </div>
 
@@ -646,6 +734,7 @@
        the same table every other group uses.
        ===================================================================== -->
   <div data-when="typed" hidden>
+    <div data-inst="full">
     <div class="toolbar">
       <nav class="levels" aria-label="Breadcrumb">
         <a href="search.html?type=music">Music</a>
@@ -706,6 +795,62 @@
     <p class="section note">Nine albums in this library are recordings of the same work. UsArr groups by release, because no connected service models a composition, and it will not invent one by matching titles.</p>
 
     <p class="section note"><span class="statebar__tag">mockup</span> Nothing on this screen is a per-type component. The breadcrumb is a level control, the container below it is the same table the other five types use, and the columns, the default sort and the number of levels come from a configuration table keyed by media type.</p>
+    </div>
+
+    <!-- ===============================================================
+         Three levels on the v0.1 install, over the type that has them there:
+         TV › series › season. The point survives the change of type exactly,
+         which is the point -- a film is one level, a series two, a season
+         three, an album three, and none of that is a new component. Same
+         breadcrumb, same container, same table.
+         =============================================================== -->
+    <div data-inst="v01" hidden>
+    <div class="toolbar">
+      <nav class="levels" aria-label="Breadcrumb">
+        <a href="search.html?type=series">TV</a>
+        <span class="levels__sep" aria-hidden="true">›</span>
+        <a href="search.html?type=series&amp;show=dune-prophecy">Dune: Prophecy</a>
+        <span class="levels__sep" aria-hidden="true">›</span>
+        <span class="levels__here" aria-current="page">Season 1</span>
+      </nav>
+      <div class="toolbar__spacer"></div>
+      <span class="toolbar__label">Sorted by episode number, which is this type's default</span>
+      <button type="button" class="btn">Options</button>
+    </div>
+
+    <section class="section section--group">
+      <div class="section__head">
+        <h2>Season 1 <span class="section__count">Dune: Prophecy · 2024 · HBO · all in the <strong>TV</strong> library · all from Sonarr</span></h2>
+        <div class="section__actions"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>6 of 6 episodes</span></div>
+      </div>
+      <div class="tablewrap">
+        <table aria-rowcount="7" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Episodes" style="--cols: 44px minmax(0,4fr) 68px minmax(0,1.6fr) 84px; --row-lines: 1.11" aria-colcount="5" role="table">
+          <thead role="rowgroup">
+            <tr role="row" aria-rowindex="1">
+              <th scope="col" class="is-num" role="columnheader" aria-colindex="1">#</th>
+              <th scope="col" role="columnheader" aria-colindex="2">Title</th>
+              <th scope="col" class="is-num" role="columnheader" aria-colindex="3">Aired</th>
+              <th scope="col" role="columnheader" aria-colindex="4">Quality</th>
+              <th scope="col" class="is-num" role="columnheader" aria-colindex="5">Size</th>
+            </tr>
+          </thead>
+          <tbody role="rowgroup">
+            <tr role="row" aria-rowindex="2"><td data-col="num" class="is-num" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">#</span>1</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>The Hidden Hand</td><td data-col="aired" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Aired</span>17 Nov</td><td data-col="quality" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Quality</span><span class="mono">WEBDL-1080p</span></td><td data-col="size" class="is-num" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Size</span>4.8 GB</td></tr>
+            <tr role="row" aria-rowindex="3"><td data-col="num" class="is-num" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">#</span>2</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Two Wolves</td><td data-col="aired" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Aired</span>24 Nov</td><td data-col="quality" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Quality</span><span class="mono">WEBDL-1080p</span></td><td data-col="size" class="is-num" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Size</span>4.6 GB</td></tr>
+            <tr role="row" aria-rowindex="4"><td data-col="num" class="is-num" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">#</span>3</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Sisterhood Above All</td><td data-col="aired" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Aired</span>1 Dec</td><td data-col="quality" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Quality</span><span class="mono">WEBDL-1080p</span></td><td data-col="size" class="is-num" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Size</span>4.7 GB</td></tr>
+            <tr role="row" aria-rowindex="5"><td data-col="num" class="is-num" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">#</span>4</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Twice Born</td><td data-col="aired" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Aired</span>8 Dec</td><td data-col="quality" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Quality</span><span class="mono">WEBDL-1080p</span></td><td data-col="size" class="is-num" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Size</span>4.9 GB</td></tr>
+            <tr role="row" aria-rowindex="6"><td data-col="num" class="is-num" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">#</span>5</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>In Blood, Truth</td><td data-col="aired" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Aired</span>15 Dec</td><td data-col="quality" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Quality</span><span class="mono">WEBDL-1080p</span></td><td data-col="size" class="is-num" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Size</span>4.5 GB</td></tr>
+            <tr role="row" aria-rowindex="7"><td data-col="num" class="is-num" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">#</span>6</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>The High Council</td><td data-col="aired" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Aired</span>22 Dec</td><td data-col="quality" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Quality</span><span class="mono">WEBDL-1080p</span></td><td data-col="size" class="is-num" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Size</span>4.9 GB</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="section note">Six of six, and the denominator is Sonarr's, not UsArr's. A season UsArr shows as complete is one where every episode Sonarr <em>monitors</em> has a file; an unmonitored special is neither held nor missing, and calling it missing would invent a gap the owner deliberately does not have. It is the same honesty the comics gap list is built on, and the full stack draws that side of it.</p>
+
+    <p class="section note"><span class="statebar__tag">mockup</span> Nothing on this screen is a per-type component. The breadcrumb is a level control, the container below it is the same table the other groups use, and the columns, the default sort and the number of levels come from a configuration table keyed by media type.</p>
+    </div>
+
   </div>
 
   <!-- =====================================================================
@@ -714,6 +859,7 @@
        scope in words rather than leaving it to be discovered.
        ===================================================================== -->
   <div data-when="scoped" hidden>
+    <div data-inst="full">
     <div class="toolbar">
       <span class="toolbar__label">Showing results for <span class="mono">dune</span> in <span class="mono">2 of 8 libraries</span>: Comics, Ongoing comics</span>
       <button type="button" class="btn btn--sm">Clear the scope</button>
@@ -748,13 +894,13 @@
           <tbody role="rowgroup">
             <tr role="row" aria-rowindex="2">
               <td data-col="series" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Series</span>Dune: House Atreides
-                <div class="cell-sub"><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>matched by title</span> Komga reports no external identifier of any kind, so this series is matched by title.</div></td>
+                <div class="cell-sub"><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>matched by title</span> Kavita returns null identifier fields without Kavita+, so this series is matched by title.</div></td>
               <td data-col="publisher" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Publisher</span>BOOM! Studios</td>
               <td data-col="year" class="num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Year</span>2020</td>
               <td data-col="issues" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Issues</span><span class="avail avail--part">11 issues · #7 missing</span></td>
               <td data-col="format" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Format</span><span class="mono">CBZ</span></td>
               <td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>the <strong>Comics</strong> library</td>
-              <td data-col="instance" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Komga</td>
+              <td data-col="instance" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Kavita</td>
               <td data-col="action" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Action</span><a href="requests.html?q=Dune+House+Atreides+007&amp;type=basic&amp;cat=7030">Search indexers →</a></td>
             </tr>
             <tr role="row" aria-rowindex="3">
@@ -765,7 +911,7 @@
               <td data-col="issues" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Issues</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>1 volume</span></td>
               <td data-col="format" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Format</span><span class="mono">CBZ</span></td>
               <td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>the <strong>Ongoing comics</strong> library</td>
-              <td data-col="instance" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span><span class="muted">Komga "garage" (removed)</span></td>
+              <td data-col="instance" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span><span class="muted">Kavita "garage" (removed)</span></td>
               <td data-col="action" class="muted" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Action</span>—</td>
             </tr>
           </tbody>
@@ -774,6 +920,51 @@
     </section>
 
     <p class="section note"><span class="statebar__tag">mockup</span> The scope is a filter, not a mode, and it is multi-select. Audiobookshelf's single-select library switcher scopes browsing and searching to one library at a time, with the documented consequence that an author with series in two libraries shows up as two separate authors. A hub whose claim is "one place" cannot do that.</p>
+    </div>
+
+    <!-- The same demonstration on the v0.1 install, at the smallest scale the
+         scope chip renders at all: two libraries, one ticked. Navidrome's
+         LibrarySelector draws nothing below two, so this is the first install
+         on which a scope exists to narrow. -->
+    <div data-inst="v01" hidden>
+    <div class="toolbar">
+      <span class="toolbar__label">Showing results for <span class="mono">dune</span> in <span class="mono">1 of 2 libraries</span>: TV</span>
+      <button type="button" class="btn btn--sm" data-scope-act="all">Clear the scope</button>
+      <div class="toolbar__spacer"></div>
+      <span class="toolbar__label mono">?q=dune&amp;lib=tv</span>
+    </div>
+
+    <div class="typechips" style="padding:8px 16px">
+      <a href="search.html?lib=tv" aria-current="page">All <span class="num">1</span></a>
+      <a href="search.html?type=series&amp;lib=tv">TV <span class="num">1</span></a>
+    </div>
+
+    <section class="section section--group">
+      <div class="section__head">
+        <h2>TV <span class="section__count num">1</span></h2>
+        <span class="section__count">4 results in the one library the scope excludes</span>
+      </div>
+      <div class="tablewrap">
+        <table aria-rowcount="2" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Series results in scope" style="--cols: minmax(0,2.4fr) 52px minmax(0,1fr) 80px 80px; --row-lines: 1.22" aria-colcount="5" role="table">
+          <thead role="rowgroup">
+            <tr role="row" aria-rowindex="1">
+              <th scope="col" role="columnheader" aria-colindex="1">Title</th>
+              <th scope="col" role="columnheader" aria-colindex="2">Year</th>
+              <th scope="col" role="columnheader" aria-colindex="3">Network</th>
+              <th scope="col" role="columnheader" aria-colindex="4">Episodes</th>
+              <th scope="col" class="is-num" role="columnheader" aria-colindex="5">Size</th>
+            </tr>
+          </thead>
+          <tbody role="rowgroup">
+            <tr role="row" aria-rowindex="2"><td data-col="title" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Title</span>Dune: Prophecy</td><td data-col="year" class="num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Year</span>2024</td><td data-col="network" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Network</span>HBO</td><td data-col="episodes" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Episodes</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>6/6</span></td><td data-col="size" class="is-num" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Size</span>28.4 GB</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="section note">The excluded count is stated, not implied. Four of this query's five results are in Movies and the scope is hiding them; a screen that showed one result and said nothing else would read as "you only have one", which is the failure the scope line exists to prevent.</p>
+    </div>
+
   </div>
 
 </main>

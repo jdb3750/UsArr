@@ -81,6 +81,12 @@ endpoint or field name cites a primary source: official docs, the OpenAPI spec, 
 service's own source code. Training data about this ecosystem is stale and actively wrong in
 the ways listed below. Where you are reasoning rather than citing, mark it as inference.
 
+**The same standard applies to the repo's own gates.** Report what you measured, not just the
+verdict — the binary, its version and the commit — because a green that names neither its tool nor
+its tree is a rumour, and fire a guard deliberately before trusting it, since one that probes a
+proxy for its condition or has never been triggered is indistinguishable from no guard.
+`docs/DEVELOPMENT.md` §11 carries the mechanics.
+
 **No invented status.** Never document a feature as existing when it does not.
 `docs/ARCHITECTURE.md` §16 is authoritative for what lands in which milestone; the README's
 status tables are generated from it. If §16 does not say a thing ships, it does not ship.
@@ -148,7 +154,8 @@ See `docs/ARCHITECTURE.md` §14 for the full threat model.
 - `gofumpt`, `golangci-lint`, `eslint`, `prettier`, `svelte-check`.
 - **`make check` (`fmt-check` + `lint` + `modverify` + `secrets` + `test`, then `vuln`) is the
   pre-commit gate and must pass before any commit.** It needs no Docker daemon and makes exactly
-  one network call — govulncheck's query to `vuln.go.dev`. `make check-offline` drops that step.
+  two network calls, both to vulnerability databases — govulncheck's to `vuln.go.dev` and
+  `pnpm audit`'s to the npm registry. `make check-offline` drops both.
 
 **Tests**
 - Recorded HTTP fixtures (`go-vcr`) plus contract tests against the shipped Servarr OpenAPI

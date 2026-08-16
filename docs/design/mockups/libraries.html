@@ -46,11 +46,32 @@
          shares. DESIGN-DIRECTION.md 13 forbids fabricated data in a shipped
          surface and makes a labelled mockup the one exception; this is the
          label. -->
-    <p class="mocknote">
+    <!-- The install switcher lives INSIDE the mockup notice, not beside it in
+         the product chrome. It is not a UsArr control and there is no setting
+         it corresponds to; putting it in the top bar proper would draw a
+         product affordance that does not exist. Inside the label, it reads as
+         part of the label — "this is a mockup, and here is which install it is
+         drawn over" — which is also the only place a control that changes the
+         sidebar, the counts and the notice itself can honestly sit.
+
+         Both options name a milestone rather than only a stack, because the
+         default view is six populated media types and a reader who takes that
+         for v0.1 has been misled by the drawing. "A later milestone" is the
+         strongest true statement available: §16 sequences the catalogue
+         sources one at a time after v0.1 and has not fixed which lands in
+         which release, so naming v0.2 here would invent a status. -->
+    <div class="mocknote">
       <span class="statebar__tag">mockup</span>
-      <span class="mocknote__long">Static design mockup of UsArr, which is pre-alpha software: none of these screens is implemented and every value on them is invented.</span>
-      <span class="mocknote__short">Pre-alpha mockup, invented data</span>
-    </p>
+      <label class="sr" for="install">Which install these screens are drawn over</label>
+      <select id="install" class="select mocknote__install" data-act="install">
+        <option value="full">Full stack — a later milestone</option>
+        <option value="v01">v0.1 — Sonarr, Radarr, Prowlarr</option>
+      </select>
+      <span class="mocknote__long" data-inst="full">Static design mockup of UsArr, which is pre-alpha software: none of these screens is implemented and every value on them is invented. Drawn over an install with every catalogue source connected, which is later than v0.1.</span>
+      <span class="mocknote__long" data-inst="v01" hidden>Static design mockup of UsArr, which is pre-alpha software: none of these screens is implemented and every value on them is invented. Drawn over the three services v0.1 connects.</span>
+      <span class="mocknote__short" data-inst="full">Pre-alpha mockup, invented data, full stack</span>
+      <span class="mocknote__short" data-inst="v01" hidden>Pre-alpha mockup, invented data, v0.1 install</span>
+    </div>
     <div class="searchbox">
       <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
       <label class="sr" for="topsearch">Search your library</label>
@@ -126,8 +147,10 @@
 
     <!-- Navidrome's LibrarySelector model, including the part that matters:
          the component renders nothing at all when the user has 0 or 1 library,
-         so no control appears for a distinction they do not have. This install
-         has eight, so it appears. -->
+         so no control appears for a distinction they do not have. The full
+         stack has eight libraries and the v0.1 install has two, so the chip
+         appears on both — and every number it states is counted over the
+         libraries the selected install actually has, never over the markup. -->
     <div class="scope">
       <button type="button" class="scope__btn" data-act="scope" aria-expanded="false" aria-haspopup="dialog" aria-controls="scope-pop" data-scoped="false">
         <span data-slot="scope-label">All libraries (8)</span>
@@ -148,12 +171,16 @@
           <label class="check"><input type="checkbox" data-act="scope-all" checked> Everything</label>
           <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="movies" checked> Movies</label>
           <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="tv" checked> TV</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="music" checked> Music</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="audiobooks" checked> Audiobooks</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="ebooks" checked> Ebooks</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="comics" checked> Comics</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="manga" checked> Manga</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="comics-ongoing" checked> Ongoing comics</label>
+          <!-- Six of the eight libraries are made of containers Navidrome,
+               Audiobookshelf and Kavita named, so on the v0.1 install they do
+               not exist to be scoped. The chip's total falls to two with them,
+               which is what "All libraries (2)" is counted from. -->
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="music" checked> Music</label>
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="audiobooks" checked> Audiobooks</label>
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="ebooks" checked> Ebooks</label>
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="comics" checked> Comics</label>
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="manga" checked> Manga</label>
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="comics-ongoing" checked> Ongoing comics</label>
         </fieldset>
         <!-- Libraries are unbounded, which is why they are a scope chip and
              not a nav list, so ticking twenty of them one at a time is a real
@@ -168,7 +195,7 @@
     </div>
 
     <ul class="nav__group">
-      <li><a class="nav__link" href="index.html" data-route="home" data-primary aria-current="page">Home</a></li>
+      <li><a class="nav__link" href="index.html" data-route="home" data-primary>Home</a></li>
     </ul>
 
     <!-- Media types: a closed enum, hard maximum six, and a type with no items
@@ -176,14 +203,24 @@
          The unit is not the same word for every type -- music counts artists
          and comics counts series -- so each number carries its unit, silently
          for a sighted reader who has the type name beside it and explicitly
-         for a screen reader, which reads the number on its own. -->
+         for a screen reader, which reads the number on its own.
+
+         On the v0.1 install four of the six are absent HERE and present in
+         Home's Block A, which is not two rules fighting: the bound is content,
+         not items. A nav entry can carry a name and a number and nothing else,
+         so a nav entry for a type with no catalogue source would be a link to
+         an empty screen with no cause and no action attached to it. A Block A
+         row carries a state, a cause, the service that will populate it and an
+         action, which is the most useful thing the product can say. Same rule,
+         and the difference is what the two surfaces can hold.
+         ARCHITECTURE.md 17.2, DESIGN-DIRECTION rule 13. -->
     <ul class="nav__group">
       <li><a class="nav__link" href="search.html?type=movie" data-route="search">Movies <span class="nav__num">1,204<span class="sr"> films</span></span></a></li>
       <li><a class="nav__link" href="search.html?type=series" data-route="search">TV <span class="nav__num">275<span class="sr"> series</span></span></a></li>
-      <li><a class="nav__link" href="search.html?type=music" data-route="search">Music <span class="nav__num">612<span class="sr"> artists</span></span></a></li>
-      <li><a class="nav__link" href="search.html?type=audiobook" data-route="search">Audiobooks <span class="nav__num">418<span class="sr"> books</span></span></a></li>
-      <li><a class="nav__link" href="search.html?type=ebook" data-route="search">Ebooks <span class="nav__num">1,842<span class="sr"> books</span></span></a></li>
-      <li><a class="nav__link" href="search.html?type=comic" data-route="search">Comics <span class="nav__num">553<span class="sr"> series</span></span></a></li>
+      <li data-inst="full"><a class="nav__link" href="search.html?type=music" data-route="search">Music <span class="nav__num">612<span class="sr"> artists</span></span></a></li>
+      <li data-inst="full"><a class="nav__link" href="search.html?type=audiobook" data-route="search">Audiobooks <span class="nav__num">418<span class="sr"> books</span></span></a></li>
+      <li data-inst="full"><a class="nav__link" href="search.html?type=ebook" data-route="search">Ebooks <span class="nav__num">1,842<span class="sr"> books</span></span></a></li>
+      <li data-inst="full"><a class="nav__link" href="search.html?type=comic" data-route="search">Comics <span class="nav__num">553<span class="sr"> series</span></span></a></li>
     </ul>
 
     <ul class="nav__group">
@@ -211,9 +248,9 @@
 
   <div class="pagehead">
     <h1>Libraries</h1>
-    <span class="pagehead__meta" data-when="list">8 libraries over 6 connected services. 1 has no sources left, 1 has all of its sources down, 1 has a source degraded, 1 is healthy and empty.</span>
-    <span class="pagehead__meta" data-when="propose" hidden>2 services connected. Nothing is saved until you accept.</span>
-    <span class="pagehead__meta" data-when="edit" hidden>Ebooks. 1,842 items, 1 catalogue source, no request destination.</span>
+    <span class="pagehead__meta" data-when="list"><span data-inst="full">8 libraries over 6 connected services. 1 has no sources left, 1 has all of its sources down, 1 has a source degraded, 1 is healthy and empty.</span><span data-inst="v01" hidden>2 libraries over 3 connected services. 1 has all of its sources down, 1 has a source degraded.</span></span>
+    <span class="pagehead__meta" data-when="propose" hidden><span data-inst="full">2 services connected. Nothing is saved until you accept.</span><span data-inst="v01" hidden>3 services connected. Nothing is saved until you accept.</span></span>
+    <span class="pagehead__meta" data-when="edit" hidden><span data-inst="full">Ebooks. 1,842 items, 1 catalogue source, no request destination.</span><span data-inst="v01" hidden>TV. 275 series, 2 catalogue sources, no request destination.</span></span>
     <span class="pagehead__meta" data-when="unconfigured" hidden>No libraries, because no service is connected.</span>
   </div>
 
@@ -255,11 +292,11 @@
        =================================================================== -->
   <div data-when="list">
 
-    <div class="banner banner--warn" role="status">
+    <div class="banner banner--warn" role="status" data-inst="full">
       <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
       <div class="banner__body">
         <div class="banner__title">Ongoing comics has no sources left</div>
-        <div class="banner__text">Its only source, the Komga instance named "garage", was removed from Services on 12 Aug 2026. The library was kept, not deleted: it carries a name you chose, four corrections, and the tags on its 41 works.</div>
+        <div class="banner__text">Its only source, the Kavita instance named "garage", was removed from Services on 12 Aug 2026. The library was kept, not deleted: it carries a name you chose, four corrections, and the tags on its 41 works.</div>
       </div>
       <div class="banner__actions"><button type="button" class="btn">Delete library</button></div>
     </div>
@@ -278,7 +315,8 @@
          the column was 4/6 identical in value and 4/6 divergent in
          explanation, and the paragraphs were what made those rows 160px tall.
          The shared fact is stated once, here, above the table. -->
-    <p class="section" style="color:var(--fg-muted);font-size:var(--fs-sm);line-height:var(--lh-sm);padding-bottom:8px">v0.1 connects <strong>no request destination for any media type</strong>, because it ships no command sinks at all &mdash; the *Arr-backed request path is v0.2. The field is specified now so the binding exists from the first migration. Indexer search works for every type and the grab ends in your download client meanwhile. When destinations do ship, Movies and TV have one immediately because Radarr and Sonarr are already their catalogue source; music, books and comics need a service added for the purpose &mdash; Lidarr, LazyLibrarian or Mylar3 &mdash; and Readarr, the *Arr that used to own books, was archived on 27 Jun 2025. That is a deferral of the <em>write</em> half, not of the media type: a library&rsquo;s catalogue source and its request destination are separate bindings, and music already has the first one in Navidrome.</p>
+    <p class="section" style="color:var(--fg-muted);font-size:var(--fs-sm);line-height:var(--lh-sm);padding-bottom:8px" data-inst="full">This install connects <strong>no request destination for any media type</strong>, because no milestone up to this one ships a command sink &mdash; the *Arr-backed request path is v0.2 and the rest are later still. The field is specified now so the binding exists from the first migration. Indexer search works for every type and the grab ends in your download client meanwhile. When destinations do ship, Movies and TV have one immediately because Radarr and Sonarr are already their catalogue source; music, books and comics need a service added for the purpose &mdash; Lidarr, LazyLibrarian or Mylar3 &mdash; and Readarr, the *Arr that used to own books, was archived on 27 Jun 2025. That is a deferral of the <em>write</em> half, not of the media type: a library&rsquo;s catalogue source and its request destination are separate bindings, and music already has the first one in Navidrome.</p>
+    <p class="section" style="color:var(--fg-muted);font-size:var(--fs-sm);line-height:var(--lh-sm);padding-bottom:8px" data-inst="v01" hidden>v0.1 connects <strong>no request destination for any media type</strong>, because it ships no command sinks at all &mdash; the *Arr-backed request path is v0.2. The field is specified now so the binding exists from the first migration. Indexer search works for every type and the grab ends in your download client meanwhile. When destinations do ship, Movies and TV have one immediately because Radarr and Sonarr are already their catalogue source; music, books and comics need a service added for the purpose &mdash; Lidarr, LazyLibrarian or Mylar3 &mdash; and Readarr, the *Arr that used to own books, was archived on 27 Jun 2025. That is a deferral of the <em>write</em> half, and on this install the <em>read</em> half is deferred for those four types too: they have no catalogue source yet either, so they have no library on this screen at all.</p>
 
     <!-- The row is a row: two lines, hard ceiling. It used to run 80-160px --
          5.7 times the design's own 28px unit -- because the State column
@@ -300,7 +338,7 @@
          never reads a filesystem and never types a path" -- and the real form,
          as the detail view's own Diagnostics panel states, is "?lib=movies"
          with no slash at all. -->
-    <div class="tablewrap">
+    <div class="tablewrap" data-inst="full">
       <table aria-rowcount="13" class="tbl tbl--stack" data-roving="tbody tr[data-row]" aria-label="Configured libraries" style="--cols: minmax(0,1.1fr) 92px 56px minmax(0,1.7fr) minmax(0,1.3fr) minmax(0,1.5fr) minmax(max-content,auto); --row-lines: 2.17" aria-colcount="7" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
@@ -328,7 +366,7 @@
             <td data-col="kind" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Kind</span><span class="chip">Movies</span></td>
             <td data-col="items" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Items</span>1,204</td>
             <td data-col="catalogue-sources" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Catalogue sources</span>Radarr<div class="cell-sub">whole instance</div></td>
-            <td data-col="request-destination" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Request destination</span>Radarr<div class="cell-sub">requests are queued, not lost</div></td>
+            <td data-col="request-destination" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Request destination</span><span class="muted">None</span><div class="cell-sub">Radarr, from v0.2</div></td>
             <td data-col="state" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>all sources down</span><div class="cell-sub">fully browsable</div></td>
             <!-- An imperative verb that performs navigation is a lie about what
                  the click does. These are links to a screen, and they say so. -->
@@ -354,7 +392,7 @@
             <td data-col="kind" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Kind</span><span class="chip">TV</span></td>
             <td data-col="items" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Items</span>275</td>
             <td data-col="catalogue-sources" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Catalogue sources</span>Sonarr, Sonarr Anime<div class="cell-sub">2 instances · 214 + 61</div></td>
-            <td data-col="request-destination" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Request destination</span>Sonarr<div class="cell-sub">HD-1080p · <span class="mono">/media/tv</span></div></td>
+            <td data-col="request-destination" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Request destination</span><span class="muted">None</span><div class="cell-sub">Sonarr, from v0.2</div></td>
             <td data-col="state" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>one source degraded</span></td>
             <td data-col="action" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Action</span><a href="services.html">Sonarr Anime health →</a></td>
           </tr>
@@ -404,7 +442,7 @@
             <td data-col="library" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Library</span><div class="cell-title">Comics</div></td>
             <td data-col="kind" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Kind</span><span class="chip">Comics</span></td>
             <td data-col="items" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Items</span>512</td>
-            <td data-col="catalogue-sources" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Catalogue sources</span>Komga<div class="cell-sub">upstream library <span class="mono">Comics</span> · 512 series</div></td>
+            <td data-col="catalogue-sources" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Catalogue sources</span>Kavita<div class="cell-sub">upstream library <span class="mono">Comics</span> · 512 series</div></td>
             <td data-col="request-destination" class="muted" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Request destination</span>None</td>
             <td data-col="state" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--ok"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>healthy</span></td>
             <td data-col="action" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Action</span><a href="libraries.html">Edit</a></td>
@@ -421,14 +459,14 @@
               </button>Manga</div></td>
             <td data-col="kind" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Kind</span><span class="chip">Comics</span></td>
             <td data-col="items" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Items</span>0</td>
-            <td data-col="catalogue-sources" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Catalogue sources</span>Komga<div class="cell-sub">upstream library <span class="mono">Manga</span></div></td>
+            <td data-col="catalogue-sources" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Catalogue sources</span>Kavita<div class="cell-sub">upstream library <span class="mono">Manga</span></div></td>
             <td data-col="request-destination" class="muted" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Request destination</span>None</td>
             <td data-col="state" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>no items</span><div class="cell-sub">not "not synced yet"</div></td>
             <td data-col="action" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Action</span><a href="libraries.html">Edit</a></td>
           </tr>
           <tr id="y-manga" hidden role="row" aria-rowindex="11"><td colspan="7" role="cell" aria-colindex="1" aria-colspan="7">
             <div class="detail">
-              <div><h4>Why it is empty</h4><ul><li>Komga is connected and reports 0 series in this library.</li><li class="muted">The last full compare finished at 13:31 and returned nothing, which is a different fact from a library that has never been read.</li></ul></div>
+              <div><h4>Why it is empty</h4><ul><li>Kavita is connected and reports 0 series in this library.</li><li class="muted">The last full compare finished at 13:31 and returned nothing, which is a different fact from a library that has never been read.</li></ul></div>
             </div>
           </td></tr>
 
@@ -449,7 +487,7 @@
           </tr>
           <tr id="y-ongoing" hidden role="row" aria-rowindex="13"><td colspan="7" role="cell" aria-colindex="1" aria-colspan="7">
             <div class="detail">
-              <div><h4>What happened</h4><ul><li>Its only source, the Komga instance named "garage", was removed on 12 Aug 2026.</li></ul></div>
+              <div><h4>What happened</h4><ul><li>Its only source, the Kavita instance named "garage", was removed on 12 Aug 2026.</li></ul></div>
               <div><h4>What was kept</h4><ul><li>Still browsable from the replica, and still in the scope chip.</li><li>The name you chose, 4 corrections, and the tags on its 41 works.</li></ul></div>
             </div>
           </td></tr>
@@ -457,19 +495,95 @@
         </tbody>
       </table>
     </div>
+    <!-- The same list on the v0.1 install, derived: six of the eight
+         libraries are bindings to containers Navidrome, Audiobookshelf and
+         Kavita named, so they do not exist here. What survives is the pair
+         that carries the two findings this screen exists for -- a library
+         whose every source is down and still fully browsable, and a library
+         over two instances of one service where one is degraded. -->
+    <div class="tablewrap" data-inst="v01" hidden>
+      <table aria-rowcount="5" class="tbl tbl--stack" data-roving="tbody tr[data-row]" aria-label="Configured libraries" style="--cols: minmax(0,1.1fr) 92px 56px minmax(0,1.7fr) minmax(0,1.3fr) minmax(0,1.5fr) minmax(max-content,auto); --row-lines: 2.17" aria-colcount="7" role="table">
+        <thead role="rowgroup">
+          <tr role="row" aria-rowindex="1">
+            <th scope="col" role="columnheader" aria-colindex="1">Library</th>
+            <th scope="col" role="columnheader" aria-colindex="2">Kind</th>
+            <th scope="col" class="is-num" role="columnheader" aria-colindex="3">Items</th>
+            <th scope="col" role="columnheader" aria-colindex="4">Catalogue sources</th>
+            <th scope="col" role="columnheader" aria-colindex="5">Request destination</th>
+            <th scope="col" role="columnheader" aria-colindex="6">State</th>
+            <th scope="col" role="columnheader" aria-colindex="7">Action</th>
+          </tr>
+        </thead>
+        <tbody role="rowgroup">
 
-    <p class="section note"><span class="statebar__tag">mockup</span> Audiobooks and Ebooks are two libraries over one Audiobookshelf library, split by edition format. Audiobookshelf's own model has one axis — <span class="mono">mediaType</span> is <span class="mono">book</span> or <span class="mono">podcast</span> — and the ebook/audiobook difference is a field on each item, so it cannot present the split itself. UsArr can, because it binds to the container and filters on format, and that is the clearest case of the organisation being better than the service's own.</p>
+          <!-- ALL SOURCES DOWN, and this is the replica principle's
+               demonstration. Radarr is Movies' only source and it is
+               unreachable; the library is complete, browsable, sortable and
+               searchable anyway, because nothing on a render path talks to
+               Radarr. Nothing greys out and there is no spinner. -->
+          <tr data-row role="row" aria-rowindex="2">
+            <td data-col="library" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Library</span><div class="cell-title">
+              <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="y-movies-v01" aria-label="Show detail for Movies">
+                <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+              </button>Movies</div></td>
+            <td data-col="kind" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Kind</span><span class="chip">Movies</span></td>
+            <td data-col="items" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Items</span>1,204</td>
+            <td data-col="catalogue-sources" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Catalogue sources</span>Radarr<div class="cell-sub">whole instance</div></td>
+            <td data-col="request-destination" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Request destination</span><span class="muted">None</span><div class="cell-sub">Radarr, from v0.2</div></td>
+            <td data-col="state" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>all sources down</span><div class="cell-sub">fully browsable</div></td>
+            <!-- An imperative verb that performs navigation is a lie about what
+                 the click does. These are links to a screen, and they say so. -->
+            <td data-col="action" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Action</span><a href="services.html">Radarr health →</a></td>
+          </tr>
+          <tr id="y-movies-v01" hidden role="row" aria-rowindex="3"><td colspan="7" role="cell" aria-colindex="1" aria-colspan="7">
+            <div class="detail">
+              <div><h4>What is stale, and what is not</h4><ul><li>All 1,204 films render from the replica.</li><li class="muted">What can be stale is whether a file has appeared or been deleted since 11:47 — not what is in the library.</li></ul></div>
+              <div><h4>Sources</h4><ul><li>Radarr · whole instance · <span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>unreachable since 11:47</span></li></ul></div>
+              <div><h4>Requests</h4><ul><li>Radarr, currently down</li><li class="muted">A request made now is written to the queue and sent when Radarr answers.</li></ul></div>
+            </div>
+          </td></tr>
+
+          <!-- ONE SOURCE DEGRADED. Two Sonarrs feed one library, which is what
+               makes a single row carry both instances' availability rather
+               than splitting a series into two entries. The second instance
+               joined; it did not create a second TV library. -->
+          <tr data-row role="row" aria-rowindex="4">
+            <td data-col="library" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Library</span><div class="cell-title">
+              <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="y-tv-v01" aria-label="Show detail for TV">
+                <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+              </button>TV</div></td>
+            <td data-col="kind" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Kind</span><span class="chip">TV</span></td>
+            <td data-col="items" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Items</span>275</td>
+            <td data-col="catalogue-sources" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Catalogue sources</span>Sonarr, Sonarr Anime<div class="cell-sub">2 instances · 214 + 61</div></td>
+            <td data-col="request-destination" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Request destination</span><span class="muted">None</span><div class="cell-sub">Sonarr, from v0.2</div></td>
+            <td data-col="state" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>one source degraded</span></td>
+            <td data-col="action" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Action</span><a href="services.html">Sonarr Anime health →</a></td>
+          </tr>
+          <tr id="y-tv-v01" hidden role="row" aria-rowindex="5"><td colspan="7" role="cell" aria-colindex="1" aria-colspan="7">
+            <div class="detail">
+              <div><h4>Sources</h4><ul><li>Sonarr · whole instance · 214 · <span class="st st--ok"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>healthy</span></li><li>Sonarr Anime · *Arr tag <span class="mono">anime</span> · 61 · <span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>degraded</span></li></ul></div>
+              <div><h4>Why it is degraded</h4><ul><li class="muted">Delta polling on the anime instance keys off a clock 212 seconds ahead of this host, so a change inside that window waits for the reconciliation sweep rather than being missed permanently.</li></ul></div>
+            </div>
+          </td></tr>
+
+        </tbody>
+      </table>
+    </div>
+
+    <p class="section note" data-inst="v01" hidden><span class="statebar__tag">mockup</span> TV is one library over <strong>two Sonarr instances</strong>, which is the same mechanism from the other side: a library is a name you own over containers, and the number of containers behind it is not the user's problem until one of them is degraded &mdash; at which point the row says which. The Audiobookshelf split that makes the strongest case for the concept is on the full stack, and the switcher above reaches it.</p>
+    <p class="section note" data-inst="full"><span class="statebar__tag">mockup</span> Audiobooks and Ebooks are two libraries over one Audiobookshelf library, split by edition format. Audiobookshelf's own model has one axis — <span class="mono">mediaType</span> is <span class="mono">book</span> or <span class="mono">podcast</span> — and the ebook/audiobook difference is a field on each item, so it cannot present the split itself. UsArr can, because it binds to the container and filters on format, and that is the clearest case of the organisation being better than the service's own.</p>
   </div>
 
   <!-- ===================================================================
        Auto-proposal, one Accept
        =================================================================== -->
   <div data-when="propose" hidden>
+    <div data-inst="full">
 
     <div class="banner" role="status">
       <svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg>
       <div class="banner__body">
-        <div class="banner__title">Audiobookshelf and Komga connected. <span data-slot="propcount">UsArr proposes 4 libraries and declines 1 thing it cannot model.</span></div>
+        <div class="banner__title">Audiobookshelf and Kavita connected. <span data-slot="propcount">UsArr proposes 4 libraries and declines 1 thing it cannot model.</span></div>
         <div class="banner__text">Every proposal is pre-selected and editable in place. Nothing is saved until you accept, and nothing that was declined is silently dropped: each refusal says what it was and why.</div>
       </div>
       <div class="banner__actions"><button type="button" class="btn btn--primary" data-act="accept-props">Accept 4 proposals</button></div>
@@ -512,13 +626,13 @@
             <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><label class="sr" for="p3n">Library name</label><input class="input" id="p3n" data-act="propname" type="text" value="Comics" style="max-width:180px"><div class="cell-sub" data-slot="mergenote" hidden></div></td>
             <td data-col="kind" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span><label class="sr" for="p3k">Kind</label><select class="select" id="p3k" style="max-width:120px"><option value="movie">Movies</option><option value="series">TV</option><option value="artist">Music</option><option value="book">Books</option><option selected value="comic">Comics</option></select></td>
             <td data-col="format-filter" class="muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Format filter</span>all formats</td>
-            <td data-col="from" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">From</span>Komga <span class="cell-sub">upstream library <span class="mono">Comics</span> · 512 series</span></td>
-            <td data-col="why" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Why</span>Komga has no library type, so the kind is a guess.</td>
+            <td data-col="from" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">From</span>Kavita <span class="cell-sub">upstream library <span class="mono">Comics</span> · 512 series</span></td>
+            <td data-col="why" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Why</span>Kavita reports the library type it was configured with, and the guess is which UsArr kind it maps to.</td>
           </tr>
 
           <!-- An upstream library that answers with nothing is still a
                library. Dropping it here would produce the failure 17.8 names:
-               the user later cannot tell "Komga reports 0 series" from "UsArr
+               the user later cannot tell "Kavita reports 0 series" from "UsArr
                never asked". Renaming it to Comics is also what demonstrates
                the join default -- a second container of a kind that already
                has a library becomes that library's second source rather than a
@@ -529,7 +643,7 @@
             <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><label class="sr" for="p4n">Library name</label><input class="input" id="p4n" data-act="propname" type="text" value="Manga" style="max-width:180px"><div class="cell-sub" data-slot="mergenote" hidden></div></td>
             <td data-col="kind" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span><label class="sr" for="p4k">Kind</label><select class="select" id="p4k" style="max-width:120px"><option value="movie">Movies</option><option value="series">TV</option><option value="artist">Music</option><option value="book">Books</option><option selected value="comic">Comics</option></select></td>
             <td data-col="format-filter" class="muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Format filter</span>all formats</td>
-            <td data-col="from" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">From</span>Komga <span class="cell-sub">upstream library <span class="mono">Manga</span> · 0 series</span></td>
+            <td data-col="from" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">From</span>Kavita <span class="cell-sub">upstream library <span class="mono">Manga</span> · 0 series</span></td>
             <td data-col="why" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Why</span>Answers and reports 0 series, which is not a failed sync.</td>
           </tr>
 
@@ -555,15 +669,120 @@
       <span class="toolbar__label">Renaming a proposal to match another makes it <strong>join</strong> that library as a second source rather than create a parallel one; the match ignores case and surrounding spaces, and the row says so the moment it happens. Editing any proposal also marks that library user-managed, after which a later connect can only offer to add sources — never reshape it.</span>
     </div>
 
-    <p class="section note">Why each of those five reads the way it does: Audiobookshelf distinguishes an ebook from an audiobook <em>per item</em>, not per library, so it cannot offer the Audiobooks/Ebooks split itself — UsArr can, because it binds to the container and filters on format. Komga publishes no library type and does scan EPUB, so its kind is a guess and the select is not read-only. The Manga container answers and reports zero series, which is a different fact from a library that failed to sync, so it is proposed rather than dropped — and renaming it to <span class="mono">Comics</span> makes it join that library as a second source instead of becoming a parallel one. Podcasts is declined because there is no podcast media type to map it to; its 61 items are not imported and not hidden, they stay in Audiobookshelf where they already work.</p>
+    <p class="section note">Why each of those five reads the way it does: Audiobookshelf distinguishes an ebook from an audiobook <em>per item</em>, not per library, so it cannot offer the Audiobooks/Ebooks split itself — UsArr can, because it binds to the container and filters on format. Kavita declares its library type — <span class="mono">Manga</span>, <span class="mono">Comic</span> or <span class="mono">Book</span> — but which UsArr kind that maps to is still a judgement, so the select is not read-only. The Manga container answers and reports zero series, which is a different fact from a library that failed to sync, so it is proposed rather than dropped — and renaming it to <span class="mono">Comics</span> makes it join that library as a second source instead of becoming a parallel one. Podcasts is declined because there is no podcast media type to map it to; its 61 items are not imported and not hidden, they stay in Audiobookshelf where they already work.</p>
 
-    <p class="section note"><span class="statebar__tag">mockup</span> Nothing on this screen asks for a path. Every container above was named by the service that owns it: an Audiobookshelf library id and a Komga library id. That is the whole difference between binding to a service and scanning a disk, and it is why the kind is editable here — nothing was inferred from a folder name, so nothing breaks when you change it.</p>
+    <p class="section note"><span class="statebar__tag">mockup</span> Nothing on this screen asks for a path. Every container above was named by the service that owns it: an Audiobookshelf library id and a Kavita library id. That is the whole difference between binding to a service and scanning a disk, and it is why the kind is editable here — nothing was inferred from a folder name, so nothing breaks when you change it.</p>
+    </div>
+
+    <!-- ===============================================================
+         The same flow on the v0.1 install. The services that can propose a
+         library there are Sonarr and Radarr, and the mechanism is identical:
+         one proposal per container the service already named, pre-selected,
+         editable in place, nothing saved until Accept, and nothing declined
+         in silence.
+
+         Two things this version says that the full-stack one cannot. The
+         merge default is demonstrated over the case a v0.1 owner actually
+         hits -- a second Sonarr -- and renaming `Anime` to `TV` is what turns
+         a parallel library into a second SOURCE of the existing one, which is
+         where the TV row on the list above gets its two instances. And the
+         declined row is Prowlarr: it was connected in the same pass and
+         carries no library at all, so it contributes nothing, and saying so
+         is the difference between "UsArr decided" and "UsArr missed it".
+         =============================================================== -->
+    <div data-inst="v01" hidden>
+
+    <div class="banner" role="status">
+      <svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg>
+      <div class="banner__body">
+        <div class="banner__title">Sonarr, Sonarr Anime and Radarr connected. <span data-slot="propcount">UsArr proposes 3 libraries and declines 1 thing it cannot model.</span></div>
+        <div class="banner__text">Every proposal is pre-selected and editable in place. Nothing is saved until you accept, and nothing that was declined is silently dropped: each refusal says what it was and why.</div>
+      </div>
+      <div class="banner__actions"><button type="button" class="btn btn--primary" data-act="accept-props">Accept 3 proposals</button></div>
+    </div>
+
+    <div class="tablewrap">
+      <table aria-rowcount="5" class="tbl tbl--stack" data-act="proposals" data-roving="tbody tr" aria-label="Proposed libraries" style="--cols: minmax(max-content,auto) minmax(0,1.3fr) 128px minmax(0,0.9fr) minmax(0,2fr) minmax(0,2.4fr); --row-lines: 2.06" aria-colcount="6" role="table">
+        <thead role="rowgroup">
+          <tr role="row" aria-rowindex="1">
+            <th scope="col" role="columnheader" aria-colindex="1">Decision</th>
+            <th scope="col" role="columnheader" aria-colindex="2">Proposal</th>
+            <th scope="col" role="columnheader" aria-colindex="3">Kind</th>
+            <th scope="col" role="columnheader" aria-colindex="4">Format filter</th>
+            <th scope="col" role="columnheader" aria-colindex="5">From</th>
+            <th scope="col" role="columnheader" aria-colindex="6">Why</th>
+          </tr>
+        </thead>
+        <tbody role="rowgroup">
+
+          <tr role="row" aria-rowindex="2">
+            <td data-col="accept" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Accept</span><label class="sr" for="pv1">Accept this proposal</label><input type="checkbox" id="pv1" checked></td>
+            <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><label class="sr" for="pv1n">Library name</label><input class="input" id="pv1n" data-act="propname" type="text" value="Movies" style="max-width:180px"><div class="cell-sub" data-slot="mergenote" hidden></div></td>
+            <td data-col="kind" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span><label class="sr" for="pv1k">Kind</label><select class="select" id="pv1k" style="max-width:120px"><option selected value="movie">Movies</option><option value="series">TV</option><option value="artist">Music</option><option value="book">Books</option><option value="comic">Comics</option></select></td>
+            <td data-col="format-filter" class="muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Format filter</span>all formats</td>
+            <td data-col="from" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">From</span>Radarr <span class="cell-sub">whole instance · 1,204 films</span></td>
+            <td data-col="why" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Why</span>One root folder, so one library over the whole instance.</td>
+          </tr>
+
+          <tr role="row" aria-rowindex="3">
+            <td data-col="accept" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Accept</span><label class="sr" for="pv2">Accept this proposal</label><input type="checkbox" id="pv2" checked></td>
+            <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><label class="sr" for="pv2n">Library name</label><input class="input" id="pv2n" data-act="propname" type="text" value="TV" style="max-width:180px"><div class="cell-sub" data-slot="mergenote" hidden></div></td>
+            <td data-col="kind" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span><label class="sr" for="pv2k">Kind</label><select class="select" id="pv2k" style="max-width:120px"><option value="movie">Movies</option><option selected value="series">TV</option><option value="artist">Music</option><option value="book">Books</option><option value="comic">Comics</option></select></td>
+            <td data-col="format-filter" class="muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Format filter</span>all formats</td>
+            <td data-col="from" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">From</span>Sonarr <span class="cell-sub">whole instance · 214 series</span></td>
+            <td data-col="why" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Why</span>One root folder, so one library over the whole instance.</td>
+          </tr>
+
+          <!-- The join default, over the case a v0.1 owner actually has. Two
+               Sonarrs are two proposals, because two instances are not one
+               library until the user says so -- and typing TV into this row is
+               how they say so. Getting that default backwards splits one show
+               across two entries and destroys the per-instance badge. -->
+          <tr role="row" aria-rowindex="4">
+            <td data-col="accept" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Accept</span><label class="sr" for="pv3">Accept this proposal</label><input type="checkbox" id="pv3" checked></td>
+            <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><label class="sr" for="pv3n">Library name</label><input class="input" id="pv3n" data-act="propname" type="text" value="Anime" style="max-width:180px"><div class="cell-sub" data-slot="mergenote" hidden></div></td>
+            <td data-col="kind" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span><label class="sr" for="pv3k">Kind</label><select class="select" id="pv3k" style="max-width:120px"><option value="movie">Movies</option><option selected value="series">TV</option><option value="artist">Music</option><option value="book">Books</option><option value="comic">Comics</option></select></td>
+            <td data-col="format-filter" class="muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Format filter</span>all formats</td>
+            <td data-col="from" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">From</span>Sonarr Anime <span class="cell-sub">whole instance · 61 series</span></td>
+            <td data-col="why" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Why</span>A separate instance, so a separate proposal. Rename it to join.</td>
+          </tr>
+
+          <!-- Declined, with the reason. Prowlarr was connected in the same
+               pass and proposes nothing, and a flow that simply says nothing
+               about it leaves the user unable to tell "decided" from
+               "missed". -->
+          <tr role="row" aria-rowindex="5">
+            <td data-col="accept" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Accept</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>declined</span></td>
+            <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><div class="cell-title">Prowlarr</div></td>
+            <td data-col="kind" class="muted" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span>not applicable</td>
+            <td data-col="format-filter" class="muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Format filter</span>not applicable</td>
+            <td data-col="from" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">From</span>Prowlarr <span class="cell-sub">indexer manager · no containers reported</span></td>
+            <td data-col="why" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Why</span>It carries no library. It is what Requests searches.</td>
+          </tr>
+
+        </tbody>
+      </table>
+    </div>
+
+    <div class="toolbar">
+      <button type="button" class="btn btn--primary" data-act="accept-props">Accept 3 proposals</button>
+      <button type="button" class="btn">Accept none</button>
+      <div class="toolbar__spacer"></div>
+      <span class="toolbar__label">Renaming a proposal to match another makes it <strong>join</strong> that library as a second source rather than create a parallel one; the match ignores case and surrounding spaces, and the row says so the moment it happens. Editing any proposal also marks that library user-managed, after which a later connect can only offer to add sources — never reshape it.</span>
+    </div>
+
+    <p class="section note">Type <span class="mono">TV</span> over <span class="mono">Anime</span> in the third row and watch it change: the row says it joins, the banner counts two libraries instead of three, and both buttons follow. That single edit is what produces the TV library on the list — 275 series over two Sonarr instances, one of them degraded — and it is the difference between one library with a per-instance badge and two libraries that each hold half a show.</p>
+
+    <p class="section note"><span class="statebar__tag">mockup</span> Nothing on this screen asks for a path. Every container above was named by the service that owns it: an *Arr root folder, an *Arr tag, or the whole instance. That is the whole difference between binding to a service and scanning a disk, and it is why the kind is editable here — nothing was inferred from a folder name, so nothing breaks when you change it.</p>
+    </div>
+
   </div>
 
   <!-- ===================================================================
        One library, edited
        =================================================================== -->
   <div data-when="edit" hidden>
+    <div data-inst="full">
 
     <div class="toolbar">
       <nav class="levels" aria-label="Level">
@@ -674,7 +893,7 @@
           </tbody>
         </table>
       </div>
-      <p class="note" style="padding-top:8px">Add source offers a list the instance reports — Audiobookshelf's <span class="mono">/api/libraries</span>, Komga's <span class="mono">/api/v1/libraries</span>, an *Arr's <span class="mono">/api/v3/rootfolder</span> or <span class="mono">/api/v3/tag</span>. There is no free-text path field on this screen, and that is deliberate: it is the difference between binding to a container a service already computed and reading a disk.</p>
+      <p class="note" style="padding-top:8px">Add source offers a list the instance reports — Audiobookshelf's <span class="mono">/api/libraries</span>, the library list Kavita reports, an *Arr's <span class="mono">/api/v3/rootfolder</span> or <span class="mono">/api/v3/tag</span>. There is no free-text path field on this screen, and that is deliberate: it is the difference between binding to a container a service already computed and reading a disk.</p>
     </section>
 
     <!-- Request sink: a separate thing from the sources, single-valued, and
@@ -689,7 +908,7 @@
           <select class="select" id="l-sink" style="max-width:260px">
             <option selected>None</option>
           </select>
-          <span class="field__help">Only instances whose probed capabilities advertise Add for a book in one of this library's formats are offered, and on this install none does: Readarr was archived on 27 Jun 2025 and v0.1 connects no book sink. A grab from indexer search still works and still lands in your download client — nothing after that renames it, moves it, or tells UsArr what became of it.</span>
+          <span class="field__help">Only instances whose probed capabilities advertise Add for a book in one of this library's formats are offered, and on this install none does: Readarr was archived on 27 Jun 2025, and the command sinks that could take a book request are deferred behind every catalogue source drawn here. A grab from indexer search still works and still lands in your download client — nothing after that renames it, moves it, or tells UsArr what became of it.</span>
         </div>
         <div class="field">
           <label class="field__label" for="l-watch">Watched folder</label>
@@ -782,6 +1001,239 @@
       </div>
     </section>
 
+    </div>
+
+    <!-- ===============================================================
+         The same screen on the v0.1 install, over the library a v0.1 owner
+         actually has. TV rather than Ebooks, and the swap earns three things
+         the full-stack drawing cannot show:
+
+         · TWO catalogue sources, so the metadata-authority radio is a real
+           choice between two instances rather than a cell reading "the only
+           source", and the source-disagreement panel has something in it.
+         · One of those two DEGRADED, on the same screen as the switch that
+           decides which of them wins a conflict -- which is the moment that
+           choice matters and the only place it is visible.
+         · An identity panel where nothing is matched by title, because Sonarr
+           carries TVDB ids. ARCHITECTURE.md 17.3: `matched by title` is not
+           reachable in v0.1, and drawing it here would invent a state.
+         =============================================================== -->
+    <div data-inst="v01" hidden>
+
+    <div class="toolbar">
+      <nav class="levels" aria-label="Level">
+        <a href="libraries.html">Libraries</a>
+        <span class="levels__sep" aria-hidden="true">›</span>
+        <span class="levels__here" aria-current="page">TV</span>
+      </nav>
+      <div class="toolbar__spacer"></div>
+      <span class="toolbar__label">275 series · membership recomputed 14:02, 6 minutes ago · user-managed</span>
+    </div>
+
+    <section class="section">
+      <div class="section__head"><h2>Identity</h2></div>
+      <form class="form" data-act="editform" onsubmit="return false">
+        <div class="field">
+          <label class="field__label" for="v-name">Name</label>
+          <input class="input" id="v-name" type="text" value="TV">
+          <span class="field__help">Your name for it. A whole-instance binding to an *Arr has no upstream name of its own — the instance name is one you chose too — so unlike a media-server library there is nothing greyed out beside this field.</span>
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="v-kind">Kind</label>
+          <select class="select" id="v-kind" data-act="kind" style="max-width:200px">
+            <option value="movie">Movies</option><option selected value="series">TV</option><option value="artist">Music</option><option value="book">Books</option><option value="comic">Comics</option>
+          </select>
+          <span class="field__err" data-slot="kind-warn" hidden><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg><span class="sr">Warning:</span>Saving this re-derives membership for 275 series from what the services report. Nothing changes in Sonarr.</span>
+          <span class="field__help">Exactly one, required, and editable. Changing it re-derives membership from what the services report and changes nothing upstream. It is editable because UsArr has no scanner: nothing here was inferred from a path or a filename.</span>
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="v-formats">Format filter</label>
+          <select class="select" id="v-formats" multiple size="5" style="max-width:200px">
+            <option>epub</option>
+            <option>pdf</option>
+            <option>azw3</option>
+            <option>m4b</option>
+            <option>mp3</option>
+            <option>cbz</option>
+          </select>
+          <span class="field__help">Empty means every format, which is the ordinary case for TV: an episode has one file and the format is not what tells two libraries apart. The field earns its place on a books library, where an audiobook and an ebook are two editions of one work and only the format separates them.</span>
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="v-order">Display order</label>
+          <input class="input" id="v-order" type="number" value="2" style="max-width:120px">
+          <span class="field__help">One ordered list drives both the sidebar and the type summary on home.</span>
+        </div>
+      </form>
+    </section>
+
+    <section class="section">
+      <div class="section__head"><h2>Visibility</h2></div>
+      <form class="form" data-act="editform" onsubmit="return false">
+        <div class="field"><label class="check" for="v-enabled"><input type="checkbox" id="v-enabled" checked> Enabled</label></div>
+        <div class="field"><label class="check" for="v-home"><input type="checkbox" id="v-home" checked> Show on home</label>
+          <span class="field__help">Off keeps the library browsable and keeps it out of the type summary and the recently-added table.</span></div>
+        <div class="field"><label class="check" for="v-search"><input type="checkbox" id="v-search" checked> Include in search</label>
+          <span class="field__help">Off keeps the library browsable and out of search results.</span></div>
+        <div class="field">
+          <label class="field__label" for="v-sort">Default sort</label>
+          <select class="select" id="v-sort" style="max-width:200px">
+            <option>Added, newest first</option>
+            <option>Author, then title</option>
+            <option selected>Title</option>
+            <option>Year</option>
+          </select>
+          <span class="field__help">One default per media type: films by added date, music by artist, ebooks by author, comics by series then issue number.</span>
+        </div>
+      </form>
+    </section>
+
+    <section class="section">
+      <div class="section__head">
+        <h2>Catalogue sources</h2>
+        <span class="section__count num">2 sources</span>
+        <div class="section__actions"><button type="button" class="btn btn--sm">Add source</button></div>
+      </div>
+      <div class="tablewrap">
+        <table aria-rowcount="3" class="tbl tbl--stack" data-roving-optout="every row is a form: a radio, a checkbox and a button" aria-label="Catalogue sources" style="--cols: minmax(0,1.4fr) minmax(0,2fr) 60px minmax(0,1.4fr) 138px 76px 92px; --row-lines: 2.22" aria-colcount="7" role="table">
+          <thead role="rowgroup">
+            <tr role="row" aria-rowindex="1">
+              <th scope="col" role="columnheader" aria-colindex="1">Instance</th>
+              <th scope="col" role="columnheader" aria-colindex="2">Container</th>
+              <th scope="col" class="is-num" role="columnheader" aria-colindex="3">Items</th>
+              <th scope="col" role="columnheader" aria-colindex="4">State</th>
+              <th scope="col" role="columnheader" aria-colindex="5">Metadata authority</th>
+              <th scope="col" role="columnheader" aria-colindex="6">Enabled</th>
+              <th scope="col" role="columnheader" aria-colindex="7">Action</th>
+            </tr>
+          </thead>
+          <tbody role="rowgroup">
+            <tr role="row" aria-rowindex="2">
+              <td data-col="instance" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Instance</span><div class="cell-title">Sonarr</div><div class="cell-sub monoNone trunc" title="http://10.0.0.4:8989">http://10.0.0.4:8989</div></td>
+              <td data-col="container" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Container</span>Whole instance
+                <div class="cell-sub">every series this instance holds</div></td>
+              <td data-col="items" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Items</span>214</td>
+              <td data-col="state" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--ok"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>healthy</span><div class="cell-sub">Last seen 14:02</div></td>
+              <td data-col="metadata-authority" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Metadata authority</span><label class="check"><input type="radio" name="v-authority" checked> Authoritative</label></td>
+              <td data-col="enabled" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Enabled</span><label class="check"><span class="sr">Enable the Sonarr source</span><input type="checkbox" checked></label></td>
+              <td data-col="action" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Action</span><button type="button" class="btn btn--sm">Remove</button></td>
+            </tr>
+            <!-- The degraded source, on the screen that decides which source
+                 wins. The skew is why it matters: an instance whose clock runs
+                 ahead can report a stale value as the newer one. -->
+            <tr role="row" aria-rowindex="3">
+              <td data-col="instance" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Instance</span><div class="cell-title">Sonarr Anime</div><div class="cell-sub monoNone trunc" title="http://10.0.0.9:8989">http://10.0.0.9:8989</div></td>
+              <td data-col="container" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Container</span>Whole instance
+                <div class="cell-sub">joined here by renaming its proposal</div></td>
+              <td data-col="items" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Items</span>61</td>
+              <td data-col="state" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>degraded</span><div class="cell-sub">clock 212 s ahead</div></td>
+              <td data-col="metadata-authority" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Metadata authority</span><label class="check"><input type="radio" name="v-authority"> Authoritative</label></td>
+              <td data-col="enabled" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Enabled</span><label class="check"><span class="sr">Enable the Sonarr Anime source</span><input type="checkbox" checked></label></td>
+              <td data-col="action" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Action</span><button type="button" class="btn btn--sm">Remove</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note" style="padding-top:8px">The authority radio decides which instance wins a field-level conflict, and it is one choice for the library rather than a sentence repeated in every row. Add source offers a list the instance reports — an *Arr's <span class="mono">/api/v3/rootfolder</span> or <span class="mono">/api/v3/tag</span>, or the whole instance. There is no free-text path field on this screen, and that is deliberate: it is the difference between binding to a container a service already computed and reading a disk.</p>
+    </section>
+
+    <section class="section">
+      <div class="section__head"><h2>Requests</h2></div>
+      <form class="form" data-act="editform" onsubmit="return false">
+        <div class="field">
+          <label class="field__label" for="v-sink">Request destination</label>
+          <select class="select" id="v-sink" style="max-width:260px">
+            <option selected>None</option>
+          </select>
+          <span class="field__help">Only instances whose probed capabilities advertise Add for a series are offered, and on this install none does: v0.1 connects no command sink at all. Sonarr is already this library's catalogue source and becomes its destination in v0.2, which is a second binding on the same instance rather than a new service. A grab from indexer search still works and still lands in your download client meanwhile.</span>
+        </div>
+        <div class="field">
+          <label class="field__label" for="v-watch">Watched folder</label>
+          <input class="input" id="v-watch" type="text" value="Not applicable" readonly style="max-width:260px">
+          <span class="field__help">Nothing here watches a folder. Sonarr imports only the releases it asked for itself, so a grab UsArr sent straight to your download client is not one it will pick up — which is the opposite of a media server, where dropping the file in the scanned folder is enough. Requests says the same thing on the row, at the moment of the grab.</span>
+        </div>
+      </form>
+    </section>
+
+    <section class="section">
+      <div class="section__head">
+        <h2>Corrections <span class="chip">v0.3</span></h2>
+        <span class="section__count num">3</span>
+        <div class="section__actions"><button type="button" class="btn btn--sm">Add correction</button></div>
+      </div>
+      <div class="tablewrap">
+        <table aria-rowcount="4" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Corrections" style="--cols: 116px minmax(max-content,auto) minmax(0,2fr) minmax(0,2.4fr) 76px; --row-lines: 2.06" aria-colcount="5" role="table">
+          <thead role="rowgroup">
+            <tr role="row" aria-rowindex="1">
+              <th scope="col" role="columnheader" aria-colindex="1">Correction</th>
+              <th scope="col" class="is-num" role="columnheader" aria-colindex="2">Count</th>
+              <th scope="col" role="columnheader" aria-colindex="3">What it does</th>
+              <th scope="col" role="columnheader" aria-colindex="4">Most recent</th>
+              <th scope="col" role="columnheader" aria-colindex="5">Action</th>
+            </tr>
+          </thead>
+          <tbody role="rowgroup">
+            <tr role="row" aria-rowindex="2">
+              <td data-col="correction" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Correction</span><span class="chip">Excluded</span></td>
+              <td data-col="count" class="is-num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Count</span>2</td>
+              <td data-col="what-it-does" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What it does</span>Keeps a work out without touching the service.</td>
+              <td data-col="most-recent" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Most recent</span><span class="cell-title">Test Show</span><div class="cell-sub">10 Aug 2026 · "added while I was learning Sonarr, never unmonitored"</div></td>
+              <td data-col="action" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Action</span><button type="button" class="btn btn--sm">Undo</button></td>
+            </tr>
+            <tr role="row" aria-rowindex="3">
+              <td data-col="correction" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Correction</span><span class="chip">Field overridden</span></td>
+              <td data-col="count" class="is-num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Count</span>1</td>
+              <td data-col="what-it-does" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What it does</span>Overrides one of five fields, and nothing else.</td>
+              <td data-col="most-recent" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Most recent</span><span class="cell-title">Shogun</span><div class="cell-sub">7 Aug 2026 · sort title "Shogun" instead of "Shōgun"</div></td>
+              <td data-col="action" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Action</span><button type="button" class="btn btn--sm">Undo</button></td>
+            </tr>
+            <!-- No Re-linked row, and that is the finding rather than a gap:
+                 both sources carry a TVDB id, so nothing in this library was
+                 matched by title and there has been no wrong match to undo. -->
+            <tr role="row" aria-rowindex="4">
+              <td data-col="correction" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Correction</span><span class="chip">Re-linked</span></td>
+              <td data-col="count" class="is-num muted" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Count</span>0</td>
+              <td data-col="what-it-does" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What it does</span>Points a row at a different work when the match was wrong.</td>
+              <td data-col="most-recent" class="muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Most recent</span>None. Both sources carry a TVDB id, so nothing here was matched by title.</td>
+              <td data-col="action" class="muted" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Action</span>—</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note" style="padding-top:8px"><span class="statebar__tag">mockup</span> The correction tables ship in migration 0001; this surface is v0.3, and 16.0 caps it there. It is drawn in full here so the bound can be reviewed before the schema is written, not because it ships with the four screens above.</p>
+
+      <p class="note" style="padding-top:8px">Four verbs and five fields, and that bound is the design. A correction lives in UsArr, is keyed to UsArr's own identity, is never written back to the service, and is never cleared by a sync, a reconciliation sweep or a tombstone expiry.</p>
+    </section>
+
+    <section class="section">
+      <div class="section__head"><h2>Diagnostics</h2></div>
+      <div class="detail">
+        <div><h4>Membership</h4><ul><li>275 series</li><li>Recomputed <span class="num">14:02</span>, 6 minutes ago</li><li>Derived 275 · manual 0</li></ul></div>
+        <div><h4>Source disagreement</h4><ul><li><span class="num">0</span> works held by both instances</li><li class="muted">The two instances hold disjoint sets, so the authority radio has decided nothing yet — it is still the answer to "if they ever overlap, who wins"</li></ul></div>
+        <div><h4>Identity matching</h4><ul><li><span class="num">275</span> matched on an external id</li><li class="muted"><span class="num">0</span> matched by title: Sonarr carries a TVDB id for every series, so the weaker tier is not reached on this install at all</li></ul></div>
+        <div><h4>Scope</h4><ul><li>In the URL as <span class="mono">?lib=tv</span></li><li>Visible to 1 user</li></ul></div>
+      </div>
+    </section>
+
+    <div class="savebar" data-slot="savebar">
+      <span class="savebar__count" data-slot="dirty">No unsaved changes</span>
+      <button type="button" class="btn btn--primary" data-act="save-lib" disabled>Save</button>
+      <button type="button" class="btn" data-act="discard-lib" disabled>Discard</button>
+      <div class="toolbar__spacer"></div>
+      <span class="muted">Nothing on this form is applied until you save, and nothing here is written back to Sonarr.</span>
+    </div>
+
+    <section class="section">
+      <div class="section__head"><h2>Danger zone</h2></div>
+      <div class="form__row">
+        <button type="button" class="btn">Delete library</button>
+        <span class="muted">This removes the library from UsArr. It does not delete anything from Sonarr or from your disks. It <strong>will</strong> discard the 3 corrections made in this library, because a correction is keyed to the library it was made in.</span>
+      </div>
+    </section>
+    </div>
+
   </div>
 
   <dialog class="dialog" id="add-library" aria-labelledby="add-library-title">
@@ -807,10 +1259,10 @@
             <option>Radarr · whole instance</option>
             <option>Radarr · *Arr tag: kids</option>
             <option>Sonarr · whole instance</option>
-            <option>Komga · upstream library: Comics</option>
-            <option>Audiobookshelf · upstream library: Audiobooks &amp; Ebooks</option>
+            <option data-inst="full">Kavita · upstream library: Comics</option>
+            <option data-inst="full">Audiobookshelf · upstream library: Audiobooks &amp; Ebooks</option>
           </select>
-          <span class="field__help">A list each instance reports, never a free-text path: an Audiobookshelf or Komga library id, or an *Arr root folder or tag. More sources can be added after it exists.</span>
+          <span class="field__help">A list each instance reports, never a free-text path: an Audiobookshelf or Kavita library id, or an *Arr root folder or tag. More sources can be added after it exists.</span>
         </div>
       </form>
     </div>

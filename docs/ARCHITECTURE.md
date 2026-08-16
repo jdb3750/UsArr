@@ -1499,8 +1499,23 @@ Sonarr, Radarr or media server to get a library."*
   download-client integration**, which is what makes the mode affordable in v0.1.
 - **Results carry derived tags immediately, with no library behind them:** `source:` from
   `ReleaseResource.protocol` (byte-identical across the Prowlarr, Sonarr and Radarr specs), `type:`
-  from the Newznab category, `indexer:`, `indexer-privacy:`, and `flag:` from `indexerFlags`.
-  The source-tagging differentiator working with zero library.
+  from the Newznab category, `indexer:`, `indexer-privacy:`, and `flag:` from `indexerFlags` —
+  **an open vocabulary, so a flag UsArr does not recognise is carried through as an opaque tag
+  rather than dropped.** The source-tagging differentiator working with zero library.
+
+  > 🚩 **`flag:` is not a fixed list, and validating it against one silently loses data.**
+  > `IndexerFlag` is an ordinary subclassable class, not an enum. The common set is the statics in
+  > Prowlarr's `src/NzbDrone.Core/Indexers/IndexerFlag.cs`, and any indexer definition may
+  > contribute its own — `PassThePopcornFlag : IndexerFlag` adds `golden` and `approved` into the
+  > same array. So the tag layer **matches the names it knows and passes the rest through**; it
+  > never filters `indexerFlags` against a known set and discards the remainder.
+  >
+  > **Re-check it** in a Prowlarr checkout with `grep -rn "static IndexerFlag" src/` — **not**
+  > `grep "new IndexerFlag("`, which returns **zero matches in a file containing seven of them**,
+  > because the file constructs with C# target-typed `new(...)`. That probe is the obvious one to
+  > reach for and it answers "the set is empty" with total confidence; it is how the closed-set
+  > reading got here in the first place (`REVIEW-LOG.md` FI-15). The vocabulary itself, and the
+  > torrents-only caveat on `indexerFlags`, live in [`reference/tags.md`](./reference/tags.md).
 
   > 🚩 **Deriving `type:` from the *parent* category is a live bug for two of the six media types,
   > and it is fixed here rather than papered over.** Verified against Prowlarr's
@@ -2395,6 +2410,21 @@ policy, the component conventions and §17.2's navigation resolution — lives i
 [`design/DESIGN-DIRECTION.md`](./design/DESIGN-DIRECTION.md), with its canonical values in
 [`design/tokens.css`](./design/tokens.css) and its stack decision in ADR-0025. This section stays
 authoritative over both.
+
+⚠️ **This section specifies one product over two installs, and the mockups draw both.** Every rule
+below is written for the product; what changes between installs is which services are connected and
+therefore which media types have a catalogue source. The clickable prototype in
+[`design/mockups/`](./design/mockups/) carries a **milestone-labelled install switcher**, and the two
+positions are the ones the rules have to survive:
+
+| Install | Services | What the screens show |
+|---|---|---|
+| **Full stack** (the mockups' default) | Sonarr, Radarr, Prowlarr, Navidrome, Audiobookshelf, Kavita | All six media types catalogued. This is the default because six populated types is the case the layout has to survive, and a design judged only on two has not been judged. **It is a later milestone than v0.1** — §16 is authoritative, and it sequences the catalogue sources one at a time *after* v0.1 — so no screen, count or caption may present it as what v0.1 ships. |
+| **v0.1** | Sonarr, Radarr, Prowlarr | Movies and TV catalogued; music, audiobooks, ebooks and comics present as media types with **no catalogue source**, each naming the service that will populate it (§17.2). Requests still covers all six over the Prowlarr free-text path. |
+
+Where a rule below reads differently on the two — Block A's sourceless rows (§17.2), the group set
+on Search (§17.4), `matched by title` (§17.3), a library's binding (§17.8) — the difference is marked
+at the rule rather than left for the reader to infer. **The rules themselves do not fork.**
 
 ### 17.1 The UI philosophy, as a design constraint
 
