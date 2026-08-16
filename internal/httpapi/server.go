@@ -255,10 +255,12 @@ func (s *Server) routes(mux *http.ServeMux) {
 
 	// ── Search and grab ─────────────────────────────────────────────────────
 	//
-	// /indexers is what makes the search screen's indexer and category filters
-	// usable on first render. It reads the local replica written by the
-	// background prober and makes NO upstream call — the picker paints before
-	// the search runs, so it is a render path like any other.
+	// /indexers serves the REQUESTS screen's indexer and category picker
+	// (§17.5, not Search — /search is the not-built §17.4 gap screen). It
+	// reads the local replica written by the background prober and makes NO
+	// upstream call, because the picker paints before the search runs. No
+	// client fetches it yet; handleListIndexers in indexers.go carries the
+	// argument and the wiring status.
 	mux.Handle("GET /api/v1/indexers", s.authenticated(s.wrap(s.handleListIndexers)))
 	mux.Handle("GET /api/v1/search", s.authenticated(s.wrap(s.handleSearch)))
 	mux.Handle("POST /api/v1/releases/{id}/grab", s.csrfProtected(s.authenticated(s.wrap(s.handleGrab))))

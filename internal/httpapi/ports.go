@@ -108,8 +108,9 @@ type UpstreamWarning struct {
 }
 
 // BlockedIndexer is one entry from Prowlarr's /api/v1/indexerstatus, which
-// returns ONLY blocked indexers. This is what lets the search screen say what is
-// missing instead of rendering an empty result set.
+// returns ONLY blocked indexers. This is what lets the Requests screen — where
+// the release search lives (§17.5) — say what is missing instead of rendering
+// an empty result set.
 type BlockedIndexer struct {
 	IndexerID         int32      `json:"indexer_id"`
 	Name              string     `json:"name,omitempty"`
