@@ -46,6 +46,7 @@ distinctions now matter and are used consistently below:
 | [0021](#adr-0021) | Stable IDs address `service_item_link`, not `work` | **Amended** (rev 2): kind byte, pin, no opacity claim |
 | [0022](#adr-0022) | v1 authentication is local-only; external identity deferred | **Accepted** (rev 2) |
 | [0023](#adr-0023) | UsArr coexists with the ecosystem rather than replacing it | **Accepted** (rev 2) |
+| [0024](#adr-0024) | AGPL-3.0 is the licence | **Accepted** — owner-confirmed 2026-08-16 |
 
 ---
 
@@ -1402,3 +1403,56 @@ Two rules follow, and they are the useful part:
 - **Users must run a second service**, and that remains the real objection to the whole approach.
   The mitigation is a good wizard, a first-class compose bundle and honest documentation — not a
   rebuttal, and not absorbing the neighbour.
+
+---
+
+<a id="adr-0024"></a>
+## ADR-0024 — AGPL-3.0 is the licence
+
+**Status:** Accepted · **Confirmed by the owner (Joe, `jdb3750`) on 2026-08-16.**
+
+### Context
+[`SETUP-CHECKLIST.md`](./SETUP-CHECKLIST.md) §1.2 listed the licence as a blocking decision, and the
+README carried it as a recommendation pending confirmation. It blocks because contributions accepted
+into a repository with no `LICENSE` have undefined terms, and retro-licensing means chasing every
+contributor for permission.
+
+The neighbourhood UsArr lives in has already converged. **Jellyfin** (GPL-2.0), **Navidrome**
+(GPL-3.0) and the newer aggregation projects surveyed in [`RESEARCH.md`](./RESEARCH.md) §5 —
+**MediaManager**, **Mydia**, **Reiverr**, **DroppedNeedle** — are all copyleft, and the last four are
+AGPL-3.0 specifically. A permissive licence here would make UsArr the outlier, not the default.
+
+The failure mode the licence is being chosen against is concrete: UsArr is a *server*. A hosted
+service can run modified UsArr for users over a network and, under a plain GPL, owe them nothing,
+because nothing is ever "distributed". That is the hosted-service loophole, and AGPL §13 is the
+clause written to close it.
+
+### Decision
+> **UsArr is licensed under the GNU Affero General Public License, version 3.0** — the verbatim FSF
+> text from <https://www.gnu.org/licenses/agpl-3.0.txt>, in [`LICENSE`](../LICENSE) at the repository
+> root.
+
+No per-file licence headers. The root `LICENSE` file and the README's `## License` section are the
+whole declaration; headers on every source file are noise the project does not need.
+
+### Consequences
+- **Network use triggers the source obligation.** Anyone who runs a modified UsArr as a hosted
+  service must offer that modified source to its users. Self-hosting for yourself, which is the
+  entire point of the project, imposes no obligation on you at all.
+- **Improvements flow back.** A fork that ships changes to users owes those changes to the commons,
+  so downstream work stays reachable rather than disappearing into a private deployment.
+- **Closed-source commercial forks are deterred**, which is the intended effect. So, unavoidably, is
+  embedding UsArr inside a proprietary product — that is the price of the protection, paid
+  knowingly.
+- **Dependency compatibility must be checked.** AGPL-3.0 accepts MIT-, BSD- and Apache-2.0-licensed
+  Go and JS dependencies, which covers the stack in [`ARCHITECTURE.md`](./ARCHITECTURE.md) §3, but a
+  GPL-2.0-only dependency would be incompatible. New dependencies get a licence check.
+- **It settles the blocking item** in `SETUP-CHECKLIST.md` §1.2, so contributions can be accepted.
+
+### Alternative rejected
+**MIT.** Permissive, maximally friendly to embedding, and the path of least friction for anyone who
+wants to build on UsArr. It was rejected because it permits exactly the outcome the project is
+positioned against: a company takes the code, reskins it, runs it as a closed hosted service, and
+returns nothing — legitimately, with no obligation to publish a line. For a self-hosted tool whose
+value proposition *is* that you own your own stack, that is the wrong trade. Apache-2.0 was
+considered as the patent-grant variant of the same choice, and falls to the same objection.
