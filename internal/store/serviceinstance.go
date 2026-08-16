@@ -43,6 +43,14 @@ type ServiceInstance struct {
 	LastOKAt            sql.NullString
 	LastError           sql.NullString
 
+	// IndexersFetchedAt is when UsArr last successfully replicated this
+	// instance's indexer list into indexer_catalog (migration 0004). INVALID
+	// means never — which is a different state from "fetched, and this service
+	// has zero indexers", and the indexers endpoint says a different sentence
+	// for each. Written only on success, so it never claims a freshness the
+	// replica does not have.
+	IndexersFetchedAt sql.NullString
+
 	DeletedAt sql.NullString
 }
 
@@ -50,7 +58,7 @@ const serviceInstanceColumns = `
   id, kind, role, name, base_url, url_base, api_key_enc, kek_id,
   api_version, verify_tls, tls_spki_pin, enabled, priority, managed_by,
   health_state, breaker_state, breaker_until, consecutive_failures,
-  last_ok_at, last_error, deleted_at`
+  last_ok_at, last_error, indexers_fetched_at, deleted_at`
 
 func scanServiceInstance(sc interface{ Scan(...any) error }) (ServiceInstance, error) {
 	var si ServiceInstance
@@ -59,7 +67,7 @@ func scanServiceInstance(sc interface{ Scan(...any) error }) (ServiceInstance, e
 		&si.ID, &si.Kind, &si.Role, &si.Name, &si.BaseURL, &si.URLBase, &si.APIKeyEnc, &si.KEKID,
 		&apiVersion, &si.VerifyTLS, &si.TLSSPKIPin, &si.Enabled, &si.Priority, &si.ManagedBy,
 		&si.HealthState, &si.BreakerState, &si.BreakerUntil, &si.ConsecutiveFailures,
-		&si.LastOKAt, &si.LastError, &si.DeletedAt,
+		&si.LastOKAt, &si.LastError, &si.IndexersFetchedAt, &si.DeletedAt,
 	)
 	if err != nil {
 		return ServiceInstance{}, err

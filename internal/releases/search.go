@@ -418,21 +418,12 @@ func magicProtocol(id int32) servarr.DownloadProtocol {
 	return servarr.ProtocolUsenet
 }
 
+// supportsSearchType delegates to internal/servarr/mapping, which is now the
+// single home of the rule: the catalogue projection behind GET /api/v1/indexers
+// has to give the picker the same answer this planner acts on, and a second
+// copy would let the picker offer an indexer the planner then skips.
 func supportsSearchType(c servarr.IndexerCapabilityResource, t servarr.SearchType) bool {
-	switch t {
-	case servarr.SearchTypeBasic:
-		// Basic search is universal; an empty searchParams array is normal.
-		return true
-	case servarr.SearchTypeTV:
-		return len(c.TvSearchParams) > 0
-	case servarr.SearchTypeMovie:
-		return len(c.MovieSearchParams) > 0
-	case servarr.SearchTypeMusic:
-		return len(c.MusicSearchParams) > 0
-	case servarr.SearchTypeBook:
-		return len(c.BookSearchParams) > 0
-	}
-	return false
+	return mapping.SupportsSearchType(c, t)
 }
 
 func supportsAnyCategory(c servarr.IndexerCapabilityResource, want []int32) bool {

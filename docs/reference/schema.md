@@ -542,6 +542,8 @@ CREATE TABLE service_instance (
   last_full_sync_at  TEXT,
   last_delta_sync_at TEXT,
   config_json        TEXT,
+  indexers_fetched_at TEXT,           -- last successful indexer-list replication. Migration 0004.
+                                      -- NULL means NEVER; see §5.1.
   deleted_at         TEXT              -- tombstone; id stays burned
 ) STRICT;
 
@@ -621,6 +623,65 @@ corresponding `container_kind` is not offered for it.
 `remote_library_id`-adjacent form only as an id and is **never** used with the `root_folder`
 container kind, whose predicate is a string prefix on a path. Getting that wrong would be UsArr
 comparing paths it did not receive — the one thing §6.5 rule 3 forbids.
+
+### 5.1 `indexer_catalog` — the indexer-list replica · **v0.1, migration 0004**
+
+The local replica of each indexer service's own indexer list, so the Search screen's indexer and
+category filters render from SQLite instead of from Prowlarr.
+
+```sql
+CREATE TABLE indexer_catalog (
+  service_instance_id INTEGER NOT NULL REFERENCES service_instance(id) ON DELETE CASCADE,
+  indexer_id          INTEGER NOT NULL,   -- the SERVICE's id; what ?indexer= sends back
+  name                TEXT NOT NULL,
+  protocol            TEXT NOT NULL DEFAULT 'unknown',  -- usenet|torrent|unknown
+  privacy             TEXT NOT NULL DEFAULT '',         -- public|semi-private|private
+  enabled             INTEGER NOT NULL DEFAULT 0,
+  priority            INTEGER NOT NULL DEFAULT 0,       -- 1-50, LOWER WINS
+  supports_search     INTEGER NOT NULL DEFAULT 0,
+  supports_rss        INTEGER NOT NULL DEFAULT 0,
+  supports_pagination INTEGER NOT NULL DEFAULT 0,
+  search_types        TEXT NOT NULL DEFAULT '[]',       -- JSON: search|tvsearch|movie|music|book
+  limits_max          INTEGER,                          -- NULL = the indexer advertised none
+  limits_default      INTEGER,
+  categories          TEXT NOT NULL DEFAULT '[]',       -- JSON {id,name,sub_categories}, RAW ids
+  fetched_at          TEXT NOT NULL,
+  PRIMARY KEY (service_instance_id, indexer_id)
+) STRICT;
+
+CREATE INDEX ix_indexer_catalog_instance ON indexer_catalog(service_instance_id, name);
+```
+
+🚩 **The column list is an ALLOWLIST, and that is a security property rather than a style
+preference.** Prowlarr's `IndexerResource` carries a `fields[]` array whose entries have
+`privacy ∈ {password, apiKey, userName}` — for a private tracker that is the user's **passkey**, its
+RSS key, its API key or its session cookie, and a leaked passkey is account termination because it
+is what the tracker attributes traffic by. There is deliberately **no `fields` column, no cookie
+column and no raw-resource column**, so the credential has nowhere to land; the projection that
+fills these rows (`internal/servarr/mapping.FromProwlarrIndexer`) names every value one at a time,
+and `search_types` / `categories` hold **UsArr's own JSON**, marshalled from that projection, never
+re-serialised upstream JSON. `TestMigration0004NeedsNoRebuild` pins the exact column set so adding
+one is a deliberate act. Same rule, same reason as `release_candidate.info_url` in §6.
+
+**Written by the background prober only, replace-whole, in one transaction.** Upstream is
+authoritative: an indexer deleted in Prowlarr disappears here rather than lingering as a filter that
+silently matches nothing. A failed refresh writes nothing and leaves the last good copy standing —
+an empty picker is worse than a stale one, and `indexers_fetched_at` is what says how stale.
+
+**`service_instance.indexers_fetched_at` is nullable with no default, and that is load-bearing.**
+Three states have to be distinguishable from the data alone, because `GET /api/v1/indexers` says a
+different sentence for each: no indexer service configured; one configured that UsArr has never
+successfully read; and one that answered and genuinely has zero indexers. The last two both have
+zero rows here, so the fetch timestamp cannot live on the rows. NULL means never.
+
+**The one read is `WHERE service_instance_id = ? ORDER BY name ASC`**, one instance per call. `name`
+is the index's second column so the order comes from the index rather than a temp b-tree; an
+`IN (…)` over a set cannot supply the order (the effect pinned in
+`TestScopedProvenanceOrderNeedsASort`), and a homelab has single-digit instances, so the caller's
+loop is cheaper than the sort it avoids. Pinned by
+`TestIndexerCatalogReadUsesTheInstanceIndex`.
+
+---
 
 ---
 

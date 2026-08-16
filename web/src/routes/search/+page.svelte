@@ -388,7 +388,7 @@
 		try {
 			// The scope narrows the fan-out server-side, before the legs are
 			// planned, so an unselected indexer spends none of its rate limit.
-			const accepted = await startSearch(trimmed, { indexerIds: scope.selected });
+			const accepted = await startSearch(trimmed, undefined, { indexerIds: scope.selected });
 			if (accepted.searchId) searchId = accepted.searchId;
 		} catch (error) {
 			searching = false;

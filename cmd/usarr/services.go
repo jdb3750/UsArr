@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,6 +17,7 @@ import (
 	"github.com/jdb3750/UsArr/internal/httpapi"
 	"github.com/jdb3750/UsArr/internal/releases"
 	"github.com/jdb3750/UsArr/internal/servarr"
+	"github.com/jdb3750/UsArr/internal/servarr/mapping"
 	"github.com/jdb3750/UsArr/internal/ssrf"
 	"github.com/jdb3750/UsArr/internal/store"
 )
@@ -425,18 +428,35 @@ func (g *registry) probe(ctx context.Context, instanceID int64) {
 		}
 	}
 
+	// The indexer catalogue. This is the ONLY place UsArr reads an indexer list,
+	// and it is off every render path by construction — which is what lets
+	// GET /api/v1/indexers populate a picker from SQLite instead of blocking a
+	// browser on Prowlarr (ARCHITECTURE.md §2.3 rule 1, migration 0004).
+	//
+	// A failure here is SOFT and leaves the replica alone: the previous good
+	// copy is better than an empty picker, and indexers_fetched_at then keeps
+	// saying how old it is rather than claiming a refresh that did not happen.
+	// The names are reused below so the blocked list costs no second call.
+	names := map[int32]string{}
+	if ixs, err := entry.client.Indexers(ctx); err != nil {
+		g.log.Debug("indexer list unavailable; the local catalogue keeps its last good copy",
+			"instance_id", instanceID, "err", err)
+	} else {
+		for _, ix := range ixs {
+			names[ix.ID] = ix.Name
+		}
+		if err := g.replicateIndexers(ctx, instanceID, ixs); err != nil {
+			g.log.Warn("the indexer catalogue could not be replicated",
+				"instance_id", instanceID, "err", err)
+		}
+	}
+
 	// Blocked indexers. GET /api/v1/indexerstatus returns ONLY blocked ones, so
 	// an empty array means everything is healthy — that is not the same as the
 	// call having failed, and the two are reported differently.
 	if statuses, err := entry.client.IndexerStatus(ctx); err != nil {
 		g.log.Debug("indexerstatus unavailable", "instance_id", instanceID, "err", err)
 	} else if len(statuses) > 0 {
-		names := map[int32]string{}
-		if ixs, err := entry.client.Indexers(ctx); err == nil {
-			for _, ix := range ixs {
-				names[ix.ID] = ix.Name
-			}
-		}
 		for _, st := range statuses {
 			health.BlockedIndexers = append(health.BlockedIndexers, httpapi.BlockedIndexer{
 				IndexerID:         st.IndexerID,
@@ -450,6 +470,79 @@ func (g *registry) probe(ctx context.Context, instanceID int64) {
 	health.BreakerState = entry.client.Breaker().State().String()
 	health.BreakerRetryAt = entry.client.Breaker().RetryAt()
 	g.recordProbe(ctx, instanceID, health, &now)
+}
+
+// replicateIndexers projects the upstream indexer list and writes it to
+// indexer_catalog, replacing this instance's rows wholesale.
+//
+// THE PROJECTION IS THE SECURITY BOUNDARY, and it is why this function does not
+// simply hand servarr resources to the store. IndexerResource carries
+// `fields[]`, whose entries have privacy ∈ {password, apiKey, userName}: for a
+// private tracker that is the user's PASSKEY, its RSS key, its API key or its
+// session cookie, and a leaked passkey is account termination. This project has
+// already written one credential to SQLite once — release_candidate.info_url,
+// redacted after the fact, in every backup until it was — so the rule applied
+// here is the stronger one: the value never reaches the row at all.
+//
+// mapping.FromProwlarrIndexer names every member it copies, store.Indexer has
+// no member that could hold a credential, and the two JSON columns are
+// marshalled from mapping's own projected structs rather than from anything
+// upstream sent. Three allowlists, no redaction pass, nothing passed through.
+func (g *registry) replicateIndexers(ctx context.Context, instanceID int64, ixs []servarr.IndexerResource) error {
+	now := time.Now()
+	rows := make([]store.Indexer, 0, len(ixs))
+	for _, raw := range ixs {
+		ix := mapping.FromProwlarrIndexer(raw)
+
+		searchTypes, err := marshalJSONArray(ix.SearchTypes)
+		if err != nil {
+			return fmt.Errorf("encoding search types for indexer %d: %w", ix.ID, err)
+		}
+		categories, err := marshalJSONArray(ix.Categories)
+		if err != nil {
+			return fmt.Errorf("encoding categories for indexer %d: %w", ix.ID, err)
+		}
+
+		row := store.Indexer{
+			ServiceInstanceID:  instanceID,
+			IndexerID:          int64(ix.ID),
+			Name:               ix.Name,
+			Protocol:           ix.Protocol,
+			Privacy:            ix.Privacy,
+			Enabled:            ix.Enabled,
+			Priority:           int64(ix.Priority),
+			SupportsSearch:     ix.SupportsSearch,
+			SupportsRSS:        ix.SupportsRSS,
+			SupportsPagination: ix.SupportsPagination,
+			SearchTypesJSON:    searchTypes,
+			CategoriesJSON:     categories,
+		}
+		// nil and 0 are different: an indexer that advertised no limit must not
+		// be recorded as one that returns nothing.
+		if ix.LimitsMax != nil {
+			row.LimitsMax = sql.NullInt64{Int64: int64(*ix.LimitsMax), Valid: true}
+		}
+		if ix.LimitsDefault != nil {
+			row.LimitsDefault = sql.NullInt64{Int64: int64(*ix.LimitsDefault), Valid: true}
+		}
+		rows = append(rows, row)
+	}
+	return g.st.ReplaceIndexers(ctx, instanceID, rows, now)
+}
+
+// marshalJSONArray renders a slice as JSON, mapping an empty or nil slice onto
+// `[]` rather than encoding/json's `null`. The columns are NOT NULL with a `[]`
+// default, and a reader that has to treat null and [] alike is one branch away
+// from treating one of them as "unknown".
+func marshalJSONArray[T any](v []T) (string, error) {
+	if len(v) == 0 {
+		return "[]", nil
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 func (g *registry) recordProbe(ctx context.Context, instanceID int64, health httpapi.UpstreamHealth, lastOK *time.Time) {

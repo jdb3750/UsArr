@@ -18,6 +18,7 @@
  *   GET  /api/v1/search?query=...      starts a search               — session
  *   GET  /api/events                   the one SSE stream            — session
  *   POST /api/v1/releases/{id}/grab    grab a release candidate      — CSRF + session
+ *   GET  /api/v1/grabs/recent          the Recent-grabs block        — session
  *
  * `sudo` is the third gate and it is NOT the same as being signed in. All FIVE
  * service writes — create, the unsaved test, PATCH, DELETE and the saved-instance
@@ -1207,8 +1208,27 @@ function appendIds(params: URLSearchParams, name: string, ids: number[] | undefi
 	}
 }
 
-export async function startSearch(query: string, scope: SearchScope = {}): Promise<SearchAccepted> {
+/**
+ * `type` stays the SECOND POSITIONAL PARAMETER and `scope` is appended as a
+ * third, rather than folding `type` into `SearchScope` where it would sit more
+ * naturally. That is a merge decision, taken deliberately: the Requests screen
+ * already calls `startSearch(trimmed, searchTypeParam(searchType))`, and moving
+ * `type` into the object would mean editing that screen from this thread while
+ * another one is working in it. The shape can be tidied by whoever owns both.
+ */
+export async function startSearch(
+	query: string,
+	type?: string,
+	scope: SearchScope = {}
+): Promise<SearchAccepted> {
 	const params = new URLSearchParams({ query });
+	// `type` is omitted rather than sent empty when the caller has none: the
+	// server's setSearchType maps "" to a basic search, so both spellings mean
+	// the same thing and the shorter URL is the one that reads in a log. An
+	// unrecognised value is a 400 here on purpose — Prowlarr itself would
+	// silently degrade to a basic search, which looks like the filter did
+	// nothing (internal/httpapi/search.go).
+	if (type) params.set('type', type);
 	appendIds(params, 'indexer', scope.indexerIds);
 	appendIds(params, 'category', scope.categories);
 	if (scope.instanceId !== undefined && scope.instanceId > 0) {
@@ -1263,6 +1283,88 @@ export async function grabRelease(candidateId: number): Promise<GrabResult> {
 		indexerName: str(payload.indexer_name),
 		reSearched: bool(payload.re_searched),
 		message: str(payload.message) ?? ''
+	};
+}
+
+/**
+ * One row of the Recent-grabs block (internal/httpapi/grabs.go).
+ *
+ * `outcome` is the field to render, NOT `acquisitionState`. The server derives
+ * it precisely so a client does not have to know that "unconfirmed" means
+ * "sent, and Prowlarr reported a problem afterwards" rather than "it did not
+ * happen"; `acquisitionState` travels beside it as the column verbatim, because
+ * the store's vocabulary is open by design and flattening it on the way through
+ * is how a value the schema deliberately does not police gets lost.
+ *
+ * There is no download URL and no info URL, by construction on the server side:
+ * a Prowlarr proxy link carries its full admin API key, and an indexer URL is
+ * where a private tracker's passkey lives.
+ */
+export interface RecentGrab {
+	id: number;
+	releaseTitle: string;
+	protocol?: string;
+	indexerName?: string;
+	categories: number[];
+	sizeBytes?: number;
+	/** RFC 3339. Absent where the stored value would not parse — the server
+	 * drops it rather than guessing, because a wrong timestamp on an
+	 * irreversible action is worse than a missing one. */
+	grabbedAt?: string;
+	/** nzo_id, or the infohash for a torrent: the string that finds this grab
+	 * in the download client, which is where the truth about it lives. */
+	downloadId?: string;
+	sourceSystem?: string;
+	acquisitionState: string;
+	/** `sent` | `sent_outcome_unknown` | `unknown`. See $lib/requests. */
+	outcome: string;
+}
+
+export function toRecentGrab(value: unknown): RecentGrab | undefined {
+	if (!isRecord(value)) return undefined;
+	const id = num(value.id);
+	const releaseTitle = str(value.release_title);
+	// Without an id there is nothing to key a row on, and without a title there
+	// is nothing to recognise the grab by — which is the block's entire job.
+	if (id === undefined || !releaseTitle) return undefined;
+	const rawCategories = Array.isArray(value.categories) ? value.categories : [];
+	return {
+		id,
+		releaseTitle,
+		protocol: str(value.protocol),
+		indexerName: str(value.indexer_name),
+		categories: rawCategories.map(num).filter((n): n is number => n !== undefined),
+		sizeBytes: num(value.size_bytes),
+		grabbedAt: str(value.grabbed_at),
+		downloadId: str(value.download_id),
+		sourceSystem: str(value.source_system),
+		acquisitionState: str(value.acquisition_state) ?? '',
+		// An absent outcome is NOT defaulted to `sent`: $lib/requests renders an
+		// unrecognised value as "sent, state not recognised", which is true of
+		// every provenance row, and quietly promoting it to the confirmed
+		// wording is exactly the overclaim §17.5 bans.
+		outcome: str(value.outcome) ?? ''
+	};
+}
+
+export interface RecentGrabs {
+	grabs: RecentGrab[];
+	/** The limit the server actually applied — it clamps, so a client that
+	 * asked for more must not read the short answer as "that is all there is". */
+	limit: number;
+}
+
+export const RECENT_GRABS_URL = '/api/v1/grabs/recent';
+
+/** The ten most recent acquisitions, newest first. A local SQLite read: it
+ * makes no upstream call and is never on a path that waits for Prowlarr. */
+export async function fetchRecentGrabs(limit = 10): Promise<RecentGrabs> {
+	const payload = await requestJson(`${RECENT_GRABS_URL}?limit=${encodeURIComponent(limit)}`);
+	if (!isRecord(payload)) return { grabs: [], limit };
+	const raw = Array.isArray(payload.grabs) ? payload.grabs : [];
+	return {
+		grabs: raw.map(toRecentGrab).filter((g): g is RecentGrab => g !== undefined),
+		limit: num(payload.limit) ?? limit
 	};
 }
 

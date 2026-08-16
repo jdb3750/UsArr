@@ -383,3 +383,91 @@ func (s *Store) GetProvenanceByDownloadID(ctx context.Context, scope Scope, down
 	}
 	return out, nil
 }
+
+// Bounds on ListRecentProvenance.
+//
+// The default is ten because that is what ARCHITECTURE.md §17.5 specifies the
+// Recent-grabs block renders. The cap exists because the scoped predicate is
+// `user_id IN (0, :uid)`, and SQLite cannot supply ORDER BY from an index whose
+// LEADING column is constrained by IN — internal/db's
+// TestScopedProvenanceOrderNeedsASort pins that. The sort is therefore over the
+// readable rows with the LIMIT applied, so the LIMIT is the only thing bounding
+// the work, and an unbounded one from a query parameter would turn a render read
+// into a full sort of a table that grows forever.
+const (
+	RecentProvenanceDefaultLimit = 10
+	RecentProvenanceMaxLimit     = 200
+)
+
+// recentProvenanceSQL renders the ListRecentProvenance statement and its
+// arguments, scope predicate included.
+//
+// It is a function rather than a string literal inlined below so the query-plan
+// test can EXPLAIN THE STATEMENT THAT SHIPS. docs/DEVELOPMENT.md §11 rule 1: a
+// guard that asserts against a hand-copied lookalike is probing a proxy, and a
+// proxy agrees with its condition right up until the day it matters.
+//
+// The limit is clamped HERE rather than in the caller, for the same reason: the
+// bound and the statement it bounds must be impossible to separate, so a second
+// caller cannot render this query with an unbounded LIMIT.
+func recentProvenanceSQL(scope Scope, limit int) (string, []any) {
+	switch {
+	case limit <= 0:
+		limit = RecentProvenanceDefaultLimit
+	case limit > RecentProvenanceMaxLimit:
+		limit = RecentProvenanceMaxLimit
+	}
+	userPred, args := scope.userPredicate("user_id")
+	return `
+		SELECT id, user_id, protocol, indexer_name, indexer_categories, download_id,
+		       release_title, size_bytes, grabbed_at, source_system, acquisition_state
+		  FROM provenance
+		 WHERE ` + userPred + `
+		 ORDER BY grabbed_at DESC, id DESC
+		 LIMIT ?`, append(args, limit)
+}
+
+// ListRecentProvenance reads the newest acquisition events, newest first. It is
+// the local read behind ARCHITECTURE.md §17.5's Recent-grabs block.
+//
+// SCOPE IS IN THE SIGNATURE AND IN THE SQL. Both halves, for the same reason
+// GetProvenanceByDownloadID carries them: a scope a query accepts and never
+// filters on is indistinguishable from no scope at all, and this table is a
+// record of what a named person acquired. The predicate also admits the
+// shared/system sentinel 0, which is what migration 0002 backfilled every
+// pre-attribution row to — reading it as "not mine" would hide the owner's own
+// history from them.
+//
+// AcquisitionState travels on every row and the caller must render it. A row
+// here means the grab was DISPATCHED, not that it succeeded: "unconfirmed" is a
+// grab Prowlarr never acknowledged, which sits beside "confirmed" (both were
+// sent) and NOT beside a failure. Grabs that never left this process write no
+// provenance row at all and are not visible from this read.
+//
+// ORDER BY matches ix_prov_user_grabbed's column order, and id breaks the tie
+// because grabbed_at has one-second resolution.
+func (s *Store) ListRecentProvenance(ctx context.Context, scope Scope, limit int) ([]Provenance, error) {
+	query, args := recentProvenanceSQL(scope, limit)
+	rows, err := s.db.Read().QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("read recent provenance: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make([]Provenance, 0, RecentProvenanceDefaultLimit)
+	for rows.Next() {
+		var p Provenance
+		var indexerName, categories, dlID sql.NullString
+		if err := rows.Scan(&p.ID, &p.UserID, &p.Protocol, &indexerName, &categories, &dlID,
+			&p.ReleaseTitle, &p.SizeBytes, &p.GrabbedAt, &p.SourceSystem,
+			&p.AcquisitionState); err != nil {
+			return nil, fmt.Errorf("read recent provenance: scan: %w", err)
+		}
+		p.IndexerName, p.IndexerCategories, p.DownloadID = indexerName.String, categories.String, dlID.String
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read recent provenance: %w", err)
+	}
+	return out, nil
+}
