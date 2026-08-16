@@ -178,6 +178,18 @@ func TestEndToEndSearchAndGrab(t *testing.T) {
 		t.Errorf("expected one search against indexer 1 only (blocked and disabled indexers "+
 			"must be skipped, not re-timed-out on), got %v", counts)
 	}
+	// The request above asked for &category=2000 at UsArr's own handler. It has
+	// to arrive at Prowlarr as a repeated `categories` parameter: comma-joining
+	// makes Prowlarr's model binder bind nothing, so a category-scoped search
+	// silently becomes an unfiltered one with no error on any screen.
+	cats := prowlarr.categoriesSeen()
+	if len(cats) != 1 {
+		t.Fatalf("prowlarr saw %d searches, want 1", len(cats))
+	}
+	if len(cats[0]) != 1 || cats[0][0] != "2000" {
+		t.Errorf("categories on the wire = %#v, want one repeated categories=2000; "+
+			"?category=2000 at the handler must reach the indexer", cats[0])
+	}
 
 	// ── 7. no credential may have crossed the boundary ──────────────────────
 	assertNoSecret(t, "SSE stream", stream.dump(), apiKey, "indexer-passkey-should-not-leak")

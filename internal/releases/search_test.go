@@ -670,6 +670,45 @@ func TestSearchClampsLimitToIndexerCapabilities(t *testing.T) {
 	}
 }
 
+// A category asked for at the HTTP boundary has to survive all the way onto the
+// wire, and in the ONE form Prowlarr's model binder accepts.
+//
+// Both halves matter. Prowlarr binds `categories` as a repeated parameter;
+// comma-joining them into `categories=2000,5030` makes the binder fail or
+// silently bind nothing, which downgrades a category-scoped search to an
+// unfiltered one with no error anywhere. Asserting on the SearchRequest struct
+// would prove neither half — hence the assertion on the encoded values.
+func TestSearchSendsCategoriesAsRepeatedQueryParameters(t *testing.T) {
+	c := &fakeClient{indexers: []servarr.IndexerResource{
+		indexer(1, "Alpha", 10, servarr.ProtocolTorrent),
+		indexer(2, "Beta", 20, servarr.ProtocolUsenet),
+	}}
+	svc := newTestService(t, c, newFakeStore())
+
+	// 2000 and 5000 are both advertised by the indexer() fixture, so neither leg
+	// can be skipped as category-unsupported.
+	ch, err := svc.Search(context.Background(), ownerScope, Query{Text: "dune", Categories: []int32{2000, 5000}})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	collect(ch)
+
+	calls := c.calls()
+	if len(calls) != 2 {
+		t.Fatalf("made %d search calls, want one per indexer", len(calls))
+	}
+	for _, call := range calls {
+		raw := call.values["categories"]
+		if len(raw) != 2 || raw[0] != "2000" || raw[1] != "5000" {
+			t.Errorf("encoded categories = %#v, want two REPEATED categories= parameters [\"2000\" \"5000\"]; "+
+				"a single comma-joined value is bound as nothing by Prowlarr", raw)
+		}
+		if len(call.categories) != 2 || call.categories[0] != 2000 || call.categories[1] != 5000 {
+			t.Errorf("decoded categories = %v, want [2000 5000]", call.categories)
+		}
+	}
+}
+
 func TestSearchBuildsTypedCriteriaTokens(t *testing.T) {
 	c := &fakeClient{indexers: []servarr.IndexerResource{indexer(1, "Alpha", 10, servarr.ProtocolTorrent)}}
 	svc := newTestService(t, c, newFakeStore())

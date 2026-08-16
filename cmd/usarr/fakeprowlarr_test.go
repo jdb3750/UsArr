@@ -40,6 +40,11 @@ type fakeProwlarr struct {
 	// searched counts GET /api/v1/search by indexer id, proving the fan-out is
 	// one request per indexer rather than one aggregate call.
 	searched map[string]int
+	// searchCategories records the RAW repeated `categories` parameter of every
+	// GET /api/v1/search, so a test can prove a category asked for at UsArr's
+	// own handler reached the wire, and reached it in the repeated form
+	// Prowlarr's model binder accepts rather than comma-joined.
+	searchCategories [][]string
 	// keySeen records every X-Api-Key value received.
 	keySeen []string
 
@@ -168,6 +173,7 @@ func (f *fakeProwlarr) handleSearch(w http.ResponseWriter, r *http.Request) {
 	for _, id := range ids {
 		f.searched[id]++
 	}
+	f.searchCategories = append(f.searchCategories, r.URL.Query()["categories"])
 	f.mu.Unlock()
 
 	query := r.URL.Query().Get("query")
@@ -488,6 +494,16 @@ func (f *fakeProwlarr) searchCounts() map[string]int {
 	for k, v := range f.searched {
 		out[k] = v
 	}
+	return out
+}
+
+// categoriesSeen returns the raw repeated `categories` parameter of every search
+// received, in arrival order.
+func (f *fakeProwlarr) categoriesSeen() [][]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([][]string, len(f.searchCategories))
+	copy(out, f.searchCategories)
 	return out
 }
 

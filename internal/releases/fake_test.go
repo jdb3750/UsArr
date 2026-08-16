@@ -3,6 +3,8 @@ package releases
 import (
 	"context"
 	"errors"
+	"net/url"
+	"strconv"
 	"sync"
 	"time"
 
@@ -89,12 +91,65 @@ func (f *fakeStore) put(c Candidate) int64 {
 	return ids[0]
 }
 
-// searchCall records one per-indexer leg so the fan-out can be asserted on.
+// searchCall records one per-indexer leg AS ENCODED, so the fan-out is asserted
+// on what actually went on the wire rather than on what the SearchRequest struct
+// meant to say.
+//
+// Recording req.IndexerIDs and friends straight off the struct is the exact
+// shape of the bug that broke the first real grab: the field can be perfectly
+// right while Values() drops it, comma-joins it, or spells the parameter name
+// differently from what Prowlarr binds — and a fake that reads the struct would
+// pass through every one of those. Everything below is therefore parsed back OUT
+// of url.Values, and values is kept raw so a test can assert on the repeated
+// form directly.
 type searchCall struct {
+	values url.Values
+
 	indexerIDs []int32
+	categories []int32
 	query      string
 	limit      *int32
 	offset     *int32
+}
+
+// newSearchCall decodes an encoded query back into assertable fields.
+//
+// A value that does not parse as a bare integer — a comma-joined "1,2", say — is
+// DROPPED rather than tolerated, so an encoding regression shows up as a failed
+// assertion instead of quietly satisfying one.
+func newSearchCall(v url.Values) searchCall {
+	return searchCall{
+		values:     v,
+		indexerIDs: parseInt32s(v["indexerIds"]),
+		categories: parseInt32s(v["categories"]),
+		query:      v.Get("query"),
+		limit:      parseInt32Ptr(v, "limit"),
+		offset:     parseInt32Ptr(v, "offset"),
+	}
+}
+
+func parseInt32s(raw []string) []int32 {
+	var out []int32
+	for _, s := range raw {
+		n, err := strconv.ParseInt(s, 10, 32)
+		if err != nil {
+			continue
+		}
+		out = append(out, int32(n))
+	}
+	return out
+}
+
+func parseInt32Ptr(v url.Values, key string) *int32 {
+	if !v.Has(key) {
+		return nil
+	}
+	n, err := strconv.ParseInt(v.Get(key), 10, 32)
+	if err != nil {
+		return nil
+	}
+	x := int32(n)
+	return &x
 }
 
 // fakeClient is a scripted IndexerClient.
@@ -142,15 +197,17 @@ func (f *fakeClient) Search(ctx context.Context, req servarr.SearchRequest) ([]s
 	if err != nil {
 		return nil, err
 	}
+	call := newSearchCall(v)
 	f.mu.Lock()
-	f.searchCalls = append(f.searchCalls, searchCall{
-		indexerIDs: req.IndexerIDs, query: v.Get("query"), limit: req.Limit, offset: req.Offset,
-	})
+	f.searchCalls = append(f.searchCalls, call)
 	f.mu.Unlock()
 
+	// Script off the ENCODED id too: if the fan-out stopped putting the indexer
+	// on the URL, the scripted response must go missing rather than arrive
+	// anyway on the strength of the struct field.
 	var id int32
-	if len(req.IndexerIDs) == 1 {
-		id = req.IndexerIDs[0]
+	if len(call.indexerIDs) == 1 {
+		id = call.indexerIDs[0]
 	}
 	if d := f.searchDelays[id]; d > 0 {
 		select {
