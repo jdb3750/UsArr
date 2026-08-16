@@ -208,15 +208,17 @@ Use `check-offline` when you have no network; run `check` before you push.
 hermetic — the mockups load over `file://` and the IBM Plex subsets are inlined as `data:` URIs, so
 it makes no network call at all — and it finishes in about 40 seconds. What keeps it out is that it
 needs a Playwright Chromium, a ~150 MB prerequisite the gate does not otherwise carry, and that
-there is nothing to pin it to: `check.mjs` resolves Playwright from an absolute path outside the
-repo rather than from `web/package.json`, so the step passes on one machine and cannot run on
-another. It also guards `docs/design/` — prose, tokens and mockups, none of which is a shipping
-artifact, and none of which can break the binary. Run it by hand when the design moves, overriding
-`PW_BROWSERS_PATH` to point at your own browser cache. If Playwright ever lands as a pinned
-`devDependency`, the browser cost is worth re-arguing on its own merits.
+there is nothing to pin it to: `check.mjs` resolves Playwright at run time — the bare specifier
+first, then `web/node_modules`, then the npm global root — so it runs wherever the module happens
+to be installed, but no manifest declares which version. A gate step that accepts whatever is
+installed is not a gate. It also guards `docs/design/` — prose, tokens and mockups, none of which
+is a shipping artifact, and none of which can break the binary. Run it by hand when the design
+moves, overriding `PW_BROWSERS_PATH` to point at your own browser cache. If Playwright ever lands
+as a pinned `devDependency`, the browser cost is worth re-arguing on its own merits.
 
-⚠️ `docs/design/check.mjs` is not on `main` yet — it arrives with the design thread's merge, and
-until then `make design` exits with a message saying so.
+`docs/design/check.mjs` landed on `main` in `56101c1` (observed 2026-08-16). If you are on a branch
+that predates it, `make design` says so and exits 1; if Playwright itself is missing, the script
+prints the install command and every resolution path it tried.
 
 ---
 
