@@ -3201,6 +3201,20 @@ this is not a connectivity failure, and the test will pass, sending the user to 
 is working. An ambiguous row offers **no misleading action**: it points at the download client, where
 the truth is.
 
+**Recent grabs reads the ambiguous state from `provenance`, not from an `audit_log` enrichment**, and
+that is settled: the code thread is adding **`acquisition_state`** to `provenance` in **migration
+0003** — `TEXT NOT NULL DEFAULT 'confirmed'`, with a partial index on the not-confirmed case and
+**deliberately no `CHECK` constraint**, because SQLite cannot `ALTER` one afterwards and v0.2's
+request model may want a `pending` value; the `audit_log` foreign key from migration 0001 is the
+precedent that paid for that caution. So a sent-unknown acquisition **does** get a provenance row,
+discriminated on the row itself. **The reason generalises well past this table and is the keeper
+sentence: an absent row fails visibly; a phantom row lies quietly.** `provenance` has no
+back-reference to `audit_log`, so writing an ambiguous row without a discriminator *on it* would let
+library sync's join and this block silently attach the wrong history. **No existing column could
+carry it**, and that is recorded so nobody proposes reusing one: `confidence` is spoken for by the
+v0.3 fuzzy-match tier and its `>= 1.0` partial index would filter out exactly the rows that matter,
+and `source_system` is a grouped-on enum.
+
 **And the failure path is reachable by accepting defaults, which is why it is worth designing for.**
 Prowlarr's Add-client form pre-fills a Default Category of `prowlarr`, so saving the form opts the
 user into the labelling step that failed here — the owner never chose a label — and the add happens
