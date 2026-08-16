@@ -57,6 +57,12 @@
 	let drawerOpen = $state(false);
 
 	let announcement = $state('');
+	/**
+	 * False until the session bootstrap has answered and any redirect it causes
+	 * has settled. Everything up to that point is still ARRIVAL, however many
+	 * client-side navigations it takes to get there.
+	 */
+	let arrived = $state(false);
 	let headingEl = $state<HTMLHeadingElement | null>(null);
 	let toggleEl = $state<HTMLButtonElement | null>(null);
 	let navEl = $state<HTMLElement | null>(null);
@@ -88,6 +94,9 @@
 	/**
 	 * One string per route, read by the toolbar title, the h1 and the live
 	 * region alike, so the three cannot disagree.
+	 *
+	 * /login is deliberately absent: it is two screens on one path and its name
+	 * is state, not a constant. See `loginTitle` below.
 	 */
 	const TITLES = new Map<string, string>([
 		[resolve('/'), 'Home'],
@@ -95,8 +104,7 @@
 		[resolve('/requests'), 'Requests'],
 		[resolve('/services'), 'Services'],
 		[resolve('/libraries'), 'Libraries'],
-		[resolve('/settings'), 'Settings'],
-		[resolve('/login'), 'Sign in']
+		[resolve('/settings'), 'Settings']
 	]);
 
 	/**
@@ -111,7 +119,19 @@
 		resolve('/login')
 	]);
 
-	const title = $derived(TITLES.get(page.url.pathname) ?? 'UsArr');
+	/**
+	 * /login is setup on a fresh install and sign-in on every install after it,
+	 * and the server decides which — `setup_required` on GET /auth/session, held
+	 * in `session` and updated by the sign-in screen when it learns otherwise.
+	 * Naming it "Sign in" unconditionally meant a fresh install read "Sign in"
+	 * in the toolbar, in the h1 and in the tab, over a body that said "Create
+	 * the owner account". The screen has one name and this is where it is
+	 * computed, so the toolbar, the h1 and the live region cannot disagree.
+	 */
+	const loginTitle = $derived(
+		session.current.setupRequired ? 'Create the owner account' : 'Sign in'
+	);
+	const title = $derived(onLoginRoute ? loginTitle : (TITLES.get(page.url.pathname) ?? 'UsArr'));
 	const showNav = $derived(session.authenticated && !onLoginRoute && !unreachable);
 	const isDrawer = $derived(showNav && narrow && drawerOpen);
 	const sidebarState = $derived(!showNav ? 'collapsed' : drawerOpen ? 'open' : 'closed');
@@ -142,6 +162,10 @@
 				}
 			} catch (error) {
 				unreachable = error instanceof ApiError ? error.message : String(error);
+			} finally {
+				// Only now is the user looking at the screen they arrived on, so
+				// only now does a navigation mean they asked for one.
+				arrived = true;
 			}
 		})();
 
@@ -162,10 +186,26 @@
 	 *
 	 * `enter` is the initial load, where focus belongs wherever the browser put
 	 * it — moving it there would fight the browser rather than help.
+	 *
+	 * AND SO IS AN ARRIVAL REDIRECT, which is the case this used to get wrong.
+	 * `/` is not a screen for a signed-out user: the bootstrap resolves the
+	 * session and sends them to /login, and that lands as a `goto` rather than
+	 * an `enter`. Focusing the h1 there put the user PAST the skip link on the
+	 * very first screen they see — the skip link measured as the fourth tab
+	 * stop, behind both password fields — which is SC 2.4.1, Level A, failing
+	 * on arrival. So until `arrived` flips, focus is left where SvelteKit's own
+	 * navigation reset put it, which is the top of the document, and the skip
+	 * link is the first thing Tab reaches. After that every navigation is one
+	 * the user asked for, and the heading is the right place to send them:
+	 * they are already past the nav they would have skipped.
+	 *
+	 * The announcement is skipped with the focus move, deliberately. A live
+	 * region firing before the user has done anything announces a page they did
+	 * not navigate to.
 	 */
 	afterNavigate(async (nav) => {
 		if (narrow) drawerOpen = false;
-		if (nav.type === 'enter') return;
+		if (nav.type === 'enter' || !arrived) return;
 		await tick();
 		headingEl?.focus();
 		announcement = title;
