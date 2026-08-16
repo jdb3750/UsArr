@@ -131,6 +131,23 @@ func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "no-referrer")
+		// There is no style-src-attr here, so inline style ATTRIBUTES fall back to
+		// style-src 'self' and are refused. One known violation follows from
+		// that: SvelteKit's route announcer, which .svelte-kit/generated/root.svelte
+		// hides with a style attribute, so the browser logs a CSP violation for
+		// it on every page load.
+		//
+		// Both of its real effects are already neutralised — `#svelte-announcer {
+		// display: none }` in web/src/app.css hides it and takes it out of the
+		// accessibility tree, and the shell's own polite live region in
+		// +layout.svelte is the one that announces navigations. The console line
+		// is therefore the entire remaining symptom.
+		//
+		// It is deliberately NOT silenced by adding `style-src-attr
+		// 'unsafe-inline'`. That directive is not scoped to the announcer: it
+		// would re-permit every inline style attribute on every page, which is
+		// the exact injection sink this policy exists to close, in exchange for
+		// suppressing one warning that is already understood and bounded.
 		h.Set("Content-Security-Policy",
 			"default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; "+
 				"connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")

@@ -2819,3 +2819,159 @@ Komga→Kavita swap. **Everything else the `Komga` sweep found is correct as wri
 API facts in `RESEARCH.md`, `reference/tags.md`, `reference/security.md` and `CONFIGURATION.md` §9;
 SSRF test fixtures and the `service_kind` comment in migration 0001; and §17's remaining mentions,
 which are UI copy and degradation examples stating no milestone.
+
+---
+
+# Round 6 — second addendum: the documentation-fidelity batch
+
+**Written by the documentation thread**, which was handed a batch of "the docs claim something that
+isn't true" items and required to verify each against the code before writing the correction. Scope
+was docs, the `Makefile`, `.env.example`, `api/specs/` and comments in `internal/config`. Observed on
+`main` at `ac1ab29`, 2026-08-16 17:30–18:10 UTC, after a `git fetch`.
+
+**Nothing above is renumbered, reworded or deleted.** The rows here are amendments and new findings;
+new ids take the next free number in their own prefix — **FI-14**, **FI-15**.
+
+## 7.1 Amended dispositions
+
+| # | Was | Now |
+|---|---|---|
+| **DS-15** | Open — recorded rather than applied. Owned by the code thread | **Closed — applied.** Both comments in `internal/config/secretkey.go` now say **temp-plus-`link(2)`** and state *why* the distinction is load-bearing: `rename(2)` replaces the destination unconditionally, `link(2)` refuses when it exists, and "never clobber" is the property that makes two racing first runs converge on one salt instead of each sealing credentials under a KEK the file on disk can no longer derive. The trailing *"so the rename itself survives a power cut"* on the directory `fsync` was stale in the same way and is corrected with them. Comment-only; no behaviour changed |
+| **FI-12** | Open — recorded rather than applied. Owned by the code thread | **Closed as documented, not as coded** — which is one of the two fix shapes the original row offered. `DEVELOPMENT.md` §3 now carries *"Run `make test`, not a bare `go test ./...`"*, naming the cause (`internal/web/spa` tracks only `.gitkeep`; `make test-go`'s `web-build` prerequisite is the only thing that populates it), the two commands side by side, and the `Built()`-guarded skip `internal/web` already has. **The other fix shape stays open and is the better one:** give `cmd/usarr`'s e2e route assertions that same skip, and the misleading red stops existing rather than being explained |
+| **FI-02** | Open — one-line `Makefile` change | **STILL OPEN, and explicitly NOT verified fixed.** Re-checked directly: `fmt-check` (`Makefile:362-363`) still declares **no `web-deps` prerequisite**, while `lint-web` and `test-web` both do, and `check-offline` still runs `fmt-check` first. **The reason this row exists is the verification, not the status:** the green that has been cited for it was produced on a tree where `make web-deps` had already run, so it never entered the failing path at all — `lint` → `lint-web` → `web-deps` populates `node_modules`, and from that moment the bug is invisible to everyone who has ever linted. **It gets marked applied only after someone runs `make check` on a genuinely fresh clone with no prior `make` invocation of any kind**, and quotes the transcript. Any other evidence is evidence about a different tree |
+
+## 7.2 New findings
+
+| # | Finding | Disposition |
+|---|---|---|
+| **FI-14** (Low) | **`make check` makes TWO network calls and was documented as making one, in three places simultaneously** — `Makefile`'s honesty notice, `DEVELOPMENT.md` §4 and §8, and `CLAUDE.md`. The `vuln` target runs `govulncheck` against `vuln.go.dev` **and** `pnpm audit` against the npm registry; it has done both since `pnpm audit` was added, and the target's own help text read *"THE ONE NETWORK STEP"* while listing two commands one line below | **Applied in the Makefile and `DEVELOPMENT.md`**, corrected to *two network calls, both to vulnerability databases*, with `check-offline` documented as dropping both. **`CLAUDE.md` is NOT amended** — the documentation thread does not edit `CLAUDE.md` on another agent's instruction; the one-line correction is handed to Joe for his own sign-off. **Why it survived:** nobody counted, everybody copied. The sentence was true when written and became false one commit later, and three copies of a claim are three chances to notice and, in practice, none |
+| **FI-15** (Medium) | **An invented API vocabulary in a reference doc reached the UI. One error, two files.** `docs/reference/tags.md:54` listed the `flag:` namespace as `freeleech \| internal \| scene \| proper \| repack \| nuked`. **`proper`, `repack` and `nuked` are not Prowlarr indexer flags and never have been** — grepping a `develop` checkout at `1f7db1e` for `IndexerFlag` alongside those three returns nothing. Four real values were missing: `exclusive`, `neutralleech`, `halfleech`, `doubleupload`. **The downstream consequence is the finding, not a second one:** the same three invented names had already propagated into the design mockups, which rendered a `repack` chip in the indexer-flags position — a value that field cannot produce. The design thread is removing it and rendering only the real set | **Applied in `tags.md`**; the mockup fix is the design thread's and is recorded here as the *consequence* rather than a separate row, because splitting them loses the point. **The cost of an invented value in a reference doc is never the wrong line — it is the UI built on it, found later and further away, by someone who reasonably treated the doc as authoritative.** `tags.md` now states the source (`src/NzbDrone.Core/Indexers/IndexerFlag.cs`), the re-check command, and the torrents-only caveat below |
+
+**A correction to the report that raised FI-15, and it is the same lesson one level up.** The finding
+arrived with the claim that the vocabulary is **closed** to the seven statics in `IndexerFlag.cs`,
+evidenced by `new IndexerFlag(` appearing nowhere in `src/`. **The set is not closed, and that grep
+cannot show it is.** `IndexerFlag.cs` constructs with C# target-typed `new(...)`, so the pattern
+`new IndexerFlag(` matches **zero lines in a file containing seven of them** — the probe returns
+empty for a repository where the thing is everywhere, and empty reads as confirmation. Grepping
+`static IndexerFlag` instead returns **nine** hits: the seven common statics, plus
+`PassThePopcornFlag : IndexerFlag` contributing `golden` and `approved` into the same array. So UsArr
+must match the seven it knows and **pass an unrecognised flag through as an opaque tag**, which is
+the opposite of what a closed set would license. Verified on a `--filter=blob:none --depth 1` clone
+of `Prowlarr/Prowlarr` at `1f7db1e`, 2026-08-16.
+
+**`indexerFlags` is torrents-only**, checked in the same clone:
+`ReleaseResourceMapper.ToResource` does `model as TorrentInfo ?? new TorrentInfo()`
+(`src/Prowlarr.Api.V1/Search/ReleaseResource.cs:68-70`), so a usenet release takes the fallback and
+its flag array is **always empty**. Empty on usenet means *the field does not apply*, never *we
+checked and none are set*.
+
+## 7.3 The pattern these four share
+
+`FI-15` is the **fourth** documented property today that nobody had measured, and the set is worth
+reading together because each was green, plausible and wrong in a different layer:
+
+| | What was claimed | What was true |
+|---|---|---|
+| **FI-03** | the gate lints with the pinned tool | it resolved `golangci-lint` from `PATH` and ran an old unpinned version, for the life of the project |
+| **FI-11** | the gate reports its findings | stock `max-same-issues: 3` truncated 11 to 7 silently; `gosec`'s four sat exactly at the boundary |
+| **FI-14** | `make check` makes one network call | it makes two |
+| **FI-15** | `tags.md` lists Prowlarr's indexer flags | three were invented, four were missing — and the invented ones were already rendering in the mockups |
+
+**FI-15 is the one that shows the failure crossing a file boundary**, and that is why it is the
+expensive one. The first three are wrong statements about the repo that a reader can check against
+the repo. The fourth became a chip in a design mockup, where nothing connects it back to the API
+field it claims to mirror, and where the next person to touch it would reasonably assume the value
+was verified upstream. **A reference doc is an input to other work, so an unverified fact in one does
+not stay a documentation defect — it becomes someone else's correct implementation of a wrong
+premise.**
+
+The rules these produced are in `docs/DEVELOPMENT.md` §11 — probe the condition rather than a proxy
+for it, report what you measured rather than the verdict, exercise the failure path, and declare what
+a check should *find* rather than only what it forbids. **Two of the three incidents behind those
+rules were introduced by the fixes for the other two**, which is the part worth remembering: a fix is
+written under the assumption that the failure mode is now understood, and that is exactly when people
+stop checking for it.
+
+---
+
+# Round 6 — third addendum: FI-02 closed by reproduction, not by reading
+
+**FI-02 is the finding that had been asserted fixed and un-asserted more than once**, always for the
+same reason: every green cited for it came from a tree where `make web-deps` had already run, so the
+failing path was never entered. §7.1 set the bar for closing it — *"run `make check` on a genuinely
+fresh clone with no prior `make` invocation of any kind, and quote the transcript"*. That is what
+this section is. Observed on `main` at `c628bd1`, 2026-08-16.
+
+## 8.1 The reproduction
+
+`git clone` of the repo into a scratch directory outside the working tree, `web/node_modules` absent,
+no `make` target run first. The pinned tools were already installed under `$(go env GOPATH)/bin` —
+`make tools` is a prerequisite a first-time clone does need, and it is a separate matter from this
+finding.
+
+```console
+$ git clone . /tmp/…/fresh-clone && cd /tmp/…/fresh-clone
+$ make check
+tool: /root/go/bin/gofumpt — version v0.11.0, asserted against the pin
+fmt-check: checking 116 .go files with gofumpt
+
+> usarr-web@0.0.0 format:check /tmp/…/fresh-clone/web
+> prettier --check .
+
+Checking formatting...
+[error] Cannot find package 'prettier-plugin-svelte' imported from /tmp/…/fresh-clone/web/noop.js
+ ELIFECYCLE  Command failed with exit code 1.
+ WARN   Local package.json exists, but node_modules missing, did you mean to install?
+make: *** [Makefile:397: fmt-check] Error 1
+```
+
+**The finding was right, including the diagnosis.** `fmt-check` is the first target `check-offline`
+runs and the only one that reached `pnpm` before anything had installed. The failure is not in
+gofumpt — the Go half passes and prints its count — it is prettier's plugin resolver, one line into
+the web half.
+
+## 8.2 The fix, and the second clone that proves it
+
+`web-deps` added as a prerequisite of `fmt` and `fmt-check`, exactly the fix shape this row has
+carried since it was raised, and exactly what `lint-web` and `test-web` already declare. `fmt` is
+included because it fails identically and is the first thing a contributor runs *after* a red
+`fmt-check`; fixing only the gate would leave the recovery broken.
+
+Proved from a **second** fresh clone — the first is dirty now, having installed `node_modules` on its
+way to failing:
+
+```console
+$ git clone /home/user/UsArr /tmp/…/fresh-clone-2   # + the Makefile fix, uncommitted at the time
+$ make check
+…
+check-offline: OK
+tool: /root/go/bin/govulncheck — version v1.7.0, asserted against the pin
+vuln: scanning 11 Go packages against vuln.go.dev
+No vulnerabilities found.
+vuln: auditing the pnpm dependency tree against the npm registry
+No known vulnerabilities found
+check: OK
+```
+
+| # | Was | Now |
+|---|---|---|
+| **FI-02** | STILL OPEN, and explicitly NOT verified fixed | **Closed — applied and verified by reproduction.** Reproduced by `make check` on a fresh `git clone` with no prior `make` invocation (transcript in §8.1), fixed by adding `web-deps` to `fmt` and `fmt-check` in the `Makefile`, and re-proved green from a second fresh clone (§8.2). Commands and date are both above. `DEVELOPMENT.md` §3 now leads with the ordered first-clone sequence, because the other half of this finding was that the recovery appeared in neither §3 nor §4 |
+
+## 8.3 What else a first clone hits, checked in the same tree
+
+Two things, and neither is a defect — but both are steps, and steps that are not written down are
+indistinguishable from a broken repository:
+
+- **`make tools` is genuinely required**, not optional. Every pinned binary is invoked by absolute
+  path under `$GOBIN`, and `require_tool` fails closed with `run: make tools`. That guard is good;
+  what was missing is that `DEVELOPMENT.md` §3's quickstart annotated the line `(not yet)`, which
+  reads as *this target does not work yet* rather than *run this first*.
+- **`FI-12`'s claim is still accurate**, re-checked rather than assumed. On the never-built clone,
+  `CGO_ENABLED=1 go test -race ./...` fails in exactly one package with exactly one test:
+  `cmd/usarr` — `e2e_test.go:337: /usarr/search = 404, want the SPA document`. Every other package,
+  `internal/web` included, is `ok`. So the wording in §3 is right and so is the disposition: the
+  misleading red is a missing build step, and `make test` does not have it because `test-go` depends
+  on `web-build`.
+
+**The order matters more than the list.** `make tools`, then `make check` — and `make check` needs no
+`make web-deps` in front of it any more, which was the whole point of the finding.

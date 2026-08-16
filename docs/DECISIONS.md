@@ -60,6 +60,7 @@ distinctions now matter and are used consistently below:
 | [0034](#adr-0034) | The project keeps the name UsArr | **Accepted** — owner-decided 2026-08-16; naming only, nothing in the codebase moves |
 | [0035](#adr-0035) | Kavita, not Komga, is the comics-and-books catalogue source | **Accepted** — owner-decided 2026-08-16; **reverses one member of [ADR-0032](#adr-0032)**, confirms [ADR-0030](#adr-0030); ⚠️ **amended 2026-08-16** — the catalogue sources sequence **after** v0.1 ([ADR-0036](#adr-0036)), so this ADR picks *which* source, and its spike orders the post-v0.1 sequence |
 | [0036](#adr-0036) | No catalogue source ships in v0.1; they arrive one at a time after it | **Accepted** — owner-decided 2026-08-16; **amends** §16; **re-sequences [ADR-0032](#adr-0032) and [ADR-0035](#adr-0035)** without rejecting any source |
+| [0037](#adr-0037) | TOFU SPKI pin enrolment is removed, not completed; enforcement stays | **Accepted** — 2026-08-16; amends no ADR; reopening conditions stated (a pin field on the update path + the change-acceptance UI) |
 
 ---
 
@@ -3281,3 +3282,103 @@ was the point of writing it down, and deferring the run must not turn it back in
 - **Rewriting ADR-0032 and ADR-0035 in place.** The file's convention is a new entry plus a flag on
   the amended ADR's Status line, which is what ADR-0035 itself did to ADR-0032. Rewriting in place
   would delete reasoning that is still correct about everything except timing.
+
+---
+
+<a id="adr-0037"></a>
+
+## ADR-0037 — TOFU SPKI pin enrolment is removed, not completed; enforcement stays
+
+**Status:** Accepted · **2026-08-16** · **Amends no ADR** — per-instance TLS pinning was specified in
+`docs/reference/providers.md` §4 and `CONFIGURATION.md` §7.1, never in a decision record, which is
+part of why half of it shipped · **Rejects nothing permanently** — the reopening conditions are
+stated below and are concrete.
+
+### Context
+
+`service_instance.tls_spki_pin` exists in migration 0001, and `internal/ssrf` **enforces** a pin that
+is present: `ssrf.Options.SPKIPin` is compared constant-time against the peer leaf's
+SubjectPublicKeyInfo on every handshake, including resumed sessions, and mismatches fail with
+`ErrPinMismatch`. That half is real, tested and staying.
+
+The other half — **enrolment**, deciding what goes in the column — was written as trust-on-first-use:
+record the pin when a connection test passes. What actually existed was a line copying a `TestResult`
+field that **nothing ever populated**, so the column was always `NULL` while the code read as though
+enrolment worked. The choice was to finish it or delete it.
+
+`docs/reference/providers.md` §4 and `CONFIGURATION.md` §7.1 both describe the intended flow, and it
+is not bare TOFU: **show the operator the fingerprint and have them accept it**, then show it again
+and have them re-accept when it changes. None of that UI exists.
+
+### Decision
+
+> **Delete the enrolment line. Nothing writes `tls_spki_pin`; the column stays `NULL` on every row.**
+> **Keep enforcement exactly as it is** — a pin that reaches the column by any future route is
+> checked on every handshake.
+>
+> UsArr therefore has one TLS mode today: ordinary chain verification, with `verify_tls` controlling
+> whether a self-signed instance is accepted at all.
+
+### Why this and not the alternatives
+
+**Silent auto-capture on a passing connection test downgrades the instances that need it least.** A
+pin **replaces** chain verification rather than supplementing it: `internal/ssrf` sets
+`InsecureSkipVerify` on the pinned path **by design**, because the certificate the feature exists for
+is a self-signed homelab one with no chain to check. Pinning every instance that passes a connection
+test would therefore take an instance behind a publicly-trusted certificate — a Sonarr behind Caddy
+with a real Let's Encrypt cert, say — and **drop hostname, expiry and revocation checking in exchange
+for nothing it did not already have**. The feature would make the well-configured deployment less
+safe and the operator would never be told.
+
+**And there is no way back.** `store.ServiceInstanceUpdate` carries `Name`, `BaseURL`, `URLBase`,
+`APIVersion`, `Enabled` and `Priority` — **no pin field**. Nothing in the API can clear a pin or
+accept a new one. So a routine certificate renewal — an ACME rotation, a container regenerating its
+self-signed cert on restart, both of which happen on their own schedule and neither of which is an
+attack — **locks the instance out permanently** with `ErrPinMismatch`, and the only recovery is
+hand-editing SQLite. A security control whose false-positive path has no supported remedy will be
+worked around, and the workaround is worse than the control.
+
+**Half-implemented is the worst of the three states.** A column that is always `NULL` behind code
+that reads as though it enrols is a claim the system does not honour — the failure mode `CLAUDE.md`
+calls invented status, in code rather than in docs. Deleting the line makes the state legible:
+enrolment is absent, and the absence is visible at the one place a reader looks.
+
+### Consequences
+
+* **No behaviour changes.** The column was always `NULL`; this deletes the code that pretended
+  otherwise. No migration, no schema change — `tls_spki_pin` stays exactly where it is.
+* **The seam survives**, which is the point of paying for it now: the column, the enforcement path
+  and its tests are all in place, so enrolment is a UI feature plus one write, not a redesign.
+* **`providers.md` §4 and `CONFIGURATION.md` §7.1 now describe an unbuilt flow.** They keep the
+  design; the code comment at the deletion site names them as what has to land first.
+* **Self-signed instances are served by `verify_tls` alone** until enrolment ships. That is a
+  coarser control and it is the honest one.
+
+### Reopening conditions
+
+This is deferred on evidence, not closed on principle. Both of these must land together:
+
+1. **A pin field on the update path** — `store.ServiceInstanceUpdate` gains one, so a pin can be
+   cleared and re-accepted through the API. Without it, item 2 has nothing to write to.
+2. **The change-acceptance UI** that `providers.md` §4 and `CONFIGURATION.md` §7.1 already describe:
+   the fingerprint shown at enrolment and accepted explicitly, and shown again and re-accepted when
+   it changes. Not a silent capture, and not a silent re-capture.
+
+Enrolment without both is the design this ADR rejects, regardless of who proposes it next.
+
+### Alternatives rejected
+
+- **Complete TOFU as specified, capturing silently on a passing test.** Rejected on both arguments
+  above: it downgrades publicly-trusted instances, and its false-positive path is unrecoverable. The
+  "first use" in trust-on-first-use has to be a moment the operator is present for, and a background
+  connection test is not one.
+- **Keep the dead line and file a TODO.** This is the state being left. Code that reads as a working
+  feature and does nothing is worse than either the feature or its absence, because it defeats the
+  reading that would find the gap.
+- **Drop enforcement too, and the column with it.** Rejected — enforcement is correct, tested, and
+  costs nothing while the column is `NULL`. Removing it would make the eventual enrolment feature a
+  large change instead of a small one, which is exactly the seam `CLAUDE.md` asks to be preserved.
+- **Pin the CA rather than the leaf.** A real option, and a different feature: it survives renewal,
+  which is this ADR's main objection. It does not help the self-signed single-certificate case the
+  pin exists for, and it is not what the column or the enforcement path implement. Worth raising on
+  its own merits when the reopening conditions are met; not a way around them.

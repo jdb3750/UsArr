@@ -670,6 +670,45 @@ func TestSearchClampsLimitToIndexerCapabilities(t *testing.T) {
 	}
 }
 
+// A category asked for at the HTTP boundary has to survive all the way onto the
+// wire, and in the ONE form Prowlarr's model binder accepts.
+//
+// Both halves matter. Prowlarr binds `categories` as a repeated parameter;
+// comma-joining them into `categories=2000,5030` makes the binder fail or
+// silently bind nothing, which downgrades a category-scoped search to an
+// unfiltered one with no error anywhere. Asserting on the SearchRequest struct
+// would prove neither half — hence the assertion on the encoded values.
+func TestSearchSendsCategoriesAsRepeatedQueryParameters(t *testing.T) {
+	c := &fakeClient{indexers: []servarr.IndexerResource{
+		indexer(1, "Alpha", 10, servarr.ProtocolTorrent),
+		indexer(2, "Beta", 20, servarr.ProtocolUsenet),
+	}}
+	svc := newTestService(t, c, newFakeStore())
+
+	// 2000 and 5000 are both advertised by the indexer() fixture, so neither leg
+	// can be skipped as category-unsupported.
+	ch, err := svc.Search(context.Background(), ownerScope, Query{Text: "dune", Categories: []int32{2000, 5000}})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	collect(ch)
+
+	calls := c.calls()
+	if len(calls) != 2 {
+		t.Fatalf("made %d search calls, want one per indexer", len(calls))
+	}
+	for _, call := range calls {
+		raw := call.values["categories"]
+		if len(raw) != 2 || raw[0] != "2000" || raw[1] != "5000" {
+			t.Errorf("encoded categories = %#v, want two REPEATED categories= parameters [\"2000\" \"5000\"]; "+
+				"a single comma-joined value is bound as nothing by Prowlarr", raw)
+		}
+		if len(call.categories) != 2 || call.categories[0] != 2000 || call.categories[1] != 5000 {
+			t.Errorf("decoded categories = %v, want [2000 5000]", call.categories)
+		}
+	}
+}
+
 func TestSearchBuildsTypedCriteriaTokens(t *testing.T) {
 	c := &fakeClient{indexers: []servarr.IndexerResource{indexer(1, "Alpha", 10, servarr.ProtocolTorrent)}}
 	svc := newTestService(t, c, newFakeStore())
@@ -784,6 +823,157 @@ func TestSearchResolvesMagicIndexerIDs(t *testing.T) {
 	calls := c.calls()
 	if len(calls) != 1 || calls[0].indexerIDs[0] != 2 {
 		t.Errorf("-1 (all usenet) resolved to %v, want just the usenet indexer", calls)
+	}
+}
+
+// A requested id Prowlarr has never heard of has to come back with a stated
+// reason, like every other non-answer in the fan-out.
+//
+// The filter runs over the indexers Prowlarr RETURNED, so before this an unknown
+// id produced neither a leg nor a skip and was missing from TotalIndexers
+// entirely — the report said "1 of 1 indexers answered" while quietly dropping
+// the second indexer the user explicitly asked for.
+func TestSearchReportsARequestedIndexerThatDoesNotExist(t *testing.T) {
+	c := &fakeClient{
+		indexers:        []servarr.IndexerResource{indexer(1, "Alpha", 10, servarr.ProtocolTorrent)},
+		searchByIndexer: map[int32][]servarr.ReleaseResource{1: nil},
+	}
+	svc := newTestService(t, c, newFakeStore())
+
+	ch, err := svc.Search(context.Background(), ownerScope, Query{Text: "dune", IndexerIDs: []int32{1, 99}})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	_, outcomes, report := collect(ch)
+
+	if len(c.calls()) != 1 || c.calls()[0].indexerIDs[0] != 1 {
+		t.Errorf("searched %v; only the indexer that exists can be queried", c.calls())
+	}
+	if report.TotalIndexers != 2 || report.Answered != 1 || report.Skipped != 1 {
+		t.Errorf("report = %+v; want 2 total, 1 answered, 1 skipped — the unknown id is not free", report)
+	}
+	if !report.Degraded() {
+		t.Error("a search that silently dropped an indexer the user named is not complete")
+	}
+	missing, ok := outcomeFor(outcomes, 99)
+	if !ok {
+		t.Fatal("indexer 99 was requested and produced no outcome at all")
+	}
+	if missing.Status != OutcomeNotFound {
+		t.Errorf("indexer 99 status = %s, want %s", missing.Status, OutcomeNotFound)
+	}
+	if missing.Reason == "" || missing.Name == "" {
+		t.Errorf("outcome = %+v; a skip must be showable, which needs a name and a reason", missing)
+	}
+}
+
+// Every requested id being unknown must say the same thing, rather than falling
+// through to ErrNoIndexers — whose action is "enable an indexer in Prowlarr",
+// the wrong instruction for an id that is simply not there.
+func TestSearchReportsWhenEveryRequestedIndexerIsUnknown(t *testing.T) {
+	c := &fakeClient{indexers: []servarr.IndexerResource{indexer(1, "Alpha", 10, servarr.ProtocolTorrent)}}
+	svc := newTestService(t, c, newFakeStore())
+
+	ch, err := svc.Search(context.Background(), ownerScope, Query{Text: "dune", IndexerIDs: []int32{98, 99}})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	_, outcomes, report := collect(ch)
+
+	if len(c.calls()) != 0 {
+		t.Errorf("made %d requests for indexers that do not exist", len(c.calls()))
+	}
+	if report.TotalIndexers != 2 || report.Skipped != 2 || report.Answered != 0 {
+		t.Errorf("report = %+v; want both unknown ids accounted for", report)
+	}
+	for _, id := range []int32{98, 99} {
+		o, ok := outcomeFor(outcomes, id)
+		if !ok || o.Status != OutcomeNotFound {
+			t.Errorf("indexer %d outcome = %+v, want %s", id, o, OutcomeNotFound)
+		}
+	}
+}
+
+// The magic values had the same silence as an unknown explicit id, with a
+// different cause: the predicate resolves -1 against the indexers this instance
+// carries, so on a torrent-only instance it matches nothing and produced neither
+// a leg nor a skip. Mixed with an id that does exist, the report claimed "1 of 1
+// answered" while half the request evaporated.
+func TestSearchReportsAMagicIndexerIDThatMatchesNoProtocol(t *testing.T) {
+	c := &fakeClient{
+		indexers:        []servarr.IndexerResource{indexer(1, "Alpha", 10, servarr.ProtocolTorrent)},
+		searchByIndexer: map[int32][]servarr.ReleaseResource{1: nil},
+	}
+	svc := newTestService(t, c, newFakeStore())
+
+	ch, err := svc.Search(context.Background(), ownerScope, Query{
+		Text: "dune", IndexerIDs: []int32{servarr.AllUsenetIndexers, 1},
+	})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	_, outcomes, report := collect(ch)
+
+	if len(c.calls()) != 1 || c.calls()[0].indexerIDs[0] != 1 {
+		t.Errorf("searched %v; only the torrent indexer exists", c.calls())
+	}
+	if report.TotalIndexers != 2 || report.Answered != 1 || report.Skipped != 1 {
+		t.Errorf("report = %+v; want the unmatched -1 accounted for, not dropped", report)
+	}
+	if !report.Degraded() {
+		t.Error("a search that served none of the requested usenet indexers is not complete")
+	}
+	o, ok := outcomeFor(outcomes, servarr.AllUsenetIndexers)
+	if !ok {
+		t.Fatal("-1 (all usenet) was requested and produced no outcome at all")
+	}
+	if o.Status != OutcomeNotFound {
+		t.Errorf("-1 status = %s, want %s", o.Status, OutcomeNotFound)
+	}
+	// The reason has to name the protocol: "go add a usenet indexer" is a
+	// different next action from "go fix the id you sent", and the status alone
+	// cannot tell the user which one they are looking at.
+	if !strings.Contains(o.Reason, "usenet") || o.Name == "" {
+		t.Errorf("outcome = %+v; want a showable reason naming the missing protocol", o)
+	}
+}
+
+// -2 alone, with nothing else requested, used to fall through to ErrNoIndexers —
+// whose instruction is "enable an indexer in Prowlarr", which is wrong when every
+// indexer is enabled and they are simply all the other protocol.
+func TestSearchReportsAllTorrentIndexersOnAUsenetOnlyInstance(t *testing.T) {
+	c := &fakeClient{indexers: []servarr.IndexerResource{indexer(5, "Newsy", 10, servarr.ProtocolUsenet)}}
+	svc := newTestService(t, c, newFakeStore())
+
+	ch, err := svc.Search(context.Background(), ownerScope, Query{
+		Text: "dune", IndexerIDs: []int32{servarr.AllTorrentIndexers},
+	})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	_, outcomes, report := collect(ch)
+
+	if len(c.calls()) != 0 {
+		t.Errorf("made %d requests; this instance has no torrent indexer to query", len(c.calls()))
+	}
+	if report.TotalIndexers != 1 || report.Skipped != 1 || report.Answered != 0 {
+		t.Errorf("report = %+v; want the unmatched -2 accounted for", report)
+	}
+	o, ok := outcomeFor(outcomes, servarr.AllTorrentIndexers)
+	if !ok {
+		t.Fatal("-2 (all torrent) was requested and produced no outcome at all")
+	}
+	if o.Status != OutcomeNotFound || !strings.Contains(o.Reason, "torrent") {
+		t.Errorf("outcome = %+v, want %s naming the torrent protocol", o, OutcomeNotFound)
+	}
+}
+
+// An unknown id must not disturb the honest ErrNoIndexers: an instance with no
+// indexers at all, asked for nothing in particular, still has nothing to say.
+func TestSearchStillFailsWhenProwlarrHasNoIndexers(t *testing.T) {
+	svc := newTestService(t, &fakeClient{}, newFakeStore())
+	if _, err := svc.Search(context.Background(), ownerScope, Query{Text: "dune"}); !errors.Is(err, ErrNoIndexers) {
+		t.Fatalf("err = %v, want ErrNoIndexers", err)
 	}
 }
 

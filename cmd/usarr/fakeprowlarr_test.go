@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -37,6 +40,11 @@ type fakeProwlarr struct {
 	// searched counts GET /api/v1/search by indexer id, proving the fan-out is
 	// one request per indexer rather than one aggregate call.
 	searched map[string]int
+	// searchCategories records the RAW repeated `categories` parameter of every
+	// GET /api/v1/search, so a test can prove a category asked for at UsArr's
+	// own handler reached the wire, and reached it in the repeated form
+	// Prowlarr's model binder accepts rather than comma-joined.
+	searchCategories [][]string
 	// keySeen records every X-Api-Key value received.
 	keySeen []string
 
@@ -165,6 +173,7 @@ func (f *fakeProwlarr) handleSearch(w http.ResponseWriter, r *http.Request) {
 	for _, id := range ids {
 		f.searched[id]++
 	}
+	f.searchCategories = append(f.searchCategories, r.URL.Query()["categories"])
 	f.mu.Unlock()
 
 	query := r.URL.Query().Get("query")
@@ -225,8 +234,16 @@ func (f *fakeProwlarr) releaseJSON(indexerID int32, indexerName, query string) m
 }
 
 func (f *fakeProwlarr) handleGrab(w http.ResponseWriter, r *http.Request) {
+	// Read the raw bytes first: the model binder rejects a body by BYTE POSITION,
+	// and the position is the most useful half of the message it returns.
+	raw, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		writeJSONTest(w, map[string]string{"message": "bad body"})
+		return
+	}
 	var body map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := json.Unmarshal(raw, &body); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		writeJSONTest(w, map[string]string{"message": "bad body"})
 		return
@@ -234,6 +251,15 @@ func (f *fakeProwlarr) handleGrab(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	f.grabbed = append(f.grabbed, body)
 	f.mu.Unlock()
+
+	// MODEL BINDING RUNS BEFORE THE CONTROLLER. A fixture that accepts whatever it
+	// is sent validates nothing, and that is exactly how UsArr shipped a grab body
+	// carrying `"protocol":""` — rejected by every real Prowlarr, accepted here.
+	if pd := bindReleaseResource(raw, body); pd != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		writeJSONTest(w, pd)
+		return
+	}
 
 	if body["guid"] == nil || body["guid"] == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -243,6 +269,214 @@ func (f *fakeProwlarr) handleGrab(w http.ResponseWriter, r *http.Request) {
 	// A 200 echoing the resource back IS the confirmation: there is no download
 	// id and no queue id.
 	writeJSONTest(w, body)
+}
+
+// releaseResourceEnums are the ReleaseResource properties whose C# member is an
+// enum, with the values System.Text.Json's JsonStringEnumConverter accepts.
+//
+// An ABSENT property is fine — the member keeps its default. A PRESENT property
+// must convert. "" is not a member name, so it is a hard failure rather than a
+// synonym for absent, which is the distinction Go's zero values erase.
+var releaseResourceEnums = map[string]struct {
+	csharpType string
+	values     []string
+}{
+	"protocol": {"NzbDrone.Core.Indexers.DownloadProtocol", []string{"unknown", "usenet", "torrent"}},
+}
+
+// releaseResourceDates are the properties bound to a C# DateTime. System.Text.Json
+// requires ISO 8601-1 extended format; "" and a bare "0" do not parse.
+var releaseResourceDates = []string{"publishDate"}
+
+// bindReleaseResource is the fixture's stand-in for ASP.NET model binding, and
+// returns the ValidationProblemDetails a real instance returns on failure — down
+// to the byte position, because that is what makes the message diagnosable.
+func bindReleaseResource(raw []byte, body map[string]any) map[string]any {
+	fail := func(prop, msg string) map[string]any {
+		return map[string]any{
+			"type":   "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+			"title":  "One or more validation errors occurred.",
+			"status": http.StatusBadRequest,
+			"errors": map[string]any{"$." + prop: []string{msg}},
+		}
+	}
+
+	for prop, spec := range releaseResourceEnums {
+		v, present := body[prop]
+		if !present {
+			continue
+		}
+		if n, ok := v.(float64); ok && n == float64(int(n)) && int(n) >= 0 && int(n) < len(spec.values) {
+			continue // integers are accepted on input
+		}
+		// JsonStringEnumConverter matches member names case-insensitively.
+		s, ok := v.(string)
+		if ok && slices.ContainsFunc(spec.values, func(m string) bool { return strings.EqualFold(m, s) }) {
+			continue
+		}
+		return fail(prop, fmt.Sprintf(
+			"The JSON value could not be converted to %s. Path: $.%s | LineNumber: 0 | BytePositionInLine: %d.",
+			spec.csharpType, prop, valueBytePosition(raw, prop)))
+	}
+
+	for _, prop := range releaseResourceDates {
+		v, present := body[prop]
+		if !present {
+			continue
+		}
+		s, ok := v.(string)
+		if ok {
+			if _, err := time.Parse(time.RFC3339, s); err == nil {
+				continue
+			}
+		}
+		return fail(prop, fmt.Sprintf(
+			"The JSON value could not be converted to System.DateTime. Path: $.%s | LineNumber: 0 | BytePositionInLine: %d.",
+			prop, valueBytePosition(raw, prop)))
+	}
+
+	return nil
+}
+
+// valueBytePosition reports where prop's value ENDS in the raw body.
+//
+// Utf8JsonReader has already consumed the value token when the converter throws,
+// so BytePositionInLine points past it, not at it. The distinction is two bytes on
+// an empty string and it is the difference between a fixture that reproduces a
+// reported failure and one that merely resembles it: the live grab reported
+// BytePositionInLine 202 for a 224-byte body whose `"protocol":""` value starts at
+// 200.
+func valueBytePosition(raw []byte, prop string) int {
+	i := bytes.Index(raw, []byte(`"`+prop+`":`))
+	if i < 0 {
+		return 0
+	}
+	pos := i + len(prop) + 3
+	for pos < len(raw) && (raw[pos] == ' ' || raw[pos] == '\t') {
+		pos++
+	}
+	if pos < len(raw) && raw[pos] == '"' {
+		for end := pos + 1; end < len(raw); end++ {
+			if raw[end] == '\\' {
+				end++
+				continue
+			}
+			if raw[end] == '"' {
+				return end + 1
+			}
+		}
+		return len(raw)
+	}
+	for end := pos; end < len(raw); end++ {
+		if raw[end] == ',' || raw[end] == '}' {
+			return end
+		}
+	}
+	return len(raw)
+}
+
+// TestFakeProwlarrBindsTheGrabBodyStrictly proves the fixture's model binding is
+// live, not decorative.
+//
+// It exists because the previous fixture accepted whatever it was sent, so the
+// end-to-end test passed green while every grab against the owner's real Prowlarr
+// failed with a 400. A test double that validates nothing is worse than no double:
+// it converts an unshippable bug into a passing suite.
+func TestFakeProwlarrBindsTheGrabBodyStrictly(t *testing.T) {
+	f := newFakeProwlarr(t, "test-api-key")
+
+	for _, tc := range []struct {
+		name, body string
+		wantStatus int
+		wantErrKey string
+		wantDetail string
+	}{
+		{
+			// THE REGRESSION. A ReleaseResource zeroed down to three fields still
+			// marshals `"protocol":""`, and an empty string is not a member name.
+			name:       "empty protocol enum",
+			body:       `{"guid":"https://tracker.example/details/1234","indexerId":1,"protocol":""}`,
+			wantStatus: http.StatusBadRequest,
+			wantErrKey: "$.protocol",
+		},
+		{
+			name:       "unrecognised protocol enum",
+			body:       `{"guid":"g","indexerId":1,"protocol":"bittorrent"}`,
+			wantStatus: http.StatusBadRequest,
+			wantErrKey: "$.protocol",
+		},
+		{
+			name:       "unparseable date",
+			body:       `{"guid":"g","indexerId":1,"publishDate":""}`,
+			wantStatus: http.StatusBadRequest,
+			wantErrKey: "$.publishDate",
+		},
+		{
+			// THE CAPTURED BODY, verbatim from the failing install: 224 bytes, and
+			// the rejection must land on byte 202 exactly as the live Prowlarr
+			// reported. A fixture that gets the position wrong is reproducing a
+			// lookalike, not the failure.
+			name: "the body that failed on the live install",
+			body: `{"guid":"https://tracker.example/details/1234","age":0,"ageHours":0,"ageMinutes":0,` +
+				`"size":0,"indexerId":1,"imdbId":0,"tmdbId":0,"tvdbId":0,"tvMazeId":0,` +
+				`"publishDate":"0001-01-01T00:00:00Z","protocol":"","downloadClientId":3}`,
+			wantStatus: http.StatusBadRequest,
+			wantErrKey: "$.protocol",
+			wantDetail: "BytePositionInLine: 202.",
+		},
+		{
+			// An ABSENT enum is fine: the C# member keeps its default. This is the
+			// asymmetry the bug turned on, so it is pinned in both directions.
+			name:       "protocol omitted entirely",
+			body:       `{"guid":"g","indexerId":1,"downloadClientId":1}`,
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "protocol as its integer ordinal",
+			body:       `{"guid":"g","indexerId":1,"protocol":2}`,
+			wantStatus: http.StatusOK,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+				f.URL()+f.URLBase()+"/api/v1/search", strings.NewReader(tc.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("X-Api-Key", "test-api-key")
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			raw, _ := io.ReadAll(resp.Body)
+			if resp.StatusCode != tc.wantStatus {
+				t.Fatalf("status = %d, want %d: %s", resp.StatusCode, tc.wantStatus, raw)
+			}
+			if tc.wantErrKey == "" {
+				return
+			}
+			var pd struct {
+				Title  string              `json:"title"`
+				Errors map[string][]string `json:"errors"`
+			}
+			if err := json.Unmarshal(raw, &pd); err != nil {
+				t.Fatalf("the rejection must be a ValidationProblemDetails, as ASP.NET returns: %v (%s)", err, raw)
+			}
+			if pd.Title != "One or more validation errors occurred." {
+				t.Errorf("title = %q, want ASP.NET's own wording", pd.Title)
+			}
+			msgs, ok := pd.Errors[tc.wantErrKey]
+			if !ok {
+				t.Errorf("errors has no %q entry: %s", tc.wantErrKey, raw)
+			}
+			if tc.wantDetail != "" && (len(msgs) == 0 || !strings.Contains(msgs[0], tc.wantDetail)) {
+				t.Errorf("message = %v, want it to contain %q", msgs, tc.wantDetail)
+			}
+			t.Logf("%s -> %d %s", tc.body, resp.StatusCode, raw)
+		})
+	}
 }
 
 func (f *fakeProwlarr) grabs() []map[string]any {
@@ -260,6 +494,16 @@ func (f *fakeProwlarr) searchCounts() map[string]int {
 	for k, v := range f.searched {
 		out[k] = v
 	}
+	return out
+}
+
+// categoriesSeen returns the raw repeated `categories` parameter of every search
+// received, in arrival order.
+func (f *fakeProwlarr) categoriesSeen() [][]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([][]string, len(f.searchCategories))
+	copy(out, f.searchCategories)
 	return out
 }
 

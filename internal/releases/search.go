@@ -48,6 +48,12 @@ const (
 	OutcomeBreakerOpen OutcomeStatus = "breaker_open" // UsArr's own breaker says so
 	OutcomeDisabled    OutcomeStatus = "disabled"
 	OutcomeUnsupported OutcomeStatus = "unsupported"
+	// OutcomeNotFound is an id the CALLER named that this Prowlarr does not
+	// have. It is deliberately not folded into any of the above: "disabled" and
+	// "unsupported" are both statements about an indexer that exists, and either
+	// one would send the user looking through Prowlarr for something that is not
+	// there. This is a fact about the request, not about an indexer.
+	OutcomeNotFound OutcomeStatus = "not_found"
 )
 
 // Answered reports whether the indexer actually returned results.
@@ -234,11 +240,18 @@ func planFanOut(
 ) fanOutPlan {
 	plan := fanOutPlan{byID: mapping.IndexerByID(indexers)}
 
-	want := indexerFilter(q.IndexerIDs)
+	want, named, magic := indexerFilter(q.IndexerIDs)
+	matched := make(map[int32]bool, len(named))
+	// Which protocols this instance carries AT ALL, recorded before the filter is
+	// applied: it is what the -1/-2 magic values are accounted against below, and
+	// the question there is about the instance rather than about the request.
+	haveProtocol := make(map[servarr.DownloadProtocol]bool, 2)
 	for _, ix := range indexers {
+		haveProtocol[ix.Protocol] = true
 		if !want(ix) {
 			continue
 		}
+		matched[ix.ID] = true
 		switch {
 		case !ix.Enable:
 			// GET /api/v1/indexer returns disabled indexers too, with no filter
@@ -294,6 +307,52 @@ func planFanOut(
 		plan.legs = append(plan.legs, leg{indexer: ix, req: req})
 	}
 
+	// An id the caller asked for that Prowlarr has never heard of gets an outcome
+	// like everything else. The filter above is applied to the indexers Prowlarr
+	// RETURNED, so without this an unknown id produces neither a leg nor a skip:
+	// it is absent from the report entirely, and the user is told "2 of 2
+	// indexers answered" while the one they actually named was dropped. That is
+	// the empty-screen-that-looks-broken failure wearing a full report.
+	//
+	// Stating it also makes the all-unknown case consistent with the partial one.
+	// Previously every-id-unknown fell through to ErrNoIndexers — "enable an
+	// indexer in Prowlarr", which is the wrong instruction for an id that simply
+	// is not there — and some-ids-unknown said nothing at all.
+	for _, id := range named {
+		if matched[id] {
+			continue
+		}
+		plan.skipped = append(plan.skipped, IndexerOutcome{
+			IndexerID: id, Name: fmt.Sprintf("indexer %d", id), Status: OutcomeNotFound,
+			Reason: "this Prowlarr instance has no indexer with that id",
+		})
+	}
+
+	// The -1/-2 magic values need the same accounting, for a different cause. An
+	// unknown explicit id is a typo or a stale saved filter; "all usenet indexers"
+	// against a torrent-only instance is a well-formed request that this instance
+	// simply cannot serve. Both are unfulfillable as asked and both were silent —
+	// `[-1, 7]` on a torrent-only instance reported "1 of 1 answered" while half
+	// the request evaporated, and `[-1]` alone fell through to ErrNoIndexers,
+	// whose instruction ("enable an indexer") is wrong when the indexers are
+	// enabled and merely all of the other protocol.
+	//
+	// OutcomeNotFound is REUSED rather than joined by a near-synonym, because its
+	// stated meaning — a fact about the request, not about an indexer — is exactly
+	// this: there is no indexer here to make a statement about. The two differ in
+	// what the user does next, and the Reason is what carries that: go fix the id
+	// you sent, versus go add an indexer of that protocol to Prowlarr.
+	for _, m := range magic {
+		proto := magicProtocol(m)
+		if haveProtocol[proto] {
+			continue
+		}
+		plan.skipped = append(plan.skipped, IndexerOutcome{
+			IndexerID: m, Name: fmt.Sprintf("all %s indexers", proto), Status: OutcomeNotFound,
+			Reason: fmt.Sprintf("this Prowlarr instance has no %s indexers", proto),
+		})
+	}
+
 	// Query the highest-priority (lowest-numbered) indexers first, so with bounded
 	// concurrency the best copy of a duplicated release usually arrives first and
 	// fewer supersede events are needed.
@@ -307,20 +366,33 @@ func planFanOut(
 // values — into a predicate. Prowlarr resolves those magic values itself on the
 // aggregate endpoint, but the fan-out addresses one indexer per request, so they
 // have to be resolved here.
-func indexerFilter(ids []int32) func(servarr.IndexerResource) bool {
+//
+// It also returns the ids the caller actually asked for, deduplicated and in the
+// order asked for, split into the explicitly-named and the magic ones. The
+// predicate alone cannot answer "did anything match?", and a request that matched
+// nothing is a fact about the request rather than about any indexer — so
+// planFanOut needs both lists to account for every entry the caller sent.
+func indexerFilter(ids []int32) (want func(servarr.IndexerResource) bool, named, magic []int32) {
 	if len(ids) == 0 {
-		return func(servarr.IndexerResource) bool { return true }
+		return func(servarr.IndexerResource) bool { return true }, nil, nil
 	}
 	allUsenet, allTorrent := false, false
 	explicit := make(map[int32]bool, len(ids))
 	for _, id := range ids {
-		switch id {
-		case servarr.AllUsenetIndexers:
-			allUsenet = true
-		case servarr.AllTorrentIndexers:
-			allTorrent = true
-		default:
+		switch {
+		case id == servarr.AllUsenetIndexers:
+			if !allUsenet {
+				allUsenet = true
+				magic = append(magic, id)
+			}
+		case id == servarr.AllTorrentIndexers:
+			if !allTorrent {
+				allTorrent = true
+				magic = append(magic, id)
+			}
+		case !explicit[id]:
 			explicit[id] = true
+			named = append(named, id)
 		}
 	}
 	return func(ix servarr.IndexerResource) bool {
@@ -334,7 +406,16 @@ func indexerFilter(ids []int32) func(servarr.IndexerResource) bool {
 			return true
 		}
 		return false
+	}, named, magic
+}
+
+// magicProtocol names the protocol a magic indexer id selects. It is total over
+// the two magic values and is only ever called with one of them.
+func magicProtocol(id int32) servarr.DownloadProtocol {
+	if id == servarr.AllTorrentIndexers {
+		return servarr.ProtocolTorrent
 	}
+	return servarr.ProtocolUsenet
 }
 
 func supportsSearchType(c servarr.IndexerCapabilityResource, t servarr.SearchType) bool {

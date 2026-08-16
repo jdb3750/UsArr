@@ -133,6 +133,16 @@ func grabError(err error) error {
 	case errors.Is(err, releases.ErrNoDownloadClient):
 		return errStatus(http.StatusConflict, CodeNoDownloadClient, redactText(err.Error())).
 			withAction("Enable a download client in Prowlarr")
+	case errors.Is(err, releases.ErrRequestRejected):
+		// 500, not 502. Prowlarr answered, promptly and correctly — it refused a
+		// body UsArr built. The status code is what tells the user whose problem
+		// this is, and a "Test connection" action on a working connection sends
+		// them to debug the one component that is fine. No action is offered
+		// because there is nothing the owner of the install can do about it.
+		return errStatus(http.StatusInternalServerError, CodeGrabFailed,
+			"UsArr sent Prowlarr a grab it would not accept — this is a bug in UsArr, not a "+
+				"problem with your Prowlarr or with this release: "+redactText(err.Error())).
+			wrapping(err)
 	}
 	return errStatus(http.StatusBadGateway, CodeGrabFailed,
 		"the grab did not go through: "+redactText(err.Error())).

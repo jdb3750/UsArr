@@ -55,7 +55,13 @@ const (
 	CodeCredentialReentryRequired ErrorCode = "credential_reentry_required" //nolint:gosec // G101: an error code, not a secret
 	CodeInvalidURLBase            ErrorCode = "invalid_url_base"
 	CodeNotConfigured             ErrorCode = "not_configured"
-	CodeServiceUnavailable        ErrorCode = "service_unavailable"
+	// CodeServiceDisabled answers a request that NAMED a service the user has
+	// turned off. It is distinct from not_configured (nothing is set up) and
+	// from no_indexer_service (nothing enabled to fall back to): here the
+	// service exists and the one thing wrong is its Enabled flag, so the client
+	// can offer to flip it.
+	CodeServiceDisabled    ErrorCode = "service_disabled"
+	CodeServiceUnavailable ErrorCode = "service_unavailable"
 
 	// Search and grab.
 	CodeExpired          ErrorCode = "expired"
@@ -92,6 +98,7 @@ var errorCodes = map[ErrorCode]struct{}{
 	CodeNotConfigured:             {},
 	CodeNotFound:                  {},
 	CodeSearchFailed:              {},
+	CodeServiceDisabled:           {},
 	CodeServiceUnavailable:        {},
 	CodeSudoRequired:              {},
 	CodeUnauthorized:              {},

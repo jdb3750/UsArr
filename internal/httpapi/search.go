@@ -379,6 +379,17 @@ func (s *Server) resolveIndexerInstance(r *http.Request, a authSession) (int64, 
 			return 0, errStatus(http.StatusBadRequest, CodeBadRequest,
 				fmt.Sprintf("%q is a %s service, not an indexer", si.Name, si.Role))
 		}
+		// A named-but-disabled instance is a mistake, and the honest answer is to
+		// say so. Searching it anyway would ignore the user's own configuration;
+		// falling back to the auto-picked instance would silently answer a
+		// different question from the one asked, which is worse than an error
+		// because the results look right. Distinct code so the client can offer
+		// "enable it" rather than the generic "add Prowlarr".
+		if !si.Enabled {
+			return 0, errStatus(http.StatusConflict, CodeServiceDisabled,
+				fmt.Sprintf("%q is disabled, so it cannot be searched", si.Name)).
+				withAction("Enable this service")
+		}
 		return si.ID, nil
 	}
 
