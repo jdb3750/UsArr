@@ -1499,8 +1499,23 @@ Sonarr, Radarr or media server to get a library."*
   download-client integration**, which is what makes the mode affordable in v0.1.
 - **Results carry derived tags immediately, with no library behind them:** `source:` from
   `ReleaseResource.protocol` (byte-identical across the Prowlarr, Sonarr and Radarr specs), `type:`
-  from the Newznab category, `indexer:`, `indexer-privacy:`, and `flag:` from `indexerFlags`.
-  The source-tagging differentiator working with zero library.
+  from the Newznab category, `indexer:`, `indexer-privacy:`, and `flag:` from `indexerFlags` —
+  **an open vocabulary, so a flag UsArr does not recognise is carried through as an opaque tag
+  rather than dropped.** The source-tagging differentiator working with zero library.
+
+  > 🚩 **`flag:` is not a fixed list, and validating it against one silently loses data.**
+  > `IndexerFlag` is an ordinary subclassable class, not an enum. The common set is the statics in
+  > Prowlarr's `src/NzbDrone.Core/Indexers/IndexerFlag.cs`, and any indexer definition may
+  > contribute its own — `PassThePopcornFlag : IndexerFlag` adds `golden` and `approved` into the
+  > same array. So the tag layer **matches the names it knows and passes the rest through**; it
+  > never filters `indexerFlags` against a known set and discards the remainder.
+  >
+  > **Re-check it** in a Prowlarr checkout with `grep -rn "static IndexerFlag" src/` — **not**
+  > `grep "new IndexerFlag("`, which returns **zero matches in a file containing seven of them**,
+  > because the file constructs with C# target-typed `new(...)`. That probe is the obvious one to
+  > reach for and it answers "the set is empty" with total confidence; it is how the closed-set
+  > reading got here in the first place (`REVIEW-LOG.md` FI-15). The vocabulary itself, and the
+  > torrents-only caveat on `indexerFlags`, live in [`reference/tags.md`](./reference/tags.md).
 
   > 🚩 **Deriving `type:` from the *parent* category is a live bug for two of the six media types,
   > and it is fixed here rather than papered over.** Verified against Prowlarr's

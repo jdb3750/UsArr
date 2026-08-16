@@ -2859,6 +2859,13 @@ must match the seven it knows and **pass an unrecognised flag through as an opaq
 the opposite of what a closed set would license. Verified on a `--filter=blob:none --depth 1` clone
 of `Prowlarr/Prowlarr` at `1f7db1e`, 2026-08-16.
 
+**Second half applied 2026-08-16:** `ARCHITECTURE.md` §8.5 derived `flag:` from `indexerFlags` with
+no statement either way, which left the closed-set reading standing wherever a reader met §8 before
+`tags.md`. It now carries the open-vocabulary clause, the pass-through rule, and the same
+`static IndexerFlag` / **not** `new IndexerFlag(` re-check — naming the failed probe in the doc,
+because a probe that returns empty for a repository where the thing is everywhere will be re-run by
+the next person otherwise. `tags.md` needed nothing further and was left untouched.
+
 **`indexerFlags` is torrents-only**, checked in the same clone:
 `ReleaseResourceMapper.ToResource` does `model as TorrentInfo ?? new TorrentInfo()`
 (`src/Prowlarr.Api.V1/Search/ReleaseResource.cs:68-70`), so a usenet release takes the fallback and
