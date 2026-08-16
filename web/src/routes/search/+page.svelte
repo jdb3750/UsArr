@@ -31,7 +31,14 @@
 	import { createFrozenOrder, settle } from '$lib/frozenorder.svelte';
 	import { createRowState } from '$lib/rowstate.svelte';
 	import { createIndexerScope, parseIds } from '$lib/indexerscope.svelte';
-	import { compareBy, nextDir, readSort, writeSort, type SortColumn } from '$lib/sortspec';
+	import {
+		compareBy,
+		nextDir,
+		readSort,
+		writeSort,
+		type SortColumn,
+		type SortSpec
+	} from '$lib/sortspec';
 	import {
 		ApiError,
 		grabRelease,
@@ -178,9 +185,20 @@
 	const indexersTotal = $derived(report?.totalIndexers ?? (indexersSeen.length || undefined));
 	const indexersDone = $derived(report ? report.totalIndexers : outcomes.length);
 
-	/** ADR-0038 clause 6: the URL is the sort's home, so a sorted search is
-	 * linkable and survives a reload exactly rather than approximately. */
-	const sort = $derived(readSort(page.url.searchParams, SORT_COLUMNS, DEFAULT_SORT));
+	/**
+	 * ADR-0038 clause 6: the sort key and direction live in the URL, so a sorted
+	 * search is linkable and survives a reload exactly rather than approximately.
+	 *
+	 * ⚠️ THE URL IS SEEDED FROM AND MIRRORED TO, NOT DERIVED FROM, and that is a
+	 * measured correction rather than a preference. Deriving `sort` from
+	 * `page.url` meant an explicit re-sort read the OLD comparator: `replaceState`
+	 * does not update `page.url` synchronously, so `order.resort()` on the next
+	 * line re-applied the order it already had. In the browser that showed as the
+	 * URL changing to `?sort=peers&dir=desc` while the rows did not move at all —
+	 * the silent kind of failure, since the control looked as though it had
+	 * worked. Local state is authoritative from here on and `writeUrl` mirrors it.
+	 */
+	let sort = $state<SortSpec>(readSort(page.url.searchParams, SORT_COLUMNS, DEFAULT_SORT));
 	const releaseKey = (release: Release) => String(release.candidateId);
 	const compare = $derived(
 		compareBy(
@@ -335,11 +353,10 @@
 	 * is why every path that changes the order goes through here.
 	 */
 	function setSort(id: string) {
-		const params = new SvelteURLSearchParams(page.url.search);
-		writeSort(params, { key: id, dir: nextDir(SORT_COLUMNS, sort, id) });
-		writeUrl(params);
-		// `page.url` has changed, so `sort` and `compare` have re-derived and this
-		// applies the NEW order rather than re-applying the old one.
+		// Local state first, so `compare` has already re-derived by the time
+		// `resort()` reads it. See the note on `sort`.
+		sort = { key: id, dir: nextDir(SORT_COLUMNS, sort, id) };
+		syncUrl(submitted);
 		order.resort();
 	}
 
