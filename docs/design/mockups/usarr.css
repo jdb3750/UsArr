@@ -165,11 +165,33 @@
    is one. --row-lines is therefore declared per list, measured from that
    list's own rendered rows, and the padding term tracks the density variable,
    so all three densities are right from one expression. `auto` then replaces
-   the estimate with the remembered real size once a row has rendered. */
+   the estimate with the remembered real size once a row has rendered.
+
+   --row-px is the horizontal half of the same pair, and it did not exist: cell
+   padding was written as a literal --sp-5 in four places, so nothing named the
+   value and nothing could check it against tokens.css. It is a token now, and
+   everything that has to land on a column edge reads it -- the header cell, the
+   body cell, the empty state's left offset, and the phone stack's row padding.
+
+   IT IS 12px AT ALL THREE DENSITIES, AND THAT IS THE MEASURED ANSWER, NOT AN
+   OVERSIGHT. tokens.css specified 16px at relaxed; the mockup rendered 12px;
+   the mockup turned out to be right, and tokens.css is now corrected to match
+   (see its 8 for the full note). The reason is that density moves the row
+   height and does NOT move grid-template-columns, so horizontal padding is
+   taken straight out of content width. Switching this to --sp-6 and re-reading
+   the rendered DOM at 1440x900 truncates eight column headers that are intact
+   at 12px -- Added, Last successful sync, Items, Items, Year, 1080p, Select --
+   because .tbl th is `overflow: hidden; text-overflow: ellipsis`, and takes
+   Requests from one text-to-text collision to three. Relaxed density exists to
+   make rows easier to hit; that is the vertical axis, and buying it an
+   ellipsised column label is a bad trade. The per-density form is kept rather
+   than collapsed to one declaration because this is where a future reader will
+   come looking, and because the day the column templates are re-tuned per
+   density is the day this legitimately varies. */
 :root,
-:root[data-density="compact"]  { --row-h: 28px; --row-py: var(--sp-2); }
-:root[data-density="standard"] { --row-h: 32px; --row-py: var(--sp-3); }
-:root[data-density="relaxed"]  { --row-h: 36px; --row-py: var(--sp-4); }
+:root[data-density="compact"]  { --row-h: 28px; --row-py: var(--sp-2); --row-px: var(--sp-5); }
+:root[data-density="standard"] { --row-h: 32px; --row-py: var(--sp-3); --row-px: var(--sp-5); }
+:root[data-density="relaxed"]  { --row-h: 36px; --row-py: var(--sp-4); --row-px: var(--sp-5); }
 
 /* Dark theme. Defined twice on purpose: once behind the media query for
    viewers on the system default, once behind the explicit attribute so the
@@ -878,10 +900,12 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
    two buttons that fix it. No illustration. No centred marketing block", and
    cites Sonarr's NoSeries.tsx, which renders one sentence and two buttons in
    the content flow, left-aligned, in body type, with no container. This is
-   that. The 12px left offset is --sp-5, the same cell padding every table
-   uses, so the heading lands on the column edge rather than the table edge. */
+   that. The left offset is --row-px, the same cell padding every table uses,
+   so the heading lands on the column edge rather than the table edge -- and it
+   has to be the token rather than a literal 12px, or the alignment this comment
+   claims silently stops being true at relaxed density. */
 .empty {
-  padding: var(--sp-5) 0 var(--sp-6) var(--sp-5);
+  padding: var(--sp-5) 0 var(--sp-6) var(--row-px);
   border-top: 1px solid var(--border-hi);
 }
 .empty__title {
@@ -1001,7 +1025,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
   font-weight: 500;
   color: var(--fg-muted);
   background: var(--surface);
-  padding: var(--sp-3) var(--sp-5);
+  padding: var(--sp-3) var(--row-px);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1032,7 +1056,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 }
 .tbl th.is-num, .tbl td.is-num { text-align: right; font-variant-numeric: tabular-nums; }
 .tbl td {
-  padding: var(--row-py) var(--sp-5);
+  padding: var(--row-py) var(--row-px);
   min-width: 0;
 }
 /* colspan is meaningless to a grid, so a spanning cell says so in grid terms.
@@ -1450,7 +1474,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
   .tbl--stack tbody tr:not([hidden]) {
     grid-template-columns: minmax(0, 1fr);
     border-bottom: 1px solid var(--border-hi);
-    padding: var(--sp-4) var(--sp-5);
+    padding: var(--sp-4) var(--row-px);
   }
   .tbl--stack td { padding: var(--sp-1) 0; text-align: left; }
   .tbl--stack td.is-num { text-align: left; }

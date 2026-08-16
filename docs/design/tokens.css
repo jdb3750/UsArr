@@ -388,6 +388,27 @@
  * 50<=52 — and the mockup, which is where this was caught, measures a compact
  * row at exactly 28.0px. If a future size step moves, redo this arithmetic;
  * do not pick a padding that looks right.
+ *
+ * --row-pad-x IS 12px AT ALL THREE DENSITIES, AND THAT IS DELIBERATE. It read
+ * 16px at relaxed, which was the one number in this block chosen next to the
+ * vertical step rather than derived from anything — exactly the mistake the
+ * paragraph above warns about, made in the other axis. Density moves the row
+ * height; it does not move the COLUMN TEMPLATE, so every extra pixel of
+ * horizontal padding comes straight out of cell content width. Measured in
+ * Chromium at 1440x900 on the mockup, relaxed density, by switching the value
+ * and re-reading the rendered DOM: at 12px no column header is truncated on
+ * any of the five screens; at 16px eight of them are — `Added` on Home,
+ * `Last successful sync` and `Items` on Services, `Items` on Libraries,
+ * `Year` and `1080p` on Search, `Select` on Requests — because `.tbl th` is
+ * `overflow: hidden; text-overflow: ellipsis`. Text-to-text collisions between
+ * adjacent cells also go from 1 to 3 on Requests. An ellipsised column LABEL is
+ * a worse outcome than a tighter gutter, and relaxed density exists to make
+ * rows easier to hit, which is the vertical axis.
+ *
+ * The honest way to spend 16px here is to re-tune every grid-template-columns
+ * per density so the columns absorb it. That is a real change with a real cost
+ * and it is not funded; until it is, this token is 12px throughout. The mockup
+ * carries the same value as `--row-px` (usarr.css), so the two agree.
  * --------------------------------------------------------------------------- */
 
 :root,
@@ -412,7 +433,7 @@
   --row-h-two-line: 52px;
   --row-h-thumb:    60px;
   --row-pad-y:      var(--space-4); /* 8px  — 18 + 16 = 34 <= 36               */
-  --row-pad-x:      var(--space-6);
+  --row-pad-x:      var(--space-5); /* 12px — NOT --space-6; measured, see above */
 }
 
 :root {
