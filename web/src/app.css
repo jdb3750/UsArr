@@ -1,64 +1,139 @@
 /* =============================================================================
- * UsArr shell stylesheet — scaffolding only.
+ * UsArr application stylesheet.
  *
- * This is NOT the design system. ADR-0024 chooses Tailwind v4 with its default
- * theme deleted, Bits UI, Tabler icons and self-hosted IBM Plex; none of that
- * is installed here on purpose, because a scaffolding shell that pulls those in
- * would bake decisions the design thread has not finished making.
+ * Two layers, in the order the design documents define them:
  *
- * What this file IS: a small amount of plain CSS whose every value is copied
- * from docs/design/tokens.css, so nothing here contradicts the design
- * direction and the real UI can delete this file wholesale without unpicking
- * anything. Token names, values and role assignments are verbatim; only the
- * subset actually used by the two shell routes is present.
+ *   LAYER 1  TOKENS      — docs/design/tokens.css, ported here under its own
+ *                          canonical names. Every value is verbatim from that
+ *                          file; the reasoning for each one lives there and in
+ *                          docs/design/DESIGN-DIRECTION.md and is not repeated.
+ *   LAYER 2  COMPONENTS  — docs/design/mockups/usarr.css, ported. The mockup is
+ *                          the proven implementation of the design; it carried
+ *                          its own token vocabulary (--surface, --border-hi,
+ *                          --fg-faint, --focus, --fs-*, --sp-*, --r-*, --st-*)
+ *                          because it opens from disk with no imports. That
+ *                          vocabulary is translated to tokens.css's canonical
+ *                          names here. There is one vocabulary in the app.
  *
- * When tokens.css lands in web/src/, this file's :root blocks are the part to
- * delete — the rules below it read only through the semantic aliases.
+ * THE RULE THIS FILE EXISTS TO ENFORCE (tokens.css): every colour, space, size,
+ * radius and duration used by a component resolves to a custom property. A
+ * literal value in a component is a review failure.
+ *
+ * TWO THINGS THIS FILE DOES NOT INHERIT FROM THE MOCKUP.
+ *   Fonts are real files under /fonts, not base64 data URIs. The mockup inlined
+ *   them because prototype.html is built as a single file with no server; UsArr
+ *   has one, and a 45 KB face belongs in a cacheable request rather than in the
+ *   critical CSS.
+ *   Nothing is set from a `style` attribute or an inline <style>. The server's
+ *   Content-Security-Policy is `style-src 'self'` with no 'unsafe-inline', and
+ *   measured in Chromium against that exact header, both are refused — the
+ *   attribute stays in the DOM and applies nothing. Per-element custom
+ *   properties (--dc for dominant_color, --cols for a grid template) are set
+ *   through the CSSOM instead, which is not covered by the directive and which
+ *   was measured working under the same header.
  * ============================================================================= */
 
-/* --- Tokens: the warm-neutral ramp, light (tokens.css §1) ------------------ */
+/* =============================================================================
+ * LAYER 1 — TOKENS
+ * ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+ * §1. The warm-neutral ramp — LIGHT (the default: theme `light` or `auto`)
+ *
+ * Nine steps. Role is fixed by index in BOTH themes: --n-0 is always the page
+ * ground and --n-8 is always maximum-contrast ink. The dark theme inverts the
+ * values, never the roles, so every semantic alias in §4 maps identically.
+ * Ratios are quoted against --n-0 · --n-1 · --n-2, the three legitimate text
+ * grounds. No #fff and no #000, here or anywhere else in the app.
+ * --------------------------------------------------------------------------- */
+
 :root {
-	--n-0: #faf9f7;
-	--n-1: #f2f0ec;
-	--n-2: #e7e3dd;
-	--n-3: #d8d3cb;
-	--n-4: #807869;
-	--n-5: #6b6355;
-	--n-6: #5a534a;
-	--n-7: #3c372f;
-	--n-8: #1c1a17;
+	--n-0: #faf9f7; /* page ground. Near-white, warm.                            */
+	--n-1: #f2f0ec; /* raised surface; toolbar; sticky header; sidebar.          */
+	--n-2: #e7e3dd; /* selected row fill; pressed control.                       */
+	--n-3: #d8d3cb; /* 1px dividers. Decorative, so SC 1.4.11 does not bind it.  */
+	--n-4: #807869; /* control boundary.  4.15 · 3.84 · 3.42  (target >= 3.2)    */
+	--n-5: #6b6355; /* placeholder text.  5.64 · 5.21 · 4.64  (target >= 4.5)    */
+	--n-6: #5a534a; /* muted metadata.    7.20 · 6.66 · 5.93  (target >= 5.5)    */
+	--n-7: #3c372f; /* secondary ink.    11.21 · 10.37 · 9.23 (target >= 9)      */
+	--n-8: #1c1a17; /* primary ink and the focus ring.
+	                 *                   16.50 · 15.25 · 13.58 (target >= 12)    */
 
-	--status-ok: #1c6b3a;
-	--status-warn: #8a5300;
-	--status-error: #b3251c;
-	--status-unset: #5a534a;
+	/* ADOPTED FROM THE MOCKUP. tokens.css §4 records that building the first
+	 * five real screens needed two roles it does not define, and declines to
+	 * invent them in a mockup. This is the pass that writes web/src/app.css,
+	 * which is the pass tokens.css names as the one that decides — so both are
+	 * adopted here, at tokens.css's own stated values.
+	 *
+	 *   --inset  the interior of an input. One step AWAY from the page ground
+	 *            rather than towards it, so a field reads as a well rather than
+	 *            as a raised surface: --n-0 on --n-1 chrome is invisible and
+	 *            --n-1 on --n-0 is a button.
+	 *   --hover  a row/control hover fill DISTINCT from --bg-selected. Mapping
+	 *            hover and raised both to --n-1 leaves hover-over-a-selected-row
+	 *            with nothing to say.
+	 *
+	 * They are interstitials in the ramp rather than new steps, so they are
+	 * declared here beside it and aliased in §4 like everything else. */
+	--inset: #fdfcfb;
+	--hover: #eceae5;
 
-	--protocol-torrent: #0a6b34;
-	--protocol-usenet: #0f6479;
+	/* Status. The ONLY saturated colour in the app besides cover art. Always
+	 * rendered as icon + text + colour together, never colour alone, and an
+	 * icon-only status still carries a WORD in its accessible name. That
+	 * redundancy is why UsArr needs no colour-impaired mode.
+	 * There are no --protocol-* tokens: the torrent hue was the same green as
+	 * --status-ok (dE76 4.59 light, 3.09 dark) so protocol read as status. The
+	 * chip is neutral and the words `torrent` / `usenet` carry the distinction.
+	 * DESIGN-DIRECTION §3.3. */
+	--status-ok: #1c6b3a; /* healthy, synced, present.   6.21 · 5.74 · 5.11 */
+	--status-warn: #8a5300; /* degraded, stale, partial.   6.02 · 5.56 · 4.95 */
+	--status-error: #b3251c; /* down, failed, rejected.     6.24 · 5.77 · 5.14 */
+	--status-unset: #5a534a; /* not configured. Grey IS a status.
+	                          *                             7.20 · 6.66 · 5.93 */
+
+	color-scheme: light dark;
 }
 
-/* --- Tokens: the warm-neutral ramp, dark (tokens.css §2) ------------------- */
+/* -----------------------------------------------------------------------------
+ * §2. The warm-neutral ramp — DARK, chosen explicitly
+ *
+ * Both themes are audited independently. A `dark:` prefix sprinkled per element
+ * is a named code-level tell and is not how this works.
+ * --------------------------------------------------------------------------- */
+
 :root[data-theme='dark'] {
-	--n-0: #171614;
+	--n-0: #171614; /* page ground. Near-black, warm.                            */
 	--n-1: #1e1d1a;
 	--n-2: #2a2824;
 	--n-3: #39362f;
-	--n-4: #7d7568;
-	--n-5: #9a9284;
-	--n-6: #b0a89b;
-	--n-7: #d3ccc0;
-	--n-8: #efece5;
+	--n-4: #7d7568; /* control boundary. 3.98 · 3.71 · 3.23  (>= 3.2)            */
+	--n-5: #9a9284; /* placeholder.      5.87 · 5.47 · 4.78  (>= 4.5)            */
+	--n-6: #b0a89b; /* muted metadata.   7.68 · 7.16 · 6.25  (>= 5.5)            */
+	--n-7: #d3ccc0; /* secondary ink.   11.34 · 10.57 · 9.22 (>= 9)              */
+	--n-8: #efece5; /* primary ink + ring.
+	                 *                  15.33 · 14.29 · 12.47 (>= 12)            */
 
-	--status-ok: #5cba7d;
-	--status-warn: #e0a33a;
-	--status-error: #f0837a;
-	--status-unset: #b0a89b;
+	--inset: #100f0e; /* adopted, see §1                                         */
+	--hover: #26241f; /* adopted, see §1                                         */
 
-	--protocol-torrent: #4fb377;
-	--protocol-usenet: #4ec3e0;
+	--status-ok: #5cba7d; /*                             7.56 · 7.04 · 6.15 */
+	--status-warn: #e0a33a; /*                             8.15 · 7.60 · 6.63 */
+	--status-error: #f0837a; /*                             7.09 · 6.61 · 5.77 */
+	--status-unset: #b0a89b; /*                             7.68 · 7.16 · 6.25 */
+
+	color-scheme: dark;
 }
 
-/* --- Tokens: auto, follow the OS when unset (tokens.css §3) ---------------- */
+/* -----------------------------------------------------------------------------
+ * §3. Auto — follow the OS when the user has not chosen
+ *
+ * Three states, not two: an explicit choice stamps data-theme, and the default
+ * `auto` stamps nothing, so only prefers-color-scheme separates light from dark.
+ * The attribute form above and the media query here must both exist or the
+ * in-page toggle only wins in one direction.
+ * --------------------------------------------------------------------------- */
+
 @media (prefers-color-scheme: dark) {
 	:root:not([data-theme='light']) {
 		--n-0: #171614;
@@ -71,92 +146,340 @@
 		--n-7: #d3ccc0;
 		--n-8: #efece5;
 
+		--inset: #100f0e;
+		--hover: #26241f;
+
 		--status-ok: #5cba7d;
 		--status-warn: #e0a33a;
 		--status-error: #f0837a;
 		--status-unset: #b0a89b;
-
-		--protocol-torrent: #4fb377;
-		--protocol-usenet: #4ec3e0;
 	}
 }
 
-/* --- Tokens: semantic aliases, space, type, geometry, density, motion ------ */
-/* (tokens.css §4-§9; only the subset this shell uses)                        */
+:root[data-theme='light'] {
+	color-scheme: light;
+}
+
+/* -----------------------------------------------------------------------------
+ * §4. Semantic aliases
+ *
+ * Components use these names, never --n-N directly. Renaming a role then means
+ * editing one line here rather than grepping the app.
+ * --------------------------------------------------------------------------- */
+
 :root {
-	--bg: var(--n-0);
-	--bg-raised: var(--n-1);
-	--bg-hover: var(--n-1);
-	--bg-selected: var(--n-2);
+	--bg: var(--n-0); /* page ground                                    */
+	--bg-raised: var(--n-1); /* toolbar, sticky header, sidebar, popover       */
+	--bg-hover: var(
+		--hover
+	); /* row/control hover. A FILL change only — hover
+	                           * never changes geometry (§6)                    */
+	--bg-selected: var(
+		--n-2
+	); /* selected row. A neutral fill step, not a
+	                            * coloured highlight                            */
+	--bg-pressed: var(--n-2);
+	--bg-inset: var(
+		--inset
+	); /* the interior of an input — the alias for the
+	                           * role adopted in §1                             */
 
-	--border: var(--n-3);
-	--border-strong: var(--n-4);
+	--border: var(--n-3); /* decorative divider between rows/cells          */
+	--border-strong: var(--n-4); /* the boundary of an actual control              */
 
-	--fg: var(--n-8);
-	--fg-secondary: var(--n-7);
-	--fg-muted: var(--n-6);
-	--fg-subtle: var(--n-5);
+	--fg: var(--n-8); /* primary text                                   */
+	--fg-secondary: var(--n-7); /* column headers, sub-labels                     */
+	--fg-muted: var(--n-6); /* metadata                                       */
+	--fg-subtle: var(--n-5); /* placeholder, inactive                          */
 
-	--ring: var(--n-8);
-	--ring-width: 2px;
+	--ring: var(
+		--n-8
+	); /* focus ring: maximum contrast, both themes.
+	                     * Applied with `outline`, never a box-shadow
+	                     * imitation, and NEVER removed. 16.50:1 light,
+	                     * 15.33:1 dark — far above SC 2.4.13's 3:1     */
+	--ring-width: 2px; /* SC 2.4.13 asks for >= a 2px perimeter          */
 	--ring-offset: 1px;
+}
 
-	--space-1: 2px;
-	--space-2: 4px;
-	--space-3: 6px;
-	--space-4: 8px;
-	--space-5: 12px;
-	--space-6: 16px;
-	--space-7: 24px;
-	--space-8: 32px;
-	--space-9: 48px;
+/* -----------------------------------------------------------------------------
+ * §5. Space — 4px base unit
+ *
+ * Scale: 2 4 6 8 12 16 24 32 48. The 2 and 6 steps are the off-4 values the §8
+ * row heights need. Above 16 the scale goes in 8s. Every padding, margin, gap
+ * and offset in the app is one of these nine values.
+ * --------------------------------------------------------------------------- */
 
+:root {
+	--space-0: 0;
+	--space-1: 2px; /* hairline gap: icon-to-label inside a chip                 */
+	--space-2: 4px; /* intra-row gap; vertical padding in a 28px compact row     */
+	--space-3: 6px; /* vertical padding inside a 32px standard row               */
+	--space-4: 8px; /* vertical padding inside a 36px relaxed row; icon-to-text  */
+	--space-5: 12px; /* horizontal cell padding; gap between row groups           */
+	--space-6: 16px; /* form field spacing; dialog padding                        */
+	--space-7: 24px; /* inter-region: gap between page sections                   */
+	--space-8: 32px; /* page gutter on desktop                                    */
+	--space-9: 48px; /* the largest step. It has no current consumer and must not
+	                  * acquire one without a reason (tokens.css §5).            */
+}
+
+/* -----------------------------------------------------------------------------
+ * §6. Type
+ *
+ * Six steps, hard stop. There is NO seventh: a 24px --text-empty existed for
+ * empty-state headings and is DELETED, not capped. It was larger than
+ * --text-xl, the page's own H1, and it was the mechanism that made the centred
+ * hero composition DESIGN-DIRECTION §9.6 bans writable.
+ *
+ * Below --text-lg, hierarchy is carried by WEIGHT and by the neutral ramp,
+ * never by size: a size step costs vertical space multiplicatively, a weight
+ * step and a colour step cost zero pixels.
+ * --------------------------------------------------------------------------- */
+
+:root {
+	/* Self-hosted, subset to Latin, served from the embedded build. Never a
+	 * Google Fonts link: that is both a named generated-UI tell and a
+	 * third-party request in software whose premise is that it runs on your own
+	 * box. IBM Plex Sans / IBM Plex Mono, SIL OFL 1.1 — see /fonts/OFL.txt. The
+	 * system stack is the fallback in the same declaration, so a failed font
+	 * fetch degrades to the stack the design was reviewed against. */
 	--font-sans:
 		'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', 'Noto Sans',
 		'Liberation Sans', Arial, sans-serif;
+	/* Mono is SEMANTIC, not decorative: it marks machine data — file paths,
+	 * indexer names, sizes, hashes, log lines, verbatim upstream error text.
+	 * Mono on prose is a named tell; mono on a file path is a feature. */
 	--font-mono:
 		'IBM Plex Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
 		monospace;
 
-	--text-xs: 11px;
+	--text-xs: 11px; /* counts, chip labels, table sub-labels    */
 	--leading-xs: 16px;
-	--text-sm: 12px;
+	--weight-xs: 500;
+	--text-sm: 12px; /* secondary metadata inside a row          */
 	--leading-sm: 16px;
-	--text-base: 13px;
+	--weight-sm: 400;
+	--text-base: 13px; /* DEFAULT: list rows, table cells          */
 	--leading-base: 18px;
-	--text-md: 14px;
+	--weight-base: 400;
+	--text-md: 14px; /* form inputs, dialog body, row title      */
 	--leading-md: 20px;
-	--text-lg: 16px;
+	--weight-md: 400;
+	--text-lg: 16px; /* section headings                         */
 	--leading-lg: 24px;
-	--text-xl: 20px;
+	--weight-lg: 600;
+	--text-xl: 20px; /* page title — the LARGEST type ANYWHERE
+	                  * in the application. No exemption.        */
 	--leading-xl: 28px;
+	--weight-xl: 600;
 
 	--weight-regular: 400;
-	--weight-medium: 500;
+	--weight-medium: 500; /* the density lever: hierarchy at zero pixel cost */
 	--weight-semibold: 600;
+
+	/* Applied to every columnar number — sizes, seeders, episode counts,
+	 * durations, timestamps, ages. NEVER to prose. */
 	--numeric-tabular: tabular-nums;
+}
 
-	--radius-0: 0;
-	--radius-sm: 2px;
+/* -----------------------------------------------------------------------------
+ * §7. Geometry — radius and elevation
+ *
+ * Radius budget: 0 in the flat plane, 4px on things that genuinely float, hard
+ * ceiling 6px. Shadow budget: overlay layers only. A shadow on a row, a card, a
+ * table or a toolbar is a review failure — elevation in the flat plane is a 1px
+ * border or a background step. No coloured shadow, ever. No backdrop-filter,
+ * ever: it costs GPU time on every scroll frame.
+ * --------------------------------------------------------------------------- */
 
-	--row-h-two-line: 44px;
-	--row-pad-y: var(--space-3);
-	--row-pad-x: var(--space-5);
-	--toolbar-h: 40px;
-	--control-h: 32px;
+:root {
+	--radius-0: 0; /* rows, tables, toolbars, sidebar, inputs, buttons */
+	--radius-sm: 2px; /* permitted on inputs/buttons if 0 reads too hard  */
+	--radius-md: 4px; /* popover, dropdown, dialog, toast                 */
+	--radius-max: 6px; /* documented ceiling. Nothing may exceed it, and
+	                    * nothing currently reaches it.                   */
 
-	--dur-0: 0ms;
-	--dur-hover: 80ms;
+	/* The only shadow in the system. Neutral, tight, no hue. rgb(0 0 0 / a) is
+	 * still #000 and would fail the ramp's own rule without tripping a grep for
+	 * "#000", so the drop is the warm near-black --n-8's value instead. */
+	--shadow-overlay: 0 2px 8px rgb(28 26 23 / 0.18), 0 0 0 1px var(--border-strong);
+
+	/* Scrim behind a modal layer. Derived from the ink token rather than
+	 * declared as a literal, so it inverts with the theme like everything
+	 * else and so no colour in a component is a literal. */
+	--scrim: color-mix(in srgb, var(--n-8) 42%, transparent);
+
+	--z-overlay: 100; /* popover, dropdown, menu, tooltip, sticky header  */
+	--z-top: 200; /* dialog and its scrim; toast                     */
+}
+
+/* -----------------------------------------------------------------------------
+ * §8. Density — three settings, COMPACT IS THE DEFAULT
+ *
+ * ARCHITECTURE §17.1: "Density is a feature. More items per screen beats larger
+ * cards. The grid is compact by default, with a size control for people who
+ * want otherwise." Compact is therefore what loads, not the middle option.
+ *
+ * Every one of these is a MIN-height. A fixed height breaks SC 1.4.12 the
+ * moment a user forces 1.5 line spacing, and truncates the second line of a
+ * long title. `height` on a row is a bug.
+ *
+ * The padding is DERIVED FROM THE FLOOR, not chosen next to it: one line of
+ * --text-base is --leading-base = 18px, so 18 + 2x4 = 26 <= 28, 18 + 2x6 = 30
+ * <= 32, 18 + 2x8 = 34 <= 36. If a size step moves, redo this arithmetic.
+ *
+ * --row-pad-x is 12px at ALL THREE densities and that is deliberate and
+ * measured. Density moves the row height; it does not move the column template,
+ * so every extra pixel of horizontal padding comes straight out of cell content
+ * width — at 16px, eight column headers ellipsise that are intact at 12px.
+ * --------------------------------------------------------------------------- */
+
+:root,
+:root[data-density='compact'] {
+	--row-h: 28px; /* read-only data row. THE DEFAULT.        */
+	--row-h-two-line: 44px; /* title 13/18 over meta 11/16             */
+	--row-h-thumb: 52px; /* 40px cover inside a 52px floor          */
+	--row-pad-y: var(--space-2); /* 4px                                     */
+	--row-pad-x: var(--space-5); /* 12px                                    */
+}
+
+:root[data-density='standard'] {
+	--row-h: 32px;
+	--row-h-two-line: 48px;
+	--row-h-thumb: 56px;
+	--row-pad-y: var(--space-3); /* 6px */
+	--row-pad-x: var(--space-5); /* 12px */
+}
+
+:root[data-density='relaxed'] {
+	--row-h: 36px; /* fits 28px inline action buttons with clearance */
+	--row-h-two-line: 52px;
+	--row-h-thumb: 60px;
+	--row-pad-y: var(--space-4); /* 8px  */
+	--row-pad-x: var(--space-5); /* 12px — NOT --space-6; measured */
+}
+
+:root {
+	--toolbar-h: 40px; /* page toolbar and sticky table header    */
+	--nav-item-h: 32px; /* sidebar entry (DESIGN-DIRECTION §5.3)   */
+
+	--control-h-sm: 28px; /* compact button                          */
+	--control-h: 32px; /* default button, input, native select    */
+	--control-h-lg: 36px; /* primary action                          */
+	--hit-min: 24px; /* SC 2.5.8 floor                          */
+
+	--icon-sm: 16px; /* inline in a row, at currentColor        */
+	--icon-md: 20px; /* toolbar and header                      */
+
+	/* NOT IN tokens.css. The sidebar's width is a shell geometry constant that
+	 * the token file never had to name because it describes components rather
+	 * than the shell. Taken from the mockup, which renders at this value. */
+	--sidebar-w: 208px;
+}
+
+/* -----------------------------------------------------------------------------
+ * §9. Motion
+ *
+ * 0ms on the critical path — route change, list render, filter, sort, tab
+ * switch, row expand. At a local-SQLite render of ~8ms, attaching a 250ms
+ * transition makes the interaction 258ms: past Nielsen's 100ms instantaneous
+ * threshold, purely for decoration.
+ *
+ * Only opacity, transform and the hover/focus colour pair may be transitioned.
+ * Never height, width, top, left, background-position or box-shadow. One
+ * easing, no overshoot, no spring, no scroll-reveal, no hover-lift, and no View
+ * Transitions on navigation.
+ * --------------------------------------------------------------------------- */
+
+:root {
+	--dur-0: 0ms; /* the critical path                                */
+	--dur-hover: 80ms; /* hover/focus colour change (0 is also fine)       */
+	--dur-menu-in: 120ms;
+	--dur-menu-out: 90ms; /* exits are shorter than entrances (NN/g)          */
+	--dur-dialog-in: 150ms;
+	--dur-dialog-out: 110ms;
+	--dur-toast: 150ms;
+	--dur-max: 200ms; /* hard ceiling. Nothing in the app may exceed it.  */
+
+	/* The ONLY easing. The CSS keyword `ease-out` is NOT this curve — it is
+	 * cubic-bezier(0, 0, 0.58, 1), which decelerates later and reads slower at
+	 * 80ms. No control point leaves 0..1 on Y: no overshoot anywhere. */
 	--ease-out: cubic-bezier(0.2, 0, 0, 1);
 }
 
+/* Every transition and animation in this file reads its duration from a token,
+ * so redefining the tokens collapses all motion with no per-rule override. */
 @media (prefers-reduced-motion: reduce) {
 	:root {
 		--dur-hover: 1ms;
+		--dur-menu-in: 1ms;
+		--dur-menu-out: 1ms;
+		--dur-dialog-in: 1ms;
+		--dur-dialog-out: 1ms;
+		--dur-toast: 1ms;
+		--dur-max: 1ms;
 	}
+
+	html {
+		scroll-behavior: auto;
+	}
+	/* Focus indicators are never animated and appear instantly, reduced motion
+	 * or not. Nothing below transitions an outline. */
 }
 
-/* --- Base ----------------------------------------------------------------- */
+/* -----------------------------------------------------------------------------
+ * §10. The faces
+ *
+ * IBM Plex Sans v23 (variable, weight axis 100–700, so 400/500/600 all come
+ * from one file) and IBM Plex Mono v20 at 400 and 600, Latin subset, served
+ * from /fonts. SIL OFL 1.1; the licence travels with them at /fonts/OFL.txt as
+ * the OFL requires.
+ *
+ * font-display: block, not swap. Over a LAN or tailnet with the faces embedded
+ * in the same binary as the document, the font always wins the race, so swap
+ * buys nothing and risks a visible reflow in a design whose whole premise is
+ * fixed row heights.
+ * --------------------------------------------------------------------------- */
+
+@font-face {
+	font-family: 'IBM Plex Sans';
+	font-style: normal;
+	font-weight: 100 700;
+	font-display: block;
+	src: url('/fonts/PlexSans-var-latin.woff2') format('woff2');
+	unicode-range:
+		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+		U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+	font-family: 'IBM Plex Mono';
+	font-style: normal;
+	font-weight: 400;
+	font-display: block;
+	src: url('/fonts/PlexMono-400-latin.woff2') format('woff2');
+	unicode-range:
+		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+		U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+	font-family: 'IBM Plex Mono';
+	font-style: normal;
+	font-weight: 600;
+	font-display: block;
+	src: url('/fonts/PlexMono-600-latin.woff2') format('woff2');
+	unicode-range:
+		U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+		U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* =============================================================================
+ * LAYER 2 — COMPONENTS
+ * ============================================================================= */
+
+/* --- 2.1 Reset and base --------------------------------------------------- */
 
 *,
 *::before,
@@ -165,6 +488,7 @@
 }
 
 html {
+	-webkit-text-size-adjust: 100%;
 	background: var(--bg);
 }
 
@@ -178,137 +502,1307 @@ body {
 	font-weight: var(--weight-regular);
 }
 
-/* Never removed, never imitated with a box-shadow (tokens.css §4). */
+/* The wrapper SvelteKit's fallback document puts around the application. It
+ * must not introduce a box: `.app` is the grid and it expects to be the body's
+ * child for layout purposes. This lives here rather than as a style attribute
+ * in app.html because the CSP refuses inline styles. */
+#usarr-root {
+	display: contents;
+}
+
+/* SvelteKit's own route announcer. It is visually hidden BY A STYLE ATTRIBUTE
+ * in .svelte-kit/generated/root.svelte, which `style-src 'self'` refuses — so
+ * without this rule it renders as a visible line of text carrying the document
+ * title after every navigation. `display: none` rather than the clip pattern is
+ * deliberate: it also takes the element out of the accessibility tree, which is
+ * the point. SvelteKit's announcer is `aria-live="assertive"` and reads
+ * document.title; DESIGN-DIRECTION §11 asks for a POLITE region carrying the
+ * page name, and two live regions firing on one navigation is exactly the
+ * double announcement §13 rules against. The shell's own region in
+ * +layout.svelte is the one that ships, and it reads the same string as the h1
+ * and the toolbar title so the three cannot disagree. */
+#svelte-announcer {
+	display: none;
+}
+
+/* No heading inherits a UA font-size. h1 defaults to 2em, which on a 13px body
+ * computes to 26px — above --text-xl, the largest step in the system, on an
+ * element nobody styled. Every heading that renders takes its size from a rule
+ * below; this is what stops one that does not from inventing a seventh step. */
+h1,
+h2,
+h3,
+h4 {
+	font-size: inherit;
+	line-height: inherit;
+	font-weight: inherit;
+}
+
+/* The page heading. Visually hidden because the toolbar renders the title, but
+ * sized anyway: "no type above --text-xl anywhere" is measured on the computed
+ * value, not on what is painted. */
+.pagetitle {
+	font-size: var(--text-xl);
+	line-height: var(--leading-xl);
+	font-weight: var(--weight-xl);
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+figure,
+ul,
+ol {
+	margin: 0;
+}
+
+ul,
+ol {
+	padding: 0;
+	list-style: none;
+}
+
+/* Links are underlined, not coloured. With no accent hue there is no "link
+ * blue" available, and underline is the more robust affordance anyway. */
+a {
+	color: inherit;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	text-decoration-thickness: 1px;
+}
+
+/* Hover changes colour only, never geometry: a thickness change on hover is a
+ * geometry change, which DESIGN-DIRECTION §6 forbids. */
+a:hover {
+	color: var(--fg);
+}
+
+button,
+input,
+select,
+textarea {
+	font: inherit;
+	color: inherit;
+}
+
+/* One focus treatment, everywhere, and it never animates. Nothing in this file
+ * ever removes a focus outline, so DESIGN-DIRECTION §13's exception for the
+ * remove-then-restore pair is not needed: every engine that ships
+ * :focus-visible already restricts its own default ring to :focus-visible, so
+ * suppressing the ring on plain :focus would buy nothing except the risk of
+ * losing it. This rule only adds. */
 :focus-visible {
 	outline: var(--ring-width) solid var(--ring);
 	outline-offset: var(--ring-offset);
 }
 
-a {
-	color: var(--fg);
-	text-underline-offset: 2px;
-}
-
-a:hover {
-	background: var(--bg-hover);
-}
-
-code,
 .mono {
 	font-family: var(--font-mono);
+}
+
+.num {
+	font-variant-numeric: var(--numeric-tabular);
+}
+
+.muted {
+	color: var(--fg-muted);
+}
+
+/* Visually hidden, still in the accessibility tree. Used for live regions and
+ * for the word that keeps a status glyph from computing to an empty name. */
+.sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/* Skip to content: the first tab stop on every screen, and the only thing in
+ * this file that is invisible until it is focused. A sidebar and a toolbar put
+ * a long, identical run of tab stops before the first row of every screen, and
+ * landmarks only help people who have a screen reader. SC 2.4.1 is Level A. */
+.skip {
+	position: absolute;
+	left: var(--space-4);
+	top: -100px;
+	z-index: var(--z-top);
+	padding: var(--space-3) var(--space-5);
+	background: var(--bg);
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+	text-decoration: none;
+	font-weight: var(--weight-semibold);
+	transition: none;
+}
+
+.skip:focus-visible {
+	top: var(--space-4);
+}
+
+.i {
+	width: var(--icon-sm);
+	height: var(--icon-sm);
+	flex: none;
+	display: block;
+}
+
+/* --- 2.2 Application shell ------------------------------------------------ */
+
+/* sidebar · toolbar · content. Nothing else (DESIGN-DIRECTION §8.3). Full
+ * viewport width: a centred max-width column is a document layout. */
+.app {
+	display: grid;
+	grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+	grid-template-rows: var(--toolbar-h) minmax(0, 1fr);
+	grid-template-areas:
+		'topbar topbar'
+		'sidebar main';
+	min-height: 100vh;
+}
+
+.app[data-sidebar='collapsed'] {
+	grid-template-columns: 0 minmax(0, 1fr);
+}
+
+.app[data-sidebar='collapsed'] .sidebar {
+	display: none;
+}
+
+.topbar {
+	grid-area: topbar;
+	display: flex;
+	align-items: center;
+	gap: var(--space-4);
+	padding: 0 var(--space-5) 0 var(--space-4);
+	min-height: var(--toolbar-h);
+	background: var(--bg-raised);
+	border-bottom: 1px solid var(--border);
+	position: sticky;
+	top: 0;
+	z-index: var(--z-overlay);
+}
+
+/* The page title lives in the toolbar at --text-xl, and it is the largest type
+ * anywhere in the application. */
+.topbar__title {
+	font-size: var(--text-xl);
+	line-height: var(--leading-xl);
+	font-weight: var(--weight-xl);
+	letter-spacing: -0.006em;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.topbar__brand {
+	font-size: var(--text-md);
+	font-weight: var(--weight-semibold);
+	margin-right: var(--space-2);
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+.topbar__brand:hover {
+	text-decoration: underline;
+}
+
+.topbar__spacer {
+	flex: 1 1 auto;
+}
+
+.topbar__right {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+}
+
+/* Sidebar */
+.sidebar {
+	grid-area: sidebar;
+	background: var(--bg-raised);
+	border-right: 1px solid var(--border);
+	padding: var(--space-4) 0;
+	overflow-y: auto;
+	position: sticky;
+	top: var(--toolbar-h);
+	align-self: start;
+	max-height: calc(100vh - var(--toolbar-h));
+}
+
+.nav__group + .nav__group {
+	margin-top: var(--space-5);
+	padding-top: var(--space-5);
+	border-top: 1px solid var(--border);
+}
+
+.nav__link {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	min-height: var(--nav-item-h);
+	padding: var(--space-2) var(--space-5);
+	text-decoration: none;
+	color: var(--fg-muted);
+	border-left: 2px solid transparent;
+	transition: background-color var(--dur-hover) var(--ease-out);
+}
+
+.nav__link:hover {
+	background: var(--bg-hover);
+	color: var(--fg);
+	text-decoration: none;
+}
+
+.nav__link[aria-current='page'] {
+	background: var(--bg-selected);
+	color: var(--fg);
+	font-weight: var(--weight-semibold);
+	border-left-color: var(--fg);
+}
+
+.nav__link--sub {
+	padding-left: var(--space-8);
 	font-size: var(--text-sm);
 }
 
-/* --- Chrome --------------------------------------------------------------- */
+/* Severity badge, Sonarr's PageSidebarStatus shape: a count coloured by
+ * severity, and NOTHING at all when the count is zero. */
+.nav__count {
+	margin-left: auto;
+	font-size: var(--text-xs);
+	line-height: var(--leading-xs);
+	font-weight: var(--weight-xs);
+	font-variant-numeric: var(--numeric-tabular);
+	padding: 0 var(--space-3);
+	border-radius: var(--radius-sm);
+	border: 1px solid currentcolor;
+}
 
-.app-header {
+.nav__count--err {
+	color: var(--status-error);
+}
+
+.nav__count--warn {
+	color: var(--status-warn);
+}
+
+/* A media-type count is a number, not a badge: right-aligned, tabular, no
+ * border. The bordered pill above stays what it is — a severity badge. */
+.nav__num {
+	margin-left: auto;
+	font-size: var(--text-xs);
+	line-height: var(--leading-xs);
+	font-variant-numeric: var(--numeric-tabular);
+	color: inherit;
+}
+
+/* Main */
+/* The top padding is on .main rather than on .pagehead. In the mockup the
+ * pagehead carries the page title and supplies the offset under the toolbar;
+ * here the title lives in the toolbar itself (DESIGN-DIRECTION §8.3), so the
+ * pagehead is not always present and the region has to carry it. Same measured
+ * offset, one fewer required element. */
+.main {
+	grid-area: main;
+	min-width: 0;
+	padding: var(--space-5) 0 var(--space-9);
+}
+
+.main:focus-visible {
+	outline: var(--ring-width) solid var(--ring);
+	outline-offset: calc(-1 * var(--ring-width));
+}
+
+/* The h1 is the focus target on every route change and carries tabindex="-1".
+ * The toolbar already renders the page title at --text-xl, so the h1 carries
+ * the same string visually hidden rather than printing it on screen twice.
+ *
+ * A 1px clipped element cannot show a focus ring, and SC 2.4.7 still applies,
+ * so the CONTENT REGION takes the indicator instead: focus landing on the
+ * heading outlines the region the focus has moved into, which is the thing the
+ * user needs to see. It is `:focus` and not `:focus-visible` deliberately —
+ * programmatic .focus() on a tabindex="-1" element does not match
+ * :focus-visible in Chromium, so the ring would never appear. */
+.main:has(> .pagetitle:focus) {
+	outline: var(--ring-width) solid var(--ring);
+	outline-offset: calc(-1 * var(--ring-width));
+}
+
+.pagehead {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: var(--space-3) var(--space-5);
+	padding: var(--space-5) var(--space-6) var(--space-4);
+}
+
+.pagehead__meta {
+	color: var(--fg-muted);
+	font-size: var(--text-sm);
+	line-height: var(--leading-sm);
+}
+
+.section {
+	padding: 0 var(--space-6) var(--space-7);
+}
+
+/* Result groups inside one result set sit closer than page regions do. Padding
+ * differs by role: intra-row, inter-row, inter-group, inter-region. */
+.section--group {
+	padding-bottom: var(--space-4);
+	position: relative;
+}
+
+.section--group .section__head {
+	min-height: 24px;
+	margin-bottom: var(--space-3);
+}
+
+/* The 1px rule under an h2 is the third signal at --text-lg. A section heading
+ * otherwise differs from a bold row title by 3px and nothing else, at the same
+ * weight in the same ink, which is not a level. The answer is not a seventh
+ * size step. */
+.section__head {
 	display: flex;
 	align-items: center;
-	gap: var(--space-6);
-	min-height: var(--toolbar-h);
-	padding: 0 var(--space-6);
-	background: var(--bg-raised);
+	gap: var(--space-3);
+	min-height: 28px;
 	border-bottom: 1px solid var(--border);
+	margin-bottom: var(--space-4);
 }
 
-.app-title {
-	margin: 0;
-	font-size: var(--text-xl);
-	line-height: var(--leading-xl);
-	font-weight: var(--weight-semibold);
-}
-
-.app-nav {
+.section__head h2 {
 	display: flex;
-	gap: var(--space-5);
-}
-
-.app-nav a[aria-current='page'] {
-	font-weight: var(--weight-medium);
-	text-decoration: none;
-	border-bottom: 2px solid var(--fg);
-}
-
-main {
-	max-width: 960px;
-	padding: var(--space-7) var(--space-6) var(--space-9);
-	margin: 0 auto;
-}
-
-h2 {
-	margin: 0 0 var(--space-5);
+	align-items: center;
+	gap: var(--space-3);
 	font-size: var(--text-lg);
 	line-height: var(--leading-lg);
-	font-weight: var(--weight-semibold);
+	font-weight: var(--weight-lg);
+	letter-spacing: -0.006em;
 }
 
-p {
-	margin: 0 0 var(--space-5);
-	max-width: 68ch;
-	color: var(--fg-secondary);
-	font-size: var(--text-md);
-	line-height: var(--leading-md);
+.section__count {
+	color: var(--fg-muted);
+	font-size: var(--text-sm);
+	font-variant-numeric: var(--numeric-tabular);
 }
 
-/* --- Controls ------------------------------------------------------------- */
+.section__actions {
+	margin-left: auto;
+	display: flex;
+	gap: var(--space-4);
+	align-items: center;
+}
 
-input[type='search'],
-input[type='text'],
-input[type='password'] {
-	height: var(--control-h);
+/* --- 2.3 Controls --------------------------------------------------------- */
+
+.btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: flex-start;
+	gap: var(--space-3);
+	min-height: var(--control-h-sm);
 	padding: 0 var(--space-4);
-	background: var(--bg);
+	background: var(--bg-raised);
 	color: var(--fg);
 	border: 1px solid var(--border-strong);
 	border-radius: var(--radius-sm);
-	font-family: inherit;
-	font-size: var(--text-md);
+	font-size: var(--text-base);
+	cursor: pointer;
+	white-space: nowrap;
+	/* An anchor styled as a button is still an anchor, and the global
+	 * `a { text-decoration: underline }` wins on every one of them without
+	 * this — so the primary action would read as an underlined label in a box
+	 * beside a plain label in a box. Underline is this product's link
+	 * affordance; it cannot also be the primary/secondary distinction. */
+	text-decoration: none;
+	transition: background-color var(--dur-hover) var(--ease-out);
 }
 
-input::placeholder {
+.btn:hover {
+	background: var(--bg-hover);
+	text-decoration: none;
+}
+
+.btn:disabled {
+	color: var(--fg-subtle);
+	border-color: var(--border);
+	cursor: not-allowed;
+}
+
+.btn:disabled:hover {
+	background: var(--bg-raised);
+}
+
+/* aria-disabled rather than disabled wherever the control has to stay
+ * focusable: a disabled element cannot hold focus, and dropping focus to
+ * <body> in the middle of a list is how a keyboard user loses their place. */
+.btn[aria-disabled='true'] {
+	color: var(--fg-subtle);
+	border-color: var(--border);
+	cursor: not-allowed;
+}
+
+.btn[aria-disabled='true']:hover {
+	background: var(--bg-raised);
+}
+
+/* Primary is a fill step, a weight step and the control boundary at full ink.
+ * Fill alone is a six-unit difference on the light ramp, which is close to
+ * nothing for the one button on the screen; the border is achromatic, so it
+ * costs the no-accent rule nothing. */
+.btn--primary {
+	background: var(--bg-selected);
+	font-weight: var(--weight-semibold);
+	border-color: var(--fg-muted);
+}
+
+.btn--primary:hover {
+	background: var(--bg-hover);
+}
+
+.btn--icon {
+	padding: 0 var(--space-3);
+	min-width: var(--control-h-sm);
+	justify-content: center;
+}
+
+.btn--sm {
+	min-height: var(--hit-min);
+	font-size: var(--text-sm);
+	padding: 0 var(--space-3);
+}
+
+.field {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.field__label {
+	font-size: var(--text-sm);
+	line-height: var(--leading-sm);
+	font-weight: var(--weight-semibold);
+}
+
+.field__help {
+	font-size: var(--text-sm);
+	line-height: var(--leading-sm);
+	color: var(--fg-muted);
+}
+
+.field__err {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--space-2);
+	font-size: var(--text-sm);
+	line-height: var(--leading-sm);
+	color: var(--status-error);
+	font-weight: var(--weight-semibold);
+}
+
+.input,
+.select,
+.textarea {
+	min-height: var(--control-h-sm);
+	padding: var(--space-2) var(--space-3);
+	background: var(--bg-inset);
+	color: var(--fg);
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+	font-size: var(--text-base);
+	max-width: 100%;
+}
+
+.input::placeholder,
+.textarea::placeholder {
 	color: var(--fg-subtle);
 }
 
-button {
-	height: var(--control-h);
-	padding: 0 var(--space-5);
+.input[aria-invalid='true'],
+.select[aria-invalid='true'] {
+	border-color: var(--status-error);
+	border-width: 2px;
+}
+
+/* A field you cannot type in must not look like a field you can. */
+.input[readonly] {
 	background: var(--bg-raised);
-	color: var(--fg);
+	border-style: dashed;
+	color: var(--fg-muted);
+}
+
+select[multiple] {
+	min-height: 88px;
+	padding: var(--space-2);
+}
+
+.check {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	font-size: var(--text-base);
+}
+
+.check input {
+	width: 14px;
+	height: 14px;
+	accent-color: var(--fg);
+}
+
+/* The per-page toolbar, distinct from the shell's top bar. */
+.toolbar {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: var(--space-3) var(--space-4);
+	min-height: var(--toolbar-h);
+	padding: var(--space-3) var(--space-6);
+	background: var(--bg-raised);
+	border-top: 1px solid var(--border);
+	border-bottom: 1px solid var(--border);
+}
+
+.toolbar__label {
+	font-size: var(--text-sm);
+	color: var(--fg-muted);
+}
+
+.toolbar__spacer {
+	flex: 1 1 auto;
+}
+
+/* A constraint that belongs to the whole form, not to one control: it takes its
+ * own line at the end of the toolbar rather than sitting between a label and
+ * its select and breaking the wrap. */
+.toolbar__note {
+	flex: 1 0 100%;
+	order: 99;
+}
+
+.segment {
+	display: inline-flex;
 	border: 1px solid var(--border-strong);
 	border-radius: var(--radius-sm);
-	font-family: inherit;
-	font-size: var(--text-md);
+	overflow: hidden;
+}
+
+.segment button {
+	min-height: 26px;
+	padding: 0 var(--space-4);
+	background: var(--bg-raised);
+	border: 0;
+	border-right: 1px solid var(--border-strong);
+	font-size: var(--text-sm);
 	cursor: pointer;
 	transition: background-color var(--dur-hover) var(--ease-out);
 }
 
-button:hover:not(:disabled) {
+.segment button:last-child {
+	border-right: 0;
+}
+
+.segment button:hover {
+	background: var(--bg-hover);
+}
+
+.segment button[aria-pressed='true'] {
+	background: var(--bg-selected);
+	font-weight: var(--weight-semibold);
+}
+
+/* --- 2.4 Status ----------------------------------------------------------- */
+
+/* Icon + text + colour, together. Never colour alone. */
+.st {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	white-space: nowrap;
+	font-weight: var(--weight-semibold);
+}
+
+.st--ok {
+	color: var(--status-ok);
+}
+
+.st--warn {
+	color: var(--status-warn);
+}
+
+.st--err {
+	color: var(--status-error);
+}
+
+/* Grey is a legitimate status and it is load-bearing: "not configured" is a
+ * real, common, non-broken condition in a pluggable app, and painting it a
+ * colour would make the two conditions that ARE broken harder to find. */
+.st--none {
+	color: var(--status-unset);
+	font-weight: var(--weight-regular);
+}
+
+.chip {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	font-size: var(--text-xs);
+	line-height: var(--leading-xs);
+	font-weight: var(--weight-xs);
+	padding: 0 var(--space-3);
+	min-height: 18px;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+	color: var(--fg-muted);
+	white-space: nowrap;
+}
+
+.chip--pending {
+	color: var(--status-warn);
+	border-color: currentcolor;
+}
+
+.chip--failed {
+	color: var(--status-error);
+	border-color: currentcolor;
+}
+
+.chip--done {
+	color: var(--status-ok);
+	border-color: currentcolor;
+}
+
+/* Protocol swatch: achromatic. The 1px --border-strong boundary carries the
+ * shape at >= 3.2:1 and there is no fill, because a torrent green one column
+ * from a status green is the one collision this ramp cannot afford. The words
+ * `torrent` and `usenet` carry the distinction in the same cell. */
+.proto {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-3);
+	white-space: nowrap;
+}
+
+.proto__dot {
+	width: 8px;
+	height: 8px;
+	flex: none;
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+}
+
+/* Availability rollup, per ARCHITECTURE §6.3: have == total && total > 0 is a
+ * tick, have == 0 is a cross, anything else is the fraction. Every one of them
+ * carries the word as text or as a visually-hidden span — an icon-only tick
+ * makes "have" and "missing" indistinguishable to a screen reader. */
+.avail {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	font-variant-numeric: var(--numeric-tabular);
+}
+
+.avail--full {
+	color: var(--status-ok);
+}
+
+.avail--none {
+	color: var(--status-error);
+}
+
+.avail--part {
+	color: var(--fg-muted);
+}
+
+/* --- 2.5 Banners, empty states, error summary ----------------------------- */
+
+/* Non-modal. No coloured left strip — a full hairline box plus a status glyph.
+ * A coloured 3–4px left border is a named tell and status belongs in the row. */
+.banner {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--space-4);
+	margin: var(--space-4) var(--space-6);
+	padding: var(--space-4) var(--space-5);
+	background: var(--bg-raised);
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+	font-size: var(--text-base);
+}
+
+.banner .i {
+	margin-top: 1px;
+}
+
+.banner--warn .i {
+	color: var(--status-warn);
+}
+
+.banner--err {
+	border-color: var(--status-error);
+}
+
+.banner--err .i {
+	color: var(--status-error);
+}
+
+.banner__body {
+	min-width: 0;
+	flex: 1 1 auto;
+}
+
+.banner__title {
+	font-weight: var(--weight-semibold);
+}
+
+.banner__text {
+	color: var(--fg-muted);
+	margin-top: var(--space-1);
+}
+
+.banner__actions {
+	display: flex;
+	gap: var(--space-4);
+	align-items: center;
+	flex: none;
+}
+
+/* An empty state is the top of a table that has no rows, and it is drawn as
+ * one: a rule where the table's top edge would be, a heading at the same
+ * content edge as the first column's text, one sentence under it, then the
+ * buttons that fix it. No centring, no container, no background step, no 24px
+ * heading. The left offset is --row-pad-x — the same cell padding every table
+ * uses — so the heading lands on the column edge rather than the table edge,
+ * and it has to be the token or that alignment silently stops being true at
+ * relaxed density. */
+.empty {
+	padding: var(--space-5) 0 var(--space-6) var(--row-pad-x);
+	border-top: 1px solid var(--border-strong);
+}
+
+.empty__title {
+	font-size: var(--text-lg);
+	line-height: var(--leading-lg);
+	font-weight: var(--weight-lg);
+	margin-bottom: var(--space-2);
+}
+
+.empty__text {
+	color: var(--fg-muted);
+	max-width: 78ch;
+	margin: 0 0 var(--space-5);
+	font-size: var(--text-base);
+	line-height: var(--leading-base);
+}
+
+.empty__actions {
+	display: flex;
+	gap: var(--space-4);
+	flex-wrap: wrap;
+}
+
+/* GOV.UK-style error summary: one list at the top, focused on submit, each
+ * entry also repeated inline at its own field. */
+.errsummary {
+	border: 2px solid var(--status-error);
+	border-radius: var(--radius-sm);
+	padding: var(--space-5);
+	margin-bottom: var(--space-6);
+}
+
+.errsummary__title {
+	font-weight: var(--weight-semibold);
+	color: var(--status-error);
+	margin-bottom: var(--space-3);
+}
+
+.errsummary ul {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.errsummary a {
+	color: var(--status-error);
+	font-weight: var(--weight-semibold);
+}
+
+/* --- 2.6 Lists: grid rows with explicit ARIA ------------------------------ */
+
+/* The list primitive is a CSS grid, not a table layout, and that is a
+ * correctness fix rather than a preference. CSS Containment Level 2: size
+ * containment "has no effect ... if its principal box is an internal table
+ * box", and `content-visibility: auto` is defined entirely in terms of size,
+ * layout and paint containment — so it is inert on a <tr> and on a <tbody>.
+ *
+ * The elements stay <table>/<thead>/<tr>/<th>/<td> so the markup still reads as
+ * a table and the phone label fork below keeps working, but the computed
+ * display is block/grid, which drops the implicit table semantics. An ARIA grid
+ * has to earn back everything the native table gave for free, so every one of
+ * those elements carries an explicit role — table / rowgroup / row /
+ * columnheader / cell — plus aria-colcount and aria-colindex, and aria-rowcount
+ * / aria-rowindex wherever the rendered rows are a window onto a larger set.
+ *
+ * Columns are declared once per list in --cols rather than derived. Auto table
+ * layout has to measure every cell in every row to size a column, which is the
+ * one layout mode no containment can help. --cols is set through the CSSOM, not
+ * through a style attribute: the CSP refuses inline styles (see the file
+ * header). */
+
+/* `clip`, not `auto`. `auto` computes to `auto` on BOTH axes, which makes this
+ * box a scroll container; the sticky thead below then pins to the wrapper's
+ * scrollport instead of the viewport, and the wrapper never scrolls vertically,
+ * so the header does not pin at all. `clip` keeps overflow-y visible, which is
+ * what lets the sticky reach the viewport. */
+.tablewrap {
+	overflow-x: clip;
+}
+
+.tbl {
+	display: block;
+	width: 100%;
+	font-size: var(--text-base);
+}
+
+.tbl caption {
+	display: block;
+	text-align: left;
+	padding: var(--space-3) 0;
+	color: var(--fg-muted);
+	font-size: var(--text-sm);
+}
+
+.tbl thead,
+.tbl tbody {
+	display: block;
+}
+
+/* :not([hidden]) rather than a bare `.tbl tr`, and it is load-bearing.
+ * `[hidden] { display: none }` is specificity 0-1-0 while `.tbl tr` is 0-1-1,
+ * so a display declaration here would out-rank it and every collapsed detail
+ * row would render open. Excluding hidden rows leaves the [hidden] rule
+ * unopposed instead of fighting it with !important. */
+.tbl tr:not([hidden]) {
+	display: grid;
+	grid-template-columns: var(--cols, minmax(0, 1fr));
+	align-items: start;
+	min-width: 0;
+}
+
+.tbl th {
+	text-align: left;
+	font-size: var(--text-xs);
+	line-height: var(--leading-xs);
+	font-weight: var(--weight-xs);
+	color: var(--fg-muted);
+	background: var(--bg-raised);
+	padding: var(--space-3) var(--row-pad-x);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+}
+
+/* The sticky box is the thead, not the header row: with `thead { display:
+ * block }` the row's containing block is the thead, which is exactly one row
+ * tall, so the row could not move at all. The thead's containing block is the
+ * table, which is the full list. The offset is the toolbar height because the
+ * viewport's top forty pixels are already occupied by the sticky .topbar. */
+.tbl thead {
+	position: sticky;
+	top: var(--toolbar-h);
+	z-index: 10;
+	background: var(--bg-raised);
+	border-bottom: 1px solid var(--border-strong);
+}
+
+.tbl th.is-num,
+.tbl td.is-num {
+	text-align: right;
+	font-variant-numeric: var(--numeric-tabular);
+}
+
+.tbl td {
+	padding: var(--row-pad-y) var(--row-pad-x);
+	min-width: 0;
+}
+
+/* colspan is meaningless to a grid, so a spanning cell says so in grid terms.
+ * aria-colspan carries the same fact to the accessibility tree. */
+.tbl td[colspan] {
+	grid-column: 1 / -1;
+}
+
+.tbl tbody tr {
+	min-height: var(--row-h);
+	border-bottom: 1px solid var(--border);
+	/* This is the whole point of the primitive change: inert on a <tr>, and it
+	 * works here. contain-intrinsic-size tracks the density variable rather
+	 * than being a constant, and it sizes the CONTENT box, so the padding is in
+	 * the expression rather than assumed away. --row-lines is declared per list
+	 * from that list's own measured rows: a constant is wrong by 50% on a
+	 * design where a services row is six lines and a search row is one. */
+	content-visibility: auto;
+	contain-intrinsic-size: auto
+		calc(2 * var(--row-pad-y) + var(--row-lines, 1.1) * var(--leading-base));
+}
+
+.tbl tbody tr:hover {
+	background: var(--bg-hover);
+}
+
+.tbl tbody tr[aria-selected='true'] {
 	background: var(--bg-selected);
 }
 
-button:disabled {
-	color: var(--fg-subtle);
-	cursor: default;
+.tbl tbody tr:focus-visible {
+	outline: var(--ring-width) solid var(--ring);
+	outline-offset: calc(-1 * var(--ring-width));
 }
 
-/* --- Banners: non-modal, never covering the results (ARCHITECTURE §17.7) --- */
+.tbl td > * + * {
+	margin-top: var(--space-1);
+}
 
-.banner {
-	padding: var(--space-4) var(--space-5);
-	margin-bottom: var(--space-5);
+/* The phone label is display:none above 760px but it is still the first child,
+ * so without this every cell's real first element inherits the inter-line
+ * margin meant for a second one. */
+.tbl td > .stacklabel + * {
+	margin-top: 0;
+}
+
+.tbl .cell-title {
+	font-weight: var(--weight-semibold);
+}
+
+/* A row disclosure is a glyph on the title's own line, not a 24px control that
+ * sets the line box for the whole row. */
+.tbl .cell-title > .btn--icon {
+	min-height: 18px;
+	min-width: 18px;
+	padding: 0;
+	border-color: transparent;
+}
+
+.tbl .cell-title > .btn--icon:hover {
+	border-color: var(--border-strong);
+}
+
+/* Release names have no spaces, so without this a single cell sets the table's
+ * min-content width and the page scrolls sideways. A base URL is not a release
+ * name: breaking "http://10.0.0.4:8989" across ":898 / 9" reads as damage, so
+ * the sub-line breaks at word boundaries. */
+.tbl td .mono {
+	overflow-wrap: anywhere;
+}
+
+.tbl .cell-sub.mono {
+	overflow-wrap: break-word;
+	word-break: normal;
+}
+
+/* THE TRUNCATION POLICY, stated rather than implied. Three tiers:
+ *   (a) an identity or machine string in a cell — a release name, a title —
+ *       truncates at the cell edge with the full value on the title attribute.
+ *       `overflow-wrap: anywhere` breaks release names mid-token, which
+ *       destroys the exact thing the reader is scanning for;
+ *   (b) verbatim upstream text never truncates. It wraps, in .verbatim, and
+ *       lives behind a row expander rather than in a cell;
+ *   (c) an explanation is not a cell value at all. It goes in the expander. */
+.trunc {
+	display: block;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 100%;
+	min-width: 0;
+}
+
+.tbl td .mono.trunc {
+	overflow-wrap: normal;
+}
+
+.cell-problem {
+	display: flex;
+	align-items: baseline;
+	gap: var(--space-3);
+	min-width: 0;
+}
+
+.cell-problem .prob {
+	min-width: 0;
+}
+
+.linkish {
+	background: none;
+	border: 0;
+	padding: 0;
+	font: inherit;
+	color: inherit;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.tbl .cell-sub {
+	color: var(--fg-muted);
+	font-size: var(--text-sm);
+	line-height: var(--leading-sm);
+}
+
+.tbl .cell-actions {
+	display: flex;
+	gap: var(--space-3);
+	align-items: center;
+}
+
+.tbl tr.is-expand > td {
 	background: var(--bg-raised);
+}
+
+/* Verbatim upstream text is machine data: mono, wrapped, never truncated. */
+.verbatim {
+	font-family: var(--font-mono);
+	font-size: var(--text-sm);
+	line-height: var(--leading-sm);
+	color: var(--fg);
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	background: var(--bg-inset);
 	border: 1px solid var(--border);
-	border-left: 3px solid var(--status-unset);
+	border-radius: var(--radius-sm);
+	padding: var(--space-3);
+	max-width: 46ch;
+}
+
+/* The phone label is for sighted phone users only. It is a real element marked
+ * aria-hidden rather than `td[data-label]::before { content: attr(...) }`,
+ * which put the column name inside the cell's accessible name and made a
+ * screen reader announce the columnheader and then the same word again on
+ * every cell of every row. */
+.stacklabel {
+	display: none;
+}
+
+/* --- 2.7 The mobile drawer ------------------------------------------------ */
+
+/* Below 900px the sidebar overlays the content rather than taking a column from
+ * it — a 208px sidebar on a 390px phone leaves 182px of content and the page
+ * reads as broken (Sonarr #7757, Prowlarr #2431 are both this bug). Because it
+ * overlays, it is a modal dialog: role="dialog" aria-modal="true", `inert` on
+ * everything behind it, Escape to close, and focus returned to the toggle. */
+.scrim {
+	display: none;
+}
+
+@media (max-width: 900px) {
+	.app,
+	.app[data-sidebar='open'],
+	.app[data-sidebar='collapsed'] {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-areas:
+			'topbar'
+			'main';
+	}
+
+	.sidebar {
+		display: none;
+	}
+
+	.app[data-sidebar='open'] .sidebar {
+		display: block;
+		position: fixed;
+		top: var(--toolbar-h);
+		left: 0;
+		width: var(--sidebar-w);
+		max-width: 80vw;
+		height: calc(100vh - var(--toolbar-h));
+		z-index: var(--z-top);
+		box-shadow: var(--shadow-overlay);
+	}
+
+	.app[data-sidebar='open'] .scrim {
+		display: block;
+		position: fixed;
+		inset: var(--toolbar-h) 0 0 0;
+		z-index: var(--z-overlay);
+		background: var(--scrim);
+	}
+}
+
+/* Above 900px the drawer never exists, so its toggle must not either. */
+@media (min-width: 901px) {
+	.sidebar-toggle {
+		display: none;
+	}
+}
+
+/* --- 2.8 Responsive: the same layout, degraded. No second design. --------- */
+
+@media (max-width: 760px) {
+	/* The wide list becomes a stack. Same markup, same data, no mobile fork.
+	 * thead is visually hidden rather than display:none: display:none takes the
+	 * columnheader nodes out of the accessibility tree entirely, and a screen
+	 * reader on a phone then has a table of cells and no headers. Clipping it
+	 * keeps the header association the explicit roles declare, at the same zero
+	 * pixels of layout cost. */
+	.tbl--stack thead {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+
+	.tbl--stack thead tr {
+		position: static;
+	}
+
+	.tbl--stack thead tr:not([hidden]) {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.tbl--stack tbody tr:not([hidden]) {
+		grid-template-columns: minmax(0, 1fr);
+		border-bottom: 1px solid var(--border-strong);
+		padding: var(--space-4) var(--row-pad-x);
+	}
+
+	.tbl--stack td {
+		padding: var(--space-1) 0;
+		text-align: left;
+	}
+
+	.tbl--stack td.is-num {
+		text-align: left;
+	}
+
+	.tbl--stack td > .stacklabel {
+		display: inline-block;
+		min-width: 84px;
+		color: var(--fg-muted);
+		font-size: var(--text-xs);
+		line-height: var(--leading-xs);
+	}
+
+	.tbl--stack td[data-col='title'] > .stacklabel,
+	.tbl--stack td[data-col='series'] > .stacklabel,
+	.tbl--stack td[data-col='album'] > .stacklabel {
+		display: block;
+	}
+
+	/* A four-line stack costs ~105px per media type, which puts the block that
+	 * reports a rejected API key 914px down an 844px viewport. Two columns makes
+	 * the type summary two lines: identity and count, then availability and sync
+	 * time. The Type label is dropped because the value IS the row's identity. */
+	.tbl--2up tbody tr:not([hidden]) {
+		grid-template-columns: minmax(0, 1fr) auto;
+		column-gap: var(--space-4);
+	}
+
+	.tbl--2up td[data-col='type'] > .stacklabel,
+	.tbl--2up td[data-col='items'] > .stacklabel,
+	.tbl--2up td[data-col='have'] > .stacklabel {
+		display: none;
+	}
+
+	.verbatim {
+		max-width: none;
+	}
+
+	.banner {
+		flex-wrap: wrap;
+	}
+
+	.banner__actions {
+		width: 100%;
+		flex-wrap: wrap;
+	}
+
+	/* A two-clause button label is wider than a 390px phone, and .btn is nowrap
+	 * by design, so a banner action wraps its text instead of pushing the
+	 * document sideways. */
+	.banner__actions .btn {
+		white-space: normal;
+		text-align: left;
+	}
+}
+
+@media (max-width: 560px) {
+	:root {
+		--toolbar-h: 68px;
+	}
+
+	.topbar {
+		flex-wrap: wrap;
+		align-items: center;
+		row-gap: var(--space-2);
+		padding: var(--space-3) var(--space-4);
+	}
+
+	.topbar__spacer {
+		display: none;
+	}
+}
+
+/* =============================================================================
+ * TRANSITIONAL — the two scaffolding screens
+ *
+ * /search and /services were built against the scaffolding stylesheet this file
+ * replaces, and they are rewritten in a later slice. Their class vocabulary is
+ * carried here, re-expressed in the tokens above, so they keep working in the
+ * meantime rather than rendering unstyled. Everything in this block is deleted
+ * by the slice that rewrites those two screens; nothing new may use it.
+ * ============================================================================= */
+
+/* The gutter every rebuilt screen gets from .section. These screens predate it
+ * and would otherwise render flush against the sidebar. */
+.transitional-scope {
+	padding: 0 var(--space-6);
+}
+
+.transitional-scope h2 {
+	font-size: var(--text-lg);
+	line-height: var(--leading-lg);
+	font-weight: var(--weight-lg);
+	letter-spacing: -0.006em;
+	margin: 0 0 var(--space-5);
+}
+
+.transitional-scope h3 {
 	font-size: var(--text-md);
 	line-height: var(--leading-md);
+	font-weight: var(--weight-semibold);
 }
 
-.banner-warn {
-	border-left-color: var(--status-warn);
+.transitional-scope p {
+	margin: 0 0 var(--space-5);
+	max-width: 78ch;
+	color: var(--fg-secondary);
+	font-size: var(--text-base);
+	line-height: var(--leading-base);
 }
 
-.banner-error {
-	border-left-color: var(--status-error);
+.transitional-scope code {
+	font-family: var(--font-mono);
+	font-size: var(--text-sm);
+}
+
+/* The scaffolding's `<p class="empty">` is a sentence, not the empty-state
+ * block above. Element + class out-ranks the bare class, so this wins. */
+p.empty {
+	padding: var(--space-7) 0;
+	border-top: 0;
+	color: var(--fg-muted);
+	font-size: var(--text-base);
+	line-height: var(--leading-base);
 }
 
 .banner-detail {
@@ -321,10 +1815,25 @@ button:disabled {
 	overflow-wrap: anywhere;
 }
 
-/* --- Results list --------------------------------------------------------- */
+.banner-warn {
+	border-color: var(--status-warn);
+}
+
+.banner-error {
+	border-color: var(--status-error);
+}
+
+.status-line {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-2) var(--space-5);
+	margin-bottom: var(--space-5);
+	color: var(--fg-muted);
+	font-size: var(--text-sm);
+	line-height: var(--leading-sm);
+}
 
 .results {
-	list-style: none;
 	margin: 0;
 	padding: 0;
 	border-top: 1px solid var(--border);
@@ -332,7 +1841,7 @@ button:disabled {
 
 .result {
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	gap: var(--space-5);
 	min-height: var(--row-h-two-line);
 	padding: var(--row-pad-y) var(--row-pad-x);
@@ -351,6 +1860,7 @@ button:disabled {
 .result-title {
 	font-size: var(--text-base);
 	line-height: var(--leading-base);
+	font-weight: var(--weight-semibold);
 	overflow-wrap: anywhere;
 }
 
@@ -365,12 +1875,12 @@ button:disabled {
 	font-variant-numeric: var(--numeric-tabular);
 }
 
-.protocol-torrent {
-	color: var(--protocol-torrent);
-}
-
+/* Neutral, per DESIGN-DIRECTION §3.3: the chip carries no colour and the words
+ * `torrent` and `usenet` carry the protocol. The two tokens these classes used
+ * to read are withdrawn and are not defined anywhere in this file. */
+.protocol-torrent,
 .protocol-usenet {
-	color: var(--protocol-usenet);
+	color: var(--fg-muted);
 }
 
 .result-action {
@@ -395,25 +1905,6 @@ button:disabled {
 	overflow-wrap: anywhere;
 }
 
-/* --- Status line ---------------------------------------------------------- */
-
-.status-line {
-	display: flex;
-	flex-wrap: wrap;
-	gap: var(--space-2) var(--space-5);
-	margin-bottom: var(--space-5);
-	color: var(--fg-muted);
-	font-size: var(--text-sm);
-	line-height: var(--leading-sm);
-}
-
-.empty {
-	padding: var(--space-7) 0;
-	color: var(--fg-muted);
-	font-size: var(--text-md);
-	line-height: var(--leading-md);
-}
-
 .search-form {
 	display: flex;
 	flex-wrap: wrap;
@@ -423,4 +1914,57 @@ button:disabled {
 
 .search-form input {
 	flex: 1 1 320px;
+	min-height: var(--control-h);
+	padding: 0 var(--space-4);
+	background: var(--bg-inset);
+	color: var(--fg);
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+	font-size: var(--text-md);
+}
+
+/* The scaffolding screens use bare <input> and <button> elements. They get the
+ * control treatment from the element selector rather than from a class, which
+ * is what those screens were written against. */
+.transitional-scope input[type='text'],
+.transitional-scope input[type='search'],
+.transitional-scope input[type='password'] {
+	min-height: var(--control-h);
+	padding: 0 var(--space-4);
+	background: var(--bg-inset);
+	color: var(--fg);
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+	font-size: var(--text-md);
+}
+
+.transitional-scope input::placeholder {
+	color: var(--fg-subtle);
+}
+
+.transitional-scope button {
+	min-height: var(--control-h);
+	padding: 0 var(--space-5);
+	background: var(--bg-raised);
+	color: var(--fg);
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+	font-size: var(--text-md);
+	cursor: pointer;
+	transition: background-color var(--dur-hover) var(--ease-out);
+}
+
+.transitional-scope button:hover:not(:disabled) {
+	background: var(--bg-hover);
+}
+
+.transitional-scope button:disabled {
+	color: var(--fg-subtle);
+	border-color: var(--border);
+	cursor: not-allowed;
+}
+
+/* Last, so it beats the component display values above at equal specificity. */
+[hidden] {
+	display: none;
 }
