@@ -682,8 +682,12 @@ three densities**, because a row whose columns wrap is taller than its floor. Tw
 (**measured: forcing the token to 100 px left the row at 28.0 px**), which is one more reason §7.4's
 list primitive is a grid row. And any code that estimates total list height from these numbers is
 wrong by ~33% at 25,000 rows. **§7.4 carries the measured heights that `contain-intrinsic-size`
-actually uses** — 28 / 32 / 36 px for a one-line row and 45 / 49 / 53 px for a rich one — and they
-are per row *shape*, which is the distinction this warning is about.
+actually uses, and they are CONTENT-box heights** — post-`440e92d`, **content box 27 / 31 / 35 px**
+for a one-line row and **content box 44 / 48 / 52 px** for a rich one, whose border boxes are
+28 / 32 / 36 px and 45 / 49 / 53 px respectively. They are per row *shape*, which is the distinction
+this warning is about, and the box is named because `contain-intrinsic-size` takes the content box
+while every height quoted from a rect is the border box — a 1 px error per row that `auto` then
+silently corrects.
 
 One consequence worth stating because it is easy to violate: SC 2.5.8 requires 24 × 24 CSS px
 targets, with a spacing exception for undersized targets whose 24 px circles do not intersect
@@ -939,25 +943,76 @@ THREE DENSITIES, and every number is recorded WITH ITS BOX.** Not one fork and a
 the other; not a plausible mechanism instead of a measurement.
 
 🚩 **EVERY FIGURE IN THIS SECTION NAMES ITS BOX, and that is not pedantry — it is the repair for a
-defect this section already had.** The same three digits, **28 / 32 / 36**, are true of the shipped
-component's one-line row as its **content** box and of the mockup's one-line row as its **border**
-box, and the table below used to print them under a heading that named neither while a paragraph
-further down called them "the rendered border-box heights". Nothing about a bare `28 / 32 / 36`
-looks stale, which is exactly why a wrong one survives a reading. **A row height quoted without its
-box is not a measurement.**
+defect this section already had.** The same three digits, **28 / 32 / 36**, were true of the shipped
+component's one-line row as its **content** box *before* the `.stacksep` fix and of the mockup's
+one-line row as its **border** box throughout — and the table below used to print them under a
+heading that named neither while a paragraph further down called them "the rendered border-box
+heights". ⚠️ **Post-`440e92d` those same digits are the component's *border* box and its content box
+is 27 / 31 / 35, so the sentence stayed readable while half of it went false.** Nothing about a bare
+`28 / 32 / 36` looks stale, which is exactly why a wrong one survives a reading. **A row height
+quoted without its box is not a measurement.**
 
-| Row shape (shipped component, `stack: 'two-line'`) | compact | standard | relaxed |
-|---|---|---|---|
-| **one-line row — content box** | **28 px** | **32 px** | **36 px** |
-| **one-line row — border box** | **29 px** | **33 px** | **37 px** |
-| **rich row — border box** (two lines, a sub-line or a thumbnail) | **45 px** | **49 px** | **53 px** |
+✅ **POST-FIX, RE-MEASURED ON BOTH FORKS AT ALL THREE DENSITIES.** The frontend thread's `.stacksep`
+margin fix is on `main` at **`440e92d`**, and the pre-fix figures this table used to carry have been
+replaced by a measurement of the merged tree. Six configurations, four numbers each, one-line rows at
+1440×900, `getBoundingClientRect().height` with `content-visibility` forced visible; *natural* means
+the same row under a forced `min-height: 0`, so it is the height the content produces with the floor
+taken away.
 
-⏳ **These are the values BEFORE the frontend thread's `.stacksep` margin fix**, which is in flight
-as this is written and moves the two-line fork down by 1 px — border box to 28 / 32 / 36, content box
-to 27 / 31 / 35. They are recorded pre-fix, with their boxes named, precisely so the post-fix
-re-measure can be told apart from them: after that merge **"28 / 32 / 36" is still true of this
-fork, as the BORDER box rather than the content box.** Do not update these digits without also
-updating which row of the table they sit in.
+| One-line row, shipped component | compact | standard | relaxed | floor |
+|---|---|---|---|---|
+| `two-line` — **border box, as rendered** | **28 px** | **32 px** | **36 px** | binds |
+| `two-line` — **content box, as rendered** | **27 px** | **31 px** | **35 px** | binds |
+| `two-line` — **border box, natural** (`min-height: 0`) | 27 px | 31 px | 35 px | — |
+| `two-line` — **content box, natural** (`min-height: 0`) | 26 px | 30 px | 34 px | — |
+| `labels` — **border box, as rendered** | **28 px** | **32 px** | **36 px** | binds |
+| `labels` — **content box, as rendered** | **27 px** | **31 px** | **35 px** | binds |
+| `labels` — **border box, natural** (`min-height: 0`) | 27 px | 31 px | 35 px | — |
+| `labels` — **content box, natural** (`min-height: 0`) | 26 px | 30 px | 34 px | — |
+
+**The two forks are now identical in every box at every density, and `min-height: var(--row-h)` binds
+on all six configurations** — 1 px of it, since the natural border box lands one under the floor. The
+row's own padding is `0` and its border is `1 px` (padding lives on the `<td>`), so *content box =
+border box − 1* throughout, and the natural content box is exactly
+`2 × var(--row-pad-y) + var(--leading-base)` — **4/6/8 px doubled plus a fixed 18 px leading = 26 / 30 / 34**.
+
+⏳ **The rich row did not move, and that is measured rather than carried over**: on both the pre-fix
+and post-fix trees it is **border box 45 / 49 / 53 px, content box 44 / 48 / 52 px**, with the floor
+**slack** on it at every density. (The sample is bimodal — 45 px × 128 and 49 px × 72 at compact —
+because rows with more chips wrap; the figures above are the mode.)
+
+🚩 **Why the fix passes the rich row by is worth writing down, because the obvious answer is wrong
+and was written here first.** It is *not* that some other cell is taller: measured at compact, the
+rich row's tallest cells are the numeric second-line cells at **`<td>` border box 44 px** — the very
+cells the margin was landing on — while the actions cell with its 32 px `<select>` is only 32 px.
+The real reason is that **in a rich row the `.stacksep` has no element sibling to give the margin
+to.** `.tbl td > * + *` matches elements; in the rich Size cell the separator's `·` is followed by a
+bare **text node**, so the adjacent-sibling rule never fired there on either tree. In the one-line
+row the same cell renders `<span class="stacksep">` followed by `<span class="trunc">`, and that
+`.trunc` measured `margin-top: 2px` pre-fix and `0px` post-fix — the only cell in the row that
+differed, taking its `<td>` to 28 px against 26 px for all six others. **The stray margin never
+reached the rich row at all; it is not that the rich row absorbed it.**
+
+🚩 **The pre-fix values are kept here, as a control rather than as history, because the fix is only
+legible against them.** Measured on `3ae0d44^`, the same script, the same six configurations:
+
+| One-line row, PRE-FIX tree | compact | standard | relaxed | floor |
+|---|---|---|---|---|
+| `two-line` — **border box, as rendered** | 29 px | 33 px | 37 px | **inert** |
+| `two-line` — **content box, as rendered** | 28 px | 32 px | 36 px | **inert** |
+| `labels` — **border box, as rendered** | 28 px | 32 px | 36 px | binds |
+| `labels` — **content box, as rendered** | 27 px | 31 px | 35 px | binds |
+
+**The `labels` fork is byte-identical across the fix in all four numbers**; only the `two-line` fork
+moved, by 1 px, from a natural height that cleared the floor to one that sits under it. **So the fix
+did not make the rows shorter so much as hand the height back to the floor that was always meant to
+set it.**
+
+⚠️ **"28 / 32 / 36" appears four times in the two tables above and means something different each
+time**, which is the whole reason every figure here names its box: it is the `two-line` fork's
+**content** box before the fix and its **border** box after, and the `labels` fork's **border** box
+on both sides. A digit that survives a change while its meaning moves underneath is a staleness that
+never looks stale. Do not update any of these numbers without also updating which row they sit in.
 
 Scrollbar drift over a full scroll at the one-line values is **0.76 / 0.70 / 0.65%** against the 2%
 budget stated below, so all three densities clear it with better than a factor of two in hand.
@@ -967,8 +1022,16 @@ worth more than the confirmation.** The bench that produced them had been runnin
 webfont — its Vite root declared no `publicDir`, so `app.css`'s `@font-face` URLs 404'd for the
 harness's whole life. Re-measured at 2,000 rows against the real `List.svelte` and `app.css`, with
 the face verified by canvas advance-width probe rather than by `document.fonts.check` alone, **every
-number is byte-identical with the face served and with it blocked**: one-line content box
-28.0 / 32.0 / 36.0, rich rows rounding to 45 / 49 / 53. Nothing is provisional.
+number is byte-identical with the face served and with it blocked**: at the time, one-line **content**
+box 28.0 / 32.0 / 36.0 on the pre-fix `two-line` fork, rich rows rounding to **border** box
+45 / 49 / 53. Nothing is provisional.
+
+✅ **The post-fix re-measure above is the same null result reached from the other side, which is
+worth more than repeating it.** That run served the face (the harness's server answers `/fonts/`
+out of `web/static`, which the bench's own Vite root cannot), and the probe confirms it drew — IBM
+Plex advance 218 px against the fallback's 221.806 px on the same string, so the two conditions are
+genuinely distinguishable. The digits are the ones the earlier run got with the face **blocked**.
+The webfont does not move this row in either direction.
 
 **The mechanism is `body { line-height: var(--leading-base) }` being a fixed 18 px *length* rather
 than a unitless multiplier**, so glyph metrics cannot move the line box — the missing font could not
@@ -977,21 +1040,30 @@ guard was fired rather than assumed:** forcing `line-height: normal` on the row 
 conditions (rich rows 43 / 47 / 51 served against 39 / 43 / 47 blocked). A probe that cannot
 distinguish the conditions it is testing proves nothing; this one can.
 
-⚠️ **Scope, stated because it bounds the claim: one list configuration was measured** — `stack:
-'two-line'`, the Search-and-Grab release columns ADR-0029 was originally measured against. **Do not
-generalise these figures past the shape they were measured on**, and the `labels` fork is the reason:
-it never emits a `.stacksep`, so it was never subject to the margin the fix removes and it does not
-move with it.
+⚠️ **Scope, stated because it bounds the claim: the row shape measured is the Search-and-Grab release
+columns**, the widest list v0.1 ships and the one ADR-0029 was originally measured against, in its
+one-line and rich variants. **Do not generalise these figures past the shape they were measured on.**
+What is no longer a caveat is the fork: both are measured, at all three densities, in both boxes.
 
-🚩 **THE `labels` FORK'S NUMBERS ARE IN DISPUTE AND ARE DELIBERATELY NOT RESOLVED HERE.** This
-section has carried **26 / 30 / 34 px** for it, *below* the floor, where `min-height` would bind —
-box unnamed, which is half the problem. The frontend thread reports the same fork at **border box
-28 / 32 / 36** (content box 27 / 31 / 35), unchanged across the `.stacksep` fix, where the floor
-binds only after that fix. **Those cannot both be right, and neither is overwritten by the other
-on the strength of being newer.** The disagreement is 2 px at every density and it decides whether
-a floor-based explanation is correct for this fork — which is the same question §7.4 already got
-wrong once. Routed for a measurement on both forks; until one arrives, cite neither figure as
-settled.
+✅ **THE `labels` FORK'S DISPUTE IS RESOLVED, AND NOBODY WAS WRONG.** Three figures were standing for
+that fork — this section's **26 / 30 / 34**, the frontend thread's **border box 28 / 32 / 36**, and a
+third measurement's **content box 27 / 31 / 35** — and the reason they could not be reconciled is
+that they are three different quantities, only one of which ever said so. Measured, they are all
+three correct, simultaneously, on both sides of the fix:
+
+| Figure, as it was reported | What it actually measures |
+|---|---|
+| **26 / 30 / 34** (this section, box unnamed) | the **natural content box** — `min-height` removed. It is `2 × --row-pad-y + --leading-base` exactly, and it is *below* the floor, which is precisely the mechanism this section attributed to it |
+| **27 / 31 / 35** (a separate measurement, "content box, before the fix") | the **content box as rendered**, floor live |
+| **28 / 32 / 36** (the frontend thread, "border box") | the **border box as rendered**, floor live — the same row as the line above, plus its 1 px border |
+
+**So this section's 26 / 30 / 34 was never in conflict with the frontend thread's 28 / 32 / 36; it
+was 2 px below it because it was two boxes below it** — one border and one `min-height` — and the
+sentence carrying it was right about the floor binding for exactly the right reason. It was a
+measurement missing its label, not a wrong measurement. 🚩 **The trap worth keeping is the middle
+row: 27 / 31 / 35 is the rendered content box AND the natural border box, two different quantities
+with the same three digits at every density.** Naming the box alone does not disambiguate it; the
+floor condition has to be named too, which is why the table above states both.
 
 **The declaration is not written as any of those numbers**, because `contain-intrinsic-size` sizes
 the **content** box — the row's 1 px bottom border is added on top of whatever it says, and on the
@@ -1002,8 +1074,11 @@ density token rather than hard-coding three constants, and `--row-lines` is decl
 that list's own rendered rows. ✅ **Checked rather than assumed, because agreement is worth
 confirming and not worth guessing at — and note which box each side of the agreement is in:** at
 1440×900 the mockups render a one-line row at **border box 28 / 32 / 36 px** and a rich one at
-**border box 45 / 49 / 53 px**, which is the component's *content*-box figure for the same digits at
-one-line and its *border*-box figure at rich. The agreement is real and it is not an identity; with the
+**border box 45 / 49 / 53 px**. ⏳ **That sentence used to add "which is the component's
+*content*-box figure for the same digits at one-line", and post-`440e92d` it is the component's
+*border*-box figure at one-line too** — the mockup and the component now agree border box to border
+box on both shapes, where before the fix the one-line agreement was mockup-border against
+component-content. The agreement is real and it is not an identity; with the
 computed
 placeholder at `auto 27.98 / 31.98 / 35.98px` and `auto 45.08 / 49.08 / 53.08px` respectively, each
 within 0.3% of the border-box height it stands in for. The mockups already carry the measured values;
@@ -1055,23 +1130,25 @@ Kept here because each one is a way to arrive at a wrong placeholder again:
    the one property with no effect on the real height. The grid-row primitive above fixes this as a
    side effect, since `min-height` does apply to a grid item — but the table below must then be
    read as what it is.
-   ✅ **Confirmed on the shipped grid row, and it corrects a second-order claim at the same time:**
-   forcing `--row-h: 100px` there moves every row to 100 px, so the property is live where it was
-   inert on the `<tr>`. **But it is live and *slack*, not load-bearing** — setting `min-height: 0`
-   leaves a one-line row unchanged, because the natural height sits 1 px over the floor and the
-   floor therefore never binds. So the one-line values are **not produced by `--row-h`**; that they
-   coincide with it at all three densities is arithmetic accident, from
-   `2 × --row-pad-y + 1.1 × --leading-base` landing within a rounding step of it. Anything that
-   reasons from "the row is `--row-h` tall because the floor says so" is reasoning from a
-   coincidence.
-   ⚠️ **And the coincidence is narrower than "a one-line row", which is the third time this row has
-   been described more confidently than it was measured.** The content box equals `--row-h` on the
-   **`two-line` fork before the `.stacksep` fix** and nowhere else: the `labels` fork, which emits no
-   `.stacksep`, measured a content box 1 px under it over the same period, and after the fix the
-   `two-line` fork joins it there and the floor starts binding. **A sentence of the form "a one-line
-   row's content box comes out at exactly `--row-h`" is therefore false as written** — it describes
-   one fork of the primitive at one moment, not the primitive. Name the fork, name the box, or say
-   neither.
+   ✅ **Confirmed on the shipped grid row, and the guard was fired rather than assumed — twice, and
+   the first firing was itself wrong.** Forcing `--row-h: 100px` moves every one-line row to
+   **border box 100 px, content box 99 px**, on both forks at all three densities, so the property is
+   live where it was inert on the `<tr>`. 🚩 **But the first attempt at that guard set the override on
+   `<html>` and nothing moved, which would have read as a clean null result and was not one:**
+   `List.svelte` stamps `data-density` on the list container, and §5.3's density blocks match a bare
+   `[data-density]` as well as `:root`, so the container **re-declares `--row-h` on itself** and an
+   inline override on the document element never reaches the rows. Anything overriding a density token
+   for a measurement has to do it on the list, not on the root.
+   ⚠️ **And "live but *slack*" was true when it was written and is now false, which is the point of
+   re-measuring rather than re-reading.** It described the `two-line` fork **before** the `.stacksep`
+   fix, where the natural height cleared the floor by 1 px so `min-height: 0` changed nothing. **After
+   `440e92d` the floor binds on both forks at all three densities**: natural border box 27 / 31 / 35
+   against a floor of 28 / 32 / 36. So the one-line border box *is* now produced by `--row-h`, and the
+   arithmetic accident has become the mechanism. **A sentence of the form "a one-line row's content
+   box comes out at exactly `--row-h`" remains false as written** — post-fix the content box is
+   `--row-h − 1` on both forks — and the older reading, "the row is `--row-h` tall because the floor
+   says so", has gone from a coincidence to the truth about the **border** box only. Name the fork,
+   name the box, name whether the floor binds, or say neither.
 2. **Row heights are not the six values in §5.3's table.** Measured on the shipped search screen at
    compact density there are **six distinct heights — 28, 30, 45, 47, 59, 62 px, mean 42.0** — and
    **eighteen across the three densities**, because real rows wrap. Estimating 25,000 rows at 28 px
