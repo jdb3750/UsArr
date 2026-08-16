@@ -53,3 +53,39 @@ regexes = [
   '''^prowlarrKEY[0-9a-f]+$''',
   '''^abc123def456$''',
 ]
+
+[[allowlists]]
+description = """
+Path-segment passkey fixtures for internal/ssrf's redaction heuristic.
+
+These exist precisely to prove that a private tracker's passkey embedded in a URL
+PATH is redacted, so a scanner finding them is the test doing its job. They are
+still allowlisted by VALUE and by fully anchored literal, never by path: a
+`paths` clause exempts the whole FILE (verified — see the note at the top of this
+file), which would mean a real *Arr admin key pasted into that test scans clean.
+
+Every value here is a sequential or mirrored run over its own alphabet, so it is
+structurally impossible to mistake for a real credential, which is what
+docs/DEVELOPMENT.md §7.1 asks for. The 32-hex ones the redaction tests use are
+already covered by the sequential-hex allowlist above; these are the shapes that
+sequence cannot express — a 20-character run, a reversed run, a rotated run, an
+uppercase base32 run, an alternating-case run, and a Crockford-base32 ULID.
+
+The heuristic needs each fixture to be at least 20 characters, unbroken
+alphanumeric, and to hold both a letter and a digit, so an obviously-fake value
+still has to look structurally like a key. That is the constraint that rules out
+the usual `deadbeef` idiom, which carries no digit at all.
+
+If you add another such fixture, extend this list with another anchored literal
+rather than loosening any of these into a pattern.
+"""
+regexTarget = "secret"
+regexes = [
+  '''^0123456789abcdefghij$''',
+  '''^9876543210zyxwvutsrq$''',
+  '''^fedcba9876543210fedcba9876543210$''',
+  '''^abcdef0123456789abcdef0123456789$''',
+  '''^ABCDEFGHIJKLMNOPQR234567$''',
+  '''^AbCdEfGhIjKlMnOpQr12$''',
+  '''^01ABCDEFGHJKMNPQRSTVWXYZ00$''',
+]

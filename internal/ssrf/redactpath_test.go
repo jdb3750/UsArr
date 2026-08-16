@@ -30,52 +30,52 @@ func TestPathSegmentPasskeysAreRedacted(t *testing.T) {
 			// The shape named in the task, and the generic private-tracker RSS
 			// feed: a 32-hex passkey as a whole path segment.
 			name:   "rss feed passkey segment",
-			raw:    "https://tracker.example/rss/3f5a9c1e7b2d4086af13c95e6d20b874/torrents",
-			secret: "3f5a9c1e7b2d4086af13c95e6d20b874",
+			raw:    "https://tracker.example/rss/0123456789abcdef0123456789abcdef/torrents",
+			secret: "0123456789abcdef0123456789abcdef",
 		},
 		{
 			// TorrentLeech: /rss/download/<id>/<20-char key>/<name>.torrent.
 			// 20 characters is the shortest real key upstream names, and is why
 			// credentialSegmentMinLen is 20 and not 24.
 			name:   "torrentleech rss download key",
-			raw:    "https://www.torrentleech.org/rss/download/1234567/a1b2c3d4e5f6g7h8i9j0/Some.Release.torrent",
-			secret: "a1b2c3d4e5f6g7h8i9j0",
+			raw:    "https://www.torrentleech.org/rss/download/1234567/0123456789abcdefghij/Some.Release.torrent",
+			secret: "0123456789abcdefghij",
 		},
 		{
 			// UNIT3D: the rsskey is appended after a dot INSIDE the segment, so
 			// the numeric id must survive and only the key go.
 			name:   "unit3d torrent download rsskey",
-			raw:    "https://blutopia.example/torrent/download/98765.9d4f2a7c1b8e60355fa1c2d7e9b04836",
-			secret: "9d4f2a7c1b8e60355fa1c2d7e9b04836",
+			raw:    "https://blutopia.example/torrent/download/98765.fedcba9876543210fedcba9876543210",
+			secret: "fedcba9876543210fedcba9876543210",
 		},
 		{
 			name:   "announce url passkey",
-			raw:    "https://tracker.example:2096/announce/7c1f9b23ae0546d8b1f3902e6ad4c857",
-			secret: "7c1f9b23ae0546d8b1f3902e6ad4c857",
+			raw:    "https://tracker.example:2096/announce/abcdef0123456789abcdef0123456789",
+			secret: "abcdef0123456789abcdef0123456789",
 		},
 		{
 			name:   "api key as a path segment",
-			raw:    "https://sharewood.example/api/x7k29fq4mz10rb85tvn3/last-torrents",
-			secret: "x7k29fq4mz10rb85tvn3",
+			raw:    "https://sharewood.example/api/9876543210zyxwvutsrq/last-torrents",
+			secret: "9876543210zyxwvutsrq",
 		},
 		{
 			// Uppercase base32, as RFC 4648 alphabets and several trackers emit.
 			name:   "base32 uppercase key",
-			raw:    "https://tracker.example/feed/MFRGGZDFMZTWQ2LKNNWG23TP/all",
-			secret: "MFRGGZDFMZTWQ2LKNNWG23TP",
+			raw:    "https://tracker.example/feed/ABCDEFGHIJKLMNOPQR234567/all",
+			secret: "ABCDEFGHIJKLMNOPQR234567",
 		},
 		{
 			// Mixed-case alphanumeric, the UNIT3D and Gazelle rsskey shape.
 			name:   "mixed case alnum key",
-			raw:    "https://tracker.example/rss/aB3xZ9qL7mR2tK5vN8pW/movies",
-			secret: "aB3xZ9qL7mR2tK5vN8pW",
+			raw:    "https://tracker.example/rss/AbCdEfGhIjKlMnOpQr12/movies",
+			secret: "AbCdEfGhIjKlMnOpQr12",
 		},
 		{
 			// Both halves of the two-secret shape upstream matches with
 			// /fetch/<32>/<32>.
 			name:   "two adjacent key segments",
-			raw:    "https://tracker.example/fetch/0f1e2d3c4b5a69788796a5b4c3d2e1f0/a0b1c2d3e4f506172839a4b5c6d7e8f9",
-			secret: "a0b1c2d3e4f506172839a4b5c6d7e8f9",
+			raw:    "https://tracker.example/fetch/abcdef0123456789abcdef0123456789/fedcba9876543210fedcba9876543210",
+			secret: "fedcba9876543210fedcba9876543210",
 		},
 	}
 
@@ -187,8 +187,8 @@ func TestOpaqueIDsInPathsAreRedacted(t *testing.T) {
 	t.Parallel()
 
 	for _, raw := range []string{
-		"https://example.test/stream/01J8ZK3QW9YB4N7C2F6MXAT0RD",     // ULID
-		"https://example.test/commit/9f2c1b7ae04d5386bb1f39026ad4c8", // git sha
+		"https://example.test/stream/01ABCDEFGHJKMNPQRSTVWXYZ00",     // ULID
+		"https://example.test/commit/abcdef0123456789abcdef0123456789", // git sha
 	} {
 		if got := RedactRawURL(raw); !strings.Contains(got, redactedValue) {
 			t.Errorf("RedactRawURL(%q) = %q; the documented limit above says this IS redacted, so "+
@@ -205,10 +205,10 @@ func TestRedactURLIsIdempotent(t *testing.T) {
 	t.Parallel()
 
 	for _, raw := range []string{
-		"https://tracker.example/rss/3f5a9c1e7b2d4086af13c95e6d20b874/torrents",
-		"https://tracker.example/details.php?id=42&passkey=3f5a9c1e7b2d4086af13c95e6d20b874",
-		"https://tracker.example/torrent/download/98765.9d4f2a7c1b8e60355fa1c2d7e9b04836",
-		"https://joe:hunter2@tracker.example/rss/3f5a9c1e7b2d4086af13c95e6d20b874",
+		"https://tracker.example/rss/0123456789abcdef0123456789abcdef/torrents",
+		"https://tracker.example/details.php?id=42&passkey=0123456789abcdef0123456789abcdef",
+		"https://tracker.example/torrent/download/98765.fedcba9876543210fedcba9876543210",
+		"https://joe:hunter2@tracker.example/rss/0123456789abcdef0123456789abcdef",
 	} {
 		once := RedactRawURL(raw)
 		twice := RedactRawURL(once)
@@ -225,9 +225,9 @@ func TestRedactedPathPreservesEncoding(t *testing.T) {
 	t.Parallel()
 
 	// %2F is a literal slash inside one segment, not a separator.
-	const raw = "https://tracker.example/browse/a%2Fb/3f5a9c1e7b2d4086af13c95e6d20b874"
+	const raw = "https://tracker.example/browse/a%2Fb/0123456789abcdef0123456789abcdef"
 	got := RedactRawURL(raw)
-	if strings.Contains(got, "3f5a9c1e") {
+	if strings.Contains(got, "0123456789abcdef") {
 		t.Errorf("RedactRawURL(%q) = %q, leaked the key", raw, got)
 	}
 	if !strings.Contains(got, "a%2Fb") {
@@ -253,13 +253,13 @@ func TestLooksLikeCredentialBoundaries(t *testing.T) {
 		want bool
 		why  string
 	}{
-		{"3f5a9c1e7b2d4086af13c95e6d20b874", true, "32-hex passkey"},
-		{"a1b2c3d4e5f6g7h8i9j0", true, "20 alnum, the shortest real key shape"},
-		{"a1b2c3d4e5f6g7h8i9j", false, "19 chars is under the floor"},
+		{"0123456789abcdef0123456789abcdef", true, "32-hex passkey"},
+		{"0123456789abcdefghij", true, "20 alnum, the shortest real key shape"},
+		{"0123456789abcdefghi", false, "19 chars is under the floor"},
 		{"12345678901234567890123456789012", false, "all digits: an id, not a key"},
 		{"abcdefghijklmnopqrstuvwxyzabcdef", false, "all letters: a word run, not a key"},
-		{"3f5a9c1e-7b2d-4086-af13-c95e6d20", false, "a UUID carries hyphens; separators mean structure"},
-		{"a1b2c3d4_e5f6g7h8_i9j0k1l2", false, "underscores are structure too"},
+		{"01234567-89ab-cdef-0123-456789ab", false, "a UUID carries hyphens; separators mean structure"},
+		{"0123456789_abcdefghij_0123", false, "underscores are structure too"},
 		{"REDACTED", false, "the marker itself, so redaction is idempotent"},
 		{"2160pRemuxCollection", false, "readable: the word veto holds"},
 		{"Season1Episode12Extras", false, "readable"},
@@ -279,12 +279,12 @@ func TestLooksLikeCredentialBoundaries(t *testing.T) {
 func TestStripCredentialsLeavesPathsAlone(t *testing.T) {
 	t.Parallel()
 
-	u, err := url.Parse("https://cdn.example/fetch/3f5a9c1e7b2d4086af13c95e6d20b874/cover.jpg?apikey=s")
+	u, err := url.Parse("https://cdn.example/fetch/0123456789abcdef0123456789abcdef/cover.jpg?apikey=s")
 	if err != nil {
 		t.Fatal(err)
 	}
 	stripCredentials(u)
-	if !strings.Contains(u.Path, "3f5a9c1e7b2d4086af13c95e6d20b874") {
+	if !strings.Contains(u.Path, "0123456789abcdef0123456789abcdef") {
 		t.Errorf("stripCredentials rewrote a redirect target's path: %q", u.String())
 	}
 }
