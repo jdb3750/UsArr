@@ -1,8 +1,9 @@
 # Reference — Security model
 
-**Status:** designed, not implemented. **Scope:** §1 (credential encryption, including rotation),
-§2 (SSRF) and §5 (redaction) are **v0.1**. §4's authorization checks land with the surfaces they
-protect.
+**Status:** partly implemented. §1's envelope, AAD binding and `kek_id` column are built (the
+`usarr key rotate` command is not), and §2 and §5 are built. The rest is designed, not implemented.
+**Scope:** §1 (credential encryption, including rotation), §2 (SSRF) and §5 (redaction) are **v0.1**.
+§4's authorization checks land with the surfaces they protect.
 **Parent:** [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §14.
 
 UsArr's threat profile is unusual: it is **a credential vault for a dozen services and an SSRF
@@ -40,15 +41,30 @@ keep.
 ### 1.2 AAD binds ciphertext to its location
 
 ```
-AAD = table_name || ":" || column_name || ":" || primary_key || ":" || sha256(normalised host:port)
+AAD = table_name || ":" || column_name || ":" || primary_key || ":" || sha256(normalised scheme://host:port)
 ```
 
 Without AAD, AES-256-GCM authenticates the ciphertext but **not where it sits**. Anyone with
 database write access — a restored backup, a NAS share, an operator, a SQL-injection-equivalent bug
 — can copy the Radarr row's ciphertext into a `service_instance` row whose `base_url` they control,
-and UsArr will decrypt it and transmit it to them. Including the normalised host:port in the AAD
+and UsArr will decrypt it and transmit it to them. Including the normalised origin in the AAD
 means changing `base_url` makes the stored ciphertext **fail to open** rather than silently succeed,
 which is the cryptographic half of the rule in §1.5.
+
+**The bound value is the full origin, scheme included — not just `host:port`.** It was `host:port`
+only, and that left exactly one edit uncaught by the cryptographic layer: flipping
+`https://nas:443` to `http://nas:443` changed nothing in the AAD, so the envelope still opened and
+UsArr would send a full-admin `X-Api-Key` over **plaintext** to a host the attacker can now MITM.
+§1.6 is normative that a **scheme** change invalidates the credential, and the §1.6 re-entry rule
+was the only thing enforcing it — but that is an application-layer control, and this section's whole
+argument is that the cryptographic layer has to hold *when the application layer is bypassed*. A
+defence-in-depth control cannot be the sole control against the threat it was written to back up.
+
+Consequence for implementers: anything that compares two base URLs to decide whether the stored
+credential is still valid must normalise the same way the AAD does (`crypto.NormalizeOrigin`), not
+to a bare `host:port` (`crypto.NormalizeHostPort`, which exists for `ssrf.Options.AllowedHostPort`).
+If the re-entry check says "unchanged" while the AAD says "changed", a legal edit produces a
+credential that can never be opened again.
 
 **A decryption failure with a valid KEK means tampering.** It is a loud, audit-logged failure, never
 a silent skip.
@@ -70,7 +86,7 @@ secret — meaning rotating the vault key would silently invalidate every outsta
 |---|---|
 | Absent, no key file | **Generate** 32 random bytes, write the key file mode 0600, log a loud "back this up" warning, continue. |
 | Present | **Validate**: must base64-decode to exactly 32 bytes, or startup **fails** with a named error. No hashing-to-length fallback, no lenient padding. |
-| Empty string | **Treated as absent**, not as a key. (A compose file passing `${USARR_SECRET_KEY}` from an unset host variable resolves to empty, which must not be mistaken for "supplied".) |
+| Empty string | **Refuse to start**, naming the variable. `CONFIGURATION.md` §3.2 owns this behaviour and this row restates it; if the two ever disagree again, §3.2 wins. (A compose file passing `${USARR_SECRET_KEY}` from an unset host variable resolves to empty. Treating that as "absent" would silently generate a *new* master key and orphan every stored credential, so the variable being *set but empty* is a hard error — distinct from it being unset, which is the ordinary first-run path.) |
 | Matches a known placeholder | **Startup fails**, with a message naming the file the placeholder came from. The reject-list is hardcoded and contains every placeholder ever shipped in a released example file. |
 | Present but wrong for existing rows | Loud failure plus the documented "re-enter your credentials" recovery flow. Never a cryptic decrypt error. |
 
@@ -295,10 +311,30 @@ acquisition link reaches.
 The earlier redaction rule covered **southbound** `Field.privacy` fields only, and said nothing about
 UsArr's own inbound URLs — which is exactly where the northbound credential lives.
 
-> **A fixed deny-list of query parameters — `apiKey`, `p`, `t`, `s`, `access_token`, `api_key`,
-> `apikey`, `token`, `sig` — and the `Authorization` and `X-Api-Key` headers is redacted to
+> **A fixed deny-list of query parameters — `apikey`, `api_key`, `token`, `access_token`,
+> `auth_token`, `sig`, `signature`, `secret`, `secret_key`, `p`, `t`, `s`, `passkey`,
+> `torrent_pass`, `torrentpass`, `rsskey`, `authkey`, `apipasskey`, `cookie` (matched
+> case-insensitively) — and the `Authorization` and `X-Api-Key` headers is redacted to
 > `<redacted>` BEFORE any log line, audit row, error message, SSE payload or support bundle is
 > produced, at every log level including `trace`. This is a middleware, not a convention.**
+
+The list lives in exactly one place, `internal/ssrf`'s `credentialParams`, and there is deliberately
+no second copy: a drifting duplicate is how a parameter ends up redacted on one code path and not the
+other. Update the code and this list together.
+
+**The private-tracker passkeys are not optional and were the gap.** The list originally stopped at
+the provider and OpenSubsonic names. But Prowlarr's `ReleaseResource.infoUrl` and `.commentUrl` are
+**indexer-supplied**, and UsArr surfaces `infoUrl` to the browser as `info_url` on every search
+result. Private trackers put the user's personal passkey in the query string of exactly those
+details and RSS URLs, under names like `passkey`, `torrent_pass`, `authkey` or `rsskey` — the names
+Prowlarr's own indexer definitions use. Without them a tracker credential shipped straight to the
+client. On a private tracker that is not a minor leak: the passkey is what the tracker attributes
+traffic by, so a leaked one means account termination.
+
+**Widening the list has a cost, so prefer long, specific names.** These parameters are also stripped
+outright from redirect targets (`stripCredentials`), not just redacted in logs. A short generic name
+such as `t` or `s` is a legitimate cache-buster or size parameter on many CDNs, so including it can
+silently change which resource a redirect resolves to. The tracker-specific names carry no such risk.
 
 - **`key_prefix`, never the key**, is what appears in logs and in the audit trail.
 - **URLs stored in the database are in scope too**: `image_asset.source_url` and the `http_cache`
@@ -371,8 +407,18 @@ UsArr's own inbound URLs — which is exactly where the northbound credential li
   issued/revoked, backup downloaded, and key rotation. Exposed in the admin UI as a **plain
   paginated list** — the filtered audit UI is deferred (FUTURE.md).
   **"Append-only" is a mechanism, not an aspiration:** no `UPDATE`/`DELETE` statements against
-  `audit_log` anywhere in the codebase, enforced by a lint rule **and** `BEFORE UPDATE/DELETE`
-  triggers that raise (schema.md §9), plus a rolling `prev_hash` chain so tampering is detectable.
+  `audit_log` **in production code**, enforced by `TestNoCodeMutatesTheAuditLog`
+  (`internal/store/auditlint_test.go`, which walks every non-test `.go` file's string literals)
+  **and** `BEFORE UPDATE/DELETE` triggers that raise (schema.md §9), plus a rolling `prev_hash`
+  chain so tampering is detectable.
+  Two corrections to what this paragraph used to say. First, the static check is a test in the
+  `make check` gate, not a `.golangci.yml` rule: golangci-lint's `forbidigo` matches function-call
+  identifiers, not the contents of string literals, and every such statement is a string literal —
+  so the rule this document claimed could not have existed in the form it described, and for a
+  while did not exist at all. Second, the scope is **production code**, not "anywhere in the
+  codebase": `TestAuditChainDetectsTampering` and `TestAuditLogIsAppendOnly` mutate `audit_log`
+  deliberately, to prove the triggers reject it and the chain notices. Forbidding those statements
+  in tests would delete the tests that verify the guarantee.
   Say plainly that this is tamper-**evident**, not tamper-**proof** — anyone with the volume can
   still edit the file, and the stated purpose ("who deleted this") is exactly the case where the
   actor has that access.

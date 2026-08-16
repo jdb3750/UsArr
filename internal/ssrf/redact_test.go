@@ -1,0 +1,150 @@
+package ssrf
+
+import (
+	"net/url"
+	"strings"
+	"testing"
+)
+
+func TestRedactURL(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		in       string
+		mustHave []string
+		mustNot  []string
+	}{
+		{
+			in:       "https://api.themoviedb.org/3/movie/550?api_key=deadbeefdeadbeef&language=en",
+			mustHave: []string{"api_key=REDACTED", "language=en"},
+			mustNot:  []string{"deadbeef"},
+		},
+		{
+			in:       "http://sonarr.lan:8989/api/v3/series?apiKey=0123456789abcdef",
+			mustHave: []string{"REDACTED"},
+			mustNot:  []string{"0123456789abcdef"},
+		},
+		{
+			in:       "https://navidrome.lan/rest/ping?u=joe&t=abcd1234&s=salty&v=1.16.1",
+			mustHave: []string{"u=joe", "v=1.16.1"},
+			mustNot:  []string{"abcd1234", "salty"},
+		},
+		{
+			in:       "https://joe:hunter2@komga.lan/api/v1/books",
+			mustHave: []string{"komga.lan"},
+			mustNot:  []string{"hunter2", "joe:"},
+		},
+		{
+			in:       "https://img.example/cover.jpg?access_token=xyz&sig=abc&width=500",
+			mustHave: []string{"width=500"},
+			mustNot:  []string{"xyz", "sig=abc"},
+		},
+	}
+
+	for _, tc := range cases {
+		u, err := url.Parse(tc.in)
+		if err != nil {
+			t.Fatalf("parse %q: %v", tc.in, err)
+		}
+		got := RedactURL(u)
+		for _, want := range tc.mustHave {
+			if !strings.Contains(got, want) {
+				t.Errorf("RedactURL(%q) = %q, want it to contain %q", tc.in, got, want)
+			}
+		}
+		for _, bad := range tc.mustNot {
+			if strings.Contains(got, bad) {
+				t.Errorf("RedactURL(%q) = %q, must not leak %q", tc.in, got, bad)
+			}
+		}
+		// Redacting must not mutate the caller's URL.
+		if u.String() != tc.in && !strings.Contains(tc.in, "@") {
+			t.Errorf("RedactURL mutated its argument: %q became %q", tc.in, u.String())
+		}
+	}
+}
+
+// TestPrivateTrackerPasskeysAreRedacted is the regression test for the passkey
+// leak.
+//
+// Prowlarr's ReleaseResource.infoUrl and .commentUrl are indexer-supplied and
+// are surfaced to the browser as info_url via httpapi's redactURLField, which
+// delegates here. Private trackers put the user's personal passkey in the query
+// string of exactly those URLs. The deny-list covered apikey/token/sig/p/t/s but
+// none of the tracker-specific names, so a passkey shipped straight to the
+// client — and on a private tracker a leaked passkey means account termination,
+// because it is what the tracker attributes traffic by.
+//
+// Both entry points are asserted: RedactURL (logging, storage, API responses)
+// and stripCredentials (redirect hops), because they share this one list and a
+// name must never be covered by only one of them.
+func TestPrivateTrackerPasskeysAreRedacted(t *testing.T) {
+	t.Parallel()
+
+	const secret = "PASSKEYVALUE0123456789"
+	names := []string{"passkey", "torrent_pass", "torrentpass", "rsskey", "authkey", "apipasskey", "cookie"}
+
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			raw := "https://tracker.example/details.php?id=42&" + name + "=" + secret
+
+			got := RedactRawURL(raw)
+			if strings.Contains(got, secret) {
+				t.Errorf("RedactRawURL leaked %s: %q\n"+
+					"this URL reaches the browser as info_url on every search result", name, got)
+			}
+			if !strings.Contains(got, "id=42") {
+				t.Errorf("RedactRawURL dropped a non-credential parameter: %q", got)
+			}
+
+			u, err := url.Parse(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stripCredentials(u)
+			if u.Query().Has(name) {
+				t.Errorf("stripCredentials left %s on a redirect target: %q", name, u.String())
+			}
+			if u.Query().Get("id") != "42" {
+				t.Errorf("stripCredentials dropped a non-credential parameter: %q", u.String())
+			}
+		})
+	}
+
+	// Case-insensitivity: trackers spell these every which way.
+	for _, spelling := range []string{"PassKey", "TORRENT_PASS", "RSSKey"} {
+		got := RedactRawURL("https://tracker.example/rss?" + spelling + "=" + secret)
+		if strings.Contains(got, secret) {
+			t.Errorf("RedactRawURL is case-sensitive on %q: %q", spelling, got)
+		}
+	}
+}
+
+func TestRedactRawURLUnparseable(t *testing.T) {
+	t.Parallel()
+
+	// "It did not parse" is not evidence that it holds no secret.
+	if got := RedactRawURL("http://[::1"); strings.Contains(got, "::1") {
+		t.Errorf("unparseable url leaked through: %q", got)
+	}
+}
+
+func TestStripCredentials(t *testing.T) {
+	t.Parallel()
+
+	u, err := url.Parse("https://cdn.example/a.jpg?apikey=secret&token=t&sig=s&keep=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stripCredentials(u)
+	q := u.Query()
+	for _, name := range []string{"apikey", "token", "sig"} {
+		if q.Has(name) {
+			t.Errorf("%s survived stripCredentials", name)
+		}
+	}
+	if q.Get("keep") != "1" {
+		t.Error("stripCredentials dropped a non-credential parameter")
+	}
+}

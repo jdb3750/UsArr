@@ -1,0 +1,189 @@
+---
+# GET /api/v1/indexer returns ENABLED AND DISABLED indexers, sorted by name,
+# with no filter parameter. fields[] carries the indexer's own credentials and
+# must never reach a browser.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: prowlarr.test:9696
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://prowlarr.test:9696/api/v1/indexer
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json
+            X-Application-Version:
+                - 2.6.2.5052
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            [
+              {
+                "id": 1,
+                "name": "Fake Torrents (API)",
+                "fields": [
+                  {
+                    "order": 0,
+                    "name": "baseUrl",
+                    "label": "Base Url",
+                    "value": "https://fake-torrents.test"
+                  },
+                  {
+                    "order": 1,
+                    "name": "apiKey",
+                    "label": "API Key",
+                    "value": "SECRET-INDEXER-PASSKEY",
+                    "privacy": "apiKey"
+                  }
+                ],
+                "implementation": "Cardigann",
+                "definitionName": "faketorrents",
+                "enable": true,
+                "supportsRss": true,
+                "supportsSearch": true,
+                "supportsPagination": true,
+                "protocol": "torrent",
+                "privacy": "private",
+                "priority": 10,
+                "capabilities": {
+                  "limitsMax": 100,
+                  "limitsDefault": 50,
+                  "categories": [
+                    {
+                      "id": 2000,
+                      "name": "Movies",
+                      "subCategories": [
+                        {
+                          "id": 2045,
+                          "name": "Movies/UHD"
+                        }
+                      ]
+                    },
+                    {
+                      "id": 5000,
+                      "name": "TV"
+                    }
+                  ],
+                  "supportsRawSearch": false,
+                  "searchParams": [
+                    "q"
+                  ],
+                  "tvSearchParams": [
+                    "q",
+                    "season",
+                    "ep",
+                    "imdbId",
+                    "tvdbId"
+                  ],
+                  "movieSearchParams": [
+                    "q",
+                    "imdbId",
+                    "tmdbId"
+                  ]
+                }
+              },
+              {
+                "id": 2,
+                "name": "Fake Usenet",
+                "fields": [
+                  {
+                    "order": 0,
+                    "name": "apiKey",
+                    "label": "API Key",
+                    "value": "SECRET-NEWZNAB-KEY",
+                    "privacy": "apiKey"
+                  }
+                ],
+                "implementation": "Newznab",
+                "enable": true,
+                "supportsRss": true,
+                "supportsSearch": true,
+                "supportsPagination": false,
+                "protocol": "usenet",
+                "privacy": "private",
+                "priority": 25,
+                "capabilities": {
+                  "limitsMax": 100,
+                  "limitsDefault": 100,
+                  "categories": [
+                    {
+                      "id": 2000,
+                      "name": "Movies",
+                      "subCategories": [
+                        {
+                          "id": 2040,
+                          "name": "Movies/HD"
+                        }
+                      ]
+                    }
+                  ],
+                  "supportsRawSearch": true,
+                  "searchParams": [
+                    "q"
+                  ],
+                  "movieSearchParams": [
+                    "q",
+                    "imdbId"
+                  ]
+                }
+              },
+              {
+                "id": 3,
+                "name": "Retired Tracker",
+                "implementation": "Cardigann",
+                "enable": false,
+                "supportsRss": true,
+                "supportsSearch": true,
+                "supportsPagination": false,
+                "protocol": "torrent",
+                "privacy": "public",
+                "priority": 50,
+                "capabilities": {
+                  "searchParams": [
+                    "q"
+                  ]
+                }
+              },
+              {
+                "id": 4,
+                "name": "Flaky Tracker",
+                "implementation": "Cardigann",
+                "enable": true,
+                "supportsRss": true,
+                "supportsSearch": true,
+                "supportsPagination": false,
+                "protocol": "torrent",
+                "privacy": "semiPrivate",
+                "priority": 30,
+                "capabilities": {
+                  "limitsMax": 50,
+                  "categories": [
+                    {
+                      "id": 2000,
+                      "name": "Movies"
+                    }
+                  ],
+                  "searchParams": [
+                    "q"
+                  ],
+                  "movieSearchParams": [
+                    "q"
+                  ]
+                }
+              }
+            ]

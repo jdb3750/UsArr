@@ -1,8 +1,9 @@
 # UsArr Development Guide
 
-> **Status: pre-alpha, zero lines of application code.** This describes the intended toolchain,
-> layout and workflows. Commands referencing files that do not exist yet are marked **(not yet)**.
-> Nothing here describes working software; it is the contract the first commits must satisfy.
+> **Status: pre-alpha. The first code has landed** — the Prowlarr Search-and-Grab path, the storage
+> and security layers under it, and an embedded SPA shell — so the build, test and check workflows
+> below are real and do run. Most of the *layout* is still contract rather than description:
+> commands referencing files that do not exist yet are marked **(not yet)**.
 >
 > Roadmap shorthand: **v0.1** unified library + search · **v0.2** requests · **v0.3** cross-media ·
 > **v0.4** gateway · **v1.0** breadth. `docs/ARCHITECTURE.md` §16 is authoritative.
@@ -13,7 +14,7 @@
 
 | Tool | Version | Why this floor | Install |
 |---|---|---|---|
-| **Go** | **1.25+** | `ncruces/go-sqlite3` v0.35 declares `go 1.25.0`, so it is the real floor. Uses `go tool` directives, `embed.FS`, generics-heavy driver code. | <https://go.dev/dl/> |
+| **Go** | **1.25.13+** | Not 1.25.0, and not 1.25.7 either. Two independent floors push this up. (1) Dependencies: the Makefile pins goose `v3.27.3`, whose `go.mod` declares `go 1.25.7` — verified by execution, `go 1.25.0` fails with `github.com/pressly/goose/v3@v3.27.3 requires go >= 1.25.7`. (`ncruces/go-sqlite3` v0.35's `go 1.25.0` is the lower floor, not the binding one.) (2) **`make vuln` is the binding constraint**, and it is the higher of the two: on 1.25.7 `govulncheck` reports 15 *called* standard-library vulnerabilities — `crypto/tls`, `net/url`, `os`, `net/http` — with fixes spread across 1.25.8, 1.25.9 and 1.25.10; 1.25.12 still reports 5. There is no code-level workaround for a stdlib advisory; the only fix is the toolchain. 1.25.13 is the newest 1.25.x and scans clean. This floor is time-dependent — a new stdlib advisory moves it, so re-check with `make vuln` rather than trusting the number here, and treat `go.mod` as authoritative. | <https://go.dev/dl/> |
 | **Node.js** | **22+ (LTS)** | SvelteKit 2 + Vite baseline. Verified in-container: `v22.22.2`. | <https://nodejs.org/> or `fnm`/`nvm` |
 | **pnpm** | **10+** | Package manager for `web/`. Verified in-container: `10.33.0`. | `corepack enable && corepack prepare pnpm@latest --activate` |
 | `git` | any recent | — | — |

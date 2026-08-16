@@ -1,8 +1,9 @@
 /* =============================================================================
  * UsArr — canonical design tokens
  *
- * Status: design document, pre-alpha. Nothing here is implemented; there is no
- * `web/` directory yet. This file is the single source of truth for every
+ * Status: design document, pre-alpha. None of these tokens is implemented. A
+ * `web/` directory exists and carries a SvelteKit shell, but it does not
+ * consume this file. This file is the single source of truth for every
  * colour, size, duration and radius the UI will ever use, and it is written so
  * it drops straight into Tailwind v4 (see §0 and ADR-0025).
  *

@@ -1,0 +1,261 @@
+---
+# The full recovery: preflight the download clients, POST the grab, take the 404,
+# transparently re-search the one indexer for the guid, then re-grab. The
+# re-search is what repopulates Prowlarr's cache, which is why the retry works.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: prowlarr.test:9696
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://prowlarr.test:9696/api/v1/downloadclient
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json
+            X-Application-Version:
+                - 2.6.2.5052
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            [
+              {
+                "id": 1,
+                "name": "sabnzbd",
+                "fields": [
+                  {
+                    "order": 0,
+                    "name": "apiKey",
+                    "label": "API Key",
+                    "value": "SECRET-SAB-KEY",
+                    "privacy": "apiKey"
+                  }
+                ],
+                "implementation": "Sabnzbd",
+                "enable": true,
+                "protocol": "usenet",
+                "priority": 1,
+                "supportsCategories": true
+              },
+              {
+                "id": 2,
+                "name": "qbittorrent",
+                "fields": [
+                  {
+                    "order": 0,
+                    "name": "password",
+                    "label": "Password",
+                    "value": "hunter2",
+                    "privacy": "password"
+                  }
+                ],
+                "implementation": "QBittorrent",
+                "enable": true,
+                "protocol": "torrent",
+                "priority": 1,
+                "supportsCategories": true
+              }
+            ]
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 98
+        host: prowlarr.test:9696
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://prowlarr.test:9696/api/v1/search
+        method: POST
+        body: |-
+            {
+              "guid": "https://fake-torrents.test/details/1001",
+              "indexerId": 1,
+              "downloadClientId": 2
+            }
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json
+            X-Application-Version:
+                - 2.6.2.5052
+        status: 404 Not Found
+        code: 404
+        duration: 1ms
+        body: |-
+            {
+              "message": "Couldn't find requested release in cache, try searching again",
+              "description": "NzbDrone.Core.Exceptions.NotFoundException: ...",
+              "content": null
+            }
+    - id: 2
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: prowlarr.test:9696
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://prowlarr.test:9696/api/v1/search?indexerIds=1&limit=100&query=Dune.Part.Two.2024.2160p.UHD.BluRay.REMUX.DV.HDR.HEVC-FraMeSToR&type=search
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json
+            X-Application-Version:
+                - 2.6.2.5052
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            [
+              {
+                "guid": "https://fake-torrents.test/details/1001",
+                "age": 3,
+                "ageHours": 79.4,
+                "ageMinutes": 4764.0,
+                "size": 5368709120,
+                "files": 1,
+                "grabs": 42,
+                "indexerId": 1,
+                "indexer": "Fake Torrents (API)",
+                "title": "Dune.Part.Two.2024.2160p.UHD.BluRay.REMUX.DV.HDR.HEVC-FraMeSToR",
+                "sortTitle": "dune part two 2024 2160p uhd bluray remux dv hdr hevc framestor",
+                "imdbId": 15239678,
+                "tmdbId": 693134,
+                "tvdbId": 0,
+                "tvMazeId": 0,
+                "publishDate": "2026-08-13T04:22:00Z",
+                "commentUrl": "https://fake-torrents.test/details/1001",
+                "downloadUrl": "http://prowlarr.test:9696/1/download?apikey=<redacted>&link=aHR0cHM6Ly9mYWtl&file=Dune.Part.Two",
+                "infoUrl": "https://fake-torrents.test/details/1001",
+                "posterUrl": "http://169.254.169.254/latest/meta-data/",
+                "indexerFlags": [
+                  "freeleech",
+                  "internal"
+                ],
+                "categories": [
+                  {
+                    "id": 2000,
+                    "name": "Movies"
+                  },
+                  {
+                    "id": 2045,
+                    "name": "Movies/UHD"
+                  }
+                ],
+                "magnetUrl": "http://prowlarr.test:9696/1/download?apikey=<redacted>&link=bWFnbmV0&file=Dune.Part.Two",
+                "infoHash": "d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0",
+                "seeders": 148,
+                "leechers": 3,
+                "protocol": "torrent",
+                "fileName": "Dune.Part.Two.2024.torrent",
+                "downloadClientId": 2
+              }
+            ]
+    - id: 3
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 98
+        host: prowlarr.test:9696
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://prowlarr.test:9696/api/v1/search
+        method: POST
+        body: |-
+            {
+              "guid": "https://fake-torrents.test/details/1001",
+              "indexerId": 1,
+              "downloadClientId": 2
+            }
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json
+            X-Application-Version:
+                - 2.6.2.5052
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            {
+              "guid": "https://fake-torrents.test/details/1001",
+              "age": 3,
+              "ageHours": 79.4,
+              "ageMinutes": 4764.0,
+              "size": 5368709120,
+              "files": 1,
+              "grabs": 42,
+              "indexerId": 1,
+              "indexer": "Fake Torrents (API)",
+              "title": "Dune.Part.Two.2024.2160p.UHD.BluRay.REMUX.DV.HDR.HEVC-FraMeSToR",
+              "sortTitle": "dune part two 2024 2160p uhd bluray remux dv hdr hevc framestor",
+              "imdbId": 15239678,
+              "tmdbId": 693134,
+              "tvdbId": 0,
+              "tvMazeId": 0,
+              "publishDate": "2026-08-13T04:22:00Z",
+              "commentUrl": "https://fake-torrents.test/details/1001",
+              "downloadUrl": "http://prowlarr.test:9696/1/download?apikey=<redacted>&link=aHR0cHM6Ly9mYWtl&file=Dune.Part.Two",
+              "infoUrl": "https://fake-torrents.test/details/1001",
+              "posterUrl": "http://169.254.169.254/latest/meta-data/",
+              "indexerFlags": [
+                "freeleech",
+                "internal"
+              ],
+              "categories": [
+                {
+                  "id": 2000,
+                  "name": "Movies"
+                },
+                {
+                  "id": 2045,
+                  "name": "Movies/UHD"
+                }
+              ],
+              "magnetUrl": "http://prowlarr.test:9696/1/download?apikey=<redacted>&link=bWFnbmV0&file=Dune.Part.Two",
+              "infoHash": "d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0",
+              "seeders": 148,
+              "leechers": 3,
+              "protocol": "torrent",
+              "fileName": "Dune.Part.Two.2024.torrent",
+              "downloadClientId": 2
+            }

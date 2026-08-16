@@ -1,8 +1,11 @@
 # UsArr
 
-> **Status: pre-alpha. Nothing is implemented yet.**
-> This repository currently contains a design and its evidence base — no code, no binary, no
-> container. There is nothing to install. If you are here to run something, come back later.
+> **Status: pre-alpha. One path works; the rest is still design and its evidence base.**
+> What runs today is Prowlarr Search-and-Grab: free-text indexer search, results streaming in per
+> indexer, and grab — served by a Go binary with an embedded SPA shell. There is no release and no
+> container image yet, so running it means building it (`make build`). The *Arr library sync, the
+> library grid, requests, cross-media and the gateway surfaces are not implemented. If you are here
+> to install something finished, come back later.
 
 **One unified, searchable catalogue over everything you own and everything you might want —
 that plugs into the players you already use.**
@@ -42,7 +45,8 @@ movies-and-TV-only.
 
 ## Feature status
 
-Nothing below is built. Status reflects **planned milestone**, not progress.
+Status reflects **planned milestone**, not progress, except where a row says otherwise. Almost
+nothing below is built: the Search-and-Grab path is the one shipped feature.
 
 > **This table is generated from [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §16. If they
 > disagree, §16 wins.** Ideas that are deliberately deferred are not listed here at all — they live
@@ -58,9 +62,9 @@ Nothing below is built. Status reflects **planned milestone**, not progress.
 | **User-defined libraries**, configured separately from services, with a correction layer | 📋 Planned — v0.1 (correction UI v0.3) |
 | **Six-type schema** — `work_credit` M:N attribution, edition-scoped `work_track`, the `comic_issue` kind, **the `person` kind**, audiobook edition columns | 📋 Planned — v0.1 (migration 0001 or never — ADR-0030, ADR-0031, ADR-0033) |
 | Local-first reads; no upstream call on any render path | 📋 Planned — v0.1 |
-| **Search-and-Grab mode** — free-text indexer search and grab via Prowlarr, **for all six types**. ⚠️ For music and books, coverage depends heavily on private trackers: 403 of Prowlarr's 543 indexer definitions are `type: private`, and the dedicated music and book trackers are invite-only, so on public indexers alone this is materially thinner than for film | 📋 Planned — v0.1 |
+| **Search-and-Grab mode** — free-text indexer search and grab via Prowlarr, **for all six types**. ⚠️ For music and books, coverage depends heavily on private trackers: 403 of Prowlarr's 543 indexer definitions are `type: private`, and the dedicated music and book trackers are invite-only, so on public indexers alone this is materially thinner than for film | ✅ Shipped — v0.1 |
 | Instant search: client prefix index → FTS5 hybrid (prefix + substring; **no typo tolerance**) | 📋 Planned — v0.1 |
-| Source tagging: **usenet / torrent**, first-class and filterable | 📋 Planned — v0.1 |
+| Source tagging: **usenet / torrent**, first-class and filterable | 🚧 Partial — v0.1: derived and served on search results; not yet filterable |
 | Minimal write path — monitor, unmonitor, delete, add — on a durable command queue | 📋 Planned — v0.1 |
 | Sync: full import + `/history/since` delta (Sonarr/Radarr) + **an ordered page-walk delta for the catalogue sources, none of which has a changed-since endpoint** + **reconciliation with 7-day tombstones** | 📋 Planned — v0.1 |
 | **Services health screen** — what is broken, why, and the button that fixes it | 📋 Planned — v0.1 |

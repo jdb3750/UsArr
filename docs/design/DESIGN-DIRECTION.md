@@ -1,10 +1,12 @@
 # UsArr — Design direction
 
-**Status:** design document, pre-alpha. **Nothing here is implemented.** There is no `web/`
-directory, no component, no line of CSS in the repository. This document and
-[`tokens.css`](./tokens.css) are written *before* the first UI commit, in the same spirit as
-[`ARCHITECTURE.md`](../ARCHITECTURE.md) §17 — which owns what the screens *are*, and which this
-document is downstream of.
+**Status:** design document, pre-alpha. **None of this design is implemented.** A `web/` directory
+now exists and carries a SvelteKit shell — sign-in, a search page and a scaffold `/services` route
+whose own header says to delete it when §17.3 lands — but it implements none of the system below:
+not the tokens, not the density model, not the component set, not the state sets. Treat every value
+here as still ahead of the code. This document and [`tokens.css`](./tokens.css) remain upstream of
+the UI, in the same spirit as [`ARCHITECTURE.md`](../ARCHITECTURE.md) §17 — which owns what the
+screens *are*, and which this document is downstream of.
 
 **Last revised:** 2026-08-16.
 **Constraints this obeys:** [`ARCHITECTURE.md`](../ARCHITECTURE.md) §17 (screens and UI

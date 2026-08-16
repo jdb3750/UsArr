@@ -4,14 +4,16 @@ A static, clickable HTML prototype of the five screens this design has to carry 
 **home, services, libraries, search, requests**.
 
 **This is a mockup, not the application.** Every page now says so itself, permanently, in the top
-bar: `mockup — Static design mockup of UsArr, which is pre-alpha software: nothing here is
-implemented and every value on these screens is invented.` That notice is not dismissible, it is in
+bar: `mockup — Static design mockup of UsArr, which is pre-alpha software: none of these screens
+is implemented and every value on them is invented.` That notice is not dismissible, it is in
 the shared chrome rather than on one page, and it therefore survives into `prototype.html`, which is
 the file built for publishing and the one most likely to reach a reader who never sees this README.
 `DESIGN-DIRECTION.md` §13 forbids fabricated data in a shipped surface and makes a labelled mockup
 the one exception; the in-page notice is that label.
 
-UsArr is pre-alpha: the docs exist, the code does not.
+UsArr is pre-alpha. Some code now exists — a Go binary serving the Prowlarr Search-and-Grab path
+with an embedded SvelteKit shell — but none of these five screens is any part of it, and none of
+this design has been implemented.
 Nothing here is wired to a database, an *Arr, a media server, or an HTTP API. Every title, size,
 narrator, issue number, seeder count, timestamp and error string on these pages is fabricated
 sample data chosen to look like the real thing so the layout can be judged, and none of it should

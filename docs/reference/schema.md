@@ -1,14 +1,26 @@
 # Reference — Data model and DDL
 
-**Status:** designed, not implemented. **Scope:** tables marked **v0.1** ship in the first
-milestone; everything else is in the "later tables" appendix at the bottom and is **not** in
-migration 0001.
+**Status:** partly implemented. Migration 0001 exists and creates `user`, `session`,
+`client_credential`, `audit_log`, `service_instance`, `provenance`, `release_candidate`,
+`write_queue`, `tag` and `tag_assignment`. The library tables — `work`, `edition`, `media_file`,
+`external_id`, `service_item_link` — and the search indexes are designed, not implemented.
+**Scope:** tables marked **v0.1** ship in the first milestone; everything else is in the "later
+tables" appendix at the bottom and is **not** in migration 0001.
 **Parent document:** [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §6 carries the design and the
 reasoning; this file carries the DDL and the invariant behind each index.
 
 SQLite dialect, `STRICT` tables throughout. **Minimum SQLite version: 3.43.0** — `STRICT` needs
-3.37, but FTS5 `contentless_delete=1` (§7 below) arrived in 3.43.0 and is mandatory. Timestamps are
-ISO-8601 UTC text. Migrations are plain SQL run by `goose`, embedded via
+3.37, but FTS5 `contentless_delete=1` (§7 below) arrived in 3.43.0 and is mandatory.
+
+**Timestamps are SQLite `datetime()` text — `YYYY-MM-DD HH:MM:SS`, UTC, no `T` and no `Z`.** This is
+*not* ISO-8601, which this document previously claimed while every column default in it reads
+`DEFAULT (datetime('now'))`. The SQLite format is the correct one and the code implements it
+(`internal/store/store.go`, and `internal/db/sqlite.go` sets `_timefmt=sqlite` to match): the
+timestamp columns are ordered lexicographically by `ix_audit_ts`, `ix_rel_expiry` and
+`ix_wq_runnable`, and lexicographic ordering breaks the moment two formats share a column. One
+format, chosen by the column defaults, applied everywhere.
+
+Migrations are plain SQL run by `goose`, embedded via
 `//go:embed migrations/*.sql`, and the migration files are ordered dependencies-first even though
 SQLite resolves foreign keys at DML time.
 
@@ -662,6 +674,21 @@ the raw name is not); **never overwrite provenance on upgrade** — insert a new
 `media_file`, which gives upgrade history for free; and **manual/filesystem imports get
 `protocol='manual'`** — do not launder `unknown` into `torrent`.
 
+**`release_candidate` has no uniqueness on `(service_instance_id, guid)`, and that is a decision, not
+an omission.** Two searches for the same term inside the TTL window insert two full copies of every
+release; the in-search `emitted` dedupe map is per-search only. The bound on that duplication is the
+TTL — 25 minutes for Prowlarr-sourced rows, swept via `ix_rel_expiry` — so the table's size is
+governed by search volume within a 25-minute window, not by uptime. For a single-user homelab that
+is a handful of rows, and each duplicate is independently grabbable, so nothing is incorrect.
+
+The alternative — a unique index plus `INSERT … ON CONFLICT DO UPDATE SET fetched_at=…,
+expires_at=…` — was considered and rejected for v0.1 because it makes every re-search *extend* the
+grab window of a candidate whose upstream cache entry is still pinned to the original 30-minute
+Prowlarr TTL. That converts a visible "search again" into an invisible failure at grab time, which is
+a worse outcome than duplicate rows. Revisit if a multi-user deployment makes write amplification on
+the single writer connection measurable; the fix is additive (a unique index plus an upsert) and
+needs no data migration beyond de-duplicating existing rows.
+
 ---
 
 ## 7. Search · **v0.1**
@@ -860,7 +887,7 @@ CREATE INDEX ix_cc_user ON client_credential(user_id, revoked_at);
 CREATE TABLE audit_log (
   id INTEGER PRIMARY KEY,
   ts TEXT NOT NULL DEFAULT (datetime('now')),
-  actor_user_id INTEGER REFERENCES user(id) ON DELETE SET NULL,
+  actor_user_id INTEGER,                       -- HISTORICAL id, deliberately NO foreign key. See below.
   actor_ip TEXT, action TEXT NOT NULL,
   target_type TEXT, target_id TEXT,
   result TEXT NOT NULL, metadata_json TEXT,   -- secret VALUES never appear here; see security.md §5
@@ -879,6 +906,19 @@ CREATE TRIGGER trg_audit_no_delete BEFORE DELETE ON audit_log
 constant-time compare — the cheap pre-check that keeps `GET /rest/ping?apiKey=garbage` from costing
 anything.
 
+**`audit_log.actor_user_id` carries no foreign key, and that is deliberate.** It is a *historical*
+id: the user it names may since have been deleted, and the point of the log is that it still records
+who acted. This column previously read `REFERENCES user(id) ON DELETE SET NULL`, which made deleting
+any user who had ever acted **impossible** — `ON DELETE SET NULL` performs an implicit `UPDATE` on
+`audit_log`, `trg_audit_no_update` aborts it, and the entire `DELETE FROM user` fails. Since logging
+in writes an audit row, that is every user.
+
+`ON DELETE NO ACTION` does **not** fix it. Verified by execution: it leaves the constraint violated
+rather than firing the trigger, so the delete still fails — only the error text changes, from
+`audit_log is append-only` to `FOREIGN KEY constraint failed`. Dropping the reference is the only
+option that both permits the delete and preserves the actor. `SET NULL` would in any case have
+destroyed exactly the record the log exists for (security.md §6, "who deleted this").
+
 ---
 
 ## 10. The write queue · **v0.1**
@@ -894,7 +934,8 @@ CREATE TABLE write_queue (
   payload         TEXT NOT NULL,          -- JSON
   state           TEXT NOT NULL DEFAULT 'pending' CHECK (state IN (
                     'pending','inflight','verifying','done','failed')),
-  fail_reason     TEXT CHECK (fail_reason IN (NULL,'rejected','unknown','exhausted')),
+  fail_reason     TEXT CHECK (fail_reason IS NULL OR fail_reason IN (
+                    'rejected','unknown','exhausted')),   -- NOT `IN (NULL,...)`: see below
   attempts        INTEGER NOT NULL DEFAULT 0,
   max_attempts    INTEGER NOT NULL DEFAULT 6,
   next_attempt_at TEXT,
@@ -915,6 +956,14 @@ another user's `payload` and state. A key that exists under a different `user_id
 
 `ix_wq_runnable` is also the reconciliation guard's index: the sweep skips any `work_id` with a row
 in `pending`, `inflight` **or** `verifying`.
+
+**`fail_reason`'s `CHECK` must test `NULL` separately.** It previously read
+`CHECK (fail_reason IN (NULL,'rejected','unknown','exhausted'))`, which enforced **nothing at all**:
+in SQL, `x IN (NULL, 'a')` evaluates to `NULL` — not `FALSE` — when `x` matches no list entry, and a
+`CHECK` constraint *passes* when its expression is `NULL`. One `NULL` in the list poisons the whole
+comparison, so every value was accepted, including `'TOTAL-GARBAGE'`. The adjacent `state` column is
+the control: the identical pattern without `NULL` in the list rejects correctly. Any nullable column
+constrained this way needs the `IS NULL OR …` form.
 
 ---
 

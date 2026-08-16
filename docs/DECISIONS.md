@@ -6,8 +6,9 @@ Lightweight architecture decision records. One entry per significant, hard-to-re
 Evidence for every claim below lives in [`RESEARCH.md`](./RESEARCH.md); the design that follows
 from it lives in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
-**All ADRs dated 2026-08-16 unless noted. Nothing here is implemented yet** — these are
-decisions taken before the first line of code, on the basis of five research tracks.
+**All ADRs dated 2026-08-16 unless noted.** These were taken before the first line of code, on the
+basis of five research tracks. **Most remain unimplemented**; the first slice of code has since
+landed, and `ARCHITECTURE.md` §16 is authoritative for which parts of it exist.
 
 **Revision 2 (2026-08-16, after a three-way adversarial review).** Seven ADRs changed. Three
 distinctions now matter and are used consistently below:

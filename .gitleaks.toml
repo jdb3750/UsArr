@@ -1,0 +1,55 @@
+# gitleaks configuration for UsArr.
+#
+# `make secrets` is GATING and its exit code is never ignored — see the note in
+# the Makefile. This file exists so that known-safe FIXTURE credentials can be
+# waived explicitly and reviewably, which is the mechanism that note calls for:
+# "waive a known-safe finding by id in .gitleaksignore, never by dropping the
+# step". A config allowlist is used instead of .gitleaksignore because the latter
+# keys on a fingerprint containing the LINE NUMBER, so every waiver silently
+# expires the moment someone adds a line above it — which is the failure mode
+# where the gate goes quietly green on a real leak.
+#
+# The waivers are matched against the SECRET VALUE ONLY, with no path clause.
+# That is deliberate and was verified by execution:
+#
+#   * With `condition = "AND"` plus a `paths = ['_test\.go$']` clause, gitleaks
+#     exempts the whole matching FILE rather than requiring both conditions. A
+#     probe file containing `const apiKey = "<a random 32-hex string>"`
+#     scanned CLEAN under that config, and is CAUGHT under this one. A path-based
+#     waiver would therefore have meant a real 32-hex *Arr admin key pasted into
+#     any test file scans clean — and every developer has one of those in .env,
+#     which makes it the single most likely way a real credential reaches this
+#     repository.
+#   * Matching on the literal value alone cannot over-reach: these regexes are
+#     anchored and describe exactly the fixture strings, so a random key never
+#     matches one.
+#
+# docs/DEVELOPMENT.md §7.1 requires fixture credentials to be structurally
+# impossible to mistake for a real one, and every value below satisfies that:
+# they are sequential hex runs or carry the literal word "KEY". If you add a
+# fixture credential that trips the scanner, make it obviously fake rather than
+# extending this list — that is the cheaper fix and it keeps this list short.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = """
+Sequential-hex fixture API keys. `0123456789abcdef` and its 32-character
+doubling are the shared *Arr key fixture across internal/servarr,
+internal/releases, internal/ssrf and internal/httpapi.
+"""
+regexTarget = "secret"
+regexes = ['''^(?:0123456789abcdef)+$''']
+
+[[allowlists]]
+description = """
+Fixture keys that label themselves as fake: the cmd/usarr end-to-end key carries
+the literal word KEY, and abc123def456 is the placeholder in an error-redaction
+test.
+"""
+regexTarget = "secret"
+regexes = [
+  '''^prowlarrKEY[0-9a-f]+$''',
+  '''^abc123def456$''',
+]

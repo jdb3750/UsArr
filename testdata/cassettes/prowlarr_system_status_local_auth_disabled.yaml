@@ -1,0 +1,54 @@
+---
+# AuthenticationRequired = DisabledForLocalAddresses. A local request succeeds
+# WITH NO KEY, so this 200 does not prove the stored key is valid. The health UI
+# must say 'reachable', not 'credential verified'.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: prowlarr.test:9696
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://prowlarr.test:9696/api/v1/system/status
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json
+            X-Application-Version:
+                - 2.6.2.5052
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            {
+              "appName": "Prowlarr",
+              "instanceName": "Prowlarr",
+              "version": "2.6.2.5052",
+              "buildTime": "2026-08-12T02:11:00Z",
+              "isDebug": false,
+              "isProduction": true,
+              "osName": "ubuntu",
+              "osVersion": "24.04",
+              "isDocker": true,
+              "branch": "develop",
+              "databaseType": "sqLite",
+              "databaseVersion": "3.46.0",
+              "authentication": "disabledForLocalAddresses",
+              "migrationVersion": 46,
+              "urlBase": "",
+              "runtimeVersion": "8.0.10",
+              "startTime": "2026-08-16T06:00:00Z",
+              "packageVersion": "2.6.2.5052"
+            }

@@ -1,6 +1,8 @@
 # UsArr — Architecture
 
-**Status:** design document, pre-alpha. Nothing is implemented yet.
+**Status:** design document, pre-alpha. One slice of it is now built — the §8.5 Search-and-Grab path
+over Prowlarr and the §14 security floor beneath it; the rest is still design. §16 says what has
+landed and what has not.
 **Last revised:** 2026-08-16 (revision 2, after a three-way adversarial review —
 [`REVIEW-LOG.md`](./REVIEW-LOG.md) records what was applied and what was rebutted).
 **Evidence:** [`RESEARCH.md`](./RESEARCH.md). **Decisions:** [`DECISIONS.md`](./DECISIONS.md).
@@ -1950,11 +1952,16 @@ The tailnet removes the "internet-exposed by design" leg and neither of the othe
 4. **Admin-grade API keys never reach the browser.** An \*Arr API key grants full admin with no
    scoping. Images are proxied because `MediaCover` requires it. Nothing leaving UsArr carries a
    backend credential (§5.4).
-5. **Redaction is middleware, not convention.** A fixed deny-list of query parameters (`apiKey`, `p`,
-   `t`, `s`, `token`, `api_key`, `sig`, `access_token`) and the `Authorization`/`X-Api-Key` headers is
-   redacted **before** any log line, audit row, error message, SSE payload or support bundle, at every
-   level including `trace`. The northbound credential rides in the request line of every Subsonic
-   call, so this is not optional. `key_prefix`, never the key, appears in logs.
+5. **Redaction is middleware, not convention.** A fixed deny-list of query parameters — the provider
+   and OpenSubsonic names (`apikey`, `api_key`, `token`, `access_token`, `auth_token`, `sig`,
+   `signature`, `secret`, `secret_key`, `p`, `t`, `s`) **and the private-tracker passkey names**
+   (`passkey`, `torrent_pass`, `torrentpass`, `rsskey`, `authkey`, `apipasskey`, `cookie`) — plus the
+   `Authorization`/`X-Api-Key` headers is redacted **before** any log line, audit row, error message,
+   SSE payload or support bundle, at every level including `trace`. The northbound credential rides in
+   the request line of every Subsonic call, so this is not optional. The tracker names are not
+   optional either: `ReleaseResource.infoUrl` is indexer-supplied and is surfaced to the browser as
+   `info_url`, and private trackers put the user's passkey in exactly that URL. The list lives once,
+   in `internal/ssrf`; see reference/security.md §5. `key_prefix`, never the key, appears in logs.
 6. **Do not outsource the authorization boundary.** Every UsArr response — northbound included — is
    filtered by UsArr's own permission model, with backend policy as a second layer. Never construct a
    UI that hides items the API would still return.
@@ -2005,8 +2012,11 @@ stop, replace the file, start**, with the key as a separate, explicitly-named st
 ## 16. Roadmap
 
 **§16 is authoritative for scope.** Where the README or any other document disagrees about what ships
-when, **this section wins.** Versions are scope markers, not dates. **Nothing below is implemented.**
-Deferred ideas are not listed here at all; they are in [`FUTURE.md`](./FUTURE.md) with their seams.
+when, **this section wins.** Versions are scope markers, not dates. **A milestone label is scope, not
+status:** it says which milestone owns a thing, never that the thing exists. Only part of v0.1 is
+built — see the landed/not-yet split at the end of the v0.1 entry; v0.2 and later are wholly
+unimplemented. Deferred ideas are not listed here at all; they are in [`FUTURE.md`](./FUTURE.md)
+with their seams.
 
 **The ordering rationale, since it changed:** *the earliest milestone that is not already available
 elsewhere is the one that must ship soonest.* The previous order put the gateway second and both
@@ -2150,6 +2160,20 @@ backups. CI: `EXPLAIN QUERY PLAN` + row-count assertions; `make bench` as a manu
 probe of Komga's `sort=lastModified,desc` on its series list** — the whole channel-3b strategy for
 Komga rests on it, it could not be verified from the spec, and if it fails Komga drops to
 reconciliation-only and the Services row says so.
+
+*Landed so far:* the Go binary with the embedded SPA shell; SQLite + WAL and goose migration 0001
+with its automatic pre-migration `VACUUM INTO`; **Prowlarr in Search-and-Grab mode** end to end —
+per-indexer fan-out, results streamed over one SSE channel, the indexer-status Report, grab — with
+the `source:`, `type:`, `format:` and `indexer:` tags derived from each result; the owner account,
+Argon2id, cookie sessions and CSRF; encrypted credentials with AAD binding and the `kek_id` column
+that makes rotation resumable; the SSRF egress policy; redaction middleware; the services CRUD and
+connection-test endpoints; `/api/health/live` and `/api/health/ready`.
+*Not yet:* Sonarr and Radarr; every sync channel; the write path and its command queue; the
+`work`/`edition`/`media_file`/`external_id`/`service_item_link` tables; the library grid and the
+image pipeline; search tiers 1 and 2; the `quality:` tag and the `downloadId` provenance join; the
+Services health **screen** (its endpoint exists, the UI does not); the "1080p ✓ / 4K ✗" badge; a
+working `usarr key rotate`; the Docker image; nightly backups and `POST /api/v1/system/backup`; and
+the arm64 RSS spike. (CI query-plan assertions are in place for the tables that exist.)
 
 **v0.2 — "Requests."** Request model, routing rules, approval workflow, quotas, single-user
 auto-approve. **One search box over owned and unowned** (§8.6). One Add that routes; availability

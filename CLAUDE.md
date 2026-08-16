@@ -19,8 +19,12 @@ misread the project.
 
 Owner: Joe (GitHub `jdb3750`). Repo: `github.com/jdb3750/UsArr`.
 
-**Status: pre-alpha. The docs exist; the code does not.** Nothing is implemented. Do not write
-or imply otherwise.
+**Status: pre-alpha. The first slice of code has landed.** What works end to end is the Prowlarr
+Search-and-Grab path: configuration, encrypted credential storage, SQLite with migration 0001, the
+SSRF egress policy, the Prowlarr client, search streamed over SSE, grab, the health endpoints, and
+an embedded SPA shell. **Everything else is still design.** The *Arr library sync, the library grid
+and local search, requests, cross-media and the gateway surfaces are unimplemented. Read the code
+before describing behaviour — "no invented status" cuts both ways.
 
 ## The four principles
 
@@ -132,7 +136,10 @@ See `docs/ARCHITECTURE.md` §14 for the full threat model.
 ## Conventions
 
 **Stack**
-- Go 1.24+, `CGO_ENABLED=0`, single static binary.
+- Go 1.25.13+, `CGO_ENABLED=0`, single static binary. The floor is set by govulncheck, not by a
+  dependency — goose v3.27.3 only needs 1.25.7, but 1.25.7 has 15 called stdlib vulnerabilities and
+  1.25.12 still has 5. Re-check rather than assuming; a new advisory moves it. `go.mod` is
+  authoritative.
 - SvelteKit with `adapter-static` (SPA), embedded via `embed.FS`.
 - SQLite + WAL: a read pool plus a single-writer connection; `BEGIN IMMEDIATE` for writes.
 - goose migrations. **A merged migration is never edited** — write a new one.

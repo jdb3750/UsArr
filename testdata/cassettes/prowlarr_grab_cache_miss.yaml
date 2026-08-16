@@ -1,0 +1,45 @@
+---
+# 404: the release fell out of Prowlarr's in-process grab cache. The cache is
+# keyed '{indexerId}_{guid}', has a NON-ROLLING 30-minute TTL, is populated only
+# by a prior GET /api/v1/search, and dies with the process.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 98
+        host: prowlarr.test:9696
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://prowlarr.test:9696/api/v1/search
+        method: POST
+        body: |-
+            {
+              "guid": "https://fake-torrents.test/details/1001",
+              "indexerId": 1,
+              "downloadClientId": 2
+            }
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json
+            X-Application-Version:
+                - 2.6.2.5052
+        status: 404 Not Found
+        code: 404
+        duration: 1ms
+        body: |-
+            {
+              "message": "Couldn't find requested release in cache, try searching again",
+              "description": "NzbDrone.Core.Exceptions.NotFoundException: Couldn't find requested release in cache, try searching again\n   at Prowlarr.Api.V1.Search.SearchController.GetRelease(ReleaseResource release)",
+              "content": null
+            }
