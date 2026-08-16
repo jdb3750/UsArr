@@ -157,22 +157,30 @@
 	 * scanned rather than read one row at a time.
 	 */
 	const COLUMNS: ListColumn[] = [
-		{ id: 'protocol', header: 'Protocol', width: '88px', stackLine: 2 },
-		{ id: 'age', header: 'Age', width: '76px', align: 'end', sortable: true, stackLine: 2 },
+		{ id: 'protocol', header: 'Protocol', width: '80px', stackLine: 2 },
+		{ id: 'age', header: 'Age', width: '68px', align: 'end', sortable: true, stackLine: 2 },
 		{
 			id: 'title',
 			header: 'Title',
-			width: 'minmax(0, 3fr)',
+			width: 'minmax(0, 2.4fr)',
 			stackLabel: false,
 			stackLine: 1
 		},
-		{ id: 'indexer', header: 'Indexer', width: 'minmax(0, 1fr)', stackLine: 2 },
-		{ id: 'category', header: 'Category', width: 'minmax(0, 0.8fr)', stackLine: 'hidden' },
-		{ id: 'size', header: 'Size', width: '92px', align: 'end', sortable: true, stackLine: 2 },
+		// ⚠️ THE FRACTIONS ARE MEASURED, NOT CHOSEN. At 3fr/1fr/0.8fr — the ratio
+		// this table arrived with, before the Category column joined it — a 1280 px
+		// viewport left Indexer 110 px, which is `Workin…` and `Newsg…`: the
+		// indexer name is one of the fields a person identifies a row BY, and
+		// seven characters of it identifies nothing. Screenshotted, re-weighted,
+		// screenshotted again. Title keeps the largest share because it is the
+		// row's identity, but it degrades gracefully — a truncated release name is
+		// still recognisable from its head, and an indexer name is not.
+		{ id: 'indexer', header: 'Indexer', width: 'minmax(0, 1.5fr)', stackLine: 2 },
+		{ id: 'category', header: 'Category', width: 'minmax(0, 0.9fr)', stackLine: 'hidden' },
+		{ id: 'size', header: 'Size', width: '88px', align: 'end', sortable: true, stackLine: 2 },
 		{
 			id: 'grabs',
 			header: 'Grabs',
-			width: '80px',
+			width: '72px',
 			align: 'end',
 			sortable: true,
 			stackLine: 'hidden'
@@ -189,7 +197,7 @@
 			sortable: true,
 			stackLine: 'hidden'
 		},
-		{ id: 'flags', header: 'Indexer flags', width: 'minmax(0, 1fr)', stackLine: 'hidden' },
+		{ id: 'flags', header: 'Indexer flags', width: 'minmax(0, 1.2fr)', stackLine: 'hidden' },
 		// minmax(max-content, auto), never a fixed track: §9.1's overflow policy.
 		// A fixed track shears the buttons attached to exactly the rows that are
 		// in trouble, with no scrollbar and no way to reach what was cut.
