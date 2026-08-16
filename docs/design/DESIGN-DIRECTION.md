@@ -2135,11 +2135,33 @@ review items**, because a hand-built grid supplies nothing a native `<table>` su
   that list's own rendered rows"; neither is the other's literal value, so a number must never be
   copied between them.
   **And the component writes `--cols` and `--row-ci` through `element.style.setProperty()`**, because
-  the server sends `style-src 'self'` with no `'unsafe-inline'` and a `style` attribute is therefore
-  refused — it stays in the DOM and applies nothing, which is the kind of failure that survives
-  review because the attribute is still visible in the inspector. That is the same constraint
-  `check.mjs` §1d enforces over the mockups, and the same reason CSSOM mutation is explicitly not
-  banned there.
+  the server sends `style-src 'self'` with no `'unsafe-inline'` and no `style-src-attr`, so a `style`
+  attribute falls back to `style-src` and is refused. That is the same constraint `check.mjs` §1d
+  enforces over the mockups, and the same reason CSSOM mutation is explicitly not banned there.
+
+  🚩 **A CORRECTION TO THIS DOCUMENT'S OWN CLAIM, and it is the useful half.** This paragraph used to
+  end *"it stays in the DOM and applies nothing"*. **That is false**, and the true statement is
+  narrower and more useful: **a reported CSP violation is not evidence the declaration was dropped.**
+  Three paths, measured against the header `internal/httpapi/middleware.go` actually sends, in
+  Chromium **141.0.7390.37**:
+
+  | Path | Violation reported | `style.length` | Computed | Verdict |
+  | --- | --- | --- | --- | --- |
+  | `el.setAttribute('style', …)` | yes | **0** | `position: static` | **genuinely blocked** |
+  | `<template>.innerHTML` carrying `style=`, then cloned in | yes | **5** | `position: absolute` | **applied** |
+  | `el.style.setProperty(…)` | **no** | 1 | `position: absolute` | applies — the CSSOM carve-out |
+
+  **The first row is the control, and without it this finding reads as the directive being
+  toothless.** `setAttribute` is the path a screen author actually reaches for, and it is stopped
+  dead — so §1d's ban and its conclusion are unchanged. Exactly one construction path gets past, and
+  it is **Svelte 5's**: the framework builds a fragment by assigning to a `<template>`'s `innerHTML`
+  and cloning the content in, which is how SvelteKit's route announcer gets its hiding styles.
+  💭 **Inference, not measurement:** the reason is presumably that a `<template>`'s contents belong
+  to an inert document outside the page's CSP, so the attribute parses into a populated declaration
+  block there and the clone carries it in already-parsed. The behaviour is verified; Blink's reason
+  for it is not, and it is marked so nobody cites it as a fact about the spec.
+  📌 **The practical rule: check the computed style before concluding anything was blocked.** A
+  console violation tells you the browser objected, not that it won.
 - **No status glyph may have an empty accessible name**, and availability is the case that matters:
   §9.5 already requires *"icon + text + colour, in that order of importance"* and that *"removing
   the colour must leave it fully legible"*. An icon-only ✓ or ✗ leaves **nothing** — a screen-reader
