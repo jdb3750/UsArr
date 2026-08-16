@@ -2267,6 +2267,14 @@ write-back**: `star`, `unstar`, `setRating` and `scrobble` return a clean protoc
 500. The `io.Copy` byte proxy with its test matrix. OPDS, aggregation, write-back and the wider
 client matrix are each their own later milestone with their own success criterion.
 
+> ✅ **The single-Navidrome scoping is now checked against a real install rather than assumed.** The
+> owner confirmed on **2026-08-16** that he runs **Navidrome for music and Audiobookshelf for
+> audiobooks** — exactly one Navidrome, which is the install this milestone and
+> [`reference/gateway.md`](./reference/gateway.md) were written against. 🔍 It is still an assumption
+> about *other* users' installs, and multi-instance aggregation does not move: it stays v1.0. What
+> changed is only that the install the success criterion will be demonstrated on is known rather
+> than guessed.
+
 **v1.0 — "Breadth."** The **command sinks** deferred in §16.0 — **Lidarr** (with the
 `status: 'deleted'` guard built on day one, not later), **Mylar3**, **Kapowarr** — plus Whisparr,
 Jellyfin, and **Calibre as a Tier 0 adapter reading `metadata.db` read-only** (Calibre-Web has no
