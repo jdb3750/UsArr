@@ -2,6 +2,7 @@ package ssrf
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -782,6 +783,144 @@ func TestSPKIPinRejectsAMismatchedKey(t *testing.T) {
 
 	if err := getErr(t, client, srv.URL+"/"); !errors.Is(err, ErrPinMismatch) {
 		t.Fatalf("got %v, want ErrPinMismatch", err)
+	}
+}
+
+// stickyTicketCache hands the same ticket back on every Get. crypto/tls's own
+// LRU cache is free to drop a TLS 1.3 ticket after a single use, which would let
+// a resumption test pass vacuously by quietly falling back to a full handshake.
+type stickyTicketCache struct {
+	mu sync.Mutex
+	cs *tls.ClientSessionState
+}
+
+func (c *stickyTicketCache) Put(_ string, cs *tls.ClientSessionState) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if cs != nil {
+		c.cs = cs
+	}
+}
+
+func (c *stickyTicketCache) Get(_ string) (*tls.ClientSessionState, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.cs == nil {
+		return nil, false
+	}
+	return c.cs, true
+}
+
+// tlsRoundTrip handshakes with cfg and drives one HTTP request, because a TLS
+// 1.3 NewSessionTicket arrives AFTER the handshake and is only processed on the
+// first read. Without the read there is never a ticket to resume from.
+func tlsRoundTrip(t *testing.T, addr string, cfg *tls.Config) (tls.ConnectionState, error) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	d := &net.Dialer{Timeout: 5 * time.Second}
+	raw, err := d.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	conn := tls.Client(raw, cfg)
+	defer func() { _ = conn.Close() }()
+
+	if err := conn.HandshakeContext(ctx); err != nil {
+		return tls.ConnectionState{}, err
+	}
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+	if _, err := io.WriteString(conn, "GET / HTTP/1.1\r\nHost: usarr.test\r\nConnection: close\r\n\r\n"); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := io.ReadAll(conn); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	return conn.ConnectionState(), nil
+}
+
+// TestSPKIPinIsEnforcedOnAResumedSession guards the bypass gosec G123 describes.
+//
+// crypto/tls does NOT re-verify certificates on a resumed session: it skips
+// verifyServerCertificate, and with it VerifyPeerCertificate, calling only
+// VerifyConnection (handshake_client_tls13.go readServerCertificate, and the
+// TLS 1.2 resumption branch of handshake_client.go — both cite golang/go#31641).
+// Because the pinned path also sets InsecureSkipVerify, dropping VerifyConnection
+// from tlsConfig would mean a resumed handshake is accepted with NO pin check at
+// all. That failure is invisible — the connection simply succeeds — which is why
+// it gets a test rather than a comment.
+func TestSPKIPinIsEnforcedOnAResumedSession(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	srv.Config.ErrorLog = log.New(io.Discard, "", 0)
+	defer srv.Close()
+
+	addr := srv.Listener.Addr().String()
+	leaf := srv.Certificate()
+	cache := &stickyTicketCache{}
+
+	// The production transport deliberately sets no ClientSessionCache, so this
+	// adds one to force the resumed path to exist at all. That is the point: the
+	// pin must hold for anything that ever enables resumption, not merely for
+	// today's transport settings.
+	pinned := func(pin []byte) *tls.Config {
+		cfg, err := tlsConfig(ClassConfigured, pin)
+		if err != nil {
+			t.Fatalf("tlsConfig: %v", err)
+		}
+		cfg.ServerName = "usarr.test"
+		cfg.ClientSessionCache = cache
+		return cfg
+	}
+
+	// 1. Full handshake with the right pin: succeeds, and banks a ticket.
+	state, err := tlsRoundTrip(t, addr, pinned(SPKIPin(leaf)))
+	if err != nil {
+		t.Fatalf("first handshake: %v", err)
+	}
+	if state.DidResume {
+		t.Fatal("the first handshake resumed, but there was no ticket to resume from")
+	}
+
+	// 2. Control. The same pin must actually RESUME, otherwise step 3 proves
+	//    nothing about resumption.
+	state, err = tlsRoundTrip(t, addr, pinned(SPKIPin(leaf)))
+	if err != nil {
+		t.Fatalf("second handshake: %v", err)
+	}
+	if !state.DidResume {
+		t.Fatal("no session was resumed, so this test cannot show the pin is checked on resumption")
+	}
+	if err := checkPin(ClassConfigured, SPKIPin(leaf), state.PeerCertificates[0]); err != nil {
+		t.Fatalf("a resumed session lost its peer certificates: %v", err)
+	}
+
+	// 3. The regression itself: resume with a pin that does not match, and
+	//    require rejection. VerifyPeerCertificate is wrapped only to prove the
+	//    rejection came from the RESUMED path — if crypto/tls had fallen back to
+	//    a full handshake, VerifyPeerCertificate would have caught the bad pin
+	//    and this test would pass while testing nothing.
+	wrong := SPKIPin(leaf)
+	wrong[0] ^= 0xff
+
+	cfg := pinned(wrong)
+	fullHandshake := false
+	inner := cfg.VerifyPeerCertificate
+	cfg.VerifyPeerCertificate = func(rawCerts [][]byte, chains [][]*x509.Certificate) error {
+		fullHandshake = true
+		return inner(rawCerts, chains)
+	}
+
+	if _, err := tlsRoundTrip(t, addr, cfg); !errors.Is(err, ErrPinMismatch) {
+		t.Fatalf("a resumed session bypassed the SPKI pin: got %v, want ErrPinMismatch", err)
+	}
+	if fullHandshake {
+		t.Fatal("the third connection did a full handshake, so it never exercised the resumed path")
 	}
 }
 

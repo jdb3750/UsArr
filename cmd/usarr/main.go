@@ -104,6 +104,21 @@ func run() error {
 	defer stopProber()
 	go a.registry.RunProber(proberCtx)
 
+	// The release_candidate sweep. It starts here and not inside buildApp
+	// because buildApp must not return with a goroutine already writing to the
+	// database it might still fail to finish setting up; by this line the
+	// migrations have been applied and the app is whole.
+	//
+	// Unlike the prober, this one is WAITED FOR: it writes, so it has to be
+	// finished before a.Close() closes the database under it. This defer is
+	// registered after the Close defer above and therefore runs before it.
+	sweeperCtx, stopSweeper := context.WithCancel(context.Background())
+	sweeperDone := a.startCandidateSweeper(sweeperCtx)
+	defer func() {
+		stopSweeper()
+		<-sweeperDone
+	}()
+
 	srv := &http.Server{
 		Handler:           a.server.Handler(),
 		ReadHeaderTimeout: readHeaderTimeout,
@@ -147,6 +162,10 @@ func run() error {
 	// while in-flight requests still complete.
 	a.server.Draining()
 	stopProber()
+	// Cancel the sweep alongside the prober so it is not still running through
+	// the drain; the deferred wait above is what guarantees it has actually
+	// stopped before the database closes.
+	stopSweeper()
 	// An SSE connection never ends by itself; closing the hub ends the streams
 	// so Shutdown has only ordinary requests left to wait for.
 	a.server.Close()

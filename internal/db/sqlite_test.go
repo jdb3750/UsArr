@@ -175,6 +175,63 @@ func TestWritePoolIsSingleConnection(t *testing.T) {
 	}
 }
 
+// TestReadPoolRefusesWrites makes the single-writer discipline structural rather
+// than conventional.
+//
+// The read pool used to open read-WRITE, so "never start a write transaction on
+// it" was a comment and nothing more. A stray write through DB.Read() therefore
+// succeeded on a developer's idle machine and only misbehaved in production,
+// where the deferred transaction it starts has to upgrade to a write lock — the
+// one path busy_timeout does NOT cover (sync.md §6 rule 2), so it surfaces as an
+// intermittent "database is locked" arbitrarily far from the statement at fault.
+//
+// mode=ro turns that into an immediate, deterministic failure at the offending
+// line. Both entry points are covered: a bare statement, and an explicit
+// transaction, because a caller can reach the pool either way.
+func TestReadPoolRefusesWrites(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	// Reads still work, so this is a read-only pool and not a broken one.
+	var n int
+	if err := d.Read().QueryRowContext(ctx, `SELECT count(*) FROM service_instance`).Scan(&n); err != nil {
+		t.Fatalf("the read pool cannot read: %v", err)
+	}
+
+	const wantErr = "readonly"
+
+	_, err := d.Read().ExecContext(ctx, `CREATE TABLE stray (id INTEGER PRIMARY KEY)`)
+	if err == nil {
+		t.Fatal("a DDL write through the read pool succeeded; the read pool is not mode=ro, " +
+			"so a stray write races the real writer instead of failing at the line that wrote it")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), wantErr) {
+		t.Errorf("read-pool write error = %v, want it to name a readonly database", err)
+	}
+
+	err = d.ReadTx(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx,
+			`INSERT INTO service_instance (kind, role, name, base_url, api_key_enc, kek_id)
+			 VALUES ('prowlarr','indexer','x','http://x.test:9696',x'01',1)`)
+		return err
+	})
+	if err == nil {
+		t.Fatal("an INSERT inside a read-pool transaction succeeded")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), wantErr) {
+		t.Errorf("read-pool transaction write error = %v, want it to name a readonly database", err)
+	}
+
+	// And the write pool is unaffected — the fix must not have made the process
+	// read-only.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `CREATE TABLE allowed (id INTEGER PRIMARY KEY)`)
+		return err
+	}); err != nil {
+		t.Fatalf("the write pool can no longer write: %v", err)
+	}
+}
+
 // Write must roll back on error and commit on success, and a rollback must
 // leave nothing behind.
 func TestWriteTransaction(t *testing.T) {

@@ -278,8 +278,13 @@ func (s *Service) recordProvenance(
 		IndexerCategories: rel.CategoryIDs(),
 		IndexerFlags:      rel.IndexerFlags,
 		TorrentInfoHash:   infoHash,
-		NZBInfoURL:        rel.InfoURL,
-		ReleaseGUID:       rel.GUID,
+		// rel comes from the sanitised stored blob, so this is already redacted.
+		// Redacting again is not belt-and-braces theatre: provenance rows are
+		// IMMUTABLE AND PERMANENT, so this is the one write in the codebase where
+		// a credential that slipped through can never be deleted, and the call is
+		// idempotent. See servarr.SanitizeRelease on why the passkey matters.
+		NZBInfoURL:  servarr.RedactURL(rel.InfoURL),
+		ReleaseGUID: rel.GUID,
 		// Verbatim, forever. Every parsed field is re-derivable from this; it is
 		// not re-derivable from them.
 		ReleaseTitle:   firstNonEmpty(grabbed.Title, rel.Title, cand.Title),

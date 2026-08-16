@@ -149,8 +149,18 @@ func (g *registry) openCredential(si store.ServiceInstance) (string, error) {
 	plain, err := g.keyring.Open(si.APIKeyEnc, aad)
 	if err != nil {
 		if errors.Is(err, crypto.ErrDecrypt) {
-			return "", fmt.Errorf("the stored API key for %q cannot be opened for %s: "+
-				"re-enter it, or restore the master key that sealed it",
+			// Name the real artifacts. This message used to say "restore the
+			// master key that sealed it", which is actively misleading for the
+			// most likely cause: an operator who restored a backup, HAS the
+			// master key, and is missing keys/kek.salt. It sent them looking
+			// for the one file they were already holding. The KEK is derived
+			// from secret.key AND kek.salt, so the recoverable unit is the
+			// whole keys/ directory.
+			return "", fmt.Errorf("the stored API key for %q cannot be opened for %s. "+
+				"Either the base URL was edited (the credential is bound to its scheme, host and "+
+				"port), or the keys/ directory does not match the one that sealed it — restore ALL "+
+				"of keys/ (secret.key AND kek.salt), not just the master key. Otherwise re-enter "+
+				"the API key",
 				si.Name, si.BaseURL)
 		}
 		return "", fmt.Errorf("opening the stored API key for %q: %w", si.Name, err)

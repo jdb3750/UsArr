@@ -34,6 +34,10 @@ Installed by `make tools` **(not yet)**, all **version-pinned in the Makefile**:
 logic on a machine that may hold a master key and *Arr admin credentials in `.env`; a floating
 version there is a supply-chain hole, not merely a flaky gate.
 
+**You do not need these on `$PATH`, and putting a different copy there cannot shadow them.** `go
+install` writes to `$GOBIN` (or `$(go env GOPATH)/bin`), and every recipe invokes them from there by
+absolute path, asserting `--version` against the pin first. See §9.
+
 **There is no FFmpeg dependency, and there never will be.** UsArr does not transcode, remux or
 otherwise process media — video routes to the backend that owns it, and the audio/ebook bytes UsArr
 does carry on its own OpenSubsonic/OPDS surfaces are a plain `io.Copy` with `Range` handling
@@ -564,13 +568,28 @@ bar. If you cannot get a test to that bar, it belongs behind the integration tag
 ### Go
 
 ```bash
-gofumpt -l -w .                # stricter superset of gofmt; the formatting authority
-golangci-lint run              # v2 — .golangci.yml MUST declare version: "2"
-golangci-lint fmt              # v2 folds goimports/gofumpt under `formatters`
+make fmt          # gofumpt -l -w .   — stricter superset of gofmt; the formatting authority
+make fmt-check    # gofumpt -l .      — the gating form, used by `make check`
+make lint-go      # golangci-lint run — v2; .golangci.yml MUST declare version: "2"
 ```
 
-`.golangci.yml` starting point **(not yet)** — v2 format, `linters.default` replaces v1's
-`enable-all`/`disable-all`:
+**Run these through `make`, not by hand.** `make tools` installs the pinned binaries into `$GOBIN`,
+which is usually *not* on `$PATH`, so a bare `golangci-lint run` in your shell runs whichever copy
+the machine happens to carry — not the pinned one. The recipes invoke every pinned tool by its
+absolute path under `$(GOBIN_DIR)` and assert `--version` against the pin before running it. If you
+must invoke one directly, use the full path: `$(go env GOPATH)/bin/golangci-lint run`.
+
+This is not a style preference. The gate spent the project's whole life so far resolving
+`golangci-lint` off `$PATH`, where it found a system-wide **v2.5.0** while the `Makefile` pinned
+**v2.12.2** — and reported `check: OK` the entire time, because the older gosec had no G123 or G124
+to fire. See `docs/reference/security.md` §7 and the block above `require_tool` in the `Makefile`.
+`gitleaks` is the one tool with no version assertion: installed by `go install` it reports
+"version is set by build process", because upstream stamps the real version with `-ldflags` at
+release time. It gets the existence guard alone, which is exactly why the absolute path rather than
+the assertion is the primary mechanism.
+
+`.golangci.yml` — v2 format, `linters.default` replaces v1's `enable-all`/`disable-all`. This is a
+summary; the file itself is the source of truth:
 
 ```yaml
 version: "2"
@@ -588,6 +607,13 @@ linters:
     - gosec
     - sqlclosecheck
     - rowserrcheck
+  exclusions:
+    rules:
+      - path: _test\.go     # fixture credentials and deliberately malformed inputs
+        linters: [gosec]
+issues:
+  max-same-issues: 0        # 0 = unlimited. See below — the defaults hide findings.
+  max-issues-per-linter: 0
 formatters:
   enable:
     - gofumpt
@@ -596,6 +622,12 @@ formatters:
 
 `noctx` and `bodyclose` are not stylistic here. UsArr fans out to a dozen services; a request without
 a timeout or a body that is never closed becomes a hung dashboard.
+
+**The `issues:` block is load-bearing.** golangci-lint defaults to `max-same-issues: 3` and
+`max-issues-per-linter: 50`, and it drops the remainder *silently* — no "N more" line, nothing in the
+summary. This repo carried 7 `noctx` findings that a default run displayed as 3, so clearing the
+three on screen would have looked like finishing the job. Do not restore the defaults to shorten the
+output.
 
 ### Frontend
 

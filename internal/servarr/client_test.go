@@ -278,6 +278,46 @@ func TestSanitizeReleaseDropsTheEmbeddedAPIKey(t *testing.T) {
 	}
 }
 
+// TestSanitizeReleaseRedactsTheIndexerSuppliedURLs covers the OTHER credential
+// in a search result.
+//
+// infoUrl, commentUrl and posterUrl come from the INDEXER, not from Prowlarr,
+// and a private tracker puts the user's personal passkey in them. They are
+// redacted rather than dropped: the tracker and the release path are what makes
+// a stored candidate and a permanent provenance row readable by a human, and
+// only the secret has to go.
+func TestSanitizeReleaseRedactsTheIndexerSuppliedURLs(t *testing.T) {
+	const passkey = "d41d8cd98f00b204e9800998ecf8427e"
+	rel := ReleaseResource{
+		GUID:       "g1",
+		InfoURL:    "https://tracker.test/details/1?passkey=" + passkey,
+		CommentURL: "https://tracker.test/comments/1?torrent_pass=" + passkey,
+		PosterURL:  "https://tracker.test/cover/1.jpg?authkey=" + passkey,
+	}
+
+	safe := SanitizeRelease(rel)
+	for name, got := range map[string]string{
+		"infoUrl":    safe.InfoURL,
+		"commentUrl": safe.CommentURL,
+		"posterUrl":  safe.PosterURL,
+	} {
+		if strings.Contains(got, passkey) {
+			t.Errorf("SanitizeRelease left the tracker passkey in %s: %s", name, got)
+		}
+		if !strings.Contains(got, "REDACTED") {
+			t.Errorf("SanitizeRelease did not redact %s through the shared deny-list: %s", name, got)
+		}
+		if !strings.Contains(got, "tracker.test") {
+			t.Errorf("SanitizeRelease dropped %s entirely; it must be redacted, not removed: %s", name, got)
+		}
+	}
+
+	// An empty field stays empty rather than becoming a placeholder URL.
+	if got := SanitizeRelease(ReleaseResource{}); got.InfoURL != "" || got.CommentURL != "" || got.PosterURL != "" {
+		t.Errorf("SanitizeRelease invented a URL for an absent field: %+v", got)
+	}
+}
+
 func TestGrabSucceeds(t *testing.T) {
 	c := newTestClient(t, "prowlarr_grab_ok")
 	rel := ReleaseResource{
