@@ -3107,3 +3107,140 @@ Reported to this thread by the deployment thread.
 | # | Finding | Disposition |
 |---|---|---|
 | **SW-24** | **A grab that succeeded end to end was reported as a failure.** The owner's book downloaded in Deluge while UsArr showed **"Grab failed — HTTP 502"**: Prowlarr added the torrent to the download client, then failed on a *post-add labelling step*, and returned 500 for the whole operation. **An upstream failure response can therefore cover an operation that has already partly succeeded**, and the harm is specific — a false *"failed"* invites the user to grab the same release again, and a grab is irreversible from UsArr's side | **Applied to `ARCHITECTURE.md` §17.5.** The grab-result surface has **three** states, not two — succeeded · failed · **the upstream reported failure and the download may already be running** — and **the third state's copy may never assert that a failed grab did not happen**. Which state a result lands in is decided **by how far the request got rather than by whether an error came back**, and that principle held while the first mapping written against it did not. 🚩 **Verified by the code thread: right in principle, wrong in the specific mapping** — which is the useful form of this record, rather than "we were right" or "we were wrong". The claim was that the existing error codes already coincide with the boundary, with `grab_failed` as the sent-unknown bucket. They do not: **`grab_failed` is the unclassified remainder and carries all three outcomes at once** — six definitely-not-sent cases (bad API key, open circuit breaker, SSRF refusal, Prowlarr 400, Prowlarr 409, corrupt blob); one **definitely sent *and confirmed*** (`ErrDecode`, reachable only after a 2xx, where Prowlarr confirmed the grab and UsArr then failed to parse its own response — **a second, independent false-failure bug**, recorded as its own thing rather than folded into Joe's); and only `ErrServer`, `ErrTimeout` and `Canceled` genuinely ambiguous. So the assignment is **backend classification off the error sentinel, not a relabel of one existing code**, implemented additively by the code thread: `grab_failed` narrows and **a new code carries sent-unknown**. ⚠️ **The near miss is recorded as a caution about scope, not about this mapping:** had the wholesale relabel shipped it would have been **the same double-grab invitation pointed the other way** — sending a user to check their download client for a request that never left UsArr's process. The rule was right; applying it to the wrong set would have produced a fresh instance of the harm the rule exists to prevent. **Unaffected by the correction, and stated as such: the no-Retry-under-ambiguity rule and the honest wording stand exactly as written** — they now attach to the new sent-unknown code rather than to `grab_failed`. Retry means *do it again*, and doing it again is what produces two copies of a 68 GB release, so the honest action points the user at their download client, where the truth actually lives, and the row says plainly that UsArr cannot tell. **Treatment, from the frontend thread and adopted:** the boundary that matters is **handed-over vs not-handed-over**, so **sent-unknown is placed beside *sent*, not beside *failed*** — a 200 means Prowlarr accepted the release, not that a download is running, and UsArr stops observing at handoff either way, so those two are the same epistemic state and only the genuinely-failed one is categorically different. A row that treats them as opposites **lies in both directions**. The sharper consequence is written in too: since detection is deliberately not built, **"sent" is the strongest true word for every handed-over state including the successful one** — never *succeeded*, never *downloading*. ✅ Convergence rather than coincidence, and worth noting as evidence: the provenance design had already chosen *sent* over *succeeded*, and Recent grabs' `done` state was already worded *"the client accepted it"*. The mockups were checked against the rule rather than assumed to pass it — the post-grab chip reads *"grabbed · sent to qBittorrent"*, which names the user's action and then makes the one true claim, so **no mockup copy changed**. The reason is written in as structural: **UsArr deliberately stops observing after handoff**, so it *cannot* resolve the ambiguity by looking, and this is the **second** failure mode in §17.5 where the absence of an undo makes wording load-bearing rather than cosmetic — cross-referenced to §9.1a's freeze-while-aimed rule, which rests on the same irreversibility. ✅ **The one question this raised is closed rather than left open, and it closed the same day**: the deployment thread checked Prowlarr's and Deluge's source and the response is **not distinguishable** — Prowlarr returns **no structured partial-success signal at all**, the 200 *is* the confirmation, and the only discriminator inside a failure is locale-dependent string and stack-frame archaeology specific to Deluge that does not generalise across download clients. Their recommendation not to build detection is written into §17.5 explicitly, so that the ambiguity is not later mistaken for an unclosed gap and answered with a parser. **It strengthens the framing rather than confirming it:** the ambiguity is permanent by the upstream API's nature *and* by the stop-observing decision — two independent reasons, either sufficient. **Two copy corrections follow and are specified**: the current message asserts *"the grab did not go through"*, the one claim that cannot be known, and is replaced by wording that says the download client reported an error and the release **may or may not have been added**, with the upstream message verbatim; and `Test connection` is removed as the offered action, because this is not a connectivity failure and the test will pass. **The state has somewhere to live, decided by the code thread:** `provenance` gains **`acquisition_state`** in **migration 0003** — `TEXT NOT NULL DEFAULT 'confirmed'`, partial index on the not-confirmed case, **no `CHECK` constraint on purpose**, since SQLite cannot `ALTER` one later and v0.2's requests may want `pending` (migration 0001's `audit_log` foreign key is the precedent that paid for that caution). So Recent grabs reads sent-unknown **from provenance**, not from an `audit_log` enrichment, and §17.5's union says so. The reasoning generalises past this table and is worth keeping in their words — **an absent row fails visibly; a phantom row lies quietly**: `provenance` has no back-reference to `audit_log`, so an ambiguous row without a discriminator *on the row* would let library sync's join and Recent grabs attach the wrong history silently. Recorded too: **no existing column could carry it** — `confidence` belongs to the v0.3 fuzzy-match tier and its `>= 1.0` partial index would filter out precisely the rows that matter, and `source_system` is a grouped-on enum. 🔍 **One mechanical fact, because it makes this common rather than exotic: the owner never chose a label.** Prowlarr's Add-client form pre-fills a Default Category of `prowlarr`, so saving the form opts you into the labelling step that failed, and the add happens *before* it with no rollback — a configuration trap reachable by accepting defaults, not a user error |
+
+---
+
+# GR-01 — the code side of SW-24, as implemented
+
+**This is the implementation record for SW-24 above**, written by the thread that wrote the code
+rather than the one that decided the design. SW-24 owns the design position and the §17.5 copy rules;
+this owns what shipped, the upstream source each claim rests on, and what the tests assert. Where the
+two touch, SW-24 wins on design and this wins on mechanism.
+
+**Reported from a real grab on the owner's machine.** Prowlarr added the torrent to Deluge, threw on
+a later labelling step, and returned a bare 500. UsArr told him it had failed. On a private tracker a
+false failure invites grabbing the same release again, which costs a duplicate download and a ratio
+hit — so the harm is not cosmetic, and it is paid in the one currency the user cannot get back.
+
+## GR-01.1 The mechanism, verified against upstream source
+
+| Claim | Source, read directly |
+|---|---|
+| Prowlarr adds first and configures second, with no rollback | `Deluge.AddFromMagnetLink`: `_proxy.AddTorrentFromMagnet` → `SetTorrentSeedingConfiguration` → `SetTorrentLabel`. A throw in the tail leaves the torrent **running** |
+| That throw is not caught | `DownloadService.SendReportToClient` catches `ReleaseUnavailableException`, `DownloadClientRejectedReleaseException`, `ReleaseDownloadException` — not `DownloadClientException`. `SearchController.GrabRelease` returns a bare **500** |
+| The bulk endpoint is the outlier's opposite | `GrabReleases` wraps each release in its own `try`/`catch`, catches `DownloadClientException`, logs and `continue`s. Prowlarr's own bulk path treats this as non-fatal |
+| The state is the DEFAULT, not a corner | `DelugeSettings`' constructor sets `Category = "prowlarr"`, so the Add-client form arrives pre-filled and saving it opts you in. Deluge's Label plugin rejects a label nobody created |
+| ⚠️ Prowlarr's own Test button goes green in exactly that state | `Deluge.TestCategory()` returns `null` when `Categories.Count == 0` — the *mapped-categories* list, not `Settings.Category`. With no mappings it never checks the Label plugin and never checks the field the add path uses (`GetCategoryForRelease(release) ?? Settings.Category`) |
+
+**A 200 is the only confirmation the API offers.** The one discriminator is a frame in the .NET stack
+trace: Deluge-specific, partly gettext-translated, and matching another project's private internals.
+**Not built, deliberately** — recorded in `reference/arr-apis.md` §7 and `reference/search.md`.
+
+⚠️ **The consequence for the Services screen, recorded so nobody assumes it away later:** a passing
+connection test is not evidence of a working grab, and a green Services row does not rule this out.
+No health-screen logic was built for it here; the fact is recorded so it is not silently assumed.
+
+## GR-01.2 Disposition — a three-way classification, from the sentinel and not the status
+
+**Applied**, additively, exactly as SW-24 specifies. `grab_failed` was the unclassified remainder and carried all three outcomes. It now
+carries one, and the split is derived from the `servarr` sentinel because the status code cannot
+carry it — a 500 is both *"no enabled download client, nothing dispatched"* and *"added to Deluge,
+then the label step threw"*.
+
+| Outcome | Errors | Reported as |
+|---|---|---|
+| **Definitely not sent** | `ErrValidation`→`ErrRequestRejected`, `ErrBreakerOpen`, `ErrInvalidRequest`, `ErrUnauthorized`, `ErrConflict`, `ErrUnexpectedStatus`, a corrupt stored blob, plus the pre-dispatch codes (`instance_mismatch`, `service_unavailable`, `expired`, `no_longer_offered`, `no_download_client`) | Failure, as now. For these UsArr genuinely knows |
+| **Sent, result unknown** | `ErrServer`, `ErrTimeout`, `context.Canceled` | **New code `grab_outcome_unknown`** — additive, not a rename, so nothing branching on `grab_failed` breaks. `audit_log.result = "warn"` |
+| **Sent and confirmed** | `ErrDecode` | **Success.** See GR-01.3 |
+
+**The remainder stays in "not sent" on purpose.** Moving an error into sent-unknown has to be a
+positive decision backed by evidence the POST left the process; defaulting there would make every
+ordinary failure read as ambiguous, and a message that appears on failures which did not dispatch is
+a message people learn to ignore — including on the one occasion it is true.
+
+## GR-01.3 `ErrDecode` — a second, independent false failure
+
+**The reachability claim was verified before turning a failure into a success**, because getting it
+backwards would be the worst available outcome. In `servarr.Client.do` the non-2xx branch
+(`resp.StatusCode < 200 || resp.StatusCode >= 300`) **returns `parseErrorBody`'s `*APIError` before
+any decode of the body is attempted**; `ErrDecode` is produced only by the two statements after it,
+on an empty body and on a failed `json.Unmarshal`. `Client.Grab` passes a non-nil `out`, so it
+reaches them. **`ErrDecode` is therefore reachable only after a 2xx**: Prowlarr confirmed the grab
+and UsArr failed to parse its own receipt. Reported as a failure until now.
+
+## GR-01.4 Storage — the join key, and why it needed migration 0003
+
+Failure paths wrote nothing to `provenance` and an `audit_log` row carrying only
+`{"instance_id":N}` with `result="fail"` — no error code, so the read side could not tell the three
+outcomes apart. Both halves are fixed.
+
+**The audit row** now carries `outcome` (`not_sent` | `sent_unknown` | `sent_confirmed`), the error
+`code`, and `provenance_id`. `"warn"` is used for sent-unknown; `internal/store/audit.go` had always
+documented the value and nothing used it. It reads naturally: the action's outcome is genuinely not
+known, which is what a warning is.
+
+**The provenance row** is the harder half. A torrent on disk with no `provenance` row loses its
+infohash — `download_id` is the only key an importer supplies — so when library sync lands there is
+nothing to join back to. But writing the row **without a discriminator on the row itself** is worse
+than writing none: `provenance` has **no back-reference to `audit_log`** (verified — `audit_log`'s
+`target_id` holds the *release-candidate* id, and that candidate is swept 25 minutes later), so a
+reader starting from `provenance` — which is what the import join and Recent grabs both do — could
+not tell an unconfirmed acquisition from a confirmed one. The join would then *succeed* and attach
+wrong history.
+
+No existing column could carry it. `confidence` means match confidence and is gated by a partial
+index at `>= 1.0`, so an unconfirmed-but-perfectly-identified row would be filtered out by the
+queries that most want it; `source_system` is a documented enum future reads group by. So
+**migration 0003** adds `provenance.acquisition_state TEXT NOT NULL DEFAULT 'confirmed'`, plus
+`ix_prov_unconfirmed` partial on `acquisition_state <> 'confirmed'`.
+
+**Deliberately no `CHECK` constraint**, following `audit_log.result` exactly: SQLite cannot `ALTER`
+one, and 0001's `audit_log` foreign key is what that costs when the vocabulary later has to grow
+(v0.2's requests may want `pending`). The vocabulary is documented and enforced in Go, in
+`internal/store/releases.go`. `ADD COLUMN … NOT NULL DEFAULT` on a `STRICT` table was **verified by
+execution**, as 0002 was, not by memory — `TestMigration0003NeedsNoRebuild` pins the column shape,
+that `provenance` is still `STRICT`, that the backfill is the default, that the index is partial, and
+that the planner reaches for it.
+
+`store.GetProvenanceByDownloadID` now returns `acquisition_state` alongside the key, so the one read
+that an unconfirmed row exists to serve cannot use the key without seeing the state.
+
+**The wording is built to `ARCHITECTURE.md` §17.5's spec rather than invented here**, since the
+frontend renders against that section: the message leads with §17.5's own two clauses — the download
+client reported an error, and the release *may or may not have been added* — quotes Prowlarr
+verbatim, and offers no misleading action. What it adds is mechanism, not a guess: Prowlarr hands the
+release over *before* it applies settings, which is why the instruction is to check the download
+client before grabbing again rather than merely to be aware. **`Test connection` is gone**, and the
+tests fail if it comes back.
+
+## GR-01.5 Also fixed — `no_longer_offered` was blaming the indexer for UsArr's own timeout
+
+One of that code's three paths fired when the transparent **re-search** failed (timeout, open
+breaker, 401) and told the user *"that indexer no longer offers this release"*. Nothing was sent, so
+this is not the same bug — the verdict was right and the **cause was invented**. It now has its own
+sentinel (`ErrReSearchFailed`) and its own message, which says the cache had dropped the release,
+that the recovery search did not complete, and that nothing was sent to the download client.
+
+## GR-01.6 What the tests assert
+
+`internal/releases/grab_outcome_test.go` and `internal/httpapi/grab_error_test.go`, one per bucket,
+each failing if an error moves:
+
+- **sent-unknown** — a 500 with a message, a bare 500, a timeout and a cancellation each classify as
+  `ErrGrabOutcomeUnknown`, write exactly one provenance row, carry the infohash in `download_id`, and
+  carry `acquisition_state = 'unconfirmed'` with `confidence` still 1.0.
+- **definitely not sent** — seven errors, none of which may classify as sent-unknown or carry its
+  wording, and none of which may write a provenance row. This is the guard against reintroducing the
+  harm in the other direction.
+- **sent and confirmed** — `ErrDecode` returns no error, sets `ResponseUnreadable`, and writes a
+  `confirmed` row.
+- **wording** — the sent-unknown message says the release was sent, says the outcome is unknown,
+  asserts neither, quotes Prowlarr, names the remedy and the screen it lives on, warns about the
+  duplicate grab, and offers no `Test connection` action. A separate case covers the no-answer
+  variant, which must not dangle a reference to a message that does not exist.
+
+## GR-01.7 Not done, and why
+
+- **No UI change.** Design owns the position that ambiguous rows get no Retry affordance.
+- **No stack-trace parsing.** See GR-01.1.
+- **No health-screen logic** for the green-test trap; recorded only.

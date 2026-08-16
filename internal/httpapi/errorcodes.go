@@ -64,14 +64,23 @@ const (
 	CodeServiceUnavailable ErrorCode = "service_unavailable"
 
 	// Search and grab.
-	CodeExpired          ErrorCode = "expired"
-	CodeGrabFailed       ErrorCode = "grab_failed"
-	CodeInstanceMismatch ErrorCode = "instance_mismatch"
-	CodeNoDownloadClient ErrorCode = "no_download_client"
-	CodeNoIndexerService ErrorCode = "no_indexer_service"
-	CodeNoIndexers       ErrorCode = "no_indexers"
-	CodeNoLongerOffered  ErrorCode = "no_longer_offered"
-	CodeSearchFailed     ErrorCode = "search_failed"
+	CodeExpired ErrorCode = "expired"
+	// CodeGrabFailed asserts that the release did NOT reach the download
+	// client. It used to be the unclassified remainder and carried three
+	// different outcomes; the ones UsArr cannot make that assertion about now
+	// have their own code below.
+	CodeGrabFailed ErrorCode = "grab_failed"
+	// CodeGrabOutcomeUnknown is the third outcome, and it is ADDITIVE rather
+	// than a rename of grab_failed, so no client that branches on the old code
+	// breaks. It means the release WAS sent to Prowlarr and neither UsArr nor
+	// Prowlarr can say what the download client did with it.
+	CodeGrabOutcomeUnknown ErrorCode = "grab_outcome_unknown"
+	CodeInstanceMismatch   ErrorCode = "instance_mismatch"
+	CodeNoDownloadClient   ErrorCode = "no_download_client"
+	CodeNoIndexerService   ErrorCode = "no_indexer_service"
+	CodeNoIndexers         ErrorCode = "no_indexers"
+	CodeNoLongerOffered    ErrorCode = "no_longer_offered"
+	CodeSearchFailed       ErrorCode = "search_failed"
 )
 
 // errorCodes is the authoritative set. A map rather than a slice because every
@@ -88,6 +97,7 @@ var errorCodes = map[ErrorCode]struct{}{
 	CodeExpired:                   {},
 	CodeForbidden:                 {},
 	CodeGrabFailed:                {},
+	CodeGrabOutcomeUnknown:        {},
 	CodeInstanceMismatch:          {},
 	CodeInternal:                  {},
 	CodeInvalidURLBase:            {},

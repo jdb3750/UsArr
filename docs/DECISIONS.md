@@ -2279,16 +2279,18 @@ indistinguishable from one nobody re-checked.
 
 **5. Two gaps in the benchmark, recorded here rather than left as folklore.**
 
-- **Arrow-key traversal at 25,000 rows is unmeasured.** Chromium exhausts memory building that many
-  rich rows — **2.7 GB resident at 5,000 rows** — so the harness cannot reach the 25k point that the
-  required `make bench` line above asks for. A **full** run of the frontend thread's list benchmark
-  therefore **exits non-zero**, while its `--quick` subset passes.
+- **Arrow-key traversal at 25,000 rows was unmeasured at the time of writing**, because Chromium
+  exhausted memory building that many rich rows — **2.7 GB resident at 5,000 rows** — so the harness
+  could not reach the 25k point that the required `make bench` line above asks for.
 - **What would close it:** a lower-memory row shape for the 25k point specifically, so the row count
   the required line names can be reached without the traversal case OOMing first.
 
-  ⚠️ **Status, stated precisely:** that harness (`pnpm bench:list`) is **not on `main` at the time of
-  writing** — `web/package.json` declares no such script — so this records a known gap and its exit
-  behaviour, not a command anyone can run from a clone today.
+  ✅ **Status, updated:** the harness is on `main` — `web/package.json` declares `bench:list`
+  (`web/scripts/list-bench.mjs`), so `pnpm bench:list` is a command anyone can run from a clone. It
+  carries the 25,000-row traversal case (`--quick` skips it, and the `--quick` subset stops at
+  5,000). **What that changes is "unmeasured", not the memory ceiling itself:** whether the full run
+  clears it is an observation from running it on the machine in hand, not a claim this ADR can make
+  for every machine, so the row-shape mitigation above stays recorded rather than struck.
 
 **A sixth measurement is the design thread's to record, not this one's**, and is named here in one
 clause only because it would trip an assertion this ADR owns: `contain-intrinsic-size: auto`

@@ -58,7 +58,7 @@ func TestMigrationRoundTrip(t *testing.T) {
 // asserted rather than derived so that adding a migration is a deliberate edit
 // here too — a version the tests do not know about is a migration nobody
 // round-tripped.
-const latestSchemaVersion int64 = 2
+const latestSchemaVersion int64 = 3
 
 // Down is not a supported user path, but it must work, because it is the
 // cheapest way to test a migration locally. A Down that leaves objects behind
@@ -193,6 +193,108 @@ func TestMigration0002NeedsNoRebuild(t *testing.T) {
 		t.Errorf("provenance refused a historical user id: %v\n"+
 			"provenance.user_id must carry NO foreign key — it records who acquired the file, and "+
 			"that must survive the user's deletion. See migration 0002's header.", err)
+	}
+}
+
+// TestMigration0003NeedsNoRebuild pins 0003's header the same way, for a TEXT
+// column rather than an INTEGER one, and checks the two things that make the
+// column safe to rely on: the backfill really is the default, and the partial
+// index really is partial.
+//
+// The rebuild it avoids would copy every provenance row, and provenance is the
+// one table whose contents are permanent.
+func TestMigration0003NeedsNoRebuild(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	// 1. The column exists, is NOT NULL, and defaults to 'confirmed'. The
+	//    default IS the backfill: SQLite rewrites the stored DDL and leaves the
+	//    rows alone, which is what makes the migration free.
+	var notNull int
+	var dflt sql.NullString
+	err := d.Read().QueryRowContext(ctx,
+		`SELECT "notnull", dflt_value FROM pragma_table_info('provenance')
+		  WHERE name = 'acquisition_state'`).Scan(&notNull, &dflt)
+	if err != nil {
+		t.Fatalf("provenance has no acquisition_state column: %v", err)
+	}
+	if notNull != 1 {
+		t.Error("provenance.acquisition_state is nullable; a NULL state is neither confirmed nor not")
+	}
+	if dflt.String != "'confirmed'" {
+		t.Errorf("acquisition_state defaults to %q, want 'confirmed' — the honest value for every "+
+			"row written before 0003, all of which followed a 2xx", dflt.String)
+	}
+
+	// 2. provenance is still STRICT after the ADD COLUMN. TestAllTablesAreStrict
+	//    covers every table; this pins the one 0003 touched, because losing
+	//    STRICT here would silently accept an integer state.
+	var strict int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT strict FROM pragma_table_list WHERE name = 'provenance'`).Scan(&strict); err != nil {
+		t.Fatalf("reading pragma_table_list for provenance: %v", err)
+	}
+	if strict != 1 {
+		t.Error("provenance is no longer STRICT after ADD COLUMN")
+	}
+
+	// 3. An insert that names no state gets 'confirmed', and one that names
+	//    'unconfirmed' keeps it. There is deliberately NO CHECK constraint —
+	//    SQLite cannot ALTER one and 0001's audit_log FK is what that costs —
+	//    so the vocabulary is enforced in internal/store, not here.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO provenance (id, protocol, release_title, source_system, user_id)
+			VALUES (1, 'torrent', 'Confirmed.Release', 'prowlarr', 0)`); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO provenance (id, protocol, release_title, source_system, user_id, acquisition_state)
+			VALUES (2, 'torrent', 'Unconfirmed.Release', 'prowlarr', 0, 'unconfirmed')`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var state string
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT acquisition_state FROM provenance WHERE id = 1`).Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if state != "confirmed" {
+		t.Errorf("a row inserted without a state got %q, want confirmed", state)
+	}
+
+	// 4. The index is partial on exactly the unconfirmed rows. A non-partial
+	//    index here would be a second full-size index on the table that grows
+	//    forever, for a block that only ever shows the rare rows.
+	var indexed int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM pragma_index_info('ix_prov_unconfirmed')`).Scan(&indexed); err != nil {
+		t.Fatalf("ix_prov_unconfirmed does not exist: %v", err)
+	}
+	var partial bool
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT partial FROM pragma_index_list('provenance') WHERE name = 'ix_prov_unconfirmed'`).
+		Scan(&partial); err != nil {
+		t.Fatal(err)
+	}
+	if !partial {
+		t.Error("ix_prov_unconfirmed is not partial; it would index every confirmed grab forever")
+	}
+
+	// And the planner actually reaches for it, rather than scanning provenance
+	// to build the attention block.
+	var plan string
+	if err := d.Read().QueryRowContext(ctx,
+		`EXPLAIN QUERY PLAN
+		 SELECT id FROM provenance
+		  WHERE user_id = 0 AND acquisition_state <> 'confirmed'
+		  ORDER BY grabbed_at DESC, id DESC`).Scan(new(int), new(int), new(int), &plan); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(plan, "ix_prov_unconfirmed") {
+		t.Errorf("the attention-block query does not use ix_prov_unconfirmed: %s", plan)
 	}
 }
 

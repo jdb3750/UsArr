@@ -250,12 +250,55 @@ type Provenance struct {
 	SourceSystem   string // sonarr|radarr|prowlarr|manual|filesystem
 	SourceRecordID string
 	Confidence     float64
+
+	// AcquisitionState says whether UsArr ever confirmed this acquisition:
+	// AcquisitionConfirmed or AcquisitionUnconfirmed. Empty means confirmed on
+	// write, which is what every caller before migration 0003 meant.
+	//
+	// It is a column and not a lookup through audit_log because provenance has
+	// NO back-reference to the audit chain — audit_log.target_id holds the
+	// release-candidate id, and that candidate is swept 25 minutes later — so a
+	// reader that starts from provenance, which is what the import join and the
+	// recent-grabs block both do, has nothing else to ask.
+	AcquisitionState string
 }
+
+// Acquisition states for Provenance.AcquisitionState.
+//
+// Deliberately NOT a CHECK constraint: SQLite cannot ALTER one, and migration
+// 0001's audit_log foreign key is what that costs when the vocabulary later
+// has to grow (v0.2's request path may want a "pending"). This is the same
+// arrangement AuditEntry.Result uses — TEXT NOT NULL in the schema, vocabulary
+// owned by Go — except that here InsertProvenance also enforces it, because an
+// unrecognised state would silently read as "not confirmed" and put a perfectly
+// good acquisition in the attention block forever.
+const (
+	// AcquisitionConfirmed means Prowlarr answered 2xx. That is the only
+	// confirmation its grab API offers: there is no download id and no queue id
+	// to poll (docs/reference/search.md).
+	AcquisitionConfirmed = "confirmed"
+
+	// AcquisitionUnconfirmed means the grab was DISPATCHED and its outcome is
+	// unknown — a 5xx or a timeout after the POST left the process. Prowlarr
+	// adds the release to the download client before it configures it and never
+	// rolls back, so the download may well be running. The row exists only to
+	// keep download_id, the join key that reattaches this grab to the file an
+	// importer later produces; it must never be counted as an acquisition.
+	AcquisitionUnconfirmed = "unconfirmed"
+)
 
 // InsertProvenance appends one acquisition event.
 func (s *Store) InsertProvenance(ctx context.Context, p Provenance) (int64, error) {
 	if p.Confidence == 0 {
 		p.Confidence = 1.0
+	}
+	switch p.AcquisitionState {
+	case "":
+		p.AcquisitionState = AcquisitionConfirmed
+	case AcquisitionConfirmed, AcquisitionUnconfirmed:
+	default:
+		return 0, fmt.Errorf("insert provenance %q: unknown acquisition_state %q",
+			p.ReleaseTitle, p.AcquisitionState)
 	}
 	var id int64
 	err := s.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
@@ -268,8 +311,8 @@ func (s *Store) InsertProvenance(ctx context.Context, p Provenance) (int64, erro
 			  release_title, release_group, quality_source, quality_resolution,
 			  video_codec, audio_codec, audio_channels, edition_label, languages,
 			  proper_repack, published_at, grabbed_at, imported_at,
-			  source_system, source_record_id, confidence
-			) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			  source_system, source_record_id, confidence, acquisition_state
+			) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			p.UserID, p.SizeBytes,
 			p.Protocol, nullString(p.IndexerName), p.IndexerID, nullString(p.IndexerPrivacy),
 			nullString(p.IndexerCategories), nullString(p.IndexerFlags),
@@ -280,7 +323,7 @@ func (s *Store) InsertProvenance(ctx context.Context, p Provenance) (int64, erro
 			nullString(p.QualityResolution), nullString(p.VideoCodec), nullString(p.AudioCodec),
 			nullString(p.AudioChannels), nullString(p.EditionLabel), nullString(p.Languages),
 			p.ProperRepack, p.PublishedAt, p.GrabbedAt, p.ImportedAt,
-			p.SourceSystem, nullString(p.SourceRecordID), p.Confidence,
+			p.SourceSystem, nullString(p.SourceRecordID), p.Confidence, p.AcquisitionState,
 		)
 		if err != nil {
 			return fmt.Errorf("insert provenance %q: %w", p.ReleaseTitle, err)
@@ -296,6 +339,13 @@ func (s *Store) InsertProvenance(ctx context.Context, p Provenance) (int64, erro
 // GetProvenanceByDownloadID reads acquisition events by download id, which is
 // how an import event is reattached to the grab that produced it.
 //
+// It returns AcquisitionState and every caller must look at it. This is the one
+// read that a row written for an UNCONFIRMED grab exists to serve — the whole
+// reason such a row is written is that download_id would otherwise be lost — and
+// a caller that joins on the key without checking the state attaches confirmed
+// history to something UsArr never confirmed. That is a worse outcome than the
+// missing row, so the column travels with the key.
+//
 // It takes the access scope IN THE SIGNATURE and applies it IN THE SQL. Both
 // halves matter: this used to take no scope at all, so any caller holding a
 // download id could read any user's acquisition history, and a download id for a
@@ -306,7 +356,7 @@ func (s *Store) GetProvenanceByDownloadID(ctx context.Context, scope Scope, down
 	userPred, userArgs := scope.userPredicate("user_id")
 	rows, err := s.db.Read().QueryContext(ctx, `
 		SELECT id, user_id, protocol, indexer_name, download_id, release_title,
-		       size_bytes, source_system, confidence
+		       size_bytes, source_system, confidence, acquisition_state
 		  FROM provenance
 		 WHERE download_id = ? AND `+userPred+`
 		 ORDER BY id ASC`, append([]any{downloadID}, userArgs...)...)
@@ -321,7 +371,8 @@ func (s *Store) GetProvenanceByDownloadID(ctx context.Context, scope Scope, down
 		var indexerName sql.NullString
 		var dlID sql.NullString
 		if err := rows.Scan(&p.ID, &p.UserID, &p.Protocol, &indexerName, &dlID,
-			&p.ReleaseTitle, &p.SizeBytes, &p.SourceSystem, &p.Confidence); err != nil {
+			&p.ReleaseTitle, &p.SizeBytes, &p.SourceSystem, &p.Confidence,
+			&p.AcquisitionState); err != nil {
 			return nil, fmt.Errorf("read provenance by download_id %q: scan: %w", downloadID, err)
 		}
 		p.IndexerName, p.DownloadID = indexerName.String, dlID.String

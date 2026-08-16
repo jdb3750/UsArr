@@ -29,6 +29,11 @@ type AuditEntry struct {
 
 	// Result is the outcome: "ok", "warn", "fail". Not a CHECK constraint in
 	// the schema, so it is not enforced here either.
+	//
+	// "warn" is for an action whose outcome UsArr genuinely does not know, and
+	// it is not decoration: the grab path uses it for a release that WAS sent to
+	// Prowlarr and whose fate is unknown, which must not be filed next to a grab
+	// that provably never left the process. See internal/httpapi/grab.go.
 	Result       string
 	MetadataJSON string
 	PrevHash     string
