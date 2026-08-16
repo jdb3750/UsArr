@@ -32,7 +32,7 @@ var wantPragmas = map[string]int64{
 	"synchronous":        1, // NORMAL
 	"temp_store":         2, // MEMORY
 	"wal_autocheckpoint": 1000,
-	"cache_size":         -32000,
+	"cache_size":         -8000,
 }
 
 // foreign_keys is off by default in SQLite and is PER-CONNECTION. Setting it
@@ -104,6 +104,45 @@ func TestPragmasOnEveryConnection(t *testing.T) {
 	}
 	if !strings.EqualFold(mode, "wal") {
 		t.Errorf("journal_mode = %q, want wal", mode)
+	}
+}
+
+// mmap_size was removed from the pragma list because this driver compiles
+// memory-mapped I/O out (ADR-0001 amendment): every value requested reads back
+// as 0. This guards the removal from both sides — the pragma is not in the list,
+// and setting it would not work anyway — so anyone re-adding it as a tuning knob
+// fails here instead of shipping configuration that measures nothing.
+func TestMmapSizeIsCompiledOut(t *testing.T) {
+	ctx := t.Context()
+
+	for _, p := range pragmas {
+		if strings.HasPrefix(p, "mmap_size(") {
+			t.Errorf("mmap_size is back in the pragma list as %q; it is inert under this "+
+				"driver (MAX_MMAP_SIZE=0). Re-run `make bench-rss SPIKE_FLAGS='-mmap=...'` "+
+				"and only re-add it with a number behind it. See ADR-0001.", p)
+		}
+	}
+
+	d := openTestDB(t)
+	conn, err := d.Read().Conn(ctx)
+	if err != nil {
+		t.Fatalf("Conn: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	// Ask for 128 MiB the way the old pragma line did. A driver that grew mmap
+	// support would read back what it was told, and that is the signal to
+	// revisit the decision rather than a failure of this package.
+	if _, err := conn.ExecContext(ctx, "PRAGMA mmap_size = 134217728"); err != nil {
+		t.Fatalf("set mmap_size: %v", err)
+	}
+	got, err := PragmaInt(ctx, conn, "mmap_size")
+	if err != nil {
+		t.Fatalf("read mmap_size: %v", err)
+	}
+	if got != 0 {
+		t.Errorf("mmap_size read back %d, want 0: this driver now supports mmap, so "+
+			"ADR-0001's removal of the pragma is worth revisiting with a fresh measurement", got)
 	}
 }
 

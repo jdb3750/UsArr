@@ -277,26 +277,34 @@ PRAGMA synchronous = NORMAL;      -- safe under WAL; ~10× faster than FULL
 PRAGMA foreign_keys = ON;
 PRAGMA temp_store = MEMORY;
 PRAGMA wal_autocheckpoint = 1000;
-PRAGMA cache_size = -32000;       -- 32 MB PER CONNECTION — measured; see below
-PRAGMA mmap_size = 134217728;     -- a NO-OP under this driver — measured; see below
+PRAGMA cache_size = -8000;        -- ~7.8 MB PER CONNECTION — measured; see below
+-- mmap_size is deliberately NOT set: a no-op under this driver. See below.
 ```
 
 **Both were pending; both are now measured on x86-64** by `make bench-rss`
 (`internal/db/spike`, ADR-0001 — a 500k-row fixture through the real `internal/db` open path, process
 RSS from `/proc/self/status`, one child process per pragma cell). What the run settled:
 
-- **`mmap_size` does nothing here.** Every requested value reads back as `0`, and `PRAGMA
-  compile_options` on the build under test reports `MAX_MMAP_SIZE=0` and `DEFAULT_MMAP_SIZE=0` —
-  memory-mapped I/O is compiled out of the driver's SQLite. The line above is inert configuration.
-  Do not tune it, and do not cite it as a reason for anything.
+- **`mmap_size` does nothing here, and has been dropped.** Every requested value reads back as `0`,
+  and `PRAGMA compile_options` on the build under test reports `MAX_MMAP_SIZE=0` and
+  `DEFAULT_MMAP_SIZE=0` — memory-mapped I/O is compiled out of the driver's SQLite, which follows
+  from its wasm32 target rather than from a build flag anyone can flip. It is no longer in the
+  pragma list: inert configuration that looks meaningful is worse than none, because the next
+  reader tunes it and measures nothing. `make bench-rss SPIKE_FLAGS='-mmap=134217728'` is the
+  re-check if the driver ever ships an mmap-capable build.
 - **`cache_size` is per-connection.** Going from one pinned read connection to all eight pool
   readers added +16 MB at `-2000`, +60 MB at `-8000` and +196 MB at `-32000` — tracking the
   per-connection prediction (0.89–1.19× of it) rather than staying flat. **A `NumCPU*2` read pool plus
-  the writer therefore pays `cache_size` × (pool + 1)**: on a 4-core box the shipped `-32000` reaches
-  **~235 MB peak RSS** under a saturating read workload, against ~35 MB at `-2000`.
+  the writer therefore pays `cache_size` × (pool + 1)**: on a 4-core box `-32000` reached
+  **~237 MB peak RSS** under a saturating read workload, against ~85 MB at `-8000` and ~35 MB at
+  `-2000` — and it grows with core count, since the pool is sized from `NumCPU`.
 
-The shipped value is unchanged pending an owner decision; the measurement, not the default, is what
-this section can now assert. **arm64 is unmeasured** — run `make bench-rss` there and add a row.
+**The shipped value is now `-8000`** (ADR-0001, amendment). `-32000` was fine on the owner's own
+x86-64 box, but a default has to be defensible on the small self-hosted machines this project
+targets, and a cost that scales with core count is easy to miss. `-8000` buys most of the cache at
+about a third of the footprint. **This is a memory-side decision only** — the harness measures RSS,
+not query latency — so revisit it if a latency benchmark ever contradicts it. **arm64 is
+unmeasured** — run `make bench-rss` there and add a row.
 
 **Rule 1 — two pools.** Reads `NumCPU*2`; **writes exactly one connection.** This eliminates
 `SQLITE_BUSY` **arising from concurrent writers inside the process**. It does not eliminate

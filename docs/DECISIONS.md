@@ -171,6 +171,47 @@ alternative, and changing a shipped default is an owner decision with a latency 
 does not measure. Recorded, not silently changed. **`mmap_size` should be dropped from the pragma
 list** as dead configuration when someone touches it next.
 
+### Amendment, 2026-08-16 — both pragmas settled
+
+The decision the table above deferred, taken. **The measurements are unchanged; this is what follows
+from them.** Both claims were re-confirmed by direct execution before anything moved — `PRAGMA
+compile_options` re-read on the linked build, `PRAGMA mmap_size` requested and read back both via the
+DSN and via a runtime `SET`, and `cache_size` read from four separately pinned pool connections and
+then changed on one of them.
+
+**1. `mmap_size` is removed from the pragma list.** Confirmed inert: `MAX_MMAP_SIZE=0` and
+`DEFAULT_MMAP_SIZE=0` in `compile_options`, and `67108864` / `134217728` / `268435456` each read back
+`0` whether set through the DSN or at runtime. The cause is structural rather than a flag anyone can
+flip: `go-sqlite3-wasm`'s `build/build.sh` compiles the amalgamation with `--target=wasm32
+-ffreestanding`, and SQLite only defaults `SQLITE_MAX_MMAP_SIZE` non-zero on platforms it recognises
+as having mmap, so a wasm build gets `0`. It will stay `0` for as long as the driver targets wasm.
+The line is gone because **inert configuration that looks meaningful is worse than none** — the next
+person to tune it would measure nothing and conclude something. `make bench-rss
+SPIKE_FLAGS='-mmap=134217728'` still sweeps it on demand, which is the re-check if the driver ever
+ships an mmap-capable build.
+
+**2. `cache_size` drops from `-32000` to `-8000`.** Per-connection confirmed directly, not only by
+inference from the RSS ratios: four pinned pool connections each read back the requested value, and
+setting one connection to `-1000` left the other three untouched. Taking the table's peak column at
+face value, on 4 cores: `-2000` → ~35 MiB, `-8000` → ~85 MiB, `-32000` → ~237 MiB.
+
+The reasoning for `-8000`, recorded because the number is otherwise arbitrary: **237 MB would be
+harmless on the owner's own hardware** — an x86-64 ThinkCentre with RAM to spare — **but a default
+has to be defensible on the small self-hosted boxes this project targets**, and this particular cost
+**scales with core count** in a way that is easy to miss, since the read pool is `NumCPU*2`. A
+16-core box would pay roughly four times the 4-core figure for a default nobody chose. `-8000` buys
+most of the cache benefit at about a third of the footprint.
+
+**The limit of this decision.** It is made on the **memory axis only**. `make bench-rss` measures
+RSS; it does not measure query latency, and a smaller page cache is not free on that axis. Nothing
+here claims `-8000` is latency-neutral — it is the defensible default until someone measures the
+other side. **A latency benchmark that contradicts this is grounds to revisit it**, and that is a
+change of evidence, not a reversal of judgement.
+
+Applied in `internal/db/sqlite.go`; `reference/sync.md` §6 and ARCHITECTURE §7.7 / §13 updated to
+match. arm64 remains unmeasured, and the sweep still covers `-2000` / `-8000` / `-32000` so an arm64
+run produces a comparable row.
+
 **arm64 is unmeasured, and the requirement is re-scoped.** The original text made this spike a
 prerequisite to the schema work; the schema shipped and the deployment target is x86-64, so an arm64
 run is now a prerequisite to **claiming arm64 support**, not to v0.1 — see ARCHITECTURE §13 and

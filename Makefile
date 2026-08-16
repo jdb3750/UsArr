@@ -197,9 +197,14 @@ bench: ## Wall-clock performance harness. A RELEASE gate on named hardware, neve
 
 # ─── The RSS measurement ─────────────────────────────────────────────────────
 # ARCHITECTURE §13's idle-RSS budget rested on a citation that does not transfer
-# (Navidrome, a cgo driver), and reference/sync.md §6 marks cache_size and
+# (Navidrome, a cgo driver), and reference/sync.md §6 marked cache_size and
 # mmap_size "pending measurement". This target is the measurement: this driver, a
 # 500k-row fixture, WAL, the §7.7 pragmas, idle and peak process RSS.
+#
+# It settled both (ADR-0001): cache_size is per-connection, so it multiplies by
+# the read pool, and mmap_size did nothing at all because this driver compiles
+# mmap out. mmap_size is no longer in the pragma list and is no longer swept by
+# default — pass -mmap=... to sweep it if the driver ever gains mmap.
 #
 # It is behind the `bench` build tag like every other wall-clock measurement, and
 # it is deliberately NOT part of `make bench`: that target runs Go benchmarks
@@ -210,7 +215,7 @@ bench: ## Wall-clock performance harness. A RELEASE gate on named hardware, neve
 # page size all move the numbers, and the report states all three.
 
 .PHONY: bench-rss
-bench-rss: ## Measure idle/peak RSS over a 500k-row DB, sweeping cache_size × mmap_size (ADR-0001)
+bench-rss: ## Measure idle/peak RSS over a 500k-row DB, sweeping cache_size (ADR-0001)
 	@echo "bench-rss: building a 500k-row fixture, then one child process per pragma cell."
 	@echo "           first run takes a few minutes; the fixture is reused afterwards."
 	$(GO) run -tags=bench ./internal/db/spike $(SPIKE_FLAGS)
@@ -220,9 +225,10 @@ bench-rss: ## Measure idle/peak RSS over a 500k-row DB, sweeping cache_size × m
 	@echo "count and page size all move them. See docs/DEVELOPMENT.md §5."
 
 # Knobs, for a quick check or a different sweep. Examples:
-#   make bench-rss SPIKE_FLAGS='-rows=50000'                  # fast smoke run
-#   make bench-rss SPIKE_FLAGS='-rebuild'                     # remeasure the import peak
-#   make bench-rss SPIKE_FLAGS='-cache=-2000,-32000 -mmap=0'  # narrower sweep
+#   make bench-rss SPIKE_FLAGS='-rows=50000'                    # fast smoke run
+#   make bench-rss SPIKE_FLAGS='-rebuild'                       # remeasure the import peak
+#   make bench-rss SPIKE_FLAGS='-cache=-2000,-32000'            # narrower sweep
+#   make bench-rss SPIKE_FLAGS='-mmap=134217728'                # re-check mmap (see above)
 SPIKE_FLAGS ?=
 
 .PHONY: cover

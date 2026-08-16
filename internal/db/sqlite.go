@@ -43,24 +43,32 @@ var pragmas = []string{
 	"wal_autocheckpoint(1000)",
 
 	// MEASURED 2026-08-16 on x86-64 by `make bench-rss` (internal/db/spike);
-	// full result in docs/DECISIONS.md ADR-0001 correction 3. Both values were
-	// previously marked unverified; neither is unverified now, and neither has
-	// been changed on the strength of the measurement — that is an owner
-	// decision, recorded rather than taken here.
+	// full result and the reasoning in docs/DECISIONS.md ADR-0001 correction 3
+	// and its amendment.
 	//
-	//   cache_size is PER-CONNECTION. The process pays it once per pool
-	//   connection plus the writer, so with NumCPU*2 readers -32000 measured
-	//   ~235 MB peak RSS on 4 cores against ~35 MB at -2000. It costs more on a
-	//   machine with more cores, not less.
-	//
-	//   mmap_size does NOTHING here. Every value reads back as 0 and PRAGMA
-	//   compile_options reports MAX_MMAP_SIZE=0 — memory-mapped I/O is compiled
-	//   out of this driver's SQLite. The line below is inert; drop it next time
-	//   this list is touched.
+	// cache_size is PER-CONNECTION, so the process pays it once per pool
+	// connection plus the writer — with a NumCPU*2 read pool it is a multiplier
+	// on RSS, not a fixed cost, and it costs MORE on a machine with more cores.
+	// Measured peak RSS on 4 cores: -2000 ~35 MB, -8000 ~85 MB, -32000 ~237 MB.
+	// -8000 is the default because it buys most of the cache at a third of the
+	// footprint of -32000, and the small self-hosted boxes this project targets
+	// are what a default has to be defensible on. This is a MEMORY-side
+	// decision only: the harness measures RSS, not query latency. Revisit it if
+	// a latency benchmark ever contradicts it.
 	//
 	// Unmeasured on arm64. Page size and core count both move these numbers.
-	"cache_size(-32000)",   // 32 MB per connection
-	"mmap_size(134217728)", // inert; see above
+	"cache_size(-8000)", // ~7.8 MB per connection; see above
+
+	// mmap_size is deliberately ABSENT. It was removed after measurement
+	// because this driver compiles memory-mapped I/O out: PRAGMA
+	// compile_options reports MAX_MMAP_SIZE=0 and DEFAULT_MMAP_SIZE=0, and
+	// every requested value reads back as 0. It follows from the wasm32 target
+	// — SQLite only defaults SQLITE_MAX_MMAP_SIZE non-zero on platforms it
+	// knows have mmap — so it is structural to this build, not a toggle.
+	// Inert configuration that looks meaningful is worse than none: a future
+	// reader would tune it and measure nothing. Re-check with `make bench-rss`
+	// if the driver ever ships an mmap-capable build, and add the line back
+	// only with a number behind it.
 }
 
 // DB holds the read and write pools.

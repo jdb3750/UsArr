@@ -300,9 +300,14 @@ nobody deploys on, blocking work on the machine everybody deploys on.
    day is `make bench-rss` on the arm64 box, and its output is a second row in ADR-0001, not a
    replacement for the first. Until then, the Pi 5 reference hardware in §13 is design intent, not a
    validated target — said in §13 in those words.
-3. **Nothing was tuned on the strength of it.** `cache_size = -32000` costs 235 MB peak against
-   35 MB at `-2000` on 4 cores, which is a real finding and an owner decision; the default is
-   unchanged and the finding is recorded. Documents now assert the measurement, not the default.
+3. **Nothing was tuned in the same change that measured.** `cache_size = -32000` costs 235 MB peak
+   against 35 MB at `-2000` on 4 cores, which is a real finding and an owner decision; the finding
+   was recorded first and the documents were made to assert the measurement rather than the default.
+   **Both defaults were then changed as a separate, recorded decision** (ADR-0001, amendment,
+   2026-08-16): `mmap_size` dropped from the pragma list as inert, `cache_size` cut to `-8000`
+   (~85 MB peak on 4 cores). Both underlying claims were re-confirmed by direct execution before the
+   change, and the amendment states its own limit — it is a memory-side decision, since the harness
+   does not measure query latency.
 
 **What would make this wrong.** If UsArr is ever run on arm64 — a Pi, an Ampere VPS, an Apple-silicon
 container — none of the above transfers, and §13's budget is again unmeasured for that machine. The

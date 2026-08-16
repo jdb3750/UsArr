@@ -1324,9 +1324,13 @@ deliberately rather than by drift (FUTURE.md §10).
    100 ms)`**, not on row count alone, and interactive commands preempt at batch boundaries. §13
    states the write budget as measured *during a concurrent import*.
 4. **Pragmas** in the sync reference. Both formerly-pending values are **measured on x86-64**
-   (ADR-0001, `make bench-rss`): `mmap_size` is a **no-op** under this driver, whose SQLite is built
-   with `MAX_MMAP_SIZE=0`; `cache_size` is **per-connection**, so with a `NumCPU*2` read pool it
-   multiplies by pool size + 1 rather than costing what it says. Unmeasured on arm64 (§13).
+   (ADR-0001, `make bench-rss`), and both defaults changed as a result. `mmap_size` is a **no-op**
+   under this driver, whose SQLite is built with `MAX_MMAP_SIZE=0`, so it has been **dropped from
+   the pragma list** rather than left in place looking tunable. `cache_size` is **per-connection**,
+   so with a `NumCPU*2` read pool it multiplies by pool size + 1 rather than costing what it says;
+   the default is now **`-8000`** (~85 MB peak on 4 cores) rather than `-32000` (~237 MB), because a
+   default has to hold up on a small self-hosted box and this cost grows with core count.
+   Unmeasured on arm64 (§13).
 5. **`ANALYZE` after bulk import.**
 
 ⚠️ **The NAS case:** SQLite's many-small-writes pattern causes severe write amplification on ZFS and
@@ -1909,11 +1913,18 @@ cgo citation nor the WASM-runtime reasoning describes what UsArr will run.
 **That measurement now exists, on x86-64.** `make bench-rss` (`internal/db/spike`, behind the `bench`
 tag) builds a 500k-row fixture through the real `internal/db` open path, then measures process RSS
 from `/proc/self/status` in one child process per pragma cell. On the reference x86-64 run recorded
-in **ADR-0001**: **idle 10 MB**, **peak 50 MB** for the 500k-row import, and **peak ~235 MB** for a
-saturating read workload at the shipped `cache_size = -32000` — because the page cache is
+in **ADR-0001**: **idle 10 MB**, **peak 50 MB** for the 500k-row import, and **peak ~237 MB** for a
+saturating read workload at the then-shipped `cache_size = -32000` — because the page cache is
 **per-connection**, so `cache_size` multiplies by the pool. `mmap_size` is a **no-op** under this
 driver. The two ⚠️ markers in the budget table above are therefore lifted for x86-64, and §7.7's
 pending note with them.
+
+**Both defaults moved on the strength of that run** (ADR-0001, amendment). `mmap_size` was dropped
+from the pragma list — it configured nothing — and `cache_size` was cut from `-32000` to **`-8000`**,
+which measures **~85 MB peak** on the same 4-core reference run. The read-workload figure this
+section budgets against is therefore ~85 MB, not ~237 MB. Note what the harness does **not** measure:
+query latency. `-8000` is chosen on the memory axis alone, and a latency benchmark that contradicts
+it would be grounds to revisit.
 
 **Not measured on arm64, and that is now the honest status.** The spike was written as a prerequisite
 to the schema work; the schema shipped, and the deployment target is x86-64, so the prerequisite is

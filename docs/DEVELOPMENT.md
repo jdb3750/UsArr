@@ -180,7 +180,7 @@ binary that 404s on `/`.** The Makefile wires the dependency; running `go build`
 | `make test` | `go test ./... -race -shuffle=on` plus `pnpm test`. No network, no Docker. |
 | `make test-integration` | Behind the `integration` build tag. Needs a live stack; **never in CI**. |
 | `make bench` | Wall-clock performance harness. A **release** gate on named hardware, never a merge gate. |
-| `make bench-rss` | Memory harness: idle and peak process RSS over a 500k-row database, sweeping `cache_size` × `mmap_size`. §5. |
+| `make bench-rss` | Memory harness: idle and peak process RSS over a 500k-row database, sweeping `cache_size`. §5. |
 | `make lint` | `golangci-lint run`, `svelte-check`, `eslint`. |
 | `make fmt` / `fmt-check` | Rewrite / verify formatting. |
 | `make secrets` | `gitleaks dir .` over the working tree. **Gating.** |
@@ -248,16 +248,18 @@ with the hardware and commit named, and treat regressions as a release conversat
 ### Memory: `make bench-rss`
 
 ```bash
-make bench-rss                                       # 500k rows, 9 pragma cells, ~45 s + fixture
+make bench-rss                                       # 500k rows, 3 pragma cells, ~15 s + fixture
 make bench-rss SPIKE_FLAGS='-rows=50000'             # fast smoke run
 make bench-rss SPIKE_FLAGS='-rebuild'                # rebuild the fixture, remeasure the import peak
-make bench-rss SPIKE_FLAGS='-cache=-2000 -mmap=0'    # one cell
+make bench-rss SPIKE_FLAGS='-cache=-2000'            # one cell
+make bench-rss SPIKE_FLAGS='-mmap=134217728'         # re-check mmap; see the note below
 ```
 
 **What it does.** Builds a 500k-row fixture through the **real `internal/db` open path** — so the
 pragmas under test are the ones the binary actually sets, not a copy — then walks *idle → one pinned
 read connection → the whole `NumCPU*2` read pool → a 10,000-row write burst*, sampling process RSS at
-each step, once per `cache_size` × `mmap_size` cell.
+each step, once per `cache_size` cell. `mmap_size` is no longer swept by default — it left the pragma
+list once this harness proved it inert — but `-mmap=...` still sweeps it on demand.
 
 Three properties worth knowing before you read a number off it:
 
@@ -284,6 +286,9 @@ behind the `bench` build tag, so neither compiles into a normal build.
 The current recorded result — **x86-64 only; arm64 is unmeasured** — is in ADR-0001, correction 3.
 Two things it settled: `mmap_size` is a **no-op** under this driver (mmap is compiled out), and
 `cache_size` is **per-connection**, so it multiplies by pool size rather than costing what it says.
+Both defaults changed as a result (ADR-0001, amendment): `mmap_size` was dropped from the pragma list
+and `cache_size` cut to `-8000`. That is a **memory-side** decision — this harness does not measure
+query latency.
 
 ### Rules
 

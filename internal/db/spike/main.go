@@ -1,16 +1,23 @@
 //go:build bench
 
 // Command spike measures UsArr's resident-set size on a 500,000-row SQLite
-// database, across candidate values of the two pragmas that are still marked
-// "pending measurement".
+// database, across candidate values of the memory pragmas.
 //
 // WHY THIS EXISTS. ARCHITECTURE §13's idle-RSS budget was justified by citing
 // Navidrome; Navidrome uses a cgo SQLite driver and UsArr does not, so the
 // budget rested on nothing measured (ADR-0001, correction 2). reference/sync.md
-// §6 marks cache_size and mmap_size "pending measurement" for the same reason:
+// §6 marked cache_size and mmap_size "pending measurement" for the same reason:
 // under ncruces/go-sqlite3 it was undetermined whether cache_size is
 // per-connection or shared, and whether mmap_size does anything at all. With a
-// read pool of NumCPU*2 those two questions are worth tens of megabytes.
+// read pool of NumCPU*2 those two questions were worth tens of megabytes.
+//
+// BOTH ARE ANSWERED NOW (ADR-0001 correction 3 and its amendment): cache_size is
+// per-connection, so it multiplies by the pool, and mmap_size did nothing at all
+// because this driver compiles mmap out. mmap_size was therefore dropped from
+// the pragma list and this harness no longer sweeps it by default — pass
+// -mmap=... to sweep it again, which is the check worth running if the driver
+// ever ships an mmap-capable build. cache_size is still swept: it is the live
+// knob, and its right value moves with core count.
 //
 // It is NOT architecture-specific. Memory behaviour differs by architecture,
 // page size and core count, so a result belongs to the machine that produced it
@@ -55,9 +62,13 @@ const resultPrefix = "SPIKE-RESULT "
 
 // The shipped defaults, so the report can point at the row that is current
 // behaviour. Kept as strings because that is what goes into the DSN.
+//
+// shippedMmapSize is empty because mmap_size is no longer in the pragma list
+// (ADR-0001 amendment). Empty means "override nothing", which is exactly what
+// the shipped binary does with it.
 const (
-	shippedCacheSize = "-32000"    // 32 MiB, reference/sync.md §6
-	shippedMmapSize  = "134217728" // 128 MiB
+	shippedCacheSize = "-8000" // ~7.8 MiB per connection, reference/sync.md §6
+	shippedMmapSize  = ""      // removed from the pragma list; nothing to set
 )
 
 // writeBurstBatches is how many §7.7-sized batches the peak measurement writes.
@@ -111,11 +122,15 @@ func main() {
 		childCache = flag.String("child-cache", shippedCacheSize, "internal: cache_size for the child")
 		childMmap  = flag.String("child-mmap", shippedMmapSize, "internal: mmap_size for the child")
 
-		dir     = flag.String("dir", ".dev/rss-spike", "working directory for the fixture (gitignored)")
-		out     = flag.String("out", ".dev/rss-spike.md", "write the result table here")
-		rows    = flag.Int("rows", 500_000, "fixture size in rows (ARCHITECTURE §13 says 500k)")
-		cacheL  = flag.String("cache", "-2000,-8000,-32000", "cache_size values to sweep (negative = KiB)")
-		mmapL   = flag.String("mmap", "0,67108864,134217728", "mmap_size values to sweep (bytes)")
+		dir    = flag.String("dir", ".dev/rss-spike", "working directory for the fixture (gitignored)")
+		out    = flag.String("out", ".dev/rss-spike.md", "write the result table here")
+		rows   = flag.Int("rows", 500_000, "fixture size in rows (ARCHITECTURE §13 says 500k)")
+		cacheL = flag.String("cache", "-2000,-8000,-32000", "cache_size values to sweep (negative = KiB)")
+		// Empty by default: mmap_size left the pragma list, so there is nothing
+		// to sweep. Passing values here still works and still errors if the
+		// pragma is absent — that is the re-check path if the driver ever gains
+		// an mmap-capable build.
+		mmapL   = flag.String("mmap", "", "mmap_size values to sweep (bytes); empty = not set")
 		rebuild = flag.Bool("rebuild", false, "rebuild the fixture even if a complete one exists")
 	)
 	flag.Parse()
@@ -148,6 +163,12 @@ func runParent(ctx context.Context, dir, out string, rows int, cacheVals, mmapVa
 	}
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
+	}
+	// No mmap values requested is the normal case now that mmap_size has left
+	// the pragma list. One cell per cache value, overriding nothing — not zero
+	// cells, which is what an empty inner loop would give.
+	if len(mmapVals) == 0 {
+		mmapVals = []string{""}
 	}
 
 	header := environmentReport(rows)
@@ -325,8 +346,12 @@ func runChildRead(ctx context.Context, path, cache, mmap string, rows int) error
 		res.Err = "cache_size is not in the pragma list"
 		return errors.New(res.Err)
 	}
-	if !db.SetPragmaForSpike("mmap_size", mmap) {
-		res.Err = "mmap_size is not in the pragma list"
+	// An empty mmap value means "do not override", which is the default now
+	// that mmap_size has left the pragma list. A non-empty one still fails
+	// loudly when the pragma is absent, so asking for a sweep that cannot
+	// happen is an error rather than a silent no-op.
+	if mmap != "" && !db.SetPragmaForSpike("mmap_size", mmap) {
+		res.Err = "mmap_size is not in the pragma list (removed; see ADR-0001)"
 		return errors.New(res.Err)
 	}
 
@@ -589,15 +614,21 @@ func pragmaFindings(results []childResult, readers int) string {
 
 	// mmap_size: does the driver honour it at all? Reported once per distinct
 	// requested value, not once per cell — the same finding nine times reads
-	// like nine findings.
+	// like nine findings. Nothing requested is the normal case now: the pragma
+	// was dropped after this harness proved it inert, so the report states what
+	// the connection actually has rather than a comparison it cannot make.
 	var ignoredVals []string
 	seen := map[string]bool{}
-	honoured := 0
+	honoured, unset := 0, 0
 	for _, r := range results {
 		if seen[r.MmapSize] {
 			continue
 		}
 		seen[r.MmapSize] = true
+		if r.MmapSize == "" {
+			unset++
+			continue
+		}
 		want, _ := strconv.ParseInt(r.MmapSize, 10, 64)
 		if r.EffMmapSize == want {
 			honoured++
@@ -607,6 +638,13 @@ func pragmaFindings(results []childResult, readers int) string {
 			fmt.Sprintf("`%s` read back as `%d`", r.MmapSize, r.EffMmapSize))
 	}
 	switch {
+	case unset > 0 && honoured == 0 && len(ignoredVals) == 0:
+		fmt.Fprintf(&b, "- **`mmap_size` is not in the pragma list.** It was removed (ADR-0001) "+
+			"because this driver compiles mmap out, so nothing was requested here and a pool "+
+			"connection reads back `%d`. `PRAGMA compile_options` on the build under test "+
+			"reports %s. Re-run with `-mmap=...` if the driver ever ships an mmap-capable "+
+			"build — that is the check that would justify adding the line back.\n",
+			results[0].EffMmapSize, compileOptionEvidence(results))
 	case len(ignoredVals) == 0:
 		fmt.Fprintf(&b, "- **`mmap_size` is honoured**: every requested value read back "+
 			"unchanged from a pool connection (%d distinct values).\n", honoured)
@@ -737,6 +775,9 @@ func describeCache(v string) string {
 }
 
 func describeMmap(v string) string {
+	if v == "" {
+		return "not set"
+	}
 	n, err := strconv.ParseInt(v, 10, 64)
 	if err != nil {
 		return "`" + v + "`"
