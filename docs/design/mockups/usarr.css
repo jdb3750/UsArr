@@ -76,7 +76,7 @@
 
   /* --- Type. IBM Plex Sans for UI, IBM Plex Mono for machine data.
      Both are loaded, self-hosted, from fonts.css: the Latin subsets, as
-     base64 woff2, with font-display: swap. The system stack stays in the
+     base64 woff2, with font-display: block. The system stack stays in the
      same declaration, so a blocked or failed font load degrades to the stack
      the design was reviewed against rather than to a browser default. --- */
   --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto,

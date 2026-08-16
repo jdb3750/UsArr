@@ -47,7 +47,8 @@ decision it leans on hardest was the one thing the build did not deliver.
 
 Both families are now self-hosted from `fonts.css`: IBM Plex Sans v23 (the variable font, weight
 axis 100–700) and IBM Plex Mono v20 at 400 and 600, Latin subsets, 76 KB of woff2 in total,
-`font-display: swap`, with the system stack still in the same `font-family` declaration so a
+`font-display: block` (set to match §4.1's call for the shipped product; the faces are inlined, so
+it is unobservable here), with the system stack still in the same `font-family` declaration so a
 blocked load degrades to the stack the design was reviewed against. They are embedded as base64
 data URIs rather than referenced by URL for two reasons: `prototype.html` is built as a genuinely
 single file, so a relative `url()` would break the moment it is opened anywhere else; and §13 bans

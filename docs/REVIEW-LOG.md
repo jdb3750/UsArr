@@ -1275,3 +1275,18 @@ report a finding; verifying the attribute family needs a real screen reader. And
 reference screenshots were fetched from the Navidrome repository rather than from its live demo,
 which was unreachable through the agent proxy — so the comparison is against a canonical published
 screenshot rather than against a running instance.
+
+---
+
+# Final consistency sweep — findings with no reviewer behind them
+
+**Date:** 2026-08-16. **Branch:** `claude/hearth-thread-vn9w7u`. Not a review round. These were
+turned up by a last read of the design documents against the mockup that implements them, looking
+for places where two files state opposite things. **No adversarial reviewer raised them** — they are
+recorded here under their own heading rather than folded into a round, so the log does not attribute
+to a review something a review did not find. Prefix `SW-` has not been used before, so nothing
+collides.
+
+| # | Finding | Disposition |
+|---|---|---|
+| **SW-01** | **`font-display` is specified two ways.** `DESIGN-DIRECTION.md` §4.1 says to set `font-display: block` with a short block period, or `optional`, on the reasoning that over a LAN the font always wins the race so `swap` risks a visible reflow for no benefit. `mockups/fonts.css` set `swap` on all three `@font-face` rules **and argued for it in its own header** — *"text paints immediately in that fallback and reflows once, which is the right trade for an application whose first principle is perceived speed"* — which is not a difference of emphasis but the same trade decided the opposite way, in the reference implementation of the document that decides it | **Resolved by the owner, 2026-08-16, toward §4.1, which stands.** The `swap` argument assumes a fetch slow enough for the fallback paint to be worth something; on a LAN or tailnet, with the faces embedded in the binary, the font is effectively available immediately, so that benefit never arrives while `swap`'s cost — a visible reflow — still does. All three declarations in `fonts.css` are now `block`, and the counter-argument in its header is removed rather than softened. Replacing it: a note that the prototype **inlines the faces as base64 data URIs, so there is no fetch, no race and no block period to observe** — the property is unobservable in the mockup and is set only to match what the shipped product should do. The two prose descriptions that restated the old value as fact are corrected with it (`mockups/usarr.css`'s type comment, `mockups/README.md`'s font paragraph). Nothing about the degradation story changes: the system stack stays in the same `font-family` declaration, so a blocked load still falls back to the stack the design was reviewed against |
