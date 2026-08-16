@@ -3544,7 +3544,7 @@ caller. The sentinel is deliberate: migration 0002 backfilled every pre-attribut
 reading it as *"not mine"* would hide the owner's own history from them. **The rebuttal stands** —
 authenticated route, user-scoped SQL, asserted on the bytes — **on the correct mechanism.**
 
-## RG-01.8 — JSON responses set `nosniff` but not `Cache-Control: no-store`. **Open, and NOT part of this batch.**
+## RG-01.8 — JSON responses set `nosniff` but not `Cache-Control: no-store`. **Applied by `2a2d9b1`.**
 
 `writeJSON` (`internal/httpapi/json.go:81-82`) sets `Content-Type` and `X-Content-Type-Options:
 nosniff`, and **no `Cache-Control`**. A body of release titles is exactly the thing that should not
@@ -3555,6 +3555,52 @@ into RG-01.
 **Deliberately not fixed in this commit.** A one-line change in `writeJSON` alters the headers of
 every API response at once; that is a change with its own blast radius and its own review, not a
 rider on a test conversion.
+
+✅ **Applied by `2a2d9b1`**, as its own change — which is what the deferral asked for, and the
+deferral was right: the review the change deserved is the three questions below, none of which a
+rider on a test conversion would have asked.
+
+**Scope: every `writeJSON` response, not an allowlist.** `writeJSON` is the single choke point every
+JSON body in the package crosses — every handler success, `writeError`'s error shape, and
+`recoverMiddleware`'s panic body — so one line there is what covers the endpoint someone adds next.
+A per-endpoint allowlist has the opposite failure mode: it keeps looking correct while the list falls
+behind the router. **Nothing in the tree depends on caching an API response**, and this was checked
+rather than assumed — `internal/httpapi` emits no `ETag` and no `Last-Modified` on any route, and
+`requestJson` (`web/src/lib/api.ts:511-520`) sets no `cache` option and sends no conditional request.
+The only `Cache-Control` the product wants is `internal/web`'s, on a different handler.
+
+**`no-store`, not `no-cache`.** `no-cache` permits a cache to **store** the response and merely
+requires revalidation before reuse (RFC 9111 §5.2.2.4); `no-store` forbids storing any part of it
+(§5.2.2.5). Storage is the thing objected to, so `no-cache` would buy the risk and none of the
+benefit — with no validator anywhere in the package, a cache holding a stored copy has nothing to
+revalidate against and goes to origin regardless. `private` is not added beside it: `no-store`
+already binds every cache, private ones included, and the pair only invites "which one wins".
+
+**The health endpoints are NOT exempt**, and the argument for them is operational rather than about
+privacy. They carry no user data, but a stale `ready` served out of an intermediary is precisely the
+failure that hides a process which is no longer ready, and `/api/v1/system/status` carries build and
+schema versions that `health.go:80-81` already names fingerprinting material. Exempting them would
+also be an allowlist wearing the other hat.
+
+**SSE does not collide.** `handleEvents` sets `Cache-Control: no-cache, no-transform`
+(`internal/httpapi/events.go:206-213`) and then calls `WriteHeader`; both of its error returns are
+**above** that block and every return below it is `nil`, so no `writeJSON` ever runs behind those
+headers. The stream keeps `no-cache, no-transform` unchanged — `no-transform` is the load-bearing
+half there, against a compressing proxy that would buffer the stream into uselessness, and a
+never-terminating `text/event-stream` is not a body a cache stores and replays.
+
+**Asserted, and the guard was watched failing.** `TestSecurityHeadersArePinnedOnEveryResponse`
+(`internal/httpapi/security_headers_test.go`) now compares `Cache-Control` **exactly** on both JSON
+rows, so a weakening to `no-cache` or `private` fails there. Deleting the `h.Set` fails it twice —
+`Cache-Control = "", want "no-store"` on `api_json` and on `api_error` — and restoring it passes all
+three subtests. The SPA row is deliberately blank: `internal/web` owns that policy (`immutable` for
+hashed assets, `no-cache` for the document) and `internal/web/web_test.go:111,179` pins it, so an
+assertion here would only pin the stub SPA the test installs.
+
+📝 **One thing rode along, and it is named rather than buried.** Folding `writeJSON`'s
+marshal-failure branch into the shared header block — instead of duplicating three `Set` calls —
+gives the encode-failure response the `X-Content-Type-Options: nosniff` it had been silently missing.
+The middleware set it anyway, so nothing was exposed; the divergence was the defect.
 
 ## RG-01.9 — the `outcomeSentUnknown` constant collision. **Closed by `0cb1a18`, re-verified here.**
 
