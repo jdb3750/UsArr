@@ -332,8 +332,14 @@ func bindReleaseResource(raw []byte, body map[string]any) map[string]any {
 	return nil
 }
 
-// valueBytePosition finds where prop's VALUE starts in the raw body, which is
-// what Utf8JsonReader reports when the converter throws.
+// valueBytePosition reports where prop's value ENDS in the raw body.
+//
+// Utf8JsonReader has already consumed the value token when the converter throws,
+// so BytePositionInLine points past it, not at it. The distinction is two bytes on
+// an empty string and it is the difference between a fixture that reproduces a
+// reported failure and one that merely resembles it: the live grab reported
+// BytePositionInLine 202 for a 224-byte body whose `"protocol":""` value starts at
+// 200.
 func valueBytePosition(raw []byte, prop string) int {
 	i := bytes.Index(raw, []byte(`"`+prop+`":`))
 	if i < 0 {
@@ -343,7 +349,24 @@ func valueBytePosition(raw []byte, prop string) int {
 	for pos < len(raw) && (raw[pos] == ' ' || raw[pos] == '\t') {
 		pos++
 	}
-	return pos
+	if pos < len(raw) && raw[pos] == '"' {
+		for end := pos + 1; end < len(raw); end++ {
+			if raw[end] == '\\' {
+				end++
+				continue
+			}
+			if raw[end] == '"' {
+				return end + 1
+			}
+		}
+		return len(raw)
+	}
+	for end := pos; end < len(raw); end++ {
+		if raw[end] == ',' || raw[end] == '}' {
+			return end
+		}
+	}
+	return len(raw)
 }
 
 // TestFakeProwlarrBindsTheGrabBodyStrictly proves the fixture's model binding is
@@ -360,6 +383,7 @@ func TestFakeProwlarrBindsTheGrabBodyStrictly(t *testing.T) {
 		name, body string
 		wantStatus int
 		wantErrKey string
+		wantDetail string
 	}{
 		{
 			// THE REGRESSION. A ReleaseResource zeroed down to three fields still
@@ -380,6 +404,19 @@ func TestFakeProwlarrBindsTheGrabBodyStrictly(t *testing.T) {
 			body:       `{"guid":"g","indexerId":1,"publishDate":""}`,
 			wantStatus: http.StatusBadRequest,
 			wantErrKey: "$.publishDate",
+		},
+		{
+			// THE CAPTURED BODY, verbatim from the failing install: 224 bytes, and
+			// the rejection must land on byte 202 exactly as the live Prowlarr
+			// reported. A fixture that gets the position wrong is reproducing a
+			// lookalike, not the failure.
+			name: "the body that failed on the live install",
+			body: `{"guid":"https://tracker.example/details/1234","age":0,"ageHours":0,"ageMinutes":0,` +
+				`"size":0,"indexerId":1,"imdbId":0,"tmdbId":0,"tvdbId":0,"tvMazeId":0,` +
+				`"publishDate":"0001-01-01T00:00:00Z","protocol":"","downloadClientId":3}`,
+			wantStatus: http.StatusBadRequest,
+			wantErrKey: "$.protocol",
+			wantDetail: "BytePositionInLine: 202.",
 		},
 		{
 			// An ABSENT enum is fine: the C# member keeps its default. This is the
@@ -424,8 +461,12 @@ func TestFakeProwlarrBindsTheGrabBodyStrictly(t *testing.T) {
 			if pd.Title != "One or more validation errors occurred." {
 				t.Errorf("title = %q, want ASP.NET's own wording", pd.Title)
 			}
-			if _, ok := pd.Errors[tc.wantErrKey]; !ok {
+			msgs, ok := pd.Errors[tc.wantErrKey]
+			if !ok {
 				t.Errorf("errors has no %q entry: %s", tc.wantErrKey, raw)
+			}
+			if tc.wantDetail != "" && (len(msgs) == 0 || !strings.Contains(msgs[0], tc.wantDetail)) {
+				t.Errorf("message = %v, want it to contain %q", msgs, tc.wantDetail)
 			}
 			t.Logf("%s -> %d %s", tc.body, resp.StatusCode, raw)
 		})

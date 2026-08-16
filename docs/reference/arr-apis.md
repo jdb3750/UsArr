@@ -213,8 +213,9 @@ every catalogue source added later, with a different field name each time and th
   integer ordinal). The empty string is not a member name and is **rejected outright, not treated
   as absent**: `400 One or more validation errors occurred. — $.protocol The JSON value could not
   be converted to NzbDrone.Core.Indexers.DownloadProtocol. Path: $.protocol | LineNumber: 0 |
-  BytePositionInLine: 202.` The byte position lands on the opening quote of the empty value, which
-  is how a body this small gets a two-hundred-something offset.
+  BytePositionInLine: 202.` In a 224-byte body the `""` starts at 200; `Utf8JsonReader` has already
+  consumed the token when the converter throws, so the reported position is **past** the value, not
+  at it. Worth knowing when reading one of these: the offset points just after the offending token.
 - **`"publishDate":"0001-01-01T00:00:00Z"` — bindable, and a lie.** Go's zero time parses as ISO
   8601, so it binds *(inference: not observed failing against a live instance)* — it survived only
   because Prowlarr ignores the field on this endpoint. On an endpoint that stores what it is sent,
