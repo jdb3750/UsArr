@@ -880,18 +880,20 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 .chip--failed  { color: var(--st-err);  border-color: currentColor; }
 .chip--done    { color: var(--st-ok);   border-color: currentColor; }
 
-/* Protocol swatch: achromatic, per the withdrawal note in 1. The 1px
-   --border-hi boundary carries the shape at >= 3.2:1 and there is no fill,
-   because a torrent green sitting one column from a status green is the one
-   collision this ramp cannot afford. The .proto--torrent / .proto--usenet
-   modifiers stay on the markup: they are the filter hook, and they are where a
-   single rule would go if the ecosystem's colour cue is ever restored. */
-.proto { display: inline-flex; align-items: center; gap: var(--sp-3); white-space: nowrap; }
-.proto__dot {
-  width: 8px; height: 8px; flex: none;
-  border: 1px solid var(--border-hi);
-  border-radius: var(--r-control);
-}
+/* Protocol: THERE IS NO SWATCH. The word is the whole of it.
+   The withdrawal in 1 took the FILL out of the protocol dot because a torrent
+   green sitting one column from a status green is the one collision this ramp
+   cannot afford. What it left behind was an 8px --border-hi outline that is
+   IDENTICAL on torrent and on usenet -- a mark repeated down the column that
+   distinguishes nothing, which is DESIGN-DIRECTION 1.4's own test ("if a label
+   sits next to it and the label alone would be understood, delete the
+   decoration") failing on the leftover rather than on the fill. So the dot is
+   gone from the markup too, and .proto__dot with it.
+   The .proto--torrent / .proto--usenet modifiers stay: they are the filter
+   hook, and they are still where a single rule would go if the ecosystem's
+   colour cue is ever restored -- which now means restoring a dot as well as a
+   hue, and DESIGN-DIRECTION 3.3 says so rather than promising one line. */
+.proto { white-space: nowrap; }
 
 /* Availability rollup, per ARCHITECTURE.md 6.3:
    have == total && total > 0 -> tick;  have == 0 -> cross;  else the fraction. */
