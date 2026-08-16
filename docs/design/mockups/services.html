@@ -18,8 +18,6 @@
   <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 4 2.6 17.4A2 2 0 0 0 4.3 20.4h15.4a2 2 0 0 0 1.7-3L13.7 4a2 2 0 0 0-3.4 0z"/><path d="M12 9v4.5M12 17.2h.01"/></symbol>
   <symbol id="i-x-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></symbol>
   <symbol id="i-dash-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12h7"/></symbol>
-  <symbol id="i-movie" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 4v16M16 4v16M4 8h4M4 16h4M4 12h16M16 8h4M16 16h4"/></symbol>
-  <symbol id="i-tv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M16 3l-4 4-4-4"/></symbol>
   <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></symbol>
   <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 11l5 5 5-5M12 4v12"/></symbol>
@@ -58,22 +56,66 @@
   <!-- TOPBAR END -->
 
   <!-- SIDEBAR START -->
+  <!-- Two axes, held apart. Media type is the navigation axis: a closed set of
+       six, showing only the types that have content. A library is scope, not a
+       place: one multi-select chip above the nav, reflected in the URL, and
+       never a nav entry. Jellyfin's libraryMenu.js maps every user view into
+       the drawer with no cap, pin or overflow, and that is the unbounded
+       sidebar this design refuses by construction rather than by capping. -->
   <nav class="sidebar" aria-label="Sections">
+
+    <!-- Navidrome's LibrarySelector model, including the part that matters:
+         the component renders nothing at all when the user has 0 or 1 library,
+         so no control appears for a distinction they do not have. This install
+         has seven, so it appears. -->
+    <div class="scope">
+      <button type="button" class="scope__btn" data-act="scope" aria-expanded="false" aria-controls="scope-pop">
+        <span data-slot="scope-label">All libraries (7)</span>
+        <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+      </button>
+      <div class="scope__pop" id="scope-pop" hidden>
+        <fieldset>
+          <legend>Select libraries</legend>
+          <label class="check"><input type="checkbox" data-act="scope-all" checked> Everything</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" checked> Movies</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" checked> TV</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" checked> Music</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" checked> Audiobooks</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" checked> Ebooks</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" checked> Comics</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" checked> Ongoing comics</label>
+        </fieldset>
+        <p class="scope__url">The scope is in the URL, so back, reload and share all work: <span class="mono" data-slot="scope-url">?lib=all</span></p>
+      </div>
+    </div>
+
     <ul class="nav__group">
       <li><a class="nav__link" href="index.html" data-route="home" data-primary>Home</a></li>
-      <li><a class="nav__link" href="index.html#movies" data-route="home">Movies</a></li>
-      <li><a class="nav__link" href="index.html#tv" data-route="home">TV</a></li>
+    </ul>
+
+    <!-- Media types: a closed enum, hard maximum six, and a type with no items
+         is not rendered at all. Counts respect the scope chip above. -->
+    <ul class="nav__group">
+      <li><a class="nav__link" href="search.html?type=movie" data-route="search">Movies <span class="nav__num">1,204</span></a></li>
+      <li><a class="nav__link" href="search.html?type=series" data-route="search">TV <span class="nav__num">275</span></a></li>
+      <li><a class="nav__link" href="search.html?type=music" data-route="search">Music <span class="nav__num">612</span></a></li>
+      <li><a class="nav__link" href="search.html?type=audiobook" data-route="search">Audiobooks <span class="nav__num">418</span></a></li>
+      <li><a class="nav__link" href="search.html?type=ebook" data-route="search">Ebooks <span class="nav__num">2,051</span></a></li>
+      <li><a class="nav__link" href="search.html?type=comic" data-route="search">Comics <span class="nav__num">733</span></a></li>
+    </ul>
+
+    <ul class="nav__group">
       <li><a class="nav__link" href="search.html" data-route="search" data-primary>Search</a></li>
       <li><a class="nav__link" href="requests.html" data-route="requests" data-primary>Requests</a></li>
+    </ul>
+
+    <ul class="nav__group">
       <li><a class="nav__link" href="services.html" data-route="services" data-primary aria-current="page">Services
         <span class="nav__count nav__count--err" title="2 errors">2</span></a></li>
-    </ul>
-    <ul class="nav__group">
+      <li><a class="nav__link" href="libraries.html" data-route="libraries" data-primary>Libraries</a></li>
       <li><a class="nav__link" href="services.html#settings" data-route="services">Settings</a></li>
-      <li><a class="nav__link nav__link--sub" href="services.html#settings" data-route="services">General</a></li>
-      <li><a class="nav__link nav__link--sub" href="services.html#settings" data-route="services">Tags</a></li>
-      <li><a class="nav__link nav__link--sub" href="services.html#settings" data-route="services">UI</a></li>
     </ul>
+
     <ul class="nav__group">
       <li><a class="nav__link" href="services.html#system" data-route="services">System</a></li>
       <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Status</a></li>
@@ -87,7 +129,7 @@
 
   <div class="pagehead">
     <h1>Services</h1>
-    <span class="pagehead__meta">5 rows. 1 down, 2 degraded, 1 not configured. Health is probed per instance, never globally.</span>
+    <span class="pagehead__meta">11 rows. 3 down, 2 degraded, 1 not configured. Health is probed per instance, never globally.</span>
   </div>
 
   <div class="statebar">
@@ -97,6 +139,7 @@
       <option value="live">Mixed health</option>
       <option value="reident">An instance needs re-identification</option>
       <option value="denied">Re-authentication required</option>
+      <option value="remove">Removing a service that feeds libraries</option>
       <option value="unconfigured">No services configured</option>
     </select>
     <span class="statebar__note">This control is not part of the product. It switches the screen between the states this design has to cover.</span>
@@ -109,7 +152,7 @@
     <svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>
     <div class="banner__body">
       <div class="banner__title">Sonarr no longer identifies as the instance UsArr synced with</div>
-      <div class="banner__text">Sync for this instance is paused deliberately. The instance fingerprint changed from <span class="mono">a91c4f</span> to <span class="mono">0d33b8</span>, which happens when the host is rebuilt, restored from a different backup, or repointed at another Sonarr. Re-link only if you know this is the same library.</div>
+      <div class="banner__text">Sync for this instance is paused deliberately, and every library it feeds has stopped recomputing membership. The instance fingerprint changed from <span class="mono">a91c4f</span> to <span class="mono">0d33b8</span>, which happens when the host is rebuilt, restored from a different backup, or repointed at another Sonarr. Re-link only if you know this is the same library.</div>
       <div class="verbatim" style="margin-top:8px">instance_id 1: identity_epoch 3 -&gt; 4, max_remote_id_seen 214 -&gt; 6, root_folder /media/tv -&gt; /srv/tv</div>
     </div>
     <div class="banner__actions"><button type="button" class="btn btn--primary">Re-link</button></div>
@@ -125,10 +168,20 @@
     <div class="banner__actions"><button type="button" class="btn btn--primary">Confirm your password</button></div>
   </div>
 
+  <!-- A service is not only a pipe: it is what some library is made of. -->
+  <div class="banner banner--err" data-when="remove" role="alert" hidden>
+    <svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>
+    <div class="banner__body">
+      <div class="banner__title">Audiobookshelf feeds 2 libraries. Removing it leaves one of them with no source.</div>
+      <div class="banner__text">Ebooks also draws on Kavita and will keep 209 of its 2,051 items. Audiobooks has no other source, so it becomes an orphan: it is kept, marked with the reason, and offered for deletion — never deleted for you, because it carries a name you chose, 10 corrections and the tags on 418 works. Nothing is removed from Audiobookshelf itself.</div>
+    </div>
+    <div class="banner__actions"><a href="libraries.html">Open Libraries</a><button type="button" class="btn">Remove anyway</button></div>
+  </div>
+
   <div class="section" data-when="unconfigured" hidden>
     <div class="empty">
       <div class="empty__title">No services configured</div>
-      <p class="empty__text">The first-run wizard asks for three things: which kind of service, its base URL, and an API key. The connection is tested before Save is enabled, so a typo does not become a broken install.</p>
+      <p class="empty__text">The first-run wizard asks for three things: which kind of service, its base URL, and an API key. The connection is tested before Save is enabled, so a typo does not become a broken install. On a successful connect UsArr proposes the libraries that service can see, and you accept them in one step.</p>
       <div class="empty__actions">
         <button type="button" class="btn btn--primary" data-act="dialog-open" aria-controls="add-service">Add service</button>
       </div>
@@ -136,7 +189,7 @@
   </div>
 
   <!-- The health table -------------------------------------------------- -->
-  <div data-when="live reident denied">
+  <div data-when="live reident denied remove">
     <div class="toolbar">
       <button type="button" class="btn btn--primary" data-act="dialog-open" aria-controls="add-service">Add service</button>
       <button type="button" class="btn">Test all connections</button>
@@ -152,6 +205,7 @@
             <th scope="col">State</th>
             <th scope="col">Last successful sync</th>
             <th scope="col" class="is-num">Items</th>
+            <th scope="col">Libraries</th>
             <th scope="col">Problem</th>
             <th scope="col">Action</th>
           </tr>
@@ -178,15 +232,50 @@
               </div>
             </td>
             <td data-label="Items" class="is-num">214</td>
+            <td data-label="Libraries"><a href="libraries.html">TV</a><div class="cell-sub">source and destination</div></td>
             <td data-label="Problem" class="muted">None</td>
             <td data-label="Action" class="muted">No action needed</td>
           </tr>
-          <tr id="x-sonarr" hidden><td colspan="6">
+          <tr id="x-sonarr" hidden><td colspan="7">
             <div class="detail">
               <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">CLOSED</span></li><li>Consecutive failures <span class="num">0</span></li></ul></div>
               <div><h4>Health warnings from Sonarr</h4><ul><li class="muted">None reported by <span class="mono">/api/v3/health</span></li></ul></div>
               <div><h4>Recent sync reports</h4><ul><li><span class="num">14:02</span> delta, 3 changed</li><li><span class="num">13:02</span> delta, 0 changed</li><li><span class="num">12:02</span> delta, 11 changed</li></ul></div>
               <div><h4>Clock skew</h4><ul><li><span class="num">+0.4 s</span> measured from the <span class="mono">Date</span> header</li></ul></div>
+            </div>
+          </td></tr>
+
+          <!-- healthy but skewed -->
+          <tr data-row>
+            <td data-label="Service">
+              <div class="cell-title">
+                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-anime" aria-label="Show detail for Sonarr Anime">
+                  <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+                </button>
+                Sonarr Anime <span class="chip">sonarr</span>
+              </div>
+              <div class="cell-sub mono">http://10.0.0.9:8989</div>
+            </td>
+            <td data-label="State"><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>degraded</span><div class="cell-sub">clock skew</div></td>
+            <td data-label="Last successful sync">
+              <div class="synclist">
+                <div class="synclist__row"><span class="synclist__ch">full</span><span class="synclist__t">03:20, 11 hours ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">delta</span><span class="synclist__t">14:01, 7 minutes ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">reconcile</span><span class="synclist__t">02:00, 12 hours ago</span></div>
+              </div>
+            </td>
+            <td data-label="Items" class="is-num">61</td>
+            <td data-label="Libraries"><a href="libraries.html">TV</a><div class="cell-sub">source, bound by the <span class="mono">anime</span> tag</div></td>
+            <td data-label="Problem"><div class="verbatim">clock skew +212 s measured from Date: Sun, 16 Aug 2026 14:11:32 GMT
+delta polling uses this host's clock, so recent changes can be missed</div></td>
+            <td data-label="Action"><button type="button" class="btn">Run full sync now</button></td>
+          </tr>
+          <tr id="x-anime" hidden><td colspan="7">
+            <div class="detail">
+              <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">CLOSED</span></li><li>Consecutive failures <span class="num">0</span></li></ul></div>
+              <div><h4>Health warnings from Sonarr Anime</h4><ul><li><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span> Indexers unavailable due to failures: Nyaa</li><li><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span> Enable Completed Download Handling</li></ul></div>
+              <div><h4>Recent sync reports</h4><ul><li><span class="num">14:01</span> delta, 2 changed</li><li><span class="num">13:01</span> delta, 0 changed</li><li><span class="num">12:01</span> delta, 4 changed</li></ul></div>
+              <div><h4>Clock skew</h4><ul><li><span class="num">+212 s</span>, warned above 60 s</li></ul></div>
             </div>
           </td></tr>
 
@@ -210,10 +299,11 @@
               </div>
             </td>
             <td data-label="Items" class="is-num">1,204</td>
+            <td data-label="Libraries"><a href="libraries.html">Movies</a><div class="cell-sub">source and destination</div></td>
             <td data-label="Problem"><div class="verbatim">Get "http://10.0.0.4:7878/api/v3/movie": dial tcp 10.0.0.4:7878: connect: connection refused</div></td>
             <td data-label="Action"><button type="button" class="btn">Test connection</button></td>
           </tr>
-          <tr id="x-radarr" hidden><td colspan="6">
+          <tr id="x-radarr" hidden><td colspan="7">
             <div class="detail">
               <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">OPEN</span></li><li>Next probe <span class="num">14:19</span>, in 4 minutes</li><li>Consecutive failures <span class="num">7</span></li><li>Backoff <span class="num">4 m 00 s</span>, capped at 15 m</li></ul></div>
               <div><h4>Health warnings from Radarr</h4><ul><li class="muted">Not readable while the breaker is open. Last body was empty.</li></ul></div>
@@ -222,6 +312,20 @@
             </div>
             <p class="muted">Browse and search keep working from the replica while this breaker is open. Writes to Radarr are accepted and queued.</p>
           </td></tr>
+
+          <!-- not configured: grey, not red -->
+          <tr data-row>
+            <td data-label="Service">
+              <div class="cell-title">Radarr 4K <span class="chip">radarr</span></div>
+              <div class="cell-sub muted">No base URL set</div>
+            </td>
+            <td data-label="State"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td>
+            <td data-label="Last successful sync" class="muted">Never</td>
+            <td data-label="Items" class="is-num muted">0</td>
+            <td data-label="Libraries" class="muted">None</td>
+            <td data-label="Problem" class="muted">Nothing is wrong. A 2160p instance has been named but never connected, so the Movies group on Search states "2160p not configured" once in its header rather than printing a cross on every row.</td>
+            <td data-label="Action"><button type="button" class="btn" data-act="dialog-open" aria-controls="add-service">Add service</button></td>
+          </tr>
 
           <!-- down, 401 -->
           <tr data-row>
@@ -243,11 +347,12 @@
               </div>
             </td>
             <td data-label="Items" class="is-num muted">0</td>
+            <td data-label="Libraries" class="muted">None<div class="cell-sub">Prowlarr has no library concept, so it is never a source or a destination.</div></td>
             <td data-label="Problem"><div class="verbatim">GET /api/v1/indexer 401 Unauthorized
 {"message":"Unauthorized","description":"The request requires a valid X-Api-Key header"}</div></td>
             <td data-label="Action"><button type="button" class="btn btn--primary">Update API key</button></td>
           </tr>
-          <tr id="x-prowlarr" hidden><td colspan="6">
+          <tr id="x-prowlarr" hidden><td colspan="7">
             <div class="detail">
               <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">OPEN</span></li><li>Next probe <span class="num">14:23</span>, in 8 minutes</li><li>Consecutive failures <span class="num">14</span></li></ul></div>
               <div><h4>Health warnings from Prowlarr</h4><ul><li class="muted">Not readable: the credential is rejected.</li></ul></div>
@@ -257,51 +362,200 @@
             <p class="muted">Updating a credential opens a five-minute sudo window. Prowlarr carries no library, so nothing in the catalogue changes while this is down; only indexer search is unavailable.</p>
           </td></tr>
 
-          <!-- healthy but skewed -->
+          <!-- healthy media server, the Music catalogue -->
           <tr data-row>
             <td data-label="Service">
               <div class="cell-title">
-                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-anime" aria-label="Show detail for Sonarr Anime">
+                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-navidrome" aria-label="Show detail for Navidrome">
                   <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
                 </button>
-                Sonarr Anime <span class="chip">sonarr</span>
+                Navidrome <span class="chip">navidrome</span>
               </div>
-              <div class="cell-sub mono">http://10.0.0.9:8989</div>
+              <div class="cell-sub mono">http://10.0.0.5:4533</div>
             </td>
-            <td data-label="State"><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>degraded</span><div class="cell-sub">clock skew</div></td>
+            <td data-label="State"><span class="st st--ok"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>healthy</span></td>
             <td data-label="Last successful sync">
               <div class="synclist">
-                <div class="synclist__row"><span class="synclist__ch">full</span><span class="synclist__t">03:20, 11 hours ago</span></div>
-                <div class="synclist__row"><span class="synclist__ch">delta</span><span class="synclist__t">14:01, 7 minutes ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">full</span><span class="synclist__t">02:40, 12 hours ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">delta</span><span class="synclist__t">13:40, 28 minutes ago</span></div>
                 <div class="synclist__row"><span class="synclist__ch">reconcile</span><span class="synclist__t">02:00, 12 hours ago</span></div>
               </div>
             </td>
-            <td data-label="Items" class="is-num">61</td>
-            <td data-label="Problem"><div class="verbatim">clock skew +212 s measured from Date: Sun, 16 Aug 2026 14:11:32 GMT
-delta polling uses this host's clock, so recent changes can be missed</div></td>
-            <td data-label="Action"><button type="button" class="btn">Run full sync now</button></td>
+            <td data-label="Items" class="is-num">612</td>
+            <td data-label="Libraries"><a href="libraries.html">Music</a><div class="cell-sub">source only; Lidarr is the destination</div></td>
+            <td data-label="Problem" class="muted">None</td>
+            <td data-label="Action" class="muted">No action needed</td>
           </tr>
-          <tr id="x-anime" hidden><td colspan="6">
+          <tr id="x-navidrome" hidden><td colspan="7">
             <div class="detail">
               <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">CLOSED</span></li><li>Consecutive failures <span class="num">0</span></li></ul></div>
-              <div><h4>Health warnings from Sonarr Anime</h4><ul><li><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span> Indexers unavailable due to failures: Nyaa</li><li><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span> Enable Completed Download Handling</li></ul></div>
-              <div><h4>Recent sync reports</h4><ul><li><span class="num">14:01</span> delta, 2 changed</li><li><span class="num">13:01</span> delta, 0 changed</li><li><span class="num">12:01</span> delta, 4 changed</li></ul></div>
-              <div><h4>Clock skew</h4><ul><li><span class="num">+212 s</span>, warned above 60 s</li></ul></div>
+              <div><h4>Credential</h4><ul><li>Salt and token pair from <span class="mono">POST /auth/login</span></li><li class="muted">Navidrome does not support OpenSubsonic api-key authentication, so no recoverable password is stored.</li></ul></div>
+              <div><h4>Contributes</h4><ul><li>612 artists, 4,118 albums, 51,204 tracks</li><li>1 upstream library: <span class="mono">Music</span></li></ul></div>
             </div>
           </td></tr>
 
-          <!-- not configured: grey, not red -->
+          <!-- request sink for Music, and it is down -->
           <tr data-row>
             <td data-label="Service">
-              <div class="cell-title">Radarr 4K <span class="chip">radarr</span></div>
-              <div class="cell-sub muted">No base URL set</div>
+              <div class="cell-title">
+                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-lidarr" aria-label="Show detail for Lidarr">
+                  <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+                </button>
+                Lidarr <span class="chip">lidarr</span>
+              </div>
+              <div class="cell-sub mono">http://10.0.0.4:8686</div>
             </td>
-            <td data-label="State"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td>
-            <td data-label="Last successful sync" class="muted">Never</td>
+            <td data-label="State"><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>down</span></td>
+            <td data-label="Last successful sync">
+              <div class="synclist">
+                <div class="synclist__row"><span class="synclist__ch">full</span><span class="synclist__t">03:04, 11 hours ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">delta</span><span class="synclist__t">12:41, 1 hour ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">reconcile</span><span class="synclist__t">02:00, 12 hours ago</span></div>
+              </div>
+            </td>
             <td data-label="Items" class="is-num muted">0</td>
-            <td data-label="Problem" class="muted">Nothing is wrong. A 2160p instance has been named but never connected, so 2160p availability reads "not configured" across the library rather than a cross.</td>
-            <td data-label="Action"><button type="button" class="btn" data-act="dialog-open" aria-controls="add-service">Add service</button></td>
+            <td data-label="Libraries"><a href="libraries.html">Music</a><div class="cell-sub">destination only; its catalogue is not bound as a source</div></td>
+            <td data-label="Problem"><div class="verbatim">Get "http://10.0.0.4:8686/api/v1/artist": dial tcp 10.0.0.4:8686: connect: connection refused</div></td>
+            <td data-label="Action"><button type="button" class="btn">Test connection</button></td>
           </tr>
+          <tr id="x-lidarr" hidden><td colspan="7">
+            <div class="detail">
+              <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">OPEN</span></li><li>Next probe <span class="num">14:24</span>, in 9 minutes</li><li>Consecutive failures <span class="num">5</span></li></ul></div>
+              <div><h4>Health warnings from Lidarr</h4><ul><li><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>error</span> Artist Supersilent was removed from MusicBrainz, last seen 12:41</li></ul></div>
+              <div><h4>What UsArr did with that</h4><ul><li class="muted">Nothing. Lidarr writes <span class="mono">status: deleted</span> when its metadata server returns 404 for an MBID, which an MBID merge also produces, so it is shown as a warning on home and excluded from the reconciliation sweep. 14 albums and 1,208 tracks are untouched.</li></ul></div>
+            </div>
+            <p class="muted">Requests to Lidarr are accepted and queued while this breaker is open. Music browsing is unaffected, because Navidrome is the catalogue source.</p>
+          </td></tr>
+
+          <!-- the books server, feeding two libraries -->
+          <tr data-row>
+            <td data-label="Service">
+              <div class="cell-title">
+                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-abs" aria-label="Show detail for Audiobookshelf">
+                  <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+                </button>
+                Audiobookshelf <span class="chip">audiobookshelf</span>
+              </div>
+              <div class="cell-sub mono">http://10.0.0.6:13378</div>
+            </td>
+            <td data-label="State"><span class="st st--ok"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>healthy</span></td>
+            <td data-label="Last successful sync">
+              <div class="synclist">
+                <div class="synclist__row"><span class="synclist__ch">full</span><span class="synclist__t">02:52, 12 hours ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">delta</span><span class="synclist__t">13:40, 28 minutes ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">reconcile</span><span class="synclist__t">02:00, 12 hours ago</span></div>
+              </div>
+            </td>
+            <td data-label="Items" class="is-num">2,260</td>
+            <td data-label="Libraries"><a href="libraries.html">Audiobooks</a>, <a href="libraries.html">Ebooks</a><div class="cell-sub">one upstream library, split by format</div></td>
+            <td data-label="Problem" class="muted">None</td>
+            <td data-label="Action" class="muted">No action needed</td>
+          </tr>
+          <tr id="x-abs" hidden><td colspan="7">
+            <div class="detail">
+              <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">CLOSED</span></li><li>Consecutive failures <span class="num">0</span></li></ul></div>
+              <div><h4>Upstream libraries</h4><ul><li><span class="mono">Audiobooks &amp; Ebooks</span> · <span class="mono">mediaType book</span> · 2,260 items</li><li><span class="mono">Podcasts</span> · <span class="mono">mediaType podcast</span> · <span class="muted">declined, no UsArr media type</span></li></ul></div>
+              <div><h4>Credential</h4><ul><li>Scoped API key with an expiry, from Audiobookshelf's own key model</li></ul></div>
+            </div>
+          </td></tr>
+
+          <!-- comics server, healthy but identifier-poor -->
+          <tr data-row>
+            <td data-label="Service">
+              <div class="cell-title">
+                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-komga" aria-label="Show detail for Komga">
+                  <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+                </button>
+                Komga <span class="chip">komga</span>
+              </div>
+              <div class="cell-sub mono">http://10.0.0.7:25600</div>
+            </td>
+            <td data-label="State"><span class="st st--ok"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>healthy</span></td>
+            <td data-label="Last successful sync">
+              <div class="synclist">
+                <div class="synclist__row"><span class="synclist__ch">full</span><span class="synclist__t">02:31, 12 hours ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">delta</span><span class="synclist__t">13:31, 37 minutes ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">reconcile</span><span class="synclist__t">02:00, 12 hours ago</span></div>
+              </div>
+            </td>
+            <td data-label="Items" class="is-num">512</td>
+            <td data-label="Libraries"><a href="libraries.html">Comics</a><div class="cell-sub">source only; nothing accepts comic requests</div></td>
+            <td data-label="Problem"><div class="verbatim">0 of 512 series carry an external identifier
+Komga's API exposes none, so matching is by title and cross-media links stay below the merge threshold</div></td>
+            <td data-label="Action"><a href="libraries.html">Open Libraries</a></td>
+          </tr>
+          <tr id="x-komga" hidden><td colspan="7">
+            <div class="detail">
+              <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">CLOSED</span></li><li>Consecutive failures <span class="num">0</span></li></ul></div>
+              <div><h4>Delta strategy</h4><ul><li class="muted">Komga has no "changed since" endpoint, so delta is sort-by-modified plus pagination and the reconciliation sweep does more work here than it does for an *Arr.</li></ul></div>
+              <div><h4>Contributes</h4><ul><li>512 series, 7,204 issues</li><li>1 upstream library: <span class="mono">Comics</span></li></ul></div>
+            </div>
+          </td></tr>
+
+          <!-- comics + books server, down, and identifier-gated when up -->
+          <tr data-row>
+            <td data-label="Service">
+              <div class="cell-title">
+                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-kavita" aria-label="Show detail for Kavita">
+                  <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+                </button>
+                Kavita <span class="chip">kavita</span>
+              </div>
+              <div class="cell-sub mono">http://10.0.0.7:5000</div>
+            </td>
+            <td data-label="State"><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>down</span></td>
+            <td data-label="Last successful sync">
+              <div class="synclist">
+                <div class="synclist__row"><span class="synclist__ch">full</span><span class="synclist__t">02:20, 12 hours ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">delta</span><span class="synclist__t">09:12, 5 hours ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">reconcile</span><span class="synclist__t">02:00, 12 hours ago</span></div>
+              </div>
+            </td>
+            <td data-label="Items" class="is-num">389</td>
+            <td data-label="Libraries"><a href="libraries.html">Ebooks</a>, <a href="libraries.html">Comics</a><div class="cell-sub">both showing what their other source has</div></td>
+            <td data-label="Problem"><div class="verbatim">Get "http://10.0.0.7:5000/api/Library": dial tcp 10.0.0.7:5000: connect: connection refused</div></td>
+            <td data-label="Action"><button type="button" class="btn">Test connection</button></td>
+          </tr>
+          <tr id="x-kavita" hidden><td colspan="7">
+            <div class="detail">
+              <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">OPEN</span></li><li>Next probe <span class="num">14:26</span>, in 11 minutes</li><li>Consecutive failures <span class="num">21</span></li></ul></div>
+              <div><h4>Identity coverage, last measured 09:12</h4><ul><li>340 of 389 series resolved to a work identity</li><li class="muted">Kavita's own identifier fields are null across all 389, because identifier matching is a paid subscription feature. The 108 were resolved from the identifier embedded in the file itself; the rest are matched by title.</li></ul></div>
+              <div><h4>Upstream libraries</h4><ul><li><span class="mono">Books</span> · <span class="mono">LibraryType 2</span> · 209</li><li><span class="mono">Manga</span> · <span class="mono">LibraryType 0</span> · 180</li><li><span class="mono">Wallpapers</span> · <span class="mono">LibraryType 3 (Image)</span> · <span class="muted">declined, no UsArr media type</span></li></ul></div>
+            </div>
+            <p class="muted">Ebooks and Comics stay fully browsable from the replica while this is down, and no row was removed: replicated rows follow the 7-day tombstone rather than vanishing when a source stops answering.</p>
+          </td></tr>
+
+          <!-- request sink only, and deliberately not a catalogue source -->
+          <tr data-row>
+            <td data-label="Service">
+              <div class="cell-title">
+                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-ll" aria-label="Show detail for LazyLibrarian">
+                  <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+                </button>
+                LazyLibrarian <span class="chip">lazylibrarian</span>
+              </div>
+              <div class="cell-sub mono">http://10.0.0.8:5299</div>
+            </td>
+            <td data-label="State"><span class="st st--ok"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>healthy</span></td>
+            <td data-label="Last successful sync">
+              <div class="synclist">
+                <div class="synclist__row"><span class="synclist__ch">full</span><span class="synclist__t muted">not bound as a source</span></div>
+                <div class="synclist__row"><span class="synclist__ch">delta</span><span class="synclist__t muted">not bound as a source</span></div>
+                <div class="synclist__row"><span class="synclist__ch">reconcile</span><span class="synclist__t muted">not bound as a source</span></div>
+              </div>
+            </td>
+            <td data-label="Items" class="is-num muted">0</td>
+            <td data-label="Libraries"><a href="libraries.html">Ebooks</a><div class="cell-sub">destination only</div></td>
+            <td data-label="Problem" class="muted">Nothing is wrong. Its catalogue is not bound here on purpose: LazyLibrarian matches books with a fuzzy ratio its own documentation recommends setting to 80–90%, so it is used for the request path and not as a source of truth about what you own.</td>
+            <td data-label="Action" class="muted">No action needed</td>
+          </tr>
+          <tr id="x-ll" hidden><td colspan="7">
+            <div class="detail">
+              <div><h4>Capabilities probed</h4><ul><li><span class="mono">Add</span> for <span class="mono">(book, epub)</span> and <span class="mono">(book, mobi)</span></li><li class="muted">No <span class="mono">Add</span> for an audiobook, which is why the Audiobooks library has no destination</li></ul></div>
+              <div><h4>Credential</h4><ul><li>Query-parameter API key, read-only and full keys kept separate</li></ul></div>
+              <div><h4>Version</h4><ul><li class="muted">Reports its version as <span class="mono">master</span>. The project ships no tagged releases, so UsArr pins the API shape it probed rather than a version number.</li></ul></div>
+            </div>
+          </td></tr>
 
         </tbody>
       </table>
@@ -309,8 +563,8 @@ delta polling uses this host's clock, so recent changes can be missed</div></td>
   </div>
 
   <!-- System health messages -------------------------------------------- -->
-  <section class="section" id="system" data-when="live reident denied">
-    <div class="section__head"><h2>System status</h2><span class="section__count">2 errors, 1 warning</span></div>
+  <section class="section" id="system" data-when="live reident denied remove">
+    <div class="section__head"><h2>System status</h2><span class="section__count">3 errors, 2 warnings</span></div>
     <ul>
       <li class="banner banner--err" style="margin-left:0;margin-right:0">
         <svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>
@@ -320,6 +574,18 @@ delta polling uses this host's clock, so recent changes can be missed</div></td>
       </li>
       <li class="banner banner--err" style="margin-left:0;margin-right:0">
         <svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>
+        <div class="banner__body"><div class="banner__title">Kavita has been unreachable for 5 hours</div>
+        <div class="banner__text">The last successful delta poll was 09:12. Ebooks and Comics are served from the replica.</div></div>
+        <div class="banner__actions"><button type="button" class="btn btn--sm">Test connection</button></div>
+      </li>
+      <li class="banner banner--err" style="margin-left:0;margin-right:0">
+        <svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>
+        <div class="banner__body"><div class="banner__title">Lidarr has been unreachable for 1 hour</div>
+        <div class="banner__text">Music browsing is unaffected because Navidrome is the source. Requests to Lidarr are queued.</div></div>
+        <div class="banner__actions"><button type="button" class="btn btn--sm">Test connection</button></div>
+      </li>
+      <li class="banner banner--warn" style="margin-left:0;margin-right:0">
+        <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
         <div class="banner__body"><div class="banner__title">Radarr has been unreachable for 2 hours</div>
         <div class="banner__text">The last successful delta poll was 11:47. Movie rows are served from the replica.</div></div>
         <div class="banner__actions"><button type="button" class="btn btn--sm">Test connection</button></div>
@@ -337,12 +603,13 @@ delta polling uses this host's clock, so recent changes can be missed</div></td>
        The shape self-hosters already know from Sonarr, Radarr and Prowlarr:
        a second-level section nav, a Show advanced toggle, and a save control
        that reads "No changes" and is disabled until the form is dirty. -->
-  <section class="section" id="settings" data-when="live reident denied">
+  <section class="section" id="settings" data-when="live reident denied remove">
     <div class="section__head"><h2>Settings</h2></div>
 
     <div class="settings" id="settings-box" data-advanced="off">
       <nav class="subnav" aria-label="Settings sections">
         <a href="#settings" data-group="settings" data-panel="services" aria-current="true">Services</a>
+        <a href="libraries.html">Libraries</a>
         <a href="#settings" data-group="settings" data-panel="general" aria-current="false">General</a>
         <a href="#settings" data-group="settings" data-panel="tags" aria-current="false">Tags</a>
         <a href="#settings" data-group="settings" data-panel="ui" aria-current="false">UI</a>
@@ -373,9 +640,15 @@ delta polling uses this host's clock, so recent changes can be missed</div></td>
               <select class="select" id="f-kind">
                 <option>sonarr</option>
                 <option selected>radarr</option>
+                <option>lidarr</option>
                 <option>prowlarr</option>
+                <option>navidrome</option>
+                <option>audiobookshelf</option>
+                <option>komga</option>
+                <option>kavita</option>
+                <option>lazylibrarian</option>
               </select>
-              <span class="field__help">Which application this is. Sonarr and Radarr use <span class="mono">/api/v3</span>; Prowlarr uses <span class="mono">/api/v1</span>. The version is probed, not assumed.</span>
+              <span class="field__help">Which application this is. Sonarr and Radarr use <span class="mono">/api/v3</span>; Lidarr and Prowlarr use <span class="mono">/api/v1</span>. The API version does not track the application version, and it is probed rather than assumed.</span>
             </div>
 
             <div class="field">
@@ -424,10 +697,10 @@ delta polling uses this host's clock, so recent changes can be missed</div></td>
         </div>
 
         <div data-panel-for="settings" data-panel-name="general" hidden>
-          <p class="muted">General settings are not drawn in this mockup. The four v0.1 screens are the scope.</p>
+          <p class="muted">General settings are not drawn in this mockup. The five v0.1 screens are the scope.</p>
         </div>
         <div data-panel-for="settings" data-panel-name="tags" hidden>
-          <p class="muted">Only the system tag namespaces ship in v0.1: <span class="mono">type:</span>, <span class="mono">format:</span>, <span class="mono">source:</span>, <span class="mono">quality:</span>, <span class="mono">indexer:</span>. They render as chips you can filter by but not delete. Aliases, virtual parents and the rule engine are v1.0.</p>
+          <p class="muted">Only the system tag namespaces ship in v0.1: <span class="mono">type:</span>, <span class="mono">format:</span>, <span class="mono">source:</span>, <span class="mono">quality:</span>, <span class="mono">indexer:</span>. They render as chips you can filter by but not delete. A tag is not a library: a library is a single-kind container with sources and a destination, a tag is a cross-kind label, and a saved filter is a query. Aliases, virtual parents, the rule engine and saved filters are v1.0.</p>
         </div>
         <div data-panel-for="settings" data-panel-name="ui" hidden>
           <p class="muted">Theme and density live in the top bar of every screen, and both persist. There is no colour-impaired mode setting, because every status here is an icon and a word as well as a colour.</p>
@@ -445,7 +718,13 @@ delta polling uses this host's clock, so recent changes can be missed</div></td>
           <select class="select" id="d-kind">
             <option>sonarr</option>
             <option>radarr</option>
+            <option>lidarr</option>
             <option>prowlarr</option>
+            <option>navidrome</option>
+            <option>audiobookshelf</option>
+            <option>komga</option>
+            <option>kavita</option>
+            <option>lazylibrarian</option>
           </select>
         </div>
         <div class="field">
@@ -456,7 +735,7 @@ delta polling uses this host's clock, so recent changes can be missed</div></td>
           <label class="field__label" for="d-key">API key</label>
           <input class="input" id="d-key" type="password" placeholder="Paste the key from the application's General settings">
         </div>
-        <p class="muted">The connection test is mandatory. Save stays disabled until it passes.</p>
+        <p class="muted">The connection test is mandatory. Save stays disabled until it passes. On success UsArr proposes the libraries this service can see, and you accept them in one step.</p>
       </form>
     </div>
     <div class="dialog__foot">

@@ -18,8 +18,6 @@
   <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 4 2.6 17.4A2 2 0 0 0 4.3 20.4h15.4a2 2 0 0 0 1.7-3L13.7 4a2 2 0 0 0-3.4 0z"/><path d="M12 9v4.5M12 17.2h.01"/></symbol>
   <symbol id="i-x-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></symbol>
   <symbol id="i-dash-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12h7"/></symbol>
-  <symbol id="i-movie" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 4v16M16 4v16M4 8h4M4 16h4M4 12h16M16 8h4M16 16h4"/></symbol>
-  <symbol id="i-tv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M16 3l-4 4-4-4"/></symbol>
   <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></symbol>
   <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></symbol>
   <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 11l5 5 5-5M12 4v12"/></symbol>
@@ -58,22 +56,66 @@
   <!-- TOPBAR END -->
 
   <!-- SIDEBAR START -->
+  <!-- Two axes, held apart. Media type is the navigation axis: a closed set of
+       six, showing only the types that have content. A library is scope, not a
+       place: one multi-select chip above the nav, reflected in the URL, and
+       never a nav entry. Jellyfin's libraryMenu.js maps every user view into
+       the drawer with no cap, pin or overflow, and that is the unbounded
+       sidebar this design refuses by construction rather than by capping. -->
   <nav class="sidebar" aria-label="Sections">
+
+    <!-- Navidrome's LibrarySelector model, including the part that matters:
+         the component renders nothing at all when the user has 0 or 1 library,
+         so no control appears for a distinction they do not have. This install
+         has seven, so it appears. -->
+    <div class="scope">
+      <button type="button" class="scope__btn" data-act="scope" aria-expanded="false" aria-controls="scope-pop">
+        <span data-slot="scope-label">All libraries (7)</span>
+        <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+      </button>
+      <div class="scope__pop" id="scope-pop" hidden>
+        <fieldset>
+          <legend>Select libraries</legend>
+          <label class="check"><input type="checkbox" data-act="scope-all" checked> Everything</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" checked> Movies</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" checked> TV</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" checked> Music</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" checked> Audiobooks</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" checked> Ebooks</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" checked> Comics</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" checked> Ongoing comics</label>
+        </fieldset>
+        <p class="scope__url">The scope is in the URL, so back, reload and share all work: <span class="mono" data-slot="scope-url">?lib=all</span></p>
+      </div>
+    </div>
+
     <ul class="nav__group">
       <li><a class="nav__link" href="index.html" data-route="home" data-primary>Home</a></li>
-      <li><a class="nav__link" href="index.html#movies" data-route="home">Movies</a></li>
-      <li><a class="nav__link" href="index.html#tv" data-route="home">TV</a></li>
+    </ul>
+
+    <!-- Media types: a closed enum, hard maximum six, and a type with no items
+         is not rendered at all. Counts respect the scope chip above. -->
+    <ul class="nav__group">
+      <li><a class="nav__link" href="search.html?type=movie" data-route="search">Movies <span class="nav__num">1,204</span></a></li>
+      <li><a class="nav__link" href="search.html?type=series" data-route="search">TV <span class="nav__num">275</span></a></li>
+      <li><a class="nav__link" href="search.html?type=music" data-route="search">Music <span class="nav__num">612</span></a></li>
+      <li><a class="nav__link" href="search.html?type=audiobook" data-route="search">Audiobooks <span class="nav__num">418</span></a></li>
+      <li><a class="nav__link" href="search.html?type=ebook" data-route="search">Ebooks <span class="nav__num">2,051</span></a></li>
+      <li><a class="nav__link" href="search.html?type=comic" data-route="search">Comics <span class="nav__num">733</span></a></li>
+    </ul>
+
+    <ul class="nav__group">
       <li><a class="nav__link" href="search.html" data-route="search" data-primary>Search</a></li>
       <li><a class="nav__link" href="requests.html" data-route="requests" data-primary aria-current="page">Requests</a></li>
+    </ul>
+
+    <ul class="nav__group">
       <li><a class="nav__link" href="services.html" data-route="services" data-primary>Services
         <span class="nav__count nav__count--err" title="2 errors">2</span></a></li>
-    </ul>
-    <ul class="nav__group">
+      <li><a class="nav__link" href="libraries.html" data-route="libraries" data-primary>Libraries</a></li>
       <li><a class="nav__link" href="services.html#settings" data-route="services">Settings</a></li>
-      <li><a class="nav__link nav__link--sub" href="services.html#settings" data-route="services">General</a></li>
-      <li><a class="nav__link nav__link--sub" href="services.html#settings" data-route="services">Tags</a></li>
-      <li><a class="nav__link nav__link--sub" href="services.html#settings" data-route="services">UI</a></li>
     </ul>
+
     <ul class="nav__group">
       <li><a class="nav__link" href="services.html#system" data-route="services">System</a></li>
       <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Status</a></li>
@@ -96,7 +138,10 @@
     <select id="st-requests" class="select" data-act="state" data-scope="pg-requests">
       <option value="live">Results, fan-out complete</option>
       <option value="partial">Results, fan-out in progress</option>
-      <option value="empty">Search ran, nothing found</option>
+      <option value="expired">Results left open past the grab window</option>
+      <option value="nosink">Audiobook search, nothing will import it</option>
+      <option value="empty">Search ran, nothing matched</option>
+      <option value="allfail">Search ran, every indexer failed</option>
       <option value="denied">One indexer refused the account</option>
       <option value="error">Prowlarr unreachable</option>
       <option value="unconfigured">No Prowlarr configured</option>
@@ -119,26 +164,36 @@
     </div>
   </div>
 
-  <!-- Search form: Prowlarr's own shape, in Prowlarr's own words. --------- -->
-  <form class="toolbar" data-when="live partial empty denied error" onsubmit="return false">
+  <!-- Search form: Prowlarr's own shape, in Prowlarr's own words, with the
+       real Newznab numbers beside the names. Prowlarr's search types are
+       Basic, Movie, TV, Music and Book -- there is no comic type, so comics
+       and manga go through Basic on the Books tree. -->
+  <form class="toolbar" data-when="live partial expired empty allfail denied error" onsubmit="return false">
     <label class="toolbar__label" for="q">Query</label>
-    <input class="input" id="q" type="search" value="dune part two" style="flex:1 1 260px">
+    <input class="input" id="q" type="search" value="dune part two" style="flex:1 1 200px">
 
     <label class="toolbar__label" for="stype">Search type</label>
     <select class="select" id="stype">
       <option>Basic</option>
-      <option>TV</option>
       <option selected>Movie</option>
+      <option>TV</option>
+      <option>Music</option>
+      <option>Book</option>
     </select>
 
     <label class="toolbar__label" for="indexers">Indexers</label>
-    <select class="select" id="indexers" multiple size="3" style="flex:0 1 200px">
+    <select class="select" id="indexers" multiple size="3" style="flex:0 1 190px">
       <optgroup label="Torrents">
         <option selected>TorrentLeech</option>
         <option selected>IPTorrents</option>
         <option selected>PassThePopcorn</option>
         <option selected>HDBits</option>
         <option selected>TorrentDay</option>
+        <option>MyAnonaMouse</option>
+        <option>Bibliotik</option>
+        <option>Redacted</option>
+        <option>Orpheus</option>
+        <option>Nyaa</option>
       </optgroup>
       <optgroup label="Usenet">
         <option selected>NZBgeek</option>
@@ -149,16 +204,43 @@
     </select>
 
     <label class="toolbar__label" for="cats">Category</label>
-    <select class="select" id="cats" multiple size="3" style="flex:0 1 180px">
-      <option selected>Movies</option>
-      <option>Movies/UHD</option>
-      <option>Movies/HD</option>
-      <option>Movies/SD</option>
-      <option>TV</option>
+    <select class="select" id="cats" multiple size="3" style="flex:0 1 210px">
+      <optgroup label="Movies">
+        <option selected>2000 Movies</option>
+        <option>2030 Movies/SD</option>
+        <option>2040 Movies/HD</option>
+        <option>2045 Movies/UHD</option>
+        <option>2050 Movies/BluRay</option>
+        <option>2080 Movies/WEB-DL</option>
+      </optgroup>
+      <optgroup label="TV">
+        <option>5000 TV</option>
+        <option>5030 TV/SD</option>
+        <option>5040 TV/HD</option>
+        <option>5045 TV/UHD</option>
+        <option>5070 TV/Anime</option>
+      </optgroup>
+      <optgroup label="Audio">
+        <option>3000 Audio</option>
+        <option>3010 Audio/MP3</option>
+        <option>3030 Audio/Audiobook</option>
+        <option>3040 Audio/Lossless</option>
+        <option>3050 Audio/Other</option>
+      </optgroup>
+      <optgroup label="Books">
+        <option>7000 Books</option>
+        <option>7010 Books/Mags</option>
+        <option>7020 Books/EBook</option>
+        <option>7030 Books/Comics</option>
+        <option>7040 Books/Technical</option>
+        <option>7060 Books/Foreign</option>
+      </optgroup>
     </select>
 
     <button type="submit" class="btn btn--primary">Search</button>
   </form>
+
+  <p class="section note" data-when="live partial expired empty allfail denied error"><span class="statebar__tag">mockup</span> The numbers are the Newznab categories Prowlarr actually uses, and two of them are the ones people get wrong. <span class="mono">3030 Audio/Audiobook</span> sits under <span class="mono">3000 Audio</span>, not under <span class="mono">7000 Books</span>, so an audiobook rule that sends 7020 finds nothing. And there is no manga category anywhere in the standard tree: Nyaa maps its literature categories to <span class="mono">7000 Books</span>, not to <span class="mono">7030 Books/Comics</span>, so a comics search filtered on 7030 returns zero manga.</p>
 
   <div class="banner banner--err" data-when="error" role="alert" hidden>
     <svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>
@@ -171,14 +253,50 @@
     <div class="banner__actions"><a href="services.html">Update API key</a></div>
   </div>
 
+  <!-- Two empty states, and they are not the same screen. Prowlarr answers a
+       search where every indexer failed with HTTP 200 and an empty array,
+       byte for byte the same as a search that genuinely matched nothing. The
+       only way to tell them apart is to correlate against
+       /api/v1/indexerstatus, which UsArr does, so that this screen can say
+       which of the two happened. -->
   <div class="section" data-when="empty" hidden>
     <div class="empty">
-      <div class="empty__title">No search results found</div>
-      <p class="empty__text">All 9 indexers answered and none of them has a release matching <span class="mono">dune part twoo</span> in the Movies categories. Indexer search matches the release name as the indexer stores it, so a typo in the query returns nothing.</p>
+      <div class="empty__title">No releases matched</div>
+      <p class="empty__text">All 9 indexers answered and none of them has a release matching <span class="mono">dune part twoo</span> in Movies. Indexer search matches the release name as the indexer stores it, so a typo in the query returns nothing rather than a near miss.</p>
       <div class="empty__actions">
         <button type="button" class="btn btn--primary">Search all categories</button>
         <button type="button" class="btn">Edit the query</button>
       </div>
+    </div>
+  </div>
+
+  <div class="section" data-when="allfail" hidden>
+    <div class="empty">
+      <div class="empty__title">Every indexer failed, so this is not a result</div>
+      <p class="empty__text">Prowlarr answered with an empty list, which is exactly what it answers when nothing matched. It is not the same thing, and UsArr checked <span class="mono">/api/v1/indexerstatus</span> before drawing this screen. 0 of 9 indexers returned a result and all 9 are in a failure state, so the honest answer is that the search did not run, not that your query found nothing.</p>
+      <div class="empty__actions">
+        <a class="btn btn--primary" href="services.html">Open Services</a>
+        <button type="button" class="btn">Retry the search</button>
+      </div>
+    </div>
+    <div class="tablewrap">
+      <table class="tbl tbl--stack" aria-label="Indexer failures">
+        <thead>
+          <tr>
+            <th scope="col">Indexer</th>
+            <th scope="col">State</th>
+            <th scope="col">What Prowlarr reports</th>
+            <th scope="col">Retry</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td data-label="Indexer" class="mono">TorrentLeech</td><td data-label="State"><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>disabled</span></td><td data-label="What Prowlarr reports"><div class="verbatim">Request to TorrentLeech failed: The remote name could not be resolved: 'www.torrentleech.org'</div></td><td data-label="Retry" class="num">14:23</td></tr>
+          <tr><td data-label="Indexer" class="mono">IPTorrents</td><td data-label="State"><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>disabled</span></td><td data-label="What Prowlarr reports"><div class="verbatim">Request to IPTorrents failed: No connection could be made because the target machine actively refused it</div></td><td data-label="Retry" class="num">14:23</td></tr>
+          <tr><td data-label="Indexer" class="mono">HDBits</td><td data-label="State"><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>disabled</span></td><td data-label="What Prowlarr reports"><div class="verbatim">Request to HDBits failed: The remote name could not be resolved: 'hdbits.org'</div></td><td data-label="Retry" class="num">14:31</td></tr>
+          <tr><td data-label="Indexer" class="mono">NZBgeek</td><td data-label="State"><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>disabled</span></td><td data-label="What Prowlarr reports"><div class="verbatim">Request to NZBgeek failed: The remote name could not be resolved: 'api.nzbgeek.info'</div></td><td data-label="Retry" class="num">14:31</td></tr>
+          <tr><td data-label="Indexer" colspan="4" class="muted">5 more indexers in the same state. Every one of the nine failed to resolve or connect, which is what a broken DNS resolver on this host looks like from here.</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -199,6 +317,12 @@
     <span>112 releases, 10 shown after de-duplication</span>
   </div>
 
+  <div class="fanout" data-when="expired" role="status" hidden>
+    <span class="fanout__count">9 of 9</span> indexers responded
+    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:100%"></span></span>
+    <span>14 releases, 2 shown after de-duplication</span>
+  </div>
+
   <div class="fanout" data-when="denied" role="status" hidden>
     <span class="fanout__count">8 of 9</span> indexers responded
     <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:89%"></span></span>
@@ -217,14 +341,30 @@
     <div class="banner__actions"><a href="services.html">Open Services</a></div>
   </div>
 
+  <!-- The grab window. Prowlarr serves a grab from an in-process cache keyed
+       to the search that produced it, held for 30 minutes and wiped by a
+       restart. A results page left open outlives it, so the rows say so and
+       the grab control becomes "Search again" rather than a button that
+       throws when it is pressed. -->
+  <div class="banner banner--warn" data-when="expired" role="status" hidden>
+    <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
+    <div class="banner__body">
+      <div class="banner__title">This search is 34 minutes old, so its releases can no longer be grabbed</div>
+      <div class="banner__text">Prowlarr holds a grabbable release for 30 minutes in memory, keyed to the search that returned it, and a Prowlarr restart clears that cache early. The rows below are still worth reading — sizes, seeders, flags and indexers are all real — but grabbing any of them needs the search running again. Nothing here fails silently and nothing is offered as grabbable when it is not.</div>
+    </div>
+    <div class="banner__actions"><button type="button" class="btn btn--primary">Search again</button></div>
+  </div>
+
   <!-- Results ------------------------------------------------------------ -->
-  <div data-when="live partial denied">
+  <div data-when="live partial expired denied">
     <div class="toolbar">
-      <button type="button" class="btn btn--primary" data-act="grab-bulk" disabled>Grab release(s)</button>
+      <button type="button" class="btn btn--primary" data-act="grab-bulk" disabled data-when="live partial denied">Grab release(s)</button>
+      <button type="button" class="btn btn--primary" data-when="expired" hidden>Search again</button>
       <button type="button" class="btn">Filter</button>
       <button type="button" class="btn">Options</button>
       <div class="toolbar__spacer"></div>
-      <span class="toolbar__label">Sorted by Age ascending. Grab window expires in <span class="num">18</span> minutes; an expired release is never offered as grabbable.</span>
+      <span class="toolbar__label" data-when="live partial denied">Sorted by Age ascending. The grab window closes in <span class="num">18</span> minutes; an expired release is never offered as grabbable.</span>
+      <span class="toolbar__label" data-when="expired" hidden>Sorted by Age ascending. The grab window closed <span class="num">4</span> minutes ago.</span>
     </div>
 
     <div class="tablewrap">
@@ -259,7 +399,26 @@
             <td data-label="Indexer flags"><span class="chip">internal</span> <span class="chip">freeleech</span></td>
             <td data-label="Actions"><div class="cell-actions">
               <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open this release on TorrentLeech"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+              <a href="#" aria-label="Open the TorrentLeech page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <!-- Same release, past the grab window. The control is not a
+               disabled download button: it is the action that actually works. -->
+          <tr data-when="expired" hidden>
+            <td data-label="Select" class="muted">n/a</td>
+            <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-label="Age" class="is-num">2 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.2160p.UHD.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-FraMeSToR</span><div data-slot="grabstate"><span class="chip">grab window closed 4 minutes ago</span></div></td>
+            <td data-label="Indexer" class="mono">TorrentLeech</td>
+            <td data-label="Size" class="is-num">68.4 GB</td>
+            <td data-label="Grabs" class="is-num">214</td>
+            <td data-label="Peers" class="is-num">41 / 9</td>
+            <td data-label="Category">Movies/UHD</td>
+            <td data-label="Indexer flags"><span class="chip">internal</span> <span class="chip">freeleech</span></td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--sm">Search again</button>
+              <a href="#" aria-label="Open the TorrentLeech page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
@@ -276,7 +435,24 @@
             <td data-label="Indexer flags" class="muted">None</td>
             <td data-label="Actions"><div class="cell-actions">
               <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open this release on NZBgeek"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+              <a href="#" aria-label="Open the NZBgeek page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <tr data-when="expired" hidden>
+            <td data-label="Select" class="muted">n/a</td>
+            <td data-label="Protocol"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-label="Age" class="is-num">3 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-FLUX</span><div data-slot="grabstate"><span class="chip">grab window closed 4 minutes ago</span></div></td>
+            <td data-label="Indexer" class="mono">NZBgeek</td>
+            <td data-label="Size" class="is-num">21.7 GB</td>
+            <td data-label="Grabs" class="is-num">1,208</td>
+            <td data-label="Peers" class="is-num muted">n/a</td>
+            <td data-label="Category">Movies/UHD</td>
+            <td data-label="Indexer flags" class="muted">None</td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--sm">Search again</button>
+              <a href="#" aria-label="Open the NZBgeek page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
@@ -293,7 +469,7 @@
             <td data-label="Indexer flags" class="muted">None</td>
             <td data-label="Actions"><div class="cell-actions">
               <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open this release on TorrentDay"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+              <a href="#" aria-label="Open the TorrentDay page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
@@ -310,7 +486,7 @@
             <td data-label="Indexer flags" class="muted">None</td>
             <td data-label="Actions"><div class="cell-actions">
               <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open this release on DrunkenSlug"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+              <a href="#" aria-label="Open the DrunkenSlug page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
@@ -329,7 +505,7 @@
             <td data-label="Indexer flags"><span class="chip">repack</span></td>
             <td data-label="Actions"><div class="cell-actions">
               <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release" disabled><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open this release on IPTorrents"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+              <a href="#" aria-label="Open the IPTorrents page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
@@ -347,7 +523,7 @@
             <td data-label="Indexer flags"><span class="chip">internal</span></td>
             <td data-label="Actions"><div class="cell-actions">
               <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release" disabled><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open this release on PassThePopcorn"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+              <a href="#" aria-label="Open the PassThePopcorn page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
@@ -364,7 +540,7 @@
             <td data-label="Indexer flags" class="muted">None</td>
             <td data-label="Actions"><div class="cell-actions">
               <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open this release on NZBFinder"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+              <a href="#" aria-label="Open the NZBFinder page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
@@ -381,7 +557,7 @@
             <td data-label="Indexer flags" class="muted">None</td>
             <td data-label="Actions"><div class="cell-actions">
               <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open this release on TorrentLeech"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+              <a href="#" aria-label="Open the TorrentLeech page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
@@ -399,7 +575,7 @@
             <td data-label="Indexer flags"><span class="chip">internal</span></td>
             <td data-label="Actions"><div class="cell-actions">
               <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open this release on HDBits"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+              <a href="#" aria-label="Open the HDBits page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
@@ -416,7 +592,7 @@
             <td data-label="Indexer flags"><span class="chip">proper</span></td>
             <td data-label="Actions"><div class="cell-actions">
               <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open this release on abNZB"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+              <a href="#" aria-label="Open the abNZB page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
@@ -424,9 +600,206 @@
       </table>
     </div>
 
-    <p class="section note"><span class="statebar__tag">mockup</span> A grab is acknowledged, not applied optimistically. The button writes a queued command and the row shows <span class="chip chip--pending">pending</span> until Prowlarr answers. A failure changes that chip on the same visible row and raises a message carrying the upstream text verbatim, with Retry and Dismiss. The row never silently reverts. Grabbing the 26-day-old HDBits release above is wired to fail, so that path is reachable from this page.</p>
+    <p class="section note" data-when="live partial denied"><span class="statebar__tag">mockup</span> A grab is acknowledged, not applied optimistically. The button writes a queued command and the row shows <span class="chip chip--pending">pending</span> until Prowlarr answers. A failure changes that chip on the same visible row and raises a message carrying the upstream text verbatim, with Retry and Dismiss. The row never silently reverts. Grabbing the 26-day-old HDBits release above is wired to fail, so that path is reachable from this page.</p>
 
-    <p class="section note"><span class="statebar__tag">mockup</span> Grabs are recorded in <span class="mono">provenance</span>, so if a Sonarr or Radarr is added later and imports the file, the download id joins back to the release these indexers returned. UsArr does not track what happens to the download, and does not talk to a download client itself.</p>
+    <p class="section note" data-when="live partial denied"><span class="statebar__tag">mockup</span> The external-link icon on each row opens the indexer's own page for that release. It is never a download link. Prowlarr's <span class="mono">downloadUrl</span> and <span class="mono">magnetUrl</span> carry its API key in the query string, and that key is full-admin, so neither field is sent to the browser at all: Grab posts an opaque release id to UsArr, and UsArr talks to Prowlarr.</p>
+
+    <p class="section note" data-when="live partial denied"><span class="statebar__tag">mockup</span> Grabs are recorded in <span class="mono">provenance</span>, so if a Sonarr or Radarr is added later and imports the file, the download id joins back to the release these indexers returned. UsArr does not track what happens to the download, and does not talk to a download client itself.</p>
+  </div>
+
+  <!-- =====================================================================
+       The honest dead end. No *Arr owns audiobooks: Readarr was archived on
+       2025-06-27, LazyLibrarian is a request sink for ebooks on this install
+       and nothing at all accepts an audiobook. So the grab lands in the
+       download client and stops there. That is a required state, not an
+       omission, and drawing a progress bar over it would be a lie.
+       ===================================================================== -->
+  <div data-when="nosink" hidden>
+    <form class="toolbar" onsubmit="return false">
+      <label class="toolbar__label" for="q2">Query</label>
+      <input class="input" id="q2" type="search" value="the wager david grann" style="flex:1 1 200px">
+
+      <label class="toolbar__label" for="stype2">Search type</label>
+      <select class="select" id="stype2">
+        <option>Basic</option>
+        <option>Movie</option>
+        <option>TV</option>
+        <option>Music</option>
+        <option selected>Book</option>
+      </select>
+
+      <label class="toolbar__label" for="indexers2">Indexers</label>
+      <select class="select" id="indexers2" multiple size="3" style="flex:0 1 190px">
+        <optgroup label="Torrents">
+          <option selected>MyAnonaMouse</option>
+          <option selected>Bibliotik</option>
+          <option>TorrentLeech</option>
+        </optgroup>
+        <optgroup label="Usenet">
+          <option selected>NZBgeek</option>
+          <option selected>DrunkenSlug</option>
+          <option selected>abNZB</option>
+        </optgroup>
+      </select>
+
+      <label class="toolbar__label" for="cats2">Category</label>
+      <select class="select" id="cats2" multiple size="3" style="flex:0 1 210px">
+        <optgroup label="Audio">
+          <option selected>3030 Audio/Audiobook</option>
+          <option>3000 Audio</option>
+          <option>3010 Audio/MP3</option>
+        </optgroup>
+        <optgroup label="Books">
+          <option selected>7020 Books/EBook</option>
+          <option>7000 Books</option>
+          <option>7040 Books/Technical</option>
+        </optgroup>
+      </select>
+
+      <button type="submit" class="btn btn--primary">Search</button>
+    </form>
+
+    <div class="banner banner--warn" role="status">
+      <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
+      <div class="banner__body">
+        <div class="banner__title">Nothing on this install imports an audiobook, so a grab ends in your download client</div>
+        <div class="banner__text">The Audiobooks library has no request destination. Readarr was archived on 27 June 2025, and the one service here that accepts book requests, LazyLibrarian, is the destination for Ebooks only. Grabbing works and the file will download; after that no service renames it, moves it into a library, or tells UsArr what became of it. The same is true of Comics on this install. Audiobookshelf will show the book once you have put the file somewhere it watches.</div>
+      </div>
+      <div class="banner__actions"><a href="libraries.html">Open Libraries</a></div>
+    </div>
+
+    <div class="fanout" role="status">
+      <span class="fanout__count">5 of 5</span> indexers responded
+      <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:100%"></span></span>
+      <span>38 releases, 6 shown after de-duplication</span>
+    </div>
+
+    <div class="toolbar">
+      <button type="button" class="btn btn--primary" data-act="grab-bulk" disabled>Grab release(s)</button>
+      <button type="button" class="btn">Filter</button>
+      <button type="button" class="btn">Options</button>
+      <div class="toolbar__spacer"></div>
+      <span class="toolbar__label">Sorted by Age ascending. The grab window closes in <span class="num">27</span> minutes.</span>
+    </div>
+
+    <div class="tablewrap">
+      <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Audiobook release results">
+        <thead>
+          <tr>
+            <th scope="col">Select</th>
+            <th scope="col">Protocol</th>
+            <th scope="col" class="is-num">Age</th>
+            <th scope="col">Title</th>
+            <th scope="col">Indexer</th>
+            <th scope="col" class="is-num">Size</th>
+            <th scope="col" class="is-num">Grabs</th>
+            <th scope="col" class="is-num">Peers</th>
+            <th scope="col">Category</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- The grab that already happened. It says what is true and stops:
+               sent to a download client, and no importer exists. There is no
+               progress bar, because UsArr has nothing to measure. -->
+          <tr>
+            <td data-label="Select" class="muted">n/a</td>
+            <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-label="Age" class="is-num">3 years</td>
+            <td data-label="Title"><span class="mono">David Grann - The Wager {Dion Graham} [2023] M4B 125kbps</span><div data-slot="grabstate"><span class="chip chip--done">grabbed 14:07 · sent to qBittorrent</span> <span class="chip">no service imports audiobooks</span></div></td>
+            <td data-label="Indexer" class="mono">MyAnonaMouse</td>
+            <td data-label="Size" class="is-num">682 MB</td>
+            <td data-label="Grabs" class="is-num">1,904</td>
+            <td data-label="Peers" class="is-num">62 / 3</td>
+            <td data-label="Category">Audio/Audiobook</td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" aria-label="Grab this release" disabled><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open the MyAnonaMouse page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+          <tr>
+            <td data-label="Select"><label class="sr" for="a2">Select this release</label><input type="checkbox" id="a2" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-label="Age" class="is-num">3 years</td>
+            <td data-label="Title"><span class="mono">The.Wager.A.Tale.of.Shipwreck.Mutiny.and.Murder.2023.Unabridged.M4B.64k.Dion.Graham</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">NZBgeek</td>
+            <td data-label="Size" class="is-num">246 MB</td>
+            <td data-label="Grabs" class="is-num">308</td>
+            <td data-label="Peers" class="is-num muted">n/a</td>
+            <td data-label="Category">Audio/Audiobook</td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open the NZBgeek page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+          <tr>
+            <td data-label="Select"><label class="sr" for="a3">Select this release</label><input type="checkbox" id="a3" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-label="Age" class="is-num">2 years</td>
+            <td data-label="Title"><span class="mono">David Grann - The Wager [2023] MP3 64kbps CBR {Dion Graham}</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">MyAnonaMouse</td>
+            <td data-label="Size" class="is-num">241 MB</td>
+            <td data-label="Grabs" class="is-num">612</td>
+            <td data-label="Peers" class="is-num">18 / 1</td>
+            <td data-label="Category">Audio/Audiobook</td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open the MyAnonaMouse page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+          <tr>
+            <td data-label="Select"><label class="sr" for="a4">Select this release</label><input type="checkbox" id="a4" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-label="Age" class="is-num">3 years</td>
+            <td data-label="Title"><span class="mono">David.Grann-The.Wager-2023-Retail-M4B</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">abNZB</td>
+            <td data-label="Size" class="is-num">701 MB</td>
+            <td data-label="Grabs" class="is-num">96</td>
+            <td data-label="Peers" class="is-num muted">n/a</td>
+            <td data-label="Category">Audio/Audiobook</td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open the abNZB page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+          <!-- Selecting both 3030 and 7020 is deliberate: the ebook and the
+               audiobook are two editions of one work, and only the category
+               tells them apart. -->
+          <tr>
+            <td data-label="Select"><label class="sr" for="a5">Select this release</label><input type="checkbox" id="a5" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-label="Age" class="is-num">3 years</td>
+            <td data-label="Title"><span class="mono">David Grann - The Wager (Doubleday, 2023) [EPUB]</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">Bibliotik</td>
+            <td data-label="Size" class="is-num">4.2 MB</td>
+            <td data-label="Grabs" class="is-num">241</td>
+            <td data-label="Peers" class="is-num">9 / 0</td>
+            <td data-label="Category">Books/EBook</td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open the Bibliotik page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+          <tr>
+            <td data-label="Select"><label class="sr" for="a6">Select this release</label><input type="checkbox" id="a6" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-label="Age" class="is-num">11 months</td>
+            <td data-label="Title"><span class="mono">The.Wager.David.Grann.2023.Retail.EPUB.MOBI</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">DrunkenSlug</td>
+            <td data-label="Size" class="is-num">7.8 MB</td>
+            <td data-label="Grabs" class="is-num">54</td>
+            <td data-label="Peers" class="is-num muted">n/a</td>
+            <td data-label="Category">Books/EBook</td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open the DrunkenSlug page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="section note"><span class="statebar__tag">mockup</span> The first row is the whole point of this state. It reads <span class="chip chip--done">grabbed 14:07 · sent to qBittorrent</span> and then it stops. There is no progress bar, no percentage and no "importing" step, because on this install nothing imports an audiobook and UsArr would have nothing to measure. The Ebooks library does have a destination, so the same screen would carry a request state for the EPUB rows if the *Arr-backed path had shipped — that path is v0.2.</p>
   </div>
 
 </main>

@@ -1,8 +1,9 @@
 /* UsArr static mockup behaviour.
    Vanilla JS, no dependencies, no animation library.
    Scope, deliberately narrow: theme toggle, density control, sidebar toggle,
-   section/tab switching, the dialog, the states switcher, roving tabindex,
-   and the acknowledged-write demonstration on the requests screen.
+   the library scope chip, section/tab switching, the dialog, the states
+   switcher, roving tabindex, and the acknowledged-write demonstration on the
+   requests screen.
    Nothing here animates anything on a render path. */
 (function () {
   'use strict';
@@ -77,6 +78,69 @@
       sideBtn.setAttribute('aria-expanded', collapsed ? 'true' : 'false');
       sideBtn.setAttribute('aria-label', collapsed ? 'Hide the sidebar' : 'Show the sidebar');
     });
+  }
+
+  /* ---- library scope chip ---------------------------------------------
+     Navidrome's LibrarySelector: a multi-select filter, not a mode. The chip
+     always states the current scope in words, so a control that hides content
+     can never be silent about what it hid. The checkboxes are native, which
+     is why Space, arrows and Escape all work without a keyboard handler. */
+  var scopeBtn = document.querySelector('[data-act="scope"]');
+  if (scopeBtn) {
+    var scopePop = document.getElementById(scopeBtn.getAttribute('aria-controls'));
+    var scopeLabel = scopeBtn.querySelector('[data-slot="scope-label"]');
+    var scopeUrl = scopePop.querySelector('[data-slot="scope-url"]');
+    var libBoxes = scopePop.querySelectorAll('[data-act="scope-lib"]');
+    var allBox = scopePop.querySelector('[data-act="scope-all"]');
+
+    function paintScope() {
+      var total = libBoxes.length;
+      var on = 0;
+      var names = [];
+      for (var i = 0; i < libBoxes.length; i++) {
+        if (!libBoxes[i].checked) continue;
+        on++;
+        names.push(libBoxes[i].parentNode.textContent.trim().toLowerCase().replace(/\s+/g, '-'));
+      }
+      allBox.checked = on === total;
+      allBox.indeterminate = on > 0 && on < total;
+      if (on === 0) scopeLabel.textContent = 'None (0 of ' + total + ')';
+      else if (on === total) scopeLabel.textContent = 'All libraries (' + total + ')';
+      else scopeLabel.textContent = on + ' of ' + total + ' libraries';
+      scopeUrl.textContent = on === total ? '?lib=all' : '?lib=' + (names.join(',') || 'none');
+    }
+
+    function openScope(open) {
+      scopePop.hidden = !open;
+      scopeBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    scopeBtn.addEventListener('click', function () {
+      openScope(scopePop.hidden);
+    });
+    scopePop.addEventListener('change', function (ev) {
+      if (ev.target === allBox) {
+        for (var i = 0; i < libBoxes.length; i++) libBoxes[i].checked = allBox.checked;
+      }
+      paintScope();
+    });
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key === 'Escape' && !scopePop.hidden) { openScope(false); scopeBtn.focus(); }
+      /* "l" opens the scope, matching "/" for search. Both have a visible,
+         mouse-reachable equivalent; neither is the only path to anything. */
+      if (ev.key !== 'l' || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+      var tag = document.activeElement && document.activeElement.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      ev.preventDefault();
+      openScope(true);
+      allBox.focus();
+    });
+    document.addEventListener('click', function (ev) {
+      if (scopePop.hidden) return;
+      if (ev.target.closest('.scope')) return;
+      openScope(false);
+    });
+    paintScope();
   }
 
   /* ---- states switcher (a mockup affordance, labelled as one) ---------- */
@@ -329,7 +393,7 @@
     box.select();
   });
 
-  /* ---- prototype.html only: hash routing between the four screens ------ */
+  /* ---- prototype.html only: hash routing between the five screens ------ */
   var pages = document.querySelectorAll('[data-page]');
   if (pages.length > 1) {
     var route = function () {

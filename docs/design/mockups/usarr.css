@@ -347,6 +347,63 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .nav__count--err  { color: var(--st-err); }
 .nav__count--warn { color: var(--st-warn); }
 
+/* A media-type count is a number, not a badge: right-aligned, tabular, no
+   border. The bordered pill above stays what it is -- a severity badge. */
+.nav__num {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+}
+
+/* Library scope chip: Navidrome's LibrarySelector model. A multi-select
+   filter above the nav, never a nav list. It renders nothing at 0 or 1
+   library, exactly as Navidrome's component returns null, so no control
+   appears for a distinction the user does not have. */
+.scope { position: relative; padding: 0 var(--sp-5) var(--sp-4); }
+.scope__btn {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: 26px;
+  padding: 0 var(--sp-3);
+  background: var(--bg);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-control);
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--t-hover) var(--ease);
+}
+.scope__btn:hover { background: var(--hover); }
+.scope__btn .i:last-child { margin-left: auto; }
+.scope__pop {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% - var(--sp-2));
+  left: var(--sp-5);
+  right: var(--sp-5);
+  min-width: 176px;
+  padding: var(--sp-4);
+  background: var(--bg);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-float);
+  box-shadow: var(--shadow-float);
+}
+.scope__pop fieldset { border: 0; margin: 0; padding: 0; }
+.scope__pop legend { padding: 0 0 var(--sp-3); font-size: var(--fs-sm); font-weight: 600; }
+.scope__pop .check { padding: var(--sp-2) 0; font-size: var(--fs-sm); }
+.scope__url {
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--fg-muted);
+}
+
 /* Main */
 .main {
   grid-area: main;
@@ -369,6 +426,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .pagehead__meta { color: var(--fg-muted); font-size: var(--fs-sm); line-height: var(--lh-sm); }
 
 .section { padding: 0 var(--sp-6) var(--sp-7); }
+/* Result groups inside one result set sit closer than page regions do.
+   Padding differs by role: intra-row, inter-row, inter-group, inter-region. */
+.section--group { padding-bottom: var(--sp-5); }
 .section__head {
   display: flex;
   align-items: center;
@@ -387,6 +447,46 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .section__count { color: var(--fg-muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
 .section__actions { margin-left: auto; display: flex; gap: var(--sp-4); align-items: center; }
+
+/* Home block A and block B sit side by side on a wide viewport, because a
+   six-row summary and a three-row attention list each waste a 1200px column
+   on their own, and stacking them costs the unified table below five rows of
+   the fold. One column below 1100px, and block A takes the full width on its
+   own whenever block B is absent. */
+.homegrid { display: grid; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1100px) {
+  .homegrid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); }
+}
+
+/* LevelBar: the one genuine per-type divergence is hierarchy depth (a film is
+   one level, an album is three), and it is a breadcrumb over an unchanged
+   container rather than a different screen. Komga's LibraryNavigation is the
+   same idea: a row of level controls above a grid that does not change. */
+.levels { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; min-width: 0; }
+.levels a { color: var(--fg-muted); }
+.levels a:hover { color: var(--fg); }
+.levels__sep { color: var(--fg-faint); }
+.levels__here { font-weight: 600; }
+
+/* Type filter chips on search: only types with hits, each carrying its count,
+   each a real href that sets &type=. One row, and it is not navigation. */
+.typechips { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); }
+.typechips a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 24px;
+  padding: 0 var(--sp-4);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-control);
+  font-size: var(--fs-sm);
+  text-decoration: none;
+  color: var(--fg-muted);
+  transition: background-color var(--t-hover) var(--ease);
+}
+.typechips a:hover { background: var(--hover); color: var(--fg); }
+.typechips a[aria-current="page"] { background: var(--selected); color: var(--fg); font-weight: 600; }
+.typechips .num { color: var(--fg-muted); }
 
 /* --- 2.3 Controls -------------------------------------------------------- */
 
@@ -678,18 +778,22 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 .detail h4 { font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: 600; margin-bottom: var(--sp-3); color: var(--fg-muted); }
 .detail li { display: flex; gap: var(--sp-3); padding: var(--sp-1) 0; font-size: var(--fs-sm); line-height: var(--lh-sm); }
 
-/* --- 2.7 Poster strips (the one place a card is justified) --------------- */
+/* --- 2.7 Poster grid (the one place a card is justified) ----------------- */
 
-.strip {
-  display: flex;
-  gap: var(--sp-4);
-  overflow-x: auto;
-  padding-bottom: var(--sp-3);
-  scrollbar-width: thin;
+/* A wrapping grid, never a horizontal strip. Six media types would have meant
+   six carousels, which is ~16 items above the fold against the >= 25 floor in
+   DESIGN-DIRECTION.md 5.3, and jellyfin/jellyfin#16615 asked for exactly this
+   wrapping grid and was closed as not planned. Nothing on any screen here
+   scrolls sideways to reveal content. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: var(--sp-5) var(--sp-4);
+  align-items: start;
 }
 .card {
-  flex: 0 0 104px;
   display: block;
+  min-width: 0;
   text-decoration: none;
   color: inherit;
 }
@@ -697,6 +801,11 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 .card:hover .card__art { border-color: var(--border-hi); }
 /* dominant_color fill with the title and year set over it. No image files,
    no grey shimmer box. aspect-ratio reserves the space so nothing shifts. */
+/* Aspect is chosen from the item's own art, not from its media type: 2:3 for
+   film, series, book and comic covers; 1:1 for an album or an artist. That is
+   Jellyfin's cardBuilder branching on primaryImageAspectRatio, which is why
+   one card component serves every type. */
+.card--sq .card__art { aspect-ratio: 1 / 1; }
 .card__art {
   aspect-ratio: 2 / 3;
   background: var(--dc, var(--surface));
