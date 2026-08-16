@@ -216,7 +216,7 @@ These are not new. They are restated because every decision below is downstream 
 | **ARCHITECTURE §17.1** | **No animation on any list, grid or navigation transition** |
 | **ARCHITECTURE §17.1** | **Density is a feature**, and compact is what loads |
 | **ARCHITECTURE §17.1** | **Every screen usable on a phone browser** — responsive layout, not a separate mobile design |
-| **ARCHITECTURE §17.1 / §4.4.1** | **No skeleton shimmer.** The image placeholder is a `dominant_color` block with the title in it: informative, not decorative |
+| **ARCHITECTURE §17.1 / §4.4.1** | **No skeleton shimmer.** The image placeholder is a `dominant_color` block — the cover's own average colour, reserved at the right aspect before the image arrives. Informative, not decorative, and it never pulses. **The title sits below it, not in it** (§9.7) |
 | **ARCHITECTURE §2.3 / §5.5 / §17.7** | Degraded ≠ blocked. A small **non-modal** banner. **The catalogue never greys out and never shows a spinner** |
 | **ARCHITECTURE §13** | Client-side prefix filter p50 < 5 ms, p99 < 16 ms — one frame. The UI's own budget, not the server's |
 | **ARCHITECTURE §16** (amended by ADR-0032, then re-sequenced) | **v0.1 connects three services: Sonarr, Radarr and Prowlarr.** The six media types stay in the model and the navigation, but **v0.1 has no catalogue source for music, audiobooks, ebooks or comics** — the read-only catalogue sources (**Navidrome, Audiobookshelf, Kavita**, then Komga) sequence **after** v0.1, one at a time, so the \*Arr library sync proves the replica thesis on real data first. Of the pair, **Kavita is the one that ships and Komga follows it** — ADR-0032 cut Kavita and **ADR-0035 reversed that**, because Kavita is the install the owner actually runs and it covers books, comics and manga in one source. ARCHITECTURE §16 is authoritative for which milestone each lands in. The **command sinks are all out of v0.1**, and they do not all land together: **LazyLibrarian is v0.3** (the first Tier 1 manifest, request sink only), while **Lidarr, Mylar3 and Kapowarr are v1.0**. Requests in v0.1 is the **Prowlarr Search-and-Grab path only — for all six types**, which is what keeps the four sourceless types navigable |
@@ -792,10 +792,11 @@ hidden behind a preference.
 The replica architecture removes the only case a skeleton would serve — a full-page load of remote
 data. So the policy is not austerity; the case simply does not arise.
 
-**This is not in tension with §17.1's "a skeleton is a `dominant_color` block with the title in
-it".** That is an *image placeholder*: a reserved box carrying the item's real identity, present
-because §4.4.1 makes `dominant_color` available before ThumbHash. It is content, not a shimmer, and
-it never pulses.
+**This is not in tension with §17.1's `dominant_color` placeholder.** That is an *image
+placeholder*: a reserved box carrying the cover's own average colour, present because §4.4.1 makes
+`dominant_color` available before ThumbHash. It is the item's real data rather than a stand-in
+animation — it never pulses, and what it replaces is a grey box, not the title. The title is not in
+it; §9.7 puts the title and year below the tile, on the chrome's own ground.
 
 ### 7.2 The four tiers
 
@@ -1631,8 +1632,13 @@ else. Rules:
   solves it by not attempting it — Navidrome sets the album and artist names below the cover, in
   the chrome — and so does every \*Arr poster view. **This deletes a subsystem from this surface
   rather than adding a scrim to it**, which is `CLAUDE.md`'s "cut before you add" working in the
-  right direction. §11's `dominant_color` rule is **narrowed, not withdrawn**: it still governs any
-  text set on a computed fill, which is the row-level dominant tint, where the ground is known.
+  right direction. §11's `dominant_color` rule is **retained without a call site, and that is
+  stated rather than dressed up**: it still binds any surface that sets text on a computed fill, and
+  after this change **no surface does** — the poster card was the only one, in the mockups and in
+  `web/src/app.css` alike. So it is a rule waiting for a case, not a rule doing work, and §11's CI
+  assertion has nothing to run over until one appears. Recording it that way is the point: a rule
+  described as active over a surface that does not exist is the invented status `CLAUDE.md` bans,
+  and it is also how a deleted subsystem grows back.
 - Design to the **fixed width allowlist**: `92, 154, 200, 342, 500, 780, orig`. An arbitrary `?w=`
   is refused as a cache-poisoning DoS (§4.4).
 - Availability renders per §6.3's rollup rule: `have == total && total > 0` → ✓; `have == 0` → ✗;
@@ -1990,12 +1996,19 @@ SC 1.4.11, which is why `tokens.css` separates `--border` from `--border-strong`
 
 **The one colour in the system that is *data*, and the rule it needs.** Every token above is a fixed
 value that can be checked once. `dominant_color` is not: ARCHITECTURE §4.4.1 computes it at runtime
-as one average over the 92 px poster fetch, and the poster card renders the title (12 px / 600) and
-year on top of it. **Nothing constrained the pair, and the shipped sample data already fails** —
+as one average over the 92 px poster fetch. The poster card **used to** render the title (12 px /
+600) and year on top of it, nothing constrained the pair, and the shipped sample data failed —
 `#16130e` on `#7d6a4f` is **3.57:1** for the title and **3.12:1** for the year, against 4.5:1 for
-both. One bad hand-picked swatch would be a nit; having no rule is the finding, because with an
-average taken over arbitrary cover art, mid-luminance fills are common and *both* black and white
+both. One bad hand-picked swatch would have been a nit; having no rule was the finding, because with
+an average taken over arbitrary cover art, mid-luminance fills are common and *both* black and white
 land near 3.5:1 on them.
+
+**§9.7 resolved that by moving the text rather than by constraining the colour**, and the rule below
+survives it as a general one. The reason the move beats the constraint is worth keeping: a solver
+constrains against a **single averaged colour**, and real cover art is not one colour — a white
+title over the light half of a Blue Note sleeve fails whatever the average says. The poster title
+and year are now ordinary `--fg` / `--fg-muted` on a known ground, which the contrast sweep above
+already covers.
 
 > **Pick whichever of the two theme text tokens scores higher against the computed
 > `dominant_color`. If the winner is still below 4.5:1, adjust `dominant_color`'s lightness — away
@@ -2006,8 +2019,11 @@ Two supporting rules, because otherwise the ratio is not computable from what sh
 title nor the year carries `opacity`** — compositing changes the effective ratio (by ~0.45 on the
 measured pair) through a mechanism no contrast check sees, so the year gets a real colour token.
 And **12 px semibold is normal text under WCAG, not large** (large is ≥18.66 px bold or ≥24 px), so
-4.5:1 applies to both lines. **Asserted in CI over any `--dc` / `--dc-fg` pair that ships in a
-fixture**, and in the image pipeline where the colour is produced (ARCHITECTURE §4.4.1).
+4.5:1 applies to both lines. **Asserted in CI over any computed-fill / foreground pair that ships in
+a fixture** — and as of §9.7 **no such pair ships**, so the assertion currently has nothing to run
+over and must not be reported as passing. It binds the moment a surface sets text on a computed
+fill, and it binds in the image pipeline where the colour is produced regardless (ARCHITECTURE
+§4.4.1).
 
 **Two ARIA requirements the grid-row primitive creates, both stated as requirements rather than as
 review items**, because a hand-built grid supplies nothing a native `<table>` supplies for free
@@ -2035,6 +2051,47 @@ review items**, because a hand-built grid supplies nothing a native `<table>` su
   by side. Absence from that tree is therefore not evidence of anything. **Verifying these attributes
   needs a real screen reader**, which is what GOV.UK's own strategy (cited below) says about
   automated checking generally.
+- 🚩 **A row expander is a second `role="row"`, it consumes a row index, and both index and count
+  have to account for it.** §17.3 makes the expander a requirement rather than a nicety — the breaker
+  state, an *Arr's own health warnings and the verbatim upstream text all live behind it, because
+  §9.1 is explicit that an explanation is not a cell value at all — so the primitive owns it and the
+  contract is stated here rather than rediscovered per screen. **It cannot be a `region`**, however
+  much better that would read: a `rowgroup`'s owned elements are rows and nothing else, so an
+  expander that is not a row is a child its parent may not own. Four consequences, and the last two
+  are the ones a hand-written implementation gets wrong:
+  **(a)** it renders *only* when open, so a collapsed list costs nothing in the DOM, which is what
+  keeps "Load more" cheap on a screen whose rows are otherwise one line;
+  **(b)** `colspan` means nothing to a grid, so the spanning cell says so in grid terms
+  (`grid-column: 1 / -1`) and repeats the fact to the accessibility tree with `aria-colspan`;
+  **(c)** because an open expander is a real row, `aria-rowindex` is a **running total** rather than
+  `offset + i + 2` — the moment one row opens, position arithmetic done in the template is wrong for
+  every row beneath it, and a confidently wrong position arriving through the accessibility tree is
+  exactly what the bullet above exists to prevent;
+  **(d)** and `aria-rowcount` has to include the open expanders for the same reason, or the count
+  and the indices disagree and the user is told "row 9 of 7". Bumping the index without bumping the
+  count is the natural half-fix and it is worse than neither.
+  **The expander carries no row identity**, which is what keeps it out of the roving model: the list
+  stays one tab stop and arrowing walks services, not services and their expanders alternately. That
+  is the same requirement as the keyboard model below, reached from the other side.
+
+  📌 **Written against the shipped component, not against a sketch: `web/src/lib/List.svelte`
+  implements all of the above** — `laidOut` computes the running index, `declaredTotal` adds the open
+  expanders to the count, and the expander `<tr>` is the one row in the list with no `data-key`.
+  **Two places the implementation is more specific than this document was**, both recorded here so
+  the contract and the code do not drift:
+  **`--row-lines` and `--row-ci` are the same seam in different units.** The mockups declare a
+  unitless multiplier per list and compute
+  `auto calc(2 * var(--row-py) + var(--row-lines) * var(--lh-base))`; the component declares
+  `--row-ci` as a **measured content-box height in px**, defaulting to `ROW_INTRINSIC` per density
+  and overridable per list via the `rowIntrinsic` prop. Both satisfy §7.4's "declared per list from
+  that list's own rendered rows"; neither is the other's literal value, so a number must never be
+  copied between them.
+  **And the component writes `--cols` and `--row-ci` through `element.style.setProperty()`**, because
+  the server sends `style-src 'self'` with no `'unsafe-inline'` and a `style` attribute is therefore
+  refused — it stays in the DOM and applies nothing, which is the kind of failure that survives
+  review because the attribute is still visible in the inspector. That is the same constraint
+  `check.mjs` §1d enforces over the mockups, and the same reason CSSOM mutation is explicitly not
+  banned there.
 - **No status glyph may have an empty accessible name**, and availability is the case that matters:
   §9.5 already requires *"icon + text + colour, in that order of importance"* and that *"removing
   the colour must leave it fully legible"*. An icon-only ✓ or ✗ leaves **nothing** — a screen-reader
@@ -2413,7 +2470,10 @@ widened, and nothing else. The `[review]` rules below are still human judgement 
   to the fix.
 - `[review]` Contrast re-measured in both themes when any token changes.
 - `[grep]` **Every `dominant_color` / foreground pair in a fixture clears 4.5:1** (§11). This is the
-  one colour that is data rather than a token, so it cannot be checked once.
+  one colour that is data rather than a token, so it cannot be checked once. ⚠️ **No such pair ships
+  today** — §9.7 moved the poster title off the fill and the constraint machinery was deleted with
+  it — so this line is armed and idle. Do not record it as passing; it has nothing to check until a
+  surface sets text on a computed fill again.
 - `[review]` No live region missing on a determinate progress readout or on a control that changes a
   visible summary string — the scope chip's label and the indexer fan-out count are both Tier 3-ish
   readouts that a sighted user watches change and a screen-reader user is told nothing about.

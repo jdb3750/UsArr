@@ -1312,40 +1312,71 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 }
 .card:hover { text-decoration: none; }
 .card:hover .card__art { border-color: var(--border-hi); }
-/* dominant_color fill with the title and year set over it. No image files,
-   no grey shimmer box. aspect-ratio reserves the space so nothing shifts. */
-/* Aspect is chosen from the item's own art, not from its media type: 2:3 for
+/* The image placeholder: a dominant_color fill, no image files, no grey
+   shimmer box. aspect-ratio reserves the space so nothing shifts when the real
+   cover arrives.
+
+   Aspect is chosen from the item's own art, not from its media type: 2:3 for
    film, series, book and comic covers; 1:1 for an album or an artist. That is
    Jellyfin's cardBuilder branching on primaryImageAspectRatio, which is why
    one card component serves every type. */
 .card--sq .card__art { aspect-ratio: 1 / 1; }
 .card__art {
+  /* display:block is load-bearing, not tidiness. .card__art is a <span>, and
+     aspect-ratio does not apply to an inline box -- the tile collapsed to
+     2x19px the moment the old `display: flex` came off with the text it used
+     to lay out. Caught by the render comparison, which is the whole reason
+     this change was measured rather than eyeballed. */
+  display: block;
   aspect-ratio: 2 / 3;
   background: var(--dc, var(--surface));
-  color: var(--dc-fg, var(--fg));
   border: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding: var(--sp-4);
 }
-/* dominant_color is the only colour in this design that is *data*: it is
-   averaged from cover art at import time, so no token system constrains it and
-   a mid-luminance fill lands both black and white near 3.5:1. The rule, applied
-   in usarr.js and enforced there rather than hoped for here:
+/* THE TITLE AND YEAR SIT BELOW THE TILE, ON THE CHROME'S OWN GROUND, and this
+   is §9.7's rule rather than a preference -- the mockup was simply the last
+   thing still doing it the old way.
 
-     1. compute the fill's relative luminance;
-     2. pick whichever of the two theme text tokens scores higher against it;
-     3. if the winner is still below 4.5:1, move the *fill* -- darken or lighten
-        --dc until it clears. The fill is decoration; the title is content.
+   They used to be set inside .card__art, over the fill, which is why usarr.js
+   carried a runtime WCAG solver: pick the better of the two theme text tokens
+   against the computed fill, then move the FILL until the pair cleared 4.5:1.
+   That machinery is deleted, and not because it was broken. It could not have
+   been made safe by improving it: it constrained against a SINGLE AVERAGED
+   colour, and real cover art is not one colour -- a white title over the light
+   half of a Blue Note sleeve, or over a manga cover with a white top-left
+   corner, fails whatever the average says. Navidrome, the reference point,
+   solves it by not attempting it, and so does every *Arr poster view.
 
-   There is deliberately no opacity on the year. opacity composites, so the
-   resulting ratio is not computable from the two tokens -- the shipped
-   `opacity: .85` cost about 0.45 and took the worst pair to 3.12:1 against a
-   4.5:1 floor. The year is separated from the title by size and weight, which
-   cost nothing and are measurable. */
-.card__t { font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: 600; }
-.card__y { font-size: var(--fs-xs); line-height: var(--lh-xs); font-variant-numeric: tabular-nums; font-weight: 400; }
+   On a known ground these are ordinary tokens, and the ratio stops being a
+   runtime computation nobody can check: --fg and --fg-muted are asserted at 12
+   and 5.5 against all five grounds in both themes by check.mjs section 3. The
+   deliberate absence of opacity survives the move and is now cheap to keep --
+   opacity composites, so a ratio taken from the two tokens would not be the
+   ratio that renders. The year is separated by size and weight, which cost
+   nothing and are measurable.
+
+   display:block because these are spans in a block card; without it the title
+   and year would run together on one line. Titles wrap rather than being
+   clamped: a poster title is an identity field, §9.1 wants ellipsis-plus-title
+   on those rather than silent truncation, and a line clamp is silent. The cost
+   is that cards in a row can differ in height -- .grid already sets
+   align-items: start, so they hang from the row top, which is what Jellyfin
+   and Navidrome both do. */
+.card__t {
+  display: block;
+  padding-top: var(--sp-3);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  font-weight: 600;
+  color: var(--fg);
+}
+.card__y {
+  display: block;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  color: var(--fg-muted);
+}
 .card__meta {
   display: flex;
   align-items: center;
@@ -2502,40 +2533,40 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
          comic cover, 1:1 for an album. Nothing here scrolls sideways. -->
     <div data-panel-for="homeview" data-panel-name="posters" hidden>
       <div class="grid" data-inst="full" data-roving=".card" data-roving-axis="horizontal" aria-label="Recently added across all media types">
-        <a class="card" href="#recent" data-dc="#7d6a4f"><span class="card__art"><span class="card__t">Dune: Part Two</span><span class="card__y">2024</span></span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card card--sq" href="#recent" data-dc="#8a9184"><span class="card__art"><span class="card__t">Geogaddi</span><span class="card__y">2002</span></span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#5c3f42"><span class="card__art"><span class="card__t">Saga #61</span><span class="card__y">2025</span></span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#443345"><span class="card__art"><span class="card__t">ER</span><span class="card__y">1994</span></span><span class="card__meta">episode <span class="avail avail--part">250/331</span></span></a>
-        <a class="card" href="#recent" data-dc="#3f4a3c"><span class="card__art"><span class="card__t">The Overstory</span><span class="card__y">2018</span></span><span class="card__meta">ebook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#2f3a44"><span class="card__art"><span class="card__t">Piranesi</span><span class="card__y">2020</span></span><span class="card__meta">audiobook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card card--sq" href="#recent" data-dc="#2c3330"><span class="card__art"><span class="card__t">Untrue</span><span class="card__y">2007</span></span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#9c8a6e"><span class="card__art"><span class="card__t">Chainsaw Man vol. 12</span><span class="card__y">2023</span></span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#55483a"><span class="card__art"><span class="card__t">The Zone of Interest</span><span class="card__y">2023</span></span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#4a3b30"><span class="card__art"><span class="card__t">Shogun</span><span class="card__y">2024</span></span><span class="card__meta">episode <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>10/10</span></span></a>
-        <a class="card" href="#recent" data-dc="#7f8a90"><span class="card__art"><span class="card__t">The Wager</span><span class="card__y">2023</span></span><span class="card__meta">audiobook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#2a3b3f"><span class="card__art"><span class="card__t">Piranesi</span><span class="card__y">2020</span></span><span class="card__meta">ebook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card card--sq" href="#recent" data-dc="#6b5744"><span class="card__art"><span class="card__t">Since I Left You</span><span class="card__y">2000</span></span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#34443c"><span class="card__art"><span class="card__t">Monstress #50</span><span class="card__y">2024</span></span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#2f3a3d"><span class="card__art"><span class="card__t">Anatomy of a Fall</span><span class="card__y">2023</span></span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#26333f"><span class="card__art"><span class="card__t">Severance</span><span class="card__y">2022</span></span><span class="card__meta">episode <span class="avail avail--part">17/19</span></span></a>
-        <a class="card card--sq" href="#recent" data-dc="#78736c"><span class="card__art"><span class="card__t">In Rainbows</span><span class="card__y">2007</span></span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#7d8a93"><span class="card__art"><span class="card__t">Blindsight</span><span class="card__y">2006</span></span><span class="card__meta">ebook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#3d2f2b"><span class="card__art"><span class="card__t">Berserk vol. 41</span><span class="card__y">2019</span></span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#463c2f"><span class="card__art"><span class="card__t">Project Hail Mary</span><span class="card__y">2021</span></span><span class="card__meta">audiobook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#4a5a63"><span class="card__art"><span class="card__t">Past Lives</span><span class="card__y">2023</span></span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card card--sq" href="#recent" data-dc="#5a4038"><span class="card__art"><span class="card__t">Ys</span><span class="card__y">2006</span></span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#3e4438"><span class="card__art"><span class="card__t">Slow Horses</span><span class="card__y">2022</span></span><span class="card__meta">episode <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>24/24</span></span></a>
-        <a class="card card--sq" href="#recent" data-dc="#33393b"><span class="card__art"><span class="card__t">Spirit of Eden</span><span class="card__y">1988</span></span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#7d6a4f"><span class="card__art"></span><span class="card__t">Dune: Part Two</span><span class="card__y">2024</span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card card--sq" href="#recent" data-dc="#8a9184"><span class="card__art"></span><span class="card__t">Geogaddi</span><span class="card__y">2002</span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#5c3f42"><span class="card__art"></span><span class="card__t">Saga #61</span><span class="card__y">2025</span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#443345"><span class="card__art"></span><span class="card__t">ER</span><span class="card__y">1994</span><span class="card__meta">episode <span class="avail avail--part">250/331</span></span></a>
+        <a class="card" href="#recent" data-dc="#3f4a3c"><span class="card__art"></span><span class="card__t">The Overstory</span><span class="card__y">2018</span><span class="card__meta">ebook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#2f3a44"><span class="card__art"></span><span class="card__t">Piranesi</span><span class="card__y">2020</span><span class="card__meta">audiobook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card card--sq" href="#recent" data-dc="#2c3330"><span class="card__art"></span><span class="card__t">Untrue</span><span class="card__y">2007</span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#9c8a6e"><span class="card__art"></span><span class="card__t">Chainsaw Man vol. 12</span><span class="card__y">2023</span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#55483a"><span class="card__art"></span><span class="card__t">The Zone of Interest</span><span class="card__y">2023</span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#4a3b30"><span class="card__art"></span><span class="card__t">Shogun</span><span class="card__y">2024</span><span class="card__meta">episode <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>10/10</span></span></a>
+        <a class="card" href="#recent" data-dc="#7f8a90"><span class="card__art"></span><span class="card__t">The Wager</span><span class="card__y">2023</span><span class="card__meta">audiobook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#2a3b3f"><span class="card__art"></span><span class="card__t">Piranesi</span><span class="card__y">2020</span><span class="card__meta">ebook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card card--sq" href="#recent" data-dc="#6b5744"><span class="card__art"></span><span class="card__t">Since I Left You</span><span class="card__y">2000</span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#34443c"><span class="card__art"></span><span class="card__t">Monstress #50</span><span class="card__y">2024</span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#2f3a3d"><span class="card__art"></span><span class="card__t">Anatomy of a Fall</span><span class="card__y">2023</span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#26333f"><span class="card__art"></span><span class="card__t">Severance</span><span class="card__y">2022</span><span class="card__meta">episode <span class="avail avail--part">17/19</span></span></a>
+        <a class="card card--sq" href="#recent" data-dc="#78736c"><span class="card__art"></span><span class="card__t">In Rainbows</span><span class="card__y">2007</span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#7d8a93"><span class="card__art"></span><span class="card__t">Blindsight</span><span class="card__y">2006</span><span class="card__meta">ebook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#3d2f2b"><span class="card__art"></span><span class="card__t">Berserk vol. 41</span><span class="card__y">2019</span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#463c2f"><span class="card__art"></span><span class="card__t">Project Hail Mary</span><span class="card__y">2021</span><span class="card__meta">audiobook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#4a5a63"><span class="card__art"></span><span class="card__t">Past Lives</span><span class="card__y">2023</span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card card--sq" href="#recent" data-dc="#5a4038"><span class="card__art"></span><span class="card__t">Ys</span><span class="card__y">2006</span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#3e4438"><span class="card__art"></span><span class="card__t">Slow Horses</span><span class="card__y">2022</span><span class="card__meta">episode <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>24/24</span></span></a>
+        <a class="card card--sq" href="#recent" data-dc="#33393b"><span class="card__art"></span><span class="card__t">Spirit of Eden</span><span class="card__y">1988</span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
       </div>
       <div class="grid" data-roving=".card" data-roving-axis="horizontal" aria-label="Recently added across all media types" data-inst="v01" hidden>
-        <a class="card" href="#recent" data-dc="#7d6a4f"><span class="card__art"><span class="card__t">Dune: Part Two</span><span class="card__y">2024</span></span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#443345"><span class="card__art"><span class="card__t">ER</span><span class="card__y">1994</span></span><span class="card__meta">episode <span class="avail avail--part">250/331</span></span></a>
-        <a class="card" href="#recent" data-dc="#55483a"><span class="card__art"><span class="card__t">The Zone of Interest</span><span class="card__y">2023</span></span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#4a3b30"><span class="card__art"><span class="card__t">Shogun</span><span class="card__y">2024</span></span><span class="card__meta">episode <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>10/10</span></span></a>
-        <a class="card" href="#recent" data-dc="#2f3a3d"><span class="card__art"><span class="card__t">Anatomy of a Fall</span><span class="card__y">2023</span></span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#26333f"><span class="card__art"><span class="card__t">Severance</span><span class="card__y">2022</span></span><span class="card__meta">episode <span class="avail avail--part">17/19</span></span></a>
-        <a class="card" href="#recent" data-dc="#4a5a63"><span class="card__art"><span class="card__t">Past Lives</span><span class="card__y">2023</span></span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#3e4438"><span class="card__art"><span class="card__t">Slow Horses</span><span class="card__y">2022</span></span><span class="card__meta">episode <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>24/24</span></span></a>
+        <a class="card" href="#recent" data-dc="#7d6a4f"><span class="card__art"></span><span class="card__t">Dune: Part Two</span><span class="card__y">2024</span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#443345"><span class="card__art"></span><span class="card__t">ER</span><span class="card__y">1994</span><span class="card__meta">episode <span class="avail avail--part">250/331</span></span></a>
+        <a class="card" href="#recent" data-dc="#55483a"><span class="card__art"></span><span class="card__t">The Zone of Interest</span><span class="card__y">2023</span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#4a3b30"><span class="card__art"></span><span class="card__t">Shogun</span><span class="card__y">2024</span><span class="card__meta">episode <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>10/10</span></span></a>
+        <a class="card" href="#recent" data-dc="#2f3a3d"><span class="card__art"></span><span class="card__t">Anatomy of a Fall</span><span class="card__y">2023</span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#26333f"><span class="card__art"></span><span class="card__t">Severance</span><span class="card__y">2022</span><span class="card__meta">episode <span class="avail avail--part">17/19</span></span></a>
+        <a class="card" href="#recent" data-dc="#4a5a63"><span class="card__art"></span><span class="card__t">Past Lives</span><span class="card__y">2023</span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#3e4438"><span class="card__art"></span><span class="card__t">Slow Horses</span><span class="card__y">2022</span><span class="card__meta">episode <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>24/24</span></span></a>
       </div>
     </div>
   </section>
@@ -6129,7 +6160,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
    Vanilla JS, no dependencies, no animation library.
    Scope, deliberately narrow: theme toggle, density control, sidebar toggle,
    the library scope chip, section/tab switching, the dialog, the states
-   switcher, roving tabindex, the dominant_color contrast rule, and the
+   switcher, roving tabindex, the dominant_color placeholder fill, and the
    acknowledged-write demonstration on the requests screen.
    Nothing here animates anything on a render path. */
 (function () {
@@ -7073,70 +7104,32 @@ delta polling uses this host's clock, so recent changes can be missed</div>
 
   /* ---- dominant_color: the one colour in this design that is data ------
      ARCHITECTURE 4.4.1 computes dominant_color as one average over the 92px
-     art fetch, so it is whatever the cover happens to be. Nothing constrains
-     it, and a mid-luminance fill puts both black and white near 3.5:1 -- the
-     shipped #7d6a4f swatch measured 3.57:1 for a 12px semibold title, which is
-     normal text under WCAG (large is >= 18.66px bold or >= 24px), so 4.5:1
-     applies. This is the rule, run where the pipeline would run it:
+     art fetch, so it is whatever the cover happens to be. It is the image
+     PLACEHOLDER: a reserved box carrying the cover's real average colour,
+     present because 4.4.1 makes dominant_color available before ThumbHash. It
+     is not a shimmer and it never pulses.
 
-       pick the foreground with the better ratio, then, if it still misses the
-       floor, move the *fill* until it clears. The fill is decoration and the
-       title is content, so the fill is what gives way.
+     What used to live here was constrainDominant(): a WCAG ratio solver that
+     picked a text colour against the fill and then moved the fill until the
+     pair cleared 4.5:1. It is gone, and it was not a bug fix -- it was doing
+     its job correctly. It existed only to keep a title legible ON TOP OF the
+     fill, and DESIGN-DIRECTION 9.7 had already ruled that the title and year
+     sit BELOW the tile, on the chrome's own ground. The mockup had simply not
+     caught up. With the title on a known ground the whole runtime-contrast
+     problem disappears: the title and year are ordinary --fg / --fg-muted
+     text, which check.mjs section 3 already asserts against both themes.
 
-     Nothing here is a render-path cost in production: it is computed once per
-     cover at import and stored beside dominant_color. It runs in the browser
-     here only because the mockup has no import step. */
-  function srgbToLin(c) {
-    c = c / 255;
-    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-  }
-  function lum(rgb) {
-    return 0.2126 * srgbToLin(rgb[0]) + 0.7152 * srgbToLin(rgb[1]) + 0.0722 * srgbToLin(rgb[2]);
-  }
-  function ratio(a, b) {
-    var la = lum(a), lb = lum(b);
-    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
-  }
-  function hexToRgb(h) {
-    h = h.trim().replace('#', '');
-    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
-    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
-  }
-  function rgbToHex(c) {
-    return '#' + c.map(function (v) {
-      var s = Math.max(0, Math.min(255, Math.round(v))).toString(16);
-      return s.length === 1 ? '0' + s : s;
-    }).join('');
-  }
-  function mix(c, towards, t) {
-    return [c[0] + (towards[0] - c[0]) * t, c[1] + (towards[1] - c[1]) * t, c[2] + (towards[2] - c[2]) * t];
-  }
+     Note that constrainDominant could not have been made safe by improving
+     it. It constrained against a SINGLE AVERAGED colour, and real cover art is
+     not one colour -- a white title over the light half of a Blue Note sleeve
+     fails whatever the average says. Deleting the subsystem is the fix.
 
-  var DC_FLOOR = 4.5;
-  function constrainDominant(hex) {
-    var fill = hexToRgb(hex);
-    /* The two theme text tokens, not the pure poles: the ramp is warm and
-       near-dark / near-light by rule, and the ratio has to be computable from
-       the tokens that actually ship. */
-    var dark = hexToRgb('#16130e');
-    var light = hexToRgb('#f7f5f1');
-    var useDark = ratio(fill, dark) >= ratio(fill, light);
-    var fg = useDark ? dark : light;
-    /* Push the fill away from the text until the floor clears. 24 steps of 4%
-       always terminates: at t = 1 the fill is the text colour's opposite pole. */
-    var pole = useDark ? light : dark;
-    for (var i = 0; i < 24 && ratio(fill, fg) < DC_FLOOR; i++) {
-      fill = mix(fill, pole, 0.04);
-    }
-    return { dc: rgbToHex(fill), fg: rgbToHex(fg), ratio: ratio(fill, fg) };
-  }
-
+     setProperty rather than a style attribute: the production CSP drops inline
+     styles, and CSSOM mutation is not covered by the directive. check.mjs 1d
+     bans the attribute and carves this out by name. */
   var arts = document.querySelectorAll('[data-dc]');
   for (var a = 0; a < arts.length; a++) {
-    var picked = constrainDominant(arts[a].getAttribute('data-dc'));
-    arts[a].style.setProperty('--dc', picked.dc);
-    arts[a].style.setProperty('--dc-fg', picked.fg);
-    arts[a].setAttribute('data-dc-ratio', picked.ratio.toFixed(2));
+    arts[a].style.setProperty('--dc', arts[a].getAttribute('data-dc'));
   }
 
   /* ---- prototype.html only: hash routing between the five screens ------ */
