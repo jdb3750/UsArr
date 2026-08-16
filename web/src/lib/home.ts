@@ -1,0 +1,158 @@
+/**
+ * HOME's vocabulary, as pure functions. ARCHITECTURE.md §17.2 (as amended by
+ * ADR-0028), §17.7, and DESIGN-DIRECTION §8.4, §9.6, §10.
+ *
+ * DOM-free and deterministic, so the node-environment vitest run can pin it.
+ * The rendering is in `routes/+page.svelte`; the decisions that §17.2 makes
+ * RULES rather than taste live here, because a rule inside a `{#if}` in a
+ * template is a rule nothing can test.
+ *
+ * WHICH OF HOME'S THREE BLOCKS THIS FILE SERVES, AND WHY IT IS ONLY ONE.
+ *
+ * ADR-0028 fixes Home at three blocks: A, a ≤6-row media-type summary; B, an
+ * attention block hidden entirely when empty; C, one unified recently-added
+ * table. **A and C have no data source in this build and are therefore not
+ * drawn at all.** The `work` / `edition` / `media_file` tables and the sync
+ * channels that would fill them are unbuilt, so every number those two blocks
+ * exist to carry would have to be invented, and DESIGN-DIRECTION §9.6 closes
+ * that off in as many words: never fabricated data in a shipped product
+ * surface. A zeroed table and a skeleton are the same fabrication with
+ * different punctuation. Block B is the one block with a real source today —
+ * GET /api/v1/services/health — so Block B is what this file computes.
+ *
+ * §17.2's hard rule points the same way and is worth restating because it is
+ * the one an implementer breaks first: a media type the user does not have is
+ * not shown AT ALL, not in Block A, not in the sidebar, not as a search group.
+ * With no catalogue there are no types the user has, so the honest count of
+ * media-type rows anywhere on this screen is zero. The sidebar already does
+ * this (see `routes/+layout.svelte`); Home now matches it.
+ *
+ * WHAT MODE THE SCREEN IS IN IS DERIVED FROM THE API AND NEVER FROM A
+ * CONSTANT. §8.5 defines Search-and-Grab mode as "activated when no configured
+ * instance advertises `LibrarySync`", and the health endpoint carries the
+ * `role` that decides it. So the mode is a function of the response, and a
+ * build that later accepts a library-bearing kind changes what this returns
+ * without anything here being edited.
+ */
+
+import type { ServiceHealth, ServicesHealth } from './api';
+import {
+	isIndexer,
+	needsAttention,
+	stateLabel,
+	type ServiceRow,
+	type StateLabel,
+	type Tone
+} from './services';
+
+/**
+ * Which state §17.7 puts Home in, decided from what is actually configured.
+ *
+ *   `unconfigured`     nothing is connected. §17.7: this goes to the first-run
+ *                      path and NEVER to an empty home page.
+ *   `search-and-grab`  services exist and none of them is library-bearing.
+ *                      §8.5's named configuration, not an implicit empty app.
+ *   `library`          at least one library-bearing service is configured.
+ *
+ * `library` is unreachable in this build and is deliberately still computed.
+ * `internal/httpapi.serviceKinds` maps exactly one kind — `prowlarr` → role
+ * `indexer` — so every instance that can exist today is an indexer, and the
+ * screen's third arm cannot be driven from a real install. It is derived
+ * rather than assumed away because the alternative is a hard-coded
+ * "Search-and-Grab always", which would go on claiming no library exists on
+ * the first build that connects a Sonarr. The arm renders one honest sentence
+ * and no catalogue, which is what is true of it.
+ */
+export type HomeMode = 'unconfigured' | 'search-and-grab' | 'library';
+
+export function homeMode(health: ServicesHealth): HomeMode {
+	if (health.setupRequired || health.services.length === 0) return 'unconfigured';
+	// §8.5's own test, applied to the field that carries it. `isIndexer` is the
+	// Services screen's existing predicate rather than a second copy of it.
+	if (health.services.every(isIndexer)) return 'search-and-grab';
+	return 'library';
+}
+
+/**
+ * One row of Block B. §17.2: the block is the differentiator and no surveyed
+ * tool has anything to put in it, and it is **hidden when empty** rather than
+ * rendering a green "all good" panel.
+ *
+ * THE COLUMNS ARE NOT THE SERVICES SCREEN'S COLUMNS, and the difference is
+ * §17.3's rule that a problem is stated canonically once per screen. `state`
+ * and `detail` are UsArr's own words, straight from `stateLabel()` so the two
+ * screens cannot drift; `problem` is the upstream's own words, verbatim, and
+ * is the only thing here that is not UsArr speaking. What Block B does NOT
+ * carry is the fix: the button that repairs a service lives on the Services
+ * row, and Home links to that row instead of growing a second copy of it.
+ */
+export interface AttentionRow {
+	id: number;
+	name: string;
+	tone: Tone;
+	icon: StateLabel['icon'];
+	/** UsArr's own plain-language word for the state. Never the mechanism's. */
+	state: string;
+	/** The qualifying clause under it, or ''. */
+	detail: string;
+	/** The upstream's own text, VERBATIM after redaction, or ''. */
+	problem: string;
+}
+
+/**
+ * Block B's rows, in the order the services came back in.
+ *
+ * The membership test is `needsAttention()`, which is the same predicate the
+ * Services roll-up uses. Two lists answering "what is wrong" from two
+ * predicates is how a screen ends up reporting three problems while another
+ * reports four, and the deduction the user makes from that is that one of them
+ * is lying.
+ */
+export function attention(services: readonly ServiceHealth[], now: Date): AttentionRow[] {
+	const out: AttentionRow[] = [];
+	for (const health of services) {
+		const row: ServiceRow = { health };
+		const state = stateLabel(row, now);
+		if (!needsAttention(row, now)) continue;
+		out.push({
+			id: health.id,
+			name: health.name,
+			tone: state.tone,
+			icon: state.icon,
+			state: state.word,
+			detail: state.detail,
+			problem: health.problem?.trim() ?? ''
+		});
+	}
+	return out;
+}
+
+// Re-exported through this module so the screen imports one vocabulary rather
+// than reaching into the Services screen's file for half of it.
+export { needsAttention };
+
+/**
+ * What the page head says, and it is derived from the same data the blocks
+ * are.
+ *
+ * A CONSTANT HERE IS THE FAILURE THIS FUNCTION EXISTS TO PREVENT, and the
+ * mockup records it happening: a fixed "Last delta sync 14:02, 6 minutes ago"
+ * sat above "No services configured" on the very first screen a new user saw —
+ * UsArr reporting a completed sync over a system with nothing connected, first
+ * in reading order and first in the accessibility tree.
+ *
+ * `count` is the roll-up's count string (`1 error, 2 warnings`) or ''. It is
+ * passed in rather than recomputed so the head and the block cannot disagree.
+ */
+export function headline(mode: HomeMode | undefined, services: number, count: string): string {
+	if (mode === undefined) return 'Reading what is connected.';
+	if (mode === 'unconfigured') return 'No service is connected yet.';
+	const connected = `${services} ${services === 1 ? 'service' : 'services'} connected.`;
+	// "Nothing needs attention" is a claim about what was computed, and it is
+	// exactly what an empty roll-up means. "Every service is healthy" is a
+	// stronger claim than the roll-up makes — it skips an enabled instance
+	// whose probe ran and could not classify it — so it is not the sentence.
+	const state = count === '' ? 'Nothing needs attention.' : `${count}.`;
+	if (mode === 'search-and-grab') return `Search-and-Grab mode. ${connected} ${state}`;
+	return `${connected} ${state}`;
+}
