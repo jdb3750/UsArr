@@ -2210,32 +2210,66 @@ withdrawn as written — it was already false when it was written.** It holds fo
 fork before the frontend thread's `.stacksep` margin fix** and for nothing else. Measured, with
 every figure carrying its box:
 
-| Fork | content box | border box |
-|---|---|---|
-| `two-line`, **before** the `.stacksep` fix | **28 / 32 / 36** | 29 / 33 / 37 |
-| `two-line`, **after** it | 27 / 31 / 35 (natural; the floor now binds) | **28 / 32 / 36** |
-| `labels` (never emitted a `.stacksep`) | 27 / 31 / 35 | **28 / 32 / 36** |
+✅ **RE-MEASURED POST-FIX, 2026-08-16.** The `.stacksep` fix is on `main` at **`440e92d`**; the table
+below is a measurement of the merged tree, with the pre-fix tree (`3ae0d44^`) measured by the same
+script as a control. One-line rows, 1440×900, both forks, all three densities. *As rendered* is the
+shipped `min-height: var(--row-h)`; *natural* is the same row under a forced `min-height: 0`.
 
-`--row-h` is **28 / 32 / 36**, so the equality held on exactly one fork at one moment. 🚩 **Note the
-shape of the hazard rather than only the correction: "28 / 32 / 36" is true on both sides of that
-merge — as the content box before and the border box after — so nothing about the digits looks stale
-and a reader who checks them against a fresh measurement gets a match either way.** Every row height
-in this ADR now names its box for that reason. The `labels` row above is **reported, not settled**:
-`DESIGN-DIRECTION.md` §7.4 carries a competing 26 / 30 / 34 for that fork and the two are not
-reconciled.
+| Fork | content box, as rendered | border box, as rendered | content box, natural | border box, natural | floor |
+|---|---|---|---|---|---|
+| `two-line`, **before** the `.stacksep` fix | **28 / 32 / 36** | 29 / 33 / 37 | 28 / 32 / 36 | 29 / 33 / 37 | **inert** |
+| `two-line`, **after** it | 27 / 31 / 35 | **28 / 32 / 36** | 26 / 30 / 34 | 27 / 31 / 35 | **binds** |
+| `labels` (never emitted a `.stacksep`; identical on both trees) | 27 / 31 / 35 | **28 / 32 / 36** | 26 / 30 / 34 | 27 / 31 / 35 | **binds** |
+
+`--row-h` is **28 / 32 / 36**, so the equality with the **content** box held on exactly one fork at
+one moment and holds nowhere now; post-fix `--row-h` is the **border** box on both forks, because the
+floor sets it. 🚩 **Note the shape of the hazard rather than only the correction: "28 / 32 / 36" is
+true on both sides of that merge — as the content box before and the border box after — so nothing
+about the digits looks stale and a reader who checks them against a fresh measurement gets a match
+either way.** Every row height in this ADR names its box for that reason.
+
+✅ **The `labels` row is now settled, and `DESIGN-DIRECTION.md` §7.4's competing 26 / 30 / 34 was not
+competing.** It is the **natural content box** — the floor removed — which is 2 px under the rendered
+border box because it is two boxes under it, one `min-height` and one border. Three figures were in
+circulation for that fork (26 / 30 / 34, 27 / 31 / 35, 28 / 32 / 36) and measurement finds all three
+correct and simultaneous, describing four different quantities between them: see §7.4's resolution
+table. ⚠️ **27 / 31 / 35 is the one to watch, because it is the rendered content box *and* the
+natural border box** — naming the box does not disambiguate it on its own, the floor condition has to
+be named too.
 
 ⚠️ **One clause above is right about the value and wrong about the cause, and the cause is what gets
-reused.** "A one-line row's content box is `--row-h`" reads as *the floor sets it*. It does not.
-Re-measured on the shipped primitive: forcing `--row-h: 100px` moves every row to 100 px, so the
-`min-height` is live — but setting `min-height: 0` leaves a one-line row **unchanged**, because the
-natural height sits 1 px over the floor. The floor is live and **slack**; it never binds. The
-content box equals `--row-h` at all three densities by **arithmetic accident**, not by construction.
-Keep the value, drop the derivation.
+reused.** "A one-line row's content box is `--row-h`" reads as *the floor sets it*. **Before the fix
+it did not**: forcing `--row-h: 100px` moved every row to border box 100 px, so the `min-height` was
+live — but setting `min-height: 0` left a one-line row **unchanged**, because the natural height sat
+1 px over the floor. The floor was live and **slack**; it never bound, and the content box equalled
+`--row-h` by **arithmetic accident** rather than by construction.
+
+✅ **After `440e92d` the derivation is true of the BORDER box, on both forks, at all three
+densities** — natural border box 27 / 31 / 35 against a floor of 28 / 32 / 36, so `min-height: 0`
+now moves the row and the floor is what sets the rendered height. The clause is therefore no longer
+wrong about the cause; it is wrong about the **box**. The content box is `--row-h − 1`, because the
+row carries a 1 px `border-bottom` and no padding of its own. **Keep the value, name the box, and
+state whether the floor binds** — those three together are what the section has been getting wrong
+one at a time.
+
+🚩 **The `--row-h: 100px` guard is only meaningful if it is applied to the right element, and the
+first firing of it here was not.** `List.svelte` stamps `data-density` on the list container and the
+density blocks match a bare `[data-density]` as well as `:root`, so the container re-declares
+`--row-h` on itself and an inline override on `<html>` never reaches the rows — the measurement does
+not move and reads as a clean null. **Fired both ways to be sure it was the element and not the
+property: on the list the rows go to border box 100 px / content box 99 px on both forks at all three
+densities; on `<html>` they stay at 28 / 32 / 36 px border box and the table still computes
+`--row-h: 28px`.** Override on the list, not on the root. 🔗 **And note where that shadowing comes
+from — it is mitigation 2 below working as designed.** List-scoping the density attribute is the
+change that takes a 5,000-row density toggle from 107 ms to 80 ms; a measurement probe that has not
+noticed it is overriding a token the list re-declares one level down is measuring the wrong cascade.
 
 This is why the shipped expression —
 `contain-intrinsic-size: auto calc(2 * var(--row-pad-y) + var(--row-lines, 1.1) * var(--leading-base))`
 — is correct with the cell padding *added into* the placeholder rather than subtracted from it:
-at compact density that is 2 × 4 px + 1.1 × 18 px ≈ 27.8 px against `--row-h: 28px`. **Corrections
+at compact density that is 2 × 4 px + 1.1 × 18 px ≈ 27.8 px, and the quantity it must stand in for is
+the **content box**, measured post-fix at **27 px** — not `--row-h: 28px`, which is the post-fix
+**border** box. **Corrections
 (a) and (b) are untouched and still hold**, and so does the "measured content-box height per row
 shape" rule they lead to.
 
@@ -2457,6 +2491,15 @@ away, and the ~200 figure had no measurement behind it.
   | one-line row | **28 px** | **32 px** | **36 px** |
   | rich row (two lines, sub-line or thumbnail) | **45 px** | **49 px** | **53 px** |
 
+  ⚠️ **THE ONE-LINE ROW OF THIS TABLE IS A TRAP, AND IT IS THE REASON THE AMENDMENT AT THE TOP OF
+  THIS ADR EXISTS.** Read as **border box** — which is what the next sentence calls them — it was
+  **wrong** when it was written and is **right** now, because it described the `two-line` fork whose
+  border box was 29 / 33 / 37 px before `440e92d` and is 28 / 32 / 36 px after. The digits did not
+  move; the fix moved underneath them. Post-fix, and on **both** forks, 28 / 32 / 36 px is the
+  **border** box and 27 / 31 / 35 px is the **content** box. The rich row is unaffected and is
+  **border box** 45 / 49 / 53 px, **content box** 44 / 48 / 52 px, on both trees. See the amendment
+  for all four numbers of all six configurations.
+
   Drift over a full scroll at the one-line values is **0.76 / 0.70 / 0.65%** against the 2% budget.
   These are rendered **border-box** heights; the declaration sizes the **content** box, so what ships
   is the derived expression the mockups already use —
@@ -2474,8 +2517,11 @@ away, and the ~200 figure had no measurement behind it.
   result is load-bearing rather than lucky because the guard was fired deliberately: forcing
   `line-height: normal` *does* split the conditions (rich rows 43 / 47 / 51 served against
   39 / 43 / 47 blocked). ⚠️ **Measured on one list configuration** — `stack: 'two-line'`, the shape
-  this ADR was originally measured against. A `stack: 'labels'` list has one-line rows at
-  26 / 30 / 34 px, below the floor, where `min-height` *would* bind.
+  this ADR was originally measured against. ✅ **Both forks are measured now, and the `26 / 30 / 34 px`
+  this bullet reported for a `stack: 'labels'` list is confirmed with its box named at last: it is the
+  NATURAL CONTENT box — `min-height` forced to `0` — and the "below the floor, where `min-height`
+  *would* bind" that follows it is correct.** That list's *rendered* heights are border box
+  28 / 32 / 36 px and content box 27 / 31 / 35 px, unchanged across `440e92d`. See the amendment.
   **The same run's other results — the 761,316 px containment confirmation against a Δ of exactly 0
   on `display: table-row`, the ~88% / ~25% mitigation split, and the superlinear 25,000-row point that
   limits the linear fit to a few thousand rows — are recorded in the amendment above rather than
