@@ -188,6 +188,7 @@ binary that 404s on `/`.** The Makefile wires the dependency; running `go build`
 | `make vuln` | `govulncheck` + `pnpm audit`. **Gating.** The only step that touches the network. |
 | `make migrate`, `migrate-new name=…` | Migration authoring against the dev DB. |
 | `make docker` | Build the image. Digest-pinned base enforced; `--provenance` + `--sbom`. Needs a daemon — §8. |
+| `make design` | `docs/design/check.mjs` — DESIGN-DIRECTION §13 made runnable: bans, token drift, contrast, overflow, row heights, roving tabindex, the webfont. Needs a browser; **not** part of `check`. |
 | `make check-offline` | `fmt-check` + `lint` + `modverify` + `secrets` + `test`. Fully hermetic. |
 | `make check` | **The pre-commit gate**: `check-offline` + `vuln`. |
 
@@ -198,6 +199,20 @@ telling you it passed.
 deliberate exception to the otherwise-hermetic rule: a project that stores a dozen full-admin
 credentials cannot ship a known-vulnerable crypto or HTTP dependency because the scan was advisory.
 Use `check-offline` when you have no network; run `check` before you push.
+
+`make design` is deliberately **outside** the gate, and the reason is not the obvious one. It is
+hermetic — the mockups load over `file://` and the IBM Plex subsets are inlined as `data:` URIs, so
+it makes no network call at all — and it finishes in about 40 seconds. What keeps it out is that it
+needs a Playwright Chromium, a ~150 MB prerequisite the gate does not otherwise carry, and that
+there is nothing to pin it to: `check.mjs` resolves Playwright from an absolute path outside the
+repo rather than from `web/package.json`, so the step passes on one machine and cannot run on
+another. It also guards `docs/design/` — prose, tokens and mockups, none of which is a shipping
+artifact, and none of which can break the binary. Run it by hand when the design moves, overriding
+`PW_BROWSERS_PATH` to point at your own browser cache. If Playwright ever lands as a pinned
+`devDependency`, the browser cost is worth re-arguing on its own merits.
+
+⚠️ `docs/design/check.mjs` is not on `main` yet — it arrives with the design thread's merge, and
+until then `make design` exits with a message saying so.
 
 ---
 

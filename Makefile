@@ -3,18 +3,23 @@
 # ─── HONESTY NOTICE ──────────────────────────────────────────────────────────
 # UsArr is PRE-ALPHA. The build is real now: ./cmd/usarr, ./internal/..., ./web/
 # and ./internal/db/migrations/ all exist, so build, test and check work. What is
-# still missing is ./deploy/Dockerfile, so `make docker` WILL fail. Targets that
-# reference a path that does not exist yet remain the build contract the commits
-# that create it are written against, not a description of a working build.
+# still missing is ./deploy/Dockerfile, so `make docker` WILL fail — and
+# ./docs/design/check.mjs, so `make design` WILL fail until the design thread
+# lands it. Targets that reference a path that does not exist yet remain the
+# build contract the commits that create it are written against, not a
+# description of a working build.
 #
-# Three rules this file must keep obeying as code lands:
+# Four rules this file must keep obeying as code lands:
 #   1. `make check` is the pre-commit gate. It must pass with NO Docker daemon
 #      and NO live services. It makes exactly ONE network call — govulncheck's
 #      query to vuln.go.dev. `make check-offline` drops that one step and is the
 #      target to use on a plane. Everything else is hermetic.
 #   2. `make docker` is the ONLY target allowed to require a Docker daemon, and
 #      it is never part of `check`.
-#   3. `make bench` holds every wall-clock performance measurement. Wall-clock
+#   3. `make design` is the ONLY target allowed to require a browser, and like
+#      `make docker` it is never part of `check`. It guards docs/design/, which
+#      ships nothing — the reasoning is in full above the target itself.
+#   4. `make bench` holds every wall-clock performance measurement. Wall-clock
 #      numbers are a release gate on named hardware, never a merge gate — see
 #      docs/DEVELOPMENT.md §5. What CI does enforce is `EXPLAIN QUERY PLAN` and
 #      row-count assertions, which are deterministic and live in `make test`.
@@ -261,6 +266,51 @@ fmt-check: ## Verify formatting without modifying files (used by `make check`)
 	@out=$$(gofumpt -l .); \
 	if [ -n "$$out" ]; then echo "not gofumpt-formatted:"; echo "$$out"; exit 1; fi
 	$(call pnpm_if_web,format:check)
+
+# ─── Design ──────────────────────────────────────────────────────────────────
+# docs/design/check.mjs is the runnable form of DESIGN-DIRECTION.md §13: the ban
+# sweep, token drift, contrast over every ground in both themes, overflow at five
+# widths, the density row-height bands, accessible names, roving tabindex, the
+# content-visibility guard and the webfont. One entry point, one exit code, and
+# it prints what it CHECKED rather than only what failed.
+#
+# WHY IT IS NOT IN `check`, decided rather than assumed. It is genuinely
+# hermetic — the mockups load over file:// and the woff2 subsets are inlined as
+# data: URIs, so it makes ZERO network calls — and at ~40 s it is not slow.
+# Neither of those is the reason it stays out. Three things are:
+#
+#   1. It needs a Playwright Chromium. The gate's whole contract is that it runs
+#      on a machine carrying Go and pnpm and nothing else; a ~150 MB browser
+#      download is a large new prerequisite for every developer and every runner.
+#   2. There is nothing to pin, and this file forbids `@latest` for a reason.
+#      check.mjs imports Playwright from an absolute path OUTSIDE the repo
+#      (/opt/node22/lib/node_modules/playwright), which is not a dependency of
+#      web/package.json and does not resolve anywhere else. A gate step that
+#      only works in one environment is not a gate.
+#   3. It guards docs/design/ — prose, tokens and mockups, none of which is a
+#      shipping artifact. Token drift in a mockup cannot break the binary.
+#
+# So it is a target a person runs, like `make bench`. If (2) is ever fixed by a
+# pinned devDependency in web/package.json, (1) is worth revisiting on its own.
+
+# Overridable. The default is the browser cache this repo's agent container
+# preinstalls; a workstation's is usually ~/.cache/ms-playwright.
+PW_BROWSERS_PATH ?= /opt/pw-browsers
+DESIGN_CHECK     ?= docs/design/check.mjs
+NODE             ?= node
+
+.PHONY: design
+design: ## Run the design check (DESIGN-DIRECTION §13). Needs Chromium. NOT part of `check`.
+	@test -f $(DESIGN_CHECK) || { \
+		echo "no $(DESIGN_CHECK) — the design thread has not landed it on this branch yet."; \
+		exit 1; }
+	@command -v $(NODE) >/dev/null 2>&1 || { \
+		echo "node not found — the design check needs Node 22+ with Playwright."; exit 1; }
+	@test -d $(PW_BROWSERS_PATH) || { \
+		echo "no Playwright browser cache at $(PW_BROWSERS_PATH)."; \
+		echo "point at yours with: make design PW_BROWSERS_PATH=~/.cache/ms-playwright"; \
+		exit 1; }
+	PLAYWRIGHT_BROWSERS_PATH=$(PW_BROWSERS_PATH) $(NODE) $(DESIGN_CHECK)
 
 # ─── Supply chain ────────────────────────────────────────────────────────────
 

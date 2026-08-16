@@ -23,7 +23,7 @@ Where §17 and this document disagree, **§17 wins** and this document is the bu
 >    that with no accent, two table screens have little left to differ by at thumbnail scale (D-24) —
 >    is accepted, not reopened.
 > 2. **IBM Plex is confirmed** as the family (§4), and since 2026-08-16 it is also **shipped and
->    proven to render** — self-hosted in `mockups/fonts.css`, asserted by `selftest.mjs` (§4.1).
+>    proven to render** — self-hosted in `mockups/fonts.css`, asserted by `check.mjs` (§4.1, §13).
 >    What is *not* settled is the **subset**; OQ-3 is narrowed to that and nothing else.
 > 3. **The left sidebar is confirmed** over top-bar type tabs. **OQ-2 is closed** (§8.1), and the
 >    move from two media types to six is new evidence in the same direction rather than a
@@ -279,9 +279,24 @@ Four states, aligned to what the ecosystem has already trained self-hosters on:
 | State | Meaning | Light | Dark |
 |---|---|---|---|
 | `ok` | healthy, synced, file present | `#1c6b3a` (6.21:1) | `#5cba7d` (7.56:1) |
-| `warning` | degraded, stale, partial, clock skew | `#8a5300` (6.02:1) | `#e0a33a` (8.15:1) |
+| `warning` | degraded, stale, partial, clock skew | `#a44c00` (5.53:1) | `#fb9349` (8.07:1) |
 | `error` | down, failed, rejected, needs re-identification | `#b3251c` (6.24:1) | `#f0837a` (7.09:1) |
 | `not configured` | no service of this kind exists | `#5a534a` (7.20:1) | `#b0a89b` (7.68:1) |
+
+The ratio in each cell is against the **page ground**, which is the best of the five. What the
+values are actually held to is the **worst** of the five grounds a status can land on — page,
+surface, hover, selected, inset — and `docs/design/check.mjs` asserts that, not this table:
+
+| | page | surface | hover | selected | inset | worst |
+|---|---|---|---|---|---|---|
+| light `ok` `#1c6b3a` | 6.21 | 5.74 | 5.43 | 5.11 | 6.38 | **5.11** |
+| light `warning` `#a44c00` | 5.53 | 5.11 | 4.84 | 4.55 | 5.67 | **4.55** |
+| light `error` `#b3251c` | 6.24 | 5.77 | 5.46 | 5.14 | 6.41 | **5.14** |
+| light `not configured` `#5a534a` | 7.20 | 6.66 | 6.30 | 5.93 | 7.40 | **5.93** |
+| dark `ok` `#5cba7d` | 7.56 | 7.04 | 6.48 | 6.15 | 8.00 | **6.15** |
+| dark `warning` `#fb9349` | 8.07 | 7.52 | 6.92 | 6.57 | 8.55 | **6.57** |
+| dark `error` `#f0837a` | 7.09 | 6.61 | 6.08 | 5.77 | 7.51 | **5.77** |
+| dark `not configured` `#b0a89b` | 7.68 | 7.16 | 6.59 | 6.25 | 8.13 | **6.25** |
 
 **Grey is a legitimate status and it is load-bearing.** "Not configured" is a real, common,
 non-broken condition in a pluggable app, and painting it a colour would make the two conditions that
@@ -289,32 +304,61 @@ non-broken condition in a pluggable app, and painting it a colour would make the
 
 > **Every status is encoded as icon + text + colour together. Never colour alone.**
 
-🚩 **The status *word* and the status *glyph* are bound by different success criteria, and the light
-warning is where that matters.** `--status-warn: #8a5300` was chosen to clear 4.5:1 as **text** on
-the light ground, and forcing an amber dark enough to be readable body text is what took the amber
-out of it — the ⚠ glyph then does the signalling and the colour does much less than §3's argument
-promises. **But the glyph is a non-text graphic, bound by SC 1.4.11 at 3:1, not by 1.4.3 at 4.5:1**,
-so it can carry materially more chroma than the word beside it. **The rule: the word keeps the
-readable value; the glyph may take a separate, more saturated token, provided it clears this
-document's own 3.2:1 non-text target against both the page ground and the surface fill.** A warning
-row may additionally take a low-alpha tint of the same hue.
+✅ **The warning is orange in both themes, and the word carries it — SW-05, closed by the owner on
+2026-08-16 in his own words: the light value was "kind of eh… going more orange would be better for
+warnings".**
 
-⚠️ **The candidate value is computed, not verified, and it must go through the repo's contrast
-script before it lands.** `#a9700a` measures **3.98:1** on `#faf9f7` and **3.68:1** on `#f2f0ec`,
-clearing both the 3:1 floor and the 3.2:1 target, at ΔE76 ≈ 13.7 from the text value — a real gain
-in chroma. Two values the finding suggested do **not** work and are recorded so they are not tried
-again: `#c98a00` is **2.80:1** and `#b8860b` is **3.09:1**, so both fail this document's target and
-the second only scrapes the WCAG floor.
+`--status-warn` was `#8a5300` light / `#e0a33a` dark. Two things were wrong with that pair. The
+light value was chosen by pushing an amber down until it cleared 4.5:1 as **text**, and what came
+out the other end was a **brown**: CIE Lab hue **70.4°**, most of the way from orange (≈60°) to
+yellow (≈90°), at chroma 52.4. And the dark value was Lab hue **77.8°** — a *gold*. The two themes
+were not the same colour at two lightnesses; they were a brown and a gold that happened to share a
+token name.
 
-📌 **And one part of the finding that raised this is rebutted on measurement.** It described
-`#8a5300` as sitting *inside* the warm neutral ramp, reading as "slightly redder body text", with
-"the colour doing none" of the work. Computed, ΔE76 from `--fg-muted #5a534a` is **46.3** in light
-against **54.2** for the dark pair (`#e0a33a` from `#b0a89b`) — a gap ~15% narrower, not a collapse.
-The *direction* is right and is why the rule above exists; the *magnitude* is not supported.
-🔍 Both instruments are crude in opposite ways: ΔE76 is a poor model of perceived difference at small
-sizes, and the finding's own instrument was a judgement on rendered pixels at thumbnail scale, which
-is a legitimate test this arithmetic does not replace. Neither settles it alone, which is the reason
-the value is escalated rather than simply changed.
+**What ships: `#a44c00` light, `#fb9349` dark.**
+
+- **It is genuinely orange, and that is measured rather than asserted.** `#a44c00` is Lab hue
+  **58.0°** at chroma **62.1**; `#fb9349` is Lab hue **58.6°** at chroma **64.0**. CSS `orange`
+  `#ff7f00` is Lab hue **59.6°**. Both themes now sit within 1.6° of it, so they are the same hue
+  at two lightnesses — which is what "give dark the same hue family" has to mean if it means
+  anything.
+- **The word clears 4.5:1 on the worst of all five grounds**, not just on the page: **4.55:1**
+  against `--selected #e7e3dd`, 4.84 against hover, 5.11 against surface, 5.53 against the page,
+  5.67 against the inset. Dark's worst is **6.57:1**.
+- **Dark holds everything constant except hue.** Chroma 64.0 against the old 61.9, worst-ground
+  contrast 6.57 against the old 6.63. The only thing that moved is the 19° of hue that made it a
+  gold.
+- **Warning still does not read as error.** ΔE76 from `--status-error` is **25.2** in light and
+  **32.1** in dark. That is the test §3.3 failed the protocol chips on, where the collision was
+  ΔE76 **4.59**.
+
+🚩 **The word/glyph split this section grants is NOT taken, and that is the point of reporting it.**
+The rule stands and is worth keeping: **the status *word* is text, bound by SC 1.4.3 at 4.5:1; the
+status *glyph* is a non-text graphic, bound by SC 1.4.11 at 3:1, so it MAY take a separate, more
+saturated token provided it clears this document's 3.2:1 non-text target on every ground.** But
+`#a44c00` is convincingly orange *and* readable as text, so exercising the split would buy a second
+token, a second row in every contrast table and a two-colour status label, in exchange for chroma the
+word already has. **One value, both roles.** The split is available if a future ground or a future
+hue makes it binding; nothing exercises it today. A warning row may still take a low-alpha tint of
+the same hue.
+
+⚠️ **Values that do not work, recorded so they are not retried.** The candidate this section
+previously carried, `#a9700a`, was never a *text* value: it is **3.98:1** on the page ground but
+**3.28:1** on `--selected`, so it fails 4.5:1 on the ground that actually binds and could only ever
+have been a glyph token. `#c98a00` is **2.80:1** and `#b8860b` **3.09:1** on the page ground alone.
+And `#b04300` — Lab hue 52.0°, chroma 68.4, more chromatic than what shipped and still clearing
+4.50:1 — is rejected on the *other* axis: ΔE76 **18.5** from `--status-error`, close enough that a
+column of warnings beside a column of errors starts to blur. Chroma is not the only thing being
+maximised.
+
+📌 **One part of the finding that raised this stays rebutted on measurement.** V-06 described
+`#8a5300` as sitting *inside* the warm neutral ramp, with "the colour doing none" of the work.
+Computed, ΔE76 from `--fg-muted #5a534a` was **46.3** in light against **54.2** for the dark pair —
+a gap ~15% narrower, not a collapse. The *direction* was right, which is why this section exists at
+all and why the value moved in the end; the *magnitude* was not supported. What settled it was not
+either instrument but the owner looking at it, which is the test both of them were standing in for.
+`#a44c00` measures ΔE76 **56.7** from `--fg-muted`, so the gap the finding complained about is now
+*wider* in light than the dark pair's was.
 
 That is why UsArr needs no colour-impaired mode. Sonarr had to ship one —
 `EnableColorImpairedMode`, help text *"Altered style to allow color-impaired users to better
@@ -479,7 +523,7 @@ software whose entire premise is that it runs on your own hardware.
 > [`design/mockups/fonts.css`](./mockups/fonts.css) carries the subsetted WOFF2 faces self-hosted as
 > base64 data URIs: IBM Plex Sans v23 (the variable font, weight axis 100–700, so 400/500/600 all
 > come from one file) and IBM Plex Mono v20 at 400 and 600, `latin` subset, 76 KB of woff2 on disk,
-> with the SIL OFL travelling alongside them in `mockups/fonts/OFL.txt`. `mockups/selftest.mjs`
+> with the SIL OFL travelling alongside them in `mockups/fonts/OFL.txt`. `docs/design/check.mjs`
 > asserts the **rendered** family on every run, by the advance-width comparison this block specified
 > rather than by `document.fonts.check()`: `"IBM Plex Sans"` measures **459.000 px** against a bogus
 > family's **401.074 px**, `"IBM Plex Mono"` measures **504.000 px**, the body's own computed
@@ -1947,6 +1991,68 @@ the feature does not.** These are layout obligations, not v0.1 work.
 time. This is the reviewable form of §1, and it is the artefact that makes "don't look
 AI-generated" an actual gate rather than a vibe.
 
+### 13.0 The enforcement mechanism — `docs/design/check.mjs`
+
+> **Every `[grep]` rule above the line is *run*, not remembered.** One file, one command, one exit
+> code:
+>
+> ```
+> PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node docs/design/check.mjs
+> ```
+
+**SW-06, from the owner directly on 2026-08-16: he is "open to some kind of adversarial design
+guideline checking".** The machinery already existed and was *scattered* — `mockups/selftest.mjs`
+held five rendered-DOM assertions, and the §13 ban sweep was a pipeline of greps retyped by hand
+each review round. `check.mjs` is those two consolidated; `selftest.mjs` is deleted, folded in
+whole, so there is one place to run and one place to add to.
+
+It covers, in order, printing a count for each: the **§13 ban list** over the stripped sources ·
+**token drift** between `tokens.css` and the mockup's copy of it · **contrast**, worst of all five
+grounds (page, surface, hover, selected, inset), both themes, against §3's floors · **overflow** at
+390/1280/1440/1680/1920 across every screen in every state, at two scopes · **row heights** against
+all three density bands · **availability glyph accessible names** · **one tab stop per list** ·
+**containment** · **the webfont** · and the **copy bans** over rendered chrome text.
+
+**Two rules govern the file, and they are the reason it is a program rather than a shell pipeline.**
+
+**1. It prints what it checked, not only what failed.** A silent pass is indistinguishable from a
+check whose glob was wrong and matched nothing — which is the specific way a hand-run sweep decays.
+Every assertion emits its own count: *"14 font-family declarations parsed"*, *"36 screen×state
+combinations"*, *"1,214 rendered chrome strings"*, *"49 list renderings checked"*. A number that
+drops is a finding.
+
+**2. False positives are excluded structurally, never by name.** The hand-run sweep kept
+rediscovering the same four, and each round re-explained them in prose that was then thrown away.
+They are gone now because of *where each ban is evaluated*, not because a list names them — which
+means a new instance of the same shape is also excluded, without anyone adding it:
+
+| False positive | Structural exclusion |
+|---|---|
+| `ArrowRight` as a `KeyboardEvent.key` | §13's rule is *no Sparkles / Zap / Shield / BarChart3 / ArrowRight **imports***. The icon bans are evaluated over **ES import specifiers** and the mockup's own icon vocabulary (`<symbol id="i-…">`) — and nowhere else. A string compared against `ev.key` is neither, so it is out of scope rather than excused. |
+| `Inter` inside "Internally" and "The Zone of Interest" | The typography ban is a **font-stack** ban. It is evaluated over the comma-separated family list of `font-family` and `--font-*` declarations, matched as a **whole family name**. Prose containing the substring is not a font stack. |
+| `BOOM! Studios`, against *no `!` in UI strings* | The copy bans are evaluated over rendered text **outside any `<td>`**. A cell holds *data* — sample data here, database rows in the product — and data is not the product's voice. That exemption is only safe because prose is kept out of cells, which is the **row-height** check in the same file: the two rules hold each other up. |
+| A comment quoting the ban it documents | Every source-level scan runs over the file with **comments stripped**, line numbers preserved. A rule cannot fire on its own documentation. |
+
+**And a fifth, derived from a document rather than declared.** The em-dash rule below already carries
+an exception for wording that [`ARCHITECTURE.md`](../ARCHITECTURE.md) §17 fixes. That exception was
+written as one hard-coded banner, so the *next* string §17 fixed would have failed the sweep and been
+rewritten in the mockup instead of recognised. `check.mjs` reads §17 at run time and exempts a short
+em-dash string when §17 contains the em dash's own two-words-either-side window — tight enough to
+require the real phrase, loose enough to survive a substituted service name or timestamp. Two
+consequences worth having: the exemption cannot go stale, and a label that **drifts** from §17's
+wording loses its exemption and fails, which turns the rule into a copy-drift check between the
+mockups and the section that specifies them. It caught one on its first run: the re-identification
+banner's second button read `Not the same — remove and re-add` against §17.3's
+`Not the same instance — remove and re-add`.
+
+⚠️ **What it is not.** It runs against `docs/design/mockups/prototype.html`, because that is the only
+artefact that exists — **there is no `web/` implementation to check** (`CLAUDE.md`: the code does not
+exist). Every DOM assertion is written against the rendered document rather than against the mockup's
+markup idiom, so it survives the port to Svelte; the source-level scans will need their file list
+widened, and nothing else. The `[review]` rules below are still human judgement and always will be.
+
+---
+
 **Colour**
 - `[grep]` No `indigo|violet|purple|fuchsia` class or equivalent hex/oklch anywhere in the app.
 - `[grep]` No `bg-gradient`, `linear-gradient`, `radial-gradient` or `bg-clip-text` in app CSS.
@@ -2158,7 +2264,7 @@ AI-generated" an actual gate rather than a vibe.
 |---|---|---|
 | ~~**OQ-1**~~ | ~~Virtualization threshold.~~ **CLOSED 2026-08-16** — delegated to us and settled as "Load more" + `content-visibility`, with virtualization as an escalation above a **benchmarked** threshold. **ADR-0029**; §4.5, §16 and §7.4 amended | — |
 | ~~**OQ-2**~~ | ~~Navigation.~~ **CLOSED 2026-08-16** — the owner confirmed the **left sidebar**. **ADR-0027**; §17.2 amended to the two-axis model, and §8.1 rewritten | — |
-| **OQ-3** *(narrowed twice)* | **The family is settled — IBM Plex, confirmed 2026-08-16 — and as of the same day it is also *shipped and visible*:** `mockups/fonts.css` self-hosts the subsets and `mockups/selftest.mjs` proves by advance-width probe that the body renders in Plex rather than in a fallback (§4.1). **What is left open is the subset, and only the subset.** `latin` alone is **103.6 KB**; `latin`+`latin-ext` is **177.2 KB** (§4.1) — 73.6 KB of first paint. Neither trips the ~200 KB trigger, so the question is whether an accented library gets `latin-ext` or falls back mid-string, and six media types make that sharper than two did, since a manga, classical-music or translated-fiction library is *full* of accented and transliterated titles. **The honest limit on both options: neither renders native CJK.** A manga library holding untransliterated Japanese titles falls through to the system stack on those rows whichever subset wins — that is an argument for a third, much more expensive option, not a tiebreaker between these two, and it should be decided knowingly rather than discovered on a real library. One loose end the family decision does not close: the argument that beat the system stack (cross-OS metric drift) is **uncited inference, unmeasured for this design** (D-32) | It is the only decision here that costs bytes on first paint, and the shipped subset is the one thing a self-hoster cannot change without a rebuild |
+| **OQ-3** *(narrowed twice)* | **The family is settled — IBM Plex, confirmed 2026-08-16 — and as of the same day it is also *shipped and visible*:** `mockups/fonts.css` self-hosts the subsets and `docs/design/check.mjs` proves by advance-width probe that the body renders in Plex rather than in a fallback (§4.1). **What is left open is the subset, and only the subset.** `latin` alone is **103.6 KB**; `latin`+`latin-ext` is **177.2 KB** (§4.1) — 73.6 KB of first paint. Neither trips the ~200 KB trigger, so the question is whether an accented library gets `latin-ext` or falls back mid-string, and six media types make that sharper than two did, since a manga, classical-music or translated-fiction library is *full* of accented and transliterated titles. **The honest limit on both options: neither renders native CJK.** A manga library holding untransliterated Japanese titles falls through to the system stack on those rows whichever subset wins — that is an argument for a third, much more expensive option, not a tiebreaker between these two, and it should be decided knowingly rather than discovered on a real library. One loose end the family decision does not close: the argument that beat the system stack (cross-OS metric drift) is **uncited inference, unmeasured for this design** (D-32) | It is the only decision here that costs bytes on first paint, and the shipped subset is the one thing a self-hoster cannot change without a rebuild |
 | **OQ-4** | **13 px base type.** That is the Linear/dense register. If it reads small to you, move base to 14 and shift the whole scale up one step — **do not add a seventh step** | Personal legibility; you are the only user in v0.1 |
 | **OQ-5** | **Radius 0 or 2 px** on inputs and buttons. Both are within the budget; 0 is more committed | Taste, and it should be decided once and applied without exception |
 | **OQ-6** | **Theme default.** Auto (Sonarr's default) or Dark (Navidrome's)? | Navidrome is the stated reference point, but Auto is the *Arr convention and UsArr sits next to three of them |
