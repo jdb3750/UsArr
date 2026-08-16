@@ -152,12 +152,32 @@ export function fanoutSummary(counts: FanoutCounts): string {
 /* ── 3. Grab outcomes ─────────────────────────────────────────────────────── */
 
 /**
- * How a grab row is coloured. Two roles only, and the assignment follows §9.5's
- * "chroma marks what is wrong, not what is fine": the ordinary sent row is
- * NEUTRAL, and the ambiguous one — the only row with something for the user to
- * do — carries the warn role.
+ * How a grab row is coloured, and the assignment follows §9.5's "chroma marks
+ * what is wrong, not what is fine": the ordinary sent row is NEUTRAL, the
+ * ambiguous one carries WARN, and the row that never left carries ERR.
+ *
+ * ⚠️ `err` IS THE THIRD STATE'S ROLE AND NOT A THIRD DEGREE OF THE SAME AXIS.
+ * §17.5's three states are not "fine, worrying, bad": the first two are the SAME
+ * epistemic state about the download — handed over, differing only in whether an
+ * error came back afterwards — and the third is categorically different, because
+ * nothing was handed over and nothing can be running. So the tone gap between
+ * `warn` and `err` is doing the work §17.5 asks of it: state 2 sits beside state
+ * 1, and state 3 sits beside neither.
  */
-export type GrabOutcomeTone = 'neutral' | 'warn';
+export type GrabOutcomeTone = 'neutral' | 'warn' | 'err';
+
+/**
+ * The one action a Recent-grabs row may offer, and `none` is a first-class value
+ * rather than an absence — the same construction `CorrelatedAction` uses, for
+ * the same §17.5 reason: where the correct action is not something UsArr can
+ * offer, naming the non-action beats offering a fake one.
+ *
+ * ⚠️ THERE IS NO MEMBER THAT GRABS AGAIN, AND THERE WILL NOT BE. `search-again`
+ * runs a fresh fan-out; it does not re-send an irreversible grab, and it is
+ * offered only where a fresh listing is the thing that was missing.
+ * `open-services` is navigation. Neither posts anything.
+ */
+export type GrabRowAction = 'none' | 'search-again' | 'open-services';
 
 export interface GrabOutcomeCopy {
 	/** The wire value this was derived from, for `data-` attributes and tests. */
@@ -179,13 +199,30 @@ export interface GrabOutcomeCopy {
 	 * still on screen once, above the table, in `KNOWLEDGE_STOPS_NOTE` — which
 	 * opens by naming the moment Prowlarr accepts a grab.
 	 *
-	 * The two states that keep a clause keep it because it is an INSTRUCTION
-	 * rather than a restatement: where to look when the outcome is unknown, and
-	 * why this screen cannot read a row it has never heard of. Both are facts the
-	 * chip does not carry, so §9.1's test — delete this clause, does the user
-	 * lose a fact they can act on? — answers yes for those two and no for `sent`.
+	 * The states that keep a clause keep it because it is an INSTRUCTION rather
+	 * than a restatement: where to look when the outcome is unknown, why this
+	 * screen cannot read a row it has never heard of, and — on the not-sent arm —
+	 * WHICH of a dozen conditions stopped it, which is the only thing that
+	 * distinguishes one such row from another. Both are facts the chip does not
+	 * carry, so §9.1's test — delete this clause, does the user lose a fact they
+	 * can act on? — answers yes for those and no for `sent`.
 	 */
 	detail?: string;
+	/**
+	 * The sentence that names what this screen CANNOT do, per §17.5's "naming the
+	 * non-action beats offering a fake one".
+	 *
+	 * Empty in exactly two situations and no others: where the offered action
+	 * genuinely resolves the condition (saying "there is nothing you can do"
+	 * beside a button that works is its own dishonesty), and on the two
+	 * handed-over states, whose row has nothing to fix because nothing is known
+	 * to be wrong with it.
+	 */
+	nonAction?: string;
+	/** What the row may offer. `none` on every handed-over state, permanently:
+	 * the release is with the download client and this screen is not where it is
+	 * resolved. */
+	action: GrabRowAction;
 	/**
 	 * Always false, on every state, permanently.
 	 *
@@ -198,31 +235,265 @@ export interface GrabOutcomeCopy {
 }
 
 /**
- * The three outcome values `GET /api/v1/grabs/recent` can carry
- * (internal/httpapi/grabs.go). `not_sent` is deliberately absent: those grabs
- * write no provenance row, so they are not readable from this surface at all.
+ * The FOUR outcome values `GET /api/v1/grabs/recent` can carry
+ * (internal/httpapi/grabs.go).
+ *
+ * ⚠️ `not_sent` DELIBERATELY DOES NOT BEGIN WITH "sent", AND NOTHING MAY MATCH
+ * THESE BY PREFIX. `'not_sent'.startsWith('sent')` is false, but the near-miss
+ * runs the other way — `startsWith` on the string `sent` was the obvious way to
+ * ask "was this handed over?" while there were only three values, and a
+ * `.includes('sent')` written in the same spirit answers TRUE for the one state
+ * where nothing was handed over. Every comparison in this file is a full-string
+ * equality for that reason, and the switch below is exhaustive rather than
+ * ordered.
  */
 export const OUTCOME_SENT = 'sent';
 export const OUTCOME_SENT_UNKNOWN = 'sent_outcome_unknown';
+export const OUTCOME_NOT_SENT = 'not_sent';
 export const OUTCOME_UNRECOGNISED = 'unknown';
+
+/**
+ * What the not-sent arm carries beyond the outcome itself: the server's error
+ * code, and whether the row has a release name at all.
+ *
+ * `hasTitle` is here rather than left to the template because it changes the
+ * COPY and not only the markup. `release_title` may be `""` on this arm — the
+ * candidate had been swept and the name is genuinely unknown — and a row with no
+ * name has nothing to search for, so "Search again" there would be a button that
+ * cannot be aimed. The condition decides the sentence as well as the control,
+ * and a sentence promising an action that is not rendered is the fake action
+ * §17.5 bans wearing different clothes.
+ */
+export interface GrabOutcomeInput {
+	/** `error_code` off the wire. Present only on the not-sent arm. */
+	errorCode?: string;
+	/** Whether `release_title` is a non-empty string. */
+	hasTitle?: boolean;
+}
+
+/**
+ * ⚠️ THE NOT-SENT COPY IS KEYED ON THE ERROR CODE AND NEVER ON PROSE, BECAUSE
+ * THERE IS NO PROSE TO KEY ON AND THERE WILL NOT BE.
+ *
+ * `internal/httpapi/grabs.go` ships `error_code` and deliberately withholds the
+ * message: the message is assembled from an upstream error string and would
+ * force this endpoint's "no URL, no passkey, no key" response guard open to
+ * carry it. The user was shown that sentence, verbatim, at the moment of the
+ * grab; this block is the history, and the history gets the code.
+ *
+ * ⚠️ AND THE TABLE IS THE ACTION RULE, NOT A GLOSSARY. §17.5: a failure offers
+ * the action that can succeed and never one that structurally cannot. Three
+ * questions decide each row, in this order:
+ *
+ *  1 **What stopped it**, in one clause — the only thing that separates one
+ *    not-sent row from another, since the chip is the same on all of them.
+ *  2 **Is there an action that genuinely helps?** `search-again` is offered only
+ *    where a fresh LISTING is the thing that was missing — Prowlarr's 30-minute
+ *    cache had dropped it, the recovery search did not finish, or the candidate
+ *    row was gone. `open-services` is offered only where UsArr's own service
+ *    configuration is the thing at fault, which is the one class of these that
+ *    UsArr's own screens can change.
+ *  3 **Where there is none, say so.** `grab_failed` is the case this rule was
+ *    written for: it is the unclassified remainder, so the row cannot say which
+ *    of a rejected credential, a refused address, a paused indexer or a request
+ *    Prowlarr would not take stopped it — and not one of those is moved by
+ *    asking again. §17.5's own words: a screen that reasons its way to a
+ *    plausible diagnosis and then hands the user a button that cannot act on it
+ *    is worse than one that says what it can see and stops.
+ *
+ * 🔍 THE CODES ARE READ OFF internal/httpapi/errorcodes.go AND THE GRAB PATH
+ * THAT EMITS THEM (grab.go's grabError and auditNotSent, search.go's
+ * searcherFor). `not_configured` is in the table and not in §17.5's enumeration
+ * because searcherFor emits it and auditNotSent records whatever it emits;
+ * carrying it costs one row and its absence would have been an unlabelled fall
+ * to the unrecognised state.
+ */
+interface NotSentCopy {
+	detail: string;
+	nonAction: string;
+	action: GrabRowAction;
+}
+
+const NOT_SENT_BY_CODE: Record<string, NotSentCopy> = {
+	// Prowlarr's grab cache is a non-rolling 30 minutes and this one was past it.
+	// §17.5 is explicit that this reads as EXPIRED and offers Search again —
+	// never as a rejection, which would read as "the tracker refused you".
+	expired: {
+		detail: 'the listing had expired — Prowlarr keeps a release grabbable for 30 minutes',
+		nonAction: '',
+		action: 'search-again'
+	},
+	// The one path where the re-search RAN and came back without the release, so
+	// "the indexer no longer offers it" is a claim the evidence supports. Searching
+	// again does not FIX that — it is how you find out whether it has come back —
+	// so the non-action is stated even though an action is offered.
+	no_longer_offered: {
+		detail: 'UsArr looked again and the indexer no longer offered this release',
+		nonAction:
+			'whether it comes back is the indexer’s call, so searching again is only how you find out',
+		action: 'search-again'
+	},
+	// The cache had dropped it AND the recovery search did not land. Nothing was
+	// sent either way, and running the search again is the whole of the remedy.
+	search_failed: {
+		detail:
+			'Prowlarr had dropped the listing, and the search UsArr ran to recover it did not finish',
+		nonAction: '',
+		action: 'search-again'
+	},
+	// The candidate row was gone — swept after its TTL, or outside this account's
+	// scope. A fresh search re-lists it under a new id, which is the only way back
+	// to a grabbable listing, so it is offered WHERE THERE IS A NAME TO SEARCH FOR.
+	// The nameless variant is handled below rather than here.
+	not_found: {
+		detail: 'the listing was gone when you pressed Grab — swept, or outside this account’s reach',
+		nonAction: '',
+		action: 'search-again'
+	},
+	// UsArr's own configuration, and the one class of these its own screens change.
+	no_indexer_service: {
+		detail: 'UsArr had no enabled indexer service to send the grab through',
+		nonAction: '',
+		action: 'open-services'
+	},
+	// The service exists and could not be opened. Services is honest here BECAUSE
+	// it shows reachability now rather than then — which is also why the row says
+	// so instead of implying the state has not moved since.
+	service_unavailable: {
+		detail: 'UsArr could not open the indexer service that owns this listing',
+		nonAction: 'this row is what happened then, and Services shows what UsArr can reach now',
+		action: 'open-services'
+	},
+	not_configured: {
+		detail: 'this build has no release-search service wired in',
+		nonAction:
+			'that is a property of the binary rather than of your setup, so nothing here moves it',
+		action: 'none'
+	},
+	// Prowlarr-side settings. Real, nameable, and not UsArr's to change — so the
+	// row names where the switch lives and offers no button, per §17.5's rule that
+	// Open Services is a dead end where Services will correctly show green.
+	no_download_client: {
+		detail: 'Prowlarr had no download client enabled to hand the release to',
+		nonAction:
+			'that switch is in Prowlarr under Settings → Download Clients, and nothing here can flip it',
+		action: 'none'
+	},
+	no_indexers: {
+		detail: 'Prowlarr had no enabled indexer that could carry this release',
+		nonAction:
+			'which indexers are on is Prowlarr’s own setting, so this screen can report it and not change it',
+		action: 'none'
+	},
+	// UsArr's own guard, tripped by a client asserting a stale instance. Nothing
+	// about the user's setup is wrong, so there is nothing for them to put right.
+	instance_mismatch: {
+		detail: 'the grab named a different service instance than the listing came from',
+		nonAction:
+			'UsArr held it back rather than send it to the wrong Prowlarr, so there is nothing here to put right',
+		action: 'none'
+	},
+	internal: {
+		detail: 'UsArr hit an error of its own before the release left',
+		nonAction:
+			'that one is UsArr’s fault rather than your setup’s, and the server log has the detail',
+		action: 'none'
+	},
+	// ⚠️ THE ROW THIS RULE EXISTS FOR. grab_failed asserts only that the release
+	// did not reach the download client; WHICH condition stopped it is exactly
+	// what the code does not say. So the clause says that rather than picking one,
+	// and the row offers nothing — every condition under it is unchanged by asking
+	// again, and an action that grabs again here would be a button that cannot
+	// work attached to the one code that cannot say why.
+	grab_failed: {
+		detail: 'UsArr could not say which of several things stopped it',
+		nonAction:
+			'nothing here puts it right: a credential Prowlarr rejected, an address UsArr refused, an ' +
+			'indexer UsArr had stopped asking and a request Prowlarr would not take are all unmoved by asking again',
+		action: 'none'
+	}
+};
+
+/** The nameless variant of `not_found`: the candidate had been swept before UsArr
+ * could read a title off it, so there is no query a fresh search could carry. */
+const NOT_SENT_NAMELESS: NotSentCopy = {
+	detail: 'the listing was gone when you pressed Grab — swept, or outside this account’s reach',
+	nonAction: 'UsArr has no name for it either, so there is nothing to search for',
+	action: 'none'
+};
+
+/** A code this build has never heard of. The store's vocabulary is open and so is
+ * errorcodes.go's, so this is a state to render rather than an impossibility. */
+const NOT_SENT_UNRECOGNISED: NotSentCopy = {
+	detail: 'the reason UsArr recorded is one this screen does not know',
+	nonAction:
+		'the code on this row is newer than this screen, so it cannot say more or offer anything',
+	action: 'none'
+};
+
+/**
+ * What a Release cell holds when `release_title` is `""`.
+ *
+ * ⚠️ NOT AN EMPTY CELL, AND NEVER AN INVENTED NAME. The empty string is a FACT
+ * on this arm rather than missing data: the candidate had been swept 25 minutes
+ * after the search, so `release_candidate` — the only place the name ever lived
+ * — no longer had it when the audit row was written. `NOTHING.empty`'s em dash
+ * would render that as an unremarkable blank, which it is not; a guessed title
+ * would be worse still, since the whole job of this column is letting a person
+ * recognise which release a row is about.
+ */
+export const GRAB_MISSING_TITLE_NOTE =
+	'no name recorded — the listing was already gone when you pressed Grab';
+
+function notSentCopy(input: GrabOutcomeInput): NotSentCopy {
+	const code = input.errorCode ?? '';
+	// The nameless case first: it overrides whatever the code would have offered,
+	// because an action needs something to aim at and this row has nothing.
+	if (input.hasTitle === false) return NOT_SENT_NAMELESS;
+	return NOT_SENT_BY_CODE[code] ?? NOT_SENT_UNRECOGNISED;
+}
 
 /**
  * Map an outcome onto the words §17.5 permits.
  *
  * THE UNCONFIRMED ROW SITS BESIDE THE CONFIRMED ONE, VISUALLY AND VERBALLY,
- * AND NEVER BESIDE A FAILURE. Both read "sent"; the ambiguous one adds that
- * Prowlarr reported a problem after accepting the release and that UsArr cannot
- * tell whether the download is affected. Pairing them as opposites would lie in
- * both directions — implying that a 200 confirms a download and that a 500
- * means nothing happened, and neither is true. This was a real incident, not an
- * inference: the owner's book downloaded end to end in Deluge while UsArr
- * reported "Grab failed — HTTP 502".
+ * AND NEVER BESIDE THE NOT-SENT ONE. The first two both read "sent"; the
+ * ambiguous one adds that Prowlarr reported a problem after accepting the
+ * release and that UsArr cannot tell whether the download is affected. Pairing
+ * them as opposites would lie in both directions — implying that a 200 confirms
+ * a download and that a 500 means nothing happened, and neither is true. This
+ * was a real incident, not an inference: the owner's book downloaded end to end
+ * in Deluge while UsArr reported "Grab failed — HTTP 502".
+ *
+ * ⚠️ THE THIRD STATE IS THE ONE THAT MAY BE WORDED AS "IT DID NOT HAPPEN", AND
+ * IT IS THE ONLY ONE. `not_sent` is written from `audit_log`, on the four
+ * pre-dispatch paths where UsArr genuinely knows the release never left the
+ * process — so the chip says `not sent` rather than "sent" anything, it takes
+ * the err role rather than warn, and it is the only state that may carry an
+ * action at all.
+ *
+ * ⚠️ AND IT STILL SAYS NOTHING §17.5 BANS. The ban list is unchanged and
+ * absolute across all four states: no row anywhere says "succeeded",
+ * "downloading", "done", "complete" or "failed", and none says "retry". "Not
+ * sent" is this screen's own existing word for state 3 — `liveGrabCopy` chose it
+ * for the live surface — and it is more precise than a verdict, because it names
+ * where the request stopped rather than passing judgement on the release. §17.5
+ * argues the case for `Search again` over `Retry` on exactly these grounds: a
+ * guard with exceptions is one people argue with rather than obey, and the cost
+ * of keeping it absolute is one word.
  *
  * An unrecognised state still reads "sent", because the store's vocabulary is
  * open by design — migration 0003 ships no CHECK constraint — and the one thing
- * a provenance row always means is that the request was dispatched.
+ * a provenance row always means is that the request was dispatched. A NEW value
+ * must therefore never be promoted into `not_sent` by accident: the switch is
+ * full-string and exhaustive, and everything it does not name lands on the
+ * handed-over reading, which is the safe direction for a value nobody has
+ * defined yet.
  */
-export function grabOutcome(outcome: string | undefined): GrabOutcomeCopy {
+export function grabOutcome(
+	outcome: string | undefined,
+	input: GrabOutcomeInput = {}
+): GrabOutcomeCopy {
 	switch (outcome) {
 		case OUTCOME_SENT:
 			// No detail: see GrabOutcomeCopy.detail. The label is the whole fact,
@@ -231,6 +502,7 @@ export function grabOutcome(outcome: string | undefined): GrabOutcomeCopy {
 				outcome: OUTCOME_SENT,
 				label: 'sent',
 				tone: 'neutral',
+				action: 'none',
 				offersRetry: false
 			};
 		case OUTCOME_SENT_UNKNOWN:
@@ -239,18 +511,44 @@ export function grabOutcome(outcome: string | undefined): GrabOutcomeCopy {
 				label: 'sent, outcome unknown',
 				tone: 'warn',
 				detail: 'Prowlarr reported a problem after accepting it — check your download client',
+				// No action, permanently. The only button that would fit is one that
+				// sends the release again, which is what produces two copies of a
+				// 68 GB release; the truth lives in the download client, and the
+				// clause above points there in words rather than in a control.
+				action: 'none',
 				offersRetry: false
 			};
+		case OUTCOME_NOT_SENT: {
+			const copy = notSentCopy(input);
+			return {
+				outcome: OUTCOME_NOT_SENT,
+				// One chip for every code, deliberately. `.chip` is `white-space:
+				// nowrap`, so a per-code label would overflow the cell it sits in —
+				// and the code's own clause is directly under it, which is where §9.1
+				// puts the fact that varies. The chip carries the STATE.
+				label: 'not sent',
+				tone: 'err',
+				detail: copy.detail,
+				nonAction: copy.nonAction === '' ? undefined : copy.nonAction,
+				action: copy.action,
+				offersRetry: false
+			};
+		}
 		default:
 			return {
 				outcome: outcome && outcome.length > 0 ? outcome : OUTCOME_UNRECOGNISED,
 				label: 'sent, state not recognised',
 				tone: 'warn',
 				detail: 'this row is newer than this screen',
+				action: 'none',
 				offersRetry: false
 			};
 	}
 }
+
+/** Every error code this build has a clause for, so a test can hold the whole
+ * table against the ban list instead of a sample of it. */
+export const NOT_SENT_CODES: readonly string[] = Object.keys(NOT_SENT_BY_CODE);
 
 /**
  * The line above the block that says where UsArr's knowledge stops (§17.5).
@@ -261,18 +559,34 @@ export const KNOWLEDGE_STOPS_NOTE =
 	'what Prowlarr said at the time — not what your download client has managed since.';
 
 /**
- * The line that says which grabs are missing from the block (§17.5).
+ * The line that says which grabs are missing from the block (§17.5), and it now
+ * has TWO facts to carry at once rather than one.
  *
- * A provenance row is written only after the request was dispatched, so a
- * rejected API key, a refused address, an open circuit breaker, a Prowlarr
- * 400/409 and a corrupt stored blob leave no row at all
- * (internal/httpapi/grabs.go). Saying so is what stops the block reading as
- * "every grab worked".
+ * ⚠️ IT USED TO SAY THE NOT-SENT ARM WAS UNBUILT, AND THAT IS NO LONGER TRUE.
+ * `GET /api/v1/grabs/recent` unions `provenance` with the `audit_log` rows
+ * carrying `action='release.grab'` and `result='fail'`, so a rejected API key, a
+ * refused address, a paused indexer and a release Prowlarr would not take are
+ * all listed now, marked `not_sent`.
+ *
+ * ⚠️ AND THE OBVIOUS REPLACEMENT — "every grab is listed" — WOULD BE FALSE IN
+ * THE OTHER DIRECTION, which is the whole reason this line is still here.
+ * handleGrab has seven pre-dispatch early returns and only FOUR write an audit
+ * row (internal/httpapi/grab.go). The three that do not are deliberate rather
+ * than pending: no session (no actor, so the scoped read could never return the
+ * row, and it is the one branch reachable without credentials — an append-only
+ * table anyone who can reach the port could grow), a malformed path id, and an
+ * undecodable body. None of the three ever named a release, so none of them
+ * describes a grab, and a row for one would render as a failed grab of nothing.
+ *
+ * So the sentence has to be true in both directions at once: they are listed,
+ * and the list is not every way a grab can go wrong. That is the whole of what
+ * it says — the reasoning above is why, and the reasoning is not the user's
+ * problem.
  */
 export const NOT_SENT_NOTE =
-	'Grabs that never got sent are not listed here yet. A rejected API key, a refused address, an ' +
-	'indexer whose breaker is open or a release Prowlarr would not take leaves no record for this ' +
-	'block to read, and that arm is still being built.';
+	'Grabs that never got sent are listed here too, marked as such — but not all of them. A request ' +
+	'UsArr turned away before it could name a release, from a signed-out tab or a malformed link, is ' +
+	'a routing fault rather than a grab, so it goes to the log and not to this table.';
 
 /**
  * Words no copy on this screen may use, and the reason each one is banned.
@@ -285,9 +599,22 @@ export const NOT_SENT_NOTE =
  *     unknowable claim on the ambiguous row.
  *   retry — the action that produces two copies of a 68 GB release.
  *
+ * ⚠️ THE LIST DID NOT GROW AN EXCEPTION WHEN THE NOT-SENT STATE ARRIVED, AND
+ * THAT WAS A DECISION RATHER THAN AN OVERSIGHT. §17.5 permits state 3 to be
+ * worded as "it did not happen" — UsArr genuinely knows the release never left
+ * the process — so "failed" would have been defensible on that arm alone. It is
+ * not used, for the reason §17.5 gives for preferring `Search again` to `Retry`
+ * on the merits-neutral case: a guard over words cannot see context, so the
+ * choice is between a guard that is absolute and a guard that has exceptions,
+ * and a guard with exceptions is one people argue with rather than obey. A
+ * screen that bans a word in one state and uses it in the next teaches the next
+ * author that the ban is soft. `not sent` is this screen's own word for state 3
+ * already — `liveGrabCopy` chose it — and it is the more precise one: it names
+ * where the request stopped instead of passing a verdict on the release.
+ *
  * The list is exported so the test can hold every string in this module against
- * it. That is the guard: a future edit reintroducing "succeeded" fails a test
- * rather than passing review.
+ * it, on every state including the not-sent one. That is the guard: a future
+ * edit reintroducing "succeeded" fails a test rather than passing review.
  */
 export const FORBIDDEN_OUTCOME_WORDS: readonly string[] = [
 	'succeeded',

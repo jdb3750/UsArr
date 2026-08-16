@@ -25,8 +25,11 @@ import {
 	DEFAULT_SEARCH_TYPE,
 	EMPTY_IDLE_TITLE,
 	FORBIDDEN_OUTCOME_WORDS,
+	GRAB_MISSING_TITLE_NOTE,
 	KNOWLEDGE_STOPS_NOTE,
+	NOT_SENT_CODES,
 	NOT_SENT_NOTE,
+	OUTCOME_NOT_SENT,
 	OUTCOME_SENT,
 	OUTCOME_SENT_UNKNOWN,
 	RECENT_GRAB_ROW_INTRINSIC,
@@ -249,6 +252,172 @@ describe('grabOutcome', () => {
 		// row is the one with nothing to do about it, so it is neutral.
 		expect(grabOutcome(OUTCOME_SENT).tone).toBe('neutral');
 		expect(grabOutcome(OUTCOME_SENT_UNKNOWN).tone).toBe('warn');
+	});
+});
+
+describe('grabOutcome — the not-sent state', () => {
+	// §17.5's third state, which the endpoint could not express until the union
+	// with audit_log landed. It is the ONE state where "nothing is running" is a
+	// true claim, and the one that may carry an action.
+	const notSent = (errorCode?: string, hasTitle = true) =>
+		grabOutcome(OUTCOME_NOT_SENT, { errorCode, hasTitle });
+
+	it('reads as not sent, and sits beside neither handed-over state', () => {
+		// The boundary is handed-over versus not-handed-over. The first two are
+		// the same epistemic state about the download; this is the other side, so
+		// it must not read as a variety of "sent".
+		const copy = notSent('expired');
+		expect(copy.label).toBe('not sent');
+		expect(copy.label.startsWith('sent')).toBe(false);
+		expect(copy.tone).toBe('err');
+		expect(copy.tone).not.toBe(grabOutcome(OUTCOME_SENT).tone);
+		expect(copy.tone).not.toBe(grabOutcome(OUTCOME_SENT_UNKNOWN).tone);
+	});
+
+	it('is matched on the FULL string, never on a "sent" prefix', () => {
+		// `not_sent` deliberately does not begin with `sent`, and the near miss
+		// runs the other way: a membership test written in the obvious spirit —
+		// `outcome.includes('sent')` — answers true for the one state where
+		// nothing was handed over. Pinned so a later refactor to a prefix or a
+		// substring match fails here.
+		expect(OUTCOME_NOT_SENT.startsWith(OUTCOME_SENT)).toBe(false);
+		expect(OUTCOME_NOT_SENT.includes(OUTCOME_SENT)).toBe(true);
+		expect(notSent('expired').outcome).toBe(OUTCOME_NOT_SENT);
+	});
+
+	it('does not promote an unrecognised outcome into it', () => {
+		// The safe direction for a value nobody has defined yet is the
+		// handed-over reading: "sent" is true of every provenance row, and
+		// asserting "not sent" is the one claim this screen may only make when
+		// the server has made it first.
+		for (const value of ['pending', 'not_sent_yet', 'sent_', '', undefined]) {
+			expect(grabOutcome(value).label).not.toBe('not sent');
+			expect(grabOutcome(value).tone).not.toBe('err');
+		}
+	});
+
+	it('never offers Retry, and never an action that grabs again', () => {
+		// The union has no member that re-sends a grab, by construction:
+		// `search-again` starts a fresh fan-out and `open-services` navigates.
+		for (const code of [...NOT_SENT_CODES, 'quantum', '']) {
+			const copy = notSent(code);
+			expect(copy.offersRetry).toBe(false);
+			expect(['none', 'search-again', 'open-services']).toContain(copy.action);
+		}
+	});
+
+	it('gives every code a clause, because the chip is identical on all of them', () => {
+		// One chip for every code — `.chip` is `white-space: nowrap` and a
+		// per-code label would overflow the cell — so the clause is the ONLY
+		// thing separating one not-sent row from another. A code with no clause
+		// would render as a bare "not sent" with nothing to act on.
+		for (const code of NOT_SENT_CODES) {
+			expect(notSent(code).detail).toBeTruthy();
+		}
+	});
+
+	it('reads an expired listing as expired, and offers Search again', () => {
+		// §17.5 by name: retrying the same opaque release id returns the same 4xx
+		// for ever, so the one action that can work is a fresh search — and the
+		// row must not read as a rejection, which says "the tracker refused you".
+		const copy = notSent('expired');
+		expect(copy.detail).toContain('expired');
+		expect(copy.action).toBe('search-again');
+		expect(`${copy.detail} ${copy.nonAction ?? ''}`.toLowerCase()).not.toContain('rejected');
+	});
+
+	it('offers Search again only where a fresh listing is what was missing', () => {
+		// Those three are the codes that mean Prowlarr's 30-minute cache, or the
+		// candidate row behind it, no longer holds the release. Every other code
+		// describes something a new search would meet again unchanged.
+		const researchable = NOT_SENT_CODES.filter((c) => notSent(c).action === 'search-again');
+		expect(researchable.sort()).toEqual(
+			['expired', 'no_longer_offered', 'not_found', 'search_failed'].sort()
+		);
+	});
+
+	it('never offers an action on grab_failed, which cannot say what stopped it', () => {
+		// The unclassified remainder: a rejected credential, a refused address, a
+		// paused indexer, a request Prowlarr would not take, a corrupt blob. Not
+		// one is moved by asking again, and the code cannot say which it was — so
+		// the honest surface is the non-action, named.
+		const copy = notSent('grab_failed');
+		expect(copy.action).toBe('none');
+		expect(copy.nonAction).toBeTruthy();
+		expect(copy.nonAction).toContain('nothing here puts it right');
+	});
+
+	it('names the non-action on every code that offers nothing', () => {
+		// §17.5's rule, applied exhaustively rather than to the one case it was
+		// written for: a row with no clause and no button says only "not sent",
+		// which is the chip restated.
+		for (const code of [...NOT_SENT_CODES, 'quantum', '']) {
+			const copy = notSent(code);
+			if (copy.action === 'none') expect(copy.nonAction).toBeTruthy();
+		}
+	});
+
+	it('claims no non-action where the offered action genuinely resolves it', () => {
+		// Saying "there is nothing you can do" beside a control that works is its
+		// own kind of dishonesty. These are the codes whose action is the fix.
+		for (const code of ['expired', 'search_failed', 'not_found', 'no_indexer_service']) {
+			expect(notSent(code).nonAction).toBeUndefined();
+		}
+		// And the counter-case, which keeps the rule from collapsing into "an
+		// action means no sentence": searching again does not FIX a withdrawn
+		// release, it is how you find out, and Services shows now rather than then.
+		expect(notSent('no_longer_offered').nonAction).toBeTruthy();
+		expect(notSent('service_unavailable').nonAction).toBeTruthy();
+	});
+
+	it('points at Services only where UsArr’s own configuration is at fault', () => {
+		// §17.5: Open Services is a dead end where Services will correctly show
+		// the service as reachable. So it is not offered on the codes that
+		// describe Prowlarr's settings or an indexer's answer.
+		const services = NOT_SENT_CODES.filter((c) => notSent(c).action === 'open-services');
+		expect(services.sort()).toEqual(['no_indexer_service', 'service_unavailable'].sort());
+		for (const code of ['no_download_client', 'no_indexers', 'grab_failed']) {
+			expect(notSent(code).action).not.toBe('open-services');
+		}
+	});
+
+	it('offers nothing to aim at a row with no release name', () => {
+		// A nameless row has no query a fresh search could carry, so the action
+		// that WOULD have been offered for its code is withdrawn and the sentence
+		// says why. A control that cannot be aimed is the fake action §17.5 bans
+		// wearing different clothes.
+		const nameless = notSent('not_found', false);
+		expect(notSent('not_found', true).action).toBe('search-again');
+		expect(nameless.action).toBe('none');
+		expect(nameless.nonAction).toContain('nothing to search for');
+	});
+
+	it('explains an empty title rather than rendering a blank or inventing one', () => {
+		// The empty string is a FACT on this arm — release_candidate is swept 25
+		// minutes after the search — so it gets a sentence, not NOTHING.empty's
+		// em dash and certainly not a guessed name.
+		expect(GRAB_MISSING_TITLE_NOTE).toBeTruthy();
+		expect(GRAB_MISSING_TITLE_NOTE).not.toBe('—');
+		expect(GRAB_MISSING_TITLE_NOTE).toContain('already gone');
+	});
+
+	it('renders a code it has never heard of rather than dropping the row', () => {
+		// errorcodes.go's vocabulary is a wire contract that can grow, so an
+		// unknown code is a state to render honestly, not an impossibility.
+		const copy = notSent('quantum');
+		expect(copy.label).toBe('not sent');
+		expect(copy.detail).toBeTruthy();
+		expect(copy.action).toBe('none');
+		expect(copy.nonAction).toContain('newer than this screen');
+	});
+
+	it('gives the two handed-over states no action at all, permanently', () => {
+		// The only control that would fit either is one that sends the release
+		// again, which is precisely what produces two copies of a 68 GB release.
+		for (const value of [OUTCOME_SENT, OUTCOME_SENT_UNKNOWN, 'pending', undefined]) {
+			expect(grabOutcome(value).action).toBe('none');
+			expect(grabOutcome(value).nonAction).toBeUndefined();
+		}
 	});
 });
 
@@ -531,16 +700,46 @@ describe('the banned vocabulary', () => {
 	// Every user-facing string this module ships, held against §17.5's ban list.
 	// This is the guard: an edit that reintroduces "succeeded" or wires a
 	// "failed" chip fails here rather than passing review.
+	//
+	// ⚠️ THE NOT-SENT ARM IS IN THE CORPUS RATHER THAN EXEMPT FROM IT, AND THAT
+	// IS THE DECISION WORTH RECORDING. §17.5 permits state 3 to be worded as "it
+	// did not happen" — UsArr genuinely knows the release never left the process
+	// — so "failed" would have been defensible there and nowhere else. Carving
+	// the exception was refused for the reason §17.5 gives for preferring `Search
+	// again` to `Retry`: a guard over words cannot see context, so the choice is
+	// between an absolute guard and one with exceptions, and a guard with
+	// exceptions is one people argue with rather than obey. Every code's clause,
+	// its non-action and the nameless variant are all held to the full list.
 	const strings = [
 		SEARCH_TYPE_NOTE,
 		THIN_COVERAGE_NOTE,
 		KNOWLEDGE_STOPS_NOTE,
 		NOT_SENT_NOTE,
+		GRAB_MISSING_TITLE_NOTE,
 		...[OUTCOME_SENT, OUTCOME_SENT_UNKNOWN, 'unknown'].flatMap((o) => {
 			const copy = grabOutcome(o);
 			return [copy.label, copy.detail ?? ''];
-		})
-	];
+		}),
+		// Every not-sent code, both with a title and without, so the nameless
+		// variant and the unrecognised fallback are both covered. The CODE strings
+		// themselves are deliberately not in the corpus — `search_failed` is a wire
+		// identifier from errorcodes.go and never reaches a user.
+		...[...NOT_SENT_CODES, 'quantum', ''].flatMap((code) =>
+			[true, false].flatMap((hasTitle) => {
+				const copy = grabOutcome(OUTCOME_NOT_SENT, { errorCode: code, hasTitle });
+				return [copy.label, copy.detail ?? '', copy.nonAction ?? ''];
+			})
+		)
+	].filter((s) => s.length > 0);
+
+	it('is holding the strings it thinks it is holding', () => {
+		// A guard that matches nothing is indistinguishable from no guard. The
+		// floor catches a helper that started returning empty copy, and the two
+		// pins catch a corpus that quietly stopped reaching the not-sent arm.
+		expect(strings.some((s) => s.includes('the listing had expired'))).toBe(true);
+		expect(strings.some((s) => s.includes('nothing here puts it right'))).toBe(true);
+		expect(strings.length).toBeGreaterThan(40);
+	});
 
 	it.each(FORBIDDEN_OUTCOME_WORDS)('never says “%s”', (word) => {
 		for (const value of strings) {
@@ -552,6 +751,11 @@ describe('the banned vocabulary', () => {
 		// The one unknowable claim. Prowlarr adds the release to the download
 		// client BEFORE the step that failed for the owner, and never rolls
 		// back, so a 5xx can cover an operation that already partly succeeded.
+		//
+		// It stays absolute across the not-sent arm too, where the claim IS
+		// knowable: the phrases below are banned wordings rather than banned
+		// facts, and the not-sent copy states the same fact more precisely — the
+		// release never left, and here is what stopped it.
 		for (const value of strings) {
 			expect(value.toLowerCase()).not.toContain('did not go through');
 			expect(value.toLowerCase()).not.toContain('nothing was sent');
@@ -563,6 +767,20 @@ describe('the banned vocabulary', () => {
 		// dispatched grabs reads as "every grab worked".
 		expect(KNOWLEDGE_STOPS_NOTE).toContain('stops watching');
 		expect(NOT_SENT_NOTE).toContain('never got sent');
+	});
+
+	it('states both halves of the gap, so neither reading is available', () => {
+		// The line has TWO facts to carry now and gets them wrong in opposite
+		// directions if it carries one. The old wording said the not-sent arm was
+		// unbuilt, which is no longer true — the union with audit_log ships. The
+		// obvious replacement, "every grab is listed", is false the other way:
+		// three of handleGrab's seven pre-dispatch returns write no audit row by
+		// design, because none of them ever named a release.
+		expect(NOT_SENT_NOTE).toContain('listed here too');
+		expect(NOT_SENT_NOTE).toContain('not all of them');
+		// And it must not have kept the retired claim.
+		expect(NOT_SENT_NOTE).not.toContain('not listed here yet');
+		expect(NOT_SENT_NOTE.toLowerCase()).not.toContain('still being built');
 	});
 });
 

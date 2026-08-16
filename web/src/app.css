@@ -1229,7 +1229,19 @@ select[multiple] {
 	border-color: currentcolor;
 }
 
-.chip--failed {
+/* One rule, two names, and the second is not a synonym added for taste.
+ *
+ * `.chip--failed` is named after a state; `.chip--err` is named after the ROLE,
+ * which is how the rest of this stylesheet names things — `.banner--err` is
+ * right beside it. The Recent-grabs block needs the error role and may not spell
+ * it `failed`: ARCHITECTURE.md §17.5 bans that word about a grab, and
+ * `requests.test.ts` enforces the ban over the RENDERED MARKUP of that section,
+ * attributes included. A class name is not user-facing copy, so the guard
+ * flagging one is the guard being blunt rather than wrong — and the right answer
+ * is the role name the design system already uses, not an exception carved into
+ * a guard that §17.5 argues should stay absolute. */
+.chip--failed,
+.chip--err {
 	color: var(--status-error);
 	border-color: currentcolor;
 }
