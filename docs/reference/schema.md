@@ -180,7 +180,10 @@ CREATE TABLE work_episode (
 ) STRICT;
 CREATE INDEX ix_ep_air ON work_episode(air_date_utc);
 
--- later tables (v1.0, with Lidarr / Komga)
+-- later tables, landing with the command sinks (Lidarr) and the comics/manga
+-- catalogue source. Both sit AFTER v0.1: ADR-0036 keeps every catalogue source
+-- out of v0.1 and sequences them one at a time afterwards, and ADR-0035 makes
+-- Kavita the comics-and-books source, with Komga last of the four.
 CREATE TABLE work_album (
   work_id    INTEGER PRIMARY KEY REFERENCES work(id) ON DELETE CASCADE,
   album_type TEXT, disambiguation TEXT, track_count INTEGER
@@ -556,7 +559,9 @@ CREATE TABLE service_item_link (
   -- The three container-predicate inputs that library_source.container_kind needs and that this
   -- table previously could not hold. Without them, `remote_library`, `tag` and `series_type` are
   -- CHECK values with no storage behind them — and `remote_library` is the ONLY container kind
-  -- available for Navidrome, Audiobookshelf and Komga, i.e. for three of the six media types.
+  -- available for the catalogue sources (Navidrome, Audiobookshelf, Kavita, then Komga), i.e. for
+  -- four of the six media types. Those arrive one at a time AFTER v0.1 (ADR-0036), so these
+  -- columns are written by the *Arr sync first and carry no catalogue reader until then.
   remote_library_id   TEXT,          -- the upstream's own library/collection id, verbatim
   remote_tag_ids      TEXT,          -- JSON array of *Arr tag ids, verbatim
   remote_subtype      TEXT,          -- the upstream's own sub-classification, verbatim
@@ -1185,8 +1190,11 @@ CREATE UNIQUE INDEX ux_libsrc_authority ON library_source(library_id)
 
 **Every `container_kind` now has storage on both sides of the predicate**, which was the defect:
 three of the five values could not be derived from any column in the schema, and `remote_library`
-is the *only* container available for Navidrome, Audiobookshelf and Komga — three of the six media
-types.
+is the *only* container available for the catalogue sources — Navidrome, Audiobookshelf and Kavita,
+then Komga — which between them cover four of the six media types. Per ADR-0036 none of those ships
+in v0.1; they arrive one at a time afterwards, in an order the ADR-0035 §2 watermark probe decides,
+with Komga last. So this storage is exercised by the \*Arr sync first and by each catalogue source
+as it lands.
 
 | `container_kind` | `container_ref` holds | Membership predicate against `service_item_link` |
 |---|---|---|

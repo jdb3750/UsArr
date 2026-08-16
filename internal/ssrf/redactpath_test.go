@@ -187,7 +187,7 @@ func TestOpaqueIDsInPathsAreRedacted(t *testing.T) {
 	t.Parallel()
 
 	for _, raw := range []string{
-		"https://example.test/stream/01ABCDEFGHJKMNPQRSTVWXYZ00",     // ULID
+		"https://example.test/stream/01ABCDEFGHJKMNPQRSTVWXYZ00",       // ULID
 		"https://example.test/commit/abcdef0123456789abcdef0123456789", // git sha
 	} {
 		if got := RedactRawURL(raw); !strings.Contains(got, redactedValue) {
