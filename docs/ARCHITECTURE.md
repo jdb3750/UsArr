@@ -3068,12 +3068,18 @@ document now says which half of itself is true today**, so a reader can tell a p
 report — and the four rows above are the checklist for closing the distance, in the order the
 dependencies allow: `write_queue` needs a writer before anything else on this list can move.
 
-**The reason it is not a nicety.** UsArr's only write path in v0.1 produces a multi-gigabyte download,
-and the confirmation currently lives in a chip inside a *search result row*, which is transient: one
-navigation away and there is no UsArr-side record that anything happened, no way to tell whether you
+**The reason it is not a nicety, stated as the argument that WON rather than as a description of
+today.** UsArr's only write path in v0.1 produces a multi-gigabyte download, and before this block
+existed the confirmation lived only in a chip inside the release row: transient, so one navigation
+away there was no UsArr-side record that anything had happened, no way to tell whether you had
 already grabbed something an hour ago, no way to recover a release name after a restart, and no
 answer to *"did that one work?"*. A hub whose acquisition loop has no memory is a slower way to reach
-Prowlarr's own UI, which does keep a history. It also closes a three-document gap: this section
+Prowlarr's own UI, which does keep a history. ⚠️ **Past tense on purpose: both halves of that
+sentence have since moved.** Recent grabs shipped, so the durable record exists; and the release
+results table itself moved off Search onto this screen (`ce32b15`), so the chip is no longer *in a
+search result row* at all. The paragraph is kept because the reasoning is why the block is funded —
+but it must not be read as a report of the current UI, which is exactly the failure the table above
+this one exists to stop. It also closes a three-document gap: this section
 required *"the user's own request list with state"*, §16's v0.1 did not fund one (the request model
 is v0.2), and §16 wins by its own rule — so the shipping answer was "no grab history in v0.1", stated
 nowhere.
