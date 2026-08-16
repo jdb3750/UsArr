@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>UsArr list primitive — measurement harness (fabricated data)</title>
+	</head>
+	<body>
+		<!--
+			THIS PAGE IS NOT PART OF THE APPLICATION AND NEVER SHIPS.
+
+			Every row on it is fabricated, which is why it is a dev-only Vite root
+			under web/scripts rather than a route: DESIGN-DIRECTION §9.6 forbids
+			fabricated data in a shipped product surface, and a route would be one
+			whether or not anything linked to it. `pnpm build` never sees this
+			directory; `scripts/list-bench.mjs` builds it into a temp dir, drives it
+			with Playwright, and deletes it.
+		-->
+		<div id="harness"></div>
+		<script type="module" src="./main.ts"></script>
+	</body>
+</html>

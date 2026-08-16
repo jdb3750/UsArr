@@ -12,6 +12,7 @@
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"lint": "eslint .",
 		"test": "vitest run",
+		"bench:list": "node scripts/list-bench.mjs",
 		"format": "prettier --write .",
 		"format:check": "prettier --check ."
 	},

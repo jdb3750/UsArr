@@ -333,10 +333,20 @@
  * measured. Density moves the row height; it does not move the column template,
  * so every extra pixel of horizontal padding comes straight out of cell content
  * width — at 16px, eight column headers ellipsise that are intact at 12px.
+ *
+ * EACH BLOCK MATCHES A BARE [data-density] AS WELL AS :root, so the attribute
+ * can be scoped to one list container rather than only to <html>. ADR-0029
+ * names that as one of three mitigations for the density toggle, which is the
+ * expensive operation on a long list. The bare selector is specificity 0-1-0
+ * against :root's 0-2-0, and that is not a conflict: a declaration that matches
+ * an element directly always beats a value inherited from an ancestor,
+ * whatever the two specificities are, so a list carrying data-density="compact"
+ * resolves compact even under <html data-density="relaxed">.
  * --------------------------------------------------------------------------- */
 
 :root,
-:root[data-density='compact'] {
+:root[data-density='compact'],
+[data-density='compact'] {
 	--row-h: 28px; /* read-only data row. THE DEFAULT.        */
 	--row-h-two-line: 44px; /* title 13/18 over meta 11/16             */
 	--row-h-thumb: 52px; /* 40px cover inside a 52px floor          */
@@ -344,7 +354,8 @@
 	--row-pad-x: var(--space-5); /* 12px                                    */
 }
 
-:root[data-density='standard'] {
+:root[data-density='standard'],
+[data-density='standard'] {
 	--row-h: 32px;
 	--row-h-two-line: 48px;
 	--row-h-thumb: 56px;
@@ -352,7 +363,8 @@
 	--row-pad-x: var(--space-5); /* 12px */
 }
 
-:root[data-density='relaxed'] {
+:root[data-density='relaxed'],
+[data-density='relaxed'] {
 	--row-h: 36px; /* fits 28px inline action buttons with clearance */
 	--row-h-two-line: 52px;
 	--row-h-thumb: 60px;
@@ -1458,14 +1470,28 @@ select[multiple] {
 	min-height: var(--row-h);
 	border-bottom: 1px solid var(--border);
 	/* This is the whole point of the primitive change: inert on a <tr>, and it
-	 * works here. contain-intrinsic-size tracks the density variable rather
-	 * than being a constant, and it sizes the CONTENT box, so the padding is in
-	 * the expression rather than assumed away. --row-lines is declared per list
-	 * from that list's own measured rows: a constant is wrong by 50% on a
-	 * design where a services row is six lines and a search row is one. */
+	 * works here — asserted rather than assumed, by scripts/list-bench.mjs and
+	 * by check 8 in docs/design/check.mjs, both of which compare the container's
+	 * scrollHeight with the declaration against without it.
+	 *
+	 * --row-ci is a MEASURED CONTENT-BOX HEIGHT IN PIXELS, written per list
+	 * through the CSSOM by List.svelte. It is not --row-h and it is not derived
+	 * from --row-h: contain-intrinsic-size sizes the CONTENT box, so the row's
+	 * padding and its 1px border are added by the browser on top of whatever is
+	 * here, and --row-h is a min-height on the border box. Deriving one from the
+	 * other double-counts the padding — measured, a 24px row with `auto 28px`
+	 * produced a 37px placeholder.
+	 *
+	 * The `auto` keyword in front of the length is what keeps the estimate from
+	 * having to be right for long: once a row has been rendered the browser
+	 * remembers its real size and uses that instead, so this value only governs
+	 * rows that have never been on screen.
+	 *
+	 * The fallback is the arithmetic that produced the measured default, kept
+	 * as a fallback rather than as the value so a list that forgets to set the
+	 * property degrades to a close estimate rather than to nothing. */
 	content-visibility: auto;
-	contain-intrinsic-size: auto
-		calc(2 * var(--row-pad-y) + var(--row-lines, 1.1) * var(--leading-base));
+	contain-intrinsic-size: auto var(--row-ci, var(--leading-base));
 }
 
 .tbl tbody tr:hover {
@@ -1606,6 +1632,58 @@ select[multiple] {
 	display: none;
 }
 
+/* The `·` between the two secondary fields of a two-line phone row. Same
+ * reasoning as .stacklabel: a real aria-hidden element rather than ::before
+ * generated content, which would land inside the cell's accessible name and be
+ * announced. Hidden above 760px, where the row is a grid of columns and there
+ * is nothing to separate. */
+.stacksep {
+	display: none;
+}
+
+/* A machine string that genuinely does not fit scrolls INSIDE ITS OWN CELL.
+ * §9.1: a declared-column list needs an overflow policy and "clip" is not one —
+ * a fixed track plus overflow-x:clip on the wrapper amputates, with no
+ * scrollbar and no way to reach what was cut. Putting the scroller in the cell
+ * rather than on the wrapper is also what keeps the wrapper from becoming a
+ * scroll container, which is what breaks the sticky header between 761 and
+ * 1,099px. overflow-wrap stays normal: `anywhere` renders x264 as x26 / 4. */
+.cell-scroll {
+	display: block;
+	white-space: nowrap;
+	overflow-x: auto;
+	overflow-y: hidden;
+	overflow-wrap: normal;
+	max-width: 100%;
+	min-width: 0;
+	scrollbar-width: thin;
+}
+
+/* "Load more" over keyset pages (ADR-0029). Never infinite scroll: NN/g finds
+ * it "can be downright harmful to usability — in particular, for search
+ * results", and Baymard measured "Load more" plus lazy loading as the
+ * best-performing pattern. The count beside it is what makes the control
+ * honest — a button that says only "Load more" cannot say how much more. */
+.list__more {
+	display: flex;
+	align-items: center;
+	gap: var(--space-4);
+	padding: var(--space-4) var(--row-pad-x);
+	border-bottom: 1px solid var(--border);
+}
+
+.list__count,
+.list__note {
+	color: var(--fg-muted);
+	font-size: var(--text-sm);
+	line-height: var(--leading-sm);
+	font-variant-numeric: var(--numeric-tabular);
+}
+
+.list__note {
+	padding: var(--space-4) var(--row-pad-x);
+}
+
 /* --- 2.7 The mobile drawer ------------------------------------------------ */
 
 /* Below 900px the sidebar overlays the content rather than taking a column from
@@ -1727,6 +1805,83 @@ select[multiple] {
 	.tbl--2up td[data-col='items'] > .stacklabel,
 	.tbl--2up td[data-col='have'] > .stacklabel {
 		display: none;
+	}
+
+	/* THE OTHER STACKING FORK: a results list is scanned, not read one record
+	 * at a time, so it degrades to TWO LINES rather than to label/value pairs.
+	 * §9.1: five labelled lines per result puts three results in an 844px
+	 * viewport and turns fourteen ebooks into ~70 lines.
+	 *
+	 * The row becomes `display: block` rather than a one-column grid, which is
+	 * what lets the second line's cells sit inline beside each other with the
+	 * `·` between them. content-visibility is unaffected — a block is not an
+	 * internal table box, so all three containments still apply. The header
+	 * stays visually-hidden-but-present, exactly as .tbl--stack does, so the
+	 * columnheader nodes survive for the accessibility tree.
+	 *
+	 * The visually-hidden thead is a copy of .tbl--stack thead rather than a
+	 * shared selector list, because the two forks are independent decisions and
+	 * a shared rule would tie them together for no reason beyond brevity. */
+	.tbl--2line thead {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+		white-space: nowrap;
+	}
+
+	.tbl--2line thead tr {
+		position: static;
+	}
+
+	.tbl--2line thead tr:not([hidden]) {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.tbl--2line tbody tr:not([hidden]) {
+		display: block;
+		border-bottom: 1px solid var(--border-strong);
+		padding: var(--space-3) var(--row-pad-x);
+	}
+
+	/* Everything the two lines do not carry goes behind the row, not onto a
+	 * third line. §9.1's truncation policy, tier 3: an explanation is not a cell
+	 * value at all. */
+	.tbl--2line td[data-line='hidden'] {
+		display: none;
+	}
+
+	.tbl--2line td {
+		padding: 0;
+		text-align: left;
+	}
+
+	.tbl--2line td[data-line='1'] {
+		display: block;
+		font-weight: var(--weight-semibold);
+	}
+
+	.tbl--2line td[data-line='2'] {
+		display: inline;
+		color: var(--fg-muted);
+		font-size: var(--text-sm);
+		line-height: var(--leading-sm);
+	}
+
+	.tbl--2line td.is-num {
+		text-align: left;
+	}
+
+	/* The separator sits BETWEEN the second-line fields, so the first of them
+	 * does not carry one. Which column that is comes from the column list, which
+	 * is static, so the component simply does not emit the span there — cheaper
+	 * than a sibling selector and it means the DOM has no element that exists
+	 * only to be hidden. */
+	.tbl--2line .stacksep {
+		display: inline;
+		color: var(--fg-muted);
+		padding: 0 var(--space-2);
 	}
 
 	.verbatim {

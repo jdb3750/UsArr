@@ -6,7 +6,7 @@
 	import { resolve } from '$app/paths';
 </script>
 
-<svelte:head><title>Libraries — UsArr</title></svelte:head>
+<svelte:head><title>Libraries · UsArr</title></svelte:head>
 
 <div class="section">
 	<div class="empty">
