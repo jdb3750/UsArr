@@ -42,6 +42,20 @@ func testGrabRowIDKey(t *testing.T) []byte {
 	return key
 }
 
+// testAuditRowIDKey is the same story for the not-sent arm: the SHIPPING
+// derivation over the SAME fixed secret and salt, so the two keys differ only by
+// their info label — which is the property the whole domain separation rests on,
+// and the one a hand-written constant here would quietly fake.
+func testAuditRowIDKey(t *testing.T) []byte {
+	t.Helper()
+	key, err := crypto.DeriveAuditRowIDKey(
+		bytes.Repeat([]byte{0x11}, 32), bytes.Repeat([]byte{0x22}, 32))
+	if err != nil {
+		t.Fatalf("derive audit row id key: %v", err)
+	}
+	return key
+}
+
 // seedGrabRow inserts one provenance row and returns its RAW rowid — the value
 // that must never reach the wire. Tests need it to assert its own absence.
 func seedGrabRow(t *testing.T, s *Server, userID int64, title string, at time.Time, state string) int64 {
@@ -199,6 +213,13 @@ var recentGrabsWireKeys = map[string]bool{
 	"source_system":     true,
 	"acquisition_state": true,
 	"outcome":           true,
+	// The not-sent arm's only new key. It is a CLOSED vocabulary — errorcodes.go's
+	// constants — which is why it is admissible here at all: the error PROSE it
+	// replaces is assembled from an upstream error string and passes through
+	// redactText, which strips credentials from a URL but leaves scheme://host
+	// behind, so admitting the sentence would mean loosening the value check
+	// below to accommodate a field.
+	"error_code": true,
 }
 
 // The one hard rule: nothing on this path may hand a client a download URL or a

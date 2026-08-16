@@ -372,18 +372,77 @@ describe('toRecentGrab', () => {
 		expect(new Map([[grab!.id, grab]]).get(opaque)?.releaseTitle).toBe('Some.Release.2024');
 	});
 
-	it('still rejects a row with no usable id, and one with no title', () => {
-		// Without an id there is nothing to key a row on, and without a title
-		// there is nothing to recognise the grab by — which is the block's job.
+	it('still rejects a row with no usable id, because there is nothing to key it on', () => {
 		expect(toRecentGrab({ ...base })).toBeUndefined();
 		expect(toRecentGrab({ ...base, id: '' })).toBeUndefined();
 		expect(toRecentGrab({ ...base, id: null })).toBeUndefined();
-		expect(toRecentGrab({ id: 'g_1' })).toBeUndefined();
 	});
 
-	it('does not promote a missing outcome to the confirmed wording', () => {
+	it('keeps a row whose title is empty, because that absence is a fact', () => {
+		// ⚠️ THIS USED TO BE A REJECTION, on the reasoning that a grab you cannot
+		// recognise is not worth a line — true while every row came from
+		// `provenance`, whose release_title is always written. The not-sent arm
+		// broke it: the candidate-not-found path has no title BECAUSE the listing
+		// was swept, and that is precisely the row a user is looking for when they
+		// ask why pressing Grab did nothing. Dropping it hid that grab entirely.
+		const swept = toRecentGrab({ id: 'g_1', outcome: 'not_sent', release_title: '' });
+		expect(swept?.releaseTitle).toBe('');
+		expect(swept?.outcome).toBe('not_sent');
+		// A row with no title key at all is the same case, not a different one.
+		expect(toRecentGrab({ id: 'g_1' })?.releaseTitle).toBe('');
+	});
+
+	it('reads the not-sent arm’s error code, which is what the action rule branches on', () => {
+		// internal/httpapi/grabs.go ships the CODE and withholds the message on
+		// purpose — the sentence would force this endpoint's response guard open.
+		expect(
+			toRecentGrab({ id: 'g_1', outcome: 'not_sent', release_title: 'x', error_code: 'expired' })
+				?.errorCode
+		).toBe('expired');
+		// Absent on a handed-over row, and absent rather than empty.
+		expect(toRecentGrab({ ...base, id: 'g_1' })?.errorCode).toBeUndefined();
+	});
+
+	it('leaves the not-sent arm’s absences absent rather than defaulting them', () => {
+		// ⚠️ THE ABSENCES ARE THE SIGNAL. A not-sent row has no provenance row, so
+		// it carries no size, no download id, no source system and no acquisition
+		// state. `sizeBytes` defaulted to 0 would render "0 B", which is a claim
+		// about a file that does not exist; `acquisitionState` defaulted to ''
+		// would read as a state whose name nobody knows, which is a different and
+		// wrong claim from "there is no provenance row here".
+		const row = toRecentGrab({
+			id: 'g_1',
+			outcome: 'not_sent',
+			release_title: 'Some.Release.2024',
+			protocol: '',
+			error_code: 'grab_failed',
+			grabbed_at: '2026-08-16T14:07:00Z'
+		});
+		expect(row?.sizeBytes).toBeUndefined();
+		expect(row?.acquisitionState).toBeUndefined();
+		expect(row?.downloadId).toBeUndefined();
+		expect(row?.sourceSystem).toBeUndefined();
+		expect(row?.indexerName).toBeUndefined();
+		expect(row?.protocol).toBeUndefined();
+		expect(row?.categories).toEqual([]);
+		// The one field this arm always fills, and the union's sort key.
+		expect(row?.grabbedAt).toBe('2026-08-16T14:07:00Z');
+	});
+
+	it('still reads a handed-over row’s acquisition state verbatim', () => {
+		// The counter-case, so making the field optional cannot quietly stop it
+		// being read: the store's vocabulary is open and carrying it flat is how a
+		// value the schema deliberately does not police survives the trip.
+		expect(
+			toRecentGrab({ ...base, id: 'g_1', acquisition_state: 'unconfirmed' })?.acquisitionState
+		).toBe('unconfirmed');
+	});
+
+	it('does not promote a missing outcome to the confirmed wording — or to not_sent', () => {
 		// $lib/requests renders an unrecognised value as "sent, state not
-		// recognised", which is true of every provenance row.
+		// recognised", which is true of every provenance row. Defaulting the other
+		// way would assert the one thing this screen may only say when the server
+		// has said it first.
 		expect(toRecentGrab({ id: 'g_1', release_title: 'x' })?.outcome).toBe('');
 	});
 });

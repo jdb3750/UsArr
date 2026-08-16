@@ -57,6 +57,28 @@ const (
 	//
 	// #nosec G101 -- an HKDF info label, not a credential. See infoStreamToken.
 	infoGrabRowID = "usarr/grab-row-id/v1"
+
+	// infoAuditRowID derives the key behind the opaque identity of the OTHER
+	// arm of the Recent-grabs union: the definite failures, which are audit_log
+	// rows rather than provenance rows.
+	//
+	// WHY A SECOND LABEL RATHER THAN REUSING infoGrabRowID. audit_log.id is an
+	// INTEGER PRIMARY KEY too, so it is the same volume oracle in the same
+	// shape, and it is a SEPARATE sequence: provenance row 41 and audit row 41
+	// are unrelated rows. Under one key they would HMAC to the same token for
+	// the same user, and one response can carry both — the client would key two
+	// different rows on one id, and focus, hover and any future row action would
+	// land on whichever arrived last. The key is what separates the domains, so
+	// a collision is not merely improbable, it is unconstructible without the
+	// secret.
+	//
+	// Adding a label is the safe direction; editing one is not. These five are
+	// bound into stored ciphertext, issued API keys and published row ids, so a
+	// rename silently invalidates whatever the old label protected. New purpose,
+	// new label, every time.
+	//
+	// #nosec G101 -- an HKDF info label, not a credential. See infoStreamToken.
+	infoAuditRowID = "usarr/audit-row-id/v1"
 )
 
 // DerivedKeyLen is the length of every key derived here.
@@ -91,6 +113,13 @@ func DeriveClientCredentialKey(secret, salt []byte) ([]byte, error) {
 // poll.
 func DeriveGrabRowIDKey(secret, salt []byte) ([]byte, error) {
 	return derive(secret, salt, infoGrabRowID)
+}
+
+// DeriveAuditRowIDKey derives the key that HMACs an audit_log rowid into the
+// opaque identity the Recent-grabs read publishes for a definite failure. See
+// infoAuditRowID for why it is not DeriveGrabRowIDKey's key.
+func DeriveAuditRowIDKey(secret, salt []byte) ([]byte, error) {
+	return derive(secret, salt, infoAuditRowID)
 }
 
 func derive(secret, salt []byte, info string) ([]byte, error) {

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log/slog"
@@ -45,6 +46,18 @@ type Config struct {
 	// derived from the master key and the KEK salt: a random per-process key
 	// would give a client a different id for the same row on every poll.
 	GrabRowIDKey []byte
+
+	// AuditRowIDKey is crypto.DeriveAuditRowIDKey's output, and it does for the
+	// definite-failure arm of Recent grabs what GrabRowIDKey does for the
+	// handed-over arm: audit_log.id is an INTEGER PRIMARY KEY and therefore the
+	// same cross-user volume oracle.
+	//
+	// A SEPARATE KEY, not a second use of GrabRowIDKey. The two ids are drawn
+	// from two independent sequences, so provenance row 41 and audit row 41 are
+	// unrelated rows that would share a token under one key — and one response
+	// carries both arms, so the client would key two rows on one id. See
+	// crypto's infoAuditRowID.
+	AuditRowIDKey []byte
 
 	// SchemaVersion is the migration version applied at startup. Readiness is
 	// "migrations applied and the listener accepting", and this is the first
@@ -105,6 +118,18 @@ func New(cfg Config) (*Server, error) {
 	if len(cfg.GrabRowIDKey) != crypto.DerivedKeyLen {
 		return nil, fmt.Errorf("httpapi: GrabRowIDKey is %d bytes, want %d",
 			len(cfg.GrabRowIDKey), crypto.DerivedKeyLen)
+	}
+	if len(cfg.AuditRowIDKey) != crypto.DerivedKeyLen {
+		return nil, fmt.Errorf("httpapi: AuditRowIDKey is %d bytes, want %d",
+			len(cfg.AuditRowIDKey), crypto.DerivedKeyLen)
+	}
+	// The two keys must be different bytes, and that is checked rather than
+	// assumed: wiring the same derived key into both fields is a one-line
+	// mistake at the call site that compiles, runs, and silently collapses the
+	// two id domains into one.
+	if bytes.Equal(cfg.GrabRowIDKey, cfg.AuditRowIDKey) {
+		return nil, fmt.Errorf("httpapi: GrabRowIDKey and AuditRowIDKey are the same key; " +
+			"the provenance and audit row ids would share a keyspace")
 	}
 	if cfg.URLBase != "" {
 		if !strings.HasPrefix(cfg.URLBase, "/") || strings.HasSuffix(cfg.URLBase, "/") {

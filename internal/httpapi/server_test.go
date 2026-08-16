@@ -42,6 +42,7 @@ func newTestServer(t *testing.T, mutate func(*Config)) *Server {
 		Store:         store.New(database),
 		Keyring:       keyring,
 		GrabRowIDKey:  testGrabRowIDKey(t),
+		AuditRowIDKey: testAuditRowIDKey(t),
 		SchemaVersion: 1,
 		Logger:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
@@ -129,10 +130,11 @@ func TestURLBaseAppliesToEveryRoute(t *testing.T) {
 func TestURLBaseIsValidated(t *testing.T) {
 	for _, bad := range []string{"usarr", "/usarr/"} {
 		if _, err := New(Config{
-			Store:        newTestServer(t, nil).store,
-			Keyring:      newTestServer(t, nil).keyring,
-			GrabRowIDKey: testGrabRowIDKey(t),
-			URLBase:      bad,
+			Store:         newTestServer(t, nil).store,
+			Keyring:       newTestServer(t, nil).keyring,
+			GrabRowIDKey:  testGrabRowIDKey(t),
+			AuditRowIDKey: testAuditRowIDKey(t),
+			URLBase:       bad,
 		}); err == nil {
 			t.Errorf("URLBase %q was accepted", bad)
 		}

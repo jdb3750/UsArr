@@ -1318,9 +1318,21 @@ export async function grabRelease(candidateId: number): Promise<GrabResult> {
  * the store's vocabulary is open by design and flattening it on the way through
  * is how a value the schema deliberately does not police gets lost.
  *
+ * ⚠️ THE READ IS A UNION OF TWO TABLES AND THE ARMS HAVE DIFFERENT SHAPES.
+ * `provenance` carries every grab that was handed over; `audit_log` carries the
+ * ones that provably never left the process, and those have no provenance row —
+ * so `categories`, `sizeBytes`, `downloadId`, `sourceSystem` and
+ * `acquisitionState` are ABSENT on them rather than empty, and `errorCode` is
+ * present only there. The absences are the point: `sizeBytes` defaulted to 0
+ * would render "0 B", which is a claim about a file that does not exist.
+ *
  * There is no download URL and no info URL, by construction on the server side:
  * a Prowlarr proxy link carries its full admin API key, and an indexer URL is
- * where a private tracker's passkey lives.
+ * where a private tracker's passkey lives. There is no error MESSAGE either, and
+ * that is the same rule: the sentence is assembled from an upstream error string
+ * and shipping it would mean loosening this endpoint's response guard to carry
+ * it. The code carries the identity, and §17.5's action rule branches on the
+ * identity.
  */
 export interface RecentGrab {
 	/**
@@ -1340,21 +1352,62 @@ export interface RecentGrab {
 	 * not a proxy for it.
 	 */
 	id: string;
+	/**
+	 * ⚠️ ALWAYS PRESENT, AND MAY LEGITIMATELY BE `""`.
+	 *
+	 * On the not-sent arm the name comes from the audit row's metadata, and the
+	 * candidate-not-found path has none: `release_candidate` is swept 25 minutes
+	 * after the search, so by the time that row was written the only place the
+	 * title ever lived no longer had it. The empty string is therefore a FACT —
+	 * "the listing was already gone" — and $lib/requests renders it as one rather
+	 * than as a blank cell or an invented name.
+	 */
 	releaseTitle: string;
 	protocol?: string;
 	indexerName?: string;
+	/** Absent on the not-sent arm, which has no provenance row to read them from.
+	 * The block renders no category column today, so this is carried rather than
+	 * used — see the two-pass reason in $lib/requests.categoryLabel. */
 	categories: number[];
+	/** Absent rather than zero where there is no provenance row. Never default
+	 * it: 0 renders as "0 B", which is a claim about a file that does not exist. */
 	sizeBytes?: number;
 	/** RFC 3339. Absent where the stored value would not parse — the server
 	 * drops it rather than guessing, because a wrong timestamp on an
-	 * irreversible action is worse than a missing one. */
+	 * irreversible action is worse than a missing one.
+	 *
+	 * It is the time of the ATTEMPT on both arms, and the union's sort key: on a
+	 * provenance row it is written at dispatch, and on a not-sent row it is when
+	 * the user pressed Grab. So the column it feeds is labelled Time, never
+	 * "Downloaded" — UsArr stops observing at handoff and never learns when a
+	 * download finished. */
 	grabbedAt?: string;
 	/** nzo_id, or the infohash for a torrent: the string that finds this grab
 	 * in the download client, which is where the truth about it lives. */
 	downloadId?: string;
 	sourceSystem?: string;
-	acquisitionState: string;
-	/** `sent` | `sent_outcome_unknown` | `unknown`. See $lib/requests. */
+	/**
+	 * ⚠️ ITS ABSENCE IS INFORMATION, WHICH IS WHY IT IS OPTIONAL RATHER THAN
+	 * DEFAULTED TO `''`. A not-sent row has no provenance row and therefore no
+	 * acquisition state at all; `''` would read as a state whose name nobody
+	 * knows, which is a different and wrong claim. The server omits the key for
+	 * exactly that reason, and flattening it here would throw the distinction
+	 * away one layer below where it was made.
+	 *
+	 * Nothing RENDERS off it — `outcome` is the derived field the server publishes
+	 * for that — so this is the column verbatim and a cross-check, no more.
+	 */
+	acquisitionState?: string;
+	/**
+	 * The apiError code of a grab that never left, from errorcodes.go's closed
+	 * vocabulary. Present only on the not-sent arm; a handed-over grab has no
+	 * error to name. §17.5's action rule branches on THIS and never on prose,
+	 * because there is no prose on this surface and there will not be.
+	 */
+	errorCode?: string;
+	/** `sent` | `sent_outcome_unknown` | `not_sent` | `unknown`. See $lib/requests
+	 * — and match the full string: `not_sent` deliberately does not begin with
+	 * one of the handed-over values. */
 	outcome: string;
 }
 
@@ -1379,26 +1432,40 @@ function rowKey(value: unknown): string | undefined {
 export function toRecentGrab(value: unknown): RecentGrab | undefined {
 	if (!isRecord(value)) return undefined;
 	const id = rowKey(value.id);
-	const releaseTitle = str(value.release_title);
-	// Without an id there is nothing to key a row on, and without a title there
-	// is nothing to recognise the grab by — which is the block's entire job.
-	if (id === undefined || !releaseTitle) return undefined;
+	// ⚠️ THE ID IS THE ONLY REQUIRED FIELD, AND A MISSING TITLE NO LONGER DROPS
+	// THE ROW. It used to, on the reasoning that a grab you cannot recognise is
+	// not worth a line — true while every row came from `provenance`, whose
+	// release_title is always written. The not-sent arm broke it: the
+	// candidate-not-found path has no title BECAUSE the listing was swept, which
+	// is precisely the row a user is looking for when they ask why pressing Grab
+	// did nothing. Dropping it would have hidden that grab entirely, and the
+	// block would have been silently short by the rows it exists to explain.
+	if (id === undefined) return undefined;
 	const rawCategories = Array.isArray(value.categories) ? value.categories : [];
 	return {
 		id,
-		releaseTitle,
+		// `?? ''` rather than a guard: the empty string is a value on this wire and
+		// $lib/requests has a rendering for it. See RecentGrab.releaseTitle.
+		releaseTitle: str(value.release_title) ?? '',
 		protocol: str(value.protocol),
 		indexerName: str(value.indexer_name),
 		categories: rawCategories.map(num).filter((n): n is number => n !== undefined),
+		// num() answers undefined for a non-number, so an absent size stays absent
+		// and never becomes 0 — which would render as "0 B".
 		sizeBytes: num(value.size_bytes),
 		grabbedAt: str(value.grabbed_at),
 		downloadId: str(value.download_id),
 		sourceSystem: str(value.source_system),
-		acquisitionState: str(value.acquisition_state) ?? '',
-		// An absent outcome is NOT defaulted to `sent`: $lib/requests renders an
-		// unrecognised value as "sent, state not recognised", which is true of
-		// every provenance row, and quietly promoting it to the confirmed
-		// wording is exactly the overclaim §17.5 bans.
+		// Left undefined where the key is absent, because the absence is the signal
+		// that there is no provenance row behind this line. See the field's note.
+		acquisitionState: str(value.acquisition_state),
+		errorCode: str(value.error_code),
+		// An absent outcome is NOT defaulted to `sent`, and just as deliberately is
+		// not defaulted to `not_sent`: $lib/requests renders an unrecognised value
+		// as "sent, state not recognised", which is true of every provenance row.
+		// Promoting it to the confirmed wording would be the overclaim §17.5 bans;
+		// promoting it to the not-sent wording would assert the one thing this
+		// screen may only say when the server has said it first.
 		outcome: str(value.outcome) ?? ''
 	};
 }

@@ -99,6 +99,7 @@
 		CODE_OUTCOME_UNKNOWN,
 		DEFAULT_SEARCH_TYPE,
 		FROZEN_ORDER_NOTE,
+		GRAB_MISSING_TITLE_NOTE,
 		GRAB_ROW_STALE_NOTE,
 		KNOWLEDGE_STOPS_NOTE,
 		LIVE_GRAB_SENT_LABEL,
@@ -207,8 +208,14 @@
 		{ id: 'actions', header: 'Actions', width: 'minmax(max-content, auto)', stackLine: 1 }
 	];
 
+	// ⚠️ `Time`, NEVER `Downloaded`, AND THE UNION IS WHY IT MATTERS RATHER THAN
+	// BEING A WORD CHOICE. The value is the time of the ATTEMPT on both arms —
+	// dispatch on a provenance row, the moment the user pressed Grab on a not-sent
+	// one — and UsArr stops observing at handoff, so it never learns when anything
+	// finished. A column headed `Downloaded` over a not-sent row would be a claim
+	// the row itself contradicts. §17.5's own word for it is "time".
 	const grabColumns: ListColumn[] = [
-		{ id: 'when', header: 'When', width: '132px' },
+		{ id: 'when', header: 'Time', width: '132px' },
 		{ id: 'release', header: 'Release', width: 'minmax(0, 3fr)' },
 		{ id: 'indexer', header: 'Indexer', width: 'minmax(0, 1fr)' },
 		{ id: 'protocol', header: 'Protocol', width: '92px' },
@@ -647,7 +654,53 @@
 		}
 		// Both arms refresh the record: the ambiguous state writes a provenance
 		// row too, precisely so the infohash join key survives (internal/releases).
+		// The not-sent arm refreshes it as well, and that is the half this move
+		// added — a grab that never left now writes an audit row the block reads.
 		void loadGrabs();
+	}
+
+	/* ── Recent grabs: the one action a not-sent row may offer ────────────── */
+
+	const requestsPath = resolve('/requests');
+	const servicesPath = resolve('/services');
+
+	/**
+	 * A REAL URL, so the control is a link rather than a button wearing one.
+	 *
+	 * The href is what a middle-click, a ctrl-click and a right-click all act on,
+	 * and it has to WORK when they do: `?q=` is the same parameter `onMount`
+	 * already seeds a search from, so a new tab opened this way runs the search on
+	 * its own. A button with an onclick gives a new tab nothing at all.
+	 */
+	function searchAgainHref(title: string): string {
+		return `${requestsPath}?q=${encodeURIComponent(title)}`;
+	}
+
+	/**
+	 * The same-tab half, and the reason the link keeps its href.
+	 *
+	 * A plain left-click is intercepted and the search runs in place: this screen
+	 * IS the search, so navigating to itself would reload the SPA to do what one
+	 * function call does. Every other kind of click is left to the browser —
+	 * middle, modified, and any non-primary button — which is what makes the href
+	 * above load-bearing rather than decoration.
+	 *
+	 * The query is the release title verbatim, which is the only name UsArr has
+	 * for the thing that was not sent. A full release name is a narrow query, and
+	 * the search box is left holding it precisely so it can be trimmed.
+	 */
+	function searchAgainFrom(event: MouseEvent, grab: RecentGrab) {
+		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+			return;
+		}
+		event.preventDefault();
+		query = grab.releaseTitle;
+		void runSearch();
+		// Instant, never smooth: §9.1a's 0 ms rule is about not moving content
+		// under an aiming pointer, and a scroll animation is exactly that. The
+		// results are two blocks up, so without this the button appears to do
+		// nothing at all.
+		document.getElementById('release-results')?.scrollIntoView();
 	}
 </script>
 
@@ -1310,7 +1363,21 @@
 						<span class="muted">{NOTHING.empty}</span>
 					{/if}
 				{:else if column.id === 'release'}
-					<span class="mono trunc" title={grab.releaseTitle}>{grab.releaseTitle}</span>
+					{#if grab.releaseTitle}
+						<span class="mono trunc" title={grab.releaseTitle}>{grab.releaseTitle}</span>
+					{:else}
+						<!--
+							⚠️ AN EMPTY TITLE IS A FACT HERE, NOT MISSING DATA, so it gets a
+							sentence rather than `NOTHING.empty`'s em dash. The candidate had
+							already been swept when the audit row was written — `release_
+							candidate` is the only place a release name ever lives and it goes
+							25 minutes after the search — so UsArr genuinely does not know
+							which release this was. An em dash would render that as an
+							unremarkable blank; a guessed name would be worse still, since
+							recognising the release is the entire job of this column.
+						-->
+						<span class="muted">{GRAB_MISSING_TITLE_NOTE}</span>
+					{/if}
 				{:else if column.id === 'indexer'}
 					{#if grab.indexerName}
 						<span class="trunc" title={grab.indexerName}>{grab.indexerName}</span>
@@ -1332,30 +1399,85 @@
 						<span class="muted">{NOTHING.empty}</span>
 					{/if}
 				{:else if column.id === 'outcome'}
-					{@const outcome = grabOutcome(grab.outcome)}
+					{@const outcome = grabOutcome(grab.outcome, {
+						errorCode: grab.errorCode,
+						hasTitle: grab.releaseTitle !== ''
+					})}
 					<!--
-						The chip's word is "sent" on every state, and the ambiguous row
-						sits BESIDE the ordinary one rather than beside a failure: both
-						were handed to the download client, and they differ only in
-						whether an error came back afterwards. The warn role is on the
-						ambiguous one because chroma marks what is wrong — or here, what
-						is unknown and worth checking — not what is fine (§9.5). Removing
-						the colour still leaves the two legible, which is why the labels
-						differ rather than only the tone.
+						THREE STATES, AND THE GROUPING IS THE WHOLE RULE. The two
+						handed-over ones both read "sent" and sit beside each other: they
+						are the SAME epistemic state about the download, differing only in
+						whether an error came back after the handoff. The third reads "not
+						sent" and sits beside neither, because nothing was handed over and
+						nothing can be running — it is the only state §17.5 permits to be
+						worded as "it did not happen".
 
-						There is no Retry on any row, on any state, permanently.
+						Tone follows §9.5's "chroma marks what is wrong, not what is fine":
+						neutral on the ordinary sent row, warn where the outcome is unknown
+						and worth checking, err where the release never left. The labels
+						differ as well as the tone, so removing the colour still leaves all
+						three legible.
 
-						THE SUB-LINE IS CONDITIONAL, and that is §9.1 rather than a
+						There is no Retry on any row, on any state, permanently. And no
+						handed-over row offers ANY action: the only control that would fit
+						is one that sends the release again, which is exactly what produces
+						two copies of a 68 GB release.
+
+						THE SUB-LINES ARE CONDITIONAL, and that is §9.1 rather than a
 						nicety: a clause identical on every row of a state is not data,
 						and "the client accepted it" under every `sent` chip restated
 						the chip at the cost of a second line on every confirmed row.
-						The two states that keep a clause carry an instruction the chip
-						does not. $lib/requests decides which; this renders what it is
-						given, and renders nothing when it is given nothing.
+						$lib/requests decides which state carries what; this renders what
+						it is given, and renders nothing when it is given nothing.
 					-->
-					<span class="chip" class:chip--pending={outcome.tone === 'warn'}>{outcome.label}</span>
+					<span
+						class="chip"
+						class:chip--pending={outcome.tone === 'warn'}
+						class:chip--err={outcome.tone === 'err'}>{outcome.label}</span
+					>
 					{#if outcome.detail}
 						<div class="cell-sub">{outcome.detail}</div>
+					{/if}
+					{#if outcome.nonAction}
+						<!-- §17.5: naming the non-action beats offering a fake one. This
+						     line is present exactly where the row's condition is not one
+						     the offered control resolves — and on most codes there is no
+						     control at all, which is what it says. -->
+						<div class="cell-sub">{outcome.nonAction}</div>
+					{/if}
+					{#if outcome.action === 'search-again'}
+						<!--
+							A LINK, NOT A BUTTON, and the href is real: `?q=` is the
+							parameter this screen already seeds a search from, so a
+							middle-click opens a tab that runs the search by itself. A plain
+							click is intercepted and runs it in place.
+
+							`Search again` rather than `Retry`, and the distinction is not
+							cosmetic: this starts a fresh fan-out and posts nothing. Nothing
+							on this block re-sends a grab.
+
+							`no-navigation-without-resolve` wants the href to BE a `resolve()`
+							call, and a `ResolvedPathname` cannot carry a query string — the
+							same limitation `writeUrl` documents above. `searchAgainHref` is
+							built from `resolve('/requests')` with `?q=` appended, so this is
+							a resolved path plus the one parameter that makes the link work,
+							and the rule is suppressed at the single call site rather than
+							switched off for the file.
+						-->
+						{@const href = searchAgainHref(grab.releaseTitle)}
+						<div class="cell-sub">
+							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- a resolve()'d path plus ?q=, which a ResolvedPathname cannot carry; see writeUrl -->
+							<a {href} class="btn btn--sm" onclick={(e) => searchAgainFrom(e, grab)}>
+								Search again
+							</a>
+						</div>
+					{:else if outcome.action === 'open-services'}
+						<!-- Offered only where UsArr's OWN service configuration is what
+						     stopped the grab. §17.5 warns that Services is a dead end when
+						     the fault is past Prowlarr — it will correctly show green — so
+						     it is not offered on the codes that describe Prowlarr's
+						     settings or an indexer's answer. -->
+						<div class="cell-sub"><a class="btn btn--sm" href={servicesPath}>Open Services</a></div>
 					{/if}
 				{/if}
 			{/snippet}
