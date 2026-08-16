@@ -108,7 +108,7 @@
   <dialog class="dialog" id="shortcut-sheet" aria-labelledby="shortcut-sheet-title">
     <h2 class="dialog__head" id="shortcut-sheet-title">Keyboard shortcuts</h2>
     <div class="dialog__body">
-      <table class="tbl" aria-label="Keyboard shortcuts" style="--cols: 92px minmax(0,1fr)" aria-colcount="2" role="table" aria-rowcount="8">
+      <table class="tbl cols-shortcuts" aria-label="Keyboard shortcuts" aria-colcount="2" role="table" aria-rowcount="8">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Key</th>
@@ -125,7 +125,7 @@
           <tr role="row" aria-rowindex="8"><td role="cell" aria-colindex="1"><span class="mono">?</span></td><td role="cell" aria-colindex="2">Open and close this sheet. It works whether or not the switch below is on.</td></tr>
         </tbody>
       </table>
-      <div class="field" style="margin-top:16px">
+      <div class="field u-mt-16">
         <label class="check" for="f-shortcuts-sheet"><input type="checkbox" id="f-shortcuts-sheet" data-act="shortcuts" checked> Single-key shortcuts</label>
         <span class="field__help">Turning this off disables <span class="mono">/</span>, <span class="mono">l</span>, <span class="mono">j</span> and <span class="mono">k</span>. Arrow keys, Escape and shortcuts that need a modifier are unaffected, and <span class="mono">?</span> keeps working so this sheet stays reachable.</span>
       </div>
@@ -381,7 +381,7 @@
            reads as though they are, which is the same failure ADR-0031 names
            for artist-level numbers. -->
       <div class="tablewrap">
-        <table aria-rowcount="7" class="tbl tbl--stack tbl--2up" data-roving="tbody tr" aria-label="Library by media type" style="--cols: minmax(0,0.8fr) minmax(0,1.15fr) minmax(0,2.4fr) 132px; --row-lines: 1.22" aria-colcount="4" role="table">
+        <table aria-rowcount="7" class="tbl tbl--stack tbl--2up cols-home-bytype-full" data-roving="tbody tr" aria-label="Library by media type" aria-colcount="4" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Type</th>
@@ -458,7 +458,7 @@
         <span class="section__count">6 media types · 2 catalogued</span>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="7" class="tbl tbl--stack tbl--2up" data-roving="tbody tr" aria-label="Library by media type" style="--cols: minmax(0,0.8fr) minmax(0,1.15fr) minmax(0,2.4fr) 132px; --row-lines: 1.72" aria-colcount="4" role="table">
+        <table aria-rowcount="7" class="tbl tbl--stack tbl--2up cols-home-bytype-v01" data-roving="tbody tr" aria-label="Library by media type" aria-colcount="4" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Type</th>
@@ -522,7 +522,7 @@
            that those types are missing from the product as well as from the
            catalogue. They are not. Requests searches indexers for all six in
            v0.1, over the Prowlarr free-text path. -->
-      <p class="cell-sub" style="margin-top:8px">The four rows without a count name the service that will catalogue that type and when it arrives; §16 fixes the milestone, and none of them is in v0.1. Requests searches indexers for all six types over Prowlarr today, including those four. <a href="requests.html">Open Requests</a></p>
+      <p class="cell-sub u-mt-8">The four rows without a count name the service that will catalogue that type and when it arrives; §16 fixes the milestone, and none of them is in v0.1. Requests searches indexers for all six types over Prowlarr today, including those four. <a href="requests.html">Open Requests</a></p>
     </section>
 
     <!-- Block B: the thing neither Jellyfin nor Plex can put on a home screen,
@@ -536,7 +536,7 @@
         <span class="section__count num" data-inst="v01" hidden>3 items</span>
       </div>
       <div class="tablewrap" data-inst="full">
-        <table aria-rowcount="5" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Items needing attention" style="--cols: 92px minmax(0,3.4fr) 118px; --row-lines: 2.06" aria-colcount="3" role="table">
+        <table aria-rowcount="5" class="tbl tbl--stack cols-home-attention-full" data-roving="tbody tr" aria-label="Items needing attention" aria-colcount="3" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">State</th>
@@ -577,7 +577,7 @@
            so three remain and the count above follows. Nothing else changes,
            because Prowlarr, Radarr and Sonarr Anime are all v0.1 services. -->
       <div class="tablewrap" data-inst="v01" hidden>
-        <table aria-rowcount="4" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Items needing attention" style="--cols: 92px minmax(0,3.4fr) 118px; --row-lines: 2.06" aria-colcount="3" role="table">
+        <table aria-rowcount="4" class="tbl tbl--stack cols-home-attention-v01" data-roving="tbody tr" aria-label="Items needing attention" aria-colcount="3" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">State</th>
@@ -631,7 +631,7 @@
 
     <div data-panel-for="homeview" data-panel-name="table">
     <div class="tablewrap" data-inst="full">
-      <table aria-rowcount="-1" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Recently added across all media types" style="--cols: 78px minmax(0,3fr) 64px minmax(0,2fr) 64px minmax(0,1fr) minmax(0,1.2fr); --row-lines: 1.11" aria-colcount="7" role="table">
+      <table aria-rowcount="-1" class="tbl tbl--stack cols-home-recent-full" data-roving="tbody tr" aria-label="Recently added across all media types" aria-colcount="7" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Type</th>
@@ -684,7 +684,7 @@
          per-type strips would have lost four whole regions and left the
          screen looking broken. -->
     <div class="tablewrap" data-inst="v01" hidden>
-      <table aria-rowcount="9" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Recently added across all media types" style="--cols: 78px minmax(0,3fr) 64px minmax(0,2fr) 64px minmax(0,1fr) minmax(0,1.2fr); --row-lines: 1.11" aria-colcount="7" role="table">
+      <table aria-rowcount="9" class="tbl tbl--stack cols-home-recent-v01" data-roving="tbody tr" aria-label="Recently added across all media types" aria-colcount="7" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Type</th>

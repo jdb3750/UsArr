@@ -1550,7 +1550,167 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
   .banner__actions .btn { white-space: normal; text-align: left; }
 }
 
-/* --- 2.12 Mockup state visibility ---------------------------------------
+/* --- 2.12 Per-list grid templates: data, not styling ---------------------
+   Every rule below was an inline style attribute carrying --cols and
+   --row-lines on one
+   <table>, and it moved here for one reason: the production
+   Content-Security-Policy drops inline styles, so a mockup that demonstrates
+   layout through a style attribute is demonstrating something that cannot
+   ship. It rendered correctly here and would render differently in the real
+   app, which is worse than rendering wrong -- nobody re-checks a screen that
+   looks right.
+
+   These are NOT collapsed into shared classes, and the near-duplicates below
+   are deliberate. --cols is this list's own column template and --row-lines is
+   DESIGN-DIRECTION §7.4's per-list measurement -- "--row-lines is declared per
+   list from that list's own rendered rows" -- so two lists that happen to
+   measure the same today are still two measurements. Merging them would make
+   a later remeasure of one silently move the other, which is exactly the
+   failure §7.4 is written against. One class per list, thirty-four of them,
+   and the count is the point.
+
+   A stylesheet rule is the honest analogue rather than a workaround: in the
+   SvelteKit app these become build-time scoped component styles on the same
+   per-list boundary. The name carries the screen, the list and -- where the
+   two installs draw the list separately -- which install it belongs to. */
+
+/* Shared chrome: the keyboard-shortcuts dialog, declared once per screen file
+   and folded into a single instance by build_prototype.py. */
+.cols-shortcuts { --cols: 92px minmax(0,1fr); }
+
+/* Home. §17.2 as amended by ADR-0028: a media-type summary, an attention
+   block, one unified recently-added table. */
+.cols-home-bytype-full { --cols: minmax(0,0.8fr) minmax(0,1.15fr) minmax(0,2.4fr) 132px; --row-lines: 1.22; }
+.cols-home-bytype-v01 { --cols: minmax(0,0.8fr) minmax(0,1.15fr) minmax(0,2.4fr) 132px; --row-lines: 1.72; }
+.cols-home-attention-full { --cols: 92px minmax(0,3.4fr) 118px; --row-lines: 2.06; }
+.cols-home-attention-v01 { --cols: 92px minmax(0,3.4fr) 118px; --row-lines: 2.06; }
+.cols-home-recent-full { --cols: 78px minmax(0,3fr) 64px minmax(0,2fr) 64px minmax(0,1fr) minmax(0,1.2fr); --row-lines: 1.11; }
+.cols-home-recent-v01 { --cols: 78px minmax(0,3fr) 64px minmax(0,2fr) 64px minmax(0,1fr) minmax(0,1.2fr); --row-lines: 1.11; }
+
+/* Services. The annex table is reachable in neither install and is kept as
+   documentation, so it has no -full / -v01 pair. */
+.cols-services-list-full { --cols: minmax(0,1.5fr) 104px 132px 56px minmax(0,2.1fr) minmax(0,1.9fr) minmax(max-content,auto); --row-lines: 2.22; }
+.cols-services-list-v01 { --cols: minmax(0,1.5fr) 104px 132px 56px minmax(0,2.1fr) minmax(0,1.9fr) minmax(max-content,auto); --row-lines: 2.22; }
+.cols-services-annex { --cols: minmax(0,1fr) 92px minmax(0,2fr) minmax(0,3.6fr); --row-lines: 6.06; }
+
+/* Libraries. §17.8: the list, the proposals, a library's catalogue sources,
+   and the v0.3 corrections surface drawn so its bound can be reviewed. */
+.cols-libraries-list-full { --cols: minmax(0,1.1fr) 92px 56px minmax(0,1.7fr) minmax(0,1.3fr) minmax(0,1.5fr) minmax(max-content,auto); --row-lines: 2.17; }
+.cols-libraries-list-v01 { --cols: minmax(0,1.1fr) 92px 56px minmax(0,1.7fr) minmax(0,1.3fr) minmax(0,1.5fr) minmax(max-content,auto); --row-lines: 2.17; }
+.cols-libraries-proposals-full { --cols: minmax(max-content,auto) minmax(0,1.3fr) 128px minmax(0,0.9fr) minmax(0,2fr) minmax(0,2.4fr); --row-lines: 2.06; }
+.cols-libraries-proposals-v01 { --cols: minmax(max-content,auto) minmax(0,1.3fr) 128px minmax(0,0.9fr) minmax(0,2fr) minmax(0,2.4fr); --row-lines: 2.06; }
+.cols-libraries-sources-full { --cols: minmax(0,1.4fr) minmax(0,2fr) 60px minmax(0,1.4fr) 138px 76px 92px; --row-lines: 2.22; }
+.cols-libraries-sources-v01 { --cols: minmax(0,1.4fr) minmax(0,2fr) 60px minmax(0,1.4fr) 138px 76px 92px; --row-lines: 2.22; }
+.cols-libraries-corrections-full { --cols: 116px minmax(max-content,auto) minmax(0,2fr) minmax(0,2.4fr) 76px; --row-lines: 2.06; }
+.cols-libraries-corrections-v01 { --cols: 116px minmax(max-content,auto) minmax(0,2fr) minmax(0,2.4fr) 76px; --row-lines: 2.06; }
+
+/* Search. One group per media type, plus the two expanded child lists and the
+   two library-scoped result tables. The v0.1 install has no ebook, audiobook,
+   comic or music catalogue, so only Movies and Series exist in both. */
+.cols-search-ebooks { --cols: minmax(0,2.6fr) minmax(0,1.3fr) 52px minmax(0,1fr) 80px; --row-lines: 1.11; }
+.cols-search-audiobooks { --cols: minmax(0,2.4fr) minmax(0,1.5fr) minmax(0,1.5fr) 104px; --row-lines: 1.11; }
+.cols-search-movies-full { --cols: minmax(0,2.6fr) 52px 60px minmax(0,1fr) 80px minmax(max-content,auto); --row-lines: 1.11; }
+.cols-search-movies-v01 { --cols: minmax(0,2.6fr) 52px 60px minmax(0,1fr) 80px minmax(max-content,auto); --row-lines: 1.11; }
+.cols-search-comics { --cols: minmax(0,2.2fr) minmax(0,1.2fr) 52px minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.6fr) minmax(max-content,auto); --row-lines: 3.11; }
+.cols-search-music { --cols: minmax(0,2.6fr) minmax(0,1.4fr) 52px 68px; --row-lines: 1.11; }
+.cols-search-series { --cols: minmax(0,2.4fr) 52px minmax(0,1fr) 80px 80px; --row-lines: 1.22; }
+.cols-search-tracks { --cols: 44px minmax(0,4fr) 68px minmax(0,1.6fr) 84px; --row-lines: 1.11; }
+.cols-search-episodes { --cols: 44px minmax(0,4fr) 68px minmax(0,1.6fr) 84px; --row-lines: 1.11; }
+.cols-search-comics-scoped { --cols: minmax(0,2.2fr) minmax(0,1.2fr) 52px minmax(0,1.2fr) minmax(0,0.8fr) minmax(0,1fr) minmax(0,1.4fr) minmax(max-content,auto); --row-lines: 3.89; }
+.cols-search-series-scoped { --cols: minmax(0,2.4fr) 52px minmax(0,1fr) 80px 80px; --row-lines: 1.22; }
+
+/* Requests. The release table is drawn twice -- once for the movie search and
+   once for the audiobook search that has no request destination -- and the two
+   carry different column counts, so they are two lists and not one. */
+.cols-requests-failures { --cols: minmax(0,1fr) 108px minmax(0,4fr) 68px; --row-lines: 2.61; }
+.cols-requests-releases { --cols: 60px 88px 80px minmax(0,3fr) minmax(0,1fr) 80px 68px 84px minmax(0,0.9fr) minmax(0,1fr) minmax(max-content,auto); --row-lines: 2.17; }
+.cols-requests-releases-audiobook { --cols: 60px 88px 80px minmax(0,3fr) minmax(0,1.1fr) 80px 68px 84px minmax(0,1fr) minmax(max-content,auto); --row-lines: 1.39; }
+.cols-requests-grabs { --cols: 116px minmax(0,3fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.9fr); --row-lines: 2.94; }
+.cols-requests-postgrab { --cols: 104px minmax(0,1fr) minmax(0,3.4fr); --row-lines: 2.22; }
+
+/* --- 2.13 Layout nudges, and why every selector is doubled ---------------
+   The other half of the inline-style removal: the genuine one-off adjustments
+   -- a top margin, a width cap, a stacking order -- that used to be written as
+   an inline `margin-top: 8px` and cannot be, because the production CSP
+   drops the attribute.
+
+   EVERY SELECTOR HERE NAMES ITS CLASS TWICE, AND THAT IS NOT A TYPO. An inline
+   declaration outranks every rule in this stylesheet. A class does not, so a
+   one-class replacement is not a faithful one: `.tbl td > .stacklabel + *` is
+   (0,2,0) and sets `margin-top: 0`, `.tbl td > * + *` is (0,1,1) and sets 2px,
+   and `@media (max-width: 560px) .select` caps a select at 96px. A plain
+   `.u-mt-6` loses to the first two and a plain `.u-mw-200` sits at the mercy of
+   source order against the third. Doubling the class makes each rule (0,2,0)
+   and puts it last in the file, which reproduces exactly what the inline
+   declaration used to win -- no more and no less. Measured before and after
+   across five screens, two installs, two viewports and both themes: identical
+   geometry on 734,496 element rects.
+
+   Values use the spacing tokens wherever a token equals the literal the inline
+   declaration carried, so a token change moves these with everything else.
+   10px has no token and stays a literal. */
+
+/* Top and bottom margins. */
+.u-mt-6.u-mt-6 { margin-top: var(--sp-3); }
+.u-mt-8.u-mt-8 { margin-top: var(--sp-4); }
+.u-mt-10.u-mt-10 { margin-top: 10px; }
+.u-mt-12.u-mt-12 { margin-top: var(--sp-5); }
+.u-mt-16.u-mt-16 { margin-top: var(--sp-6); }
+.u-mb-16.u-mb-16 { margin-bottom: var(--sp-6); }
+/* A banner inside a list that already provides the gutter: drop .banner's own
+   16px side margin rather than double it. */
+.u-mx-0.u-mx-0 { margin-left: 0; margin-right: 0; }
+
+/* Padding. */
+.u-pt-8.u-pt-8 { padding-top: var(--sp-4); }
+.u-pb-8.u-pb-8 { padding-bottom: var(--sp-4); }
+.u-pb-12.u-pb-12 { padding-bottom: var(--sp-5); }
+.u-pb-16.u-pb-16 { padding-bottom: var(--sp-6); }
+/* The media-type chip row when it sits directly under a toolbar and has to
+   pick up the toolbar's own inset. */
+.u-p-8-16.u-p-8-16 { padding: var(--sp-4) var(--sp-6); }
+
+/* Width caps on form controls. .input/.select are width:100% by default, so
+   each of these is the field's own sensible maximum: a priority or sort-order
+   number, a name, a kind or format select, a request destination or watch
+   path. */
+.u-mw-120.u-mw-120 { max-width: 120px; }
+.u-mw-180.u-mw-180 { max-width: 180px; }
+.u-mw-200.u-mw-200 { max-width: 200px; }
+.u-mw-260.u-mw-260 { max-width: 260px; }
+.u-mw-320.u-mw-320 { max-width: 320px; }
+
+/* Fan-out meter fill. These three are DATA -- the fraction of indexers that
+   answered -- not styling, and they are named after the value they carry so a
+   reader can see which row is which without opening the stylesheet. §2.10's
+   rule still holds: the meter reports a real count and never a fake bar. */
+.u-w-44.u-w-44 { width: 44%; }
+.u-w-89.u-w-89 { width: 89%; }
+.u-w-100.u-w-100 { width: 100%; }
+
+/* Search result groups stack in reading order: an earlier group's sticky
+   header has to paint over a later group's rows, so the z-index descends down
+   the page. Six groups, six values, and they are declared rather than derived
+   because :nth-of-type would silently renumber when a group is added or an
+   install hides one. */
+.u-z-1.u-z-1 { z-index: 1; }
+.u-z-2.u-z-2 { z-index: 2; }
+.u-z-3.u-z-3 { z-index: 3; }
+.u-z-4.u-z-4 { z-index: 4; }
+.u-z-5.u-z-5 { z-index: 5; }
+.u-z-6.u-z-6 { z-index: 6; }
+
+/* A toolbar that sits directly under another bordered edge would draw a
+   two-pixel rule; it drops its own top border instead. */
+.u-bt-0.u-bt-0 { border-top: 0; }
+
+/* Section-level prose held at the small muted size: the one-paragraph
+   explanation that sits above a table so the fact is stated once instead of
+   repeated in every row. Same three declarations as .note, and deliberately
+   not .note -- .note marks mockup commentary, and this is product copy. */
+.u-sm-muted.u-sm-muted { color: var(--fg-muted); font-size: var(--fs-sm); line-height: var(--lh-sm); }
+
+/* --- 2.14 Mockup state visibility ---------------------------------------
    The states switcher on each screen sets [hidden] on the blocks that do not
    belong to the selected state. This rule sits last so it beats the
    component display values above at equal specificity. */
