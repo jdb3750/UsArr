@@ -2816,6 +2816,28 @@ the sole service, which left the ordinary six-service v0.1 install with a specif
 that does not exist. The catalogue affordances that belong to the v0.2 path are hidden rather than
 shown broken, exactly as they are in Search-and-Grab mode.
 
+**Coverage is not the same for every media type, and this screen is where that has to be said —
+SW-08.** A free-text search that runs correctly, against healthy indexers, and returns one row is
+indistinguishable on screen from a search that is broken. For music it is neither: **403 of
+Prowlarr's 543 indexer definitions are `type: private`**, and the trackers where music actually
+lives — Redacted, Orpheus, and MyAnonaMouse for audiobooks — are **invite-only**. A stock Prowlarr
+carrying public indexers therefore returns a materially thinner list for music than the same search
+returns for a film or an episode, and the user cannot see why. **So the empty and near-empty result
+states are scoped by media type, and the music one names the reason** rather than offering the
+generic *"nothing matched"*: the search worked, the indexers answered, and the ones that carry music
+are not on this install. The one action that changes it — adding a private indexer the user already
+has an account on — is the one the state offers. This is the same qualification §8.5 carries for
+Search-and-Grab mode, surfaced at the point of use.
+
+> ⚠️ **What this is *not* saying.** It is not that music is a lesser media type in UsArr. **A
+> library's catalogue source and its request destination are separate bindings** (§8.3), and music
+> has both halves available on the ordinary install: **Navidrome catalogues it in v0.1 exactly as
+> Radarr catalogues films**, and the free-text path requests it. **Lidarr is deferred because no
+> write-capable service ships in v0.1 at all** — not because music is second-class. LazyLibrarian
+> and Mylar3 are deferred on precisely the same ground, and Radarr and Sonarr are present as
+> *destinations* in v0.2 only because they are already there as *sources*. The thin-indexer fact
+> above is narrow, true, and about the indexer ecosystem rather than about UsArr's design.
+
 **A grab leaves a record, and that is v0.1.** The second block on this screen is **Recent grabs** —
 the ten most recent, newest first: time (absolute and relative, §17.3's rule), release name, indexer,
 protocol, size, the library or media type the category resolved to, and **last known state**. It is a
