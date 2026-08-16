@@ -2407,17 +2407,63 @@ away, and the ~200 figure had no measurement behind it.
   for a density change on desktop; a Pi 5 is conservatively 3–5× slower at style recalculation and
   layout, which puts the 100 ms Tier-0 hard fail at roughly **100–300 rows in the DOM** as the
   markup stands, or **300–600** with `table-layout: fixed` and a working containment path (which
-  cut the same operation by 1.5–5× in an isolated `div`-row test). **The ceiling is set by the
+  cut the same operation by 1.5–5× in an isolated `div`-row test). ⚠️ **That per-row cost is a linear
+  fit and the 25,000-row point is superlinear, so the fit is only good to a few thousand rows**; the
+  extrapolation runs downward into the range it covers, and nothing extrapolated beyond it is quoted
+  as measured. **The ceiling is set by the
   density control, not by scrolling**, and the earlier framing implied 25,000 rows was the number
   in question. Choosing a replacement threshold here from judgement is still refused; what changed
   is *which operation* the benchmark points at. Three mitigations are available before any redesign:
   `table-layout: fixed` (never set anywhere) halves it for free; scoping the density attribute to
   the list container rather than `:root` bounds the invalidation; and an explicit 150 ms "applying"
   state on a density change is honest where a silent multi-second freeze is not.
-- ⚠️ **`contain-intrinsic-size` still has no value, and the value this ADR previously prescribed is
-  wrong three ways.** The browser uses it as the placeholder height for skipped elements; when it is
-  wrong the scrollbar drifts as content scrolls in, which reads as *slowness* — the failure this
-  decision exists to prevent. The prescription was `contain-intrinsic-size: auto var(--row-h)`:
+- ✅ **`contain-intrinsic-size` has measured values, and the "no value yet" caveat this ADR carried
+  is withdrawn.** 📏 **Measured by the frontend thread's `pnpm bench:list` — not by the thread that
+  wrote this ADR, which did not run them.**
+
+  | Row shape | compact | standard | relaxed |
+  |---|---|---|---|
+  | one-line row | **28 px** | **32 px** | **36 px** |
+  | rich row (two lines, sub-line or thumbnail) | **45 px** | **49 px** | **53 px** |
+
+  Drift over a full scroll at the one-line values is **0.76 / 0.70 / 0.65%** against the 2% budget.
+  These are rendered **border-box** heights; the declaration sizes the **content** box, so what ships
+  is the derived expression the mockups already use —
+  `auto calc(2 * var(--row-py) + var(--row-lines) * var(--lh-base))` — which tracks the density token
+  instead of hard-coding three constants. Verified against the mockups rather than assumed: they
+  render exactly 28 / 32 / 36 and 45 / 49 / 53, with computed placeholders within 0.3% of the
+  border-box height each stands in for.
+
+  ✅ **Two confirmations from the same run.** Containment is live on the grid-row primitive — at
+  5,000 rows with a deliberately wrong placeholder the contained and uncontained scroll heights
+  differ by **761,316 px**, while the same rows forced to `display: table-row` differ by **exactly
+  0**, reproducing the `<tr>` limitation as a control. And the density toggle's cost is mostly
+  buyable: at 5,000 rows **containment is worth about 88% and scoping the density attribute to the
+  list container about 25%**, taking the extremes from **911 ms to 80 ms**.
+
+  ⚠️ **The 25,000-row point is superlinear, so the linear per-row fit is only good to a few thousand
+  rows** (0.15 ms/row at 1,000, 0.24 at 5,000, 0.26 at 25,000). The DOM-row ceiling above extrapolates
+  *downward*, inside that range; **no figure extrapolated past a few thousand rows is quoted here as
+  though it were measured.**
+- 🚩 **`contain-intrinsic-size: auto` remembers a size measured at the *previous* density — a live
+  correctness bug, reported by the frontend thread's bench as new and apparently undocumented
+  upstream.** A keyed `{#each}` reuses row nodes, so after a compact → relaxed switch the reused rows
+  carry the remembered compact size and **the scrollbar is 14.57% wrong, against 0.65% when the same
+  rows are rebuilt rather than reused**. Both preconditions are ordinary: density is a first-class
+  control on every screen and the lists are keyed by row id. **The rule is required, not advisory:
+  when row height changes, the remembered intrinsic size must be invalidated** — rebuild the affected
+  nodes (key on `id + density`, or `{#key density}` around the list body) or force re-measurement of
+  every mounted row before the next paint.
+
+  ⚠️ **Not enforced yet, and it cannot be enforced by `docs/design/check.mjs`:** the condition needs
+  node reuse plus thousands of rows, and that check's target is static HTML with neither, so an
+  assertion there could not fire and would pass for ever. Enforcement belongs to `pnpm bench:list`,
+  **fail above 2% drift** — the drift budget above, not a second number. Sequencing is fix, then
+  assert, then claim: `bench:list` exits non-zero on a full run today because of a 25,000-row
+  Chromium out-of-memory. If the app target later mounts large lists, moving the assertion into
+  `check.mjs` is small and uncontested. `design/DESIGN-DIRECTION.md` §7.4 carries the full statement.
+- **The value this ADR previously prescribed was wrong three ways**, kept because each is a way to
+  arrive at a wrong placeholder again. The prescription was `contain-intrinsic-size: auto var(--row-h)`:
   1. **`--row-h` is inert on the element it describes.** `.tbl tbody tr { min-height: var(--row-h) }`
      — `min-height` does not apply to `display: table-row`. Measured: forcing `--row-h: 100px`
      leaves the row at **28.0 px**, with `getComputedStyle(tr).minHeight === "28px"`. Density works
@@ -2433,9 +2479,10 @@ away, and the ~200 figure had no measurement behind it.
      a 24 px row with `auto 28px` produced a **37 px** placeholder (28 + 8 + 1).
 
   **What ships instead: `contain-intrinsic-size: auto <measured content-box height>` per row
-  shape**, relying on `auto`'s remembered-size behaviour for the rest, with the < 2% drift assertion
-  above as the gate. **Until that measurement exists §4.5 is a direction, not an implementable
-  rule**, and this ADR says so rather than shipping a rule nobody can follow.
+  shape**, relying on `auto`'s remembered-size behaviour for the rest — **plus the invalidation rule
+  above wherever row height can change, because that remembered size is the bug** — with the < 2%
+  drift assertion as the gate. The measurement now exists (first bullet in this group), so this is an
+  implementable rule rather than a direction.
 - §16's "virtualized" line item is amended to match.
 
 ### Alternatives rejected

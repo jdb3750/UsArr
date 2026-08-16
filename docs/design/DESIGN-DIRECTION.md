@@ -672,7 +672,9 @@ three densities**, because a row whose columns wrap is taller than its floor. Tw
 `min-height` must sit on an element it applies to: on a `display: table-row` it is inert
 (**measured: forcing the token to 100 px left the row at 28.0 px**), which is one more reason §7.4's
 list primitive is a grid row. And any code that estimates total list height from these numbers is
-wrong by ~33% at 25,000 rows.
+wrong by ~33% at 25,000 rows. **§7.4 carries the measured heights that `contain-intrinsic-size`
+actually uses** — 28 / 32 / 36 px for a one-line row and 45 / 49 / 53 px for a rich one — and they
+are per row *shape*, which is the distinction this warning is about.
 
 One consequence worth stating because it is easy to violate: SC 2.5.8 requires 24 × 24 CSS px
 targets, with a spacing exception for undersized targets whose 24 px circles do not intersect
@@ -886,7 +888,9 @@ more" plus `content-visibility: auto` with `contain-intrinsic-size`**, and virtu
 "~1,000 rows" this document previously floated, because the finding against §4.5's "~200" was that it
 had no measurement behind it, and answering an unmeasured number with a different unmeasured number
 concedes the argument while pretending to fix it. `make bench` gains the measurement (ARCHITECTURE
-§4.5, §13); the threshold is whatever it says.
+§4.5, §13); the threshold is whatever it says. **Part of that harness now exists — the frontend
+thread's `pnpm bench:list`, which supplies every measured number below — but it does not yet complete
+a full run (a 25,000-row Chromium out-of-memory), so the threshold itself is still unset.**
 
 🚩 **The list primitive is a grid, not a table, and that is a constraint rather than a preference.**
 `content-visibility: auto` is defined entirely in terms of size, layout and paint containment, and
@@ -912,11 +916,70 @@ rendered at all. And **`make bench` asserts the mechanism rather than assuming i
 `content-visibility: auto` on a row and assert the container's `scrollHeight` **differs** from the
 uncontained case.
 
-⚠️ **`contain-intrinsic-size` still has no value, and the value this section previously prescribed
-is wrong three ways.** The browser uses that number as the placeholder height for every skipped
-element; when it is wrong the scrollbar drifts as content scrolls into view, which reads as
-*slowness* — the precise failure this section exists to avoid. `contain-intrinsic-size: auto
-var(--row-h)` fails because:
+✅ **`contain-intrinsic-size` has measured values now, and the "no value yet" caveat that made this
+section a direction rather than a rule is withdrawn.** 📏 **The numbers in this block were measured
+by the frontend thread's `pnpm bench:list`. They are not this thread's measurements — we did not run
+them** — and they are recorded here because §7.4 is where the containment policy lives.
+
+| Row shape | compact | standard | relaxed |
+|---|---|---|---|
+| **one-line row** | **28 px** | **32 px** | **36 px** |
+| **rich row** — two lines, a sub-line or a thumbnail | **45 px** | **49 px** | **53 px** |
+
+Scrollbar drift over a full scroll at the one-line values is **0.76 / 0.70 / 0.65%** against the 2%
+budget stated below, so all three densities clear it with better than a factor of two in hand.
+
+**Those are the rendered *border-box* heights, and the declaration is not written as those three
+numbers**, because `contain-intrinsic-size` sizes the **content** box — the row's padding and its
+1 px bottom border are added on top of whatever it says. The mockups compute it instead, as
+`auto calc(2 * var(--row-py) + var(--row-lines) * var(--lh-base))`: the padding term tracks the
+density token rather than hard-coding three constants, and `--row-lines` is declared per list from
+that list's own rendered rows. ✅ **Checked rather than assumed, because agreement is worth
+confirming and not worth guessing at:** at 1440×900 the mockups render **28 / 32 / 36 px** for a
+one-line row and **45 / 49 / 53 px** for a rich one — the measured values exactly — with the computed
+placeholder at `auto 27.98 / 31.98 / 35.98px` and `auto 45.08 / 49.08 / 53.08px` respectively, each
+within 0.3% of the border-box height it stands in for. The mockups already carry the measured values;
+nothing needed changing there.
+
+🚩 **`contain-intrinsic-size: auto` remembers a size measured at the *previous* density, and that is
+a live correctness bug for every list this design is about to have.** Reported by the frontend
+thread's bench **as new — they could not find it documented anywhere, upstream included**, so treat
+it as a finding of this project rather than as received wisdom. `auto` means "use the last real
+measurement in place of the estimate", and **a keyed `{#each}` reuses row nodes** across a
+re-render. So after a compact → relaxed density switch the reused rows still carry the remembered
+*compact* size, every skipped row is placeheld one density stale, and **the scrollbar is 14.57%
+wrong — against 0.65% when the same rows are rebuilt rather than reused.** Neither precondition is
+exotic here: the density control is a first-class setting on every screen (§5.3), and a keyed
+each-block over a stable row id is the correct way to write these lists — §9.1a clause 4 requires
+the key. Any list that both reuses nodes and changes row height hits this, which is all of them.
+
+**The rule, and it is required rather than advisory: when row height changes, the remembered
+intrinsic size must be invalidated.** Concretely, a density change must either **rebuild the affected
+row nodes** — key the each-block on `id + density`, or wrap the list body in `{#key density}`, so the
+rows are new elements with nothing remembered — or **force re-measurement of every mounted row before
+the next paint**. One or the other, on every list, not "where it matters": a list that reuses nodes
+across a density change and does neither is wrong, and it is wrong in the one dimension this whole
+section exists to protect.
+
+⚠️ **Where that rule will be enforced, and the fact that it is not enforced today.** It cannot be
+asserted by `docs/design/check.mjs`. The bug needs node **reuse** across a density change, plus
+enough rows for the drift to exceed threshold; the check's target is `prototype.html`, which is
+static HTML with no reuse semantics and no list at that scale, so **an assertion written there could
+not reproduce the condition and would pass for ever** — a rule that can never fire, indistinguishable
+from a rule that passes, which is the exact failure shape this repository caught three times in a
+single day. Enforcement therefore belongs to the frontend thread's **`pnpm bench:list`**, the only
+harness that mounts a large keyed list. **Threshold, once it lands: fail above 2% drift** — the same
+budget `contain-intrinsic-size` is already held to rather than a second number invented for this,
+and the two cases sit either side of it with room to spare (0.65–0.76% rebuilt, 14.57% stale).
+**The honest sequencing is fix, then assert, then call it enforced:** `bench:list` currently exits
+non-zero on a full run because of a 25,000-row Chromium out-of-memory, so the OOM is fixed first, the
+assertion lands second, and nobody writes "the bench asserts this" until both are true. If the app
+target later grows large-list mounting, moving the assertion into `check.mjs` is a small change and
+the frontend thread would not object — the split is *where the condition can exist*, not a
+territorial line.
+
+**And the earlier prescription — `contain-intrinsic-size: auto var(--row-h)` — was wrong three ways.**
+Kept here because each one is a way to arrive at a wrong placeholder again:
 
 1. **`--row-h` is inert on the element it describes.** `min-height` does not apply to
    `display: table-row`; measured, forcing `--row-h: 100px` leaves the row at **28.0 px**, and the
@@ -933,10 +996,21 @@ var(--row-h)` fails because:
    24 px row with `auto 28px` produced a **37 px** placeholder.
 
 **What ships: `contain-intrinsic-size: auto <measured content-box height>` per row shape**, with
-`auto` remembering the last real measurement, and the assertion is drift rather than frame time —
+`auto` remembering the last real measurement **and the invalidation rule above wherever row height
+can change**, and the assertion is drift rather than frame time —
 `|scrollHeight after a full scroll − scrollHeight at load| / scrollHeight < 2%` at 1k / 5k / 25k
-rows, both themes, all three densities. **Until that measurement exists, §7.4 is a direction, not an
-implementable rule** — and settling OQ-1 did not close this, deliberately.
+rows, both themes, all three densities. The measured heights at the top of this block are what that
+`<measured content-box height>` resolves to, so §7.4 is now an implementable rule rather than a
+direction.
+
+✅ **Two confirmations from the same bench run, because the policy rests on them rather than on the
+mechanism being obvious.** First, **containment is live on the grid-row primitive**: at 5,000 rows
+with a deliberately wrong placeholder the contained and uncontained scroll heights differ by
+**761,316 px**, while the same rows forced back to `display: table-row` differ by **exactly 0** —
+the `<tr>` limitation reproduced as a control, which is what makes the positive result mean
+something. Second, **the density toggle's cost is mostly buyable**: at 5,000 rows, **containment
+accounts for about 88% of it and scoping the density attribute to the list container for about
+25%**, taking the extremes from **911 ms to 80 ms**.
 
 ⚠️ **And the expensive operation on a long list is not scrolling.** Measured: scrolling costs
 **0.1–0.3 ms** at every size, while the **density toggle** costs **153 ms at 1,000 rows, 1,199 ms at
@@ -946,10 +1020,15 @@ top-bar controls on every screen, both are pure-local no-data interactions, and 
 **Tier 0 by §7.2's own definition, whose hard fail is 100 ms**. 🔍 Extrapolating the measured
 0.15–0.26 ms/row to a Pi 5 at a conservative 3–5× puts that hard fail at **100–300 rows in the DOM**,
 or 300–600 with `table-layout: fixed` and working containment — **so the real ceiling is set by the
-density control, in the hundreds, not by scrolling in the tens of thousands.** Three mitigations
-before any redesign: set `table-layout: fixed` (never set anywhere today, and it halves the cost);
-scope the density attribute to the list container rather than `:root`; and if it still exceeds
-100 ms, an explicit 150 ms "applying" state is honest where a silent multi-second freeze is not.
+density control, in the hundreds, not by scrolling in the tens of thousands.** ⚠️ **The per-row
+figure is a linear fit, and the linear fit is only good to a few thousand rows**, because the
+**25,000-row point is superlinear**: 0.15 ms/row at 1,000 and 0.24 at 5,000, against 0.26 at 25,000.
+The extrapolation above runs *downward*, into the range the fit covers, which is why it is stated at
+all — **no figure extrapolated past a few thousand rows may be quoted here as though it were
+measured.** Three mitigations before any redesign: set `table-layout: fixed` (never set anywhere
+today, and it halves the cost); **scope the density attribute to the list container rather than
+`:root` — measured at about 25%, on top of containment's ~88%**; and if it still exceeds 100 ms, an
+explicit 150 ms "applying" state is honest where a silent multi-second freeze is not.
 
 The reasons are concrete. `content-visibility: auto` skips rendering of off-screen content but,
 unlike `display: none`, "the skipped contents must still be available as normal to user-agent

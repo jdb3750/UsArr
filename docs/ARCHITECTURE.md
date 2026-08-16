@@ -3005,7 +3005,9 @@ protocol, size, the library or media type the category resolved to, and **last k
 local read and nothing else; it introduces no new table and no new state machine, because the states
 it renders are the write queue's own — `pending | inflight | verifying | done | failed` (§7.6) —
 joined to the `provenance` row §8.5 already writes per acquisition event. A `failed` row carries the
-verbatim upstream error and the same Retry the toast offers.
+verbatim upstream error, **and whether it also carries Retry depends on which kind of failure it is —
+see the three-state rule below, which is the one place in this section where a `failed` row must not
+be treated as "it did not happen".**
 
 **The reason it is not a nicety.** UsArr's only write path in v0.1 produces a multi-gigabyte download,
 and the confirmation currently lives in a chip inside a *search result row*, which is transient: one
@@ -3100,6 +3102,110 @@ failure inside Prowlarr's own container, `Open Services` and `Retry` are both de
 will correctly show Prowlarr as reachable, because it is — and the honest surface is the sentence
 plus `Retry the search`. A screen that reasons its way to a correct diagnosis and then hands the user
 two buttons that cannot act on it is worse than one that says so.
+
+**A grab can report failure after it has already been handed over, so the grab-result surface has
+three states rather than two — and this is a production observation rather than a design inference.**
+Reported by the deployment thread from the owner's own grab, 2026-08-16: the book downloaded in
+Deluge, end to end, while UsArr reported **"Grab failed — HTTP 502"**. Prowlarr had added the torrent
+to the download client, then failed on a *post-add labelling step*, and returned 500 for the whole
+operation. The upstream's failure response covered an operation that had already partly succeeded.
+**No copy on this screen may assert that a failed grab did not happen.**
+
+**The boundary that matters is handed-over versus not-handed-over, not success versus failure**
+(frontend thread). Prowlarr's 200 means *Prowlarr accepted the release*, not that a download is
+running, and UsArr stops observing at handoff either way — so *sent with nothing reported* and *sent
+with a problem reported afterwards* are **the same epistemic state about the download**, differing
+only in whether an error came back after the handoff. *Genuinely failed* is the categorically
+different one, because nothing was sent, so nothing can be running. The three states:
+
+1. **Sent — nothing reported.** The common path.
+2. **Sent — a problem was reported after handoff, and UsArr cannot tell whether the download is
+   affected.** The owner's incident.
+3. **Genuinely failed — nothing was sent, so nothing is running.**
+
+**So state 2 sits beside state 1, visually and verbally, and not beside state 3.** Both read *sent to
+your download client*; the ambiguous one adds that Prowlarr reported a problem after accepting the
+release and UsArr cannot tell whether the download is affected. The common case then reads as a grab
+that probably worked, with a caveat, rather than as a failure demanding action — which matters
+because it is reachable by accepting Prowlarr's defaults (below), i.e. common rather than exotic.
+**The reasoning is what stops someone re-pairing them later: a row that treats 1 and 2 as opposites
+lies in both directions**, implying that a 200 confirms a download and that a 500 means nothing
+happened. Neither is true.
+
+**The sharper half of that is the happy path: it may not be worded as a confirmation either.** Since
+detection is deliberately not built (see the closure below), **"sent" is the strongest true word for
+every handed-over state, the successful one included** — never *succeeded*, never *downloading*,
+never anything implying UsArr knows the bytes are moving. ✅ **Two parts of this design reached that
+vocabulary independently, which is decent evidence it is the right one:** the provenance design
+already chose *sent* over *succeeded* for exactly this reason, and Recent grabs' `done` state was
+already worded as *"handed the release to the download client and the client accepted it"*. The
+mockups were checked against this rule rather than assumed to pass it — the post-grab chip and its
+announcement read *"grabbed · sent to qBittorrent"*, which names the action the user took and then
+makes the one true claim, so nothing there overclaims and no mockup copy changed.
+
+**Which state a result lands in is decided by how far the request got, not by whether an error came
+back.** That principle survived a verification that killed the first mapping written against it, and
+both halves are recorded because the pattern is more useful than either verdict alone. 🚩 **Verified
+by the code thread: right in principle, wrong in the specific mapping.** The claim was that today's
+error codes already coincide with the boundary, with `grab_failed` as the sent-unknown bucket. They
+do not — **`grab_failed` is the unclassified remainder, and it carries all three outcomes at once:**
+
+- **Six definitely-not-sent cases sit under it today** — a bad API key, an open circuit breaker, an
+  SSRF refusal, a Prowlarr 400, a Prowlarr 409, and a corrupt blob.
+- **One is definitely sent *and confirmed*: `ErrDecode`, reachable only after a 2xx.** Prowlarr
+  confirmed the grab and UsArr then failed to parse its own response. **That is a second, independent
+  false-failure bug**, distinct from the owner's incident, and it is recorded as one rather than
+  folded into it.
+- **Only `ErrServer`, `ErrTimeout` and `Canceled` are genuinely ambiguous.**
+
+**So the assignment is backend classification off the error sentinel, not a relabel of one existing
+code.** The code thread is implementing it additively: **`grab_failed` narrows, and a new code carries
+sent-unknown.** ⚠️ **The near miss is worth keeping as a caution about scope rather than about this
+one mapping:** had the wholesale relabel shipped, it would have been **the same double-grab invitation
+pointed the other way** — sending a user to check their download client for a request that never left
+UsArr's process. The rule was right, and applying it to the wrong set would have produced a fresh
+instance of the exact harm the rule exists to prevent.
+
+**Retry is removed from an ambiguous row, not softened**, and this rule attaches to the new
+sent-unknown code rather than to `grab_failed`. Retry means *do it again*, and doing it again is
+precisely what produces two copies of a 68 GB release; a safe-looking button is more dangerous than
+no button. The honest action sends the user **to where the truth actually lives — their download
+client** — and the row states plainly that UsArr cannot tell whether the grab landed, rather than
+implying either outcome. Retry, and `Search again` where the cache expired, stay on the
+genuinely-failed states, where *"nothing happened"* is true.
+
+**UsArr structurally cannot resolve the ambiguity by looking, and that is a decision rather than a
+gap:** it deliberately stops observing after handoff — the same property the sort-freeze rule above
+rests on. The honest surface is therefore one that says what it does not know instead of guessing in
+the safe-sounding direction. **And this is the second failure mode in this section where the absence
+of an undo makes the wording load-bearing rather than cosmetic**: a false *"failed"* invites the user
+to grab the same release again, and a grab is irreversible from UsArr's side — the same
+irreversibility that justifies the freeze-while-aimed rule (`design/DESIGN-DIRECTION.md` §9.1a).
+
+> ✅ **Closed, 2026-08-16: the response is *not* distinguishable, checked by the deployment thread
+> against Prowlarr's and Deluge's source. Wording is the mechanism, and detection is not to be
+> built.** Prowlarr returns **no structured partial-success signal at all** — the 200 *is* the
+> confirmation — and the only discriminator available inside a failure is locale-dependent string and
+> stack-frame archaeology that is specific to Deluge and does not generalise across download clients.
+> The deployment thread's recommendation is explicitly **not to build detection**, and that is
+> recorded here so nobody later reads the ambiguity as a gap someone forgot to close and goes off to
+> write a parser for it. **This strengthens the framing above rather than merely confirming it:** the
+> ambiguity is permanent by the upstream API's nature *and* by UsArr's deliberate decision to stop
+> observing after handoff — two independent reasons, either one sufficient on its own.
+
+**Two corrections to the message shown today, both following from that closure.** First, it asserts
+**"the grab did not go through"**, which is precisely the unknowable claim; it must instead say that
+the download client reported an error and the release **may or may not have been added**, with the
+upstream message shown verbatim. Second, it offers **`Test connection`**, which is the wrong remedy —
+this is not a connectivity failure, and the test will pass, sending the user to check something that
+is working. An ambiguous row offers **no misleading action**: it points at the download client, where
+the truth is.
+
+**And the failure path is reachable by accepting defaults, which is why it is worth designing for.**
+Prowlarr's Add-client form pre-fills a Default Category of `prowlarr`, so saving the form opts the
+user into the labelling step that failed here — the owner never chose a label — and the add happens
+*before* that step, with no rollback. A configuration trap rather than a user error, and common
+rather than exotic.
 
 **The post-grab confirmation names what will and will not import the file, per media type, and it is
 never truncated to the first clause.** §8.5 owns the copy rule and the reasoning; the requirement on

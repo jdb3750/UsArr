@@ -743,6 +743,18 @@ so it was built on rather than replaced. What that buys, all measured:
 | sticky column headers at 761–1099px | never pinned: `overflow-x: auto` made the wrapper a scroll container | **pinned** at the toolbar edge — see the note below the table |
 | accessibility tree at 390px | `{table:1, row:7, cell:49}` — **no columnheaders at all** | `{table:1, rowgroup:2, row:9, columnheader:7, cell:56}` — read from Chromium's full AX tree over CDP, not from Playwright's filtered snapshot, which returns nothing for these nodes. The table, rowgroup, row and columnheader counts are the same at 1440px and at 390px; the cell count is 35 at rest and 56 after a full scroll, because `content-visibility: auto` skips the contents of an off-screen row until it is rendered, scrolled to, or focused. Rows and columns stay identifiable throughout — it is only the cell *text* that materialises on demand |
 
+✅ **The derived expression agrees with the frontend thread's independently measured row heights, and
+that was checked rather than assumed.** `pnpm bench:list` measured **28 / 32 / 36 px** for a one-line
+row and **45 / 49 / 53 px** for a rich one across compact / standard / relaxed
+(`../DESIGN-DIRECTION.md` §7.4). Re-measured here at 1440×900, these mockups render exactly those
+heights, with the computed placeholder at `auto 27.98 / 31.98 / 35.98px` on the one-line
+Recently-added list and `auto 45.08 / 49.08 / 53.08px` on the two-line attention list — within 0.3%
+of the border-box height each stands in for, since the property sizes the content box. **No mockup
+change was required and `prototype.html` did not need regenerating.** ⚠️ Note what these files
+*cannot* show: §7.4's stale-remembered-size rule needs row nodes to be **reused** across a density
+change, and static HTML has no reuse semantics, so `../check.mjs` is the wrong place to assert it —
+`pnpm bench:list` owns that one.
+
 The sticky box is the `thead`, not the header row: with `thead { display: block }` a sticky row's
 containing block is the thead, which is one row tall, so it could not travel.
 
