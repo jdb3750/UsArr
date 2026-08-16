@@ -935,6 +935,18 @@ paragraph describing a repo that no longer exists.
 * **`ARCHITECTURE.md` §16 carries two different kinds of edit.** *Scope* — which milestone a thing
   lands in — is owned by the ADRs, and §16 is authoritative for it. *Status* — what has actually
   landed — is a separate question. Do not change one while intending the other.
+* **Branch late, or rebase early.** `main` moving mid-task cost work three times in one day. The
+  clearest case: a thread cut from `85cae80` built its own module equivalents of an ADR's rules, then
+  threw them away when `7aa4f26` landed the real `frozenorder.svelte.ts`, `sortspec.ts` and
+  `indexerscope.svelte.ts` **eighteen minutes later**. Discarding was the right call and nothing
+  shipped wrong, but the work was wasted before it began, because the branch point was already stale
+  when it was cut. Cut the branch when you start typing, not when you were assigned.
+* **Cite symbols, not line numbers, while `main` is moving.** A `docs/REVIEW-LOG.md` citation to
+  `web/src/lib/api.ts:1237` drifted **ninety-odd lines** — the symbol was at 1329 by the time the
+  finding was pushed — and survived only because the author re-verified every citation after
+  rebasing instead of assuming they still held (`6afe583`). A line number is a claim with a shelf
+  life; a symbol name is one that does not decay. Cite the symbol; if you give a line too, date it to
+  the commit you read it at.
 
 Who leads which area, roughly:
 
