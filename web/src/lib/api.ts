@@ -19,11 +19,19 @@
  *   GET  /api/events                   the one SSE stream            — session
  *   POST /api/v1/releases/{id}/grab    grab a release candidate      — CSRF + session
  *
- * `sudo` is the third gate and it is NOT the same as being signed in: every
- * service write sits behind internal/httpapi's sudo middleware, which answers
- * 403 `sudo_required` once the five-minute window opened by signing in has
- * closed. Re-bootstrapping the CSRF token cannot fix that, so sendJson below
- * refuses to retry it and the caller has to confirm the password instead.
+ * `sudo` is the third gate and it is NOT the same as being signed in. All FIVE
+ * service writes — create, the unsaved test, PATCH, DELETE and the saved-instance
+ * test (internal/httpapi/server.go) — sit behind the sudo middleware, which
+ * answers 403 `sudo_required` once the five-minute window opened by signing in
+ * has closed. Both connection tests are in that list because they make UsArr
+ * send a stored full-admin credential upstream, so they are writes as far as the
+ * threat model is concerned even though they store nothing.
+ *
+ * Three DIFFERENT things answer 403 here — `csrf`, `sudo_required` and
+ * `forbidden` — and the code is on the body's `error` field, not a `code` field
+ * (internal/httpapi/json.go errorBody). Only `csrf` is fixable by re-bootstrapping
+ * the token, so sendJson retries that one and surfaces the other two; see
+ * isRetryableCsrfFailure.
  *
  * All of them are implemented by internal/httpapi. The repo is still pre-alpha
  * and the rest of the surface is not, so everything below is written to degrade
@@ -499,19 +507,44 @@ async function sendJson(method: WriteMethod, url: string, body: unknown = {}): P
 	try {
 		return await send(await ensureCsrfToken());
 	} catch (error) {
-		if (!(error instanceof ApiError) || error.status !== 403) throw error;
-		// `sudo` answers 403 too, and no amount of re-bootstrapping fixes it:
-		// the fix is a password confirmation, which only the caller can ask for.
-		// Retrying would double every service write for nothing.
-		if (error.code === 'sudo_required') throw error;
-		// Re-bootstrap unconditionally: the server reissues the cookie on this
-		// call, so this is the only thing that can actually change the outcome.
+		if (!(error instanceof ApiError) || error.status !== 403 || !isRetryableCsrfFailure(error)) {
+			throw error;
+		}
+		// Re-bootstrap: the server reissues the cookie on this call, so this is
+		// the only thing that can actually change the outcome.
 		forgetCsrfToken();
 		await fetchSession();
 		const token = currentCsrfToken();
 		if (!token) throw error;
 		return send(token);
 	}
+}
+
+/**
+ * Whether a 403 is the one a fresh CSRF token can fix.
+ *
+ * internal/httpapi answers 403 with THREE different codes and only one of them
+ * is about the token, so this is an allow-list rather than a deny-list — a
+ * fourth code added server-side must default to "surface it", not to "retry it":
+ *
+ *   - `csrf`          — checkCSRFToken: the cookie and the header disagree, or
+ *                       there is no cookie. GET /api/v1/auth/session reissues
+ *                       both, so retrying once is exactly the fix.
+ *   - `sudo_required` — the sudo middleware, on all five service writes. The fix
+ *                       is POST /api/v1/auth/sudo with the user's password,
+ *                       which only the caller can ask for. Retrying would double
+ *                       every service write for nothing and still fail.
+ *   - `forbidden`     — the account is disabled (authenticate), or the operation
+ *                       is not permitted (handleSudo's owner check). Nothing the
+ *                       client can do changes it, and a retry is one more
+ *                       rejected write against a disabled account.
+ *
+ * A 403 whose body is not the server's error shape leaves `code` empty — a
+ * proxy or a gateway in front of UsArr, not checkCSRFToken, which always names
+ * itself. It is surfaced too.
+ */
+function isRetryableCsrfFailure(error: ApiError): boolean {
+	return error.code === 'csrf';
 }
 
 async function postJson(url: string, body: unknown = {}): Promise<unknown> {

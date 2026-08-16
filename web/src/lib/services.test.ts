@@ -719,6 +719,176 @@ describe('DELETE and PATCH take the same CSRF path POST does', () => {
 	});
 });
 
+/**
+ * THREE different things answer 403, and telling them apart is the whole of what
+ * this client owes the Services screen:
+ *
+ *   `csrf`          checkCSRFToken — a token that rotated under a long-lived tab.
+ *                   GET /api/v1/auth/session reissues it, so retry once.
+ *   `sudo_required` the sudo middleware — needs the user's password. Retrying
+ *                   doubles the write and still fails.
+ *   `forbidden`     a disabled account, or an operation this account may not
+ *                   perform. Nothing the client does changes it.
+ *
+ * The code arrives on the body's `error` field (internal/httpapi/json.go's
+ * errorBody), NOT on a `code` field — so a client that read `code` would see an
+ * empty string for all three and treat every one of them alike.
+ *
+ * Conflating any two is a real failure, not a tidiness point: retrying
+ * `sudo_required` sends a second credential-touching write for nothing;
+ * retrying `forbidden` hammers a disabled account; and NOT retrying `csrf`
+ * turns a rotated token into a dead button.
+ */
+describe('the three 403s are told apart', () => {
+	/** A 403 body exactly as internal/httpapi/json.go marshals it. */
+	function forbid(code: string, message: string, action?: string) {
+		return jsonResponse({ error: code, message, ...(action ? { action } : {}) }, 403);
+	}
+
+	/**
+	 * Every write internal/httpapi/server.go puts behind `sudo` — lines 208, 210,
+	 * 212, 213 and 214. All five, because a gate the client handles on four of
+	 * five endpoints is a screen that dead-ends on the fifth.
+	 */
+	const sudoGatedWrites: Array<[string, string, () => Promise<unknown>]> = [
+		[
+			'POST /api/v1/services',
+			'/api/v1/services',
+			() =>
+				createService({
+					kind: 'prowlarr',
+					name: 'Prowlarr',
+					baseUrl: 'http://prowlarr:9696',
+					apiKey: API_KEY
+				})
+		],
+		[
+			'POST /api/v1/services/test',
+			'/api/v1/services/test',
+			() =>
+				testNewService({
+					kind: 'prowlarr',
+					name: 'Prowlarr',
+					baseUrl: 'http://prowlarr:9696',
+					apiKey: API_KEY
+				})
+		],
+		['PATCH /api/v1/services/{id}', '/api/v1/services/4', () => updateService(4, { name: 'x' })],
+		['DELETE /api/v1/services/{id}', '/api/v1/services/4', () => deleteService(4)],
+		['POST /api/v1/services/{id}/test', '/api/v1/services/4/test', () => testService(4)]
+	];
+
+	it.each(sudoGatedWrites)(
+		'surfaces sudo_required from %s so the screen can ask for the password',
+		async (_name, endpoint, call) => {
+			stubFetch((url) =>
+				url === '/api/v1/auth/session'
+					? jsonResponse(sessionBody)
+					: forbid(
+							'sudo_required',
+							'this operation touches a stored credential and needs a fresh password confirmation',
+							'Confirm your password'
+						)
+			);
+
+			const error = await call().catch((e: unknown) => e);
+			expect(error).toBeInstanceOf(ApiError);
+			// The code is what the Services screen's guarded() branches on to raise
+			// the password prompt, and the action is the words on the button.
+			expect(error as ApiError).toMatchObject({
+				status: 403,
+				code: 'sudo_required',
+				action: 'Confirm your password'
+			});
+			// Sent once. A retry here is a second credential-touching write that
+			// cannot succeed.
+			expect(calls.filter((c) => c.url === endpoint)).toHaveLength(1);
+		}
+	);
+
+	it('does NOT retry a forbidden 403 — it is not a token problem', async () => {
+		stubFetch((url) =>
+			url === '/api/v1/auth/session'
+				? jsonResponse(sessionBody)
+				: forbid('forbidden', 'this account is disabled')
+		);
+
+		const error = await deleteService(4).catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(ApiError);
+		expect(error as ApiError).toMatchObject({ status: 403, code: 'forbidden' });
+		// The server's own sentence reaches the screen, not a generic one (§17.3).
+		expect((error as ApiError).detail).toBe('this account is disabled');
+		expect(calls.filter((c) => c.url === '/api/v1/services/4')).toHaveLength(1);
+		// And it never went back for a new token: re-bootstrapping cannot enable a
+		// disabled account, so the extra round trip buys nothing.
+		expect(calls.filter((c) => c.url === '/api/v1/auth/session')).toHaveLength(1);
+	});
+
+	it('DOES retry a csrf 403, exactly once', async () => {
+		let issued = 0;
+		stubFetch((url, init) => {
+			if (url === '/api/v1/auth/session') {
+				issued += 1;
+				return jsonResponse({ ...sessionBody, csrf_token: `token-${issued}` });
+			}
+			return headersOf(init)[CSRF_HEADER.toLowerCase()] === 'token-2'
+				? new Response(null, { status: 204 })
+				: forbid('csrf', 'the CSRF token does not match this session', 'Reload the page');
+		});
+
+		await expect(deleteService(4)).resolves.toBeUndefined();
+		expect(calls.map((c) => c.url)).toEqual([
+			'/api/v1/auth/session',
+			'/api/v1/services/4',
+			'/api/v1/auth/session',
+			'/api/v1/services/4'
+		]);
+	});
+
+	it('gives up after ONE csrf retry rather than looping', async () => {
+		stubFetch((url) =>
+			url === '/api/v1/auth/session'
+				? jsonResponse(sessionBody)
+				: forbid('csrf', 'the CSRF token does not match this session')
+		);
+
+		await expect(deleteService(4)).rejects.toMatchObject({ status: 403, code: 'csrf' });
+		expect(calls.filter((c) => c.url === '/api/v1/services/4')).toHaveLength(2);
+	});
+
+	it('surfaces a 403 that is not the server error shape instead of retrying it', async () => {
+		// A proxy or gateway in front of UsArr. checkCSRFToken always names itself
+		// as `csrf`, so an unnamed 403 did not come from it and a fresh token
+		// cannot help.
+		stubFetch((url) =>
+			url === '/api/v1/auth/session'
+				? jsonResponse(sessionBody)
+				: new Response('<html>403 Forbidden</html>', { status: 403 })
+		);
+
+		const error = await deleteService(4).catch((e: unknown) => e);
+		expect((error as ApiError).status).toBe(403);
+		expect((error as ApiError).code).toBe('');
+		expect(calls.filter((c) => c.url === '/api/v1/services/4')).toHaveLength(1);
+	});
+
+	it('reads the code off `error`, not off a `code` field', async () => {
+		// The regression this pins: internal/httpapi's errorBody marshals the code
+		// as `error`. A body carrying `code` instead is NOT the server's shape, so
+		// nothing may be inferred from it — least of all "this is a csrf failure,
+		// retry it".
+		stubFetch((url) =>
+			url === '/api/v1/auth/session'
+				? jsonResponse(sessionBody)
+				: jsonResponse({ code: 'csrf', message: 'the CSRF token does not match' }, 403)
+		);
+
+		const error = await deleteService(4).catch((e: unknown) => e);
+		expect((error as ApiError).code).toBe('');
+		expect(calls.filter((c) => c.url === '/api/v1/services/4')).toHaveLength(1);
+	});
+});
+
 describe('no response the client receives can carry the API key', () => {
 	it('holds across list, create, patch and test', async () => {
 		// A server that (wrongly) echoed the key everywhere it could. The client
