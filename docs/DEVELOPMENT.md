@@ -13,7 +13,7 @@
 
 | Tool | Version | Why this floor | Install |
 |---|---|---|---|
-| **Go** | **1.25+** | `ncruces/go-sqlite3` v0.35 declares `go 1.25.0`, so it is the real floor. Uses `go tool` directives, `embed.FS`, generics-heavy driver code. | <https://go.dev/dl/> |
+| **Go** | **1.25.13+** | govulncheck is the binding constraint, not any dependency: it reports 15 called stdlib vulnerabilities at 1.25.7, 5 at 1.25.12, and is clean only at 1.25.13. The highest `go` directive among dependencies is goose v3.27.3's `1.25.7`, which is lower and so not binding. Re-check before trusting the number — a new advisory moves it. | <https://go.dev/dl/> |
 | **Node.js** | **22+ (LTS)** | SvelteKit 2 + Vite baseline. Verified in-container: `v22.22.2`. | <https://nodejs.org/> or `fnm`/`nvm` |
 | **pnpm** | **10+** | Package manager for `web/`. Verified in-container: `10.33.0`. | `corepack enable && corepack prepare pnpm@latest --activate` |
 | `git` | any recent | — | — |

@@ -128,7 +128,10 @@ See `docs/ARCHITECTURE.md` §14 for the full threat model.
 ## Conventions
 
 **Stack**
-- Go 1.24+, `CGO_ENABLED=0`, single static binary.
+- Go 1.25.13+, `CGO_ENABLED=0`, single static binary. The floor is set by govulncheck, not by a
+  dependency — goose v3.27.3 only needs 1.25.7, but 1.25.7 has 15 called stdlib vulnerabilities and
+  1.25.12 still has 5. Re-check rather than assuming; a new advisory moves it. `go.mod` is
+  authoritative.
 - SvelteKit with `adapter-static` (SPA), embedded via `embed.FS`.
 - SQLite + WAL: a read pool plus a single-writer connection; `BEGIN IMMEDIATE` for writes.
 - goose migrations. **A merged migration is never edited** — write a new one.
