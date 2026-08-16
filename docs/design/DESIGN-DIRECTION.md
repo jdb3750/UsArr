@@ -13,9 +13,25 @@ principles); [`DECISIONS.md`](../DECISIONS.md) ADR-0003 (SvelteKit `adapter-stat
 and ADR-0025 (the styling and typography stack, which this document is the rationale for).
 **Deferred UI surfaces and the seams they need:** [`FUTURE.md`](../FUTURE.md).
 
-Where §17 and this document disagree, **§17 wins** and this document is the bug. §17's open
-navigation question is the one place this document is permitted to decide something §17 did not —
-see §8.1, and the honest note about how that decision differs from the two options §17 named.
+Where §17 and this document disagree, **§17 wins** and this document is the bug.
+
+> **Four things the owner settled on 2026-08-16, and they are decided rather than proposed.**
+>
+> 1. **Colourless chrome is confirmed.** There is no brand accent hue (§3). The one recorded cost —
+>    that with no accent, two table screens have little left to differ by at thumbnail scale (D-24) —
+>    is accepted, not reopened.
+> 2. **IBM Plex is confirmed** as the family (§4). What is *not* settled is the **subset**; OQ-3 is
+>    narrowed to that and nothing else.
+> 3. **The left sidebar is confirmed** over top-bar type tabs. **OQ-2 is closed** (§8.1), and the
+>    move from two media types to six is new evidence in the same direction rather than a
+>    re-litigation — §17.2's top-navbar option was drafted when "per-type" meant two.
+> 4. **Virtualization was delegated to us and is now settled** as "Load more" plus
+>    `content-visibility`, with virtualization as an escalation above a **benchmarked** threshold.
+>    **OQ-1 is closed** (§7.4, ADR-0029), and §4.5 and §16 are amended to match.
+>
+> **Two things this revision adds that §17 now owns:** the six-media-type expansion and user-defined
+> libraries. ARCHITECTURE §17.2 has been amended for both (ADR-0027, ADR-0028); §§8.1, 8.4, 8.5, 8.6
+> and 9.7 below are this document's downstream detail, not a competing decision.
 
 Citation convention follows the rest of `docs/`: every empirical claim carries a primary-source
 URL, and reasoning that is not itself cited is marked **INFERENCE**.
@@ -200,7 +216,8 @@ These are not new. They are restated because every decision below is downstream 
 | **ARCHITECTURE §17.1 / §4.4.1** | **No skeleton shimmer.** The image placeholder is a `dominant_color` block with the title in it: informative, not decorative |
 | **ARCHITECTURE §2.3 / §5.5 / §17.7** | Degraded ≠ blocked. A small **non-modal** banner. **The catalogue never greys out and never shows a spinner** |
 | **ARCHITECTURE §13** | Client-side prefix filter p50 < 5 ms, p99 < 16 ms — one frame. The UI's own budget, not the server's |
-| **ARCHITECTURE §16** | **v0.1 is Movies and TV only** (Sonarr + Radarr + Prowlarr). Music, books, comics and audiobooks are v1.0. Requests in v0.1 is the **Prowlarr Search-and-Grab path only** |
+| **ARCHITECTURE §16** (amended, ADR-0032) | **v0.1 is six media types, read-only beyond video**: Sonarr + Radarr, plus the read-only catalogue sources **Navidrome, Audiobookshelf, Komga, Kavita**, plus Prowlarr. The **command sinks** (Lidarr, LazyLibrarian, Mylar3, Kapowarr) are v1.0. Requests in v0.1 is the **Prowlarr Search-and-Grab path only — for all six types** |
+| **ARCHITECTURE §6.5 / ADR-0026** | **User-defined libraries exist and are configured separately from services.** They are a *scope*, never a navigation axis (§8.1) |
 
 One more, from the ecosystem rather than from the repo: in this software family **stability of
 layout outranks currency of visual style**. Proxmox runs ExtJS 7 with a Sencha Touch mobile UI and
@@ -218,9 +235,9 @@ things.** Freeze the nav and the page skeleton in v0.1 and do not reshuffle them
 
 > **Chrome is achromatic. Chroma is reserved for status and cover art.**
 
-**There is no brand accent hue in UsArr. None.** Not a blue, not a green, not a "not-purple". This
-is the single biggest structural defence in this document, and it is worth stating why rather than
-just asserting it:
+**There is no brand accent hue in UsArr. None.** Not a blue, not a green, not a "not-purple".
+**Confirmed by the owner on 2026-08-16.** This is the single biggest structural defence in this
+document, and it is worth stating why rather than just asserting it:
 
 1. **The AI default is a violet or blue brand accent, and this app has none.** The tell cannot be
    present if the category is absent.
@@ -354,7 +371,9 @@ So the earlier ~120–180 KB estimate was right for `latin` + `latin-ext` and **
 over a LAN this is a single-digit-millisecond cost, and WOFF2 is already Brotli-compressed
 internally so the build-time precompression adds nothing here. The number that would have failed
 the ~200 KB trigger is the one that includes `latin-ext`; a self-hoster with an accented library
-will want it, so **decide the subset, not just the family** (OQ-3). If it must be cut, drop
+will want it, so **the family is decided and the subset is not** (OQ-3) — and six media types sharpen
+it, because a manga, classical or translated-fiction library is full of accented and transliterated
+titles where a two-type video library was not. If it must be cut, drop
 `latin-ext` before dropping a weight, and drop a weight before dropping the family.
 Mitigations: the font is served from the same box over a LAN,
 it is content-hashed and immutable, and it is precompressed at build time (`statigz`, see
@@ -654,8 +673,13 @@ phase A commits.
 
 ### 7.4 Long lists — and an open conflict with ARCHITECTURE §4.5
 
-The research position is: **"Load more" plus `content-visibility: auto` with
-`contain-intrinsic-size`** as the default, reaching for virtualization only above ~1,000 rows.
+**Settled, 2026-08-16: the owner delegated this and it is now ADR-0029.** The default is **"Load
+more" plus `content-visibility: auto` with `contain-intrinsic-size`**, and virtualization is an
+**escalation above a threshold set from a benchmark that does not exist yet** — deliberately not the
+"~1,000 rows" this document previously floated, because the finding against §4.5's "~200" was that it
+had no measurement behind it, and answering an unmeasured number with a different unmeasured number
+concedes the argument while pretending to fix it. `make bench` gains the measurement (ARCHITECTURE
+§4.5, §13); the threshold is whatever it says.
 
 ⚠️ **`contain-intrinsic-size` has no value anywhere in this document, and it is the whole risk.**
 The browser uses that number as the placeholder height for every skipped element; when it is wrong
@@ -665,8 +689,9 @@ the row height across 28 / 32 / 36 px and the two-line and thumbnail rows across
 Whatever ships must derive it from the same custom property the row height reads
 (`contain-intrinsic-size: auto var(--row-h)`, with `auto` letting the browser remember the last
 real measurement), and it must be tested with the density control while scrolling. **Until that is
-specified with a value and a test, §7.4 is a direction, not an implementable rule** — which is one
-more reason OQ-1 needs settling rather than deferring.
+specified with a value and a test, §7.4 is a direction, not an implementable rule** — and settling
+OQ-1 did not close this, deliberately: ADR-0029 records it as the open half rather than shipping a
+rule nobody can follow.
 
 The reasons are concrete. `content-visibility: auto` skips rendering of off-screen content but,
 unlike `display: none`, "the skipped contents must still be available as normal to user-agent
@@ -685,18 +710,15 @@ search results" (<https://www.nngroup.com/articles/infinite-scrolling/>), and Ba
 (<https://baymard.com/blog/external-load-more-vs-pagination-vs-infinite-scrolling>). UsArr is a
 retrieval tool, not a discovery feed.
 
-> ⚠️ **This contradicts the repository in three places, and it is not resolved here.**
-> [`ARCHITECTURE.md`](../ARCHITECTURE.md) §4.5 says **"Virtualize everything over ~200 rows"**;
-> §16 lists "Library grid, **virtualized**, keyset pagination" as a v0.1 line item; and
-> **ADR-0003 — an accepted ADR — rejects HTMX partly on the grounds that "a 10k-item virtualized
-> poster grid with instant client-side filter/sort *is* a rich client-state problem"**, so
-> virtualization is load-bearing in the reasoning that chose the framework. §4.5 is authoritative
-> and this document does not overrule it. Settling OQ-1 against virtualization therefore means
-> amending three documents, one of them an ADR, not one line. The conflict is recorded as **open
-> question OQ-1 in §15**, for Joe to settle — either by amending §4.5's threshold, or by accepting
-> the Ctrl+F loss deliberately and saying so in §4.5 rather than by omission.
-> Note the two positions are closer than they look: keyset windows of ~100 rows with ±2 pages
-> prefetched (§4.5) means the mounted set is small either way; what differs is whether the
+> ✅ **The three-document conflict is resolved, not deferred.** `ARCHITECTURE.md` §4.5's "virtualize
+> everything over ~200 rows" is **replaced**; §16's "Library grid, virtualized" line item is amended
+> to match; and **ADR-0003's conclusion is untouched while one of its arguments is corrected** — a
+> 10k-item grid with instant client-side filter and sort is still a rich client-state problem (the
+> client-side prefix index is the proof), so the HTMX rejection stands on its own; the word
+> "virtualized" in that sentence should now be read as "large". All of it is recorded in **ADR-0029**
+> rather than left as an omission.
+> Note the two positions were always closer than they looked: keyset windows of ~100 rows with ±2
+> pages prefetched (§4.5) means the mounted set is small either way; what differs is whether the
 > unmounted rows are absent from the DOM (virtualized) or present-but-unpainted
 > (`content-visibility`).
 
@@ -704,15 +726,27 @@ retrieval tool, not a discovery feed.
 
 ## 8. Navigation and page anatomy
 
-### 8.1 The navigation model — resolving §17.2's open choice
+### 8.1 The navigation model — two axes, and they are never merged
 
-§17.2 deliberately left the v0.1 navigation model open between two options: *"sections on the home
-page (the default assumed above), or per-type tabs in a top navbar with the home page as an
-overview. Both are standard; pick one on first contact with real data and do not relitigate."*
+**Closed, 2026-08-16 (OQ-2), and now ARCHITECTURE §17.2 + ADR-0027.** §17.2 had left the model open
+between *"sections on the home page"* and *"per-type tabs in a top navbar"*. The owner confirmed a
+**persistent, collapsible left sidebar**, and the expansion to six media types is new evidence in the
+same direction rather than a re-litigation: §17.2's second option was drafted when "per-type" meant
+two, and six types plus Home · Search · Requests · Services · Settings · System is twelve top-level
+items in a horizontal strip — before Calendar and Stats (§12) — with the persistent search input left
+nowhere to go but a compressed corner or an icon.
 
-**The decision: a persistent, collapsible left sidebar. Content nouns first; `Settings` and
-`System` always the last two entries, in that order; sub-items indented inline under the expanded
-parent, with no flyouts. Home remains sectioned by media type.**
+**The decision, in two halves:**
+
+> **Media type is the navigation axis** — a closed set of six (movies, TV, music, ebooks, audiobooks,
+> comics), one sidebar entry per type *that has content*, bounded at six by construction.
+>
+> **A library is a *scope*, not a place** — a multi-select chip pinned above the nav, reflected in
+> the URL as `?lib=`, on the routes that already exist. Libraries are unbounded in number and are
+> therefore **never** sidebar entries.
+
+Content nouns first; `Settings` and `System` always the last two entries, in that order; sub-items
+indented inline under the expanded parent, **no flyouts**.
 
 This is **verbatim the shape of the Sonarr/Radarr/Prowlarr sidebar**, and self-hosters already know
 it:
@@ -726,31 +760,92 @@ it:
 - Navidrome uses the react-admin sidebar with a library selector pinned at the top
   ([Menu.jsx](https://github.com/navidrome/navidrome/blob/master/ui/src/layout/Menu.jsx)).
 
-**Honest note on how this differs from §17.2.** A sidebar is neither of the two options §17.2
-named. It is closest to the second — per-type entries giving one-click access to each media type —
-relocated from a top navbar to a sidebar, while keeping the first option's sectioned home page.
-The reasons for the relocation: the sidebar is what three of UsArr's five v0.1-adjacent
-neighbours already use, it is where the ecosystem puts status badges (§8.2), it collapses cleanly
-on a phone, and a top navbar of media types does not scale to the eventual
-Home · Library · Search · Requests · Calendar · Stats · Services · Settings set (§12). **If Joe
-reads §17.2 as excluding a third option, §17.2 wins and this reverts to top-bar tabs** — recorded
-as **OQ-2** in §15.
+**Why the sidebar rather than the top bar, recorded now that it is settled:** it is what three of
+UsArr's neighbours already use, it is where the ecosystem puts status badges (§8.2), it collapses
+cleanly on a phone, and it scales to the eventual Home · six types · Search · Requests · Calendar ·
+Stats · Services · Settings · System set (§12) — which a horizontal strip does not.
 
-**The v0.1 sidebar, and nothing more.** Because v0.1 is Sonarr + Radarr + Prowlarr only, the
-content nouns are **Movies** and **TV**. There is no Music, Books, Comics or Audiobooks entry,
-because there is no provider for them until v1.0. §17.2's hard rule applies to the sidebar as it
-does to home sections: **a type the user does not have is not shown at all.**
+**The sidebar, with the scope chip and the six types.** Type entries are **data-driven**, not
+markup: §17.2's hard rule applies to the sidebar exactly as it does to Home — **a type the user does
+not have is not shown at all**, so a movies-only install renders two content nouns and a
+music-and-books install renders three. Nothing hard-codes a type.
 
 ```
-Home
-Movies
-TV
-Search
-Requests          (v0.1: the Prowlarr Search-and-Grab path — §17.5)
-Services       ●2
-Settings
-System
+┌────────────────────────────┐
+│  UsArr                 [«] │   collapse toggle
+├────────────────────────────┤
+│ ▣ All libraries (4)      ▾ │   scope chip — RENDERS NOTHING at 0 or 1 library
+├────────────────────────────┤
+│   Home                     │
+├────────────────────────────┤
+│   Movies             1,204 │  ┐
+│   TV                   214 │  │  present media types only,
+│   Music              8,930 │  ├  fixed order, hard max 6,
+│   Audiobooks           412 │  │  counts respect the scope chip
+│   Ebooks             2,051 │  │
+│   Comics               733 │  ┘
+├────────────────────────────┤
+│   Kids                     │  ┐  pinned libraries — opt-in, default none,
+│   Vinyl rips               │  ┘  capped, hidden group when empty
+│   More…                    │     only when something is unpinned
+├────────────────────────────┤
+│   Search                   │
+│   Requests                 │
+├────────────────────────────┤
+│   Services              ●2 │   severity badge, null at zero (§8.2)
+│   Settings                 │
+│   System                   │
+└────────────────────────────┘
 ```
+
+Expanded, with the scope popover open — **native checkboxes**, so Space toggles, arrows move and
+`Esc` closes with no custom key handling written at all, which is the payoff of §17.1's
+native-controls rule:
+
+```
+│ ▣ 2 of 4 libraries       ▴ │
+│  ┌──────────────────────────────────┐
+│  │ Select libraries:                │
+│  │   ☑ Everything                   │   master checkbox, indeterminate state
+│  │   ☑ Kids                         │
+│  │   ☐ Vinyl rips                   │
+│  │   ☑ Comics — ongoing             │
+│  │   ☐ Archive                      │
+│  └──────────────────────────────────┘
+```
+
+**Row budget, with the arithmetic, because "it fits" is not a design.** Fixed entries: Home, Search,
+Requests, Services, Settings, System = 6, plus Calendar and Stats later (§12) = 8. Types ≤ 6. Scope
+chip = 1. That is 15 before pins, so the **budget is 16 rows** and pins are capped at
+`16 − fixed − types` — the cap shrinks automatically when Calendar and Stats arrive, and the excess
+goes under `More…`. At §5.3's 32 px sidebar row height, 16 rows plus 4 separators ≈ 528 px, which
+fits a 900 px viewport with the collapse toggle and without scrolling the nav. **INFERENCE:** the
+number is derived from this document's own row height and viewport target, cross-checked against
+Kavita's published "10 items + Home", not from a study.
+
+**The scope chip is Navidrome's `LibrarySelector`, deliberately and in detail** — four properties,
+each of which is a decision:
+
+1. **Multi-select, not single-select.** It is a filter, not a mode, so cross-library browsing and
+   search survive.
+2. **It states the scope in words** — "All libraries (4)" / "2 of 4 libraries" / "None (0 of 4)".
+   A switcher that hides content is only dangerous when it is silent about what it hid.
+3. **It renders `null` at 0 or 1 library.** No control appears for a distinction the user does not
+   have — the same discipline as Sonarr's `PageSidebarStatus` returning `null` at zero (§8.2).
+4. **Native checkboxes in a popover.**
+
+**Pinning is the honest concession.** Plex users pin because a library used hourly should be one click
+away, and refusing that is dogma — so pins exist, **opt-in, default none, capped, in their own
+sidebar group**, with one `More…` overflow and no second level (NN/g: designs beyond two disclosure
+levels *"typically have low usability"*). A pin **sets the scope and lands on Home**; it is not a
+separate view of the app. That is Plex's affordance with Plex's failure mode designed out — the pin
+state is purely additive, and unpinning hides nothing, because everything is still reachable at the
+default scope.
+
+**Where library configuration lives: Settings → Libraries** (ARCHITECTURE §17.8), **not on Services.**
+Services stays exactly what §17.3 says it is — one row per configured *service*, its health, its
+problem, and the one button that fixes it. Membership of a library is not a service concern, and
+putting it there blurs the screen that has to stay legible when things break.
 
 ### 8.2 Status badges live on the sidebar item
 
@@ -789,6 +884,119 @@ Mobile is where this ecosystem's UI complaints actually cluster — Sonarr
 [#4401](https://github.com/Sonarr/Sonarr/issues/4401) (import dialog too big),
 Prowlarr [#2431](https://github.com/Prowlarr/Prowlarr/issues/2431) (add-indexer modal unusable on
 mobile) — so this is the specific failure mode to design against, not a checkbox.
+
+⚠️ **Not designed yet, and it is a genuinely separate problem:** the phone layout for six types plus
+a scope chip. A 16-row sidebar and a multi-select popover in a drawer is not the desktop layout at a
+narrower width, and §17.1 requires every screen to work on a phone browser. Named here rather than
+assumed away.
+
+### 8.4 Home — three fixed blocks
+
+**ARCHITECTURE §17.2, amended by ADR-0028.** Home is **not** one recently-added strip per media type.
+Its height is **O(1) in the number of media types**:
+
+```
+┌───────────────────────────────────────────────────────────────────────────────────────┐
+│ Home                                                    [ Table | Posters ]  [Filter] │  40px toolbar
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│ Radarr 4K is unreachable — showing cached data from 14:02          [Open Services]    │  banner, only when degraded
+├───────────────────────────────────────────────────────────────────────────────────────┤
+│ Your library                                                                          │  BLOCK A
+│ ───────────────────────────────────────────────────────────────────────────────────── │
+│ Movies          1,204     1,187 have · 17 wanted     synced 14:02          see all →  │
+│ TV                214     28,904 / 31,110 episodes   synced 14:02          see all →  │
+│ Music           8,930     8,930 have                 synced 13:40          see all →  │
+│ Audiobooks        412     410 have · 2 wanted        synced 13:40          see all →  │
+│ Ebooks          2,051     2,051 have                 synced 09:12          see all →  │
+│ Comics            733     733 issues · 12 gaps       synced 09:12          see all →  │
+│                                                                                       │
+│ Needs attention                                            3 items                    │  BLOCK B — hidden when empty
+│ ───────────────────────────────────────────────────────────────────────────────────── │
+│ ✕ error    Sonarr        401 Unauthorized on /api/v3/series      [Update API key]     │
+│ ▲ warning  Komga         last successful sync 3 d ago            [Run full sync now]  │
+│ ▲ warning  1 work needs re-identification (Lidarr)               [Re-link]            │
+│                                                                                       │
+│ Recently added                                          across 6 types    see all →   │  BLOCK C
+│ ───────────────────────────────────────────────────────────────────────────────────── │
+│ Type    Title                            Added   Detail              Have   Instance  │
+│ movie   Dune: Part Two                   14:02   Bluray-1080p 14.2G   ✓     Radarr    │
+│ album   Geogaddi — Boards of Canada      13:58   FLAC · 23 tracks     ✓     Lidarr    │
+│ comic   Saga #61                         13:55   CBZ · 24 p           ✓     Komga     │
+│ tv      ER S12E14 Quintessence of Dust   13:22   HDTV-1080p 1.9G   250/331  Sonarr    │
+│ book    The Overstory — Powers           12:40   EPUB · 2.1 MB        ✓     Kavita    │
+│ audio   Piranesi — Susanna Clarke        12:04   M4B · 6 h 45 m       ✓     ABS       │
+│ …                                                                                     │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+- **Block A is a table, not tiles**, per §5.4: a media-type summary's primary content is a **count**,
+  and a card is justified only when the primary content is cover art.
+- **Block B is hidden entirely when empty** — §10's state table, applied. A green "all good" panel is
+  the thing it must never become.
+- **Block C** carries the same small-multiple row as search (§9.1), so a sixth type adds rows rather
+  than a sixth region. In the Posters view it becomes **one wrapping grid across all types**, never
+  six strips.
+- **No horizontal strip appears on Home in any view mode.** Strips are legitimate on item detail
+  ("More from this artist", ≤5 items per NN/g's frames guidance).
+- **v0.1 ships no home configuration**, with two seams pre-wired: one ordered list of present types
+  per user driving **both** sidebar order and Block A order (Plex's "sidebar order is home order" —
+  one stored list, two renderers), and a per-type `show_on_home` boolean defaulting true, unset in
+  the UI.
+
+The arithmetic that decided this, because it is UsArr's own test rather than a borrowed one: at
+1440×900 a 154 px poster strip fits ~8 cards across a ~1200 px column; a portrait card plus its meta
+line is ~260 px, plus a 24 px header and a 16 px gap ≈ 300 px per section; a 900 px viewport minus the
+40 px toolbar shows **2.8 sections** and about **16 items above the fold** — under §5.3's own 25-item
+floor, on the screen whose whole job is inventory.
+
+### 8.5 Search across six types
+
+§17.4's separation of owned from unowned survives the expansion and gains four rules. They are
+ARCHITECTURE §17.4's, restated here as component behaviour:
+
+1. **A group with zero hits does not render.** No header, no empty state, no "0 results in Music".
+2. **Group order is by the group's best-scoring hit, descending — not a fixed type order — computed
+   once per query and then frozen.** Late-arriving unowned results never reorder or move a group.
+3. **The per-group cap comes from a total row budget:** `cap = clamp(floor(40 / groups), 3, 10)`, so
+   6 groups get 6 rows each. Every truncated group's last row is `Show all 34 movies →` **carrying
+   the real total**, because Baymard found silent truncation makes users believe they have seen
+   everything. The 40 comes from §5.3's above-the-fold heuristic; **INFERENCE**, not a measurement.
+4. **A cross-media linked work appears exactly once**, in the group of its highest-scoring medium,
+   with the other media as availability chips on that row. *Annihilation* is a film, a novel, an
+   audiobook and an ebook; showing it four times is the specific incoherence a hub creates that a
+   single-type tool cannot.
+
+Above the results: **a single row of type filter chips** — `All · Movies · TV · Music · Audiobooks` —
+showing only types with hits, each carrying its count, each a real `<a href>` that sets `&type=`.
+That is the affordance people want from "type tabs" without a navbar competing with the sidebar. It
+disappears at one type, and it is **not navigation**.
+
+Every row is one template — `[type chip] Title … secondary metadata … [availability] [library]` —
+varying only in data (§9.1). The type chip is **neutral**, because the type is data, not status
+(§9.5); that is the whole trick, since six types in one list are incoherent only if the layout changes
+per type. The library name renders only at ≥2 libraries, matching the scope chip's own `null`
+discipline — Kavita's `in {{libraryName}}` line is the cheapest thing that makes a heterogeneous list
+cohere, and it costs nothing.
+
+### 8.6 Recommended against, with the evidence
+
+Carried across so none of it has to be rediscovered:
+
+| # | Do not | Because |
+|---|---|---|
+| 1 | Put user-defined libraries in the sidebar as nav items | Jellyfin's `libraryMenu.js` maps `items.map(...)` over every user view with **no cap, pin, overflow or reorder**; Calibre-Web reached **17** `SIDEBAR_*` bits on *one* library; Kavita had to retrofit "10 items + Home, rest under More" |
+| 2 | Use a **single-select** library switcher that scopes the app | Audiobookshelf's own docs: *"Most actions … apply to the currently selected library, **including browsing and searching**"*, and an author with series in two libraries shows as **two separate author entries** |
+| 3 | Rely on pin state as the only way to reach a library | Plex forum, 2026-07-09: *"10+ of my users have reported that their pinned libraries have vanished … The 'More' option … is gone entirely"*, with a four-year tail of the same class |
+| 4 | Ship six recently-added carousels on Home | ~1% CTR with **84%** of clicks on slide 1 (Runyon, 28,928 tracked clicks); NN/g *"5 or fewer frames"* and *"people often scroll past carousels"*; jellyfin/jellyfin#16615 asked for a wrapping grid and was **closed as not planned**; and six strips show ~16 items above the fold against §5.3's 25 floor |
+| 5 | Auto-advance anything | NN/g: auto-forwarding carousels *"annoy users and reduce visibility"*. Independently banned by §6 |
+| 6 | Put per-type tabs in a top navbar | Twelve top-level items before Calendar and Stats, and the persistent search input loses its home |
+| 7 | Build a two-level sidebar or flyout submenus | NN/g: beyond two disclosure levels, *"users often get lost when moving between the levels"* |
+| 8 | Make a command palette the way to reach a library | Zero surveyed tools ship one; Sonarr's entire global keyboard surface is five bindings. Nielsen's heuristic 7 makes accelerators a *second* path and heuristic 6 wants options visible. **The seam ships — build the `/` search input so a leading `>` could switch it into command mode, and keep routes and registries as data — the palette does not** |
+| 9 | Interleave search results across types | §17.4's stability argument, plus Sushmita et al. (CIKM 2010): position is significant **only** in the blended design, so blending manufactures a ranking bias across incomparable signals |
+| 10 | Let a linked work appear once per medium | §8.5 rule 4 |
+| 11 | Build per-type screens | Jellyfin serves eight content types from one card builder branching on **aspect ratio, not media type**; §9.1 already forbids varying row treatment by type |
+| 12 | Hide a media type behind "More" | Types are a closed enum capped at six and all fit the row budget. Overflow is for pinned libraries only |
+| 13 | Show a type, section, group or control with no content | §17.2; Komga's `v-if="collectionsCount > 0"`; Navidrome's `LibrarySelector` returning `null` at ≤1 library; Sonarr's status badge returning `null` at zero |
 
 ---
 
@@ -921,6 +1129,70 @@ which renders the message plus **Import Existing Series** and **Add New Series**
 No illustration. No centred marketing block. Never fabricated data — not in an empty state, not in
 a screenshot, not in documentation.
 
+### 9.7 The minimum component set, and where per-type divergence is allowed
+
+**Five components cover all six media types.** The evidence that this stretches further than intuition
+suggests is Jellyfin's, and it is decisive: it serves movies, shows, music, books, audiobooks, photos,
+live TV and home videos from **one** card builder whose shape is chosen from the *image*, not from the
+media type —
+
+```js
+if (primaryImageAspectRatio >= 3)         { options.shape = 'banner'; }
+else if (primaryImageAspectRatio >= 1.33) { options.shape = getBackdropShape(...); }
+else if (primaryImageAspectRatio > 0.8)   { options.shape = getSquareShape(...); }
+else                                      { options.shape = getPortraitShape(...); }
+```
+
+— four shapes, chosen from data, with **not one branch on media type**. Sonarr and Radarr define
+exactly three view modes across their whole application; Navidrome offers two.
+
+| # | Component | Covers | Notes |
+|---|---|---|---|
+| 1 | **`ItemTable`** | ebooks, tracks, albums, audiobooks, episodes, comic issues, films, search results, release candidates, services, the item-detail per-instance table | The default container (§5.4). Columns come from a **column registry keyed by type**; the user-facing control is the existing **"Options"** column picker (§9.1) |
+| 2 | **`ItemGrid`** | every type's cover view | One card, `aspect ∈ {2:3, 1:1, 16:9}`, chosen from the image's real ratio. `variant="strip"` is a **modifier** adding `overflow-x`, not a second component |
+| 3 | **`SectionHeader`** | Home blocks, search groups, type screens | Name · count · "see all" |
+| 4 | **`LevelBar`** | TV, music, comics, multi-book series | **The one genuine per-type addition** — below |
+| 5 | **`ScopeChip`** | the library selector | §8.1 |
+
+Aspect assignment is **data, not code**: portrait 2:3 for films, series, ebooks, audiobooks and comic
+series; square 1:1 for albums and artists; 16:9 for episodes. Cross-checked against §9.2's fixed width
+allowlist `92, 154, 200, 342, 500, 780, orig` — those work for 2:3 and 1:1 alike, so **no
+image-pipeline work is implied**.
+
+**Hierarchy depth is the only genuine per-type divergence, and it is a breadcrumb over an unchanged
+container.**
+
+| Type | Levels |
+|---|---|
+| Movies | 1 — work |
+| Ebooks / audiobooks | 1–2 — (series →) book |
+| Comics / manga | 2 — series → issue |
+| TV | 3 — series → season → episode |
+| Music | 3 — artist → album → track |
+
+A flat grid genuinely cannot express "artist → album → track" — but **the fix is a level control in
+the toolbar, not a different screen**, and the container below it is `ItemTable` or `ItemGrid` at
+every level. Komga ships exactly this: a row of level buttons (Series / Books / Collections / Read
+lists) above an unchanged grid, **hiding the levels with zero content**. ARCHITECTURE §6.1's
+three-layer core already carries the model, so the level set is **data** and `LevelBar` renders
+whatever the type declares.
+
+Two more divergences are **config, not components**: the **primary metric column** (films: quality +
+size; TV: `250/331`; music: tracks + duration; audiobooks: duration + narrator; ebooks: format + size;
+comics: issue count **and its gap list**, never a fraction against a moving total — ARCHITECTURE §6.1)
+and the **default sort** (films by added, music by artist, ebooks by author, comics by series then
+issue number). One row each in a registry.
+
+**Not warranted, and each already has a rule against it:** per-type row heights or padding (§5.3
+defines three density steps for the whole app); per-type colour or accent (§3 — chrome is achromatic,
+colour is status); per-type card chrome or hover behaviour (§9.1 — do not vary row treatment by media
+type); a bespoke music screen with a player or a bespoke reader (CLAUDE.md principle 2); per-type
+empty states beyond the one sentence §9.6 specifies.
+
+> **The review test, and it is the useful one:** if a proposed per-type divergence can be expressed as
+> *a different column set, a different default sort, or a different number of levels*, it is config
+> and it ships. **If it needs a new component, it needs an argument in `REVIEW-LOG.md`.**
+
 ---
 
 ## 10. The required state set per component
@@ -1014,9 +1286,13 @@ the feature does not.** These are layout obligations, not v0.1 work.
   **Calendar** · **Stats** · Services · Settings. Calendar (FUTURE §8, trigger: after v0.2) and
   Stats (FUTURE §9) are both named as wanted. The sidebar shape accommodates them without a
   reshuffle; a top navbar of media types would not. **Do not draw them in v0.1.**
-- **More media types.** Music, Books, Comics and Audiobooks arrive in v1.0. §17.2's rule — a type
-  the user does not have is not shown at all — means adding them is a data change, not a layout
-  change, provided nothing hard-codes two sections.
+- **More media types are here, not deferred.** All six arrive with the read-only catalogue sources in
+  v0.1 (ADR-0032). §17.2's rule — a type the user does not have is not shown at all — means the
+  *presence* of each is a data change rather than a layout change, **provided nothing hard-codes a
+  type list anywhere**. That is now a live requirement rather than a future-proofing note.
+- **Libraries grow without bound and the layout must not care.** The scope chip (§8.1) is the seam:
+  a library is `?lib=` on an existing route, so a user with thirty libraries costs zero new page
+  types and zero sidebar rows.
 - **The cross-media review inbox** (FUTURE §5) is *"a whole second surface"* — a confirm / reject /
   not-sure queue over the 0.55–0.85 confidence band with `evidence` rendered so a human can judge.
   It is explicitly deferred and explicitly not a v1 screen. The design seam is that
@@ -1141,9 +1417,9 @@ AI-generated" an actual gate rather than a vibe.
 
 | # | Question | Why it needs you |
 |---|---|---|
-| **OQ-1** | **Virtualization threshold.** ARCHITECTURE §4.5 says "virtualize everything over ~200 rows"; §7.4 above argues for "Load more" + `content-visibility: auto` below ~1,000 rows, because virtualization breaks Ctrl+F in a **library browser**. Amend §4.5, or accept the Ctrl+F loss explicitly? | §4.5 is authoritative and this document does not overrule it. It is a real functional trade, not a style preference |
-| **OQ-2** | **Navigation.** §17.2 named two options (home sections / top-navbar type tabs); §8.1 picks a **left sidebar** carrying both. Does that count as resolving §17.2, or does §17.2 exclude a third option? | §17.2 says "pick one and do not relitigate", so this needs settling once |
-| **OQ-3** | **Font budget — now measured, and the question has changed.** IBM Plex Sans 400/600 + Mono 400 is **103.6 KB for `latin` alone, 177.2 KB with `latin-ext`** (§4.1). Neither trips the ~200 KB trigger, so the real question is the **subset**: ship `latin` only and let an accented library fall back mid-string, or pay the extra 73.6 KB? And the argument that beat the system stack — cross-OS metric drift — is inference, uncited, and unmeasured for this design (§4.1) | It is the only decision here that costs bytes on first paint. The mockup makes it live: it loads **no** webfont, so on any machine without Plex installed it renders in the system stack — and its README calls that "the correct and expected result", which is the opposite of ADR-0025's reason for rejecting that stack. Those two statements cannot both stand |
+| ~~**OQ-1**~~ | ~~Virtualization threshold.~~ **CLOSED 2026-08-16** — delegated to us and settled as "Load more" + `content-visibility`, with virtualization as an escalation above a **benchmarked** threshold. **ADR-0029**; §4.5, §16 and §7.4 amended | — |
+| ~~**OQ-2**~~ | ~~Navigation.~~ **CLOSED 2026-08-16** — the owner confirmed the **left sidebar**. **ADR-0027**; §17.2 amended to the two-axis model, and §8.1 rewritten | — |
+| **OQ-3** *(narrowed)* | **The family is settled — IBM Plex, confirmed 2026-08-16. The *subset* is not.** `latin` alone is **103.6 KB**; `latin`+`latin-ext` is **177.2 KB** (§4.1). Neither trips the ~200 KB trigger, so the question is only whether an accented library gets `latin-ext` or falls back mid-string — and six media types make that sharper than two did, since a manga, classical-music or translated-fiction library is *full* of accented and transliterated titles. Two loose ends the family decision does not close: the argument that beat the system stack (cross-OS metric drift) is **uncited inference, unmeasured for this design** (D-32), and the mockup README asserts the opposite of it (D-30) | It is the only decision here that costs bytes on first paint, and the two documents still disagree about whether the specific face matters |
 | **OQ-4** | **13 px base type.** That is the Linear/dense register. If it reads small to you, move base to 14 and shift the whole scale up one step — **do not add a seventh step** | Personal legibility; you are the only user in v0.1 |
 | **OQ-5** | **Radius 0 or 2 px** on inputs and buttons. Both are within the budget; 0 is more committed | Taste, and it should be decided once and applied without exception |
 | **OQ-6** | **Theme default.** Auto (Sonarr's default) or Dark (Navidrome's)? | Navidrome is the stated reference point, but Auto is the *Arr convention and UsArr sits next to three of them |
