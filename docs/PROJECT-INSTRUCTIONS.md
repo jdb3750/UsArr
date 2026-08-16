@@ -15,14 +15,15 @@ This file records the instruction text only. The design detail lives in `CLAUDE.
 
 | Version | Date | State | Size |
 | --- | --- | --- | --- |
-| v1.3 | 2026-08-16 | **Proposed — supersedes v1.2, not yet applied** | 7844 bytes |
-| v1.2 | 2026-08-16 | Applied 2026-08-16 07:57 UTC, superseded by v1.3 | 7585 bytes |
+| v1.3 | 2026-08-16 | **Applied to project settings** — 2026-08-16 16:34 UTC | 7844 bytes |
+| v1.2 | 2026-08-16 | Applied 2026-08-16 07:57 UTC, superseded by v1.3 the same day | 7585 bytes |
 | v1.1 | 2026-08-16 | Superseded by v1.2, never applied | 7022 bytes |
 | v1.0 | 2026-08-16 | Superseded by v1.2 — applied 2026-08-16, replaced the same day | 3849 bytes |
 
-## v1.3 — proposed
+## v1.3 — as applied
 
-This is the text to paste into the Project's settings; it has not been applied yet.
+The text applied verbatim to the Project's settings at 16:34 UTC on 2026-08-16, replacing v1.2.
+This is what is live now; the settings read-back was confirmed to match it — 7844 bytes.
 
 ````
 You are working on UsArr: a fast, self-hosted, unified hub and gateway over the media-acquisition ecosystem, running on a single self-hoster's own server. It aggregates the *Arrs (Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian) and media backends (Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita) into one local library you can browse, search and request from, and it exposes protocol surfaces (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend individually. It is meant to coexist with the rest of the ecosystem, not replace it. The stack is Go compiled to a single static binary with a SvelteKit SPA embedded in it, over SQLite in WAL mode. Do not state a Go minimum from memory: the go directive in go.mod is authoritative, 1.25.13 at the time of writing, and it is a moving floor raised by the gating govulncheck step rather than by the dependency floor beneath it, with the reasoning in docs/DEVELOPMENT.md. The first slice of code is on main — the Prowlarr Search-and-Grab path runs end to end — and everything else is still design. CLAUDE.md, the README and section 16 each carry an accurate landed / not-yet split, so read them rather than assuming in either direction: a milestone label is scope, not status.
@@ -54,8 +55,9 @@ On interface design, read section 17 of ARCHITECTURE.md before touching a screen
 
 ## v1.2 — superseded
 
-The text applied verbatim at 07:57 UTC on 2026-08-16, replacing v1.0 and superseding v1.1,
-and live in the Project's settings until v1.3 is applied. Preserved verbatim — 7585 bytes.
+The text applied verbatim at 07:57 UTC on 2026-08-16, replacing v1.0 and superseding v1.1. It
+was live in the Project's settings until v1.3 replaced it at 16:34 UTC the same day. Preserved
+verbatim as the record of what was live until then — 7585 bytes.
 
 ````
 You are working on UsArr: a fast, self-hosted, unified hub and gateway over the media-acquisition ecosystem, running on a single self-hoster's own server. It aggregates the *Arrs (Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian) and media backends (Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita) into one local library you can browse, search and request from, and it exposes protocol surfaces (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend individually. It is meant to coexist with the rest of the ecosystem, not replace it. The stack is Go compiled to a single static binary with a SvelteKit SPA embedded in it, over SQLite in WAL mode. Do not state a Go minimum from memory: the go directive in go.mod is authoritative, 1.25.13 at the time of writing, and it is a moving floor raised by the gating govulncheck step rather than by the dependency floor beneath it, with the reasoning in docs/DEVELOPMENT.md. Implementation has begun on feature branches while CLAUDE.md, the README and section 16 of ARCHITECTURE.md all still say nothing is implemented; that wording is stale wherever code exists, so check the working tree before describing project status, and name the branch you checked.
@@ -146,7 +148,7 @@ On interface design: utilitarian over stylish. The bar is tried-and-true, easy t
 
 ## Changelog
 
-### v1.3 — 2026-08-16 (proposed)
+### v1.3 — 2026-08-16 (applied 16:34 UTC)
 
 Produced by the 16:02 UTC drift check after `main` advanced 52 commits, merging the
 implementation, the design system and ADRs 0025-0034. An adversarial review of the draft raised
