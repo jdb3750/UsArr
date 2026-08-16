@@ -21,6 +21,7 @@ import { describe, expect, it } from 'vitest';
 // been the obvious way and is not available: this workspace ships no
 // `@types/node`, and adding one to read one file is a dependency for nothing.
 import SCREEN_SOURCE from '../routes/requests/+page.svelte?raw';
+import { PRIORITY_NOTE, indexerFacts, scopeSummary, unavailableReason } from './indexercatalog';
 import {
 	DEFAULT_SEARCH_TYPE,
 	EMPTY_IDLE_TITLE,
@@ -894,6 +895,53 @@ describe('the banned vocabulary, in the screen’s own markup', () => {
  * claim about a download wherever they appear, and this copy is rendered on the
  * same screen as the Grab button.
  */
+/**
+ * Every user-facing string the scope picker can produce.
+ *
+ * It is built rather than listed, so a new branch inside one of these helpers is
+ * covered the day it is written instead of the day somebody remembers to extend
+ * an array here.
+ */
+const SCOPE_COPY: string[] = (() => {
+	const base = {
+		instanceId: 1,
+		instanceName: 'Prowlarr',
+		indexerId: 1,
+		name: 'Indexer',
+		protocol: 'usenet',
+		privacy: 'public',
+		enabled: true,
+		priority: 25,
+		supportsSearch: true,
+		searchTypes: ['search'],
+		categories: [],
+		fetchedAt: ''
+	};
+	const named = [
+		{ id: 1, name: 'Alpha' },
+		{ id: 2, name: 'Beta' },
+		{ id: 3, name: 'Gamma' },
+		{ id: 4, name: 'Delta' }
+	];
+	return [
+		unavailableReason({ ...base, enabled: false }),
+		unavailableReason({ ...base, supportsSearch: false }),
+		unavailableReason(base),
+		PRIORITY_NOTE,
+		indexerFacts(base),
+		indexerFacts({ ...base, priority: 0 }),
+		...[0, 1, 2, 4].flatMap((n) =>
+			[0, 1, 2, 4].map((m) =>
+				scopeSummary({
+					indexers: named.slice(0, n),
+					categories: named.slice(0, m),
+					knownIndexers: 9
+				})
+			)
+		)
+	].filter((s) => s.length > 0);
+})();
+
 describe('the banned vocabulary, over the search-side copy', () => {
 	const strings = [
 		...['basic', 'movie', 'tv', 'music', 'book', 'comics'].flatMap((typeId) =>
@@ -918,7 +966,12 @@ describe('the banned vocabulary, over the search-side copy', () => {
 					4
 				)
 			)
-			.flatMap((diag) => [diag?.title ?? '', diag?.text ?? '', diag?.nonAction ?? ''])
+			.flatMap((diag) => [diag?.title ?? '', diag?.text ?? '', diag?.nonAction ?? '']),
+		// The scope picker's own copy, which lives in `$lib/indexercatalog` for the
+		// same reason the rest of this does: it renders on THIS screen, beside the
+		// Grab button, so §17.5's ban reaches it. `indexercatalog.test.ts` asserts
+		// what these strings mean; this asserts what they may not say.
+		...SCOPE_COPY
 	]
 		// The one deliberate empty string in the corpus is `unknown_ids.nonAction`,
 		// which is empty BECAUSE that class has an action that works. Dropping
@@ -933,6 +986,9 @@ describe('the banned vocabulary, over the search-side copy', () => {
 		// helper returning `undefined` for everything would fall through.
 		expect(strings.some((s) => s.includes('invite-only'))).toBe(true);
 		expect(strings.some((s) => s.includes('came back with the same error'))).toBe(true);
+		// And something only the scope picker says, so widening the corpus to it
+		// cannot silently become a no-op.
+		expect(strings.some((s) => s.includes('the lower number wins'))).toBe(true);
 		expect(strings.length).toBeGreaterThan(50);
 	});
 
