@@ -2289,7 +2289,13 @@ rows, newest first: time, release name, indexer, protocol, size, resolved type, 
 queue's own — `pending | inflight | verifying | done | failed` (§7.6) — and the rows are the
 `provenance` rows §8.5 already writes per acquisition event, so the cost is: **one keyset-paginated
 read joining `write_queue` to `provenance`, one index to serve it, one API endpoint, and one block on
-an existing screen.** That is the whole of it. **This is a deliberate addition to v0.1 and it is
+an existing screen.** That is the whole of it. ⚠️ **The cost estimate held; the shape it costed did
+not ship whole.** What landed is `GET /api/v1/grabs/recent` — **six columns, no join, no keyset
+cursor, a server-clamped `LIMIT`** — because nothing writes `write_queue` yet and the category
+resolver is behind a layering boundary `internal/httpapi` may not cross. §17.5 carries the full
+shipped-against-target table and is authoritative for the difference; the estimate is left standing
+above rather than retro-fitted, because a cost note rewritten after the fact stops being evidence
+about estimating. **This is a deliberate addition to v0.1 and it is
 listed here because §16 is authoritative**: §17.5 had required a request list, §16 had not funded
 one, and the resolution is not to delete the requirement but to fund the honest, small version of it.
 **It is not the request model** — no approval queue, no `pending → approved → routed → available`, no
@@ -3026,6 +3032,30 @@ verbatim upstream error, **and whether it also carries Retry depends on which ki
 see the three-state rule below, which is the one place in this section where a `failed` row must not
 be treated as "it did not happen".**
 
+⚠️ **The paragraph above is the TARGET, and what shipped is four columns' worth away from it.** It is
+marked here rather than rewritten, because a specification is allowed to describe a shape that does
+not exist yet — what it may not do is read as a description of the present, which this one did until
+now. Recent grabs landed as `GET /api/v1/grabs/recent` plus a block on `web/src/routes/requests`
+(reviewed as `REVIEW-LOG.md` RG-01, whose finding **RG-01.1** is this correction). Every deviation
+is deliberate and each had a stated reason — but the reason lived only in a 19-line comment above the
+handler in `internal/httpapi/grabs.go`, which is an honest record in the one place a reader
+consulting the design will never look:
+
+| Specified above | Shipped in v0.1 | Why they differ |
+| --- | --- | --- |
+| Seven fields, including **the library or media type the category resolved to** | **Six columns** — When · Release · Indexer · Protocol · Size · Outcome | The raw Newznab category ints are on the row, but the resolver lives in `internal/servarr/mapping`, which `internal/httpapi` may not import (`doc.go`). A layering rule, not an oversight |
+| **Last known state**, from the write queue's own vocabulary — `pending \| inflight \| verifying \| done \| failed` (§7.6) | **Outcome**, from `provenance.acquisition_state`, on the wire as `sent \| sent_outcome_unknown \| unknown` | **Nothing writes `write_queue` yet.** Those five states describe a transfer UsArr does not observe in v0.1; what it does know is whether the release was handed over, which is the distinction the ambiguity note below turns on |
+| One **keyset-paginated** read **joining `write_queue` to `provenance`** | One read over `provenance` alone — `LIMIT`, server-clamped (default 10, ceiling 200) | Same cause: there is no second table to join to. Keyset pagination is **unbuilt, not withdrawn** — the block renders ten rows and offers nothing to page with, so no cursor is needed until it does |
+| A `failed` row carries **the verbatim upstream error** | No such row exists to carry one | `provenance` is written only *after* dispatch, so a refused SSRF target, an open circuit breaker, a rejected API key or a Prowlarr 4xx leaves **no row at all**. The three-state rule's third state — *genuinely failed, nothing was sent* — is **absent from this surface**, which is better than being mis-rendered by it, and worse than being present |
+
+📌 **The specification is not being narrowed to what shipped, and that is the point of recording it
+this way.** All four target properties are still wanted: the join is what makes the block a transfer
+history rather than a handover log, keyset pagination is what makes it survive a real grab volume,
+and the missing third state is a real gap in v0.1's story about failure. **What changed is that the
+document now says which half of itself is true today**, so a reader can tell a promise from a
+report — and the four rows above are the checklist for closing the distance, in the order the
+dependencies allow: `write_queue` needs a writer before anything else on this list can move.
+
 **The reason it is not a nicety.** UsArr's only write path in v0.1 produces a multi-gigabyte download,
 and the confirmation currently lives in a chip inside a *search result row*, which is transient: one
 navigation away and there is no UsArr-side record that anything happened, no way to tell whether you
@@ -3219,11 +3249,14 @@ is working. An ambiguous row offers **no misleading action**: it points at the d
 the truth is.
 
 **Recent grabs reads the ambiguous state from `provenance`, not from an `audit_log` enrichment**, and
-that is settled: the code thread is adding **`acquisition_state`** to `provenance` in **migration
-0003** — `TEXT NOT NULL DEFAULT 'confirmed'`, with a partial index on the not-confirmed case and
+that is settled — and ✅ **shipped: `acquisition_state` landed on `provenance` in migration 0003 at
+`f895ddc`**, `TEXT NOT NULL DEFAULT 'confirmed'`, with the partial index `ix_prov_unconfirmed`
+`ON provenance(user_id, grabbed_at DESC, id DESC) WHERE acquisition_state <> 'confirmed'` and
 **deliberately no `CHECK` constraint**, because SQLite cannot `ALTER` one afterwards and v0.2's
 request model may want a `pending` value; the `audit_log` foreign key from migration 0001 is the
-precedent that paid for that caution. So a sent-unknown acquisition **does** get a provenance row,
+precedent that paid for that caution. It is read by `internal/store/releases.go`,
+`internal/releases/grab.go` and `internal/httpapi/grabs.go`, and pinned on the wire by
+`web/src/lib/api.ts`. So a sent-unknown acquisition **does** get a provenance row,
 discriminated on the row itself. **The reason generalises well past this table and is the keeper
 sentence: an absent row fails visibly; a phantom row lies quietly.** `provenance` has no
 back-reference to `audit_log`, so writing an ambiguous row without a discriminator *on it* would let
