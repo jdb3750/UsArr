@@ -145,13 +145,29 @@ which belong in `mapping/`. Six clients would be six times the maintenance for o
 
 ## 3. Getting running
 
+**In this order, and it is the whole list.** Nothing here is optional except the line that says so,
+and nothing else has to be run first — in particular `make check` no longer needs a `make web-deps`
+in front of it, which it did until `fmt` and `fmt-check` were given the `web-deps` prerequisite the
+other web targets already had (`REVIEW-LOG.md` FI-02, verified from a fresh clone on 2026-08-16).
+
 ```bash
 git clone <repo> && cd UsArr
 cp .env.example .env       # optional — every value has a working default
 
-make tools                 # install the pinned toolchain      (not yet)
+make tools                 # REQUIRED FIRST. Installs the pinned toolchain into $GOBIN.
+make check                 # the gate. Installs web/node_modules itself on the way through.
 make dev                   # backend on :8484                  (not yet)
 ```
+
+`make tools` is not a convenience. Every recipe invokes its pinned binary by **absolute path** under
+`$GOBIN` and asserts `--version` against the pin before running it, so a copy on `$PATH` does not
+satisfy it and cannot shadow it; without this step the first gate target stops with `missing pinned
+tool: …` / `run: make tools`. Verified from a fresh clone on 2026-08-16 — it installs all five and
+exits 0.
+
+**The first `make check` is the slow one**, and that is expected rather than a symptom: it runs
+`pnpm install --frozen-lockfile`, builds the SPA, and makes the two network calls in `vuln`. Later
+runs reuse both caches.
 
 **Do not put a master key in `.env`.** On first run UsArr generates one into
 `$USARR_CONFIG_DIR/keys/secret.key` at mode `0600` and logs a line saying so. That path has real
@@ -186,6 +202,12 @@ to find and reports a red that is a missing build step, not a broken repository.
 make test        # correct: builds the SPA first, then runs the Go and web suites
 go test ./...    # red on a fresh clone until `make web-build` has run once
 ```
+
+**Re-checked by execution on a fresh clone, 2026-08-16**, because a documented failure nobody has
+reproduced lately is a claim, not a fact: `CGO_ENABLED=1 go test -race ./...` fails in exactly one
+package with exactly one assertion — `cmd/usarr`, `e2e_test.go:337: /usarr/search = 404, want the SPA
+document`. Every other package, `internal/web` among them, reports `ok`. The paragraph above is still
+accurate, and so is the shape of the red: one package, missing build step.
 
 `internal/web`'s own tests skip honestly here (*"no frontend build embedded — run `make
 web-build`"*), escalating to a hard failure under `USARR_REQUIRE_WEB_BUILD=1` so the embed

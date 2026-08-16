@@ -2891,3 +2891,87 @@ a check should *find* rather than only what it forbids. **Two of the three incid
 rules were introduced by the fixes for the other two**, which is the part worth remembering: a fix is
 written under the assumption that the failure mode is now understood, and that is exactly when people
 stop checking for it.
+
+---
+
+# Round 6 — third addendum: FI-02 closed by reproduction, not by reading
+
+**FI-02 is the finding that had been asserted fixed and un-asserted more than once**, always for the
+same reason: every green cited for it came from a tree where `make web-deps` had already run, so the
+failing path was never entered. §7.1 set the bar for closing it — *"run `make check` on a genuinely
+fresh clone with no prior `make` invocation of any kind, and quote the transcript"*. That is what
+this section is. Observed on `main` at `c628bd1`, 2026-08-16.
+
+## 8.1 The reproduction
+
+`git clone` of the repo into a scratch directory outside the working tree, `web/node_modules` absent,
+no `make` target run first. The pinned tools were already installed under `$(go env GOPATH)/bin` —
+`make tools` is a prerequisite a first-time clone does need, and it is a separate matter from this
+finding.
+
+```console
+$ git clone . /tmp/…/fresh-clone && cd /tmp/…/fresh-clone
+$ make check
+tool: /root/go/bin/gofumpt — version v0.11.0, asserted against the pin
+fmt-check: checking 116 .go files with gofumpt
+
+> usarr-web@0.0.0 format:check /tmp/…/fresh-clone/web
+> prettier --check .
+
+Checking formatting...
+[error] Cannot find package 'prettier-plugin-svelte' imported from /tmp/…/fresh-clone/web/noop.js
+ ELIFECYCLE  Command failed with exit code 1.
+ WARN   Local package.json exists, but node_modules missing, did you mean to install?
+make: *** [Makefile:397: fmt-check] Error 1
+```
+
+**The finding was right, including the diagnosis.** `fmt-check` is the first target `check-offline`
+runs and the only one that reached `pnpm` before anything had installed. The failure is not in
+gofumpt — the Go half passes and prints its count — it is prettier's plugin resolver, one line into
+the web half.
+
+## 8.2 The fix, and the second clone that proves it
+
+`web-deps` added as a prerequisite of `fmt` and `fmt-check`, exactly the fix shape this row has
+carried since it was raised, and exactly what `lint-web` and `test-web` already declare. `fmt` is
+included because it fails identically and is the first thing a contributor runs *after* a red
+`fmt-check`; fixing only the gate would leave the recovery broken.
+
+Proved from a **second** fresh clone — the first is dirty now, having installed `node_modules` on its
+way to failing:
+
+```console
+$ git clone /home/user/UsArr /tmp/…/fresh-clone-2   # + the Makefile fix, uncommitted at the time
+$ make check
+…
+check-offline: OK
+tool: /root/go/bin/govulncheck — version v1.7.0, asserted against the pin
+vuln: scanning 11 Go packages against vuln.go.dev
+No vulnerabilities found.
+vuln: auditing the pnpm dependency tree against the npm registry
+No known vulnerabilities found
+check: OK
+```
+
+| # | Was | Now |
+|---|---|---|
+| **FI-02** | STILL OPEN, and explicitly NOT verified fixed | **Closed — applied and verified by reproduction.** Reproduced by `make check` on a fresh `git clone` with no prior `make` invocation (transcript in §8.1), fixed by adding `web-deps` to `fmt` and `fmt-check` in the `Makefile`, and re-proved green from a second fresh clone (§8.2). Commands and date are both above. `DEVELOPMENT.md` §3 now leads with the ordered first-clone sequence, because the other half of this finding was that the recovery appeared in neither §3 nor §4 |
+
+## 8.3 What else a first clone hits, checked in the same tree
+
+Two things, and neither is a defect — but both are steps, and steps that are not written down are
+indistinguishable from a broken repository:
+
+- **`make tools` is genuinely required**, not optional. Every pinned binary is invoked by absolute
+  path under `$GOBIN`, and `require_tool` fails closed with `run: make tools`. That guard is good;
+  what was missing is that `DEVELOPMENT.md` §3's quickstart annotated the line `(not yet)`, which
+  reads as *this target does not work yet* rather than *run this first*.
+- **`FI-12`'s claim is still accurate**, re-checked rather than assumed. On the never-built clone,
+  `CGO_ENABLED=1 go test -race ./...` fails in exactly one package with exactly one test:
+  `cmd/usarr` — `e2e_test.go:337: /usarr/search = 404, want the SPA document`. Every other package,
+  `internal/web` included, is `ok`. So the wording in §3 is right and so is the disposition: the
+  misleading red is a missing build step, and `make test` does not have it because `test-go` depends
+  on `web-build`.
+
+**The order matters more than the list.** `make tools`, then `make check` — and `make check` needs no
+`make web-deps` in front of it any more, which was the whole point of the finding.

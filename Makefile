@@ -384,14 +384,27 @@ lint-web: web-deps ## eslint + svelte-check
 	$(call pnpm_if_web,lint)
 	$(call pnpm_if_web,check)
 
+# Both fmt targets shell out to prettier, and prettier is a node_modules
+# dependency exactly like eslint is — so both declare `web-deps`, for the same
+# reason `lint-web` does. Without it, `fmt-check` is the FIRST target `check`
+# runs and the only one reaching pnpm before anything has installed, so a fresh
+# clone's very first `make check` died in prettier's plugin resolver:
+#
+#   [error] Cannot find package 'prettier-plugin-svelte' imported from …/web/noop.js
+#   WARN   Local package.json exists, but node_modules missing, did you mean to install?
+#
+# Every green run of the gate before this had happened to run some other web
+# target first, which is why the hole survived so long: `check` was only ever
+# exercised on a tree that was already installed. Reproduced from a fresh
+# `git clone` on 2026-08-16, and fixed here. See docs/REVIEW-LOG.md FI-02.
 .PHONY: fmt
-fmt: ## Format everything IN PLACE (gofumpt + prettier)
+fmt: web-deps ## Format everything IN PLACE (gofumpt + prettier)
 	$(call require_tool,$(GOFUMPT),$(GOFUMPT_WANT))
 	$(GOFUMPT) -l -w .
 	$(call pnpm_if_web,format)
 
 .PHONY: fmt-check
-fmt-check: ## Verify formatting without modifying files (used by `make check`)
+fmt-check: web-deps ## Verify formatting without modifying files (used by `make check`)
 	$(call require_tool,$(GOFUMPT),$(GOFUMPT_WANT))
 	@n=$$(find . -path ./.git -prune -o -path ./$(WEB_DIR)/node_modules -prune -o \
 		-name '*.go' -print | wc -l); \
