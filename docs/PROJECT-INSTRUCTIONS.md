@@ -175,9 +175,23 @@ implementation, the design system and ADRs 0025-0034. An adversarial review of t
   It is now committed to `docs/DEVELOPMENT.md` §11 where any thread can correct it, and the
   instructions carry one sentence pointing there.
 - **Not changed, and deliberately: the v0.1 provider set.** v1.2 defers to §16, which is
-  authoritative for scope, so an ADR that moves a provider needs no instructions edit. Note that
-  ADR-0035 (Kavita replaces Komga in v0.1) is on an unmerged branch and §16 has not been updated
-  even there.
+  authoritative for scope, so an ADR that moves a provider needs no instructions edit. That still
+  holds, and it is why the correction below needs no new version: the instructions text itself is
+  unaffected.
+
+  **Correction — the note this bullet originally ended with was already stale on arrival.** As
+  first written it said ADR-0035 (Kavita replaces Komga in v0.1) *"is on an unmerged branch and
+  §16 has not been updated even there."* The first half was true when the check ran at 16:05 UTC
+  and stopped being true minutes later, when the design batch merged ADR-0035 to `main`
+  (`ab1a941`, reaching `main` via `e0d4b26`) — so it was already false by the time this entry was
+  drafted at ~16:20. The second half is still true. What holds now: **ADR-0035 is Accepted and on
+  `main`** (`DECISIONS.md:2852`; `:2881` — *"Komga moves to v0.2, taking Kavita's former
+  place"*), while `ARCHITECTURE.md` §16 still pairs Komga with v0.1 and Kavita with v0.2
+  (`:2068`, `:2217`), `README.md` still says the same (`:19`, `:61`, `:81`), and
+  `SETUP-CHECKLIST.md:142` still files both under v1.0. **§16 is authoritative for milestones and
+  currently contradicts the ADR that amends it.** ADR-0035 routed that rewrite to the
+  implementation thread (`REVIEW-LOG.md:1634`), so it is queued rather than lost. **Nothing
+  anywhere removes Komga from the roadmap — it is re-sequenced to v0.2.**
 
 ### v1.2 — 2026-08-16 (applied 07:57 UTC)
 
