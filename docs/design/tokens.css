@@ -229,13 +229,19 @@
   --space-6: 16px;  /* form field spacing; dialog padding                      */
   --space-7: 24px;  /* inter-region: gap between page sections                 */
   --space-8: 32px;  /* page gutter on desktop                                  */
-  --space-9: 48px;  /* empty-state block spacing — the only place this is used */
+  --space-9: 48px;  /* the largest step. It was the empty-state block's spacing; under
+                     * DESIGN-DIRECTION §9.6 the empty state is left-aligned content in
+                     * the flow with no block of its own, so this step has no current
+                     * consumer and must not acquire one without a reason. */
 }
 
 /* -----------------------------------------------------------------------------
  * §6. Type
  *
- * Six steps, hard stop, plus one 24px step permitted ONLY in empty states.
+ * Six steps, hard stop. There is NO seventh step: a 24px --text-empty existed here
+ * for empty-state headings and is DELETED (DESIGN-DIRECTION §9.6). It was larger
+ * than --text-xl, the page's own H1, and it was the mechanism that made the centred
+ * hero composition §9.6 bans writable. The empty-state heading is --text-lg.
  * Below --text-lg, hierarchy is carried by WEIGHT and by the neutral ramp,
  * never by size: a size step costs vertical space multiplicatively, a weight
  * step and a colour step cost zero pixels.
@@ -268,12 +274,10 @@
   --text-base:  13px; --leading-base: 18px; --weight-base: 400; /* DEFAULT: rows, cells   */
   --text-md:    14px; --leading-md:   20px; --weight-md:   400; /* inputs, dialog body    */
   --text-lg:    16px; --leading-lg:   24px; --weight-lg:   600; /* section headings       */
-  --text-xl:    20px; --leading-xl:   28px; --weight-xl:   600; /* page title — the
-                                                                * LARGEST type in chrome  */
-  --text-empty: 24px; --leading-empty: 32px;                    /* empty states ONLY. Any
-                                                                 * other use is a review
-                                                                 * failure. There is no
-                                                                 * hero heading anywhere. */
+  --text-xl:    20px; --leading-xl:   28px; --weight-xl:   600; /* page title — the LARGEST
+                                                                * type ANYWHERE in the app.
+                                                                * No exemption, no --text-empty,
+                                                                * no hero heading.           */
 
   --weight-regular: 400;
   --weight-medium:  500; /* the density lever: hierarchy at zero pixel cost    */

@@ -93,7 +93,7 @@ lint checklist in §13.
 | Inter everywhere, one weight, flat hierarchy | Krebs (scored detector); [mania.design](https://www.mania.design/blog/spot-the-slop-a-ui-designers-guide-to-fixing-ai-defaults/) calls changing the font *"the single highest-leverage move against slop"* | IBM Plex Sans (§4) |
 | The rotating cast of not-Inter defaults — Geist, Space Grotesk, Instrument Serif, Poppins | Krebs; developersdigest; febbhav | All five named in the lint ban list |
 | Serif-italic accent word in a sans headline | Krebs; [Hallmark](https://raw.githubusercontent.com/Nutlope/hallmark/main/skills/hallmark/SKILL.md) gate 38a: *"Headers always roman (never italic)"* | No italic headings. Emphasis is weight or the neutral ramp |
-| Giant centred hero heading, 64px+ | febbhav; Krebs | Largest type in chrome is a 20px page title. 24px exists only in empty states |
+| Giant centred hero heading, 64px+ | febbhav; Krebs | **The largest type anywhere in the application is the 20px page title. There is no exemption.** The earlier form of this rule ended *"24px exists only in empty states"*, and that exemption is **withdrawn** — see §9.6 |
 | All-caps tracked eyebrow labels | Krebs; febbhav; kiwibreaksme | Sentence case, no `text-transform: uppercase` on labels |
 | No real hierarchy — HN **Ardon**: *"All the text sizes except for the main heading are within 15% size of each other"* | HN 47864393 | Six sizes, hard stop; below `lg` hierarchy is weight + ramp step, deliberately (§4) |
 | Monospace as decoration | febbhav; HN **toraway** on the *"console-ish font Claude seems to love"* | Mono is **semantic**: machine data only (§4). This converts the tell into a feature |
@@ -383,6 +383,32 @@ always wins the race and `swap` risks a visible reflow for no benefit.
 **Never a Google Fonts `<link>`.** It is both a documented tell and a third-party request in
 software whose entire premise is that it runs on your own hardware.
 
+> ⚠️ **The typeface decision has never been seen. Recorded here because it changes how much weight
+> §4.1 can carry.** The prototype ships **zero `@font-face` rules**, so every screenshot, every
+> review and every judgement made about this design so far has been rendered in the *fallback* stack
+> — measured as **DejaVu Sans and Liberation Mono** on the review host, via a canvas advance-width
+> probe (`"IBM Plex Sans"` measured **identical** to a deliberately bogus family name, while
+> `document.fonts` reported it "available", which is a false positive worth knowing about). DejaVu is
+> roughly **24% wider** than Plex with a taller x-height and a looser default fit, so:
+>
+> - **Density findings against the prototype are conservative**, not optimistic. Real Plex fits more
+>   per column and would reduce wrapping, never increase it.
+> - **Hierarchy findings are unaffected** — size ratio, weight and colour are face-independent.
+> - **The anti-Inter argument's payload has never actually been delivered.** §1.2 and §4.1 stake the
+>   strongest anti-slop claim in this document on the face — mania.design's *"the single
+>   highest-leverage move against slop"* — and a build without the font gives a Linux self-hoster
+>   DejaVu, a Windows one Segoe UI and a macOS one SF. On the system stack, §1.2's typography row is
+>   satisfied by a fallback rather than by a decision.
+>
+> **What would validate it, and nothing short of this does:** the subsetted WOFF2 faces actually
+> loaded — Plex Sans 400/500/600 and Plex Mono 400/600, `latin` subset, ~104 KB per §4.1's measured
+> table — served locally with a probe confirming the *rendered* family (an advance-width comparison
+> against a bogus family name, not `document.fonts.check()`), and the density and hierarchy screens
+> re-shot on it side by side with the system-stack capture. Until that exists, **the family is
+> decided and unvalidated**, and OQ-3 (the subset) is being answered on top of a choice nobody has
+> looked at. If the load cannot be made to work, the honest alternative is not to keep the claim —
+> it is to take the recorded fallback below and design against the system stack deliberately.
+
 **The recorded alternative** — and it is a respectable one — is the zero-webfont system stack with
 `font-variant-numeric: tabular-nums` on numeric columns, which most system UI faces support. If the
 measured font cost turns out to matter more than metric reproducibility, that is the fallback, and
@@ -405,8 +431,12 @@ where it sits inline with sans text.
 | `base` | 13 / 18 | 400 | **default: list rows, table cells** |
 | `md` | 14 / 20 | 400 | form inputs, dialog body, primary row title |
 | `lg` | 16 / 24 | 600 | section headings |
-| `xl` | 20 / 28 | 600 | page title — **the largest type in the chrome** |
-| *(empty states only)* | 24 / 32 | 600 | nothing else may use it |
+| `xl` | 20 / 28 | 600 | page title — **the largest type anywhere in the application** |
+
+**There is no seventh step.** A 24 px empty-state token existed here and in `tokens.css` as
+`--text-empty`, and it has been **deleted** rather than restated: it was larger than the page's own
+H1, it applied to the screen with the least information on it, and it was the mechanism by which the
+composition §9.6 bans became writable. §9.6 carries the rule and the greppable form of it.
 
 **Below `lg`, hierarchy is carried by weight and by the neutral ramp step, never by size.** This is
 the highest-leverage density technique available: a size step costs vertical space
@@ -909,11 +939,31 @@ each of which is a decision:
 
 1. **Multi-select, not single-select.** It is a filter, not a mode, so cross-library browsing and
    search survive.
-2. **It states the scope in words** — "All libraries (4)" / "2 of 4 libraries" / "None (0 of 4)".
-   A switcher that hides content is only dangerous when it is silent about what it hid.
+2. **It states the scope in words** — and in **one grammar**, not three. `All libraries (4)` /
+   `2 of 4 libraries` / `No libraries selected`. The earlier third form, `None (0 of 4)`, used the
+   parenthesis for a different thing from the first and read as a fourth shape when announced in
+   sequence by a live region. A switcher that hides content is only dangerous when it is silent
+   about what it hid.
 3. **It renders `null` at 0 or 1 library.** No control appears for a distinction the user does not
    have — the same discipline as Sonarr's `PageSidebarStatus` returning `null` at zero (§8.2).
 4. **Native checkboxes in a popover.**
+5. 🚩 **It is reachable at every viewport whenever the scope is not "all libraries".** Below 900 px
+   the sidebar is a collapsed overlay drawer and takes the chip with it, so the only statement of an
+   active scope is invisible until the drawer is opened — on the device §17.1 singles out, after a
+   scope set on a desktop travels to the phone in the same `?lib=` URL. **A non-default scope
+   therefore hoists the chip into the top bar**, beside the search box, and the drawer is never its
+   only home. This is property 2 taken seriously: a control whose entire job is to state what it hid
+   may not itself be hidden. Its terminal case is `scope-empty` (§10), which empties the whole
+   application.
+6. **A non-default scope looks different from the default one.** As drawn, the chip is
+   pixel-identical to the density `<select>` in the top bar — same border, radius, chevron and fill
+   — and nothing changes when a scope is active, so the only difference between "everything is
+   shown" and "six of eight libraries are hidden" is two words of 13 px grey in a corner. The status
+   token system already carries a neutral "not default" step; use it. **And the Search screen's
+   inline line — *"29 results in the six libraries the scope excludes"* + `Clear the scope` — is the
+   pattern for every scoped surface, not just Search.** Sonarr's
+   `AllSeriesAreHiddenByTheAppliedFilter`, cited in §9.6, puts the message *where the content is
+   not*, which is exactly what Home and the type grids lack.
 
 **Pinning is the honest concession.** Plex users pin because a library used hourly should be one click
 away, and refusing that is dogma — so pins exist, **opt-in, default none, capped, in their own
@@ -922,6 +972,20 @@ levels *"typically have low usability"*). A pin **sets the scope and lands on Ho
 separate view of the app. That is Plex's affordance with Plex's failure mode designed out — the pin
 state is purely additive, and unpinning hides nothing, because everything is still reachable at the
 default scope.
+
+**One word is mandatory wherever a library name is rendered beside a media-type name: `library`.**
+Write *"all in the **Ebooks** library"*, never *"all in Ebooks"*. The two axes are the whole model of
+this section, and on the common install they collide as strings — Audiobookshelf's one container is
+called *"Audiobooks & Ebooks"*, UsArr splits it into libraries named **Audiobooks** and **Ebooks**,
+and those are also two of the six media-type names, so the same word appears at three levels. Without
+the noun a search group header reads *"Ebooks: all in Ebooks"*, which is a tautology to a sighted
+reader and, to a screen-reader user hearing *"heading level 2, Ebooks 14, all in Ebooks"*, carries no
+cue that the two are different kinds of thing. **It teaches the user that media type and library are
+one axis, which is precisely what ADR-0027 exists to prevent** — and it costs one word. It applies
+everywhere the two meet: search group sub-headers (ARCHITECTURE §17.4 rule 5), the Services screen's
+`Libraries` column, the scope popover's legend, and the Libraries detail screen's Identity panel.
+The reverse case needs no special handling: where the library name and the type name differ, the
+noun is still correct and still cheap.
 
 **Where library configuration lives: Settings → Libraries** (ARCHITECTURE §17.8), **not on Services.**
 Services stays exactly what §17.3 says it is — one row per configured *service*, its health, its
@@ -1227,6 +1291,37 @@ strings are worth reading as a house style:
 which renders the message plus **Import Existing Series** and **Add New Series**, and swaps to the
 "hidden by filter" message when `totalItems > 0`.)
 
+**The rule needs enforcing, not restating, so here it is in a form the ban list can grep.** §9.6 has
+said "one sentence, no centred marketing block" since it was written, and the design shipped a
+centred 24 px hero — larger than the page's own H1 — inside a dashed box with a three-to-four-line
+centred paragraph and a centred button pair, byte-identical across seven states on five screens,
+made writable by a `--fs-empty` / `--text-empty` token §1.2 had granted an exemption for. In an
+artefact where every other region was tuned by hand, the one region built by applying a template is
+the one a reader will point at. **The exemption is withdrawn, the token is deleted from
+`tokens.css`, and the rule is now four constraints that a linter can check rather than a sentence a
+reviewer has to remember:**
+
+1. **The heading is `--text-lg` (16/600).** No token above `--text-xl` exists; the empty-state
+   heading is not the page title and must not out-size it.
+2. **Everything is left-aligned at the same content edge as the table or grid it replaces.** No
+   `text-align: center` on an empty state, on its heading, on its sentence or on its buttons. The
+   `[grep]` rule in §13 previously exempted empty states from the centring ban; that exemption goes
+   with this one, leaving dialogs as the only exception.
+3. **No container.** No dashed border, no box, no panel, no background step. The empty state is not
+   a component sitting in the region; it *is* the region's content. It should look like the top of a
+   table that has no rows, because that is what it is.
+4. **One sentence.** Not three. If the explanation genuinely needs more — and the first-run
+   `unconfigured` state is the case where it might, because it is teaching the product rather than
+   reporting a state — the extra sentences are a separate paragraph below the buttons at
+   `--text-base`, not a wider centred measure above them. ⚠️ **This is the one place the rule and
+   the drawn screens still disagree**: the `No services configured` copy is four sentences and is
+   genuinely good, and either the rule is wrong for first run or that state is. Recorded rather than
+   resolved by fiat; it is the smaller of the two open copy questions and it belongs to the pass
+   that rewrites the state.
+
+The model is the one this section already cites and did not follow: Sonarr's `NoSeries.tsx` renders
+its message plus two buttons **in the content flow, left-aligned, in body type, with no box**.
+
 No illustration. No centred marketing block. **Never fabricated data in a shipped product surface**
 — not in an empty state, not in a screenshot, not in documentation. **The one exception is a design
 mockup, which must say on every page that its data is fabricated** — not only in a sibling README,
@@ -1320,6 +1415,7 @@ follow-up:
 | **loading** — *only where it genuinely applies* | per §7's tier | Tier 0 components have **no loading state at all**, and inventing one is the failure |
 | **empty** | why it is empty + the fix | — |
 | **filtered-empty** | a **different** message: the filter is responsible | Sonarr's `AllSeriesAreHiddenByTheAppliedFilter` is the model |
+| **scope-empty** | that the **library scope** — not the query, not the filter — is why there is nothing, and the one control that undoes it | *"Your library scope is set to 0 of 8 libraries, so nothing is shown."* + **Show all libraries**. Required on Home, on Search and on every per-type grid. It is a **third** thing: `empty` says you own nothing, `filtered-empty` says the filter hid it, and neither is true when the scope hid it. Reachable in two clicks — unticking the chip's `Everything` box unticks all eight — and without this state the whole application renders with no content and no explanation. Worse on Search, where §17.4 rule 1 means a zero-hit group does not render at all, so the screen draws literally nothing. **And the chip that caused it must be reachable at the viewport the user is on:** below 900 px the sidebar collapses to a drawer and takes the chip with it, so whenever the scope is not "all libraries" the chip renders in the top bar instead (§8.1, ARCHITECTURE §17.2 and §17.7) |
 | **partial** | what arrived, what did not, and that more may come | "4 of 9 indexers responded"; "250/300" |
 | **stale** | the data is real but old, with the timestamp | `"stale": true` from §2.3. Not greyed out |
 | **error** | the **verbatim upstream text**, plus Retry / Dismiss | §17.3's "Problem" column is verbatim by requirement, rendered in mono |
@@ -1383,6 +1479,43 @@ measured pair) through a mechanism no contrast check sees, so the year gets a re
 And **12 px semibold is normal text under WCAG, not large** (large is ≥18.66 px bold or ≥24 px), so
 4.5:1 applies to both lines. **Asserted in CI over any `--dc` / `--dc-fg` pair that ships in a
 fixture**, and in the image pipeline where the colour is produced (ARCHITECTURE §4.4.1).
+
+**Two ARIA requirements the grid-row primitive creates, both stated as requirements rather than as
+review items**, because a hand-built grid supplies nothing a native `<table>` supplies for free
+(§7.4, ARCHITECTURE §4.5).
+
+- 🚩 **`aria-rowcount` on the grid and `aria-rowindex` on every row — including the header row —
+  wherever the rendered rows are a window onto a larger set.** That is every list in the product, for
+  two reasons the design has already committed to: **"Load more" over keyset pages is the primary
+  pagination interaction** (ADR-0029), so the DOM holds a prefix of the result set by construction;
+  and **`content-visibility: auto` skips the contents of off-screen rows**, so a row whose contents
+  are skipped is a row whose position in the whole set an assistive technology cannot compute.
+  Indices are **1-based over the full set, not over the rendered window**, and `aria-rowcount="-1"`
+  is the correct value when the total is genuinely unknown — ARIA defines it for exactly that.
+  **Without them a screen-reader user is told "row 3 of 26" when the truth is "row 3 of 1,204"** —
+  a confidently wrong number, which is the failure mode `CLAUDE.md`'s honesty rules exist to prevent,
+  arriving through the accessibility tree instead of through the UI.
+  Note the asymmetry with the attribute that *is* everywhere: `aria-colindex` carries no information
+  here, because every column is present in the DOM and the implicit index is already right. It is
+  harmless and may stay; it must not be allowed to stand in for the two attributes that carry
+  something.
+  ⚠️ **Unverified, and it is a tooling limit rather than a defect:** the reviewer who found this
+  could not confirm `aria-colindex`/`aria-colcount` from the Chrome DevTools Protocol accessibility
+  tree, because **CDP exposes neither column nor row indices as node properties for a native
+  `<table>` or for an ARIA grid** — established against a purpose-built control page with both side
+  by side. Absence from that tree is therefore not evidence of anything. **Verifying these attributes
+  needs a real screen reader**, which is what GOV.UK's own strategy (cited below) says about
+  automated checking generally.
+- **No status glyph may have an empty accessible name**, and availability is the case that matters:
+  §9.5 already requires *"icon + text + colour, in that order of importance"* and that *"removing
+  the colour must leave it fully legible"*. An icon-only ✓ or ✗ leaves **nothing** — a screen-reader
+  user hears identical silence on the film they have and the film they do not, which defeats the
+  product's central question for a whole class of user and is an SC 1.1.1 (Level A) failure. Every
+  availability rendering carries the word from ARCHITECTURE §6.3's rollup — `Have`, `Missing`, or
+  the existing visible fraction for a partial — as visible text or as a visually-hidden span, with
+  the glyph `aria-hidden`. **`[grep]`-able as: no element carrying an availability or status class
+  may compute to an empty accessible name.** This is the second time an icon-only status has slipped
+  through, which is why it is a lint line in §13 and not a note here.
 
 **Keyboard model, beyond the success criteria** (this is a power tool):
 
@@ -1500,8 +1633,16 @@ AI-generated" an actual gate rather than a vibe.
 - `[grep]` No `fonts.googleapis.com` or `fonts.gstatic.com` reference anywhere.
 - `[grep]` No `font-style: italic` on a heading; no `text-transform: uppercase` on a label; no
   `letter-spacing` below `-0.01em` on body text.
-- `[grep]` No font-size token above 24px in the application bundle.
-- `[grep]` No `text-align: center` outside empty-state and dialog components.
+- `[grep]` **No font-size token above `--text-xl` (20px) anywhere, and no `--text-empty` /
+  `--fs-empty` token at all.** The 24px empty-state step is deleted, not capped (§9.6): a token that
+  exists will be used, and this one was — on five screens, at a size larger than the page's own H1.
+- `[grep]` **No `text-align: center` outside dialog components.** Empty states were the other
+  exception and are no longer one — §9.6 requires them left-aligned at the content edge of the
+  region they replace.
+- `[grep]` **No empty state renders inside a border, a dashed border, a panel or a background
+  step** — greppable as: no class matching `empty` may set `border`, `border-style: dashed`,
+  `background` or `box-shadow`. §9.6's composition rule; this is the specific construction that made
+  the region read as generated.
 - `[review]` Count distinct font sizes in the chrome. More than six → fail.
 - `[review]` Every numeric column uses `tabular-nums`; no prose does.
 
@@ -1603,6 +1744,22 @@ AI-generated" an actual gate rather than a vibe.
 - `[review]` No live region missing on a determinate progress readout or on a control that changes a
   visible summary string — the scope chip's label and the indexer fan-out count are both Tier 3-ish
   readouts that a sighted user watches change and a screen-reader user is told nothing about.
+- `[review]` **Every screen that can be scoped demonstrates `scope-empty`** (§10), not just `empty`
+  and `filtered-empty`. Three states, three different sentences.
+- `[grep]` **Every list whose rendered rows are a window onto a larger set carries `aria-rowcount`
+  on the grid and `aria-rowindex` on every row, header row included, 1-based over the full set**
+  (§11). Under ADR-0029 that is every list in the product. `aria-rowcount="-1"` where the total is
+  genuinely unknown. ⚠️ Assert it over the rendered DOM, not over the accessibility tree: CDP
+  exposes neither row nor column indices as node properties, for a native `<table>` or an ARIA grid,
+  so tooling absence proves nothing here.
+- `[grep]` **No status or availability glyph computes to an empty accessible name** (§11). An
+  icon-only ✓/✗ makes "have" and "missing" indistinguishable to a screen reader while the UI prints
+  a claim to the contrary; the word from §6.3's rollup ships as text or as a visually-hidden span.
+
+**Copy — the two axes**
+- `[review]` **A library name rendered beside a media-type name carries the noun `library`** (§8.1).
+  *"all in the **Ebooks** library"*, never *"all in Ebooks"*. Without it the two axes ADR-0027
+  separates read as one, and on the common install they are the same string.
 
 **The two catch-alls** (§1.6), applied to every PR that touches a screen.
 
