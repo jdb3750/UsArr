@@ -9,29 +9,43 @@ from it lives in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 **All ADRs dated 2026-08-16 unless noted. Nothing here is implemented yet** — these are
 decisions taken before the first line of code, on the basis of five research tracks.
 
+**Revision 2 (2026-08-16, after a three-way adversarial review).** Seven ADRs changed. Three
+distinctions now matter and are used consistently below:
+
+- **Accepted** — the decision stands.
+- **Deferred** — the idea is sound and is *not* being built now. Every deferred ADR names **the
+  seam** in the v0.1 design that keeps it cheap to add later, and **a revisit trigger**. The full
+  set lives in [`FUTURE.md`](./FUTURE.md). A deferral is not a rejection, and it must not be
+  restated as one.
+- **Superseded / Reversed** — the decision was wrong, or its evidence was. The reversal records what
+  changed and why, rather than silently rewriting the original.
+
 | ADR | Decision | Status |
 |---|---|---|
-| [0001](#adr-0001) | Go for the backend | Accepted |
-| [0002](#adr-0002) | Embedded SQLite + WAL, no required sidecar | Accepted |
+| [0001](#adr-0001) | Go for the backend | **Accepted, evidence corrected** (rev 2) |
+| [0002](#adr-0002) | Embedded SQLite + WAL, no required sidecar | Accepted, one claim narrowed |
 | [0003](#adr-0003) | SvelteKit `adapter-static` SPA embedded via `embed.FS` | Accepted |
 | [0004](#adr-0004) | Replica, not proxy | Accepted |
 | [0005](#adr-0005) | Delegate playback to media servers | Accepted |
-| [0006](#adr-0006) | Never build a video transcoder | Accepted |
-| [0007](#adr-0007) | Wikidata as the cross-media spine, shipped as a prebuilt CC0 subset | Accepted |
-| [0008](#adr-0008) | Three plugin tiers, with declarative YAML manifests as the centrepiece | Accepted |
-| [0009](#adr-0009) | `work` / `edition` / `file` with typed `work_relation` edges | Accepted |
-| [0010](#adr-0010) | OpenSubsonic and OPDS as northbound server surfaces | Accepted |
+| [0006](#adr-0006) | Never build a video transcoder | Accepted · permanent |
+| [0007](#adr-0007) | Wikidata as the cross-media spine, shipped as a prebuilt CC0 subset | **Amended** (rev 2): edges-only artifact, per-release |
+| [0008](#adr-0008) | **Two** plugin tiers now; a WASM tier deferred | **Amended** (rev 2) |
+| [0009](#adr-0009) | `work` / `edition` / `file` with typed `work_relation` edges | Accepted, `audiobook` resolved |
+| [0010](#adr-0010) | OpenSubsonic and OPDS as northbound server surfaces | Accepted, scope narrowed |
 | [0011](#adr-0011) | Named permission strings, not a bitfield | Accepted |
-| [0012](#adr-0012) | Four-channel sync with an intent log for writes | Accepted |
-| [0013](#adr-0013) | Three-tier search: client prefix → FTS5+RRF → optional Meilisearch | Accepted |
-| [0014](#adr-0014) | `service_item_link` is many-to-many | Accepted |
+| [0012](#adr-0012) | Sync channels and the write path | **Superseded in part by ADR-0012a** |
+| [0012a](#adr-0012a) | A durable command queue replaces the optimistic intent log | **Accepted** (rev 2) |
+| [0013](#adr-0013) | **Two-tier** search; an external engine deferred | **Amended** (rev 2) |
+| [0014](#adr-0014) | `service_item_link` is many-to-many | Accepted, framing demoted |
 | [0015](#adr-0015) | Namespaced tags with virtual parents | Accepted |
 | [0016](#adr-0016) | Tailnet as the default deployment assumption | Accepted |
-| [0017](#adr-0017) | 302 redirect for streams, byte-proxy as fallback | Accepted (supersedes an earlier lean toward proxying) |
-| [0018](#adr-0018) | No in-app player; UsArr serves no media bytes | Accepted |
-| [0019](#adr-0019) | Single-user first, multi-user schema from migration 0001 | Accepted |
+| [0017](#adr-0017) | ~~302 redirect for streams~~ → **proxy for audio/ebooks, link out for video** | **Reversed** (rev 2) |
+| [0018](#adr-0018) | No in-app player; UsArr is not a byte-delivery product | Accepted, one clause corrected |
+| [0019](#adr-0019) | Single-user first, multi-user schema from migration 0001 | Accepted, list reconciled |
 | [0020](#adr-0020) | Requests are a first-class pillar | Accepted |
-| [0021](#adr-0021) | Stable opaque IDs address `service_item_link`, not `work` | Accepted |
+| [0021](#adr-0021) | Stable IDs address `service_item_link`, not `work` | **Amended** (rev 2): kind byte, pin, no opacity claim |
+| [0022](#adr-0022) | v1 authentication is local-only; external identity deferred | **Accepted** (rev 2) |
+| [0023](#adr-0023) | UsArr coexists with the ecosystem rather than replacing it | **Accepted** (rev 2) |
 
 ---
 
@@ -57,15 +71,35 @@ SQLite via `ncruces/go-sqlite3`. WASM plugin host via `wazero`.
 - `docker buildx` multi-arch images become trivially reproducible; target < 40 MB compressed.
 - Goroutines + `errgroup` + a bounded semaphore is ~30 lines for the fan-out poller, with no
   function colouring.
-- **`ncruces/go-sqlite3` runs the exact upstream SQLite C source compiled to WASM under wazero**
-  — bit-for-bit upstream behaviour for FTS5, the trigram tokenizer and extensions, while staying
-  cgo-free. **The same wazero runtime then serves the Tier 2 plugin host: one runtime, two
-  uses.** This is a Go-exclusive property; every other language's WASM runtime is a native
-  library that would break the static-binary story.
+- **`ncruces/go-sqlite3` gives cgo-free SQLite with FTS5 and the trigram tokenizer.**
 - GC spikes during a large import are real (~150–300 MB peak vs Rust's ~60–120 MB flat). Budget
   for it; streaming ingest (ADR-0012) is what keeps it bounded.
 - A modest cgo-free performance penalty on SQLite (~75% of `mattn/go-sqlite3` in one benchmark
   set). Irrelevant at this scale.
+
+### Correction, revision 2 — two claims in this ADR were wrong, and one of them was load-bearing
+
+1. **`ncruces/go-sqlite3` no longer runs on wazero.** The library migrated to the maintainer's own
+   **`wasm2go`** translator: its README now states it *"wraps a Wasm build of SQLite, and uses
+   wasm2go to translate it to Go"*, and that *"Go and `x/sys` are the only direct dependencies"* —
+   i.e. **wazero is not a dependency at all.** Announced in discussion #361 (2026-03-05), PR #362
+   ready 2026-03-09. The original text's clinching argument — *"the same wazero runtime then serves
+   the Tier 2 plugin host: one runtime, two uses"* — is therefore **false**, and ADR-0008 has been
+   re-argued without it. `DEVELOPMENT.md` already carried the correct position while four other
+   documents asserted the opposite.
+2. **"Bit-for-bit upstream behaviour" is dropped.** Under `wasm2go` the C source is compiled to Wasm
+   and then *translated to Go*, which is a different claim from "runs the upstream C source" and
+   would need its own evidence. What can be said without evidence is narrower and is what the text
+   now says: cgo-free SQLite with FTS5 and the trigram tokenizer.
+
+**A memory claim in this ADR is also unsupported and is now marked so.** The README's acknowledgement
+of *"Navidrome, the existence proof that Go + embedded SQLite idles at ~50 MB"* does not transfer:
+Navidrome uses a **cgo** driver. The `< 80 MB` idle-RSS budget therefore rests on nothing measured.
+**Required before schema work starts:** a one-day spike — this driver, a 500k-row fixture, WAL, the
+architecture's pragmas, idle and peak RSS measured **on arm64**. Record the number here as a
+consequence and set the budget from it. If it lands materially above 80 MB, **the pragma defaults are
+the first thing to tune, not the driver** — noted explicitly so a future reader does not reopen this
+ADR by mistake.
 
 ### Alternatives rejected
 - **Rust + Axum** — the honest runner-up. 2–3× lower memory, no GC pauses during a 500k-row
@@ -114,10 +148,21 @@ transaction uses `BEGIN IMMEDIATE`. A second, disposable `cache.db` holds high-c
 
 ### Consequences
 - Zero network hops on the query path — SQLite is *faster* here, not a compromise.
-- **`SQLITE_BUSY` from internal contention becomes structurally impossible**, because all writes
-  funnel through one connection. This matters because `busy_timeout` does **not** rescue a
-  deferred read transaction that upgrades to a write — that path returns `SQLITE_BUSY`
-  immediately, which is the classic production-only bug.
+- **`SQLITE_BUSY` arising from concurrent writers *inside the process* is eliminated**, because all
+  writes funnel through one connection. `busy_timeout` does **not** rescue a deferred read
+  transaction that upgrades to a write — that path returns `SQLITE_BUSY` immediately, which is the
+  classic production-only bug.
+  **Revision 2 narrows this claim**, which previously said `SQLITE_BUSY` from internal contention was
+  *"structurally impossible"* — overstated, and the kind of sentence that gets believed. Residual
+  sources remain, all present in this design: `VACUUM INTO` and `ANALYZE` take their own locks; WAL
+  checkpointing can be starved by a long-lived reader, after which `wal_autocheckpoint` silently
+  fails and the WAL grows unbounded; a second process (`usarr key rotate`, a user running `sqlite3`,
+  two containers on one volume); and `cache.db` if it is ever `ATTACH`ed inside a write transaction.
+  Mitigations are specified in `reference/sync.md` §6.
+- **The single writer is shared between the bulk importer and the interactive write path**, so it
+  needs a scheduler, not just a pool size: import batches commit at `min(2000 rows, 100 ms)` and
+  interactive commands preempt at batch boundaries. Without that, a 5,000-row import batch (200 ms–2 s
+  on a Pi) puts every user write behind it, which is the exact failure mode ADR-0004 exists to avoid.
 - Bulk writes must be batched (1000–5000 rows per transaction). This is the difference between a
   40-second import and a 40-minute one.
 - `STRICT` tables require SQLite ≥ 3.37. `ncruces/go-sqlite3` bundles a recent build, so this is
@@ -345,18 +390,31 @@ Measured coverage, from live SPARQL counts: **15,360** films with `P144`; **5,31
 **34,673** `P4969` statements total; **14,443** films with both `P144` and a TMDB ID (**94%** of
 adaptations are TMDB-resolvable).
 
-### Decision
-**Wikidata is the spine.** Ship a **prebuilt CC0 SQLite subset** (`wikidata-edges.db`,
-well under 1M rows) as a release artifact, refreshed weekly from the dumps. **Live SPARQL is a
-cache-miss path, not a dependency.** Confidence-scored edges; 0.55–0.85 routed to a human review
-inbox.
+### Decision (amended, revision 2)
+**Wikidata is the spine.** Ship an **edges-only CC0 SQLite artifact** (`wikidata-edges.db`,
+single-digit MB) as a release asset, **generated by a committed SPARQL script and regenerated per
+release**. **Live SPARQL is a cache-miss path, not a dependency.** Edges come from authoritative
+sources only; **nothing below 0.85 confidence is stored**, and there is no review inbox in v1.
 
 ### Consequences
-- **Cross-media search is instant and works offline.** The entire edge set fits in a few MB.
+- **Cross-media search is instant and works offline.** The entire edge set is a few MB.
 - Redistribution is legal because Wikidata structured data is CC0.
 - ⚠️ **Coverage is excellent for famous works and poor for the long tail** (~6.1k book→film pairs
-  with an OL ID on the book side). **Hence the fuzzy Tier-3 scorer and the review UI are not
-  optional** — this is a direct consequence of the measurement, not a hedge.
+  with an OL ID on the book side). The original ADR concluded from this that *"the fuzzy Tier-3
+  scorer and the review UI are not optional"*. **Revision 2 reverses that conclusion while keeping
+  the measurement**: a wrong link is far worse than a missing one, the design itself concedes that
+  title-similarity guessing is *"a false-positive machine"*, and a false-positive-management UI is a
+  second product this project cannot staff. If Wikidata does not know about an adaptation, UsArr does
+  not claim one. **The fuzzy ladder is deferred, not rejected** — `work_relation` already carries the
+  `confidence` and `evidence` columns it would populate, so adding it later is writing lower-confidence
+  rows plus a surface, with no change to how edges are read, grouped or rendered
+  ([`FUTURE.md`](./FUTURE.md) §5).
+- **The weekly dump pipeline is dropped.** It committed a one-person project to ingesting tens of GB
+  of Wikidata dumps and republishing an artifact forever, unpaid, with the feature quietly rotting if
+  it lapsed — and the original ADR quoted the artifact's size three incompatible ways ("a few MB", "a
+  few hundred MB", "fits in the release artifact"), one of which does not fit in a < 40 MB container
+  image. It is also unnecessary: the measured counts are tens of thousands of rows, retrievable by
+  paginated SPARQL in minutes. One number now: **single-digit MB, per release.**
 - **The inverse query is mandatory.** The adaptation edge exists **only** on the derived item;
   the novella `Q85810391` carries no `P4969` back to the film. An implementation that reads a
   book's statements finds nothing. `?x wdt:P144 wd:<book>` is the core primitive.
@@ -382,9 +440,9 @@ inbox.
 ---
 
 <a id="adr-0008"></a>
-## ADR-0008 — Three plugin tiers, with declarative YAML manifests as the centrepiece
+## ADR-0008 — Two plugin tiers now; a WASM tier deferred with its seam preserved
 
-**Status:** Accepted
+**Status:** Accepted · **Amended in revision 2** (was "three plugin tiers")
 
 ### Context
 UsArr must work with (a) Prowlarr alone, (b) a full stack, and (c) **a service nobody has
@@ -396,30 +454,61 @@ query-string RPC and XML; **error signalling includes HTTP 200 with a `Success:f
 
 The insight: **90% of "add a new service" is not code, it is HTTP plumbing.**
 
-### Decision
-Three tiers over one `Provider` interface. **Tier 0** compiled-in Go. **Tier 1 declarative YAML
-service manifests in `/config/providers/` — the centrepiece.** **Tier 2** WASM via
-Extism/wazero, deny-by-default sandbox.
+### Decision (amended, revision 2)
+**Two tiers now, over one `Provider` interface resolved from a registry.** **Tier 0** compiled-in
+Go. **Tier 1** declarative YAML service manifests in `$USARR_CONFIG_DIR/providers/`. **A WASM tier
+is deferred**, with the registry seam that makes it cheap preserved deliberately.
 
 ### Consequences
 - A user adds Komga, Kavita, a Sonarr fork or their own homebrew service in **~40 lines of YAML
-  and a reload** — no compiler, no sandbox, no release.
-- Manifests are shareable as gists; popular ones get promoted into the repo. **Ship 6–8
-  community manifests in the first release** — a plugin system with one plugin is not a plugin
-  system.
-- **wazero is pure Go**, so the plugin host costs nothing from the static-binary, zero-CGO,
-  trivially-cross-compiled property that justified ADR-0001. It is also already a dependency via
-  `ncruces/go-sqlite3`.
-- `RemoteItem` is the neutral wire type all three tiers produce, so **adding Tier 2 later
-  changes zero code in the sync engine.**
-- **The discipline required is resisting DSL growth.** When a feature request would add control
-  flow to the manifest, the answer is "write a Tier 2 plugin." That path otherwise ends in a
-  Turing-complete YAML nobody can debug.
-- Tier 1 and Tier 2 are **inside** the SSRF boundary, not outside it: a manifest's `path`
-  template must not escape the instance's configured base URL, and Tier 2's `http_request` host
-  function is restricted to it by construction.
+  and a reload** — no compiler, no release.
+- **The registry is the seam.** Providers are resolved from a registry of `ProviderFactory`
+  implementations, and the sync engine never names a concrete provider type. `RemoteItem` is the
+  neutral wire type every tier produces. **A WASM host — or any future tier — is one more factory
+  and changes zero code in the sync engine.** That property costs one interface today and is
+  expensive to retrofit, which is exactly why it is in v0.1.
+- **A manifest is not a sandbox**, and the original text calling Tier 1 *"fully sandboxed (no code
+  runs)"* was the most dangerous sentence in the document set, because it would have driven an
+  implementation that validates nothing. A manifest is a **server-side HTTP request generator that
+  runs with the instance's stored credential**. Four normative rules now govern it: URL construction
+  confined by construction (`ResolveReference` forbidden — `//evil.example/x` against
+  `http://sonarr:8989` escapes the host and carries the credential); mandatory escaping filters on
+  every interpolation; manifest-emitted `externalIds` capped below confidence 1.0 so a manifest can
+  never write a strong identity and collapse a library into one work; and **reviewed distribution**.
+- **Manifests are no longer promoted as shareable gists.** A manifest chooses which endpoint on the
+  configured host receives the credential and in what form, which is a straight credential-disclosure
+  primitive if the author is hostile. The 6–8 bundled manifests ship **embedded in the repo,
+  reviewed**, and a manifest found in `providers/` requires explicit admin confirmation, with its
+  endpoints, auth placement and target host displayed, before it is bound to a credential.
+- **The manifest's scope is now stated rather than implied:** a read-mostly JSON-over-HTTP service
+  with stateless auth. Session establishment (qBittorrent, Deluge), challenge-retry handshakes
+  (Transmission), JSON-RPC envelopes and XML (Plex) are **out of scope** and need a Tier 0 provider.
+  The original ADR listed those axes as diversity the manifest accommodates, next to a grammar that
+  cannot express any of them.
+- **The discipline is resisting DSL growth.** When a feature request would add control flow, the
+  answer is "write a Tier 0 provider" — and with WASM deferred that is the only answer, which is a
+  real cost, accepted deliberately.
 
-### Alternatives rejected
+### Why the WASM tier is deferred rather than rejected
+Deferred on **staffing and blast radius**, not on merit: a sandbox executing third-party code inside
+the process that holds every \*Arr admin key is a security-critical subsystem, and this project does
+not yet have the capacity to review third-party modules or to answer for one that misbehaves.
+Shipping the *design* before the base exists invites someone to build it first. The specification it
+would need — a fuel/interrupt budget, a hard per-call timeout, a memory-page cap, one invocation at a
+time per instance, a host-function API in which **the host attaches credentials and a plugin never
+receives a decrypted key**, module-hash approval, and a bounded `kv_*` store in `cache.db` rather
+than `usarr.db` — is written out in [`FUTURE.md`](./FUTURE.md) §1 so it does not have to be
+rediscovered.
+
+**Revisit trigger:** Tier 1 manifests have demonstrably hit their expressiveness ceiling for a
+service people actually run, **and** there is someone who can own sandbox security response.
+
+**One argument for WASM is now dead and must not be recycled:** *"wazero is already a dependency via
+`ncruces/go-sqlite3`."* That library moved to `wasm2go` and no longer depends on wazero at all
+(ADR-0001, revision 2). A WASM host would be a **new** dependency and must be argued on wazero's own
+merits — pure Go, zero CGO, real sandboxing — not on shared-runtime economy.
+
+### Alternatives rejected (still rejected)
 - **gRPC (hashicorp/go-plugin)** — battle-tested in Terraform/Nomad/Vault, but unsandboxed and
   requires shipping and supervising extra processes inside the container, which is exactly the
   sidecar complexity ADR-0002 rejects. **Helm 4 explicitly ruled it out "as it wasn't as secure
@@ -595,6 +684,28 @@ ULID idempotency keys.
 - **This is the biggest schedule risk in the project.** Everything else is mechanical; the intent
   log's failure and reconciliation semantics are where subtle bugs will live. **Budget a
   fault-injection harness that randomly 500s and times out a fake *Arr.**
+  → **Revision 2 acted on this sentence rather than repeating it: see ADR-0012a.**
+
+### Revision 2 — two corrections to the channel model
+
+1. **The shipping order was backwards.** SignalR (channel 2) shipped before reconciliation (channel
+   4), but `/history/since` provably cannot observe a movie *removed* from Radarr (removing it
+   deletes its history rows), a `monitored` toggle, a quality-profile change, or a root-folder move.
+   Without channel 4 the only repair for divergence is a manual full re-import, for most of the
+   project's life. Reconciliation is also the *simplest* channel and is fully specified. **Channel 4
+   moves into v0.1; SignalR and webhooks move out.**
+2. **Prowlarr is not a channel-3 source.** Its `/history/since` exists, but its `HistoryEventType`
+   enum is `unknown, releaseGrabbed, indexerQuery, indexerRss, indexerAuth, indexerInfo` — indexer
+   telemetry, not entity change. `indexerQuery`/`indexerRss` fire on every RSS poll of every indexer,
+   and `prowlarr.HistoryResource` has no `movieId`/`seriesId`. Channel 3 applies to library-bearing
+   acquisition apps only. (Also: **six** apps expose `/history/since`, not five — Whisparr is the
+   sixth.)
+
+**Two guards are now mandatory on the sweep**, because "the \*Arr owns the truth" is dangerous when
+the \*Arr is lying: **id resurrection** (the \*Arrs reuse integer ids after deletion, so a tombstoned
+link can rebind a *different* movie to the old `work_id` — compare external identity before clearing
+`deleted_at`) and **instance identity generation** (an \*Arr restored from an older backup moves its
+id space backwards; on a fingerprint change or a backwards jump in `max(id)`, refuse to sweep).
 
 ### Alternatives rejected
 - **SignalR alone** — breaks behind reverse proxies, which is the common deployment.
@@ -602,14 +713,73 @@ ULID idempotency keys.
   have no rate limit but serialise the whole object graph on every list call.
 - **Webhooks alone** — require writing config into the user's *Arr, and give no bootstrap path.
 - **Synchronous writes** (block the request until the *Arr answers) — violates ADR-0004 and gives
-  up the sub-10 ms ack that makes the UI feel instant.
+  up the sub-10 ms ack that makes the UI feel instant. **Revision 2 partially reverses this
+  judgement: see ADR-0012a.**
+
+---
+
+<a id="adr-0012a"></a>
+## ADR-0012a — A durable command queue replaces the optimistic intent log
+
+**Status:** Accepted (revision 2) · **Supersedes the write-path half of ADR-0012.**
+
+### Context
+ADR-0012 specified optimistic local apply, a stored `inverse_patch`, three-phase settlement where
+`applied ≠ confirmed`, per-kind retry-safety analysis, and a client-side pending-intent overlay
+reconciled against SSE — and then named itself *"the biggest schedule risk in the project"*.
+
+All of that machinery exists so that a monitor toggle feels instant instead of taking one round trip.
+The owner's speed complaint was about **browsing and API-driven page loads**, not about writes.
+Writes in this product are rare and deliberate: request a thing, toggle monitored, delete. A
+200–400 ms spinner on a button the user just pressed is normal and expected.
+
+Three defects made the cost worse than the benefit. **The `applied` state had no timeout and no
+guard**, so a write that the \*Arr accepted but that was never independently confirmed — the *normal*
+case once SignalR was deferred out of v0.1 — was unguarded against the reconciliation sweep and would
+be silently reverted. **Rollback was not real**: `inverse_patch` reverts UsArr's local state only, so
+a timeout after Radarr committed produced a local rollback, a failure toast, and the item reappearing
+hours later with no explanation. And **`idempotency_key` was globally `UNIQUE`** rather than
+user-scoped, so a collision or replay returned another user's intent row.
+
+### Decision
+**A durable command queue.** States `pending → inflight → done | failed_rejected | verifying → done |
+failed`. `POST` returns `202 {command_id}`; the UI shows an inline pending chip on that one item and
+resolves it from SSE. **No optimistic apply, no `inverse_patch`, and therefore no rollback — because
+nothing was applied locally.**
+
+Four things are kept or added deliberately:
+
+1. **`verifying` is the state that matters.** A timeout, transport error or 5xx means the write
+   *might* have landed, so it triggers a **targeted refetch of the affected entity** rather than a
+   failure report. TTL 15 minutes, then one final verification and an explicit `failed` with a
+   reason. No state is unbounded. A 4xx **with a body** is `failed_rejected` and may be reported
+   immediately.
+2. **`UNIQUE (user_id, idempotency_key)`**, not a global unique. A key that exists under a different
+   user returns `409`, never the other row.
+3. **Northbound idempotency keys are derived server-side** from
+   `(user_id, client_credential_id, verb, usarr_id, coarse_timestamp)`, because OpenSubsonic and OPDS
+   carry no idempotency field. One rule for every surface; there is no second scheme for scrobbles.
+4. **`grab` remains max one attempt** plus a manual retry, because a blind retry is a double
+   download.
+
+**The reconciliation guard covers every non-terminal state** — `pending`, `inflight` *and*
+`verifying`. Guarding only the first two means every v0.1 write is reverted by the next sweep.
+
+### Consequences
+- The project's self-declared top schedule risk is removed rather than restated.
+- The UI is honest instead of optimistic: a pending chip and a real error beat a value that
+  silently reverts.
+- **Optimistic apply is deferred, not condemned** ([`FUTURE.md`](./FUTURE.md) §10). The queue's state
+  machine already distinguishes "definitely did not land" from "might have", which is the hard half;
+  a future contributor with more people can add optimistic apply on top **deliberately, rather than
+  by drift.**
 
 ---
 
 <a id="adr-0013"></a>
-## ADR-0013 — Three-tier search: client prefix index → FTS5 + RRF → optional Meilisearch
+## ADR-0013 — Two-tier search; an external engine and typo tolerance deferred
 
-**Status:** Accepted
+**Status:** Accepted · **Amended in revision 2** (was "three-tier … → optional Meilisearch")
 
 ### Context
 The requirement is typo tolerance (`train dremas`), as-you-type prefix matching, cross-entity
@@ -619,12 +789,13 @@ tokenizer is explicitly built for generalized substring matching. Benchmarks sho
 Typesense and Meilisearch handle misspellings properly — **but also that in-memory SQLite is by
 far the fastest** on raw FTS latency.
 
-### Decision
-**Tier 1:** a ~1.2 MB client-side prefix index over the whole library, in IndexedDB.
-**Tier 2:** two FTS5 tables (`unicode61 remove_diacritics 2` with `prefix='2 3 4'`, and
+### Decision (amended, revision 2)
+**Tier 1:** a client-side prefix index in IndexedDB over **top-level works only**, capped at 25,000
+items. **Tier 2:** two FTS5 tables (`unicode61 remove_diacritics 2` with `prefix='2 3 4'`, and
 `trigram`) fused by **Reciprocal Rank Fusion (k=60)**, then a Go re-rank of ≤200 candidates by
 Jaro-Winkler + popularity + `in_library` + an IDF penalty, followed by **media-type diversity
-injection**. **Tier 3:** an optional Meilisearch provider behind a `SearchProvider` interface.
+injection**. **There is no Tier 3.** An external engine is deferred behind the retained
+`SearchProvider` boundary.
 
 ### Consequences
 - **Tier 1 is where the "instant" feeling actually comes from** — ~80% of real queries resolve
@@ -635,10 +806,36 @@ injection**. **Tier 3:** an optional Meilisearch provider behind a `SearchProvid
 - **Media-type diversity injection is what makes the Train Dreams case work.** Without it,
   whichever medium has better text statistics sweeps the list and the novella never appears.
 - **`in_library` boost is the single most user-satisfying signal and everyone forgets it.**
-- **Short common titles must be penalised hard** via corpus IDF, or "It"/"Her"/"Us" swamp
-  everything and flood the link-review queue.
-- Meilisearch **must never be required.** ~50k short strings do not justify a 200 MB search
-  server.
+- **Short common titles must be penalised hard** via corpus IDF, or "It"/"Her"/"Us" swamp everything.
+
+### Revision 2 — three corrections and one deferral
+
+1. **The typo-tolerance claim was false and is withdrawn.** This ADR's own context opened with
+   *"the requirement is typo tolerance (`train dremas`)"*, and the design does not deliver it. FTS5's
+   `trigram` tokenizer is a **substring** matcher, not a fuzzy one: `MATCH 'dremas'` finds rows
+   literally containing `dremas`, so a transposition destroys the match and neither FTS table
+   retrieves the row. The Go re-rank only reorders candidates *already retrieved*. Tier 2 gives
+   **prefix and substring matching**, the UI says so, and the README no longer claims otherwise.
+   **Typo tolerance is deferred** (`spellfix1`/`editdist3` or a Go-side BK-tree as a fourth retrieval
+   leg), with its costs and its ⚠️ unverified extension-availability question recorded in
+   [`FUTURE.md`](./FUTURE.md) §3.
+2. **Tier 1's sizing was wrong by ~40×.** "~1.2 MB for 10k items" described an index "for the whole
+   library", but the reference library is ~412k `work` rows once episodes are counted — 33–50 MB
+   shipped on every cold load. Scoping it to top-level works (~13k rows), dropping `sort_title`,
+   sending ThumbHashes as raw bytes and capping at 25,000 items makes it ~1.5–2.1 MB and *true*.
+3. **Both FTS tables need `contentless_delete=1`** (SQLite ≥ 3.43) or deleted works stay in the index
+   forever, and the three tables must share one rowid space or RRF silently fuses unrelated
+   documents. Both are now invariants with CI assertions.
+
+**Meilisearch is deferred, not rejected.** This ADR previously kept it as a named tier with config
+variables, a checklist row and a README row — implying someone would build and support it — while
+§8.4 of the architecture argued against itself (*"the library is ~50k short strings, not 50M
+documents; a 200 MB search server for that is absurd"*). **The seam is kept and is the part that
+matters:** retrieval is separated from ranking, the fusion takes N legs, and the re-rank never learns
+which engine produced a candidate — so an external engine, or a typo-tolerant index, is **an added
+leg rather than a rewrite**. The `SearchProvider` interface boundary costs one Go interface.
+**Revisit trigger:** a real user with a library where FTS5 latency or recall is measurably
+inadequate, measured on `make bench`.
 
 ### Alternatives rejected
 - **Bleve (Go)** — its fuzzy path is not Levenshtein-automaton-backed (a long-open issue says
@@ -790,9 +987,12 @@ every client device can already reach every backend directly.
 ---
 
 <a id="adr-0017"></a>
-## ADR-0017 — 302 redirect for streams; byte-proxy as an opt-in fallback
+## ADR-0017 — Stream path: proxy audio and ebooks, link out for video
 
-**Status:** Accepted · **Supersedes an earlier lean toward always proxying.**
+**Status:** **Reversed in revision 2.** The original decision — "302 redirect by default, byte-proxy
+as an opt-in fallback" — is recorded below in full, along with what falsified it. This is a reversal,
+not a rewrite: the reasoning that produced the wrong answer is worth keeping, because it was sound
+given a premise that turned out to be false.
 
 ### Context
 A gateway that aggregates N backends behind one client credential must decide who carries the
@@ -804,33 +1004,75 @@ reach the backend.**
 
 ADR-0016 removes that last objection.
 
-### Decision
-**`302` redirect is the default.** A byte-proxy mode exists as an opt-in fallback
-(`USARR_STREAM_MODE=proxy`, with per-instance override).
+### The original decision (superseded)
+> **`302` redirect is the default.** A byte-proxy mode exists as an opt-in fallback
+> (`USARR_STREAM_MODE=proxy`, with per-instance override). The remaining honest problem is
+> credential leakage in the redirect target, solved in preference order by (1) a **backend-native
+> ephemeral token** minted per request — *"Jellyfin can issue scoped access tokens; Navidrome
+> supports its own API keys"* — (2) a short-TTL signed URL, (3) a per-backend proxy.
+
+### What falsified it
+**Mitigation 1 does not exist**, and the whole safety case rested on it.
+
+- ✅ `jellyfin/jellyfin#10808` — *"Refactor 'Copy Stream URL' to not leak the user's session API
+  key"* — is an **open issue proposing** per-object scoped keys, filed precisely because Jellyfin has
+  no such thing today and its stream URLs carry the user's **full session token**.
+- ✅ **Navidrome does not support OpenSubsonic `apiKeyAuthentication`** in any release or in `master`
+  (v0.63.2 latest; PRs #4022 and #5731 open, neither merged; its advertised extensions are
+  `transcodeOffset, formPost, songLyrics, indexBasedQueue, transcoding, playbackReport,
+  topSongsByArtistId, sonicSimilarity`). There is no Navidrome API key to mint either.
+
+Three further defects, each fatal on its own:
+
+1. A Jellyfin access token **is** a backend credential. Once in a client's hands it authenticates
+   arbitrary API calls against that backend for its lifetime — exactly the "replay against the
+   backend outside UsArr's authorization" the credential rule forbids, and it silently un-does
+   library visibility and parental controls on a tailnet whose threat model explicitly includes a
+   kids account.
+2. Neither backend can mint a token **bound to `(user_id, usarr_id)`**; their tokens are scoped to a
+   backend *user*, not to one item. The stated binding rule was unimplementable via mitigation 1.
+3. A minutes-lived token **breaks seek**, because most Subsonic clients issue a new `Range` request
+   to the *same* URL rather than re-calling `stream` — the hardest failure mode to diagnose, since it
+   appears mid-playback rather than at start. Cookie-session backends cannot be redirected to at all.
+
+### Decision (revision 2)
+**UsArr proxies bytes for its own OpenSubsonic and OPDS surfaces (audio, ebooks, comics), and links
+out for video.** The proxy is a plain `io.Copy` with correct `Range` / `Content-Range` / `206` /
+`If-Range` / `ETag` / `Accept-Ranges` handling and **no transcoding, ever**. `USARR_STREAM_MODE` is
+gone; there is no redirect mode to fall back to.
 
 ### Consequences
-- UsArr never saturates a Pi's NIC. A 4K remux at 60 Mb/s through a proxy is the whole box.
-- Seek, resume and range behaviour are the backend's, untouched and already correct.
-- **The remaining honest problem is credential leakage in the redirect target, and it must be
-  solved rather than waved off.** In preference order: (1) a **backend-native ephemeral token**
-  minted per request (Jellyfin scoped tokens, Navidrome API keys); (2) a **short-TTL signed URL**
-  where supported; (3) redirect to UsArr itself and proxy, **per backend**, where neither is
-  available. Tokens are minutes-lived, `no-store`, and **bound to `(user_id, usarr_id)`** so a
-  leaked token is not a general key to the backend.
-- ⚠️ **Verify per client** — some Subsonic clients historically follow redirects poorly,
-  particularly on `getCoverArt` and during seek. Test Symfonium, Amperfy, Supersonic, DSub. The
-  per-backend proxy fallback is the escape hatch, and it is a config flag, not a redesign.
-- **Images are the deliberate exception**: `/img/*` is always proxied and cached, never
-  redirected — because *Arr `MediaCover` requires an API key, because the downscale + ThumbHash
-  pipeline is the biggest perceived-speed win, and because a poster is ~30 KB, not 30 GB.
+- **No client ever receives a backend credential.** That is the property this reversal buys, and it
+  is worth the cost.
+- **UsArr is on the byte path for audio.** Stated plainly rather than minimised: `Range` handling is
+  a genuine source of subtle bugs. Mitigations: audio is ~1–5 Mb/s rather than a 60 Mb/s 4K remux;
+  there is no transcode; and the failure mode of getting it wrong is a client that cannot seek, not a
+  leaked credential.
+- **Video links out**, so the ruinous byte cost never arrives and the northbound surfaces advertise
+  no video stream endpoint at all. Carrying video is deferred, not refused
+  ([`FUTURE.md`](./FUTURE.md) §7) — and if it ever lands it is `io.Copy` and nothing else. **A
+  transcoder remains a permanent non-goal (ADR-0006).**
+- **A short token TTL no longer breaks seek**, because the bytes come from UsArr: a client
+  re-`Range`s the same UsArr URL and UsArr re-authorizes. The token is now fully specified — numeric
+  TTL (120 s default, 600 s max), a nonce, a replay cache, revocation checked against
+  `client_credential.revoked_at` on **every** redemption, and a signing key derived under a distinct
+  HKDF label from the credential KEK so the two rotate independently.
+- **Images remain the deliberate exception in the other direction**: `/img/*` is always proxied and
+  cached, never redirected — `MediaCover` requires an API key, the downscale + ThumbHash pipeline is
+  the biggest perceived-speed win, and a poster is ~30 KB.
+- ⚠️ The per-client redirect-tolerance question disappears with the redirect. It is replaced by a
+  narrower test matrix on the proxy: seek, resume after pause, large-file range, repeated requests to
+  the same URL.
 
 ### Alternatives rejected
-- **Always proxy** — the earlier lean. Correct for an internet-exposed deployment where backends
-  are unreachable; wrong as a default once ADR-0016 is assumed, because it pays a permanent
-  byte-path tax to solve a problem the network already solved. **Retained as the fallback mode
-  precisely for the deployments where the assumption does not hold.** Note that Streamarr's
-  authenticated internal proxy is the proxy argument in its strongest form — but that is for
-  *admin UIs*, where the payload is kilobytes.
+- **Keeping the redirect and accepting the leak** — would mean documenting, loudly, that any tailnet
+  client can extract a backend-user-equivalent credential. On a network whose threat model is "people
+  I deliberately let on", including a kids account, that is not an acceptable default.
+- **Cutting the byte path entirely and linking out for everything**, which is what one reviewer
+  proposed. It does not work for the surfaces UsArr actually ships: a Subsonic client has exactly one
+  `stream` verb and no way to be sent somewhere else, so "link out" for audio means the OpenSubsonic
+  surface does not play music, which is the milestone's entire success criterion. Link-out is
+  correct for video precisely because video has a first-class alternative — the backend's own client.
 
 ---
 

@@ -12,6 +12,11 @@ single local library you can browse, search and request from, and it exposes pro
 (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend
 individually.
 
+**UsArr coexists with the ecosystem; it does not replace it.** The *Arrs keep doing their job,
+the media servers keep owning the bytes. UsArr is the hub and gateway in front of them, and a
+proposal that starts by reimplementing something an existing service already does well has
+misread the project.
+
 Owner: Joe (GitHub `jdb3750`). Repo: `github.com/jdb3750/UsArr`.
 
 **Status: pre-alpha. The docs exist; the code does not.** Nothing is implemented. Do not write
@@ -41,6 +46,19 @@ row carries `user_id` from the very first migration; the UI simply hides what ha
 yet. Authorization is enforced server-side from the first commit and is never bolted on later.
 See ADR-0019, ADR-0011.
 
+## UI direction
+
+Utilitarian over stylish. Tried and true beats novel: standard, familiar patterns, easy to use,
+and snappy above all. No visual flair that costs render time — if an effect buys nothing but
+looks, it does not ship. **Navidrome is the reference point for the bar to hit.**
+
+Four screens are essential in v0.1:
+- **Home**, sectioned by media type.
+- **Service setup and health**, which must show what in the pipeline is broken and how to fix it.
+- **Search** across your media.
+- **Requests**, covering both the *Arr-backed path and the Prowlarr free-text indexer
+  search-and-grab path.
+
 ## Working practice
 
 **Adversarial review is mandatory.** The owner asked for this explicitly. Substantive design,
@@ -61,6 +79,13 @@ status tables are generated from it. If §16 does not say a thing ships, it does
 **Cut before you add.** This project's biggest risk is never shipping. A proposal that adds a
 subsystem must say what it removes, or defer itself to a later milestone. "And also" is not a
 plan.
+
+**Build the base with intentional space for what comes later.** Several deferred features have
+an obvious seam in the current design: the provider registry is an interface a plugin host
+could implement, the search retriever is pluggable behind one boundary, `work_relation` already
+carries confidence and evidence columns. Keep those seams — they cost almost nothing now and
+are expensive to retrofit. This is not a licence to build the deferred feature early: the seam
+ships, the feature does not.
 
 ## Ecosystem facts that stale training data gets wrong
 
@@ -129,6 +154,7 @@ See `docs/ARCHITECTURE.md` §14 for the full threat model.
 | --- | --- |
 | `docs/ARCHITECTURE.md` | The design. §16 is the authoritative roadmap. |
 | `docs/DECISIONS.md` | ADRs. **Add one for any decision that closes off an alternative.** |
+| `docs/FUTURE.md` | Deferred features, and the seam each one is designed against. |
 | `docs/RESEARCH.md` | Ecosystem findings with primary-source citations. |
 | `docs/CONFIGURATION.md` | Every configuration key and its semantics. |
 | `docs/DEVELOPMENT.md` | Local setup, workflow, the make targets. |
@@ -151,5 +177,20 @@ Detail lives in `docs/ARCHITECTURE.md` §16, which wins over this summary.
 - **v0.4** — gateway surfaces (OpenSubsonic, OPDS).
 - **v1.0** — breadth: more providers, multi-user, the full tag system.
 
-**Explicit non-goals.** Do not propose these; they have been decided against:
-video transcoding · an in-app player · WASM plugins · Meilisearch · OIDC / passkeys / TOTP.
+## Non-goals, and deferred work
+
+**Permanent non-goals.** Decided against for good. Do not propose them, do not reopen them:
+video transcoding · an in-app media player · any FFmpeg dependency.
+
+**Deferred, not rejected.** Out of scope for the current milestone, wanted later, and the
+design should leave room for them. Do not build them now; do not treat them as refused either.
+`docs/FUTURE.md` owns each one, with the seam in the current design that keeps it cheap to add:
+
+- WASM / Extism plugins
+- an external search engine such as Meilisearch
+- OIDC, passkeys, TOTP
+- the cross-media fuzzy-match tier and its review inbox
+- spellfix1 typo tolerance
+- a Jellyfin-compatible northbound surface
+- aggregated release calendars across subscriptions
+- per-user watch / listen / read statistics
