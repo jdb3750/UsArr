@@ -3358,8 +3358,8 @@ had moved by the time the findings were recorded — `dd15d95` landed `GET /api/
 `ec2a21d` rather than the review's diff.** None was overtaken; the closed item at the end was
 already closed at `85cae80` and is confirmed closed here for the second time, by a different method.
 
-Seven findings, one follow-up and one closure. **One is applied (RG-01.2), one routes to another
-thread (RG-01.1), one is deferred pending coordination (RG-01.3), and four are rebutted
+Seven findings, one follow-up and one closure. **Two are applied (RG-01.2, and RG-01.3 once the
+client went opaque at `23cac0f`), one routes to another thread (RG-01.1), and four are rebutted
 (RG-01.4 to RG-01.7)** — written down rather than dropped, because a rebuttal that is not on paper
 gets re-litigated by the next reviewer to notice the same shape.
 
@@ -3459,7 +3459,7 @@ cannot produce the same green (DEVELOPMENT §11 rule 4).
 
 Both reverted; the suite is green.
 
-## RG-01.3 — `provenance.id` on the wire is a cross-user volume oracle. **Deferred pending coordination.**
+## RG-01.3 — `provenance.id` on the wire is a cross-user volume oracle. **Applied.**
 
 `internal/httpapi/grabs.go:46` ships `ID int64 \`json:"id"\``, which is `provenance.id` — `INTEGER
 PRIMARY KEY`, therefore **a globally monotonic rowid shared across every user**.
@@ -3482,6 +3482,77 @@ here blanks the block rather than degrading it.
 sequence, exposed instead of the rowid. ⚠️ **It is far cheaper now than later.** One published shape
 and one consumer pin it today; every additional client pins it harder, and this is the last cheap
 moment.
+
+### Applied — the coordination completed, and the deferral's own condition was met first
+
+**The client went opaque before the server did**, which is what closed the ordering window the
+deferral named. `23cac0f` retyped `RecentGrab.id` as a `string` and gave `toRecentGrab` a `rowKey`
+helper that accepts a non-empty string **or** a finite number it stringifies, so both wire forms
+render and the two changes could land in either order without a blank block in between. The
+deferral asked for coordination, not for the finding to lapse; this is the coordination.
+
+**What ships:** `recentGrabResponse.ID` is now a `string` carrying `grabRowID`'s keyed hash
+(`internal/httpapi/grabs.go`). **The wire key is unchanged — still `id`** — because the client's own
+note said the replacement would arrive under the same name, and renaming it would have reopened the
+ordering window the retype closed. An example value: `se_wB7GtQhzj_fdHcvNG8A`.
+
+**HMAC-SHA256, truncated to 128 bits, base64url without padding — 22 characters.** The key comes
+from a **new** `crypto.DeriveGrabRowIDKey`, under a **new** HKDF info label `usarr/grab-row-id/v1`.
+⚠️ **No existing label was touched, and that restraint is the point.** `usarr/kek/v1`,
+`usarr/stream-token/v1` and `usarr/client-credential/v1` are domain-separation inputs bound into
+stored ciphertext and issued API keys; editing one silently makes every stored credential
+undecryptable, and `derive_test.go` carries no golden vectors, so nothing would catch it. A new
+purpose gets a new label. `TestDerivedKeysAreDistinct` now covers all four pairwise.
+
+**A keyed hash rather than a per-user sequence, deliberately.** A sequence needs a column, therefore
+a migration, and *"a merged migration is never edited"* — the schema is where this project's
+expensive mistakes live. The hash needs nothing stored at all.
+
+**`user_id` is in the HMAC input alongside the rowid.** It costs one field and buys per-user domain
+separation: the shared/system sentinel-`0` rows migration 0002 backfilled, and any future view that
+widens the scope, would otherwise hand two users the same token for one row and let them correlate
+by comparing. Nothing joins on this value, so there is no cost to it differing per user, and
+`provenance.user_id` is historical and never rewritten, so stability holds. Both inputs are
+fixed-width big-endian, so `(user 1, row 23)` and `(user 12, row 3)` cannot render the same bytes.
+
+**Three tests, pinning the properties rather than the construction** — a truncated hash, a different
+hash, or a per-user sequence with a random base would all pass them; a rowid dressed in hex or
+base64, which is the tempting cheap fix, fails every one:
+
+- **`TestGrabRowIDIsStableAcrossServerInstances`** — the same row gives the same id across two calls,
+  and across a **second server built on the same derived key**, which stands in for a restart. This
+  is the arm that rejects a random per-response token; the client keys rows by identity for focus
+  and hover, so an id that moves rebuilds the block under the cursor.
+- **`TestGrabRowIDCarriesNoOrderOrVolume`** — sorting 64 ids must not reproduce rowid order;
+  adjacent rowids must differ in 32–96 of 128 bits and share no leading prefix; the distance to the
+  **neighbour** and to the **63rd row** must both sit near half, so the *gap* is not recoverable —
+  which is the oracle itself. Plus: two users' ids for one row differ, the fixed-width collision
+  case differs, and a different install key gives different ids.
+- **`TestRecentGrabsNeverShipsAURLOrACredential`, extended rather than duplicated.** The raw rowid
+  would **not** have tripped RG-01.2's allowlist: it leaks through `id`, a key that is *on* the list
+  and must stay there. Only a value-level assertion can catch it, so it sits beside the existing
+  value check — two shapes of the same guard is how one of them rots (RG-01.2's own argument).
+
+**Both guards were fired deliberately before being trusted** (DEVELOPMENT §11), both reverted:
+
+- **The leak assertion** — `ID` kept as a `string` but filled with `strconv.FormatInt(p.ID, 10)`,
+  i.e. the exact cheap "just make it a string" fix. It failed three ways:
+  `the response ships the raw provenance rowid 1 as a string; stringifying it changes the type and
+  keeps the leak` on the body `{"grabs":[{"id":"1",…}]}`, then `the wire id "1" parses as an
+  integer`, then `the wire id is not the keyed hash of (user_id, rowid)`.
+- **The order/volume assertion** — `grabRowID` replaced with big-endian rowid in 16 bytes. It failed
+  on `sorting the ids reproduces rowid order`, on `rowids 1 and 2 differ in 2 of 128 bits`, and on
+  the shared prefix `"AAAAAAAAAAAAAAAAAAAAAQ"` / `"AAAAAAAAAAAAAAAAAAAAAg"`.
+
+**`Config.GrabRowIDKey` is required and `httpapi.New` refuses a wrong length.** The fallback for a
+missing key would be shipping the rowid, which is the leak the key exists to close; it fails closed
+instead. `cmd/usarr` derives it beside the KEK, from the same master key and salt, which is what
+makes the id survive a restart.
+
+**Still on the wire elsewhere, and out of this change's scope:** `grabResponse.ProvenanceID` in
+`internal/httpapi/grab.go` returns the raw rowid to the caller who *just made* that grab. That is a
+much weaker oracle — one id, self-inflicted, no second sample to difference against — but it is the
+same column, and it is a follow-up rather than a thing this finding closed.
 
 ## RG-01.4 — the `ORDER BY` is not a DoS. **Rebutted on measurement.**
 
