@@ -61,6 +61,7 @@ distinctions now matter and are used consistently below:
 | [0035](#adr-0035) | Kavita, not Komga, is the comics-and-books catalogue source | **Accepted** — owner-decided 2026-08-16; **reverses one member of [ADR-0032](#adr-0032)**, confirms [ADR-0030](#adr-0030); ⚠️ **amended 2026-08-16** — the catalogue sources sequence **after** v0.1 ([ADR-0036](#adr-0036)), so this ADR picks *which* source, and its spike orders the post-v0.1 sequence |
 | [0036](#adr-0036) | No catalogue source ships in v0.1; they arrive one at a time after it | **Accepted** — owner-decided 2026-08-16; **amends** §16; **re-sequences [ADR-0032](#adr-0032) and [ADR-0035](#adr-0035)** without rejecting any source |
 | [0037](#adr-0037) | TOFU SPKI pin enrolment is removed, not completed; enforcement stays | **Accepted** — 2026-08-16; amends no ADR; reopening conditions stated (a pin field on the update path + the change-acceptance UI) |
+| [0038](#adr-0038) | A list freezes its order while a user is aiming at it | **Accepted** — 2026-08-16; amends no ADR; the argument lives in `design/DESIGN-DIRECTION.md` §9.1a and ARCHITECTURE §17.5, this record holds the rejected alternatives |
 
 ---
 
@@ -3507,3 +3508,85 @@ Enrolment without both is the design this ADR rejects, regardless of who propose
   which is this ADR's main objection. It does not help the self-signed single-certificate case the
   pin exists for, and it is not what the column or the enforcement path implement. Worth raising on
   its own merits when the reopening conditions are met; not a way around them.
+
+---
+
+<a id="adr-0038"></a>
+
+## ADR-0038 — A list freezes its order while a user is aiming at it
+
+**Status:** Accepted · **2026-08-16** · **Amends no ADR** — the rule is new, and it constrains every
+mutable list rather than reversing an earlier choice · **The argument is not repeated here.**
+[`design/DESIGN-DIRECTION.md`](./design/DESIGN-DIRECTION.md) §9.1a carries the general component
+rule and [`ARCHITECTURE.md`](./ARCHITECTURE.md) §17.5 the Requests-screen specification. This record
+exists for the part neither of those keeps well — **what was rejected, and why**.
+
+### Context
+
+Settled 2026-08-16 in **four rounds across three threads** — design, frontend and code — over how the
+release result list may reorder itself while a Prowlarr fan-out is still delivering, and closed.
+Logged as **SW-21** in [`REVIEW-LOG.md`](./REVIEW-LOG.md). The frontend thread **converged on the
+suspend ruling independently**, from the implementation side and without the design thread's argument
+in front of it, which is why it was treated as settled rather than as one thread's preference — and
+then improved it twice: **focus-within beside pointer-within**, and **collapsing the late-arrival
+case into the same single control**.
+
+### Decision
+
+> **Instability is acceptable only while nobody is aiming at anything.**
+>
+> The condition keys on whether **a person is committed to a target**, never on whether the
+> **application considers itself settled**. The six clauses that follow — re-sort live and freeze on
+> fan-out completion; freeze while the pointer is inside the results region **or** focus is within
+> it, surfacing anything that would have reordered as one `3 new results · re-sort` control;
+> identity rather than position for focus, hover, selection and pending row state; 0 ms and never
+> animated; sort keys in the URL — live in `DESIGN-DIRECTION.md` §9.1a, and **every mutable list in
+> UsArr inherits them**.
+
+**Why it keys on the person and not the app.** *"The fan-out finished, so the order is final"* is the
+application's own readiness, and it is wrong in both directions: the user reaching for the third row
+is not helped by more legs being outstanding, and the user idly reading is not harmed by a row
+moving. What makes this a correctness question rather than a polish one is the affordance being
+protected — **`Grab` is irreversible from UsArr's side**, since the release is handed to a download
+client UsArr deliberately stops observing after handoff (§17.5, §8.5), so a mis-click cannot be
+detected, cannot be reported and cannot be reversed. **Where there is no undo, prevention is the only
+lever.**
+
+### Alternatives rejected
+
+- **Append a late arrival below the list, marked *late*, instead of counting it in the same
+  control.** Rejected, and this is a rejection rather than an omission. One condition with two
+  surfaces is two rendering rules and two vocabularies to maintain; the *late* marker is meaningless
+  the instant the list is re-sorted; and appending **still** moves the list under an engaged user —
+  the row count changes, the scroll extent changes, and a pointer resting near the foot of the list
+  gets a new row under it. A late arrival is not a special case, it is another thing that would have
+  reordered.
+- **Animate the reorder so the movement is legible.** Rejected, and strictly worse than an instant
+  re-sort for this rule: an animation *widens* the window in which the row under the pointer is
+  neither where it was nor where it is going, and a click landing mid-flight is precisely the
+  ambiguous case the rule exists to remove. §6's 0 ms sort is extended to say a reorder is never
+  animated anywhere.
+- **Key focus, hover, selection and pending row state by index.** Rejected. An index-keyed list
+  reassigns all four the moment the order changes, so the highlighted row, the focused row and the
+  row with a grab in flight silently become different rows. Identity keying is also what makes the
+  keyboard half of the rule work at all: focus is attached to a row, so the row may move and take
+  the focus with it.
+- **Rely on identity keying alone and drop the pointer clause.** Rejected — the two input paths fail
+  differently. Identity fully protects the keyboard user; **the physical pointer is attached to
+  nothing**, sitting at a screen coordinate no amount of re-keying moves, so a row shifting under a
+  resting pointer puts a *different release* under the click, with no error raised and nothing on
+  screen recording the substitution. Neither half of pointer-within **or** focus-within is
+  redundant.
+
+### Consequences
+
+* **Nothing is drawn.** The mockups are static documents with invented data: there is no fan-out to
+  run, nothing to arrive late, and no honest count for the `re-sort` control to carry. §17.5 says so
+  rather than illustrating it — drawing a frozen screenshot would assert a behaviour the artefact
+  cannot exercise, which is `CLAUDE.md`'s invented status by illustration. This is specification for
+  the implementation, verified there or not at all.
+* **The scope is every mutable list**, not one screen. A future list carrying a comparably
+  irreversible action inherits the rule for the same reason; a list of purely local reads does not
+  need it and should not pay for it.
+* **No code, no schema and no mockup changed** when this was settled. The rule lands ahead of the
+  screen it governs, which is the cheapest moment at which an ordering contract can be fixed.
