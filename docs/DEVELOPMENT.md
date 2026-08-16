@@ -920,6 +920,28 @@ repaired as the least trustworthy thing in the file, not the most.
   `make check` (or `make lint`) is authoritative, because only those go through `require_tool` and
   assert the pin. Quote the tool line it prints alongside any claim of green.
 
+### Consistency is a property of the read, not only of the write
+
+**A writer's transaction guarantees only what a reader takes in one statement, or in one
+`db.ReadTx`.** `store.ReplaceIndexers` writes `indexers_fetched_at` and the `indexer_catalog` rows
+in a single transaction so that no reader can see one without the other, and it is right to. But
+`GET /api/v1/indexers` then asked for them with two statements off the read pool — and two
+statements on the pool are **two WAL snapshots**. A replication commit landing between them
+returned a NULL stamp to the first and the fresh rows to the second, so the endpoint rendered
+"UsArr has not yet read the indexer list from Prowlarr" while listing three indexers: a state the
+database never held, at 1.2% of requests. `db.ReadTx` existed for exactly this, with a correct doc
+comment, and had **no production caller at all**.
+
+This is easy to miss because the write side looks careful and *is* careful — so the pair reads as
+solved, and attention stops at the transaction that is already there. Ask the question at the read
+instead: **do these two results have to agree?** A parent row and its children, a count and the rows
+it counts, a status field and the data it describes, a stamp and the thing it stamps. If they do,
+pair them under `db.ReadTx`, and pair them **in the store**, because the invariant belongs to the
+pair rather than to whichever handler noticed first. If they do not, leave them alone and say why —
+an unnecessary read transaction is noise that hides the necessary ones, and every one of them is a
+lock the WAL checkpointer has to wait behind. The full sweep of this codebase's read paths, with the
+reason each one is safe, is the consistency audit in `docs/REVIEW-LOG.md`.
+
 ### Working alongside other threads
 
 Several threads work this repo in parallel, on branches cut from the same base. The collisions that

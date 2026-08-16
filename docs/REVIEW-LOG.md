@@ -3786,3 +3786,76 @@ change — that matches the measured rich-row content box.
 **Gate**: `node docs/design/check.mjs` passes on the merged tree at `eb78308` (all checks, both
 installs). Measurements were taken in throwaway worktrees off `origin/main` and `3ae0d44^`, not in
 the shared checkout.
+
+---
+
+# Consistency audit — the writer's transaction bought nothing, because the reader asked twice
+
+**Date:** 2026-08-16. **Branch:** `main`. **Baseline:** `70a61c9` (the fix), audited forward from
+`a3c79b2` (the tree before it). Not a review round, and no adversarial reviewer behind it: this
+started as a **flake report** against `TestEndToEndIndexerCatalogue`, and the entry exists because
+the flake was not one. Prefix `SNAP-` has not been used before, so nothing collides.
+
+**The mechanism, in one paragraph.** `GET /api/v1/indexers` issued two statements off the **read
+pool**: one for `service_instance.indexers_fetched_at`, then one for the `indexer_catalog` rows.
+Two statements on the pool are **two WAL snapshots**. `store.ReplaceIndexers` writes the stamp and
+the rows inside a single transaction precisely so that no reader can observe one without the other
+— its own comment says so, and the comment is correct — but write-side atomicity buys the reader
+nothing when the reader asks twice. A replication commit landing between the two reads gave the
+first a NULL `indexers_fetched_at` and the second the freshly written rows:
+
+```
+{"status":"never_fetched","fetched_at":null,"indexer_count":3}
+```
+
+followed by the three indexers, each stamped with the fetch time the instance claims never
+happened. The picker renders *"UsArr has not yet read the indexer list from Prowlarr"* beside a
+**Test connection** button, on an install where nothing is wrong — arriving on the first paint
+after a service is added, which is the one moment the replication write is guaranteed to be in
+flight. It is exactly the failure §17 exists to prevent.
+
+**This was a production bug, not a flaky test.** Worth stating plainly, because the report arrived
+as a flake and the cheap disposition was `-count 1` and a shrug. The test was reading the API's real
+response through the real handler; it failed because the response was genuinely wrong, roughly one
+request in a hundred, for every user of that endpoint. The test's only unusual property was running
+the write and the read concurrently on purpose — which is what a background prober and a browser do
+by default. A test that fails intermittently on a race the product also has is not flaky; it is the
+only thing in the repo telling the truth.
+
+**Reproduction.** 48 failures in 4000 runs (1.2%) — eight parallel workers of `-test.count 500` on a
+loaded four-core box — always as `TestEndToEndIndexerCatalogue`'s `fetched_at` assertion, never
+anything else. After the fix the same loop is **4000/4000**, and 240 runs under `-race` are clean.
+
+| # | Finding | Disposition |
+|---|---|---|
+| **SNAP-01** | **The catalogue read spanned two WAL snapshots, and rendered a state the database never held.** The invariant `rows present ⇒ the stamp is valid` is one-directional and always true of the *database*; it was not true of the *response* | **Applied at `70a61c9`.** `store.ReadIndexerCatalog` now pairs the instance read and the catalogue read inside `db.ReadTx`. The fix is in the **store, not the handler**, because the invariant belongs to the pair rather than to any one caller: whatever reads a replication stamp beside the rows it stamps has to read them together, and a second caller written next year would otherwise re-open the hole. The three read bodies (`getServiceInstance`, `listServiceInstances`, `listIndexers`) were reshaped to take a `querier`, so one body serves both the pool and a snapshot |
+| **SNAP-02** | **`db.ReadTx` existed for exactly this and had no production caller at all.** Written with a correct doc comment — *"so a multi-statement read sees one consistent snapshot"* — and reached only from `internal/db`'s own test | **Closed by SNAP-01's fix, and named here because the shape generalises.** An unused helper is not evidence that nothing needed it; it is evidence that nobody looked. The lesson is recorded in `DEVELOPMENT.md` §11 so the next multi-statement read starts from the question rather than from the pool |
+| **SNAP-03** | **The guard has to be watched failing, or it is decoration.** `TestReadIndexerCatalogIsOneSnapshot` asserts the one-directional invariant — indexers present implies `indexers_fetched_at` valid — while a writer replicates against four spinning readers. The converse is a legitimate state and is deliberately **not** asserted | **Applied, and fired deliberately twice** — once when written, once when this entry was compiled, against a `ReadIndexerCatalog` whose `db.ReadTx` was swapped back for `s.db.Read()` and nothing else changed. It fails in **round 0, in 0.03s**, on three of the four readers: *"the catalogue carries 2 indexers while the instance reports `indexers_fetched_at` NULL. ReplaceIndexers writes both in one transaction, so this state never existed in the database — the read spanned two snapshots."* Restored, it is green at `-count 5` |
+| **SNAP-04** | **Is this shape anywhere else?** Audited every read path in the tree for it: two or more statements off the read pool whose results a caller or a user expects to agree | **Swept; nothing else is broken.** The sweep is below. `indexers_fetched_at` is the **only** cross-table stamp in the schema — the other two `fetched_at` columns (`release_candidate`, `indexer_catalog`) are per-row and are read in the same statement as their row — so the exposure was one endpoint wide, and it is closed. No second fix was made, and none was invented: an unnecessary read transaction is noise that hides the necessary ones |
+
+## The sweep
+
+Every read path in the tree, with the reason it is safe. Verdicts are **safe** (one statement, or
+already in a transaction), **benign** (can disagree; nothing observable depends on it), or **broken**.
+
+| Path | Verdict | Why |
+|---|---|---|
+| `GET /api/v1/indexers` → `store.ReadIndexerCatalog` | **fixed** | SNAP-01 |
+| `GET /api/health/live`, `/ready`, `/api/v1/system/status` | safe | Touch no database at all. Readiness is migrations-applied plus listener-accepting, both recorded at construction, and `handleReady`'s comment already says "nothing more" means it does not touch SQLite |
+| `GET /api/v1/services`, `/services/{id}` | safe | One statement each |
+| `GET /api/v1/grabs/recent` → `store.ListRecentProvenance` | safe | One statement. `limit` is echoed from the value the server clamped to, not re-derived, so there is no count-versus-rows pair to tear |
+| `store.ListAuditLog`, `store.VerifyAuditChain`, `store.GetProvenanceByDownloadID` | safe | One statement each. A single `QueryContext` holds one read transaction for the life of its cursor, so a streamed chain walk is one snapshot even at table scale |
+| `GET /api/v1/services/health` | safe on the SQLite side | One statement (`ListServiceInstances`); everything else on the row comes from the prober's in-memory snapshot. Noted rather than fixed: `recordProbe` publishes to memory **before** it writes the health columns, so a row can carry a fresh `observed_at` beside the previous probe's `last_error` for the microseconds between. That is not a WAL-snapshot tear and `db.ReadTx` cannot address it — one side is a map — and it is the state the process genuinely held a moment earlier, self-correcting on the next tick. Left alone; if it ever needs closing, the repair is ordering, not a transaction |
+| `resolveSession` → `GetSession` + `GetUser`, on every authenticated route | benign | Two statements, but the pair cannot disagree observably: `user` rows are never deleted and nothing updates `is_disabled` in v0.1, so the second read cannot fail or change. The ordering is also the fail-closed one — the session is read first and the user second, so a future disable is *more* likely to be caught, not less. A revocation landing between the two is a check-then-act latency every design has, not a torn read: one snapshot would not shrink the window, it would only move it |
+| `GET /api/v1/auth/session` → `Owner()` + `resolveSession` | benign | The closest thing in the tree to the original shape — a status field (`setup_required`) beside the data it describes (`authenticated`) — and the invariant `authenticated ⇒ an owner exists` is real and one-directional. It cannot be violated, **by causality rather than by luck**: the session cookie is only ever issued by `startSession`, which runs after `CreateUser` has committed, so any request carrying a valid cookie is causally later than the owner row, and a fresh statement on the read pool takes the latest committed snapshot. Recorded because the argument, not the code, is what makes it safe — a future path that mints a session by any other route re-opens it |
+| `GET /api/v1/search` → `resolveIndexerInstance` + `registry.entry` | benign | Two reads of the same `service_instance` row, one snapshot apart. `entry` re-checks `Enabled` and `Role` itself and is authoritative and fail-closed; the handler's earlier read exists to *pick* the instance and to word the error. Worst case is a slightly different error message, and the network call that follows is outside any snapshot regardless — `db.ReadTx`'s own note forbids holding one across it |
+| `POST /api/v1/releases/{id}/grab` → `GetReleaseCandidate` + `releases.Grab`'s `Candidate` | benign | Two reads of the same row, and the row is immutable: `release_candidate` has `INSERT` and a TTL `DELETE` and **no `UPDATE` anywhere in the tree** (verified against every mutating statement in `internal/store` and against the migrations, which add no triggers beyond `audit_log`'s two). No field can change between the reads; the only divergence is presence, reported as an honest expiry error that names the fix |
+| `PATCH`/`DELETE /api/v1/services/{id}`, `POST /services/{id}/test` | benign, and out of shape | Read-then-write, not read-then-read. The window spans a network call, so no read transaction can cover it; the store's `UPDATE … WHERE id = ? AND deleted_at IS NULL` plus `expectOneRow` is what makes the write itself safe. The re-read at the end of `handleUpdateService` deliberately wants the *newest* snapshot, which is the opposite of pairing |
+| `store.RedactStoredProvenanceURLs` | benign, by design | A keyset-paged scan-and-rewrite over many snapshots on purpose. It is idempotent and converges, and holding one snapshot across the whole pass is precisely the long-lived read transaction that starves the WAL checkpointer |
+| `registry.probeAll` → `probe` → `entry` | benign | Background loop with no user-facing pair; a row deleted mid-sweep fails the per-instance read and is skipped, and the next tick re-reads everything |
+| Startup `CountEncryptedCredentials` | safe | One statement, and the only reader of it fails closed on the answer |
+
+**Result:** one genuine instance of the shape, found from a flake report, fixed at `70a61c9` in the
+store and guarded by a test watched failing. **Nothing else in the tree has it.** The negative result
+is the deliverable for the other thirteen paths, and each one's reason is recorded above so the next
+sweep argues with the reasoning rather than repeating the search.
