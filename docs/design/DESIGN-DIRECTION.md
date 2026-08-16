@@ -20,8 +20,9 @@ Where §17 and this document disagree, **§17 wins** and this document is the bu
 > 1. **Colourless chrome is confirmed.** There is no brand accent hue (§3). The one recorded cost —
 >    that with no accent, two table screens have little left to differ by at thumbnail scale (D-24) —
 >    is accepted, not reopened.
-> 2. **IBM Plex is confirmed** as the family (§4). What is *not* settled is the **subset**; OQ-3 is
->    narrowed to that and nothing else.
+> 2. **IBM Plex is confirmed** as the family (§4), and since 2026-08-16 it is also **shipped and
+>    proven to render** — self-hosted in `mockups/fonts.css`, asserted by `selftest.mjs` (§4.1).
+>    What is *not* settled is the **subset**; OQ-3 is narrowed to that and nothing else.
 > 3. **The left sidebar is confirmed** over top-bar type tabs. **OQ-2 is closed** (§8.1), and the
 >    move from two media types to six is new evidence in the same direction rather than a
 >    re-litigation — §17.2's top-navbar option was drafted when "per-type" meant two.
@@ -216,7 +217,7 @@ These are not new. They are restated because every decision below is downstream 
 | **ARCHITECTURE §17.1 / §4.4.1** | **No skeleton shimmer.** The image placeholder is a `dominant_color` block with the title in it: informative, not decorative |
 | **ARCHITECTURE §2.3 / §5.5 / §17.7** | Degraded ≠ blocked. A small **non-modal** banner. **The catalogue never greys out and never shows a spinner** |
 | **ARCHITECTURE §13** | Client-side prefix filter p50 < 5 ms, p99 < 16 ms — one frame. The UI's own budget, not the server's |
-| **ARCHITECTURE §16** (amended, ADR-0032) | **v0.1 is six media types, read-only beyond video**: Sonarr + Radarr, plus the read-only catalogue sources **Navidrome, Audiobookshelf and Komga**, plus Prowlarr. **Kavita is v0.2**, not v0.1 — ADR-0032 moved it out, and ARCHITECTURE §16 and §7.1a are authoritative. The **command sinks** (Lidarr, LazyLibrarian, Mylar3, Kapowarr) are v1.0. Requests in v0.1 is the **Prowlarr Search-and-Grab path only — for all six types** |
+| **ARCHITECTURE §16** (amended, ADR-0032) | **v0.1 is six media types, read-only beyond video**: Sonarr + Radarr, plus the read-only catalogue sources **Navidrome, Audiobookshelf and Komga**, plus Prowlarr. **Kavita is v0.2**, not v0.1 — ADR-0032 moved it out, and ARCHITECTURE §16 and §7.1a are authoritative. The **command sinks are all out of v0.1**, and they do not all land together: **LazyLibrarian is v0.3** (the first Tier 1 manifest, request sink only), while **Lidarr, Mylar3 and Kapowarr are v1.0**. Requests in v0.1 is the **Prowlarr Search-and-Grab path only — for all six types** |
 | **ARCHITECTURE §6.5 / ADR-0026** | **User-defined libraries exist and are configured separately from services.** They are a *scope*, never a navigation axis (§8.1) |
 
 One more, from the ecosystem rather than from the repo: in this software family **stability of
@@ -451,31 +452,43 @@ always wins the race and `swap` risks a visible reflow for no benefit.
 **Never a Google Fonts `<link>`.** It is both a documented tell and a third-party request in
 software whose entire premise is that it runs on your own hardware.
 
-> ⚠️ **The typeface decision has never been seen. Recorded here because it changes how much weight
-> §4.1 can carry.** The prototype ships **zero `@font-face` rules**, so every screenshot, every
-> review and every judgement made about this design so far has been rendered in the *fallback* stack
+> ✅ **The typeface decision has now been seen — validated 2026-08-16.** The history below is kept
+> rather than deleted, because it is what tells a reader how much weight any review dated before that
+> day can carry.
+>
+> **Until 2026-08-16 the prototype shipped zero `@font-face` rules**, so every screenshot, every
+> review and every judgement made about this design up to then was rendered in the *fallback* stack
 > — measured as **DejaVu Sans and Liberation Mono** on the review host, via a canvas advance-width
 > probe (`"IBM Plex Sans"` measured **identical** to a deliberately bogus family name, while
 > `document.fonts` reported it "available", which is a false positive worth knowing about). DejaVu is
 > roughly **24% wider** than Plex with a taller x-height and a looser default fit, so:
 >
-> - **Density findings against the prototype are conservative**, not optimistic. Real Plex fits more
->   per column and would reduce wrapping, never increase it.
+> - **Density findings taken before that date are conservative**, not optimistic. Real Plex fits more
+>   per column and would reduce wrapping, never increase it — so nothing measured then has to be
+>   re-taken to stay safe, and anything re-taken now should only improve.
 > - **Hierarchy findings are unaffected** — size ratio, weight and colour are face-independent.
-> - **The anti-Inter argument's payload has never actually been delivered.** §1.2 and §4.1 stake the
+> - **The anti-Inter argument's payload had never actually been delivered.** §1.2 and §4.1 stake the
 >   strongest anti-slop claim in this document on the face — mania.design's *"the single
 >   highest-leverage move against slop"* — and a build without the font gives a Linux self-hoster
->   DejaVu, a Windows one Segoe UI and a macOS one SF. On the system stack, §1.2's typography row is
->   satisfied by a fallback rather than by a decision.
+>   DejaVu, a Windows one Segoe UI and a macOS one SF. On the system stack, §1.2's typography row was
+>   satisfied by a fallback rather than by a decision. It is now satisfied by the decision.
 >
-> **What would validate it, and nothing short of this does:** the subsetted WOFF2 faces actually
-> loaded — Plex Sans 400/500/600 and Plex Mono 400/600, `latin` subset, ~104 KB per §4.1's measured
-> table — served locally with a probe confirming the *rendered* family (an advance-width comparison
-> against a bogus family name, not `document.fonts.check()`), and the density and hierarchy screens
-> re-shot on it side by side with the system-stack capture. Until that exists, **the family is
-> decided and unvalidated**, and OQ-3 (the subset) is being answered on top of a choice nobody has
-> looked at. If the load cannot be made to work, the honest alternative is not to keep the claim —
-> it is to take the recorded fallback below and design against the system stack deliberately.
+> **What validated it — which is exactly what this block demanded, and nothing less.**
+> [`design/mockups/fonts.css`](./mockups/fonts.css) carries the subsetted WOFF2 faces self-hosted as
+> base64 data URIs: IBM Plex Sans v23 (the variable font, weight axis 100–700, so 400/500/600 all
+> come from one file) and IBM Plex Mono v20 at 400 and 600, `latin` subset, 76 KB of woff2 on disk,
+> with the SIL OFL travelling alongside them in `mockups/fonts/OFL.txt`. `mockups/selftest.mjs`
+> asserts the **rendered** family on every run, by the advance-width comparison this block specified
+> rather than by `document.fonts.check()`: `"IBM Plex Sans"` measures **459.000 px** against a bogus
+> family's **401.074 px**, `"IBM Plex Mono"` measures **504.000 px**, the body's own computed
+> `font-family` measures **459.000 px** — identical to Plex Sans, so the body genuinely renders in
+> Plex rather than falling through the stack — and `document.fonts` reports all three faces
+> `loaded`. The probe is a standing assertion, not a one-off capture, so a regression that silently
+> drops the font fails the self-test instead of quietly restoring DejaVu.
+>
+> **The family is therefore decided *and* validated, and OQ-3 is now the subset alone.** `REVIEW-LOG`
+> D-30 — which held that the mockup rebutted ADR-0025 by shipping no font at all — is resolved by
+> this, and resolved by shipping the font rather than by choosing between the two statements.
 
 **The recorded alternative** — and it is a respectable one — is the zero-webfont system stack with
 `font-variant-numeric: tabular-nums` on numeric columns, which most system UI faces support. If the
@@ -2137,7 +2150,7 @@ AI-generated" an actual gate rather than a vibe.
 |---|---|---|
 | ~~**OQ-1**~~ | ~~Virtualization threshold.~~ **CLOSED 2026-08-16** — delegated to us and settled as "Load more" + `content-visibility`, with virtualization as an escalation above a **benchmarked** threshold. **ADR-0029**; §4.5, §16 and §7.4 amended | — |
 | ~~**OQ-2**~~ | ~~Navigation.~~ **CLOSED 2026-08-16** — the owner confirmed the **left sidebar**. **ADR-0027**; §17.2 amended to the two-axis model, and §8.1 rewritten | — |
-| **OQ-3** *(narrowed)* | **The family is settled — IBM Plex, confirmed 2026-08-16. The *subset* is not.** `latin` alone is **103.6 KB**; `latin`+`latin-ext` is **177.2 KB** (§4.1). Neither trips the ~200 KB trigger, so the question is only whether an accented library gets `latin-ext` or falls back mid-string — and six media types make that sharper than two did, since a manga, classical-music or translated-fiction library is *full* of accented and transliterated titles. Two loose ends the family decision does not close: the argument that beat the system stack (cross-OS metric drift) is **uncited inference, unmeasured for this design** (D-32), and the mockup README asserts the opposite of it (D-30) | It is the only decision here that costs bytes on first paint, and the two documents still disagree about whether the specific face matters |
+| **OQ-3** *(narrowed twice)* | **The family is settled — IBM Plex, confirmed 2026-08-16 — and as of the same day it is also *shipped and visible*:** `mockups/fonts.css` self-hosts the subsets and `mockups/selftest.mjs` proves by advance-width probe that the body renders in Plex rather than in a fallback (§4.1). **What is left open is the subset, and only the subset.** `latin` alone is **103.6 KB**; `latin`+`latin-ext` is **177.2 KB** (§4.1) — 73.6 KB of first paint. Neither trips the ~200 KB trigger, so the question is whether an accented library gets `latin-ext` or falls back mid-string, and six media types make that sharper than two did, since a manga, classical-music or translated-fiction library is *full* of accented and transliterated titles. **The honest limit on both options: neither renders native CJK.** A manga library holding untransliterated Japanese titles falls through to the system stack on those rows whichever subset wins — that is an argument for a third, much more expensive option, not a tiebreaker between these two, and it should be decided knowingly rather than discovered on a real library. One loose end the family decision does not close: the argument that beat the system stack (cross-OS metric drift) is **uncited inference, unmeasured for this design** (D-32) | It is the only decision here that costs bytes on first paint, and the shipped subset is the one thing a self-hoster cannot change without a rebuild |
 | **OQ-4** | **13 px base type.** That is the Linear/dense register. If it reads small to you, move base to 14 and shift the whole scale up one step — **do not add a seventh step** | Personal legibility; you are the only user in v0.1 |
 | **OQ-5** | **Radius 0 or 2 px** on inputs and buttons. Both are within the budget; 0 is more committed | Taste, and it should be decided once and applied without exception |
 | **OQ-6** | **Theme default.** Auto (Sonarr's default) or Dark (Navidrome's)? | Navidrome is the stated reference point, but Auto is the *Arr convention and UsArr sits next to three of them |

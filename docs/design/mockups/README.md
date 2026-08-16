@@ -814,7 +814,7 @@ the dialog the button opens and were the empty state doing the dialog's job.
 | `g`-prefixed go-to-screen keybindings | proposed in research, not implemented here |
 | A `permission-denied` state on a search, library or item surface | specified from day one (`DESIGN-DIRECTION.md` §10) and **not drawn**: v0.1 has one account, and the §14 rule-6 behaviour is that a library the user cannot see renders as *absent*, which is indistinguishable from an empty scope in a static mockup. The Services `denied` state is a sudo re-auth state, which is a different thing and is not a substitute. |
 | An `importing` and a `needs re-identification` per-library state (§17.8) | v0.1, not drawn here — the four §17.8 states that are drawn are *all sources down*, *sources healthy zero items*, *one source degraded* and *orphaned* |
-| Lidarr, LazyLibrarian and Kavita as configured services | v1.0, v1.0 and v0.2 — drawn in the Services **annex** state, labelled with their milestone, and nowhere in the v0.1 screens |
+| Lidarr, LazyLibrarian and Kavita as configured services | v1.0, **v0.3** and v0.2 — drawn in the Services **annex** state, labelled with their milestone, and nowhere in the v0.1 screens. LazyLibrarian is v0.3, not v1.0: ARCHITECTURE §16 ships it as the first Tier 1 manifest, request sink only |
 
 Also absent, and permanently: any in-app player, any transcoding path, any FFmpeg dependency.
 
