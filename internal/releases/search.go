@@ -48,6 +48,12 @@ const (
 	OutcomeBreakerOpen OutcomeStatus = "breaker_open" // UsArr's own breaker says so
 	OutcomeDisabled    OutcomeStatus = "disabled"
 	OutcomeUnsupported OutcomeStatus = "unsupported"
+	// OutcomeNotFound is an id the CALLER named that this Prowlarr does not
+	// have. It is deliberately not folded into any of the above: "disabled" and
+	// "unsupported" are both statements about an indexer that exists, and either
+	// one would send the user looking through Prowlarr for something that is not
+	// there. This is a fact about the request, not about an indexer.
+	OutcomeNotFound OutcomeStatus = "not_found"
 )
 
 // Answered reports whether the indexer actually returned results.
@@ -234,11 +240,13 @@ func planFanOut(
 ) fanOutPlan {
 	plan := fanOutPlan{byID: mapping.IndexerByID(indexers)}
 
-	want := indexerFilter(q.IndexerIDs)
+	want, named := indexerFilter(q.IndexerIDs)
+	matched := make(map[int32]bool, len(named))
 	for _, ix := range indexers {
 		if !want(ix) {
 			continue
 		}
+		matched[ix.ID] = true
 		switch {
 		case !ix.Enable:
 			// GET /api/v1/indexer returns disabled indexers too, with no filter
@@ -294,6 +302,27 @@ func planFanOut(
 		plan.legs = append(plan.legs, leg{indexer: ix, req: req})
 	}
 
+	// An id the caller asked for that Prowlarr has never heard of gets an outcome
+	// like everything else. The filter above is applied to the indexers Prowlarr
+	// RETURNED, so without this an unknown id produces neither a leg nor a skip:
+	// it is absent from the report entirely, and the user is told "2 of 2
+	// indexers answered" while the one they actually named was dropped. That is
+	// the empty-screen-that-looks-broken failure wearing a full report.
+	//
+	// Stating it also makes the all-unknown case consistent with the partial one.
+	// Previously every-id-unknown fell through to ErrNoIndexers — "enable an
+	// indexer in Prowlarr", which is the wrong instruction for an id that simply
+	// is not there — and some-ids-unknown said nothing at all.
+	for _, id := range named {
+		if matched[id] {
+			continue
+		}
+		plan.skipped = append(plan.skipped, IndexerOutcome{
+			IndexerID: id, Name: fmt.Sprintf("indexer %d", id), Status: OutcomeNotFound,
+			Reason: "this Prowlarr instance has no indexer with that id",
+		})
+	}
+
 	// Query the highest-priority (lowest-numbered) indexers first, so with bounded
 	// concurrency the best copy of a duplicated release usually arrives first and
 	// fewer supersede events are needed.
@@ -307,20 +336,27 @@ func planFanOut(
 // values — into a predicate. Prowlarr resolves those magic values itself on the
 // aggregate endpoint, but the fan-out addresses one indexer per request, so they
 // have to be resolved here.
-func indexerFilter(ids []int32) func(servarr.IndexerResource) bool {
+//
+// It also returns the explicitly-named ids, deduplicated and in the order asked
+// for. The predicate alone cannot answer "did anything match?", and an id that
+// matched nothing is the caller's mistake rather than a fact about any indexer —
+// so planFanOut needs the list to account for every one of them.
+func indexerFilter(ids []int32) (func(servarr.IndexerResource) bool, []int32) {
 	if len(ids) == 0 {
-		return func(servarr.IndexerResource) bool { return true }
+		return func(servarr.IndexerResource) bool { return true }, nil
 	}
 	allUsenet, allTorrent := false, false
 	explicit := make(map[int32]bool, len(ids))
+	var named []int32
 	for _, id := range ids {
-		switch id {
-		case servarr.AllUsenetIndexers:
+		switch {
+		case id == servarr.AllUsenetIndexers:
 			allUsenet = true
-		case servarr.AllTorrentIndexers:
+		case id == servarr.AllTorrentIndexers:
 			allTorrent = true
-		default:
+		case !explicit[id]:
 			explicit[id] = true
+			named = append(named, id)
 		}
 	}
 	return func(ix servarr.IndexerResource) bool {
@@ -334,7 +370,7 @@ func indexerFilter(ids []int32) func(servarr.IndexerResource) bool {
 			return true
 		}
 		return false
-	}
+	}, named
 }
 
 func supportsSearchType(c servarr.IndexerCapabilityResource, t servarr.SearchType) bool {
