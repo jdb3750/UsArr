@@ -32,9 +32,13 @@ plays.*
 
 **Response envelope**, required on every response: `subsonic-response` with `status`, `version`
 (the OpenSubsonic version UsArr implements), `type` (`"usarr"`), `serverVersion`, and
-`openSubsonic: true`. Errors use the spec's own codes — **40** wrong credentials, **50** not
-authorized, **70** not found. **Never a 500**, and never a 403 where 70 is the honest answer
-(see §3).
+`openSubsonic: true`. Errors use the spec's own codes, and the list leads with the one an
+api-key-only server actually emits: **44** invalid API key · **43** conflicting authentication
+parameters (`apiKey` together with `u`) · **42** unsupported mechanism (plaintext `p`) · **41**
+token auth removed (`u`+`t`+`s`) · **50** not authorized · **70** not found. **40 "wrong username or
+password" is meaningless on a server with no usernames** and is listed last rather than first, which
+is where it used to be. **Never a 500**, and never a 403 where 70 is the honest answer (see §3).
+Every auth refusal carries `helpUrl`.
 
 **Not in the gateway milestone, each its own later milestone with its own criterion:** OPDS
 (§5), multi-instance aggregation (§2), write-back (§6), and the wider client matrix.
@@ -50,12 +54,23 @@ authorized, **70** not found. **Never a 500**, and never a 403 where 70 is the h
 | Rule | Detail |
 |---|---|
 | Parameter name | **`apiKey`**, as a **query parameter**. ✅ verified against the extension spec. |
-| Both `apiKey` and `u` present | **Reject** with error 40. Ambiguous credentials are never resolved in the client's favour. |
-| `u`, `t`, `s`, `p` present without `apiKey` | **Reject with error 40.** Never silently ignore — silent ignoring lets a client believe it authenticated and then behave as if it had. |
+| Both `apiKey` and `u` present | **Reject with error 43** (corrected 2026-08-16 — this said 40). The apiKeyAuth extension spec: *"When an API key is provided, the client **must not** provide a `u` parameter; passing in `u` must be treated as an **error 43**"*, and *"If multiple conflicting authentication parameters are passed in, the server must return an **error 43**, Multiple conflicting authentication mechanisms provided."* Ambiguous credentials are never resolved in the client's favour. |
+| `u` + `t` + `s` present without `apiKey` (**token auth**) | **Reject with error 41** (corrected 2026-08-16 — this said 40, then 42). **UsArr *is* the narrower case the spec reserves for 41**, because it refuses token-based authentication as a matter of policy: *"If a server removes support for token-based authentication, it must return **error 41**…"*. The previous row cited that sentence and then applied 42, which inverts it. |
+| `p` present without `apiKey` (**plaintext password auth**) | **Reject with error 42** — *"Provided authentication mechanism not supported"*, which is the code the same spec sentence reserves for *"any other particular authentication mechanism"*. |
+| `apiKey` present but unknown, revoked or malformed | **Reject with error 44, "Invalid API key"** — introduced by the very extension UsArr implements, and **the single most common failure an api-key-only server will emit**. It appeared nowhere in this document. |
+| Any of the above | **Never silently ignore** — silent ignoring lets a client believe it authenticated and then behave as if it had. |
+| **`helpUrl` on every auth refusal** | **Populate it**, pointing at UsArr's own API-key page. The spec introduces the field precisely for this: *"it is recommended that the server provide a meaningful url… in the `helpUrl`"*. Omitting it is why a user sees "wrong password" instead of "this server needs an API key" — the exact confusion the hard-rejection policy exists to avoid. |
 | Spec force | The spec *recommends* that servers offering API-key auth no longer support salt/token. The refusal is **UsArr's own policy**, implemented as a hard rejection, not an omission. |
 | TLS | The spec does **not** require it, so the key rides in the request line of every call. Serve over TLS (tsnet certs or a proxy); warn in the UI otherwise. Redaction is mandatory (security.md §5). |
 | Verification cost | `key_prefix` lookup (unique index) → HMAC-SHA256 → `subtle.ConstantTimeCompare`. **Not Argon2id** — see ARCHITECTURE §5.2 for why, and do not change it back. |
 | Rate limiting | `/rest/*` and `/opds/*` are in the tighter bucket, keyed on `key_prefix` **and** peer IP, with the prefix-exists pre-check before any crypto. |
+
+⚠️ **Two of the three OpenSubsonic clients named in `ARCHITECTURE.md` §3 cannot authenticate here.**
+Verified from source: **Amperfy** has zero occurrences of `apiKey` in its entire Swift source and
+emits `u` + `t`/`s` only; **Feishin**'s Subsonic controller has no `apiKey` path either. **Symfonium**
+is the reference client and ⚠️ **its own `apiKeyAuthentication` support is unverified** — its
+documentation does not mention API keys and it is closed-source. The policy is still right; the client
+matrix must be stated rather than implied.
 
 **Why salt/token is refused at all:** `t = md5(password + salt)` mathematically requires the server
 to hold the password in recoverable form. Navidrome's own docs concede the consequence — *"Due to
@@ -98,8 +113,18 @@ var kindByte = map[string]byte{
     "movie": 1, "series": 2, "season": 3, "episode": 4,
     "artist": 5, "album": 6, "track": 7,
     "book": 8, "comic": 9, "author": 10, "file": 11,
+    "comic_issue": 12, // ADR-0030 — allocated in the same commit as "comic",
+                       // before any client caches an id. See the note below.
+    "person": 13,      // ADR-0033 — a creator entity reported under a name other than
+                       // "author". Both 10 and 13 resolve to work.kind = 'person'.
 }
 ```
+
+**The map is keyed by the *remote* kind, not by `work.kind`, and the two vocabularies differ.**
+`author` and `file` are remote kinds with no `work.kind` of the same name, and `work.kind = 'person'`
+(ADR-0033) is reachable through either `author` (10) or `person` (13) depending on what the service
+calls it. Decoding a `usarr_id` yields the remote kind, which is what `ux_sil` needs; the work kind
+comes from the row it resolves to.
 
 **`kind_byte` is load-bearing, not decoration.** The only unique index on `service_item_link` is
 `(service_instance_id, remote_kind, remote_id)`. Without `remote_kind` at lookup time SQLite uses

@@ -1,0 +1,45 @@
+---
+# Envelope shape (3): ASP.NET ValidationProblemDetails, produced by the model
+# binder before any controller code runs -- a different shape for the same status.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 28
+        host: prowlarr.test:9696
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://prowlarr.test:9696/api/v1/search
+        method: POST
+        body: |-
+            {"indexerId":"not-a-number"}
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/problem+json
+            X-Application-Version:
+                - 2.6.2.5052
+        status: 400 Bad Request
+        code: 400
+        duration: 1ms
+        body: |-
+            {
+              "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+              "title": "One or more validation errors occurred.",
+              "status": 400,
+              "errors": {
+                "$.indexerId": [
+                  "The JSON value could not be converted to System.Int32. Path: $.indexerId | LineNumber: 0 | BytePositionInLine: 27."
+                ]
+              }
+            }

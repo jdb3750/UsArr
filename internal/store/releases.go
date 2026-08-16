@@ -1,0 +1,288 @@
+package store
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"time"
+)
+
+// ReleaseCandidate is one grabbable release from an indexer search.
+//
+// These are ephemeral by design. Prowlarr caches grabbable releases server-side
+// for 30 minutes, so a candidate persisted and grabbed later fails — ExpiresAt
+// is capped below that (<= 25 min) so UsArr notices first and can say why.
+type ReleaseCandidate struct {
+	ID                int64
+	WorkID            sql.NullInt64 // NULL in Search-and-Grab: nothing owns the result yet
+	ServiceInstanceID int64
+	GUID              string
+	Title             string
+	Indexer           string
+	IndexerID         sql.NullInt64
+	Protocol          string
+	Categories        string // JSON array of raw Newznab category ints
+	SizeBytes         sql.NullInt64
+	Seeders           sql.NullInt64
+	Leechers          sql.NullInt64
+	AgeDays           sql.NullFloat64
+	Quality           string
+	DownloadURL       string
+	InfoURL           string
+	InfoHash          string
+	DownloadClientID  sql.NullInt64
+
+	// RawReleaseJSON is the full upstream ReleaseResource. It is needed
+	// verbatim for the grab: the grab POSTs the release back, so any field
+	// dropped on the way in cannot be reconstructed on the way out.
+	RawReleaseJSON string
+
+	Rejected         bool
+	RejectionReasons string
+	FetchedAt        time.Time
+	ExpiresAt        time.Time
+}
+
+// InsertReleaseCandidates writes a search's results in one transaction.
+//
+// One transaction, not one per row: a Prowlarr search returns hundreds of
+// releases and the process has a single writer connection, so per-row commits
+// would hold it for the whole batch.
+func (s *Store) InsertReleaseCandidates(ctx context.Context, rcs []ReleaseCandidate) ([]int64, error) {
+	if len(rcs) == 0 {
+		return nil, nil
+	}
+	ids := make([]int64, 0, len(rcs))
+	err := s.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		stmt, err := tx.PrepareContext(ctx, `
+			INSERT INTO release_candidate (
+			  work_id, service_instance_id, guid, title, indexer, indexer_id, protocol,
+			  categories, size_bytes, seeders, leechers, age_days, quality,
+			  download_url, info_url, info_hash, download_client_id,
+			  raw_release_json, rejected, rejection_reasons, fetched_at, expires_at
+			) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+		if err != nil {
+			return fmt.Errorf("insert release_candidate: prepare: %w", err)
+		}
+		defer func() { _ = stmt.Close() }()
+
+		for i := range rcs {
+			rc := &rcs[i]
+			res, err := stmt.ExecContext(ctx,
+				rc.WorkID, rc.ServiceInstanceID, rc.GUID, rc.Title, nullString(rc.Indexer),
+				rc.IndexerID, nullString(rc.Protocol), nullString(rc.Categories),
+				rc.SizeBytes, rc.Seeders, rc.Leechers, rc.AgeDays, nullString(rc.Quality),
+				nullString(rc.DownloadURL), nullString(rc.InfoURL), nullString(rc.InfoHash),
+				rc.DownloadClientID, rc.RawReleaseJSON, rc.Rejected,
+				nullString(rc.RejectionReasons), FormatTime(rc.FetchedAt), FormatTime(rc.ExpiresAt),
+			)
+			if err != nil {
+				return fmt.Errorf("insert release_candidate %q: %w", rc.GUID, err)
+			}
+			id, err := res.LastInsertId()
+			if err != nil {
+				return fmt.Errorf("insert release_candidate %q: last insert id: %w", rc.GUID, err)
+			}
+			ids = append(ids, id)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+// GetReleaseCandidate reads one candidate within scope.
+//
+// now is passed rather than read from the clock so the caller decides what
+// "expired" means for this request, and so the expiry branch is testable
+// without sleeping. An expired candidate is reported as expired, not as
+// missing: "this release listing went stale, search again" is a different
+// message from "no such release".
+func (s *Store) GetReleaseCandidate(ctx context.Context, scope Scope, id int64, now time.Time) (ReleaseCandidate, error) {
+	pred, args := scope.instancePredicate("service_instance_id")
+	query := `
+		SELECT id, work_id, service_instance_id, guid, title, indexer, indexer_id, protocol,
+		       categories, size_bytes, seeders, leechers, age_days, quality,
+		       download_url, info_url, info_hash, download_client_id,
+		       raw_release_json, rejected, rejection_reasons, fetched_at, expires_at
+		  FROM release_candidate
+		 WHERE id = ? AND ` + pred
+
+	var rc ReleaseCandidate
+	var indexer, protocol, categories, quality sql.NullString
+	var downloadURL, infoURL, infoHash, rejectionReasons sql.NullString
+	var fetchedAt, expiresAt string
+
+	err := s.db.Read().QueryRowContext(ctx, query, append([]any{id}, args...)...).Scan(
+		&rc.ID, &rc.WorkID, &rc.ServiceInstanceID, &rc.GUID, &rc.Title, &indexer, &rc.IndexerID,
+		&protocol, &categories, &rc.SizeBytes, &rc.Seeders, &rc.Leechers, &rc.AgeDays, &quality,
+		&downloadURL, &infoURL, &infoHash, &rc.DownloadClientID,
+		&rc.RawReleaseJSON, &rc.Rejected, &rejectionReasons, &fetchedAt, &expiresAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ReleaseCandidate{}, fmt.Errorf("release_candidate %d: %w", id, ErrNotFound)
+	}
+	if err != nil {
+		return ReleaseCandidate{}, fmt.Errorf("read release_candidate %d: %w", id, err)
+	}
+
+	rc.Indexer, rc.Protocol, rc.Categories, rc.Quality = indexer.String, protocol.String, categories.String, quality.String
+	rc.DownloadURL, rc.InfoURL, rc.InfoHash = downloadURL.String, infoURL.String, infoHash.String
+	rc.RejectionReasons = rejectionReasons.String
+	if rc.FetchedAt, err = ParseTime(fetchedAt); err != nil {
+		return ReleaseCandidate{}, err
+	}
+	if rc.ExpiresAt, err = ParseTime(expiresAt); err != nil {
+		return ReleaseCandidate{}, err
+	}
+	if !now.IsZero() && !now.Before(rc.ExpiresAt) {
+		return rc, fmt.Errorf("release_candidate %d expired at %s: %w", id, expiresAt, ErrExpired)
+	}
+	return rc, nil
+}
+
+// ErrExpired means the release listing went stale before it was grabbed.
+// Prowlarr drops grabbable releases from its own cache after 30 minutes, so
+// this is a normal outcome, not a fault.
+var ErrExpired = errors.New("store: release candidate expired")
+
+// ExpireReleaseCandidates deletes candidates whose expires_at has passed and
+// returns how many went. Driven by ix_rel_expiry.
+func (s *Store) ExpireReleaseCandidates(ctx context.Context, now time.Time) (int64, error) {
+	var n int64
+	err := s.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx,
+			`DELETE FROM release_candidate WHERE expires_at <= ?`, FormatTime(now))
+		if err != nil {
+			return fmt.Errorf("expire release_candidate: %w", err)
+		}
+		n, err = res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("expire release_candidate: rows affected: %w", err)
+		}
+		return nil
+	})
+	return n, err
+}
+
+// Provenance is one immutable acquisition event.
+//
+// Never overwrite provenance on upgrade — insert a new row and link the new
+// media_file, which gives upgrade history for free. ReleaseTitle is the raw
+// scene/P2P name and is stored VERBATIM, FOREVER: every parsed field is
+// re-derivable if the parser improves, and the raw name is not recoverable once
+// discarded.
+type Provenance struct {
+	ID                 int64
+	Protocol           string // usenet|torrent|irc|direct|manual|unknown
+	IndexerName        string
+	IndexerID          sql.NullInt64
+	IndexerPrivacy     string
+	IndexerCategories  string // JSON array of raw Newznab cat ints — DO NOT collapse
+	IndexerFlags       string // JSON array
+	DownloadClientType string
+	DownloadClientName string
+
+	// DownloadID is THE join key between a grab event and the import event
+	// that follows it: nzo_id for usenet, the infohash for torrents. The
+	// import event carries no indexer, protocol or guid, so this is the only
+	// way to reattach provenance to the imported file.
+	DownloadID      string
+	TorrentInfoHash string
+
+	NZBInfoURL  string
+	DownloadURL string
+	ReleaseGUID string
+
+	ReleaseTitle      string
+	ReleaseGroup      string
+	QualitySource     string
+	QualityResolution string
+	VideoCodec        string
+	AudioCodec        string
+	AudioChannels     string
+	EditionLabel      string
+	Languages         string
+	ProperRepack      sql.NullInt64
+
+	PublishedAt sql.NullString
+	GrabbedAt   sql.NullString
+	ImportedAt  sql.NullString
+
+	SourceSystem   string // sonarr|radarr|prowlarr|manual|filesystem
+	SourceRecordID string
+	Confidence     float64
+}
+
+// InsertProvenance appends one acquisition event.
+func (s *Store) InsertProvenance(ctx context.Context, p Provenance) (int64, error) {
+	if p.Confidence == 0 {
+		p.Confidence = 1.0
+	}
+	var id int64
+	err := s.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `
+			INSERT INTO provenance (
+			  protocol, indexer_name, indexer_id, indexer_privacy, indexer_categories,
+			  indexer_flags, download_client_type, download_client_name, download_id,
+			  torrent_info_hash, nzb_info_url, download_url, release_guid,
+			  release_title, release_group, quality_source, quality_resolution,
+			  video_codec, audio_codec, audio_channels, edition_label, languages,
+			  proper_repack, published_at, grabbed_at, imported_at,
+			  source_system, source_record_id, confidence
+			) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			p.Protocol, nullString(p.IndexerName), p.IndexerID, nullString(p.IndexerPrivacy),
+			nullString(p.IndexerCategories), nullString(p.IndexerFlags),
+			nullString(p.DownloadClientType), nullString(p.DownloadClientName),
+			nullString(p.DownloadID), nullString(p.TorrentInfoHash), nullString(p.NZBInfoURL),
+			nullString(p.DownloadURL), nullString(p.ReleaseGUID),
+			p.ReleaseTitle, nullString(p.ReleaseGroup), nullString(p.QualitySource),
+			nullString(p.QualityResolution), nullString(p.VideoCodec), nullString(p.AudioCodec),
+			nullString(p.AudioChannels), nullString(p.EditionLabel), nullString(p.Languages),
+			p.ProperRepack, p.PublishedAt, p.GrabbedAt, p.ImportedAt,
+			p.SourceSystem, nullString(p.SourceRecordID), p.Confidence,
+		)
+		if err != nil {
+			return fmt.Errorf("insert provenance %q: %w", p.ReleaseTitle, err)
+		}
+		if id, err = res.LastInsertId(); err != nil {
+			return fmt.Errorf("insert provenance %q: last insert id: %w", p.ReleaseTitle, err)
+		}
+		return nil
+	})
+	return id, err
+}
+
+// GetProvenanceByDownloadID reads acquisition events by download id, which is
+// how an import event is reattached to the grab that produced it.
+func (s *Store) GetProvenanceByDownloadID(ctx context.Context, downloadID string) ([]Provenance, error) {
+	rows, err := s.db.Read().QueryContext(ctx, `
+		SELECT id, protocol, indexer_name, download_id, release_title, source_system, confidence
+		  FROM provenance
+		 WHERE download_id = ?
+		 ORDER BY id ASC`, downloadID)
+	if err != nil {
+		return nil, fmt.Errorf("read provenance by download_id %q: %w", downloadID, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []Provenance
+	for rows.Next() {
+		var p Provenance
+		var indexerName sql.NullString
+		var dlID sql.NullString
+		if err := rows.Scan(&p.ID, &p.Protocol, &indexerName, &dlID,
+			&p.ReleaseTitle, &p.SourceSystem, &p.Confidence); err != nil {
+			return nil, fmt.Errorf("read provenance by download_id %q: scan: %w", downloadID, err)
+		}
+		p.IndexerName, p.DownloadID = indexerName.String, dlID.String
+		out = append(out, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read provenance by download_id %q: %w", downloadID, err)
+	}
+	return out, nil
+}

@@ -1,0 +1,46 @@
+---
+# 500 with a full .NET stack trace in `description`, because no ENABLED download
+# client matches the release protocol. Nothing here is actionable to a user, so
+# the message is matched and turned into an instruction -- and the preflight
+# against GET /api/v1/downloadclient means it should rarely be reached at all.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 98
+        host: prowlarr.test:9696
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://prowlarr.test:9696/api/v1/search
+        method: POST
+        body: |-
+            {
+              "guid": "https://fake-torrents.test/details/1001",
+              "indexerId": 1,
+              "downloadClientId": 2
+            }
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json
+            X-Application-Version:
+                - 2.6.2.5052
+        status: 500 Internal Server Error
+        code: 500
+        duration: 1ms
+        body: |-
+            {
+              "message": "Torrent Download client isn't configured yet",
+              "description": "NzbDrone.Core.Download.DownloadClientUnavailableException: Torrent Download client isn't configured yet\n   at NzbDrone.Core.Download.DownloadService.SendReportToClient(ReleaseInfo release, String source, String host, Boolean redirect)\n   at Prowlarr.Api.V1.Search.SearchController.GrabRelease(ReleaseResource release)",
+              "content": null
+            }

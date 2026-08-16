@@ -1,0 +1,33 @@
+# golangci-lint v2 configuration.
+#
+# v2 binaries cannot parse a v1 config, so `version: "2"` is mandatory and
+# `linters.default` replaces v1's enable-all/disable-all.
+# Source of truth for this list: docs/DEVELOPMENT.md §9.
+version: "2"
+linters:
+  default: standard
+  enable:
+    - errcheck # unchecked errors are how credential-handling bugs hide
+    - govet
+    - staticcheck
+    - ineffassign
+    - unused
+    - bodyclose # UsArr makes a LOT of outbound HTTP; leaked bodies leak sockets
+    - noctx # every outbound request must carry a context with a timeout
+    - errorlint
+    - gosec
+    - sqlclosecheck
+    - rowserrcheck
+  exclusions:
+    rules:
+      # Test code asserts on hardcoded fixture credentials and deliberately
+      # malformed inputs; gosec's credential and error-handling heuristics fire
+      # on both. Fixture keys are structurally impossible to mistake for real
+      # ones (docs/DEVELOPMENT.md §7.1).
+      - path: _test\.go
+        linters:
+          - gosec
+formatters:
+  enable:
+    - gofumpt
+    - goimports

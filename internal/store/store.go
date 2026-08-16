@@ -1,0 +1,120 @@
+// Package store is the data-access layer over internal/db for the tables in
+// migration 0001.
+//
+// Two rules run through every function here, both from ARCHITECTURE.md §1.3,
+// and both are cheap now and expensive to retrofit:
+//
+//  1. Every user-scoped row carries user_id, from the first migration.
+//  2. Every read that aggregates across instances takes an access-scope
+//     parameter IN THE QUERY SIGNATURE — not bolted on later. v0.1 has one
+//     owner, so callers pass OwnerScope and nothing is filtered out; the
+//     parameter exists so multi-user is a behaviour change rather than a
+//     redesign. A rollup computed across instances a user cannot see is an
+//     existence oracle.
+package store
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/jdb3750/UsArr/internal/db"
+)
+
+// SystemUserID is the reserved shared/system sentinel row created by migration
+// 0001. Shared tag assignments carry it, and the canonical tag filter predicate
+// is `user_id IN (0, :uid)`.
+const SystemUserID int64 = 0
+
+// timeLayout is SQLite's own datetime() format.
+//
+// docs/reference/schema.md calls timestamps "ISO-8601 UTC text" but every
+// column default in the same file is `datetime('now')`, which produces
+// "2006-01-02 15:04:05" with no T and no Z. Go-written timestamps must match
+// the defaults byte-for-byte: these columns are compared and ordered
+// lexicographically (ix_audit_ts, ix_rel_expiry, ix_wq_runnable), and two
+// formats in one column silently breaks both. Correct ordering beats the
+// prettier format; resolving the two is a docs question, and changing it later
+// is a migration that rewrites every timestamp column.
+const timeLayout = "2006-01-02 15:04:05"
+
+// FormatTime renders a timestamp for storage.
+func FormatTime(t time.Time) string { return t.UTC().Format(timeLayout) }
+
+// ParseTime reads a stored timestamp.
+func ParseTime(s string) (time.Time, error) {
+	t, err := time.Parse(timeLayout, s)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("store: parse timestamp %q: %w", s, err)
+	}
+	return t, nil
+}
+
+// Scope is the access scope a read is evaluated under.
+//
+// It is a value, not an interface, because there is exactly one implementation
+// today and a speculative interface would be a guess about a shape nobody has
+// needed yet.
+type Scope struct {
+	// UserID is the acting user. Reads of user-scoped rows match
+	// `user_id IN (SystemUserID, UserID)`.
+	UserID int64
+
+	// AllInstances grants visibility of every service instance. It is true for
+	// the owner, which in v0.1 is everyone.
+	AllInstances bool
+
+	// InstanceIDs is the visible set when AllInstances is false. An empty slice
+	// with AllInstances false means the user can see nothing, and the queries
+	// below return no rows rather than every row — failing closed is the whole
+	// point of carrying the parameter.
+	InstanceIDs []int64
+}
+
+// OwnerScope is the full scope of the single v0.1 owner.
+func OwnerScope(userID int64) Scope {
+	return Scope{UserID: userID, AllInstances: true}
+}
+
+// instancePredicate renders the scope as a SQL fragment plus its arguments.
+// column is the qualified service_instance id column to constrain.
+func (s Scope) instancePredicate(column string) (string, []any) {
+	if s.AllInstances {
+		return "1=1", nil
+	}
+	if len(s.InstanceIDs) == 0 {
+		// Fail closed. "No visible instances" must mean no rows, never all rows.
+		return "1=0", nil
+	}
+	args := make([]any, 0, len(s.InstanceIDs))
+	for _, id := range s.InstanceIDs {
+		args = append(args, id)
+	}
+	return column + " IN (" + placeholders(len(args)) + ")", args
+}
+
+func placeholders(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
+}
+
+// Store reads and writes UsArr's tables.
+type Store struct {
+	db *db.DB
+}
+
+// New wraps an open database.
+func New(d *db.DB) *Store { return &Store{db: d} }
+
+// DB exposes the underlying pools for callers that need a transaction spanning
+// more than one store method.
+func (s *Store) DB() *db.DB { return s.db }
+
+// write runs fn inside a BEGIN IMMEDIATE transaction on the single writer.
+func (s *Store) write(ctx context.Context, fn func(context.Context, *sql.Tx) error) error {
+	return s.db.Write(ctx, fn)
+}

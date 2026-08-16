@@ -1,0 +1,73 @@
+package servarr
+
+import (
+	"github.com/jdb3750/UsArr/internal/ssrf"
+)
+
+// RedactedPlaceholder is what a stripped credential is replaced with in a HEADER
+// or a request body. It is a visible marker rather than an empty string so a
+// redacted value still reads as "there was a secret here".
+//
+// URLs are redacted by ssrf.RedactRawURL and carry that package's placeholder;
+// this constant deliberately does not try to unify the two, because the URL
+// redactor is shared with the logging middleware and owns its own vocabulary.
+const RedactedPlaceholder = "<redacted>"
+
+// RedactURL strips credential-bearing query parameters and any userinfo from a
+// URL so it is safe to log, store or return in an error.
+//
+// This exists because Prowlarr's SearchController.MapReleases rewrites every
+// result's downloadUrl and magnetUrl into
+// `{serverUrl}{urlBase}/{indexerId}/download?apikey={ApiKey}&link=…&file=…`,
+// embedding Prowlarr's FULL ADMIN API KEY in plaintext in two fields of every
+// search result. A single log line at info level would leak the vault.
+//
+// It delegates to internal/ssrf so there is exactly one deny-list of credential
+// parameter names in the codebase. A second, drifting copy is how the OpenSubsonic
+// salt/token/password triple ends up redacted in one code path and not the other.
+func RedactURL(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	return ssrf.RedactRawURL(raw)
+}
+
+// SanitizeRelease returns a copy of r with every credential-bearing field removed.
+//
+// Call this on the boundary toward anything that is not the grab path: the HTTP
+// API, SSE payloads, logs, support bundles. DownloadURL and MagnetURL are dropped
+// entirely rather than redacted, because a redacted proxy link is useless to a
+// client anyway and keeping the shape invites someone to "fix" the redaction.
+//
+// MagnetURL is NOT a magnet: URI. It is an http(s) Prowlarr proxy link, so it
+// cannot be handed to a torrent client. Use InfoHash to build a real magnet.
+//
+// PosterURL survives, but it is an indexer-supplied URL read out of a response
+// body: SSRF class `derived` (security.md §2). Never fetch it with the
+// `configured` policy.
+func SanitizeRelease(r ReleaseResource) ReleaseResource {
+	out := r
+	out.DownloadURL = nil
+	out.MagnetURL = nil
+	return out
+}
+
+// SanitizeIndexer returns a copy of ix with fields[] removed.
+//
+// IndexerResource.fields carries the indexer's own credentials (cookies, passkeys,
+// API keys) under Field.privacy ∈ {password, apiKey, userName}. It must never
+// reach the browser. The rest of the resource is safe.
+func SanitizeIndexer(ix IndexerResource) IndexerResource {
+	out := ix
+	out.Fields = nil
+	out.Presets = nil // presets are IndexerResource values and carry fields too
+	return out
+}
+
+// SanitizeDownloadClient does the same for a download client's fields[].
+func SanitizeDownloadClient(dc DownloadClientResource) DownloadClientResource {
+	out := dc
+	out.Fields = nil
+	out.Presets = nil
+	return out
+}

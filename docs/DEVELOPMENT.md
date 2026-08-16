@@ -1,8 +1,9 @@
 # UsArr Development Guide
 
-> **Status: pre-alpha, zero lines of application code.** This describes the intended toolchain,
-> layout and workflows. Commands referencing files that do not exist yet are marked **(not yet)**.
-> Nothing here describes working software; it is the contract the first commits must satisfy.
+> **Status: pre-alpha. The first code has landed** — the Prowlarr Search-and-Grab path, the storage
+> and security layers under it, and an embedded SPA shell — so the build, test and check workflows
+> below are real and do run. Most of the *layout* is still contract rather than description:
+> commands referencing files that do not exist yet are marked **(not yet)**.
 >
 > Roadmap shorthand: **v0.1** unified library + search · **v0.2** requests · **v0.3** cross-media ·
 > **v0.4** gateway · **v1.0** breadth. `docs/ARCHITECTURE.md` §16 is authoritative.
@@ -13,7 +14,7 @@
 
 | Tool | Version | Why this floor | Install |
 |---|---|---|---|
-| **Go** | **1.25.13+** | govulncheck is the binding constraint, not any dependency: it reports 15 called stdlib vulnerabilities at 1.25.7, 5 at 1.25.12, and is clean only at 1.25.13. The highest `go` directive among dependencies is goose v3.27.3's `1.25.7`, which is lower and so not binding. Re-check before trusting the number — a new advisory moves it. | <https://go.dev/dl/> |
+| **Go** | **1.25.13+** | Not 1.25.0, and not 1.25.7 either. Two independent floors push this up. (1) Dependencies: the Makefile pins goose `v3.27.3`, whose `go.mod` declares `go 1.25.7` — verified by execution, `go 1.25.0` fails with `github.com/pressly/goose/v3@v3.27.3 requires go >= 1.25.7`. (`ncruces/go-sqlite3` v0.35's `go 1.25.0` is the lower floor, not the binding one.) (2) **`make vuln` is the binding constraint**, and it is the higher of the two: on 1.25.7 `govulncheck` reports 15 *called* standard-library vulnerabilities — `crypto/tls`, `net/url`, `os`, `net/http` — with fixes spread across 1.25.8, 1.25.9 and 1.25.10; 1.25.12 still reports 5. There is no code-level workaround for a stdlib advisory; the only fix is the toolchain. 1.25.13 is the newest 1.25.x and scans clean. This floor is time-dependent — a new stdlib advisory moves it, so re-check with `make vuln` rather than trusting the number here, and treat `go.mod` as authoritative. | <https://go.dev/dl/> |
 | **Node.js** | **22+ (LTS)** | SvelteKit 2 + Vite baseline. Verified in-container: `v22.22.2`. | <https://nodejs.org/> or `fnm`/`nvm` |
 | **pnpm** | **10+** | Package manager for `web/`. Verified in-container: `10.33.0`. | `corepack enable && corepack prepare pnpm@latest --activate` |
 | `git` | any recent | — | — |
@@ -179,6 +180,7 @@ binary that 404s on `/`.** The Makefile wires the dependency; running `go build`
 | `make test` | `go test ./... -race -shuffle=on` plus `pnpm test`. No network, no Docker. |
 | `make test-integration` | Behind the `integration` build tag. Needs a live stack; **never in CI**. |
 | `make bench` | Wall-clock performance harness. A **release** gate on named hardware, never a merge gate. |
+| `make bench-rss` | Memory harness: idle and peak process RSS over a 500k-row database, sweeping `cache_size`. §5. |
 | `make lint` | `golangci-lint run`, `svelte-check`, `eslint`. |
 | `make fmt` / `fmt-check` | Rewrite / verify formatting. |
 | `make secrets` | `gitleaks dir .` over the working tree. **Gating.** |
@@ -242,6 +244,51 @@ a self-hosted single-point-of-failure runner or emulation whose numbers mean not
 gates on shared CI are flake generators — the predictable outcome is that they get disabled in month
 two, but only after blocking real work first. Record `make bench` output in `docs/BENCHMARKS.md`
 with the hardware and commit named, and treat regressions as a release conversation.
+
+### Memory: `make bench-rss`
+
+```bash
+make bench-rss                                       # 500k rows, 3 pragma cells, ~15 s + fixture
+make bench-rss SPIKE_FLAGS='-rows=50000'             # fast smoke run
+make bench-rss SPIKE_FLAGS='-rebuild'                # rebuild the fixture, remeasure the import peak
+make bench-rss SPIKE_FLAGS='-cache=-2000'            # one cell
+make bench-rss SPIKE_FLAGS='-mmap=134217728'         # re-check mmap; see the note below
+```
+
+**What it does.** Builds a 500k-row fixture through the **real `internal/db` open path** — so the
+pragmas under test are the ones the binary actually sets, not a copy — then walks *idle → one pinned
+read connection → the whole `NumCPU*2` read pool → a 10,000-row write burst*, sampling process RSS at
+each step, once per `cache_size` cell. `mmap_size` is no longer swept by default — it left the pragma
+list once this harness proved it inert — but `-mmap=...` still sweeps it on demand.
+
+Three properties worth knowing before you read a number off it:
+
+* **RSS, not `MemStats`.** `VmRSS` and `VmHWM` from `/proc/self/status`. SQLite's page cache is not on
+  the Go heap; on the reference run the Go heap read 0.3 MB against 235 MB of RSS. On a platform
+  without `/proc` every RSS column reads `n/a` and the output says the run measured nothing —
+  deliberately, rather than substituting a heap figure that would be pasted into an ADR as if it were
+  RSS.
+* **One child process per cell.** `VmHWM` is a per-process high-water mark that never falls, so nine
+  cells in one process would produce one peak and eight fictions.
+* **Each cell gets its own copy of the fixture**, so a cell's write burst cannot bias the next.
+
+**What to do with the output.** It prints a table and writes the same table to `.dev/rss-spike.md`
+(gitignored, removed by `make clean`), formatted to paste into **ADR-0001** — which is where the
+measurement lives, next to the budget it justifies. **Name the hardware.** Architecture, core count
+and page size all move these figures: the read pool is `NumCPU*2`, and the page cache is
+per-connection, so a result from one machine is not a result for another. The harness prints
+`GOOS`/`GOARCH`/CPU count/page size/total RAM into its own header for exactly that reason.
+
+**It is not in `make check` and must never be.** It is not in `make bench` either: that target runs Go
+benchmarks, and this is a minutes-long measurement tool whose output is prose for an ADR. Both live
+behind the `bench` build tag, so neither compiles into a normal build.
+
+The current recorded result — **x86-64 only; arm64 is unmeasured** — is in ADR-0001, correction 3.
+Two things it settled: `mmap_size` is a **no-op** under this driver (mmap is compiled out), and
+`cache_size` is **per-connection**, so it multiplies by pool size rather than costing what it says.
+Both defaults changed as a result (ADR-0001, amendment): `mmap_size` was dropped from the pragma list
+and `cache_size` cut to `-8000`. That is a **memory-side** decision — this harness does not measure
+query latency.
 
 ### Rules
 

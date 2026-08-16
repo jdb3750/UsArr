@@ -1,0 +1,8 @@
+# spa/ is the mirror of web/build written by web/scripts/sync-embed.mjs. It is
+# build output and is never committed — but the directory itself must exist and
+# be tracked, or `//go:embed all:spa` fails to compile in a fresh clone and
+# `go test ./...` breaks for everyone who has not run `make web-build` yet.
+#
+# So: ignore everything in spa/, keep the one empty marker file.
+spa/*
+!spa/.gitkeep

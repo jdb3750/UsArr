@@ -1,6 +1,8 @@
 # Reference — The provider model
 
-**Status:** designed, not implemented. **Scope:** Tier 0 (Sonarr, Radarr, Prowlarr) is **v0.1**;
+**Status:** partly implemented. There is a Prowlarr client and a working connection test (§4); the
+registry seam (§1) and the Go provider interface (§2) are designed, not implemented, and no code
+has been written for Sonarr or Radarr. **Scope:** Tier 0 (Sonarr, Radarr, Prowlarr) is **v0.1**;
 Tier 1 manifests are **v0.3**. A WASM tier is **deferred, not rejected** — see
 [`../FUTURE.md`](../FUTURE.md) §1.
 **Parent:** [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §11.
@@ -286,8 +288,28 @@ confirmation before it is bound to a credential**.
 | Request bodies | JSON-RPC method envelopes; no `request.body` construct exists | NZBGet, Transmission, Deluge |
 | Transport | XML; `itemsPath` is JSONPath | Plex |
 
-**Manifests do cover:** LazyLibrarian, Komga, Kavita, Audiobookshelf, Calibre-Web and \*Arr forks.
-**They do not cover:** qBittorrent, Deluge, Transmission, NZBGet or Plex.
+**Manifests do cover:** LazyLibrarian, Komga, Kavita, Audiobookshelf and \*Arr forks.
+**They do not cover:** qBittorrent, Deluge, Transmission, NZBGet, Plex, **Calibre-Web**,
+**Suwayomi** or **Navidrome**.
+
+> 🚩 **Calibre-Web was on the covered list and is removed, because it has no REST API.** It exposes
+> OPDS (Atom) and `/ajax/listbooks`, which is session-cookie authenticated; neither is a manifest
+> target, and reconstructing a library by parsing Atom on a schedule is slow, fragile and lossy,
+> since no identifiers survive the feed. The right adapter is **Tier 0 Go code opening Calibre's own
+> `metadata.db` read-only** — `identifiers(book, type, val)` is a native typed external-id table,
+> `books.uuid` is durable, `data(book, format)` is genuinely multi-format, `series_index REAL` sorts
+> correctly, and `last_modified` is a real delta key. **That is a filesystem read and it is an
+> explicit, written-down exception** to ARCHITECTURE §11.2 and ADR-0026's *"UsArr never touches a
+> filesystem"*: a read-only handle on one SQLite file, not a scanner and not a library concept.
+> Calibre-Web stays as the link-out target and byte server. **Suwayomi** is removed for a different
+> reason — it is GraphQL. **Navidrome** is not manifest-describable either: `POST /auth/login`
+> returning a JWT plus a `(subsonicSalt, subsonicToken)` pair is session establishment, which §3.2
+> above places out of scope. (ARCHITECTURE §11.2 was corrected on this in an earlier round and this
+> file was not; both lists now say the same thing.)
+>
+> **And "covered" describes what a manifest *could* express, not how anything ships.** The manifest
+> tier does not exist until v0.3, so Komga and Audiobookshelf are **hand-written Tier 0 Go adapters
+> in v0.1**, and Kavita is one in v0.2 (ARCHITECTURE §16).
 
 This replaces an earlier "real diversity of the ecosystem" table that listed cookie-session,
 409-challenge, JSON-RPC and XML as *axes the manifest accommodates*, immediately next to a manifest

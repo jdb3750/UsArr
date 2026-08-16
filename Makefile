@@ -1,11 +1,11 @@
 # UsArr Makefile
 #
 # ─── HONESTY NOTICE ──────────────────────────────────────────────────────────
-# UsArr is PRE-ALPHA and currently has ZERO application code. Most targets below
-# reference paths that do not exist yet: ./cmd/usarr, ./internal/..., ./web/,
-# ./deploy/Dockerfile, ./internal/db/migrations/. They WILL fail until those are
-# created. That is intentional — this file is the build contract the first
-# commits are written against, not a description of a working build.
+# UsArr is PRE-ALPHA. The build is real now: ./cmd/usarr, ./internal/..., ./web/
+# and ./internal/db/migrations/ all exist, so build, test and check work. What is
+# still missing is ./deploy/Dockerfile, so `make docker` WILL fail. Targets that
+# reference a path that does not exist yet remain the build contract the commits
+# that create it are written against, not a description of a working build.
 #
 # Three rules this file must keep obeying as code lands:
 #   1. `make check` is the pre-commit gate. It must pass with NO Docker daemon
@@ -31,6 +31,8 @@ SHELL       := /bin/bash
 BINARY      ?= usarr
 MAIN_PKG    ?= ./cmd/usarr
 WEB_DIR     ?= web
+# Where web/scripts/sync-embed.mjs mirrors the SPA so //go:embed can reach it.
+EMBED_DIR   ?= internal/web/spa
 MIGRATIONS  ?= internal/db/migrations
 DIST_DIR    ?= dist
 
@@ -46,12 +48,25 @@ LDFLAGS     := -s -w \
 # Static binary. No CGO — SQLite is pure Go (ncruces/go-sqlite3 ships a
 # wasm2go-translated SQLite; there is no Wasm runtime in the dependency graph).
 # If this ever needs a C toolchain, something has gone wrong. DEVELOPMENT.md §1.
+#
+# This is the DEFAULT, so anything that produces a shipping artifact inherits it
+# and a new build target added later cannot silently pick up the ambient value.
+# The test recipes override it to 1 with a target-scoped variable, because the
+# race detector requires cgo on every supported platform — see the note above
+# GOTESTFLAGS. Overriding on the test side rather than removing the default here
+# keeps the "no CGO in anything we ship" invariant fail-safe.
 export CGO_ENABLED := 0
 
 # Dependency integrity: never let a build silently mutate go.mod/go.sum.
 export GOFLAGS := -mod=readonly
 
 GO          ?= go
+
+# -race requires cgo. Every recipe that consumes GOTESTFLAGS therefore carries a
+# target-scoped `export CGO_ENABLED := 1`; without it `go test` refuses to start
+# and the whole gate dies before running a single test. Tests are not a shipping
+# artifact, so building them against the cgo resolvers is a non-issue — the
+# binary in `make build` is still CGO_ENABLED=0.
 GOTESTFLAGS ?= -race -shuffle=on
 PNPM        ?= pnpm
 
@@ -83,7 +98,7 @@ BASE_IMAGE ?= gcr.io/distroless/static-debian12:nonroot@sha256:1b7b9f0f0e0a1d215
 
 .PHONY: help
 help: ## Show this help
-	@echo "UsArr — pre-alpha. Most targets fail until the code they reference exists."
+	@echo "UsArr — pre-alpha. Build, test and check work; targets whose paths do not exist yet fail."
 	@echo ""
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| sort \
@@ -116,16 +131,12 @@ build: web-build ## Build the static binary with the SPA embedded -> ./usarr
 web-build: web-deps ## Build the SvelteKit SPA -> web/build (embedded by `make build`)
 	$(call pnpm_if_web,build)
 
-# Frontend dependency guard.
-# While the project is pre-alpha there is no web/ yet, so every web target
-# no-ops loudly instead of dying with a cryptic "No rule to make target".
-# Delete the guard branch once web/package.json exists.
+# web/package.json is committed (since a279517), so the "no frontend yet" guard
+# that used to wrap this line was dead code on every checkout. A missing
+# package.json is now a hard failure, which is the right answer: it means the
+# tree is broken, not that the frontend has not been written yet.
 .PHONY: web-deps
 web-deps:
-	@if [ ! -f $(WEB_DIR)/package.json ]; then \
-		echo "SKIP: $(WEB_DIR)/package.json not present yet (pre-alpha) — skipping frontend step"; \
-		exit 0; \
-	fi; \
 	$(PNPM) -C $(WEB_DIR) install --frozen-lockfile
 
 # Wrapper so web targets skip cleanly while web/ does not exist.
@@ -147,14 +158,28 @@ endef
 test: test-go test-web ## Run all tests (offline; no Docker, no network)
 
 .PHONY: test-go
-test-go: ## Go tests with the race detector. Includes the EXPLAIN QUERY PLAN gates.
-	$(GO) test $(GOTESTFLAGS) ./...
+test-go: export CGO_ENABLED := 1
+test-go: web-build ## Go tests with the race detector. Includes the EXPLAIN QUERY PLAN gates.
+	@if [ -f $(WEB_DIR)/package.json ]; then \
+		USARR_REQUIRE_WEB_BUILD=1 $(GO) test $(GOTESTFLAGS) ./...; \
+	else \
+		$(GO) test $(GOTESTFLAGS) ./...; \
+	fi
+
+# Why `test-go` depends on `web-build`, and why USARR_REQUIRE_WEB_BUILD is set:
+# internal/web's content assertions — above all TestEmbeddedFSCarriesAppDir, the
+# only thing that catches a lost `all:` prefix — skip when nothing is embedded.
+# Skipping is correct for a bare `go test` in a fresh clone, but it meant the
+# gate went green on a tree where the trap was live. The dependency produces the
+# build; the env var turns the skip into a failure once a frontend exists, so the
+# guard cannot silently disarm itself again.
 
 .PHONY: test-web
 test-web: web-deps ## Frontend unit tests (vitest)
 	$(call pnpm_if_web,test)
 
 .PHONY: test-integration
+test-integration: export CGO_ENABLED := 1
 test-integration: ## Tests behind the `integration` tag. Needs a live stack. NEVER run in CI.
 	@test "$${USARR_INTEGRATION:-}" = "1" || { \
 		echo "refusing: set USARR_INTEGRATION=1 and have a live stack up"; \
@@ -169,6 +194,42 @@ bench: ## Wall-clock performance harness. A RELEASE gate on named hardware, neve
 	@echo "record the numbers, the hardware and the commit in docs/BENCHMARKS.md."
 	@echo "these are NOT enforced in CI: a p99 latency gate on shared runners is a"
 	@echo "flake generator, and on emulated arm64 it measures nothing. See DEVELOPMENT.md §5."
+
+# ─── The RSS measurement ─────────────────────────────────────────────────────
+# ARCHITECTURE §13's idle-RSS budget rested on a citation that does not transfer
+# (Navidrome, a cgo driver), and reference/sync.md §6 marked cache_size and
+# mmap_size "pending measurement". This target is the measurement: this driver, a
+# 500k-row fixture, WAL, the §7.7 pragmas, idle and peak process RSS.
+#
+# It settled both (ADR-0001): cache_size is per-connection, so it multiplies by
+# the read pool, and mmap_size did nothing at all because this driver compiles
+# mmap out. mmap_size is no longer in the pragma list and is no longer swept by
+# default — pass -mmap=... to sweep it if the driver ever gains mmap.
+#
+# It is behind the `bench` build tag like every other wall-clock measurement, and
+# it is deliberately NOT part of `make bench`: that target runs Go benchmarks
+# (`-run '^$$' -bench .`), and this is a long-running measurement tool whose
+# output is a table for an ADR. Neither one is ever in `check`.
+#
+# A result belongs to the machine that produced it — architecture, core count and
+# page size all move the numbers, and the report states all three.
+
+.PHONY: bench-rss
+bench-rss: ## Measure idle/peak RSS over a 500k-row DB, sweeping cache_size (ADR-0001)
+	@echo "bench-rss: building a 500k-row fixture, then one child process per pragma cell."
+	@echo "           first run takes a few minutes; the fixture is reused afterwards."
+	$(GO) run -tags=bench ./internal/db/spike $(SPIKE_FLAGS)
+	@echo ""
+	@echo "record .dev/rss-spike.md in docs/DECISIONS.md ADR-0001, with the hardware named."
+	@echo "the numbers are ONLY valid for the machine that produced them: architecture, core"
+	@echo "count and page size all move them. See docs/DEVELOPMENT.md §5."
+
+# Knobs, for a quick check or a different sweep. Examples:
+#   make bench-rss SPIKE_FLAGS='-rows=50000'                    # fast smoke run
+#   make bench-rss SPIKE_FLAGS='-rebuild'                       # remeasure the import peak
+#   make bench-rss SPIKE_FLAGS='-cache=-2000,-32000'            # narrower sweep
+#   make bench-rss SPIKE_FLAGS='-mmap=134217728'                # re-check mmap (see above)
+SPIKE_FLAGS ?=
 
 .PHONY: cover
 cover: ## Coverage report -> cover.html
@@ -217,8 +278,16 @@ secrets: ## Scan the working tree for committed credentials. GATING, part of `ch
 # real ones (docs/DEVELOPMENT.md §7.1).
 
 .PHONY: modverify
-modverify: ## Verify downloaded module contents against go.sum
+modverify: ## Verify module contents against go.sum, and that go.mod/go.sum are tidy
 	$(GO) mod verify
+	@# `go mod verify` only checks that the downloaded module CONTENT matches the
+	@# recorded checksums. It cannot see that go.mod is untidy — that is how four
+	@# directly-imported modules sat marked `// indirect` with go.sum entries
+	@# missing and the gate stayed green. `-diff` exits non-zero and prints the
+	@# patch instead of writing it, so the gate reports drift without mutating the
+	@# tree under GOFLAGS=-mod=readonly. It reads the module cache, not the
+	@# network, so it stays inside the `check-offline` contract.
+	$(GO) mod tidy -diff
 
 .PHONY: vuln
 vuln: ## govulncheck + pnpm audit. GATING, part of `check`. THE ONE NETWORK STEP.
@@ -299,6 +368,13 @@ tools: ## Install the pinned dev tools into $GOBIN
 clean: ## Remove build artifacts and the dev database
 	rm -f $(BINARY) cover.out cover.html
 	rm -rf $(DIST_DIR) $(WEB_DIR)/build $(WEB_DIR)/.svelte-kit ./.dev
+	@# The embed mirror too. //go:embed cannot reach outside internal/web, so the
+	@# SPA is synced into $(EMBED_DIR) by web/scripts/sync-embed.mjs. Removing
+	@# web/build without removing the mirror leaves a STALE build embedded in the
+	@# next binary — `make clean && make build` would ship whatever was there
+	@# before. .gitkeep survives: it is what keeps //go:embed compiling in a tree
+	@# where the frontend has never been built.
+	@find $(EMBED_DIR) -mindepth 1 -not -name .gitkeep -delete 2>/dev/null || true
 
 .PHONY: check
 check: check-offline vuln ## THE PRE-COMMIT GATE. No Docker. One network call (vuln.go.dev).

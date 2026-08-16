@@ -1,0 +1,544 @@
+/* =============================================================================
+ * UsArr — canonical design tokens
+ *
+ * Status: design document, pre-alpha. None of these tokens is implemented. A
+ * `web/` directory exists and carries a SvelteKit shell, but it does not
+ * consume this file. This file is the single source of truth for every
+ * colour, size, duration and radius the UI will ever use, and it is written so
+ * it drops straight into Tailwind v4 (see §0 and ADR-0025).
+ *
+ * Rationale for every value lives in DESIGN-DIRECTION.md, which owns the
+ * reasoning; this file owns the numbers. If the two disagree, the design
+ * document wins and this file is the bug.
+ *
+ * THE RULE THIS FILE EXISTS TO ENFORCE
+ *   Every colour, space, size, radius and duration used by a component
+ *   resolves to a custom property defined here. A literal value in a component
+ *   is a review failure. No exceptions, including "just this once for a 1px
+ *   nudge".
+ *
+ * CONTRAST
+ *   Every ratio below was computed with the WCAG 2.x relative-luminance
+ *   formula (https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)
+ *   and is recorded verbatim next to the pair it was measured for. Targets,
+ *   which sit deliberately above the WCAG floor so theme tuning has slack:
+ *     primary text        >= 12:1   (floor 4.5:1, SC 1.4.3)
+ *     secondary text      >=  9:1
+ *     muted metadata      >= 5.5:1  (floor 4.5:1 — it is text, there is no
+ *                                    3:1 shortcut; this is the ratio dense
+ *                                    UIs habitually breach)
+ *     subtle/placeholder  >= 4.5:1
+ *     borders, focus ring >= 3.2:1  (floor 3:1, SC 1.4.11, unrounded)
+ *     status TEXT         >= 4.5:1  (always rendered as text+icon, never
+ *                                    colour alone)
+ *     status GLYPH        >= 3.2:1  (a non-text graphic under SC 1.4.11, so it
+ *                                    MAY take a separate, more saturated value
+ *                                    than the word beside it — see
+ *                                    DESIGN-DIRECTION §3.2 on the light warn)
+ *     (protocol chips no longer carry colour at all — see §1 below)
+ *   Every foreground is measured against all three legitimate grounds it can
+ *   land on: --n-0 (page), --n-1 (row hover), --n-2 (row selected). --n-3 is a
+ *   divider colour and is never a text ground; that is why there is no
+ *   "selected + hovered" third fill.
+ *
+ * NO PURE BLACK OR WHITE
+ *   #fff and #000 do not appear in this file and must not appear anywhere in
+ *   the app. The ramp is warm-neutral (hue ~35-45, chroma deliberately low) so
+ *   that cover art — which supplies every saturated pixel on a browse screen —
+ *   sits on a ground that does not fight it.
+ * ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+ * §0. How this file is consumed
+ *
+ * Tailwind v4's `@theme` block is static, so a themeable palette is expressed
+ * in two layers: raw values that switch with the theme (§1-§3, plain custom
+ * properties on :root), and an `@theme inline` mapping that hands those
+ * variables to Tailwind so the utilities generate (§9). `inline` is required —
+ * without it Tailwind copies the value rather than the reference and the dark
+ * theme never applies.
+ *
+ * In `web/src/app.css`:
+ *
+ *   @import "tailwindcss";
+ *   @import "./tokens.css";
+ *   @theme { --*: initial; }     <- deletes Tailwind's ENTIRE default theme.
+ *                                   After this, bg-indigo-500, shadow-md and
+ *                                   rounded-2xl do not exist as classes. This
+ *                                   line is load-bearing (ADR-0025).
+ * --------------------------------------------------------------------------- */
+
+
+/* -----------------------------------------------------------------------------
+ * §1. The warm-neutral ramp — LIGHT (the default, `theme: light` or `auto`)
+ *
+ * Nine steps. Role is fixed by index in BOTH themes: --n-0 is always the page
+ * ground and --n-8 is always maximum-contrast ink. The dark theme inverts the
+ * values, never the roles, so every semantic token in §4 maps identically.
+ * --------------------------------------------------------------------------- */
+
+:root {
+  --n-0: #faf9f7; /* page ground. Near-white, warm. Never #fff.                */
+  --n-1: #f2f0ec; /* raised surface; row hover fill; toolbar; sticky header.   */
+                  /*   1.08:1 vs --n-0 — a fill, not a boundary; unbound.      */
+  --n-2: #e7e3dd; /* selected row fill; pressed control; inset well.           */
+                  /*   1.21:1 vs --n-0 — decorative, unbound.                  */
+  --n-3: #d8d3cb; /* 1px dividers between rows and table cells.                */
+                  /*   1.42:1 vs --n-0. Decorative separator, not a control    */
+                  /*   boundary, so SC 1.4.11 does not bind it.                */
+  --n-4: #807869; /* control boundary: input, select, checkbox, button border. */
+                  /*   4.15:1 vs --n-0 · 3.84:1 vs --n-1 · 3.42:1 vs --n-2     */
+                  /*   (target >= 3.2, SC 1.4.11 floor 3:1)                    */
+  --n-5: #6b6355; /* placeholder text, disabled label that still conveys.      */
+                  /*   5.64:1 · 5.21:1 · 4.64:1  (target >= 4.5)               */
+  --n-6: #5a534a; /* muted metadata: year, size, indexer, timestamps.          */
+                  /*   7.20:1 · 6.66:1 · 5.93:1  (target >= 5.5)               */
+  --n-7: #3c372f; /* secondary ink: column headers, sub-labels.                */
+                  /*  11.21:1 · 10.37:1 · 9.23:1  (target >= 9)                */
+  --n-8: #1c1a17; /* primary ink and the focus ring. Never #000.               */
+                  /*  16.50:1 · 15.25:1 · 13.58:1 (target >= 12)               */
+
+  /* Status. The ONLY saturated colour in the app besides cover art — the
+   * protocol chips gave theirs up, see below. Always rendered as icon + text +
+   * colour together, never colour alone; and an icon-only status must still
+   * carry a WORD in its accessible name (DESIGN-DIRECTION §11), which is the
+   * half that was missing. That redundancy is why UsArr needs no
+   * colour-impaired mode, unlike Sonarr, which had to ship one
+   * (EnableColorImpairedMode, ConfigService.cs).
+   * Ratios below are vs --n-0 · --n-1 · --n-2.
+   *
+   * OPEN (DESIGN-DIRECTION §3.2): --status-warn light is #8a5300, a value
+   * forced dark by the 4.5:1 TEXT requirement, which took the amber out of it.
+   * A separate glyph token at ~#a9700a (computed 3.98 · 3.68 vs --n-0 · --n-2,
+   * clearing the 3.2 non-text target) is the candidate; #c98a00 (2.80) and
+   * #b8860b (3.09) do NOT clear it. Not landed: run the repo contrast script
+   * and look at it at thumbnail scale first. */
+  --status-ok:      #1c6b3a; /* healthy, synced, present.  6.21 · 5.74 · 5.11 */
+  --status-warn:    #8a5300; /* degraded, stale, partial.  6.02 · 5.56 · 4.95 */
+  --status-error:   #b3251c; /* down, failed, rejected.    6.24 · 5.77 · 5.14 */
+  --status-unset:   #5a534a; /* not configured. Grey IS a status — a healthy,
+                              * nothing-to-see-here row must not be coloured.
+                              *                            7.20 · 6.66 · 5.93 */
+
+  /* Protocol chips. The hues come from the *Arrs' own theme file, so a
+   * self-hoster reads them without a legend:
+   *   torrentColor #00853d, usenetColor #17b1d9
+   *   https://github.com/Sonarr/Sonarr/blob/develop/frontend/src/Styles/Themes/dark.js
+   *
+   * WITHDRAWN (DESIGN-DIRECTION §3.3). --protocol-torrent was #0a6b34 light /
+   * #4fb377 dark and --protocol-usenet #0f6479 / #4ec3e0. The torrent value is
+   * the SAME GREEN as --status-ok: computed dE76 4.59 in light and 3.09 in
+   * dark, i.e. indistinguishable at a 6px dot and worse in the better theme.
+   * §3's whole case for having no brand accent is that reserving chroma makes
+   * STATUS legible, so a green protocol dot reads as "this row is healthy".
+   * Retuning lightness cannot fix a hue collision, and §1.1 bans the obvious
+   * escape (indigo/violet/purple). So the protocol chip is NEUTRAL and the
+   * words `torrent` / `usenet` carry the distinction, which they already did in
+   * the same cell — §1.4's delete-the-decoration rule applied to a fill.
+   * Protocol remains a first-class filterable field; only the ink is gone.
+   * Reversible: restore both tokens with a torrent hue outside the status band.
+   */
+}
+
+/* -----------------------------------------------------------------------------
+ * §2. The warm-neutral ramp — DARK
+ *
+ * Applied when the user picks Dark explicitly. Sonarr's setting shape is
+ * Light / Dark / Auto with Auto as the default
+ * (https://wiki.servarr.com/sonarr/settings); UsArr copies it. Both themes are
+ * audited independently — a `dark:` prefix sprinkled per element is a named
+ * code-level tell and is not how this works.
+ * --------------------------------------------------------------------------- */
+
+:root[data-theme="dark"] {
+  --n-0: #171614; /* page ground. Near-black, warm. Never #000.                */
+  --n-1: #1e1d1a; /* raised surface; row hover.   1.07:1 vs --n-0, unbound.    */
+  --n-2: #2a2824; /* selected row fill.           1.23:1 vs --n-0, unbound.    */
+  --n-3: #39362f; /* dividers.                    1.50:1 vs --n-0, decorative. */
+  --n-4: #7d7568; /* control boundary. 3.98:1 · 3.71:1 · 3.23:1 (>= 3.2)       */
+  --n-5: #9a9284; /* placeholder.      5.87:1 · 5.47:1 · 4.78:1 (>= 4.5)       */
+  --n-6: #b0a89b; /* muted metadata.   7.68:1 · 7.16:1 · 6.25:1 (>= 5.5)       */
+  --n-7: #d3ccc0; /* secondary ink.   11.34:1 · 10.57:1 · 9.22:1 (>= 9)        */
+  --n-8: #efece5; /* primary ink + focus ring.
+                   *                  15.33:1 · 14.29:1 · 12.47:1 (>= 12)      */
+
+  --status-ok:    #5cba7d; /*                     7.56 · 7.04 · 6.15           */
+  --status-warn:  #e0a33a; /*                     8.15 · 7.60 · 6.63           */
+  --status-error: #f0837a; /*                     7.09 · 6.61 · 5.77           */
+  --status-unset: #b0a89b; /*                     7.68 · 7.16 · 6.25           */
+
+  /* --protocol-* withdrawn in both themes — see the light-theme note above. */
+}
+
+/* -----------------------------------------------------------------------------
+ * §3. Auto — follow the OS when the user has not chosen
+ * --------------------------------------------------------------------------- */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --n-0: #171614;
+    --n-1: #1e1d1a;
+    --n-2: #2a2824;
+    --n-3: #39362f;
+    --n-4: #7d7568;
+    --n-5: #9a9284;
+    --n-6: #b0a89b;
+    --n-7: #d3ccc0;
+    --n-8: #efece5;
+
+    --status-ok:    #5cba7d;
+    --status-warn:  #e0a33a;
+    --status-error: #f0837a;
+    --status-unset: #b0a89b;
+  }
+}
+
+/* -----------------------------------------------------------------------------
+ * §4. Semantic aliases
+ *
+ * Components use these names, never --n-N directly. Renaming a role then means
+ * editing one line here rather than grepping the app.
+ * --------------------------------------------------------------------------- */
+
+:root {
+  --bg:            var(--n-0); /* page ground                                  */
+  --bg-raised:     var(--n-1); /* toolbar, sticky header, sidebar, popover     */
+  --bg-hover:      var(--n-1); /* row/control hover. A FILL change only — hover
+                                * never changes geometry (see §7)              */
+  --bg-selected:   var(--n-2); /* selected row. Selection is a neutral fill
+                                * step, not a coloured highlight               */
+  --bg-pressed:    var(--n-2);
+
+  --border:        var(--n-3); /* decorative divider between rows/cells        */
+  --border-strong: var(--n-4); /* the boundary of an actual control            */
+
+  --fg:            var(--n-8); /* primary text                                 */
+  --fg-secondary:  var(--n-7); /* column headers, sub-labels                   */
+  --fg-muted:      var(--n-6); /* metadata                                     */
+  --fg-subtle:     var(--n-5); /* placeholder, inactive                        */
+
+  --ring:          var(--n-8); /* focus ring: maximum contrast, both themes.
+                                * Applied with `outline`, never a box-shadow
+                                * imitation, and NEVER removed. Contrast is
+                                * 16.50:1 (light) / 15.33:1 (dark) against the
+                                * page ground — far above SC 2.4.13's 3:1      */
+  --ring-width:    2px;        /* SC 2.4.13 asks for >= a 2px perimeter        */
+  --ring-offset:   1px;
+}
+
+/* OPEN, raised by docs/design/mockups/usarr.css and recorded here rather than
+ * invented there. Building the first five real screens needed two roles this
+ * file does not have, and the mockup declares them locally:
+ *
+ *   --inset  #fdfcfb light / #100f0e dark — the interior of an input. It is
+ *            one step AWAY from the page ground rather than towards it, so a
+ *            field reads as a well rather than as a raised surface; --n-0 on
+ *            --n-1 chrome is invisible and --n-1 on --n-0 is a button.
+ *   --hover  #eceae5 light / #26241f dark — a row/control hover fill DISTINCT
+ *            from --bg-selected. §4 currently maps hover and raised to the
+ *            same --n-1 and selected to --n-2, which leaves hover-over-a-
+ *            selected-row with nothing to say.
+ *
+ * Neither is adopted here yet. Adopting them means either two more ramp steps
+ * or admitting the ramp is nine values with two interstitials, and that is a
+ * decision for the pass that writes web/src/app.css, not for a mockup. Until
+ * then this note is the record that the mockup did not invent colour silently.
+ */
+
+/* -----------------------------------------------------------------------------
+ * §5. Space — 4px base unit
+ *
+ * Scale: 2 4 6 8 12 16 24 32 48. The 2 and 6 steps are the off-4 values the
+ * §8 row heights need: 6 is the standard row's vertical padding and 2 is the
+ * hairline gap inside a chip. Above 16 the scale goes in 8s. Every padding,
+ * margin, gap and offset in the app is one of these nine values.
+ * Origin of the rule: Müller-Brockmann, *Grid Systems in Graphic Design*
+ * (1981) — every measurement derives from one unit. Cross-checked against
+ * Carbon's data-table row heights (24/32/40/48/64), all divisible by 4:
+ * https://carbondesignsystem.com/components/data-table/style/
+ * --------------------------------------------------------------------------- */
+
+:root {
+  --spacing: 4px;   /* Tailwind's base unit: p-3 == 12px, gap-2 == 8px         */
+
+  --space-0: 0;
+  --space-1: 2px;   /* hairline gap: icon-to-label inside a chip               */
+  --space-2: 4px;   /* intra-row gap; vertical padding in a 28px compact row   */
+  --space-3: 6px;   /* vertical padding inside a 32px standard row             */
+  --space-4: 8px;   /* vertical padding inside a 36px relaxed row; icon-to-text*/
+  --space-5: 12px;  /* horizontal cell padding; gap between row groups         */
+  --space-6: 16px;  /* form field spacing; dialog padding                      */
+  --space-7: 24px;  /* inter-region: gap between page sections                 */
+  --space-8: 32px;  /* page gutter on desktop                                  */
+  --space-9: 48px;  /* the largest step. It was the empty-state block's spacing; under
+                     * DESIGN-DIRECTION §9.6 the empty state is left-aligned content in
+                     * the flow with no block of its own, so this step has no current
+                     * consumer and must not acquire one without a reason. */
+}
+
+/* -----------------------------------------------------------------------------
+ * §6. Type
+ *
+ * Six steps, hard stop. There is NO seventh step: a 24px --text-empty existed here
+ * for empty-state headings and is DELETED (DESIGN-DIRECTION §9.6). It was larger
+ * than --text-xl, the page's own H1, and it was the mechanism that made the centred
+ * hero composition §9.6 bans writable. The empty-state heading is --text-lg.
+ * Below --text-lg, hierarchy is carried by WEIGHT and by the neutral ramp,
+ * never by size: a size step costs vertical space multiplicatively, a weight
+ * step and a colour step cost zero pixels.
+ *
+ * Line-heights are whole multiples of 2px and pair 1:1 with their size, so
+ * text in adjacent columns aligns. Butterick's band for readable line spacing
+ * is 120-145% (https://practicaltypography.com/line-spacing.html); UI rows at
+ * short measure want the low end. WCAG SC 1.4.12's 1.5 figure is a robustness
+ * requirement — the layout must SURVIVE a user forcing 1.5 — not an
+ * instruction to ship it, which is why every row height in §8 is a min-height.
+ * --------------------------------------------------------------------------- */
+
+:root {
+  /* Self-hosted, subset to Latin, served from embed.FS. Never a Google Fonts
+   * link: that is both a named generated-UI tell and a third-party request in
+   * software whose entire premise is that it runs on your own box.
+   * IBM Plex Sans / IBM Plex Mono, SIL OFL 1.1 — https://www.ibm.com/plex/
+   * The system stack is the fallback in the same declaration so a failed font
+   * fetch degrades to something correct rather than to Times. */
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto,
+               "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif;
+  /* Mono is SEMANTIC, not decorative: it marks machine data — file paths,
+   * indexer names, sizes, hashes, log lines, verbatim upstream error text.
+   * Mono on prose is a named tell; mono on a file path is a feature. */
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+               Consolas, "Liberation Mono", monospace;
+
+  --text-xs:    11px; --leading-xs:   16px; --weight-xs:   500; /* counts, chip labels    */
+  --text-sm:    12px; --leading-sm:   16px; --weight-sm:   400; /* secondary row metadata */
+  --text-base:  13px; --leading-base: 18px; --weight-base: 400; /* DEFAULT: rows, cells   */
+  --text-md:    14px; --leading-md:   20px; --weight-md:   400; /* inputs, dialog body    */
+  --text-lg:    16px; --leading-lg:   24px; --weight-lg:   600; /* section headings       */
+  --text-xl:    20px; --leading-xl:   28px; --weight-xl:   600; /* page title — the LARGEST
+                                                                * type ANYWHERE in the app.
+                                                                * No exemption, no --text-empty,
+                                                                * no hero heading.           */
+
+  --weight-regular: 400;
+  --weight-medium:  500; /* the density lever: hierarchy at zero pixel cost    */
+  --weight-semibold: 600;
+
+  /* Applied to every columnar number — sizes, seeders, episode counts,
+   * durations, timestamps, ages. NEVER to prose: proportional figures read
+   * better in running text.
+   * https://developer.mozilla.org/en-US/docs/Web/CSS/font-variant-numeric */
+  --numeric-tabular: tabular-nums;
+}
+
+/* -----------------------------------------------------------------------------
+ * §7. Geometry — radius and elevation
+ *
+ * Radius budget: 0 on anything in the flat plane. 4px on things that genuinely
+ * float. Hard ceiling 6px. `rounded-2xl` is the single most-cited structural
+ * tell and, with the theme deleted, is not a class that exists.
+ *
+ * Shadow budget: overlay layers only. A shadow on a row, a card, a table or a
+ * toolbar is a review failure — elevation in the flat plane is a 1px border or
+ * a background step. No coloured shadow, ever. No `backdrop-filter`, ever: it
+ * costs GPU time on every scroll frame, which contradicts the project's
+ * number-one requirement.
+ * --------------------------------------------------------------------------- */
+
+:root {
+  --radius-0:  0;    /* rows, tables, toolbars, sidebar, inputs, buttons       */
+  --radius-sm: 2px;  /* permitted on inputs/buttons if 0 reads too hard        */
+  --radius-md: 4px;  /* popover, dropdown, dialog, toast                       */
+  --radius-max: 6px; /* documented ceiling. Nothing may exceed it.             */
+
+  /* The only shadow in the system. Neutral, tight, no hue. */
+  /* rgb(0 0 0 / a) is still #000: it fails this file's own no-pure-black
+   * rule, which a grep for "#000" does not catch. The shadow is the warm
+   * near-black --n-8 instead, so the ramp has no exception. */
+  --shadow-overlay: 0 2px 8px rgb(28 26 23 / 0.18), 0 0 0 1px var(--border-strong);
+
+  --z-overlay: 100; /* popover, dropdown, menu, tooltip, sticky header         */
+  --z-top:     200; /* dialog and its scrim; toast                            */
+}
+
+/* -----------------------------------------------------------------------------
+ * §8. Density — three settings, COMPACT IS THE DEFAULT
+ *
+ * ARCHITECTURE.md §17.1: "Density is a feature. More items per screen beats
+ * larger cards. The grid is compact by default, with a size control for people
+ * who want otherwise." Compact is therefore what loads, not the middle option.
+ *
+ * Every one of these is a MIN-height. A fixed height breaks SC 1.4.12 the
+ * moment a user forces 1.5 line spacing, and truncates the second line of a
+ * long title. `height` on a row is a bug.
+ *
+ * Hit targets: SC 2.5.8 requires 24x24 CSS px, with the spacing exception that
+ * makes a dense toolbar legal. A 28px compact row therefore carries no inline
+ * clickable icons — compact rows are for reading. Rows with inline actions use
+ * the relaxed step.
+ * https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html
+ *
+ * THE PADDING IS DERIVED FROM THE FLOOR, NOT CHOSEN NEXT TO IT. The vertical
+ * padding used to be 6/8/8, and that is arithmetically impossible: a min-height
+ * is only a floor if the content box fits under it, and one line of --text-base
+ * is --leading-base = 18px. 18 + 2x6 = 30 against a 28px compact floor, and
+ * 18 + 2x8 = 34 against a 32px standard floor — both overshoot, so the row that
+ * rendered was not the row this table names. The two-line steps say the same
+ * thing: 18 + 16 = 34, and 34 + 2x6 = 46 against a 44px compact floor.
+ * At 4/6/8 all six numbers fit — 26<=28, 42<=44, 30<=32, 46<=48, 34<=36,
+ * 50<=52 — and the mockup, which is where this was caught, measures a compact
+ * row at exactly 28.0px. If a future size step moves, redo this arithmetic;
+ * do not pick a padding that looks right.
+ *
+ * --row-pad-x IS 12px AT ALL THREE DENSITIES, AND THAT IS DELIBERATE. It read
+ * 16px at relaxed, which was the one number in this block chosen next to the
+ * vertical step rather than derived from anything — exactly the mistake the
+ * paragraph above warns about, made in the other axis. Density moves the row
+ * height; it does not move the COLUMN TEMPLATE, so every extra pixel of
+ * horizontal padding comes straight out of cell content width. Measured in
+ * Chromium at 1440x900 on the mockup, relaxed density, by switching the value
+ * and re-reading the rendered DOM: at 12px no column header is truncated on
+ * any of the five screens; at 16px eight of them are — `Added` on Home,
+ * `Last successful sync` and `Items` on Services, `Items` on Libraries,
+ * `Year` and `1080p` on Search, `Select` on Requests — because `.tbl th` is
+ * `overflow: hidden; text-overflow: ellipsis`. Text-to-text collisions between
+ * adjacent cells also go from 1 to 3 on Requests. An ellipsised column LABEL is
+ * a worse outcome than a tighter gutter, and relaxed density exists to make
+ * rows easier to hit, which is the vertical axis.
+ *
+ * The honest way to spend 16px here is to re-tune every grid-template-columns
+ * per density so the columns absorb it. That is a real change with a real cost
+ * and it is not funded; until it is, this token is 12px throughout. The mockup
+ * carries the same value as `--row-px` (usarr.css), so the two agree.
+ * --------------------------------------------------------------------------- */
+
+:root,
+:root[data-density="compact"] {
+  --row-h:          28px; /* read-only data row. THE DEFAULT.                  */
+  --row-h-two-line: 44px; /* title 13/18 over meta 11/16                       */
+  --row-h-thumb:    52px; /* 40px cover inside a 52px floor                    */
+  --row-pad-y:      var(--space-2); /* 4px  — 18 + 8  = 26 <= 28               */
+  --row-pad-x:      var(--space-5); /* 12px                                    */
+}
+
+:root[data-density="standard"] {
+  --row-h:          32px;
+  --row-h-two-line: 48px;
+  --row-h-thumb:    56px;
+  --row-pad-y:      var(--space-3); /* 6px  — 18 + 12 = 30 <= 32               */
+  --row-pad-x:      var(--space-5);
+}
+
+:root[data-density="relaxed"] {
+  --row-h:          36px; /* fits 28px inline action buttons with clearance    */
+  --row-h-two-line: 52px;
+  --row-h-thumb:    60px;
+  --row-pad-y:      var(--space-4); /* 8px  — 18 + 16 = 34 <= 36               */
+  --row-pad-x:      var(--space-5); /* 12px — NOT --space-6; measured, see above */
+}
+
+:root {
+  --toolbar-h:  40px; /* page toolbar and sticky table header                  */
+  --nav-item-h: 32px; /* sidebar entry                                         */
+
+  --control-h-sm: 28px; /* compact button                                      */
+  --control-h:    32px; /* default button, input, native select                */
+  --control-h-lg: 36px; /* primary action                                      */
+  --hit-min:      24px; /* SC 2.5.8 floor; below this the spacing exception
+                         * must be honoured deliberately, not accidentally     */
+
+  --icon-sm: 16px; /* inline in a row, at text colour via currentColor         */
+  --icon-md: 20px; /* toolbar and header                                       */
+}
+
+/* -----------------------------------------------------------------------------
+ * §9. Motion
+ *
+ * 0ms on the critical path. This is not austerity: at a local-SQLite render of
+ * ~8ms, attaching a 250ms transition makes the interaction 258ms — past
+ * Nielsen's 100ms instantaneous threshold and two thirds of the way to
+ * Doherty's 400ms flow limit, purely for decoration.
+ *   https://www.nngroup.com/articles/response-times-3-important-limits/
+ *   https://www.nngroup.com/articles/animation-duration/
+ * Only `opacity` and `transform` may be transitioned. Never height, width,
+ * top, left, background-position or box-shadow. No overshoot easing, no
+ * spring, no scroll-reveal, no hover-lift, no View Transitions on navigation.
+ * --------------------------------------------------------------------------- */
+
+:root {
+  --dur-0:        0ms;   /* route change, list render, filter, sort, tab
+                          * switch, row expand. ARCHITECTURE §17.1: "No
+                          * animation on any list, grid or navigation
+                          * transition."                                       */
+  --dur-hover:   80ms;   /* hover/focus colour change (0 is also fine)         */
+  --dur-menu-in: 120ms;
+  --dur-menu-out: 90ms;  /* exits are shorter than entrances (NN/g)            */
+  --dur-dialog-in: 150ms;
+  --dur-dialog-out: 110ms;
+  --dur-toast:   150ms;
+  --dur-max:     200ms;  /* hard ceiling. Nothing in the app may exceed it.    */
+
+  --ease-out: cubic-bezier(0.2, 0, 0, 1); /* the ONLY easing. No control point
+                                           * outside 0..1 on Y — no overshoot. */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-hover: 1ms;
+    --dur-menu-in: 1ms;
+    --dur-menu-out: 1ms;
+    --dur-dialog-in: 1ms;
+    --dur-dialog-out: 1ms;
+    --dur-toast: 1ms;
+    --dur-max: 1ms;
+  }
+  /* Focus indicators are never animated and must appear instantly, reduced
+   * motion or not. */
+}
+
+/* -----------------------------------------------------------------------------
+ * §10. Tailwind v4 mapping
+ *
+ * `inline` is required: it makes Tailwind emit `var(--n-8)` rather than
+ * copying #1c1a17, which is what lets the dark theme switch at runtime.
+ * Only the namespaces below generate utilities — there is no --color-indigo-*,
+ * no --shadow-md, no --radius-2xl, because §0's `@theme { --*: initial; }`
+ * deleted them.
+ * --------------------------------------------------------------------------- */
+
+@theme inline {
+  --color-bg:            var(--bg);
+  --color-bg-raised:     var(--bg-raised);
+  --color-bg-hover:      var(--bg-hover);
+  --color-bg-selected:   var(--bg-selected);
+  --color-border:        var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-fg:            var(--fg);
+  --color-fg-secondary:  var(--fg-secondary);
+  --color-fg-muted:      var(--fg-muted);
+  --color-fg-subtle:     var(--fg-subtle);
+  --color-ring:          var(--ring);
+
+  --color-status-ok:     var(--status-ok);
+  --color-status-warn:   var(--status-warn);
+  --color-status-error:  var(--status-error);
+  --color-status-unset:  var(--status-unset);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --text-xs:   var(--text-xs);   --text-xs--line-height:   var(--leading-xs);
+  --text-sm:   var(--text-sm);   --text-sm--line-height:   var(--leading-sm);
+  --text-base: var(--text-base); --text-base--line-height: var(--leading-base);
+  --text-md:   var(--text-md);   --text-md--line-height:   var(--leading-md);
+  --text-lg:   var(--text-lg);   --text-lg--line-height:   var(--leading-lg);
+  --text-xl:   var(--text-xl);   --text-xl--line-height:   var(--leading-xl);
+
+  --radius-none: var(--radius-0);
+  --radius-sm:   var(--radius-sm);
+  --radius-md:   var(--radius-md);
+
+  --shadow-overlay: var(--shadow-overlay);
+
+  --ease-out: var(--ease-out);
+}
