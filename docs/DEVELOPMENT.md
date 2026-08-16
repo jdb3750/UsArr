@@ -671,3 +671,33 @@ An agent working in this repo should assume:
   403, PascalCase webhook `eventType` against camelCase REST) that are easy to get plausibly wrong.
 * When something is unverified, say so in the comment or the doc, with the date. This repo marks
   uncertainty rather than papering over it, and reviewers rely on that.
+
+### Working alongside other threads
+
+Several threads work this repo in parallel, on branches cut from the same base. The collisions that
+result are usually **semantic rather than textual**: a merge can go through cleanly and still ship a
+paragraph describing a repo that no longer exists.
+
+* **Merge to `main` early and in small batches.** Direct merges are fine at this stage; no PR is
+  required. Batch size is the real control — a branch sitting twenty-odd commits behind is what turns
+  a trivial collision into a semantic one.
+* **Announce before pushing** an edit to a shared document outside the area you lead, both in your own
+  thread and to the project coordinator, so the other side hears about it before building on text you
+  are about to change.
+* **`ARCHITECTURE.md` §16 carries two different kinds of edit.** *Scope* — which milestone a thing
+  lands in — is owned by the ADRs, and §16 is authoritative for it. *Status* — what has actually
+  landed — is a separate question. Do not change one while intending the other.
+
+Who leads which area, roughly:
+
+| Area | Led by |
+|---|---|
+| Go and Svelte source: `internal/`, `cmd/`, `web/` | the implementation work |
+| implementation-status wording in `CLAUDE.md`, `README.md` and `ARCHITECTURE.md` §16 | the implementation work |
+| `ARCHITECTURE.md` §17 and `docs/design/` | the design work |
+| `docs/PROJECT-INSTRUCTIONS.md` | the instructions gatekeeper |
+
+**These are leads, not exclusive ownership**, because in practice edits cross the lines routinely.
+`README.md`, `CLAUDE.md` and `ARCHITECTURE.md` are shared documents; a §17 change routinely lands
+§8.x amendments alongside it; and `docs/reference/` follows whichever change drove it. The map says
+who to talk to, not who is permitted to type.
