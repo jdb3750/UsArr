@@ -56,7 +56,7 @@ Nothing below is built. Status reflects **planned milestone**, not progress.
 | Unified library across **six media types** — movies, TV, music, ebooks, audiobooks, comics | 📋 Planned — v0.1 |
 | Read-only catalogue sources: **Navidrome, Audiobookshelf, Komga** (plus Sonarr + Radarr) — Kavita in v0.2 | 📋 Planned — v0.1 |
 | **User-defined libraries**, configured separately from services, with a correction layer | 📋 Planned — v0.1 (correction UI v0.3) |
-| **Six-type schema** — `work_credit` M:N attribution, edition-scoped `work_track`, the `comic_issue` kind, audiobook edition columns | 📋 Planned — v0.1 (migration 0001 or never — ADR-0030, ADR-0031) |
+| **Six-type schema** — `work_credit` M:N attribution, edition-scoped `work_track`, the `comic_issue` kind, **the `person` kind**, audiobook edition columns | 📋 Planned — v0.1 (migration 0001 or never — ADR-0030, ADR-0031, ADR-0033) |
 | Local-first reads; no upstream call on any render path | 📋 Planned — v0.1 |
 | **Search-and-Grab mode** — free-text indexer search and grab via Prowlarr, **for all six types**. ⚠️ For music and books, coverage depends heavily on private trackers: 403 of Prowlarr's 543 indexer definitions are `type: private`, and the dedicated music and book trackers are invite-only, so on public indexers alone this is materially thinner than for film | 📋 Planned — v0.1 |
 | Instant search: client prefix index → FTS5 hybrid (prefix + substring; **no typo tolerance**) | 📋 Planned — v0.1 |
@@ -64,6 +64,7 @@ Nothing below is built. Status reflects **planned milestone**, not progress.
 | Minimal write path — monitor, unmonitor, delete, add — on a durable command queue | 📋 Planned — v0.1 |
 | Sync: full import + `/history/since` delta (Sonarr/Radarr) + **an ordered page-walk delta for the catalogue sources, none of which has a changed-since endpoint** + **reconciliation with 7-day tombstones** | 📋 Planned — v0.1 |
 | **Services health screen** — what is broken, why, and the button that fixes it | 📋 Planned — v0.1 |
+| **Recent grabs** — the last ten grabs with their state, so the acquisition loop has a memory. Not the request model, which is v0.2 | 📋 Planned — v0.1 |
 | Image pipeline: proxy, downscale, ThumbHash, **viewport-prioritised cold start** | 📋 Planned — v0.1 |
 | **"1080p ✓ / 4K ✗"** — one poster across two Radarr instances | 📋 Planned — v0.1 |
 | Encrypted credentials with key versioning, AAD and a working rotate command | 📋 Planned — v0.1 |

@@ -473,7 +473,9 @@ lazy loading as the best-performing pattern. Three consequences, all normative:
 
 The one deliberate exception to "never load the whole library" is the **client-side prefix index,
 over *top-level works only*** (`movie, series, artist, album, book, comic, game`) — never seasons,
-episodes, tracks or comic issues. Fields `{id, title, year, kind, availability_state}` in a columnar
+episodes, tracks, comic issues **or `person` works** (ADR-0033: a credited author is not something
+the user browses, and shipping every author and illustrator to the client would spend the byte budget
+on rows with no destination). Fields `{id, title, year, kind, availability_state}` in a columnar
 payload plus ThumbHashes as raw bytes in a side `ArrayBuffer` (~25 B each, not ~34 base64 chars),
 at a realistic 110–160 B/item. **Hard cap 25,000 items.** Against §13's six-type reference library
 that is **~27,500 top-level works — over the cap**, and the cap's failure mode is that the single
@@ -554,6 +556,13 @@ usarr_id := crockford_base32( varint(instance_id) || kind_byte || enc_byte || na
 ```
 
 - `instance_id` is `service_instance.id`, assigned once and **never reused**.
+- **`kind_byte` encodes the *remote* kind, not `work.kind`**, and that distinction is worth stating
+  because the two vocabularies are not the same size: the map already carries `author` (LazyLibrarian's
+  own remote kind) and `file`, neither of which is a `work.kind`. ADR-0033's new `work.kind = 'person'`
+  therefore takes **`kind_byte` 13**, allocated in the same commit as `comic_issue`'s 12 and before any
+  client caches an id, for services that report a creator entity under a name other than `author`;
+  remote `author` keeps byte 10, and both resolve to `work.kind = 'person'`. The full map is in
+  [`reference/gateway.md`](./reference/gateway.md) §3.
 - **`kind_byte` is required, not decoration.** The only unique index on `service_item_link` is
   `(service_instance_id, remote_kind, remote_id)`; without the kind at lookup time SQLite uses only
   the leftmost column and every resolve degrades to a scan over one instance's links — ~400k rows for
@@ -668,7 +677,34 @@ book". And the UI can say **"Based on the novella by Denis Johnson"** instead of
 bytes).
 
 **`work.kind` is:** `movie, series, season, episode, artist, album, track, book, comic, comic_issue,
-game`.
+person, game`.
+
+> **`person` is new in this revision, and it is migration 0001 or never (ADR-0033).** `work_credit`
+> (ADR-0031) is M:N and required for books and comics explicitly — *"it is needed for books too,
+> where role matters: author, translator, editor, illustrator"* — and its creator column pointed at a
+> `work` whose only available kind was `artist`. So a book's author and a comic's penciller were
+> stored as **`artist`-kind works**, with two consequences that are not theoretical: §17.2's
+> navigation enum maps `artist` to **Music**, so every author and illustrator appeared in the Music
+> media type; and §4.5's Tier 1 prefix index counts `artist` as a top-level work, so every credit
+> consumed the client-side byte budget that §13 already shows is over its cap. `person` fixes both by
+> existing.
+>
+> **The rule for which kind a credit points at** — because "just use `person` for everyone" loses the
+> Music type: **a credit points at an `artist` work when a connected service models it as a top-level
+> catalogue entity in its own right** (Navidrome and Lidarr artists, which have albums, a page and a
+> library row), **and at a `person` work otherwise** (authors, translators, editors, illustrators,
+> writers, pencillers, inkers, colorists, letterers, cover artists, and narrators reported only as a
+> string). A human who is both — a musician who also writes books — is two rows, one per kind, joined
+> by nothing in v0.1; that is a real and stated loss, and it is smaller than the two failures above.
+> 🔍 The rule is inference from how the sources model their own data, not a citation.
+>
+> **`person` is excluded from the navigation enum (§17.2), from the Tier 1 prefix index (§4.5) and
+> from the FTS corpus (§8.2)** — the last because there is no person screen in any milestone, so a
+> person hit would be a search result with nowhere to land. It is reachable as a credit link on an
+> item (§17.6). Adding it to the corpus later is a predicate change plus an FTS re-index; adding the
+> *kind* later is a CHECK-constraint change (a SQLite table rebuild), a rebuild of every client prefix
+> index, and a `kind_byte` allocation that §5.3 states is unchangeable once clients cache ids. That
+> asymmetry is the whole timing argument, and it is ADR-0030's argument in a second place.
 
 > **`comic_issue` is new in this revision, and migration 0001 is the only cheap moment to add it
 > (ADR-0030).** Every other multi-level medium got its levels — TV has `series`/`season`/`episode`,
@@ -780,6 +816,11 @@ and `pdf` as comic/ebook file shapes, which the DDL currently lacks.
   `reading_direction`, `publisher`, `total_issues_declared`, `total_issues_source`. Issue level
   (`work_comic_issue`): `number_text`, `number_sort`, `volume_label`, `volume_sort`, `is_special`,
   `is_oneshot`, `special_version`, `page_count`.
+- **`person` has no subtype table, deliberately** (ADR-0033). A credited human is a name, optional
+  `external_id` rows (OLIDs, Comic Vine person ids) and the credits pointing at it — all of which
+  `work`, `external_id` and `work_credit` already carry. A `work_person` table would hold a birth
+  year and a biography that no v0.1 source reports for an author, so it would be columns nothing
+  writes.
 
 **The availability rollup is keyed by whatever the medium's denominator actually is** (§6.3), and
 for two of the six types the denominator is not a quality tier:
@@ -1326,7 +1367,13 @@ statistics sweeps the list. Four things previously implicit, each a correctness 
 - **The corpus is top-level works only** (`movie, series, artist, album, book, comic, game`).
   `season`, `episode`, `track` **and `comic_issue`** are excluded — a 400k-row corpus of episode
   titles swamps every query, and a large manga library does the same with chapter titles — and are
-  reachable by scoped search from a parent's detail view. CI asserts it.
+  reachable by scoped search from a parent's detail view. **`person` is excluded too, for a different
+  reason: there is no person screen in any milestone (ADR-0033), so a person hit would be a result
+  row with nowhere to go.** ⚠️ **This leaves "find everything by this author" unanswered in v0.1 and
+  says so rather than implying otherwise.** The cheap candidate is to fold credited names into the
+  FTS `alt_titles` column of the *works* they are credited on, so the query returns the books rather
+  than the person — but that is a decision for whoever writes the FTS document builder, it is not
+  specified here, and it must not be assumed. CI asserts the exclusions.
 
 Permission filtering happens **in the index join, not after it**, so a filtered search cannot
 silently break page sizes or leak existence through result counts. **The mechanism is a junction
@@ -1463,11 +1510,34 @@ Kavita are libraries rather than importers — they pick a file up only if it la
 root and the filename parses. Books are the same shape unless LazyLibrarian is present, whose
 `forceProcess` + `getDownloadProgress` genuinely close the loop and are the strongest argument for
 keeping it as a sink after demoting its catalogue. So the grab confirmation is type-specific and
-literal — *"Sent to \<download client\>. UsArr does not import downloads."*, naming the watched
-folder when a library-bearing service is configured — and **UsArr never renders a progress bar or a
-"Downloading" state for a Prowlarr grab**, because it cannot know. `Grabbed <timestamp>` and stop.
-The `provenance` row is the whole of what UsArr knows, and for comics it is the *only* trace the
-acquisition ever leaves.
+literal, and **UsArr never renders a progress bar or a "Downloading" state for a Prowlarr grab**,
+because it cannot know. `Grabbed <timestamp>` and stop. The `provenance` row is the whole of what
+UsArr knows, and for comics it is the *only* trace the acquisition ever leaves.
+
+> 🚩 **The confirmation must name what will and will not import the file, and the sentence is
+> incomplete without the second half.** *"Sent to \<download client\>. UsArr does not import
+> downloads."* is true and is **not sufficient for movies and TV**, which are exactly the two types
+> where the reader's prior knowledge fills the gap wrongly: every self-hoster running
+> Prowlarr → Radarr knows that Radarr imports what Radarr grabbed, so *"UsArr does not import
+> downloads"* full stop reads as *"…but obviously Radarr does"*. **It will not.** This grab did not go
+> through Radarr — UsArr posted the release to Prowlarr, which handed it to Prowlarr's own download
+> client — so Radarr has no record of it and will never pick it up. The failure is silent and
+> cumulative.
+>
+> **Three shapes, chosen from the library's request destination and the type, all of them
+> complete:**
+>
+> | Case | Sentence |
+> |---|---|
+> | A watched-folder importer is configured for the type (Audiobookshelf, Komga, Navidrome) | *"Sent to qBittorrent. UsArr does not import downloads. Audiobookshelf watches `/media/books` and will show it once the file is there."* |
+> | An \*Arr owns the type but did not request this release (Sonarr, Radarr — the v0.1 case for every grab) | *"Sent to qBittorrent. Nothing will import this. Radarr did not request this release, so it will not pick it up — the file stays in your download client until you move it into the library folder yourself."* |
+> | No connected service accepts the type at all (comics with no Mylar3, music with no Lidarr) | *"Sent to qBittorrent. Nothing will import this. No connected service accepts a comic, so the file stays in your download client."* |
+>
+> Every input is already computed: the library's request destination is `none` for four types and an
+> \*Arr for two (§6.5, §17.8), and the watched folder is read from the source for the first case. The
+> named folder is quoted from the source's own report and never typed by UsArr (ADR-0026). **The
+> naming of the *non*-importer is the load-bearing half** — the same principle as §17.7's rule that a
+> reassuring wrong number is worse than none.
 
 **And one qualification that applies to the whole mode, because "runs over just Prowlarr" is
 materially weaker for two of the six types.** ✅ **403 of Prowlarr's 543 shipped indexer definitions
@@ -1759,16 +1829,26 @@ library is:
 | `album` | 5,000 | ~50,000 `track` rows behind them |
 | `book` | 6,000 | ebook + audiobook editions; ~9,000 `edition` rows |
 | `comic` | 3,000 | ~90,000 `comic_issue` rows behind them |
+| `person` | ~6,000 | authors, translators, editors, illustrators, writers, pencillers, inkers, colorists, letterers, cover artists (ADR-0033). **Not top-level: excluded from the prefix index, the FTS corpus and the navigation enum** |
 | **Top-level works** | **27,500** | the corpus for FTS (§8.2) and the Tier 1 prefix index (§4.5) |
 | **All `work` rows** | **~880,000** | |
 
 🔍 *The non-video counts are chosen, not measured: they are a plausible six-type self-hoster, floored
 by the mockups' own install (1,204 movies, 275 series, 612 artists, 4,118 albums, 2,469 books, 733
-comics = 9,411 top-level works) and scaled to the same ratio the video figures already assumed.*
+comics = 9,411 top-level works) and scaled to the same ratio the video figures already assumed. The
+~6,000 `person` figure is chosen the same way — comics credit five or six roles per issue over a
+small pool of people, books one to three — and it is the one row where being wrong by 2× changes
+nothing, because the row is excluded from every budget it could have pressed on.*
+
 **The number that matters is 27,500, because §4.5's client prefix index is hard-capped at 25,000 —
 so tripping the cap is the *expected* outcome for the target user rather than the exotic one**, and
-§4.5 now specifies a partial index rather than "no index" for that case. Every p50/p99 below is
-against this library.
+§4.5 now specifies a partial index rather than "no index" for that case. **The `person` row is what
+keeps that number at 27,500 rather than ~33,500.** Before ADR-0033 a book's author and a comic's
+writer were `artist`-kind works, and `artist` is top-level: those ~6,000 credits would have entered
+the prefix index and the FTS corpus as browsable rows, taking the overshoot from **10% over the cap
+to 34% over it**, and putting every author into the Music media type on the way (§17.2). The kind
+does not make the index smaller than it was designed to be; it stops a schema accident from making it
+a third larger. Every p50/p99 below is against this library.
 
 | Operation | p50 | p99 |
 |---|---|---|
@@ -2015,9 +2095,12 @@ and both sweep guards** for everything. SignalR and webhooks are **out**. **Mini
 not the ADRs:** `work`/`edition`/`media_file`/`external_id`/`service_item_link`; the **four library
 tables** (§6.5) and the **`search_doc_library` junction**; and the six-type schema that is migration
 0001 **or a backfill over the largest tables in the schema** — `work.kind = 'comic_issue'` with the
-`work_comic` / `work_comic_issue` split and its `kind_byte` (ADR-0030); `work_track.edition_id`,
-`work_track.track_number TEXT` plus the derived `track_position`, the M:N **`work_credit`**, and
-`edition.narrators` / `duration_seconds` / `abridged` (ADR-0031). **Identity tier 1 only**; the
+`work_comic` / `work_comic_issue` split and its `kind_byte` (ADR-0030); **`work.kind = 'person'` with
+its own `kind_byte`, excluded from the navigation enum, the prefix index and the FTS corpus, and
+`work_credit.creator_work_id` renamed from `artist_work_id` to match (ADR-0033)**;
+`work_track.edition_id`, `work_track.track_number TEXT` plus the derived `track_position`, the M:N
+**`work_credit`**, and `edition.narrators` / `duration_seconds` / `abridged` (ADR-0031).
+**Identity tier 1 only**; the
 correction *UI* deferred to v0.3. Library auto-proposal on service add, the Libraries settings screen
 (§17.8), Home's three fixed blocks (§17.2). Library grid with **"Load more" + `content-visibility`
 on grid rows carrying explicit ARIA roles (§4.5)**, keyset pagination, image pipeline **including the
@@ -2025,7 +2108,23 @@ on grid rows carrying explicit ARIA roles (§4.5)**, keyset pagination, image pi
 Search tiers 1 and 2, corpus limited to top-level kinds, **no typo tolerance**. System tags `type:`,
 `format:`, `source:`, `quality:`, `indexer:` with the `downloadId` provenance join. The **"1080p ✓ /
 4K ✗"** badge — a free consequence of the M:N link and a strong signal to power users, though *not*
-the landing-page claim, since it needs two Radarr instances. **The Services health screen (§17.3).**
+the landing-page claim, since it needs two Radarr instances. **The Services health screen (§17.3),
+whose add flow asks for four fields — kind, name, base URL, API key — and draws all four states of
+the mandatory connection test, failure included.**
+
+**A `Recent grabs` block on the Requests screen (§17.5), and what it costs, stated plainly.** Ten
+rows, newest first: time, release name, indexer, protocol, size, resolved type, and last known state.
+**It adds no table, no state machine and no background work.** The states are the durable command
+queue's own — `pending | inflight | verifying | done | failed` (§7.6) — and the rows are the
+`provenance` rows §8.5 already writes per acquisition event, so the cost is: **one keyset-paginated
+read joining `write_queue` to `provenance`, one index to serve it, one API endpoint, and one block on
+an existing screen.** That is the whole of it. **This is a deliberate addition to v0.1 and it is
+listed here because §16 is authoritative**: §17.5 had required a request list, §16 had not funded
+one, and the resolution is not to delete the requirement but to fund the honest, small version of it.
+**It is not the request model** — no approval queue, no `pending → approved → routed → available`, no
+quotas, no `request` table; those stay in v0.2. Without it, v0.1's only write path produces a
+multi-gigabyte download that UsArr forgets on the next navigation, and the acquisition loop the
+project exists to close has no memory.
 Owner account, Argon2id, cookie sessions, CSRF, encrypted credentials **with key versioning, AAD and
 a working `usarr key rotate`**, the SSRF egress policy, redaction middleware. **Zero external metadata
 providers** — Radarr's `MovieResource` and Sonarr's `SeriesResource` already carry everything the
@@ -2187,6 +2286,14 @@ discovered when the sixth chip does nothing. The machinery to express the pair a
 reused: `Caps.MediaKinds` is a list of `(Kind, Format)` pairs (§11), and the tag vocabulary has
 `type:` and `format:` namespaces (§10).
 
+**`work.kind = 'person'` maps to no media type and must be excluded from the enum explicitly**
+(ADR-0033). A book's author and a comic's writer are `person` works; they are creative *credits*, not
+things the user has a library of, and there is no Persons screen in any milestone. The exclusion has
+to be written down because the mapping above is `kind`-driven and the previous shape — authors stored
+as `artist`-kind works — would have filed every author under **Music**. `artist` still means a music
+artist and still maps to Music; `person` is reachable only as a credit link on an item, never as a
+navigation destination.
+
 **Libraries are scope, not navigation, and the reason is a documented failure rather than a
 preference.** Jellyfin's drawer maps `items.map(...)` over every user view with no cap, no pin, no
 overflow and no reorder — add a library, get a sidebar row, for ever. Calibre-Web reached seventeen
@@ -2196,7 +2303,12 @@ Services · Settings · System, and to Calendar and Stats later — **eight fixe
 before a single user-defined library exists. So the model is **Navidrome's `LibrarySelector`**: a multi-select chip
 that reads "All libraries (4)" or "2 of 4 libraries", **absent entirely at 0 or 1 library**,
 defaulting to *everything*, stating its scope in words, and carried as `?lib=` on routes that already
-exist — **zero new page types**. Multi-select rather than single-select is load-bearing: it is a
+exist — **zero new page types**. **Whenever the scope is not "all libraries", the chip is rendered at
+every viewport** — in the sidebar above 900 px, and hoisted into the top bar below it, where the
+sidebar is a collapsed drawer. A scope is state the content cannot express (an absence looks like an
+absence, not like a filter), it survives in the URL across devices, and its terminal case empties the
+application entirely (§17.7, `scope-empty`). A control whose whole job is to state what it hid may
+not itself be hidden. Multi-select rather than single-select is load-bearing: it is a
 filter, not a mode, so cross-library search and browse survive. Audiobookshelf's own documentation
 records the alternative's cost — *"Most actions in the server apply to the currently selected
 library, including browsing and searching"*, and an author with series in two libraries shows as
@@ -2304,6 +2416,45 @@ sync now.
 The same screen hosts **Add service** — the wizard from §11 with its mandatory connection test — and
 a global banner elsewhere in the app links here whenever any instance is not healthy.
 
+**The add flow asks for a name, and §17.7's "three fields" is corrected to four.** The wizard was
+specified as kind, base URL and API key, and the field the whole screen is keyed on was missing from
+the one flow that creates a row. `service_instance.name` is what tells two Radarrs apart — it is the
+first column of this table, it is what the `Radarr 4K` row is called, and the **"1080p ✓ / 4K ✗"**
+badge §16 names as v0.1's power-user signal is unrenderable if the second instance arrives
+indistinguishable from the first. **The field is defaulted from the probed application and instance
+(`Radarr`, then `Radarr (2)` on collision) and is editable in place**, so the common single-instance
+case is still three things typed; it is not an extra question, it is a pre-filled answer. It must be
+unique per user, which the inline settings form's own help text already states and the add flow never
+enforced.
+
+**The connection test's result is a specified surface, in all four of its states.** §17.7 makes the
+test mandatory and blocking — *"a live connection test that must pass before Save is enabled"* — and
+nothing anywhere specified what the user sees when it runs. That matters most for the state the
+document never named: **failure**. §17.3's verbatim-error contract covers *configured* services — the
+`Problem` column, the expanded row, the System status list — and a service that fails its test is
+never saved, so it has no row and the verbatim error has nowhere to go. This is the first thing every
+user does and its most likely outcome is a failure: wrong port, `https` against a plain-HTTP service,
+a trailing slash, a Tailscale name that resolves in the browser but not from the container, or a
+**reverse-proxy URL base**, which is how a large share of this audience reaches its \*Arrs
+(`https://host.tailnet.ts.net/sonarr`) and which produces a connection that resolves and then 404s.
+
+| Test state | What the dialog shows, below the API-key field |
+|---|---|
+| `idle` | nothing; Save is disabled and labelled with the reason |
+| `testing` | the request in flight, cancellable; Save stays disabled. §7's per-request timeout applies, so this state is bounded |
+| `connected` | **the probed application, its version and its API path, plus one count** — *"Sonarr 4.0.10.2544, `/api/v3`, 214 series"*. Naming the probed application is the only thing that catches "the Kind select still said `sonarr` and I pasted a Radarr URL", which the dialog otherwise cannot catch at all, since both serve `/api/v3/system/status` |
+| `failed` | **the verbatim upstream text or transport error in mono**, exactly as the `Problem` column renders it, plus the two or three most likely causes for that error class as prose. A 404 names the URL base; a TLS error names the pin; a refused connection names the port |
+
+**The base-URL field's help text names the URL base**, because the placeholder (`http://10.0.0.4:7878`)
+teaches the LAN-IP shape only and the subpath case is the one that fails silently.
+
+**Editing a saved service's host clears its API key.** `CLAUDE.md`'s security rules forbid sending a
+stored \*Arr credential to a host the user has just edited, and that rule needs a UI or it is not
+enforced: when the **host** of `Base URL` changes (a path or scheme change alone does not count), the
+key field is cleared, Save is disabled, and the form says *"The host changed, so the stored key will
+not be sent to it. Paste the key for the new host."* Fixing a typo in a hostname is the most common
+edit on this screen, and it was the one that silently repointed a full-admin credential.
+
 ### 17.4 Search
 
 One input, results as a single ranked list, reachable from every screen (and from `/` with a keyboard
@@ -2314,7 +2465,8 @@ separated rather than interleaved, because interleaving reorders the list under 
 Linked works render as **one grouped card** with per-medium availability (the film and the novella on
 one card, each with its own state) rather than two rows. Zero results: the query echoed back, the
 honest note that search does prefix and substring matching but not typos (§8.1), and a "search
-indexers instead" action that goes to 17.5.
+indexers instead" action that goes to 17.5 — **which is no longer the only route to that screen; see
+rule 6.**
 
 **Separation survives six types and gets *more* right, but it needs four rules two types never
 needed.** The IR literature calls this *aggregated search* and splits it into vertical selection and
@@ -2354,6 +2506,25 @@ carries eleven groups in a `SearchResultGroup`.
    somewhere new. **The rule is therefore: render `library` when the user has ≥2 libraries *and* the
    group contains more than one distinct value; otherwise state it once in the group header.** The
    same applies to any per-group column with one distinct value.
+   **When the collapsed value is stated in the header beside the media-type name, the noun
+   `library` is mandatory** — *"all in the **Ebooks** library · all from Audiobookshelf"*, never
+   *"all in Ebooks"*. The `<h2>` is a media type (a closed enum of six) and the collapsed value is a
+   library (unbounded, user-named); on the common install they are the same string, so without the
+   noun the line reads as a tautology and teaches that the two axes ADR-0027 exists to separate are
+   one axis. The general rule is `design/DESIGN-DIRECTION.md` §8.1.
+
+6. **Every result row whose availability is incomplete carries a secondary `Search indexers →`
+   action, and it is in v0.1.** "Incomplete" means anything that is not a full ✓: a cross, a partial
+   fraction, or a tier the user does not hold (`2160p ✗`). The action links to §17.5 with the query
+   pre-filled from the row's title and the Newznab category preselected from the row's media type
+   (§8.5's five special cases decide the mapping). **Without it, v0.1 has no exit from the one screen
+   where the user definitively learns they are missing something.** §17.5 makes Add the primary
+   action and "search indexers" its secondary, and Add is v0.2 (§16) — so in the exact configuration
+   v0.1 draws, the primary action does not exist and the secondary was only ever specified as its
+   accompaniment. The zero-results state (above) carries the same action, which is the case where the
+   user has learned *nothing* was found; this rule covers the case where the product has told them,
+   correctly and prominently, that they do not have the thing they searched for. That is the
+   difference between a catalogue and a hub, and it is one link.
 
 **Every result row is one template *within its group*, and the claim needs that qualifier.** Type
 chip, title, secondary metadata, availability, library — varying only in data. But the six groups
@@ -2382,12 +2553,51 @@ one they are on until it matters:
    action is **Grab**, which posts the release back to Prowlarr within the 30-minute cache window.
 
 They share one screen because they are one user intent. Which path is offered depends on what is
-configured: with a library-bearing service, Add is primary and "search indexers" is a secondary
-action on the same item; with only Prowlarr, the free-text path **is** the screen (§8.5) and the
-catalogue affordances are hidden rather than shown broken.
+configured — **and the v0.1 case is the free-text path standing alone, not accompanying anything.**
+With a library-bearing service *and* the request model (v0.2, §16), Add is primary and "search
+indexers" is a secondary action on the same item. **In v0.1 there is no Add**, so the free-text path
+is the whole of this screen on every install, whether or not a Sonarr and a Radarr are configured —
+it is not a fallback for the Prowlarr-only case. The earlier wording specified it only as the
+accompaniment to an action that does not ship until v0.2, and as the *screen* only when Prowlarr is
+the sole service, which left the ordinary six-service v0.1 install with a specified primary action
+that does not exist. The catalogue affordances that belong to the v0.2 path are hidden rather than
+shown broken, exactly as they are in Search-and-Grab mode.
 
-Also on this screen: the user's own request list with state and, for an admin, the pending-approval
-queue. In single-user mode the approval UI is hidden entirely (§8.3).
+**A grab leaves a record, and that is v0.1.** The second block on this screen is **Recent grabs** —
+the ten most recent, newest first: time (absolute and relative, §17.3's rule), release name, indexer,
+protocol, size, the library or media type the category resolved to, and **last known state**. It is a
+local read and nothing else; it introduces no new table and no new state machine, because the states
+it renders are the write queue's own — `pending | inflight | verifying | done | failed` (§7.6) —
+joined to the `provenance` row §8.5 already writes per acquisition event. A `failed` row carries the
+verbatim upstream error and the same Retry the toast offers.
+
+**The reason it is not a nicety.** UsArr's only write path in v0.1 produces a multi-gigabyte download,
+and the confirmation currently lives in a chip inside a *search result row*, which is transient: one
+navigation away and there is no UsArr-side record that anything happened, no way to tell whether you
+already grabbed something an hour ago, no way to recover a release name after a restart, and no
+answer to *"did that one work?"*. A hub whose acquisition loop has no memory is a slower way to reach
+Prowlarr's own UI, which does keep a history. It also closes a three-document gap: this section
+required *"the user's own request list with state"*, §16's v0.1 did not fund one (the request model
+is v0.2), and §16 wins by its own rule — so the shipping answer was "no grab history in v0.1", stated
+nowhere.
+
+**The request model itself is still v0.2.** Recent grabs is not it, and must not be presented as it:
+no approval queue, no `pending → approved → routed → available`, no per-user quota, no
+`request` table. It is a read over rows v0.1 already writes.
+
+For v0.2 and later, this screen also carries the user's own request list with state and, for an
+admin, the pending-approval queue. In single-user mode the approval UI is hidden entirely (§8.3).
+
+**The post-grab confirmation names what will and will not import the file, per media type, and it is
+never truncated to the first clause.** §8.5 owns the copy rule and the reasoning; the requirement on
+this screen is that the sentence rendered at the moment of the grab is the complete one for that
+row's type. *"UsArr does not import downloads."* full stop is read by a Radarr owner as *"UsArr
+doesn't, but obviously Radarr does"* — and Radarr will not, because the grab went from UsArr to
+Prowlarr to the download client and Radarr never requested that release, so it has no record of it.
+The failure is silent and cumulative: five films over a week become five orphaned downloads and an
+unchanged library. The four sink-less types already get a complete sentence; the two with an \*Arr
+are exactly the two where the user's prior knowledge produces the wrong belief, and they were the two
+getting the incomplete one.
 
 ### 17.6 Item detail
 
@@ -2403,8 +2613,10 @@ backend's own client** (§5.4), and the button says so.
 
 Each is a named screen, not an accident.
 
-- **First run** — the wizard is **mandatory and blocking**; there is no way around it. Three fields
-  (kind, base URL, API key) plus a live connection test that must pass before Save is enabled. On
+- **First run** — the wizard is **mandatory and blocking**; there is no way around it. **Four fields**
+  (kind, **name**, base URL, API key — the name defaulted from the probe and editable, §17.3) plus a
+  live connection test that must pass before Save is enabled, **whose four result states are
+  specified in §17.3 rather than left to the implementer**. On
   save the import starts, the wizard hands off to home, and a progress affordance shows real counts
   ("1,240 of 10,000 movies") fed by SSE. **Sections populate live as import phase A commits** — it is
   not a spinner in front of an empty screen. If the only configured instance advertises no
@@ -2430,6 +2642,23 @@ Each is a named screen, not an accident.
   screen, explaining that its identity changed and sync is paused, with a Re-link action. Loud on
   purpose: silently doing the wrong thing here destroys a library.
 - **Search returned nothing** → 17.4.
+- **Library scope excludes everything (`scope-empty`)** → a named state on Home, on Search and on
+  every per-type grid, replacing the ordinary empty state: *"Your library scope is set to 0 of 8
+  libraries, so nothing is shown."* plus **Show all libraries**. It is reachable in two clicks — the
+  scope chip's `Everything` checkbox unticks every library and the chip's own label goes to
+  `No libraries selected` — and without this state the whole application renders as an application
+  with no content. §17.4 rule 1 makes it worse rather than better on Search: a group with zero hits
+  does not render at all, so a scoped-out search draws literally nothing, with no header saying why.
+  **The scope is a third thing, neither the query nor the filter**, so neither `empty` nor
+  `filtered-empty` covers it and neither says the true sentence.
+  **And the control that caused it must be reachable at the viewport the user is on.** Below 900 px
+  the sidebar collapses to a drawer and takes the scope chip with it, so on a phone the only
+  explanation of an empty application is invisible until the drawer is opened — the case where a
+  scope set on a laptop is carried to the sofa on the same `?lib=` URL. **Whenever the scope is not
+  "all libraries", the chip renders in the top bar at every viewport**, next to the search box, and
+  it is never the drawer's only home. This is the design's own rule — *a switcher that hides content
+  is only dangerous when it is silent about what it hid* — applied to the case where it hides all of
+  it. See `design/DESIGN-DIRECTION.md` §8.1 and §10.
 - **A command failed** → an inline chip on the affected item plus a toast carrying the upstream error
   **verbatim**, with **Retry** and **Dismiss**. Never a silent revert.
 
