@@ -1451,13 +1451,17 @@ four result states are specified in ARCHITECTURE §17.3 and which must pass befo
 (§17.7, §11.3). The **name** was missing from the add flow while the whole Services screen is keyed
 on it, so a second Radarr arrived indistinguishable from the first and the "1080p ✓ / 4K ✗" badge —
 v0.1's named power-user signal — had nothing to tell the two apart. It is defaulted from the probe
-and editable, so the single-instance case still types three things.
+and editable, so the single-instance case still types three things. **A fifth input, `URL base`, is
+optional and empty by default**, and it is on the wizard rather than behind `Show advanced`
+(ARCHITECTURE §17.3.1): a reverse-proxy sub-path is how a large share of this audience reaches its
+\*Arrs, and it is the most likely reason a first connection test fails.
 
 Credentials render as `••••••1a2b` and are never returned by the API. Changing `base_url`'s
 scheme/host/port **invalidates the stored credential**, and that has to be visible rather than
-implicit: **the key field clears, Save disables, and the form says why** (§17.3). Fixing a typo in a
-hostname is the most common edit on that screen and it was silently repointing a full-admin
-credential at a host the user had just typed.
+implicit: **the key field clears, Save disables, and the form says why** (§17.3.2). Fixing a typo in
+a hostname is the most common edit on that screen and it was silently repointing a full-admin
+credential at a host the user had just typed. Editing `url_base` alone changes nothing about the
+credential, and the form must not pretend otherwise.
 
 Three smaller rules the same forms need:
 
@@ -1717,6 +1721,8 @@ follow-up:
 | **error** | the **verbatim upstream text**, plus Retry / Dismiss | §17.3's "Problem" column is verbatim by requirement, rendered in mono |
 | **unconfigured** | the service does not exist; what adding it would give you; a link to Add | The Search-and-Grab first-run copy (§8.5) is the reference tone |
 | **permission-denied** | that it is denied, without leaking existence | v0.1 has one account, so **what exists from day one is the *behaviour*, not a drawn screen**: §14 rule 6 plus §1.3's access-scope parameter mean an item the caller may not see is **absent from the response**, so the honest rendering is the ordinary `empty` or `filtered-empty` state and there is nothing distinct to draw. A visibly *denied* surface is a v1.0 screen and arrives with `user_library_access`. (Services' `denied` state is a sudo re-authentication prompt — a different thing, and it should not be read as this one.) |
+| **re-authentication-required** — *Services, and every screen that writes a credential* | that the sudo window closed, that nothing was lost, and one password field that **retries the pending action** on success | The API answers `403` with `error: sudo_required` on all five service writes (ARCHITECTURE §17.3.3). It is a **prompt, not an `error`**: no verbatim block, UsArr's own words, and the raw code only on a muted `for the record` line. It must be distinguishable in the code from the other two 403s — `forbidden` (retrying cannot help) and `csrf` (reload) — so the screen branches on `error` and never on the status alone. Rendering all three the same way is the failure this row exists to catch |
+| **credential-re-entry** — *Services* | that the saved key is bound to the old address and will not be sent to the new one; the cleared key field; the address it *was* stored against | `400` `credential_reentry_required` from `PATCH /api/v1/services/{id}` and `POST /api/v1/services/{id}/test` (ARCHITECTURE §17.3.2). Triggered by a change of **scheme, host or port** and by nothing else — not the path, not `url_base`, not letter-case, not an explicitly written default port. Also not an `error` state: nothing was sent upstream, so there is no verbatim text and inventing one would be a fabrication. The form pre-empts it while the user types **and** renders it from the response, because pre-empting alone turns the server's refusal into an unexplained failure |
 
 The Services screen is the sharpest test of this. **It must be *more* informative when things are
 broken than when they are fine** — a screen that is a wall of green dots when healthy and a wall of

@@ -2135,7 +2135,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 
   <div class="pagehead">
     <h1>Services</h1>
-    <span class="pagehead__meta" data-when="live reident denied remove">8 services. 1 down, 2 degraded, 1 not configured. Health is probed per instance, never globally.</span>
+    <span class="pagehead__meta" data-when="live reident denied reentry remove">8 services. 1 down, 2 degraded, 1 not configured. Health is probed per instance, never globally.</span>
     <span class="pagehead__meta" data-when="addservice" hidden>Adding a service. The connection test runs before anything is saved.</span>
     <span class="pagehead__meta" data-when="annex" hidden>3 services v0.1 does not have, drawn apart from the ones it does.</span>
     <span class="pagehead__meta" data-when="unconfigured" hidden>No service connected yet.</span>
@@ -2148,6 +2148,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
       <option value="live">Mixed health</option>
       <option value="reident">An instance needs re-identification</option>
       <option value="denied">Re-authentication required</option>
+      <option value="reentry">The address changed: the key must be re-entered</option>
       <option value="remove">Removing a service that feeds libraries</option>
       <option value="addservice">Adding a service: the connection test</option>
       <option value="unconfigured">No services configured</option>
@@ -2172,11 +2173,31 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
   <div class="banner" data-when="denied" role="alert" hidden>
     <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
     <div class="banner__body">
-      <div class="banner__title">Confirm your password before changing an API key</div>
-      <div class="banner__text">Changing a service credential opens a five-minute window, and this session does not have one. Nothing is wrong: the server enforced it, not this screen, and the value you typed is still in the field.</div>
-      <div class="cell-sub" style="margin-top:6px">The server's answer, for the record: <span class="mono">PUT /api/v1/services/3 403 sudo_required</span></div>
+      <div class="banner__title">Confirm your password to change a service</div>
+      <div class="banner__text">Changing a service credential needs a password confirmation from the last five minutes, and this session's has expired. Nothing is wrong and nothing was lost: the server enforced it rather than this screen, the change you made is still in the form, and it is retried for you once you confirm. This is not a permission problem. An account that may not do this at all would say so and offer no retry, because retrying could not succeed.</div>
+      <div class="field" style="margin-top:10px;max-width:320px">
+        <label class="field__label" for="sudo-pw">Password</label>
+        <input class="input" id="sudo-pw" type="password" autocomplete="current-password">
+      </div>
+      <div class="cell-sub" style="margin-top:6px">The server's answer, for the record: <span class="mono">PATCH /api/v1/services/3 → 403 sudo_required</span></div>
     </div>
     <div class="banner__actions"><button type="button" class="btn btn--primary">Confirm</button></div>
+  </div>
+
+  <!-- 400 credential_reentry_required. Deliberately NOT the "error" state of
+       DESIGN-DIRECTION 10: nothing was sent upstream, so there is no verbatim
+       upstream text to render and inventing one would be a fabrication. The
+       form pre-empts this while you type AND renders it from the response,
+       because pre-empting alone turns the server's refusal into an
+       unexplained failure. ARCHITECTURE.md 17.3.2. -->
+  <div class="banner banner--warn" data-when="reentry" role="alert" hidden>
+    <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
+    <div class="banner__body">
+      <div class="banner__title">The stored API key does not move to a new address</div>
+      <div class="banner__text">This key is stored encrypted against <span class="mono">http://10.0.0.4:7878</span>, so it cannot be sent to <span class="mono">http://10.0.0.4:7879</span>. Paste the key for the new address, or put the old address back. The stored key is not deleted until you save. The scheme counts too: changing <span class="mono">https</span> to <span class="mono">http</span> on the same port would put a full-admin credential on the wire in clear text, so it is treated as a new address. Changing only the URL base is not a new address and clears nothing.</div>
+      <div class="cell-sub" style="margin-top:6px">The server's answer, for the record: <span class="mono">PATCH /api/v1/services/3 → 400 credential_reentry_required</span></div>
+    </div>
+    <div class="banner__actions"><a href="#r-apikey">Go to the API key field</a></div>
   </div>
 
   <!-- A service is not only a pipe: it is what some library is made of. -->
@@ -2200,7 +2221,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
   </div>
 
   <!-- The health table -------------------------------------------------- -->
-  <div data-when="live reident denied remove">
+  <div data-when="live reident denied reentry remove">
     <div class="toolbar">
       <button type="button" class="btn btn--primary" data-act="dialog-open" aria-controls="add-service">Add service</button>
       <button type="button" class="btn">Test all connections</button>
@@ -2467,7 +2488,7 @@ Komga's API exposes none, so matching is by title and cross-media links stay bel
   </div>
 
   <!-- System health messages -------------------------------------------- -->
-  <section class="section" id="system" data-when="live reident denied remove">
+  <section class="section" id="system" data-when="live reident denied reentry remove">
     <div class="section__head"><h2>System status</h2><span class="section__count">1 error, 2 warnings</span></div>
     <ul>
       <li class="banner banner--err" style="margin-left:0;margin-right:0">
@@ -2489,6 +2510,45 @@ Komga's API exposes none, so matching is by title and cross-media links stay bel
         <div class="banner__actions"><button type="button" class="btn btn--sm">Run full sync</button></div>
       </li>
     </ul>
+  </section>
+
+  <!-- =====================================================================
+       The credential-re-entry form state, drawn. Same three fields as the
+       Settings form below, in the state a changed address puts them in. It is
+       drawn as its own panel for the same reason the connection test is:
+       a state that only exists while someone is typing cannot be reviewed in
+       a screenshot otherwise.
+       ===================================================================== -->
+  <section class="section" data-when="reentry" hidden>
+    <div class="section__head">
+      <h2>Radarr 4K: the form after the address changed</h2>
+      <span class="section__count">3 fields</span>
+    </div>
+    <p class="note" style="padding-bottom:12px"><span class="statebar__tag">mockup</span> The port went from <span class="mono">7878</span> to <span class="mono">7879</span>. The key is encrypted against the old address and cannot be opened for the new one, so it is cleared rather than sent. Putting the old address back restores the field, which is the way out for someone who edited the wrong thing.</p>
+    <div class="detail">
+      <form class="form" novalidate>
+        <div class="field">
+          <label class="field__label" for="r-url">Base URL</label>
+          <input class="input" id="r-url" type="text" value="http://10.0.0.4:7879" aria-describedby="r-url-help">
+          <span class="field__help" id="r-url-help">Was <span class="mono">http://10.0.0.4:7878</span>. Scheme, host and port are what the key is stored against; a change to any of the three is a new address.</span>
+        </div>
+        <div class="field">
+          <label class="field__label" for="r-urlbase">URL base</label>
+          <input class="input" id="r-urlbase" type="text" value="/radarr" aria-describedby="r-urlbase-help">
+          <span class="field__help" id="r-urlbase-help">Unchanged, and it would not have mattered: the sub-path is not part of what the key is stored against, so moving a service to a different path never asks for the key again.</span>
+        </div>
+        <div class="field">
+          <label class="field__label" for="r-apikey">API key</label>
+          <input class="input" id="r-apikey" type="password" value="" placeholder="Re-enter the API key" aria-invalid="true" aria-describedby="r-apikey-err">
+          <span class="field__err" id="r-apikey-err"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg><span class="sr">Error:</span>Enter the key for the new address. The stored one is bound to the old address and will not be sent to this one.</span>
+        </div>
+        <div class="form__foot">
+          <button type="button" class="btn" aria-disabled="true">Test connection</button>
+          <button type="button" class="btn btn--primary" aria-disabled="true">Save</button>
+          <span class="muted">Both stay blocked until the key is entered, or until the old address is put back.</span>
+        </div>
+      </form>
+    </div>
   </section>
 
   <!-- Settings anatomy ---------------------------------------------------
@@ -2527,7 +2587,7 @@ Komga's API exposes none, so matching is by title and cross-media links stay bel
               <div class="errsummary__title">There is a problem</div>
               <ul>
                 <li><a href="#f-url">Base URL must include a scheme, for example http:// or https://</a></li>
-                <li><a href="#f-apikey">Enter the API key. It was cleared when the host changed.</a></li>
+                <li><a href="#f-apikey">Enter the API key. It was cleared when the address changed.</a></li>
               </ul>
             </div>
 
@@ -2554,20 +2614,23 @@ Komga's API exposes none, so matching is by title and cross-media links stay bel
               <label class="field__label" for="f-url">Base URL</label>
               <input class="input" id="f-url" type="text" value="10.0.0.4:7879" aria-invalid="true" aria-describedby="f-url-err f-url-help" data-act="host">
               <span class="field__err" id="f-url-err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg><span class="sr">Error:</span>Base URL must include a scheme, for example http:// or https://</span>
-              <span class="field__help" id="f-url-help">The address this host can reach, not the one your browser uses. UsArr resolves it once and pins the address for the life of the request, so a rebinding DNS answer cannot redirect the call.</span>
+              <span class="field__help" id="f-url-help">The address this host can reach, not the one your browser uses. Scheme, host and port only; a path goes in <strong>URL base</strong> below. UsArr resolves it once and pins the address for the life of the request, so a rebinding DNS answer cannot redirect the call. Changing any of the three clears the API key, because the key is encrypted against this address and cannot be opened for another one.</span>
             </div>
 
             <div class="field">
               <label class="field__label" for="f-apikey">API key</label>
               <input class="input" id="f-apikey" type="password" value="••••••1a2b" aria-describedby="apikey-reentry f-apikey-help">
               <span class="field__help" id="f-apikey-help">Stored encrypted and never sent back to the browser. An *Arr API key is a full-admin credential.</span>
-              <span class="field__err" id="apikey-reentry" hidden><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg><span class="sr">Error:</span>The host changed, so the stored key was cleared. Enter it again before saving.</span>
+              <span class="field__err" id="apikey-reentry" hidden><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg><span class="sr">Error:</span>The address changed, so the stored key was cleared. Enter the key for the new address before saving.</span>
             </div>
 
-            <div class="field advanced">
-              <label class="field__label" for="f-urlbase">URL base <span class="adv-tag">advanced</span></label>
-              <input class="input" id="f-urlbase" type="text" placeholder="/radarr">
-              <span class="field__help">Only needed when the application is served under a path by a reverse proxy.</span>
+            <!-- Not advanced. It was, and being hidden by default made the one
+                 setting a reverse-proxy install cannot work without invisible
+                 on the screen that configures it. -->
+            <div class="field">
+              <label class="field__label" for="f-urlbase">URL base <span class="muted">optional</span></label>
+              <input class="input" id="f-urlbase" type="text" value="/radarr" aria-describedby="f-urlbase-help">
+              <span class="field__help" id="f-urlbase-help">Only needed when a reverse proxy serves the application under a path. For <span class="mono">https://home.tailnet.ts.net/radarr</span> the base URL is <span class="mono">https://home.tailnet.ts.net</span> and this is <span class="mono">/radarr</span>. A leading slash is added for you and a trailing one is trimmed. Changing it does <em>not</em> clear the API key: the key is encrypted against the address, and the sub-path is not part of the address.</span>
             </div>
 
             <div class="field advanced">
@@ -2689,7 +2752,20 @@ Komga's API exposes none, so matching is by title and cross-media links stay bel
         <div class="field">
           <label class="field__label" for="d-url">Base URL</label>
           <input class="input" id="d-url" type="text" placeholder="http://10.0.0.4:7878">
-          <span class="field__help">The address <em>this host</em> can reach, which is not always the one your browser uses. If a reverse proxy serves the application under a path — <span class="mono">https://home.tailnet.ts.net/radarr</span> — include that path here: without it the connection resolves and then answers 404 on every API call.</span>
+          <span class="field__help">The address <em>this host</em> can reach, which is not always the one your browser uses. Scheme, host and port only. A path belongs in <strong>URL base</strong> below, because UsArr stores the two separately: the key is encrypted against the address, and the sub-path is not part of it.</span>
+        </div>
+        <!-- The field the wizard did not have. A reverse proxy serving an *Arr
+             under a sub-path is an ordinary self-hoster setup, the server has
+             accepted url_base on create and update since the first migration,
+             and a form that only mentions the sub-path in another field's help
+             text cannot express the deployment it is describing. It is not
+             behind "Show advanced": this is the most likely reason a first
+             connection test fails, and the wizard has no advanced toggle at
+             all, so hiding it would mean not having it. -->
+        <div class="field">
+          <label class="field__label" for="d-urlbase">URL base <span class="muted">optional</span></label>
+          <input class="input" id="d-urlbase" type="text" placeholder="/radarr">
+          <span class="field__help">Leave this empty unless a reverse proxy serves the application under a path. If you reach Radarr at <span class="mono">https://home.tailnet.ts.net/radarr</span>, the base URL is <span class="mono">https://home.tailnet.ts.net</span> and the URL base is <span class="mono">/radarr</span>. It is the same value the application calls <span class="mono">urlBase</span> in its own settings. A leading slash is added for you and a trailing one is trimmed.</span>
         </div>
         <div class="field">
           <label class="field__label" for="d-key">API key</label>

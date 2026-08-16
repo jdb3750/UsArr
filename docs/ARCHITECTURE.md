@@ -2124,8 +2124,9 @@ Search tiers 1 and 2, corpus limited to top-level kinds, **no typo tolerance**. 
 `format:`, `source:`, `quality:`, `indexer:` with the `downloadId` provenance join. The **"1080p ✓ /
 4K ✗"** badge — a free consequence of the M:N link and a strong signal to power users, though *not*
 the landing-page claim, since it needs two Radarr instances. **The Services health screen (§17.3),
-whose add flow asks for four fields — kind, name, base URL, API key — and draws all four states of
-the mandatory connection test, failure included.**
+whose add flow asks for four fields — kind, name, base URL, API key — plus an optional `URL base`
+for reverse-proxy sub-paths, and draws all four states of the mandatory connection test, failure
+included.**
 
 **A `Recent grabs` block on the Requests screen (§17.5), and what it costs, stated plainly.** Ten
 rows, newest first: time, release name, indexer, protocol, size, resolved type, and last known state.
@@ -2471,8 +2472,9 @@ measured from its `Date` header (§7.3), warned when large.
 **The actions are the point.** Each failure state names its fix: *unreachable* → Test connection;
 *401/403* → Update API key (sudo mode, §12.1) — **and a sudo re-prompt is not an error state**: §10
 requires verbatim upstream text for *errors*, and leading a routine "confirm your password" step
-with `PUT /api/v1/services/3 403: {"error":"sudo_required"}` makes a normal security step look like
-a fault. It is a prompt, in UsArr's own words, with no verbatim block; *TLS pin changed* → show both fingerprints and require
+with `PATCH /api/v1/services/3 403: {"error":"sudo_required"}` makes a normal security step look
+like a fault. It is a prompt, in UsArr's own words, with no verbatim block, and §17.3.3 specifies
+it; *TLS pin changed* → show both fingerprints and require
 an explicit accept; *needs re-identification* (§7.4 guard 2) → explain that the instance's identity
 changed, that sync is paused deliberately, and offer **two** actions, not one; *degraded, partial
 data* → Run full sync now.
@@ -2508,7 +2510,9 @@ indistinguishable from the first. **The field is defaulted from the probed appli
 (`Radarr`, then `Radarr (2)` on collision) and is editable in place**, so the common single-instance
 case is still three things typed; it is not an extra question, it is a pre-filled answer. It must be
 unique per user, which the inline settings form's own help text already states and the add flow never
-enforced.
+enforced. **Four is the count of answers the wizard requires**; §17.3.1 adds `URL base` as a fifth
+input which is optional, defaults to empty, and is left empty by every deployment that does not sit
+behind a reverse proxy.
 
 **The connection test's result is a specified surface, in all four of its states.** §17.7 makes the
 test mandatory and blocking — *"a live connection test that must pass before Save is enabled"* — and
@@ -2528,15 +2532,100 @@ a trailing slash, a Tailscale name that resolves in the browser but not from the
 | `connected` | **the probed application, its version and its API path, plus one count** — *"Sonarr 4.0.10.2544, `/api/v3`, 214 series"*. Naming the probed application is the only thing that catches "the Kind select still said `sonarr` and I pasted a Radarr URL", which the dialog otherwise cannot catch at all, since both serve `/api/v3/system/status` |
 | `failed` | **the verbatim upstream text or transport error in mono**, exactly as the `Problem` column renders it, plus the two or three most likely causes for that error class as prose. A 404 names the URL base; a TLS error names the pin; a refused connection names the port |
 
-**The base-URL field's help text names the URL base**, because the placeholder (`http://10.0.0.4:7878`)
-teaches the LAN-IP shape only and the subpath case is the one that fails silently.
+#### 17.3.1 `URL base` is a field, not help text on another field
 
-**Editing a saved service's host clears its API key.** `CLAUDE.md`'s security rules forbid sending a
-stored \*Arr credential to a host the user has just edited, and that rule needs a UI or it is not
-enforced: when the **host** of `Base URL` changes (a path or scheme change alone does not count), the
-key field is cleared, Save is disabled, and the form says *"The host changed, so the stored key will
-not be sent to it. Paste the key for the new host."* Fixing a typo in a hostname is the most common
-edit on this screen, and it was the one that silently repointed a full-admin credential.
+**The base URL and the URL base are two values and they get two inputs.** The schema has carried
+`service_instance.url_base` as a column distinct from `base_url` since migration 0001, the HTTP API
+accepts `url_base` on `POST /api/v1/services`, on `PATCH /api/v1/services/{id}` and on both
+connection-test endpoints, and the upstream client is built over the **concatenation** of the two.
+A Prowlarr reached at `https://home.tailnet.ts.net/prowlarr` is an ordinary self-hoster deployment
+and it cannot be described with one input; a form that only *mentions* the sub-path inside the base
+URL's help text is a form that cannot express the setup it is describing. So:
+
+| | |
+|---|---|
+| Label | `URL base` |
+| Placeholder | `/prowlarr` |
+| Required | No. Empty is the common case, empty is the default, and empty is valid |
+| Where | **Both the add wizard and the edit form**, and **not** behind `Show advanced`. A field the wizard does not have is a field a first-time user cannot reach, and the reverse-proxy sub-path is the single most likely reason their first connection test fails |
+| Help text | *"Leave this empty unless a reverse proxy serves the application under a path. If you reach Prowlarr at `https://home.tailnet.ts.net/prowlarr`, the base URL is `https://home.tailnet.ts.net` and the URL base is `/prowlarr`. It is the same value the application calls `urlBase` in its own settings."* |
+| Validation | A leading `/` is required and a trailing `/` is refused; empty passes both. The two are checked because the upstream URL is `base_url + url_base` with no normalising join, so a missing leading slash yields an unparseable host and a trailing slash yields a doubled separator. **The form normalises rather than only complaining** — it adds the leading slash and trims the trailing one on blur, and only reports an error for something it cannot repair (a scheme, a host, a query string) |
+| Effect on the stored credential | **None**, and the field says so where it matters. The AAD binds the credential to the normalised *origin* only, so moving a service to a different sub-path is the one URL edit that does **not** invalidate the key |
+
+**The base URL field's help text stops naming the sub-path** and names the URL base field instead.
+Its own job is the other half: the address *this host* can reach, which is not always the one the
+browser uses.
+
+#### 17.3.2 `credential re-entry` — a named state, not a generic error
+
+**Changing a saved service's origin invalidates its stored API key**, because the encryption binds
+the ciphertext to the normalised `scheme://host:port` and the envelope cannot be opened for anything
+else. `CLAUDE.md`'s security rules forbid sending a stored \*Arr credential to a host the user has
+just edited, and that rule needs a screen or it is not enforced.
+
+**What counts as a change, precisely,** because the screen has to pre-empt exactly this set and no
+larger one:
+
+- **Triggers re-entry:** the scheme, the host, or the port. `https://nas:443` → `http://nas:443` is a
+  change, and it is the one an earlier draft of this section got wrong by writing *"a path or scheme
+  change alone does not count"*: a same-port downgrade to plaintext is precisely the edit that would
+  put a full-admin key on the wire, so it is bound cryptographically and it counts.
+- **Does not trigger re-entry:** the path, `url_base`, host letter-case, a trailing root dot, an
+  IP-literal spelling (`::1` and `0:0::1`), or writing the scheme's default port out in full
+  (`http://nas` and `http://nas:80` are the same origin). Editing `url_base` alone never touches the
+  credential, which is what makes the sub-path fix in §17.3.1 a safe edit rather than a re-key.
+
+**The API's answer is `400` with `error: credential_reentry_required`** and
+`action: "Re-enter the API key"`, from `PATCH /api/v1/services/{id}` and from
+`POST /api/v1/services/{id}/test` alike — testing against a host the user has just typed uses only
+the key in the form and never the stored one.
+
+The state is reached two ways and looks the same in both: **the form pre-empts it locally** while
+the user types, and **the server can still answer it** if the client did not. The screen must
+therefore render it from the response code as well as from its own comparison, because a form that
+only pre-empts it turns the server's refusal into an unexplained failure.
+
+| | |
+|---|---|
+| Trigger | The origin of `Base URL` differs from the saved one, on edit or on test |
+| Title | *"The stored API key does not move to a new address"* |
+| Body | *"This key is stored encrypted against `http://10.0.0.4:7878`, so it cannot be sent to `http://10.0.0.4:7879`. Paste the key for the new address. The old key is not deleted until you save."* |
+| Field behaviour | The key field clears, its placeholder becomes `Re-enter the API key`, and it is what focus moves to |
+| Commit | Save and Test are `aria-disabled` (§9.3: never `disabled`, or a keyboard user never meets the blocked control) and labelled with the reason |
+| Recovery | Typing the key re-enables both. **Restoring the original address also clears the state**, which is the escape hatch for the user who edited the wrong field |
+| What it is not | Not the `error` state of §10: there is no upstream text to render verbatim, because nothing was sent upstream. It is a form state, in UsArr's own words |
+
+#### 17.3.3 `re-authentication required` — a named state, and not an authorisation failure
+
+**Every write on this screen sits behind sudo mode**, a window that opens on sign-in and on each
+password confirmation and closes **five minutes** later. Five endpoints are gated, which is every
+way this screen changes anything: create, update, delete, test-an-unsaved-service, and
+test-a-saved-service. Both test endpoints are gated because a test is what sends a credential
+somewhere.
+
+**The response is `403` with `error: sudo_required`** and `action: "Confirm your password"`. The
+screen branches on `error`, never on the status alone, because 403 is also how an ordinary
+authorisation failure and a CSRF mismatch arrive, and the three need different screens:
+
+| Status | `error` | What it means | What the screen does |
+|---|---|---|---|
+| 403 | `sudo_required` | The session is fine; the sudo window closed | Password prompt, then **retry the pending action** |
+| 403 | `forbidden` | The account may not do this at all | State it plainly; offer no retry, because retrying cannot succeed |
+| 403 | `csrf` | The page's token is stale | *"Reload the page"* — its own `action` says so |
+
+**It is a prompt, not an error.** §10 requires verbatim upstream text for *errors*, and leading a
+routine confirmation with a raw status line makes a normal security step look like a fault. The
+title is UsArr's words, there is no verbatim block, and the raw code appears only on a
+`for the record` line beneath the body, where it is diagnostic rather than the message.
+
+| | |
+|---|---|
+| Title | *"Confirm your password to change a service"* |
+| Body | *"Changing a service credential needs a password confirmation from the last five minutes, and this session's has expired. Nothing is wrong and nothing was lost: the change you made is still in the form."* |
+| Control | One password field and `Confirm`. Focus moves to the field |
+| On success | **The pending write is retried automatically.** Making the user find and press the original button again is the failure mode this state exists to avoid |
+| On failure | *"That password does not match"* inline, and the prompt stays open |
+| For the record | `PATCH /api/v1/services/3 → 403 sudo_required`, one line, muted, in mono |
 
 ### 17.4 Search
 
