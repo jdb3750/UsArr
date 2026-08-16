@@ -2035,6 +2035,47 @@ review items**, because a hand-built grid supplies nothing a native `<table>` su
   by side. Absence from that tree is therefore not evidence of anything. **Verifying these attributes
   needs a real screen reader**, which is what GOV.UK's own strategy (cited below) says about
   automated checking generally.
+- 🚩 **A row expander is a second `role="row"`, it consumes a row index, and both index and count
+  have to account for it.** §17.3 makes the expander a requirement rather than a nicety — the breaker
+  state, an *Arr's own health warnings and the verbatim upstream text all live behind it, because
+  §9.1 is explicit that an explanation is not a cell value at all — so the primitive owns it and the
+  contract is stated here rather than rediscovered per screen. **It cannot be a `region`**, however
+  much better that would read: a `rowgroup`'s owned elements are rows and nothing else, so an
+  expander that is not a row is a child its parent may not own. Four consequences, and the last two
+  are the ones a hand-written implementation gets wrong:
+  **(a)** it renders *only* when open, so a collapsed list costs nothing in the DOM, which is what
+  keeps "Load more" cheap on a screen whose rows are otherwise one line;
+  **(b)** `colspan` means nothing to a grid, so the spanning cell says so in grid terms
+  (`grid-column: 1 / -1`) and repeats the fact to the accessibility tree with `aria-colspan`;
+  **(c)** because an open expander is a real row, `aria-rowindex` is a **running total** rather than
+  `offset + i + 2` — the moment one row opens, position arithmetic done in the template is wrong for
+  every row beneath it, and a confidently wrong position arriving through the accessibility tree is
+  exactly what the bullet above exists to prevent;
+  **(d)** and `aria-rowcount` has to include the open expanders for the same reason, or the count
+  and the indices disagree and the user is told "row 9 of 7". Bumping the index without bumping the
+  count is the natural half-fix and it is worse than neither.
+  **The expander carries no row identity**, which is what keeps it out of the roving model: the list
+  stays one tab stop and arrowing walks services, not services and their expanders alternately. That
+  is the same requirement as the keyboard model below, reached from the other side.
+
+  📌 **Written against the shipped component, not against a sketch: `web/src/lib/List.svelte`
+  implements all of the above** — `laidOut` computes the running index, `declaredTotal` adds the open
+  expanders to the count, and the expander `<tr>` is the one row in the list with no `data-key`.
+  **Two places the implementation is more specific than this document was**, both recorded here so
+  the contract and the code do not drift:
+  **`--row-lines` and `--row-ci` are the same seam in different units.** The mockups declare a
+  unitless multiplier per list and compute
+  `auto calc(2 * var(--row-py) + var(--row-lines) * var(--lh-base))`; the component declares
+  `--row-ci` as a **measured content-box height in px**, defaulting to `ROW_INTRINSIC` per density
+  and overridable per list via the `rowIntrinsic` prop. Both satisfy §7.4's "declared per list from
+  that list's own rendered rows"; neither is the other's literal value, so a number must never be
+  copied between them.
+  **And the component writes `--cols` and `--row-ci` through `element.style.setProperty()`**, because
+  the server sends `style-src 'self'` with no `'unsafe-inline'` and a `style` attribute is therefore
+  refused — it stays in the DOM and applies nothing, which is the kind of failure that survives
+  review because the attribute is still visible in the inspector. That is the same constraint
+  `check.mjs` §1d enforces over the mockups, and the same reason CSSOM mutation is explicitly not
+  banned there.
 - **No status glyph may have an empty accessible name**, and availability is the case that matters:
   §9.5 already requires *"icon + text + colour, in that order of importance"* and that *"removing
   the colour must leave it fully legible"*. An icon-only ✓ or ✗ leaves **nothing** — a screen-reader
