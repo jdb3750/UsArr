@@ -2703,3 +2703,67 @@ Nothing in it is false — §1.3's `salt=<per-install random, stored>` is correc
 layout to `CONFIGURATION.md` §5 — but it never says where the salt lives or that it is required for
 recovery, and §1.3 should now name `$USARR_CONFIG_DIR/kek.salt` and state that it is a non-secret
 which the database backup must contain. That is the only item outstanding.
+
+---
+
+# Scope audit — v0.1's catalogue sources were re-sequenced, and the docs disagreed with themselves
+
+**Date:** 2026-08-16. **Branch:** `main`. Not a review round, and no adversarial reviewer behind it.
+The trigger was the owner, handed the question of whether v0.1 should grow from two providers to
+five, handing it back: *"I'm fine with starting small, it's honestly sort of whatever to me."*
+Recorded here because the outcome is a scope change that two Accepted ADRs argued against, and
+because the second half of the finding is drift — the repository had begun contradicting itself
+about which sources v0.1 ships, which is exactly the failure mode `CLAUDE.md`'s "no invented status"
+rule exists to catch.
+
+| # | Finding | Disposition |
+|---|---|---|
+| **SCOPE-01** | **ADR-0032 and ADR-0035 each answered "which catalogue sources", and neither answered "can v0.1 carry three of them".** ADR-0032 moved four out of the v1.0 bucket and put three into v0.1; ADR-0035 swapped which three. §16.0 priced them honestly — four hand-written Tier 0 adapters, four auth schemes, one with a lifecycle, four hierarchies, and one entirely new sync channel — and then did not treat that price as a constraint on the milestone paying it. Meanwhile what is actually **built** is the Prowlarr path; the \*Arr *library* sync, the tables it writes, the grid, the image pipeline and local search are all still design | **Applied as [ADR-0036](./DECISIONS.md#adr-0036). v0.1 ships Sonarr, Radarr and Prowlarr; no catalogue source ships in v0.1.** The \*Arr library sync lands first, because it is the thing that proves the replica thesis on real data. **This is re-sequencing, not rejection** — Navidrome, Audiobookshelf, Kavita and Komga all still arrive, one at a time after v0.1, each behind a milestone with its own success criterion (*this source appears in the grid, is searchable, delta-syncs, and its Services row is honest about what it cannot do*). ADR-0032's roadmap conclusion is preserved intact; only its v0.1 membership moves. Neither prior ADR is reversed, and both carry a 🚩 note on their Status line pointing here — the same convention ADR-0035 used on ADR-0032 |
+| **SCOPE-02** | **The order within the sequence was the temptation, because fixing it would let `SETUP-CHECKLIST.md` name one next service** | **Left to the probe, deliberately.** ADR-0035 §2's `LastChapterAdded` watermark spike still decides it — **Kavita first if it passes, Navidrome first if it fails** — with its three falsifiable clauses unchanged. What moved is only *when it runs*: it was day-one because it decided build order *inside* v0.1, and with no catalogue source there it gates nothing on day one. It now runs immediately before the first catalogue adapter is written. **Deferring the run must not turn it back into a guess**, which is why the pass condition stays written down in advance in ADR-0035 §2, §7.1a and §16 alike. **Komga is last regardless** — nobody on this project can point it at a real library. **Navidrome must precede v0.4**, whose success criterion needs a populated music replica |
+| **SCOPE-03** | **v0.1's "unified library across six media types" became false and had to be replaced with something narrower rather than quietly softened** | **Applied, and split into the three claims it was conflating.** The **schema** is six-type — it must be, migration 0001 can never be edited, and the enumeration in §16's v0.1 entry is unchanged. **Requesting** is six-type — Prowlarr Search-and-Grab covers all six categories, and that part is already shipped. **The catalogue is film and TV.** §16's v0.1 entry now carries that as a blockquote, the README's first v0.1 row says it, and `CLAUDE.md`'s one-line v0.1 summary says it. A media type with no configured source degrades honestly (principle 3) rather than rendering an empty grid — which makes the honest-degradation path the *common* path in v0.1 and gets it exercised from the first release |
+| **SCOPE-04** | **§6.4 justified a v0.1 rule with a source v0.1 no longer shipped.** *"It is v0.1 because v0.1 ships Komga, which supplies no external identifiers at all"* — written under ADR-0032, left standing after ADR-0035 replaced Komga with Kavita, and false twice over after ADR-0036 | **Applied, and the rule survives on better ground.** The nullable column and the `matched by title` badge are v0.1's **because they cannot be retrofitted**, not because v0.1 renders the state often — v0.1's Sonarr and Radarr carry TVDB and TMDB ids, so the state first *renders* with the first catalogue source, where per ADR-0035 §1 it is the **ordinary** case rather than an edge case. The honest comparison is kept: Komga supplies no external identifiers at all, so comics has no strong-identity path under either choice. §16's v0.3 entry, which repeated *"because v0.1 ships Komga"*, is corrected the same way |
+| **SCOPE-05** | **§7.1a's Kavita row still said the thing ADR-0035 had already disproved.** *"⚠️ None. `sortByLastModified` does not exist on the Series, Volume or Chapter endpoints"* — true about query parameters, wrong as a conclusion, and directly contradicted by ADR-0035's verification from Kavita `main` | **Applied.** Kavita's row is now the probed one, stating the three-clause pass condition, recording that `SortField.LastModifiedDate` exists but `SeriesDto` returns no last-modified property (so that key yields no carryable watermark), and noting that its result orders the post-v0.1 sequence. Komga's row becomes *"(later)"* with its own probe at the milestone it lands in. The section intro's *"no sortable delta at all"* is corrected to *"no query-parameter delta; the sort lives in `FilterV2Dto.SortOptions` on `POST /api/Series/all-v2`"*, which is what ADR-0035 §2 actually probes. The table is reordered into expected landing order and the trailing paragraph — which claimed channel 3b for v0.1 — now says it is **specified now, built with the first catalogue adapter**. §7.1's channel table row 3b is corrected to match |
+| **SCOPE-06** | **Three rows were stale in the *opposite* direction, filing catalogue sources under v1.0 — the pre-ADR-0032 world.** A sweep that only looked for "v0.1 + Komga" would miss them entirely | **Applied, with a different rewrite each.** `DEVELOPMENT.md`'s tree lumped `jellyfin/ navidrome/ audiobookshelf/ komga/ kavita/` under one *"v1.0 southbound adapters"* comment; the four catalogue adapters are split out as one milestone each after v0.1 and Jellyfin stays v1.0, which it correctly is. `SETUP-CHECKLIST.md`'s prerequisite table filed Audiobookshelf and Komga/Kavita under v1.0 on one shared row; they are now three rows in sequence order, Kavita's *"⚠️ auth scheme unconfirmed"* note **cleared** against `RESEARCH.md` Track 06 (`x-api-key`, with the key in a URL path segment on OPDS routes) and replaced with the Kavita+ identifier caveat that actually matters, and Komga marked *"only if you adopt it"*. Its §3 also said Navidrome-as-a-library-source was **v1.0**, which contradicted everything else on the page; that is now "one of the first two catalogue milestones, and before v0.4 either way". ⚠️ **The relayed line numbers were off** — the rows are `DEVELOPMENT.md:94`, `SETUP-CHECKLIST.md:143-144` and, for the third, **not `CONFIGURATION.md:748` at all**: that file's only Komga mention is line 798, an SSRF example about tailnet-resolved cover art, which is a technical fact and correct as written |
+| **SCOPE-07** | **`reference/gateway.md` contradicted §16 on the method count and mis-pointed two cross-references.** Line 12 said the gateway implements *"thirteen methods"* while §16 v0.4 — authoritative — says ~20; line 51 cited *"multi-instance aggregation (§2)"* where §2 is Authentication, and *"OPDS (§5)"* where §5 is capability negotiation | **Applied, without pretending the table is something it is not.** §1's lead now states the ~20-method subset and carries a ⚠️ saying the table below lists the thirteen it was first scoped around, naming the six §16 added plus the error responder, and stating plainly that **§16 wins** on any disagreement — the rows remain correct about tables and degradation for the methods they cover. The two cross-references are re-pointed at what actually discusses them: OPDS's auth scheme is §2's own `### OPDS` subsection, and multi-instance aggregation is §3, whose ID format ships from day one because it cannot change later |
+| **SCOPE-08** | **A claim introduced during the fix was wrong and was caught before it landed.** A first draft of §16.0's auth bullet asserted Kavita authenticates with *"a JWT from `/api/Account/login` with a refresh"* — invented, not verified, and contradicted by §11.2 four hundred lines away | **Rewritten against primary-source-backed repository evidence rather than left to stand.** `RESEARCH.md` line 1187 records the Kavita auth question **cleared 2026-08-16 (Track 06)** from the full `openapi.json`: it is `x-api-key`, with the key in a URL path segment on OPDS routes. Both §16.0 and §11.2 now say that, and they now agree. Logged rather than silently fixed because it is the exact failure the "verify, don't assert" rule names, committed while fixing an instance of the same rule being broken |
+
+**Also corrected while in the same paragraphs, because leaving them would have been fresh
+self-contradiction:** §16.0's payment argument (the old *"what has to move out is Kavita, to v0.2"*
+is now the honest full payment, with **both** earlier undersized payments named); §16.0's shared-read-
+machinery bullet, which is now the argument *for* the sequence — shared machinery has to exist and
+have run before it can be shared; §16.0's libraries paragraph, which justified the subsystem with
+the Ebooks/Audiobooks split over one Audiobookshelf library, a demonstration that **moves with
+Audiobookshelf** — the subsystem stays in v0.1 on its real grounds (four tables that belong in
+migration 0001, one of the five essential screens, and the request destination the write path routes
+on) and is given demonstrations v0.1 can actually perform; §11.2's note, which priced *"three
+hand-written Go adapters in v0.1"*; and §16's v0.2 entry, which had pinned Kavita to it as *"the
+fourth catalogue source"*.
+
+**A new §16.1 holds the sequence** as a four-row table with the gate on each, so there is one place
+that answers "what is next" rather than the answer being spread across an ADR, a channel table and a
+setup checklist. ADR-0035's Decision block also pointed at *"the day-one watermark spike in §3
+below"* when the spike is its §2 (§3 is the ADR-0030 re-examination); corrected in passing, with the
+old pointer noted so the fix is not mistaken for a renumbering.
+
+**Done in parallel by the design thread, and merged rather than duplicated.** The same call was taken
+independently in the same hours, which is why it lands in two places: **SW-10** above records it from
+the design side, **ADR-0035 carries an amendment** restating its own four findings against the moved
+milestone, and **§17 was re-scoped** for a v0.1 with no catalogue sources (`67b0868`) — including
+Home Block A's four sourceless rows, `matched by title` marked unreachable in v0.1, and the removal
+of *"Navidrome catalogues music in v0.1 exactly as Radarr catalogues films"*. The two accounts agree
+and neither restates the other: **ADR-0036 carries the decision, its alternatives and the §16
+rewrite; ADR-0035's amendment carries what the move does to ADR-0035 clause by clause.** That split
+is what the design thread's own commit asked for — *"ADR-0032's status note and the §16 rows are the
+implementation thread's"* — and ADR-0032's status note now points at ADR-0036, because a note has to
+point at something and burying a scope decision inside a source decision is what caused this drift
+in the first place.
+
+**Left to other threads, not touched:** everything under `docs/design/` beyond what the design thread
+has already landed, and `docs/reference/schema.md` (held by the migration-0002 thread) — whose
+line 183 *"later tables (v1.0, with Lidarr / Komga)"* and lines 559 and 1188, both scoping
+`service_item_link`'s container to *"Navidrome, Audiobookshelf and Komga — three of the six media
+types"*, all still read from the pre-ADR-0035 world and need the same re-sequencing plus the
+Komga→Kavita swap. **Everything else the `Komga` sweep found is correct as written**: ecosystem and
+API facts in `RESEARCH.md`, `reference/tags.md`, `reference/security.md` and `CONFIGURATION.md` §9;
+SSRF test fixtures and the `service_kind` comment in migration 0001; and §17's remaining mentions,
+which are UI copy and degradation examples stating no milestone.

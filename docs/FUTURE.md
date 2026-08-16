@@ -262,8 +262,8 @@ calendar can subscribe to.
 
 ⚠️ **Which of those sources can actually supply a date, stated because the sentence above promises
 aggregation over services that cannot.** **Only the \*Arrs expose a `/calendar` endpoint.** Lidarr is
-v1.0, and v0.1's book, audiobook and comic sources — Audiobookshelf, Komga, and Kavita from v0.2 —
-expose **no calendar endpoint at all**. So a catalogue-only source contributes `work.release_date`
+v1.0, and the book, audiobook and comic sources — Audiobookshelf and Kavita, which arrive after v0.1,
+then Komga — expose **no calendar endpoint at all**. So a catalogue-only source contributes `work.release_date`
 where it happens to have one and nothing where it does not, and the calendar must be honest about
 which media types it can cover rather than rendering four empty lanes. The **seam**
 (`work.release_date`) is unaffected; the **promise** needed narrowing.
@@ -669,14 +669,19 @@ an ISBN or an ASIN satisfy `ux_extid_work_strong`.** Break that and the pass has
 visible **"not identified"** state: whatever the backend reports, UsArr keeps the row — a book with
 a title and a file and a quiet marker, still searchable. That single behaviour is what
 LazyLibrarian's absence of disqualifies it as a catalogue, and it costs one nullable column and one
-badge. **It is a v0.1 requirement**, not a v0.3-or-later one, because v0.1 ships Komga, which
-supplies **no external identifiers at all** — so the state is reachable on day one. It now lives in
-ARCHITECTURE §6.4 as a rule; it is recorded here only so the connection is not lost.
+badge. **It is a v0.1 requirement**, not a v0.3-or-later one, **because it cannot be retrofitted** —
+the nullable column belongs in migration 0001 and the badge in the first grid. It is *reached*
+rarely in v0.1, whose Sonarr and Radarr carry TVDB and TMDB ids, and becomes the ordinary case with
+the first catalogue source (ARCHITECTURE §16.1): free Kavita's identifier fields are null, and Komga
+supplies **no external identifiers at all**. It now lives in ARCHITECTURE §6.4 as a rule; it is
+recorded here only so the connection is not lost.
 
 **Trigger.** ⚠️ **Rewritten, because the previous one — *"the milestone that ships any book
-catalogue source with real user data behind it"* — is satisfied by v0.1** under ADR-0032, which
-would make this a deferred entry whose reopening condition fires one milestone *before* the roadmap
-line that used to claim it. **The trigger is now: after v0.3, once the Wikidata edge pipeline has
+catalogue source with real user data behind it"* — was satisfied by v0.1** under ADR-0032, which
+would have made this a deferred entry whose reopening condition fires one milestone *before* the
+roadmap line that used to claim it. (Under [ADR-0036](./DECISIONS.md#adr-0036) no book catalogue
+source ships in v0.1 at all, so the old trigger would now fire later — but it was the wrong *kind* of
+condition either way, being about data rather than about machinery, and the rewrite stands on that.) **The trigger is now: after v0.3, once the Wikidata edge pipeline has
 proved the confidence/evidence path on real data.** That is the machinery this pass writes into, and
 until it exists there is nowhere to put a computed link.
 

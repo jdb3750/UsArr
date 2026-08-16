@@ -78,7 +78,7 @@ func (s *Server) handleListServices(w http.ResponseWriter, r *http.Request) erro
 	a, _ := sessionFrom(r)
 	instances, err := s.store.ListServiceInstances(r.Context(), storeScope(a))
 	if err != nil {
-		return errStatus(http.StatusInternalServerError, "internal",
+		return errStatus(http.StatusInternalServerError, CodeInternal,
 			"the configured services could not be read").wrapping(err)
 	}
 	out := make([]serviceResponse, 0, len(instances))
@@ -122,13 +122,13 @@ func (s *Server) handleCreateService(w http.ResponseWriter, r *http.Request) err
 	kind := strings.ToLower(strings.TrimSpace(req.Kind))
 	role, ok := serviceKinds[kind]
 	if !ok {
-		return errStatus(http.StatusBadRequest, "bad_request",
+		return errStatus(http.StatusBadRequest, CodeBadRequest,
 			fmt.Sprintf("%q is not a service kind UsArr can talk to yet; v0.1 supports: %s",
 				req.Kind, knownKinds())).withAction("Choose a supported service kind")
 	}
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
-		return errStatus(http.StatusBadRequest, "bad_request", "name must not be empty")
+		return errStatus(http.StatusBadRequest, CodeBadRequest, "name must not be empty")
 	}
 	baseURL, err := normalizeBaseURL(req.BaseURL)
 	if err != nil {
@@ -139,7 +139,7 @@ func (s *Server) handleCreateService(w http.ResponseWriter, r *http.Request) err
 		return err
 	}
 	if strings.TrimSpace(req.APIKey) == "" {
-		return errStatus(http.StatusBadRequest, "bad_request",
+		return errStatus(http.StatusBadRequest, CodeBadRequest,
 			"an API key is required: UsArr cannot talk to an *Arr without one").
 			withAction("Paste the key from the service's Settings → General")
 	}
@@ -157,7 +157,7 @@ func (s *Server) handleCreateService(w http.ResponseWriter, r *http.Request) err
 	if !result.OK {
 		s.audit(r, "service.credential.added", "service_instance", 0, "fail",
 			fmt.Sprintf(`{"name":%q,"reason":"connection test failed"}`, name))
-		return errStatus(http.StatusBadGateway, "connection_test_failed", result.Message).
+		return errStatus(http.StatusBadGateway, CodeConnectionTestFailed, result.Message).
 			withAction(defaultString(result.Action, "Test connection"))
 	}
 
@@ -210,7 +210,7 @@ func (s *Server) handleCreateService(w http.ResponseWriter, r *http.Request) err
 			return s.sealKey(id, baseURL, req.APIKey)
 		})
 	if err != nil {
-		return errStatus(http.StatusConflict, "conflict",
+		return errStatus(http.StatusConflict, CodeConflict,
 			"that service could not be saved: "+redactText(err.Error())).wrapping(err)
 	}
 
@@ -287,12 +287,12 @@ func (s *Server) handleUpdateService(w http.ResponseWriter, r *http.Request) err
 		// never be opened again. security.md §1.6.
 		oldHost, herr := crypto.NormalizeOrigin(existing.BaseURL)
 		if herr != nil {
-			return errStatus(http.StatusInternalServerError, "internal",
+			return errStatus(http.StatusInternalServerError, CodeInternal,
 				"the stored base URL cannot be parsed").wrapping(herr)
 		}
 		newHost, herr := crypto.NormalizeOrigin(newBase)
 		if herr != nil {
-			return errStatus(http.StatusBadRequest, "bad_request", redactText(herr.Error()))
+			return errStatus(http.StatusBadRequest, CodeBadRequest, redactText(herr.Error()))
 		}
 		hostChanged = oldHost != newHost
 		effectiveBaseURL = newBase
@@ -305,7 +305,7 @@ func (s *Server) handleUpdateService(w http.ResponseWriter, r *http.Request) err
 	// even if UsArr were willing to try — and the failure mode of "try anyway"
 	// is sending a full-admin key to whatever the user just typed.
 	if hostChanged && strings.TrimSpace(derefString(req.APIKey)) == "" {
-		return errStatus(http.StatusBadRequest, "credential_reentry_required",
+		return errStatus(http.StatusBadRequest, CodeCredentialReentryRequired,
 			"changing this service's scheme, host or port invalidates the stored API key: "+
 				"the key is bound to the old host and cannot be moved").
 			withAction("Re-enter the API key")
@@ -327,7 +327,7 @@ func (s *Server) handleUpdateService(w http.ResponseWriter, r *http.Request) err
 			return terr
 		}
 		if !result.OK {
-			return errStatus(http.StatusBadGateway, "connection_test_failed", result.Message).
+			return errStatus(http.StatusBadGateway, CodeConnectionTestFailed, result.Message).
 				withAction(defaultString(result.Action, "Test connection"))
 		}
 		reseal = func(rowID int64) ([]byte, uint32, error) {
@@ -418,7 +418,7 @@ func (s *Server) handleTestUnsaved(w http.ResponseWriter, r *http.Request) error
 		return err
 	}
 	if strings.TrimSpace(req.APIKey) == "" {
-		return errStatus(http.StatusBadRequest, "bad_request",
+		return errStatus(http.StatusBadRequest, CodeBadRequest,
 			"an API key is required to test a service that has not been saved yet")
 	}
 	result, err := s.runTest(r, TestRequest{
@@ -472,16 +472,16 @@ func (s *Server) handleTestService(w http.ResponseWriter, r *http.Request) error
 	// for the purposes of the re-entry rule.
 	oldHost, herr := crypto.NormalizeOrigin(existing.BaseURL)
 	if herr != nil {
-		return errStatus(http.StatusInternalServerError, "internal",
+		return errStatus(http.StatusInternalServerError, CodeInternal,
 			"the stored base URL cannot be parsed").wrapping(herr)
 	}
 	newHost, herr := crypto.NormalizeOrigin(baseURL)
 	if herr != nil {
-		return errStatus(http.StatusBadRequest, "bad_request", redactText(herr.Error()))
+		return errStatus(http.StatusBadRequest, CodeBadRequest, redactText(herr.Error()))
 	}
 
 	if oldHost != newHost && strings.TrimSpace(req.APIKey) == "" {
-		return errStatus(http.StatusBadRequest, "credential_reentry_required",
+		return errStatus(http.StatusBadRequest, CodeCredentialReentryRequired,
 			"a connection test against a changed host uses only the key typed into the form, "+
 				"never the stored one").
 			withAction("Re-enter the API key")
@@ -510,7 +510,7 @@ func (s *Server) handleTestService(w http.ResponseWriter, r *http.Request) error
 // a user action with its own deadline, not a render path (see doc.go).
 func (s *Server) runTest(r *http.Request, req TestRequest) (TestResult, error) {
 	if s.cfg.Tester == nil {
-		return TestResult{}, errStatus(http.StatusNotImplemented, "not_configured",
+		return TestResult{}, errStatus(http.StatusNotImplemented, CodeNotConfigured,
 			"this build has no connection tester wired in")
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), connectionTestTimeout)
@@ -616,7 +616,7 @@ func (s *Server) handleServicesHealth(w http.ResponseWriter, r *http.Request) er
 	a, _ := sessionFrom(r)
 	instances, err := s.store.ListServiceInstances(r.Context(), storeScope(a))
 	if err != nil {
-		return errStatus(http.StatusInternalServerError, "internal",
+		return errStatus(http.StatusInternalServerError, CodeInternal,
 			"the configured services could not be read").wrapping(err)
 	}
 
@@ -770,10 +770,10 @@ func (s *Server) sealKey(rowID int64, baseURL, apiKey string) ([]byte, uint32, e
 func normalizeBaseURL(raw string) (string, error) {
 	v := strings.TrimSpace(raw)
 	if v == "" {
-		return "", errStatus(http.StatusBadRequest, "bad_request", "base_url must not be empty")
+		return "", errStatus(http.StatusBadRequest, CodeBadRequest, "base_url must not be empty")
 	}
 	if _, err := crypto.NormalizeHostPort(v); err != nil {
-		return "", errStatus(http.StatusBadRequest, "bad_request",
+		return "", errStatus(http.StatusBadRequest, CodeBadRequest,
 			"that base URL is not usable: "+redactText(err.Error())).
 			withAction("Use a full URL, e.g. http://prowlarr:9696")
 	}
@@ -813,7 +813,7 @@ func normalizeServiceURLBase(raw string) (string, error) {
 		return "", nil
 	}
 	reject := func(why string) error {
-		return errStatus(http.StatusBadRequest, "invalid_url_base",
+		return errStatus(http.StatusBadRequest, CodeInvalidURLBase,
 			fmt.Sprintf("%q is not a sub-path: %s", raw, why)).
 			withAction("Enter a path such as /prowlarr, or leave it blank")
 	}
@@ -878,9 +878,9 @@ func notFoundOr(err error, what string) error {
 		// "Does not exist" and "exists but is outside your scope" are
 		// deliberately indistinguishable: the difference is an existence
 		// oracle.
-		return errStatus(http.StatusNotFound, "not_found", "no such "+what)
+		return errStatus(http.StatusNotFound, CodeNotFound, "no such "+what)
 	}
-	return errStatus(http.StatusInternalServerError, "internal",
+	return errStatus(http.StatusInternalServerError, CodeInternal,
 		"the "+what+" could not be read").wrapping(err)
 }
 

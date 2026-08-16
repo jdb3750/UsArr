@@ -193,6 +193,16 @@ implementation, the design system and ADRs 0025-0034. An adversarial review of t
   implementation thread (`REVIEW-LOG.md:1634`), so it is queued rather than lost. **Nothing
   anywhere removes Komga from the roadmap — it is re-sequenced to v0.2.**
 
+  **Resolved, and superseded the same day.** The queued §16 rewrite has landed, and it went further
+  than the drift fix: [ADR-0036](./DECISIONS.md#adr-0036) — owner-decided, *"I'm fine with starting
+  small"* — takes **all four** catalogue sources out of v0.1. §16, §16.0, the new §16.1, §6.4,
+  §7.1a, §11.2, the README rows, `FUTURE.md`, `DEVELOPMENT.md`, `SETUP-CHECKLIST.md`,
+  `reference/providers.md` and `reference/gateway.md` now agree, and the audit is
+  `REVIEW-LOG.md`'s *"Scope audit"* section. **The bullet's conclusion still holds and is what
+  matters: nothing removes any source from the roadmap.** Navidrome, Audiobookshelf, Kavita and
+  Komga all arrive, one at a time after v0.1, in §16.1's sequence. The instructions text remains
+  unaffected — v1.2 defers to §16, which is the whole point of that deferral.
+
 ### v1.2 — 2026-08-16 (applied 07:57 UTC)
 
 Produced by a drift check triggered by the scaffold session's report that `CLAUDE.md`'s Go

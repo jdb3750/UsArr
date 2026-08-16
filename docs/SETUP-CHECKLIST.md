@@ -102,8 +102,11 @@ ordinary backup already contains it — nothing extra to do.
 
 You have it; it is worth knowing where it lands.
 
-* **As a library source** (music appearing in your unified library): **v1.0**.
-* **As a client target** (UsArr speaking OpenSubsonic *to* Symfonium and friends): **v0.4**.
+* **As a library source** (music appearing in your unified library): **one of the first two catalogue
+  milestones after v0.1** — it is either first or second depending on the delta-watermark probe in
+  `ARCHITECTURE.md` §16.1, and it has to land before v0.4 either way.
+* **As a client target** (UsArr speaking OpenSubsonic *to* Symfonium and friends): **v0.4**, which
+  needs the library source above to be populated first.
 * Neither blocks anything now.
 
 **✅ Verified 2026-08-16: Navidrome does not support the OpenSubsonic `apiKeyAuthentication`
@@ -140,8 +143,9 @@ Supply these when the milestone that uses them is being built, not before.
 | **Lidarr** (8686, `/api/v1`) | v1.0 | free | Only if you want music from the acquisition side rather than from Navidrome. |
 | **LazyLibrarian** (5299) | v1.0 | free | Books/magazines/comics. Key must be **exactly 32 characters** or it returns `503 Invalid API key`. Prefer its read-only key. |
 | **Jellyfin** (8096) | v1.0 | free | Video library aggregation and the "open in Jellyfin" handoff. **Not blocking, and never was** — v0.1 sources 100% of its metadata and poster URLs from the *Arrs. When it lands, give the wizard admin credentials once and let UsArr mint its own key via `/Auth/Keys` rather than storing a password; tell me the server version, since 10.11 changed which auth header the server accepts. |
-| **Audiobookshelf** (13378) | v1.0 | free | Audiobooks; ABS stays the source of truth for listening position, UsArr mirrors it. |
-| **Komga** (25600) / **Kavita** (5000) | v1.0 | free | Comics and ebooks. ⚠️ Kavita's REST auth scheme is unconfirmed from primary sources. |
+| **Kavita** (5000) | the first catalogue milestone after v0.1, or the second | free | Books, comics and manga — the one you already run. Which of Kavita and Navidrome is built first is decided by the delta-watermark probe in `ARCHITECTURE.md` §16.1. ✅ Auth is `x-api-key`, confirmed from the OpenAPI spec (RESEARCH.md Track 06); the earlier "unconfirmed" note is cleared. ⚠️ The external-identifier fields are a **Kavita+** feature — on a free instance they are null and UsArr will say so. |
+| **Audiobookshelf** (13378) | the third catalogue milestone after v0.1 | free | Audiobooks; ABS stays the source of truth for listening position, UsArr mirrors it. |
+| **Komga** (25600) | the last catalogue milestone | free | A second comics source. Last deliberately — you do not run it, so nothing on this project can test the adapter against a real library. Only needed if you adopt it. |
 | **Bazarr** (6767) | v1.0 | free | Subtitle status. Joins via the *Arr instance's local IDs, not external IDs. |
 | **TMDB key** | v0.2 | free, non-commercial | **Not blocking, and never was.** Radarr's `MovieResource` and Sonarr's `SeriesResource` already carry title, overview, year, runtime, genres, certification, ratings, `tmdbId`, `imdbId` and `images[].remoteUrl` — every field v0.1 renders. TMDB enters only with discovery search for things you don't own. When it does, you accept: mandatory in-UI attribution with the TMDB logo less prominent than UsArr's; a **6-month cache cap**; and no sublicensing, which is why every user brings their own key. |
 | **Metadata contact string** | v0.3 | free | The value of `USARR_METADATA_USER_AGENT`, e.g. `UsArr/0.1 (+https://github.com/joe/UsArr)`. MusicBrainz **requires** an identifying UA (1 req/s, 503 above); Open Library raises you 1 → 3 req/s for one. A project URL is fine; it does not have to be your email, and ⚠️ whatever you put is transmitted to those providers. |

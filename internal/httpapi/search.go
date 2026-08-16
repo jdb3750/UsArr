@@ -46,7 +46,7 @@ type searchAcceptedResponse struct {
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) error {
 	a, ok := sessionFrom(r)
 	if !ok {
-		return errStatus(http.StatusUnauthorized, "unauthorized", "this request has no session")
+		return errStatus(http.StatusUnauthorized, CodeUnauthorized, "this request has no session")
 	}
 
 	q := r.URL.Query()
@@ -112,7 +112,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) error {
 	searchID, err := newSearchID()
 	if err != nil {
 		cancel()
-		return errStatus(http.StatusInternalServerError, "internal", "a search id could not be generated").wrapping(err)
+		return errStatus(http.StatusInternalServerError, CodeInternal, "a search id could not be generated").wrapping(err)
 	}
 
 	s.hub.Publish(a.User.ID, EventSearchStarted, map[string]any{
@@ -369,14 +369,14 @@ func (s *Server) resolveIndexerInstance(r *http.Request, a authSession) (int64, 
 	if raw := strings.TrimSpace(r.URL.Query().Get("instance")); raw != "" {
 		id, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || id <= 0 {
-			return 0, errStatus(http.StatusBadRequest, "bad_request", "instance must be a service id")
+			return 0, errStatus(http.StatusBadRequest, CodeBadRequest, "instance must be a service id")
 		}
 		si, err := s.store.GetServiceInstance(r.Context(), scope, id)
 		if err != nil {
 			return 0, notFoundOr(err, "service")
 		}
 		if si.Role != "indexer" {
-			return 0, errStatus(http.StatusBadRequest, "bad_request",
+			return 0, errStatus(http.StatusBadRequest, CodeBadRequest,
 				fmt.Sprintf("%q is a %s service, not an indexer", si.Name, si.Role))
 		}
 		return si.ID, nil
@@ -384,7 +384,7 @@ func (s *Server) resolveIndexerInstance(r *http.Request, a authSession) (int64, 
 
 	instances, err := s.store.ListServiceInstances(r.Context(), scope)
 	if err != nil {
-		return 0, errStatus(http.StatusInternalServerError, "internal",
+		return 0, errStatus(http.StatusInternalServerError, CodeInternal,
 			"the configured services could not be read").wrapping(err)
 	}
 	var candidates []store.ServiceInstance
@@ -395,7 +395,7 @@ func (s *Server) resolveIndexerInstance(r *http.Request, a authSession) (int64, 
 	}
 	switch len(candidates) {
 	case 0:
-		return 0, errStatus(http.StatusConflict, "no_indexer_service",
+		return 0, errStatus(http.StatusConflict, CodeNoIndexerService,
 			"no enabled indexer service is configured, so there is nothing to search").
 			withAction("Add Prowlarr")
 	default:
@@ -407,17 +407,17 @@ func (s *Server) resolveIndexerInstance(r *http.Request, a authSession) (int64, 
 
 func (s *Server) searcherFor(ctx context.Context, instanceID int64) (ReleaseSearcher, error) {
 	if s.cfg.Releases == nil {
-		return nil, errStatus(http.StatusNotImplemented, "not_configured",
+		return nil, errStatus(http.StatusNotImplemented, CodeNotConfigured,
 			"this build has no release-search service wired in")
 	}
 	searcher, err := s.cfg.Releases.For(ctx, instanceID)
 	if err != nil {
 		if errors.Is(err, ErrNoIndexerService) {
-			return nil, errStatus(http.StatusConflict, "no_indexer_service",
+			return nil, errStatus(http.StatusConflict, CodeNoIndexerService,
 				"no enabled indexer service is configured, so there is nothing to search").
 				withAction("Add Prowlarr")
 		}
-		return nil, errStatus(http.StatusBadGateway, "service_unavailable",
+		return nil, errStatus(http.StatusBadGateway, CodeServiceUnavailable,
 			"that indexer service could not be opened: "+redactText(err.Error())).
 			withAction("Test connection").wrapping(err)
 	}
@@ -427,15 +427,15 @@ func (s *Server) searcherFor(ctx context.Context, instanceID int64) (ReleaseSear
 func searchStartError(err error) error {
 	switch {
 	case errors.Is(err, releases.ErrInvalidQuery):
-		return errStatus(http.StatusBadRequest, "bad_request", redactText(err.Error()))
+		return errStatus(http.StatusBadRequest, CodeBadRequest, redactText(err.Error()))
 	case errors.Is(err, releases.ErrNoIndexers):
-		return errStatus(http.StatusConflict, "no_indexers",
+		return errStatus(http.StatusConflict, CodeNoIndexers,
 			"this Prowlarr has no enabled indexer that could serve that query").
 			withAction("Enable an indexer in Prowlarr")
 	case errors.Is(err, releases.ErrForbidden):
-		return errStatus(http.StatusNotFound, "not_found", "no such service")
+		return errStatus(http.StatusNotFound, CodeNotFound, "no such service")
 	}
-	return errStatus(http.StatusBadGateway, "search_failed",
+	return errStatus(http.StatusBadGateway, CodeSearchFailed,
 		"the search could not be started: "+redactText(err.Error())).
 		withAction("Test connection").wrapping(err)
 }
@@ -470,7 +470,7 @@ func setSearchType(q *releases.Query, v string) error {
 	case "book":
 		q.Type = "book"
 	default:
-		return errStatus(http.StatusBadRequest, "bad_request",
+		return errStatus(http.StatusBadRequest, CodeBadRequest,
 			fmt.Sprintf("type=%q is not one of search, tvsearch, movie, music, book", v))
 	}
 	return nil
@@ -513,7 +513,7 @@ func queryInt32(r *http.Request, name string) (int32, error) {
 	}
 	n, err := strconv.ParseInt(raw, 10, 32)
 	if err != nil || n < 0 {
-		return 0, errStatus(http.StatusBadRequest, "bad_request",
+		return 0, errStatus(http.StatusBadRequest, CodeBadRequest,
 			fmt.Sprintf("%s=%q is not a non-negative integer", name, raw))
 	}
 	return int32(n), nil

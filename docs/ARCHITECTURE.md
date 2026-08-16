@@ -963,9 +963,14 @@ where it was remembered.
 
 **A work with no resolvable identity is kept, marked, and stays searchable — and that is a v0.1
 rule, not a later one.** Whatever the backend reports, UsArr writes the row: a title, a file, and a
-quiet *"not identified"* marker. It is v0.1 because v0.1 ships Komga, which supplies **no external
-identifiers at all**, so the state is reachable on day one rather than at the milestone that
-computes cross-media links. It costs one nullable column and one badge, and it is precisely what
+quiet *"not identified"* marker. **It is written now because it cannot be retrofitted**, not because
+v0.1 renders it often: v0.1's only sources are Sonarr and Radarr, which carry TVDB and TMDB ids, so
+the state first *renders* with the first catalogue source (§16) — and per
+[ADR-0035](./DECISIONS.md#adr-0035) §1 it renders as the **ordinary** case when that source is
+Kavita, whose identifier fields are null without Kavita+. Komga supplies **no external identifiers at
+all**, so comics has no strong-identity path under either choice. The rule is v0.1's because the
+nullable column belongs in migration 0001 and the badge belongs in the first grid, not because the
+badge is common on day one. It costs one nullable column and one badge, and it is precisely what
 LazyLibrarian's absence of disqualifies it as a catalogue (§6.5): a file its matcher cannot bind gets
 no row at all. The badge is never a synonym for "broken" — an unidentified book is a book you own,
 and the honest statement is that UsArr could not find an identifier for it, not that it is missing.
@@ -1128,7 +1133,7 @@ Mechanics in full: [`reference/sync.md`](./reference/sync.md).
 |---|---|---|---|---|
 | 1 | Full import | minutes | Bootstrap, disaster recovery | **v0.1** |
 | 3 | Delta poll (`/history/since`) | 30–120 s | **Library-bearing acquisition apps only** — Sonarr, Radarr | **v0.1** |
-| **3b** | **Ordered page-walk delta** | **5–15 min** | **The catalogue sources — Navidrome, Audiobookshelf, Komga; Kavita in v0.2. None has a changed-since endpoint** | **v0.1** |
+| **3b** | **Ordered page-walk delta** | **5–15 min** | **The catalogue sources — Navidrome, Audiobookshelf, Kavita, Komga. None has a changed-since endpoint** | **specified now, built with the first catalogue adapter (§16.1)** |
 | 4 | Reconciliation sweep | 6–24 h | Silent drift, out-of-band edits, deletions | **v0.1** |
 | 2 | SignalR stream | < 1 s | Live changes while connected | later |
 | 4b | Webhook receiver | < 1 s | Push from services with no SignalR | later |
@@ -1156,8 +1161,9 @@ changed-since endpoint. Verified against the vendored specs: `komga-openapi.json
 parameters matching `since|modified|updated|changed` on any path — 20 `lastModified` *fields* and a
 generic Spring `sort` parameter — and `kavita-openapi.json` exposes `sortByLastModified` on exactly
 two endpoints, `GET /api/Collection` and `POST /api/ReadingList/lists`, and on **neither the Series
-nor Volume nor Chapter endpoints**, so Kavita's actual catalogue has no sortable delta at all and the
-sort lives inside a POST filter body.
+nor Volume nor Chapter endpoints**, so Kavita's catalogue exposes no *query-parameter* delta and its
+sort lives inside a POST filter body instead — `FilterV2Dto.SortOptions` on
+`POST /api/Series/all-v2`, which is the thing [ADR-0035](./DECISIONS.md#adr-0035) §2 probes.
 
 Left at that, four of six media types would be refreshed only by the 6–24 h sweep: add an album to
 Navidrome and it is invisible in UsArr for up to six hours, with nothing on screen saying the number
@@ -1184,17 +1190,23 @@ delta time, and the library row (§17.8) carries the same, with the last full-co
 freshness number that is not backed by a delta must never be rendered with the same weight as one
 that is.
 
-⚠️ **Per-source status, dated 2026-08-16, and one of these is load-bearing and unverified.**
+⚠️ **Per-source status, dated 2026-08-16. No source in this table ships in v0.1** (§16) — they arrive
+one at a time afterwards — **and the two that carry the strategy are both unverified.** The rows are
+in the order the sources are expected to land.
 
 | Source | Ordering key | Status |
 |---|---|---|
 | Navidrome | `getScanStatus.lastScan` as a cheap change *signal*, then an `updated_at`-ordered walk of the native API | 🔍 inference from the model; probe at connect |
 | Audiobookshelf | `LibraryItem.updatedAt` | 🔍 probe at connect |
-| Komga | `sort=lastModified,desc` on the series list | ⚠️ **Could not be verified from the spec** — Spring `Pageable` sort properties are not enumerated and the DTO field name may not be the entity property name. **The whole Komga delta strategy rests on it**, which is why §16 makes it a **day-one spike**, before the schema is written. If the probe fails, Komga drops to reconciliation-only and says so on its row. |
-| Kavita (v0.2) | — | ⚠️ **None.** `sortByLastModified` does not exist on the Series, Volume or Chapter endpoints. Kavita is reconciliation-only unless a probe finds otherwise, and it is deferred to v0.2 partly for this reason (ADR-0032). |
+| Kavita | `LastChapterAdded` ordering on `POST /api/Series/all-v2` | ⚠️ **Unverified; the probe is specified in [ADR-0035](./DECISIONS.md#adr-0035) §2.** It passes only if all three hold: the response is ordered by the `lastChapterAdded` value the rows themselves carry; re-requesting from the last seen value returns the expected suffix rather than a shuffled page; and adding a chapter to an existing series moves it to the front. `SortField.LastModifiedDate` exists but `SeriesDto` returns **no** last-modified property, so that key yields no carryable watermark. **Its result orders the post-v0.1 catalogue sequence** (§16). |
+| Komga (later) | `sort=lastModified,desc` on the series list | ⚠️ **Could not be verified from the spec** — Spring `Pageable` sort properties are not enumerated and the DTO field name may not be the entity property name. **The whole Komga delta strategy rests on it**, so it is a probe at the milestone Komga lands in. If it fails, Komga drops to reconciliation-only and says so on its row. |
 
-Budget rows for the walk are in §13. **Until this section existed, §16 claimed "sync channels 1, 3
-and 4" for a v0.1 in which channel 3 covers two of its services; that claim is corrected to name 3b.**
+Budget rows for the walk are in §13. **This channel is specified here but built with the first
+catalogue adapter, not in v0.1** — v0.1's services are Sonarr, Radarr and Prowlarr, for which
+channels 1, 3 and 4 are the whole story. It is written ahead of its milestone because the watermark
+column and the overlap rule are what the adapters are written against, and because the probe that
+decides whether Kavita or Navidrome goes first has to have its pass condition on paper before it
+runs.
 
 ### 7.2 Channel 1 — full import
 
@@ -1718,18 +1730,19 @@ Out of scope and needing Tier 0: session establishment (qBittorrent, Deluge, **N
 challenge-retry handshakes (Transmission), JSON-RPC envelopes (NZBGet, Transmission, Deluge) and XML
 (Plex). Concretely it covers LazyLibrarian, Komga, Kavita, Audiobookshelf and \*Arr forks.
 
-> 🚩 **In v0.1 the catalogue sources are Tier 0 Go adapters, not manifests, and §16 and this section
+> 🚩 **The catalogue sources are Tier 0 Go adapters, not manifests, and §16 and this section
 > previously implied otherwise.** The manifest tier does not exist until v0.3, which ships
 > LazyLibrarian as the *first* Tier 1 manifest. So the three sources this list covers — Komga,
-> Audiobookshelf, and Kavita when it lands in v0.2 — are **hand-written Go in the milestone they
-> ship in**, and Navidrome is Tier 0 by this section's own exclusion, because `POST /auth/login`
-> returning a JWT plus a `(subsonicSalt, subsonicToken)` pair is session establishment. The list
-> above describes what a manifest *could* express once the tier exists, not how v0.1 ships. That is
-> **three hand-written Go adapters in v0.1** (Navidrome, Audiobookshelf, Komga) rather than "the
-> marginal cost of a provider adapter" — priced honestly in §16.0.
+> Audiobookshelf and Kavita — are **hand-written Go in the milestone they ship in**, and Navidrome is
+> Tier 0 by this section's own exclusion, because `POST /auth/login` returning a JWT plus a
+> `(subsonicSalt, subsonicToken)` pair is session establishment. The list above describes what a
+> manifest *could* express once the tier exists, not how these sources ship. That is **four
+> hand-written Go adapters**, one per source, rather than "the marginal cost of a provider adapter" —
+> priced honestly in §16.0. ⚠️ **None of the four is in v0.1**: ADR-0036 moved them into the §16.1
+> sequence that starts after it, so this is a cost the roadmap carries, not one v0.1 pays.
 >
 > Two further consequences worth naming, because the \*Arr machinery does not have them: **auth here
-> is three schemes, and one has a lifecycle.** Navidrome is a login round trip yielding a JWT;
+> is four schemes, and one has a lifecycle.** Navidrome is a login round trip yielding a JWT;
 > Audiobookshelf is a Bearer JWT *or* a scoped API key **with an expiry**; Komga is a static
 > `X-API-Key` (and Basic on OPDS only); Kavita is a static `x-api-key`. The \*Arr shape is a static
 > header credential with **no lifecycle at all**, so token refresh and credential *expiry* are new
@@ -2059,37 +2072,56 @@ elsewhere is the one that must ship soonest.* The previous order put the gateway
 differentiators last, so a one-to-two-person project had to survive its largest milestone before
 delivering anything the owner asked for.
 
-### 16.0 The scope amendment, argued rather than asserted (ADR-0032)
+### 16.0 The scope amendment, argued rather than asserted (ADR-0032, re-sequenced by ADR-0036)
 
 The owner's scope moved from two media types to six. That is a bigger claim, so it has to be paid
 for, and "cut before you add" means saying what enters, what leaves and what is refused.
 
-**What enters: the read-only catalogue sources.** Navidrome, Audiobookshelf and Komga move from v1.0
-into the earliest milestone that can carry them. **Kavita does not — it moves to v0.2**, and that is
-the payment; see below. They are precisely what makes *"everything in one place"* true rather than
-aspirational: **without them, five of the six media types are empty screens**, and the product's
-one-sentence claim is a claim about Sonarr and Radarr.
+**What enters the roadmap: the read-only catalogue sources.** Navidrome, Audiobookshelf, Kavita and
+Komga move out of the single v1.0 "Breadth" bucket, where taken literally they left five of the six
+media types as empty screens until the last milestone. They are precisely what makes *"everything in
+one place"* true rather than aspirational.
+
+> 🚩 **When they enter is not v0.1.** [ADR-0032](./DECISIONS.md#adr-0032) put three of them *inside*
+> v0.1 and [ADR-0035](./DECISIONS.md#adr-0035) swapped which three;
+> [ADR-0036](./DECISIONS.md#adr-0036) moves all four out of v0.1 and makes them a **sequence that
+> starts immediately after it — Navidrome, Audiobookshelf and Kavita one at a time, then Komga.**
+> **This is re-sequencing, not rejection**: every source ADR-0032 named still arrives, each behind a
+> milestone that ships on its own. What changes is that **v0.1 proves the replica thesis on the
+> \*Arr library sync first**, on the two services that are already half-built, rather than on four
+> adapters written at once. See §16.1 for the sequence and for what the six-type claim honestly is
+> in v0.1.
 
 **What they cost, priced honestly rather than minimised.** An earlier draft of this section said all
 four were *"the same shape … with no write path, no state machine and no new subsystem"*, and that
-was wrong in four ways the repository's own documents contradict. The honest version: **three
-hand-written Tier 0 Go adapters, three auth schemes, one token lifecycle, three hierarchies, and one
-new delta channel they all share.**
+was wrong in four ways the repository's own documents contradict. The honest version: **four
+hand-written Tier 0 Go adapters, four auth schemes, one token lifecycle, four hierarchies, and one
+new delta channel they all share.** Pricing them at that and then putting three of them in the
+milestone whose one job is proving the replica thesis is what ADR-0036 corrects: the cost was stated
+correctly and then not acted on.
 
 - **They are Tier 0, not manifests.** §11.2's manifest list covers them, but the manifest *tier*
   does not exist until v0.3 (which ships LazyLibrarian as the first one), and Navidrome is excluded
-  from it by §11.2's own rule against session establishment. So v0.1 writes three Go adapters.
-- **Auth is three schemes and one of them expires.** Navidrome is a login round trip yielding a JWT
+  from it by §11.2's own rule against session establishment. So each one is a Go adapter, written by
+  hand.
+- **Auth is four schemes and one of them expires.** Navidrome is a login round trip yielding a JWT
   plus a `(subsonicSalt, subsonicToken)` pair; Audiobookshelf is a Bearer JWT or a **scoped API key
-  with an expiry**; Komga is a static `X-API-Key`. The \*Arr machinery is a static header credential
-  with no lifecycle, so refresh, expiry and a *"this key expired"* Services state are new.
+  with an expiry**; Komga is a static `X-API-Key` (Basic on OPDS); Kavita is a static `x-api-key`,
+  **with the key in a URL path segment on OPDS routes** (RESEARCH.md Track 06). The \*Arr machinery
+  is a static header credential with no lifecycle, so refresh, expiry and a *"this key expired"*
+  Services state are new.
 - **None of them has a changed-since endpoint**, so they need **channel 3b** (§7.1a) — an ordered
   page-walk delta with a watermark, an overlap window and a stated fallback. That is a new channel,
   specified now rather than left as an assumption, and it is the single largest thing this amendment
-  adds.
-- **The read machinery is genuinely shared.** `RemoteItem`, the registry, the circuit breaker, the
-  import phasing, the write-queue-free read path and the reconciliation sweep all already exist for
-  Sonarr and Radarr and are reused unchanged. That part of the original claim holds.
+  adds. It is *specified* ahead of its milestone and *built* with the first adapter, because the
+  probe that decides which adapter is first has to have its pass condition on paper before it runs.
+- **The read machinery is genuinely shared** — and that is the argument for the sequence, not
+  against it. `RemoteItem`, the registry, the circuit breaker, the import phasing, the
+  write-queue-free read path and the reconciliation sweep are reused unchanged by every catalogue
+  adapter. But **shared machinery has to exist before it can be shared**, and it exists only once the
+  \*Arr library sync has landed and run against a real library. Writing the first catalogue adapter
+  against machinery that has never imported anything is how the shared layer gets designed around the
+  wrong source.
 
 **What is deferred, and why: the command sinks.** Lidarr, LazyLibrarian, Mylar3 and Kapowarr stay
 out. A write path is per-service and expensive — routing, capability probing, an idempotent verb
@@ -2103,28 +2135,48 @@ in v0.1** — **ebooks at `7020`, audiobooks at `3030`** (which is under `Audio`
 and merging the two here misstated §8.5), comics and manga at `7000`, music at `3000` — so deferring
 the sinks defers *convenience*, not *capability*. That is the trade, stated plainly.
 
-**What has to move out to pay for it: Kavita, to v0.2.** An earlier answer here was *"nothing is
-cut, and one thing is capped"*, and the capped thing was the library correction UI — which the very
-next sentence argued has no work to do in v0.1. A cap on a declared no-op is not a payment.
-`CLAUDE.md`'s rule carries no exemption clause, so the amendment pays.
+**What has to move out to pay for it: all four catalogue sources, out of v0.1 (ADR-0036).** Two
+earlier answers here were wrong in the same direction. The first was *"nothing is cut, and one thing
+is capped"*, where the capped thing was the library correction UI — which the very next sentence
+argued has no work to do in v0.1, and a cap on a declared no-op is not a payment. The second was
+**cutting one adapter of four and keeping three**, which is a real payment but a third of the right
+size: it left v0.1 carrying three hand-written adapters, three auth schemes, one token lifecycle and
+a brand-new sync channel *on top of* the \*Arr sync that does not exist yet.
 
-**Kavita earns the cut on the evidence already gathered, and no media type is lost.** Komga covers
-comics, so **all six media types still have a catalogue source in v0.1** — Sonarr and Radarr for film
-and TV, Navidrome for music, Audiobookshelf for ebooks and audiobooks, Komga for comics. Against
-that, Kavita is the weakest of the four adapters on both axes that matter: **its identifier fields
-are gated behind a paid subscription**, so on a free instance every external id is null and it
-contributes the *least* identity value and the *most* honest-gap UI per adapter; and its
-**Series → Volume → Chapter → File hierarchy is the deepest of the four**, and the one §6.1 already
-flattens deliberately (Volume becomes `volume_label` + `volume_sort`, a grouping attribute rather
-than a node). It is also the source with **no catalogue delta at all** — `sortByLastModified` exists
-on `GET /api/Collection` and `POST /api/ReadingList/lists` and on none of the Series, Volume or
-Chapter endpoints — so it is the one source channel 3b cannot serve.
+**The honest payment is that v0.1 ships no catalogue source at all.** Its services are **Sonarr,
+Radarr and Prowlarr**. The \*Arr library sync lands first and proves the replica thesis on real data
+— a real Sonarr and a real Radarr, imported, delta-synced, reconciled, searched and rendered — and
+the catalogue sources then arrive **one at a time, after v0.1, each behind a milestone that ships on
+its own**. Nothing is refused: **Navidrome, Audiobookshelf, Kavita and Komga all still arrive**, in
+that order subject to the probe below.
+
+**What the six-type claim honestly is in v0.1, stated rather than implied.** The **schema** is
+six-type, because migration 0001 can never be edited (see the enumeration in the v0.1 entry).
+**Requesting** is six-type, because Prowlarr Search-and-Grab covers all six categories. **The
+catalogue is film and TV**, because those are the sources that ship. A screen for a media type with
+no configured source says so — principle 3, degrade honestly — rather than rendering an empty grid,
+and that behaviour is the same one an install without Navidrome would get in any case.
+
+**The order within the catalogue sequence is not fixed here. It is decided by the Kavita
+`LastChapterAdded` watermark probe** ([ADR-0035](./DECISIONS.md#adr-0035) §2, §7.1a): **Kavita first
+if it passes, Navidrome first if it fails.** Kavita first because it is the owner's install and the
+source with the most media types riding on it; Navidrome first if Kavita turns out to be
+reconciliation-only, because Kavita is then the *hardest* adapter rather than the easiest and
+Navidrome de-risks v0.4 at the same time. **Komga is last regardless**, because nobody on this
+project can point it at a real library. The probe now runs before the first catalogue adapter is
+written rather than on day one — it decides the order of a sequence that no longer starts
+immediately.
 
 **What is kept, with its remaining cost stated rather than argued away.** The libraries subsystem
-(§6.5) and the auto-proposal flow stay in v0.1, because they are what makes the six-type claim
-*usable*: without them a six-type install is one undifferentiated grid, and the Ebooks/Audiobooks
-split over one Audiobookshelf library — the concrete improvement over upstream's own organisation —
-is the demonstration. The cost that remains, plainly: **four tables in migration 0001, materialised
+(§6.5) and the auto-proposal flow stay in v0.1. Its four tables have to be in migration 0001 either
+way, its screen is one of the five `CLAUDE.md` names as essential, and **a library binding carries
+the request destination** that v0.1's one write path routes on — so it is load-bearing in v0.1 even
+with only \*Arr sources. ⚠️ **Its best demonstration is not:** the Ebooks/Audiobooks split over one
+Audiobookshelf library was the concrete improvement over upstream's own organisation, and that
+demonstration moves with Audiobookshelf. What v0.1 can show instead is narrower and honest — an
+Anime library bound to one Sonarr tag, or one Films library spanning a 1080p and a 4K Radarr — and
+the subsystem should be judged on that in v0.1, not on the split it cannot yet perform. The cost that
+remains, plainly: **four tables in migration 0001, materialised
 membership with a 250 ms dirty-flush and a denormalised sort key, a derivation with five container
 predicates, an auto-proposal engine with join-vs-create defaults, and a second first-class settings
 screen (§17.8).** It is true that the Libraries screen *replaces* hard-coded per-type sections rather
@@ -2133,24 +2185,49 @@ anything. The correction **UI** is still capped to v0.3 — §6.4 establishes th
 essentially 100% of the v0.1 identity problem for Sonarr and Radarr — but that cap is now correctly
 described as a *scheduling detail*, not as the payment.
 
-🔍 **The scoping observation behind moving Navidrome specifically, marked as inference:** v0.4's
-success criterion is *"Symfonium connects to UsArr with one API key, browses, searches and plays"*,
-which requires a **populated music replica before the surface exists**. As previously written, v0.4
-contained both a new southbound adapter and a new northbound protocol. Splitting them is a scheduling
-correction, not a new feature.
+🔍 **The scoping observation behind moving Navidrome ahead of the gateway, marked as inference:**
+v0.4's success criterion is *"Symfonium connects to UsArr with one API key, browses, searches and
+plays"*, which requires a **populated music replica before the surface exists**. As originally
+written, v0.4 contained both a new southbound adapter and a new northbound protocol. Splitting them
+is a scheduling correction, not a new feature — and it constrains the sequence above at one end:
+**Navidrome has to land before v0.4 whichever branch the probe takes.**
 
-**v0.1 — "It reads your library, it is fast, and you can act on it" — now across six media types.**
+### 16.1 The catalogue sequence, after v0.1
+
+Each of these is its own milestone with its own success criterion — *this source's library appears in
+the grid, is searchable, delta-syncs, and its Services row is honest about what it cannot do*. They
+are numbered by order, not by version, because the version numbers below are already spoken for and
+the sequence is deliberately allowed to interleave with them.
+
+| # | Source | Media types it lights up | Gate |
+|---|---|---|---|
+| 1 | **Kavita** *or* **Navidrome** | books + comics/manga, *or* music | The [ADR-0035](./DECISIONS.md#adr-0035) §2 watermark probe. **Kavita first if it passes, Navidrome first if it fails.** |
+| 2 | the other of those two | — | — |
+| 3 | **Audiobookshelf** | audiobooks (and ebooks where the install holds them) | `LibraryItem.updatedAt` probe at connect (§7.1a) |
+| 4 | **Komga** | a second comics source | Its own `sort=lastModified,desc` probe (§7.1a); reconciliation-only if that fails |
+
+**Navidrome must precede v0.4** whichever branch #1 takes, because v0.4's success criterion needs a
+populated music replica. Nothing else in the table is pinned to a version.
+
+**v0.1 — "It reads your library, it is fast, and you can act on it."**
 Go binary + embedded SPA; SQLite + WAL with the §7.7 discipline; goose migrations. **Tier 0 Go
-adapters** for **Sonarr, Radarr**, plus the three **read-only catalogue sources — Navidrome,
-Audiobookshelf, Komga** (§16.0; **Kavita moves to v0.2**, and Komga still covers comics, so all six
-media types have a source); **Prowlarr in Search-and-Grab mode** (§8.5), which is the request path
-for **all six** types. **No command sinks** — no Lidarr, no LazyLibrarian, no Mylar3, no Kapowarr.
-Sync channels **1, 3, 3b and 4**: full import for every service; **channel 3 (`/history/since`) for
-Sonarr and Radarr only**, because it applies to library-bearing acquisition apps and to nothing else;
-**channel 3b (the ordered page-walk delta, §7.1a) for the three catalogue sources**, with
-reconciliation-only fallback and a Services row that says so; **reconciliation with 7-day tombstones
-and both sweep guards** for everything. SignalR and webhooks are **out**. **Minimal write path**
-(`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue; no optimistic apply.
+adapters** for **Sonarr and Radarr** — the \*Arr library sync, which is what proves the replica
+thesis on real data — plus **Prowlarr in Search-and-Grab mode** (§8.5), which is the request path for
+**all six** media types. **No catalogue source ships in v0.1** (§16.0, ADR-0036): Navidrome,
+Audiobookshelf, Kavita and Komga arrive one at a time afterwards, in §16.1's sequence. **No command
+sinks** — no Lidarr, no LazyLibrarian, no Mylar3, no Kapowarr.
+Sync channels **1, 3 and 4**: full import for every service; **channel 3 (`/history/since`) for
+Sonarr and Radarr**, which is every library-bearing service v0.1 has; **reconciliation with 7-day
+tombstones and both sweep guards** for everything. **Channel 3b is specified (§7.1a) and not built
+here**, because the sources that need it are not here. SignalR and webhooks are **out**. **Minimal
+write path** (`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue; no optimistic
+apply.
+
+> **What "six media types" does and does not mean in v0.1**, because the phrase is load-bearing and
+> was previously overstated. The **schema** is six-type — it has to be, migration 0001 cannot be
+> edited. **Requesting** is six-type — Prowlarr covers all six categories. **The catalogue is film
+> and TV.** A media type with no configured source says so on screen rather than rendering an empty
+> grid.
 
 **Schema, enumerated — because §16 is authoritative for scope and an implementer reads this line,
 not the ADRs:** `work`/`edition`/`media_file`/`external_id`/`service_item_link`; the **four library
@@ -2192,10 +2269,13 @@ a working `usarr key rotate`**, the SSRF egress policy, redaction middleware. **
 providers** — Radarr's `MovieResource` and Sonarr's `SeriesResource` already carry everything the
 grid needs, so **no TMDB account is required to see your own library**. Docker image, `VACUUM INTO`
 backups. CI: `EXPLAIN QUERY PLAN` + row-count assertions; `make bench` as a manual release gate.
-**Two day-one spikes, both before the schema is written:** the arm64 RSS spike (§13), and **a live
-probe of Komga's `sort=lastModified,desc` on its series list** — the whole channel-3b strategy for
-Komga rests on it, it could not be verified from the spec, and if it fails Komga drops to
-reconciliation-only and the Services row says so.
+**One day-one spike, before the schema is written:** the arm64 RSS spike (§13). **The catalogue
+watermark probe is no longer day-one.** ADR-0032 funded a day-one probe of Komga's
+`sort=lastModified,desc` and [ADR-0035](./DECISIONS.md#adr-0035) §2 retargeted it to Kavita's
+`LastChapterAdded`; with no catalogue source in v0.1 it has nothing to gate here. **It runs before
+the first catalogue adapter is written**, and its result orders §16.1's sequence — **Kavita first if
+it passes, Navidrome first if it fails.** Its pass condition stays written down in advance
+(ADR-0035 §2, §7.1a) precisely so that deferring it does not turn it back into a guess.
 
 *Landed so far:* the Go binary with the embedded SPA shell; SQLite + WAL and goose migration 0001
 with its automatic pre-migration `VACUUM INTO`; **Prowlarr in Search-and-Grab mode** end to end —
@@ -2213,9 +2293,9 @@ the arm64 RSS spike. (CI query-plan assertions are in place for the tables that 
 
 **v0.2 — "Requests."** Request model, routing rules, approval workflow, quotas, single-user
 auto-approve. **One search box over owned and unowned** (§8.6). One Add that routes; availability
-states; per-season TV. Release search behind progressive disclosure. **Kavita** as the fourth
-catalogue source (§16.0) — a second comics source alongside Komga, with its paid-tier identifier gap
-and its reconciliation-only sync surfaced on its Services row.
+states; per-season TV. Release search behind progressive disclosure. **No catalogue source is pinned
+to this milestone** — §16.1's sequence runs on its own numbering and is expected to interleave with
+v0.2, with the first source (Kavita or Navidrome, per the probe) landing before or alongside it.
 
 **v0.3 — "Cross-media" — Train Dreams works end to end.** Ship `wikidata-edges.db` from the committed
 SPARQL script. Tiers 0–2 only; nothing below 0.85; no review inbox. Grouped result cards derived at
@@ -2225,8 +2305,10 @@ audiobook only when the files share a folder, and everything else treats them as
 *schema* handles it (an audiobook is an `edition` of a `book` work, §6.1) and the **resolution pass
 that would populate it is deferred**, with its cost and its seam, to [`FUTURE.md`](./FUTURE.md) §16.
 What v0.3 ships is the cross-media machinery the pass would eventually plug into. **The visible
-*"not identified"* state is *not* deferred with it** — it is a v0.1 rule (§6.4), because v0.1 ships
-Komga, which supplies no identifiers at all. **The library correction surface** (`exclude`,
+*"not identified"* state is *not* deferred with it** — the column and the badge are a v0.1 rule
+(§6.4) because they cannot be retrofitted, even though v0.1's Sonarr-and-Radarr catalogue rarely
+reaches the state; it becomes the ordinary case with the first catalogue source (§16.1).
+**The library correction surface** (`exclude`,
 `include`, `relink`, `field`) plus the Corrections list lands here, with the weak catalogues it
 exists for. **LazyLibrarian** as the first Tier 1 manifest — as a
 **request sink only** — proving the mechanism on a genuinely hostile API (HTTP 200 +

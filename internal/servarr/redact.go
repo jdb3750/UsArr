@@ -59,10 +59,14 @@ func RedactURL(raw string) string {
 // HTTP boundary, so a stored URL and a served URL can never disagree about what
 // counts as a secret. Do not add a second list here.
 //
-// LIMIT, deliberately: the deny-list matches query PARAMETERS. A tracker that
-// embeds a passkey in a path segment (…/rss/<passkey>/…) is not covered by it,
-// here or anywhere else in UsArr. Fixing that belongs in internal/ssrf, once,
-// not in a private copy in this function.
+// PATH SEGMENTS ARE COVERED TOO, as of the path heuristic in internal/ssrf. The
+// deny-list matches query PARAMETERS, so a tracker that embeds the passkey in a
+// path segment (…/rss/<passkey>/…) used to sail straight through. There is no
+// name to match on in a path, so that half is a deliberately conservative
+// heuristic — long, unbroken, mixed alphanumeric, not word-shaped — sourced from
+// the real URL layouts in Prowlarr's own log scrubber. It lives beside the
+// deny-list in internal/ssrf, never in a private copy here. Its known limit is
+// pinned by TestOpaqueIDsInPathsAreRedacted.
 //
 // MagnetURL is NOT a magnet: URI. It is an http(s) Prowlarr proxy link, so it
 // cannot be handed to a torrent client. Use InfoHash to build a real magnet.

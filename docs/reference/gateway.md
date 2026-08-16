@@ -10,9 +10,16 @@ OPDS, multi-instance aggregation and write-back are **v1.0**.
 
 The OpenSubsonic spec is ~100 endpoints across ~15 categories plus ~28 negotiated extensions.
 Specifying "an OpenSubsonic server" in one paragraph and calling it a milestone is how a
-one-to-two-person project loses a year. The gateway milestone implements **thirteen methods**, and
+one-to-two-person project loses a year. The gateway milestone implements a **~20-method subset**, and
 its success criterion is a sentence: *Symfonium connects with one API key, browses, searches and
 plays.*
+
+⚠️ **This table lists the thirteen the subset was first scoped around.**
+[`../ARCHITECTURE.md`](../ARCHITECTURE.md) §16 v0.4 — which is **authoritative for scope** — raised
+the count to ~20 on client evidence, adding `getGenres`, `getPlaylists`, `getPlaylist`, `getUser`,
+`download` and `getMusicDirectory`, plus a spec-correct error responder for every unimplemented
+method. Where this file and §16 disagree on the method list, **§16 wins**; the rows below are still
+correct about tables and degradation for the methods they cover.
 
 | Method | UsArr tables | Degradation rule |
 |---|---|---|
@@ -40,8 +47,9 @@ password" is meaningless on a server with no usernames** and is listed last rath
 is where it used to be. **Never a 500**, and never a 403 where 70 is the honest answer (see §3).
 Every auth refusal carries `helpUrl`.
 
-**Not in the gateway milestone, each its own later milestone with its own criterion:** OPDS
-(§5), multi-instance aggregation (§2), write-back (§6), and the wider client matrix.
+**Not in the gateway milestone, each its own later milestone with its own criterion:** OPDS (whose
+auth scheme is settled in §2), multi-instance aggregation (whose ID format ships from day one
+regardless — §3, because it cannot change later), write-back (§6), and the wider client matrix.
 
 > ✅ **One Navidrome is a checked assumption, not a guess.** The owner confirmed on **2026-08-16**
 > that he runs Navidrome for music and Audiobookshelf for audiobooks — a single Navidrome, which is
