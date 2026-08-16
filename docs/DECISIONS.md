@@ -30,7 +30,7 @@ distinctions now matter and are used consistently below:
 | [0006](#adr-0006) | Never build a video transcoder | Accepted · permanent |
 | [0007](#adr-0007) | Wikidata as the cross-media spine, shipped as a prebuilt CC0 subset | **Amended** (rev 2): edges-only artifact, per-release |
 | [0008](#adr-0008) | **Two** plugin tiers now; a WASM tier deferred | **Amended** (rev 2) |
-| [0009](#adr-0009) | `work` / `edition` / `file` with typed `work_relation` edges | Accepted, `audiobook` resolved — **refined by [ADR-0030](#adr-0030), [ADR-0031](#adr-0031)** |
+| [0009](#adr-0009) | `work` / `edition` / `file` with typed `work_relation` edges | Accepted, `audiobook` resolved — **refined by [ADR-0030](#adr-0030), [ADR-0031](#adr-0031), [ADR-0033](#adr-0033)** |
 | [0010](#adr-0010) | OpenSubsonic and OPDS as northbound server surfaces | Accepted, scope narrowed |
 | [0011](#adr-0011) | Named permission strings, not a bitfield | Accepted |
 | [0012](#adr-0012) | Sync channels and the write path | **Superseded in part by ADR-0012a** |
@@ -55,6 +55,7 @@ distinctions now matter and are used consistently below:
 | [0030](#adr-0030) | `work.kind` gains `comic_issue`; manga is not a separate kind | **Accepted** — refines ADR-0009 |
 | [0031](#adr-0031) | Track position is edition-scoped; attribution is many-to-many | **Accepted** — refines ADR-0009 |
 | [0032](#adr-0032) | Read-only catalogue sources move early; command sinks defer | **Accepted** — **amends** §16 |
+| [0033](#adr-0033) | `work.kind` gains `person`; a credit is not a music artist | **Accepted** — owner-decided 2026-08-16; refines ADR-0009, ADR-0031 |
 
 ---
 
@@ -543,9 +544,10 @@ merits — pure Go, zero CGO, real sandboxing — not on shared-runtime economy.
 <a id="adr-0009"></a>
 ## ADR-0009 — `work` / `edition` / `file`, with typed `work_relation` edges
 
-**Status:** Accepted · **Refined by [ADR-0030](#adr-0030)** (`work.kind` gains `comic_issue`) and
-**[ADR-0031](#adr-0031)** (track position is edition-scoped; attribution is M:N). Neither reopens the
-three-layer conclusion; both add levels inside it.
+**Status:** Accepted · **Refined by [ADR-0030](#adr-0030)** (`work.kind` gains `comic_issue`),
+**[ADR-0031](#adr-0031)** (track position is edition-scoped; attribution is M:N) and
+**[ADR-0033](#adr-0033)** (`work.kind` gains `person`). None of the three reopens the three-layer
+conclusion; they add members and levels inside it.
 
 ### Context
 FRBR defines four layers (Work → Expression → Manifestation → Item). **BIBFRAME collapses Work +
@@ -2266,8 +2268,9 @@ manga in Komga simply is not tagged, and the user can tag it themselves, which t
 <a id="adr-0031"></a>
 ## ADR-0031 — Track position is edition-scoped; attribution is many-to-many
 
-**Status:** Accepted · **Refines [ADR-0009](#adr-0009)**. Both changes are **migration 0001 or they
-are backfills over the largest tables in the schema.**
+**Status:** Accepted · **Refines [ADR-0009](#adr-0009)** · **refined by [ADR-0033](#adr-0033)**,
+which gives `work_credit` a `person` kind to point at and renames its creator column. Both changes
+below are **migration 0001 or they are backfills over the largest tables in the schema.**
 
 ### Context
 
@@ -2288,6 +2291,8 @@ way, superseding its single `ArtistID`/`AlbumArtistID` fields with a `Participan
 > **2. `work_track.track_number` is `TEXT`**, with a derived `track_position INTEGER` sort key.
 > **3. Artist attribution is an M:N `work_credit(work_id, artist_work_id, role, position,
 > credited_as)`.** There is no `artist_id` column on an album.
+> *(Amended by [ADR-0033](#adr-0033): the column is `creator_work_id`, because for books and comics
+> it points at a `person` work rather than an `artist` one. The M:N decision is unchanged.)*
 > **4. `edition` gains `narrators`, `duration_seconds` and `abridged`** for audiobooks.
 > **5. The availability rollup is edition-keyed for music**, which makes the `availability` blob
 > polymorphic across media — worked shapes per medium in
@@ -2514,3 +2519,119 @@ v0.3, and that cap is now correctly described as a scheduling detail rather than
 - **Moving Search-and-Grab out to v0.2 to make room.** It was the least load-bearing candidate on
   paper, and it is the *only* request path for four of the six media types under this decision.
   Cutting it would remove the thing that makes the deferral of the sinks affordable.
+
+---
+
+<a id="adr-0033"></a>
+
+## ADR-0033 — `work.kind` gains `person`; a credit is not a music artist
+
+**Status:** Accepted · **owner-decided 2026-08-16** (REVIEW-LOG round-4 §4.6 item 6, closed) ·
+**Refines [ADR-0009](#adr-0009)** and **[ADR-0031](#adr-0031)**. **Migration 0001 is the only cheap
+moment to make this change**, for exactly the reasons [ADR-0030](#adr-0030) gives.
+
+### Context
+
+[ADR-0031](#adr-0031) made attribution many-to-many: `work_credit(work_id, artist_work_id, role,
+position, credited_as)`, with a `role` CHECK list that spans three media —
+`primary`/`featured`/`composer`/`conductor`/`performer`/`remixer`/`producer` for music,
+`author`/`translator`/`editor`/`illustrator`/`narrator` for books, and
+`writer`/`penciller`/`inker`/`colorist`/`letterer`/`cover_artist` for comics. Its own words: *"it is
+needed for books too, where role matters."*
+
+**But `artist_work_id` points at a `work`, and `work.kind` had no `person`, `author` or `creator`
+member.** So a book's author and a comic's penciller were stored as **`artist`-kind works** — the
+same kind Navidrome and Lidarr music artists use. This was found by the round-4 disposition pass
+rather than by a reviewer, recorded in `reference/schema.md` §1.1 with its cost, and **left
+deliberately unresolved** on the grounds that a `kind_byte` allocation is a decision of the same size
+as ADR-0030 and should be made by the owner rather than folded into a review pass. It was escalated
+as REVIEW-LOG round-4 §4.6 item 6. The owner decided it on 2026-08-16.
+
+Two consequences made it a live defect rather than a modelling preference, and neither is
+speculative:
+
+1. **Every author lands in the Music navigation type.** ARCHITECTURE §17.2's media-type enum is
+   `kind`-driven and maps `('artist'|'album', *)` → **Music**. A Frank Herbert stored as an `artist`
+   work is therefore a Music item, on the sidebar, in Block A's counts and in the Music search group.
+2. **Every credit consumes the client prefix index's byte budget.** §4.5's Tier 1 index is over
+   top-level kinds, `artist` among them, hard-capped at 25,000 items — and §13's six-type reference
+   library already sits at 27,500, i.e. over the cap before a single author is counted. Adding
+   ~6,000 credited people takes the overshoot from **10% to 34%**, on the mechanism the whole
+   perceived-speed story rests on.
+
+### Decision
+
+> **`work.kind` gains `person`**, with **`kind_byte` 13** allocated in the same commit as
+> `comic_issue`'s 12 and before any client caches an id.
+>
+> **`person` is excluded from the media-type navigation enum (ARCHITECTURE §17.2), from the Tier 1
+> client prefix index (§4.5) and from the FTS corpus (§8.2).** It is not a thing the user browses;
+> it is reachable as a credit link on an item (§17.6).
+>
+> **`work_credit.artist_work_id` is renamed `creator_work_id`** and points at a work of kind
+> `artist` **or** `person`. **The rule: `artist` when a connected service models the creator as a
+> top-level catalogue entity in its own right — a Navidrome or Lidarr artist, which has albums, a
+> page and a library row — and `person` in every other case** (authors, translators, editors,
+> illustrators, comic writers and artists, narrators reported only as a string).
+
+### Consequences
+
+- **Doing it now costs one CHECK member, one byte allocation and one column name. Doing it later
+  costs a CHECK-constraint change (a SQLite table rebuild), an FTS re-index, a rebuild of every
+  client-side prefix index, and a change to the `kind_byte` codec — which ARCHITECTURE §5.3 states is
+  *"unchangeable once clients cache ids"*.** That asymmetry is the entire argument for the timing,
+  and it is ADR-0030's argument reappearing at a second member of the same enum.
+- **`artist` keeps its meaning and keeps the Music type.** This is not a rename of `artist` to
+  `person`; it is a second kind beside it. Music artists are genuinely top-level — they have their
+  own page in every music tool in the ecosystem, they carry albums as children, and §17.2 maps them
+  to a navigation type. Collapsing both into `person` would cost Music its top level and would make
+  `getIndexes`/`getArtists` (§16, v0.4) unimplementable without a second predicate.
+- **`kind_byte` encodes the *remote* kind, not `work.kind`**, and this ADR is the occasion to write
+  that down. The map in `reference/gateway.md` §3 already carries `author` (byte 10, LazyLibrarian's
+  own remote kind) and `file` (11), neither of which is a `work.kind`. Remote `author` keeps 10;
+  `person` takes 13 for services that report a creator entity under some other name. **Both resolve
+  to `work.kind = 'person'`.**
+- ⚠️ **"Find everything by this author" is unanswered in v0.1, and that is stated rather than
+  implied.** Excluding `person` from the FTS corpus means a person is not a search result. The cheap
+  candidate is to fold credited names into the FTS `alt_titles` of the works they are credited on, so
+  the query returns the *books* — but that is a decision for whoever writes the FTS document builder,
+  it is not specified anywhere, and nothing may assume it. Adding `person` to the corpus later is a
+  predicate change plus a re-index; it is not a migration, which is why it can wait and the kind
+  cannot.
+- 🔍 **The artist-versus-person rule is inference from how the sources model their own data**, not a
+  citation. Navidrome and Lidarr expose artists as first-class entities with their own endpoints;
+  Audiobookshelf, Komga and Kavita expose authors and comic creators as strings or as tags on an
+  item. If a future source exposes authors as first-class browsable entities — a post-Readarr book
+  manager doing what Lidarr does — the rule sends them to `artist` and the Music type would be wrong,
+  so **the rule is worth re-reading when a book *catalogue* source with an author endpoint is
+  added**. It does not change the schema; it changes which kind the adapter writes.
+- **A human who is both a music artist and a book author is two `work` rows in v0.1**, joined by
+  nothing. That is a real loss, it is smaller than filing every novelist under Music, and the seam
+  for fixing it already exists: `work_relation` carries typed edges with `confidence` and `evidence`
+  (ADR-0009), so a `same_person` edge is an added edge type rather than a schema change.
+- **§13's reference library gains a `person` row (~6,000)** and its top-level total stays 27,500
+  rather than becoming ~33,500. 🔍 The figure is chosen, not measured, and it is the one row in that
+  table where being wrong by 2× changes no budget, because it is excluded from every budget it could
+  have pressed on.
+
+### Alternatives rejected
+
+- **Leave authors as `artist` works and filter them out of the Music type at query time.** This was
+  the shape that existed. It needs a predicate that distinguishes them, and there is none —
+  `work.kind` is the only thing the enum, the corpus rule and the prefix-index builder read, so the
+  filter would have to be "does this artist have any album children", which is a join on the hot
+  navigation path and is wrong for a music artist whose albums have not imported yet.
+- **A separate `person` *table* rather than a `work.kind` member.** It avoids the `kind_byte`
+  allocation, and it costs the thing `work_credit` was built on: `creator_work_id REFERENCES
+  work(id)` becomes a polymorphic reference with no foreign key, `work_relation` cannot carry a
+  `same_person` edge, and an author gains no `external_id` rows (OLIDs and Comic Vine person ids are
+  real and useful) without duplicating that table too. The `work` table already models "an abstract
+  entity with a title, identifiers and typed edges", which is what a person is here.
+- **Rename `artist` to `person` and give music artists a subtype.** Symmetrical and cheap in the
+  schema, expensive everywhere else: it renames the one kind that already appears in a navigation
+  type, in the v0.4 OpenSubsonic surface, in `Caps.MediaKinds` and in every research document, to buy
+  nothing the two-member answer does not.
+- **Defer the decision to v0.2 and store credits as strings until then.** A string credit cannot
+  carry an `external_id`, cannot be deduplicated across two sources, and cannot be the target of the
+  reverse index that makes "everything this person is credited on" a seek. Upgrading strings to rows
+  later is a backfill over `work_credit` *plus* the migration this ADR exists to avoid.

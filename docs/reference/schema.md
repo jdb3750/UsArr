@@ -26,7 +26,7 @@ CREATE TABLE work (
   kind              TEXT NOT NULL CHECK (kind IN (
                       'movie','series','season','episode',
                       'artist','album','track',
-                      'book','comic','comic_issue','game')),
+                      'book','comic','comic_issue','person','game')),
                     -- NOTE: 'audiobook' is deliberately NOT a kind. An audiobook is an
                     -- edition of a 'book' work (edition.format='audiobook'). See §2.
                     -- NOTE: 'comic' is the SERIES; 'comic_issue' is the issue or chapter,
@@ -34,6 +34,16 @@ CREATE TABLE work (
                     -- (ADR-0030). There is no 'manga' kind and no Volume level; manga is
                     -- work_comic.reading_direction plus a derived type:manga tag, and Kavita's
                     -- Volume is work_comic_issue.volume_label + volume_sort.
+                    -- NOTE: 'person' is a credited human — author, translator, editor,
+                    -- illustrator, writer, penciller, inker, colorist, letterer, cover
+                    -- artist, narrator (ADR-0033). It is the target of
+                    -- work_credit.creator_work_id for books and comics. It is NOT top-level:
+                    -- excluded from the media-type navigation enum (ARCHITECTURE §17.2),
+                    -- from the Tier 1 client prefix index (§4.5) and from the FTS corpus
+                    -- (§8.2), because there is no person screen in any milestone.
+                    -- 'artist' still means a MUSIC artist and still maps to the Music type;
+                    -- a credit points at 'artist' only when a connected service models it as
+                    -- a top-level catalogue entity of its own.
   parent_work_id    INTEGER REFERENCES work(id) ON DELETE CASCADE,
                     -- series→season→episode; artist→album→track; book series→book.
   title             TEXT NOT NULL,
@@ -125,7 +135,11 @@ INDEX`, not `COVERING INDEX`.
 ### 1.1 Subtype tables · **v0.1 for movie/series/episode**
 
 Rule: **every `kind` has a subtype table or an explicit justification for not having one.**
-`season`, `artist` and `game` have none and need none today.
+`season`, `artist` and `game` have none and need none today. **`person` (ADR-0033) has none by
+design**: a credited human is a name, an optional set of `external_id` rows (OLIDs, Comic Vine
+person ids) and the credits that point at it, all of which `work`, `external_id` and `work_credit`
+already carry. A `work_person` table would hold birth year and a biography, which no v0.1 source
+reports for authors, and inventing it now is a column nothing writes.
 
 ```sql
 CREATE TABLE work_movie (
@@ -225,10 +239,15 @@ CREATE UNIQUE INDEX ux_track_pos ON work_track(edition_id, disc_number, track_po
 -- classical roles are unrepresentable — which is Lidarr's own limitation
 -- (AlbumResource.artistId is singular) and there is no reason to inherit it.
 CREATE TABLE work_credit (
-  work_id        INTEGER NOT NULL REFERENCES work(id) ON DELETE CASCADE,
-  artist_work_id INTEGER NOT NULL REFERENCES work(id) ON DELETE CASCADE,
-                                     -- a work of kind 'artist'. See the note below: books and
-                                     -- comics have no person kind, and that is a stated loss.
+  work_id         INTEGER NOT NULL REFERENCES work(id) ON DELETE CASCADE,
+  creator_work_id INTEGER NOT NULL REFERENCES work(id) ON DELETE CASCADE,
+                                     -- a work of kind 'artist' OR 'person' (ADR-0033).
+                                     -- 'artist' when a connected service models the creator as a
+                                     -- top-level catalogue entity in its own right (Navidrome and
+                                     -- Lidarr artists); 'person' otherwise (authors, translators,
+                                     -- editors, illustrators, comic writers and artists,
+                                     -- narrators). Renamed from artist_work_id, which asserted
+                                     -- the wrong kind for four of the six media types.
   role           TEXT NOT NULL CHECK (role IN (
                    -- music
                    'primary','featured','composer','conductor','performer','remixer','producer',
@@ -238,25 +257,43 @@ CREATE TABLE work_credit (
                    'writer','penciller','inker','colorist','letterer','cover_artist')),
   position       INTEGER NOT NULL DEFAULT 0,   -- billing order within (work, role)
   credited_as    TEXT,               -- the string this release printed, when it differs from
-                                     -- the artist work's title ("Sting" on a Police reissue)
-  PRIMARY KEY (work_id, role, position, artist_work_id)
+                                     -- the creator work's title ("Sting" on a Police reissue)
+  PRIMARY KEY (work_id, role, position, creator_work_id)
 ) STRICT, WITHOUT ROWID;
-CREATE INDEX ix_credit_artist ON work_credit(artist_work_id, role);
+CREATE INDEX ix_credit_creator ON work_credit(creator_work_id, role);
 ```
 
 **The PK leads with `(work_id, role, position)`** because the only hot read is *"give me this
-album's credits in billing order"*, which is then a single covered range scan. `artist_work_id`
-trails it to make the row unique when two artists share a role and a position (a co-credit).
-`ix_credit_artist` serves the reverse — an artist page listing everything they are credited on.
+album's credits in billing order"*, which is then a single covered range scan. `creator_work_id`
+trails it to make the row unique when two creators share a role and a position (a co-credit).
+`ix_credit_creator` serves the reverse — a creator page listing everything they are credited on.
 
-⚠️ **`artist_work_id` points at a `work` of kind `artist`, and `work.kind` has no `person`,
-`author` or `creator` member.** So a book's author and a comic's writer are stored as `artist`-kind
-works. That is a deliberate v0.1 loss with two visible consequences: an author appears in the
-`artist` navigation type unless filtered out, and the Tier 1 prefix index (ARCHITECTURE §4.5)
-counts them as top-level works. **The alternative — a `person` kind — is a `kind_byte` allocation
-and a CHECK-constraint change, which §5.3 states is unchangeable once clients cache ids**, so if it
-is wanted it has to be decided in migration 0001 like `comic_issue` was. Recorded here rather than
-discovered later; it is not resolved.
+**`creator_work_id` points at a `work` of kind `artist` or of kind `person`, and `person` is new in
+migration 0001 (ADR-0033).** The previous shape had no `person` member at all, so a book's author and
+a comic's penciller were stored as `artist`-kind works — which put every author into the **Music**
+navigation type (ARCHITECTURE §17.2 maps `artist` → Music) and counted every credit against the Tier 1
+prefix index's 25,000-item cap (§4.5), which §13 already shows is tripped by the reference library.
+Both consequences are gone, at the cost of one CHECK member, one `kind_byte` and this column's name.
+
+**Which kind a given credit points at is a rule, not a choice made per row:** `artist` when a
+connected service models the creator as a **top-level catalogue entity in its own right** — a
+Navidrome or Lidarr artist, which has albums, a page and a library row — and `person` otherwise. 🔍
+That rule is inference from how the sources model their own data, not a citation. **A human who is
+both a music artist and a book author is two rows in v0.1**, joined by nothing; that is a stated
+loss, and it is smaller than filing every novelist under Music.
+
+**`person` is excluded from the media-type navigation enum, the Tier 1 prefix index and the FTS
+corpus**, because there is no person screen in any milestone and a person hit would be a search result
+with nowhere to land. It is reachable as a credit link on an item (ARCHITECTURE §17.6). ⚠️ The
+consequence is carried rather than tidied: **"find everything by this author" is unanswered in v0.1**,
+and the cheap candidate — folding credited names into the FTS `alt_titles` of the works they are
+credited on, so the query returns the books — belongs to whoever writes the document builder and is
+not specified here.
+
+**Doing this in migration 0001 costs one CHECK member and one byte allocation. Doing it later costs a
+CHECK-constraint change (a SQLite table rebuild), an FTS re-index, a rebuild of every client prefix
+index, and a change to the `kind_byte` codec that ARCHITECTURE §5.3 states is unchangeable once
+clients cache ids** — which is ADR-0030's argument, in a second place, for the same reason.
 
 ```sql
 
@@ -691,9 +728,11 @@ CREATE INDEX ix_sdl_doc ON search_doc_library(doc_rowid);
    title change issues the matching FTS `DELETE` in the same transaction. Without
    `contentless_delete=1` this is impossible — a plain contentless table answers
    `cannot DELETE from contentless fts5 table`.
-3. `SELECT COUNT(*) FROM search_doc WHERE kind IN ('season','episode','track','comic_issue')` is
-   **0**. `comic_issue` is in the list for the same reason as the other three: a large manga
-   library's chapter titles would swamp every query (ADR-0030).
+3. `SELECT COUNT(*) FROM search_doc WHERE kind IN ('season','episode','track','comic_issue',
+   'person')` is **0**. `comic_issue` is in the list for the same reason as the first three: a large
+   manga library's chapter titles would swamp every query (ADR-0030). `person` is there for a
+   different reason — not corpus volume but the absence of a destination: there is no person screen
+   in any milestone, so a person hit would be a result row with nowhere to go (ADR-0033).
 4. **No query in the identity path references `library_member`, `library_source` **or
    `library_override`** (ADR-0026). Library membership is never an input to identity —
    jellyfin#10985 is what happens when it is. `library_override` is named explicitly because it is
@@ -966,8 +1005,9 @@ CREATE TABLE library (
                                       -- Exactly one, required, and EDITABLE (§6.5 rule 4).
                                       -- Only top-level kinds: a library of episodes or tracks is
                                       -- not a thing, and the search corpus rule (§7) filters the
-                                      -- same set. 'season','episode','track','comic_issue' are
-                                      -- deliberately absent.
+                                      -- same set. 'season','episode','track','comic_issue' and
+                                      -- 'person' are deliberately absent — a library of authors is
+                                      -- not a thing either (ADR-0033).
   formats       TEXT,                 -- JSON array over edition.format, or NULL for "any".
                                       -- ["ebook"] and ["audiobook"] over one Audiobookshelf
                                       -- library are the flagship case (§17.8).

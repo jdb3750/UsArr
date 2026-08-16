@@ -55,7 +55,7 @@ zero-results screen says so rather than leaving the user guessing.
 movie, series, artist, album, book, comic, game
 ```
 
-`season`, `episode`, `track` and **`comic_issue`** are **excluded**. The reference library is ~400k episode rows
+`season`, `episode`, `track`, **`comic_issue`** and **`person`** are **excluded**. The reference library is ~400k episode rows
 against ~13k top-level works; indexing episode titles means a corpus of "Pilot", "Part One" and
 "The Beginning" swamps every query, and the `title_idf` penalty was tuned for short *movie* titles,
 not for that. Episodes and tracks are reachable by **scoped search from within a parent's detail
@@ -64,7 +64,17 @@ view**, which queries `work` by `parent_work_id` directly and never touches FTS.
 A large manga library does to the corpus with chapter titles exactly what episode titles do
 (ADR-0030), which is why `comic_issue` is a kind at all.
 
-CI asserts `SELECT COUNT(*) FROM search_doc WHERE kind IN ('season','episode','track','comic_issue')`
+`person` (ADR-0033) is excluded for a different reason from the other four: it is not a volume
+problem, it is a destination problem — there is no person screen in any milestone, so a person hit
+would be a result row with nowhere to go. ⚠️ **The consequence is that "find everything by this
+author" is unanswered in v0.1.** The cheap candidate is to fold credited names into the `alt_titles`
+column of the works they are credited on, so the query returns the books rather than the person, but
+that is a decision for whoever writes the document builder and it is not specified here. Adding
+`person` to the corpus later is a predicate change plus a re-index — not a migration, which is why
+it can wait and the kind itself could not.
+
+CI asserts
+`SELECT COUNT(*) FROM search_doc WHERE kind IN ('season','episode','track','comic_issue','person')`
 is 0.
 
 **Permission filtering happens in the join, not after it**, and **the mechanism is a junction table,

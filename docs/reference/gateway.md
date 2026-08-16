@@ -115,8 +115,16 @@ var kindByte = map[string]byte{
     "book": 8, "comic": 9, "author": 10, "file": 11,
     "comic_issue": 12, // ADR-0030 — allocated in the same commit as "comic",
                        // before any client caches an id. See the note below.
+    "person": 13,      // ADR-0033 — a creator entity reported under a name other than
+                       // "author". Both 10 and 13 resolve to work.kind = 'person'.
 }
 ```
+
+**The map is keyed by the *remote* kind, not by `work.kind`, and the two vocabularies differ.**
+`author` and `file` are remote kinds with no `work.kind` of the same name, and `work.kind = 'person'`
+(ADR-0033) is reachable through either `author` (10) or `person` (13) depending on what the service
+calls it. Decoding a `usarr_id` yields the remote kind, which is what `ux_sil` needs; the work kind
+comes from the row it resolves to.
 
 **`kind_byte` is load-bearing, not decoration.** The only unique index on `service_item_link` is
 `(service_instance_id, remote_kind, remote_id)`. Without `remote_kind` at lookup time SQLite uses
