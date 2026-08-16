@@ -152,16 +152,23 @@ func (s *Server) handleListIndexers(w http.ResponseWriter, r *http.Request) erro
 	}
 	scope := storeScope(a)
 
-	instances, err := s.indexerInstances(r, scope)
+	// ONE read, under ONE snapshot. The instance's indexers_fetched_at and its
+	// indexer_catalog rows are written by a single transaction and have to be
+	// read by a single transaction too: asking for them separately renders a
+	// state the database never held — an instance reporting "UsArr has not yet
+	// read the indexer list" beside the three indexers it just read. See
+	// store.ReadIndexerCatalog.
+	catalogs, err := s.indexerCatalogs(r, scope)
 	if err != nil {
 		return err
 	}
 
 	resp := indexersResponse{
-		Instances: make([]indexerInstanceResponse, 0, len(instances)),
+		Instances: make([]indexerInstanceResponse, 0, len(catalogs)),
 		Indexers:  []indexerResponse{},
 	}
-	for _, si := range instances {
+	for _, cat := range catalogs {
+		si := cat.Instance
 		row := indexerInstanceResponse{
 			InstanceID: si.ID,
 			Name:       si.Name,
@@ -186,14 +193,11 @@ func (s *Server) handleListIndexers(w http.ResponseWriter, r *http.Request) erro
 			continue
 		}
 
-		// The one read, and it is local. The scope is applied again inside the
-		// query even though the instance list above was already scoped: the
-		// parameter exists to be applied in the SQL, not merely accepted.
-		ixs, err := s.store.ListIndexers(r.Context(), scope, si.ID)
-		if err != nil {
-			return errStatus(http.StatusInternalServerError, CodeInternal,
-				"the replicated indexer list could not be read").wrapping(err)
-		}
+		// Already read, locally and in the same snapshot as si. The scope was
+		// applied again inside that query even though the instance list was
+		// already scoped: the parameter exists to be applied in the SQL, not
+		// merely accepted.
+		ixs := cat.Indexers
 		for _, ix := range ixs {
 			resp.Indexers = append(resp.Indexers, s.toIndexerResponse(si, ix))
 		}
@@ -207,42 +211,49 @@ func (s *Server) handleListIndexers(w http.ResponseWriter, r *http.Request) erro
 	return nil
 }
 
-// indexerInstances resolves which services this request is about.
+// indexerCatalogs resolves which services this request is about, and reads each
+// one's replicated indexers alongside it in the same snapshot.
 //
 // With ?instance= it is that one, validated the same way the search path
 // validates it, because the two have to agree about what "an indexer service"
 // is. Without it, every indexer-role service the caller can see — the common
 // install has exactly one, and a picker that silently picked one of two would
 // show a list that does not match the search it is about to run.
-func (s *Server) indexerInstances(r *http.Request, scope store.Scope) ([]store.ServiceInstance, error) {
+func (s *Server) indexerCatalogs(r *http.Request, scope store.Scope) ([]store.IndexerCatalog, error) {
 	if raw := strings.TrimSpace(r.URL.Query().Get("instance")); raw != "" {
 		id, err := strconv.ParseInt(raw, 10, 64)
 		if err != nil || id <= 0 {
 			return nil, errStatus(http.StatusBadRequest, CodeBadRequest, "instance must be a service id")
 		}
-		si, err := s.store.GetServiceInstance(r.Context(), scope, id)
+		cats, err := s.store.ReadIndexerCatalog(r.Context(), scope, id)
 		if err != nil {
 			return nil, notFoundOr(err, "service")
 		}
-		if si.Role != "indexer" {
+		// A named instance resolves to exactly one catalogue or to ErrNotFound.
+		// Checked rather than assumed: a handler must not index into a slice on
+		// the strength of another package's invariant.
+		if len(cats) != 1 {
+			return nil, notFoundOr(store.ErrNotFound, "service")
+		}
+		if si := cats[0].Instance; si.Role != "indexer" {
 			return nil, errStatus(http.StatusBadRequest, CodeBadRequest,
 				fmt.Sprintf("%q is a %s service, not an indexer", si.Name, si.Role))
 		}
 		// A DISABLED instance is not an error here, unlike on the search path.
 		// Search refuses because it was asked to do something it cannot do;
 		// this is a list, and "it is off" is the most useful thing it can say.
-		return []store.ServiceInstance{si}, nil
+		return cats, nil
 	}
 
-	all, err := s.store.ListServiceInstances(r.Context(), scope)
+	all, err := s.store.ReadIndexerCatalog(r.Context(), scope, 0)
 	if err != nil {
 		return nil, errStatus(http.StatusInternalServerError, CodeInternal,
 			"the configured services could not be read").wrapping(err)
 	}
-	out := make([]store.ServiceInstance, 0, len(all))
-	for _, si := range all {
-		if si.Role == "indexer" {
-			out = append(out, si)
+	out := make([]store.IndexerCatalog, 0, len(all))
+	for _, cat := range all {
+		if cat.Instance.Role == "indexer" {
+			out = append(out, cat)
 		}
 	}
 	return out, nil

@@ -156,11 +156,18 @@ func insertServiceInstance(ctx context.Context, tx *sql.Tx, si ServiceInstance) 
 // excluded: the id stays burned but the row is gone as far as callers are
 // concerned.
 func (s *Store) GetServiceInstance(ctx context.Context, scope Scope, id int64) (ServiceInstance, error) {
+	return getServiceInstance(ctx, s.db.Read(), scope, id)
+}
+
+// getServiceInstance is GetServiceInstance's body, over any querier, so a caller
+// that must see this row in the same snapshot as something else can pass its own
+// read transaction. See ReadIndexerCatalog.
+func getServiceInstance(ctx context.Context, q querier, scope Scope, id int64) (ServiceInstance, error) {
 	pred, args := scope.instancePredicate("id")
 	query := `SELECT` + serviceInstanceColumns + `
 		FROM service_instance
 		WHERE id = ? AND deleted_at IS NULL AND ` + pred
-	row := s.db.Read().QueryRowContext(ctx, query, append([]any{id}, args...)...)
+	row := q.QueryRowContext(ctx, query, append([]any{id}, args...)...)
 
 	si, err := scanServiceInstance(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -175,13 +182,19 @@ func (s *Store) GetServiceInstance(ctx context.Context, scope Scope, id int64) (
 // ListServiceInstances reads every instance visible in scope, ordered by
 // priority then name so the services screen is stable across reloads.
 func (s *Store) ListServiceInstances(ctx context.Context, scope Scope) ([]ServiceInstance, error) {
+	return listServiceInstances(ctx, s.db.Read(), scope)
+}
+
+// listServiceInstances is ListServiceInstances's body, over any querier. See
+// getServiceInstance.
+func listServiceInstances(ctx context.Context, q querier, scope Scope) ([]ServiceInstance, error) {
 	pred, args := scope.instancePredicate("id")
 	query := `SELECT` + serviceInstanceColumns + `
 		FROM service_instance
 		WHERE deleted_at IS NULL AND ` + pred + `
 		ORDER BY priority DESC, name ASC`
 
-	rows, err := s.db.Read().QueryContext(ctx, query, args...)
+	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list service_instance: %w", err)
 	}

@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -225,6 +227,93 @@ func TestIndexerCatalogReadUsesTheInstanceIndex(t *testing.T) {
 	if strings.Contains(joined, "TEMP B-TREE") {
 		t.Errorf("the plan needs a temp b-tree for ORDER BY name:\n  %s\n"+
 			"ix_indexer_catalog_instance carries name for exactly this reason.", joined)
+	}
+}
+
+// TestReadIndexerCatalogIsOneSnapshot is the regression guard for a torn read
+// that shipped on GET /api/v1/indexers.
+//
+// ReplaceIndexers stamps service_instance.indexers_fetched_at and rewrites
+// indexer_catalog in ONE transaction, so no reader can see one without the
+// other. The endpoint then read them with TWO statements off the read pool —
+// two WAL snapshots — and a replication commit landing between them produced a
+// response that said "UsArr has not yet read the indexer list from Prowlarr"
+// while listing the three indexers it had just read. It reproduced at roughly
+// 1 request in 100 on a loaded four-core box, which is exactly the frequency
+// that gets a test re-run instead of read.
+//
+// THE INVARIANT IS ONE-DIRECTIONAL, and that is what makes it assertable:
+// indexers_fetched_at is written in the same transaction as the rows and is
+// never cleared, so ROWS PRESENT ⟹ FETCHED_AT VALID, always. The reverse is a
+// legitimate state (a service that answered and has no indexers), so it is not
+// checked.
+//
+// It hammers rather than orchestrates because the window is a commit landing
+// between two statements and there is no hook to stop the reader in it. A fresh
+// instance per round is what makes each round a real NULL → stamped transition:
+// nothing clears indexers_fetched_at once set, so a reused instance would only
+// test the first round. Run against the two-statement version this fails within
+// a few hundred rounds; the point of the loop is that it cannot pass vacuously.
+func TestReadIndexerCatalogIsOneSnapshot(t *testing.T) {
+	const rounds = 400
+
+	s := newTestStore(t)
+	ctx := t.Context()
+	scope := OwnerScope(1)
+
+	for round := range rounds {
+		instanceID, err := s.CreateServiceInstance(ctx, ServiceInstance{
+			Kind: "prowlarr", Role: "indexer", Name: fmt.Sprintf("Prowlarr %d", round),
+			BaseURL: "http://prowlarr.internal:9696", APIKeyEnc: []byte{0}, Enabled: true,
+		})
+		if err != nil {
+			t.Fatalf("CreateServiceInstance: %v", err)
+		}
+
+		// The writer replicates while readers are already spinning, so the
+		// commit lands mid-read rather than before the first one.
+		written := make(chan error, 1)
+		go func() {
+			written <- s.ReplaceIndexers(ctx, instanceID, sampleIndexers(instanceID), testNow)
+		}()
+
+		var readers sync.WaitGroup
+		for range 4 {
+			readers.Add(1)
+			go func() {
+				defer readers.Done()
+				// Bounded: a reader that never sees the rows must not hang the
+				// suite, and the writer's own error is reported below anyway.
+				for range 20000 {
+					cats, err := s.ReadIndexerCatalog(ctx, scope, instanceID)
+					if err != nil {
+						t.Errorf("round %d: ReadIndexerCatalog: %v", round, err)
+						return
+					}
+					if len(cats) != 1 {
+						t.Errorf("round %d: read %d catalogues for one instance", round, len(cats))
+						return
+					}
+					if len(cats[0].Indexers) == 0 {
+						continue
+					}
+					if !cats[0].Instance.IndexersFetchedAt.Valid {
+						t.Errorf("round %d: the catalogue carries %d indexers while the instance "+
+							"reports indexers_fetched_at NULL. ReplaceIndexers writes both in one "+
+							"transaction, so this state never existed in the database — the read "+
+							"spanned two snapshots.", round, len(cats[0].Indexers))
+					}
+					return
+				}
+			}()
+		}
+		readers.Wait()
+		if err := <-written; err != nil {
+			t.Fatalf("round %d: ReplaceIndexers: %v", round, err)
+		}
+		if t.Failed() {
+			return
+		}
 	}
 }
 

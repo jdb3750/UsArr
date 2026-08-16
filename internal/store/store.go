@@ -140,3 +140,16 @@ func (s *Store) DB() *db.DB { return s.db }
 func (s *Store) write(ctx context.Context, fn func(context.Context, *sql.Tx) error) error {
 	return s.db.Write(ctx, fn)
 }
+
+// querier is the read surface *sql.DB and *sql.Tx have in common.
+//
+// It exists so one read function serves both callers: an ordinary read straight
+// off the pool, and a read that has to share ONE WAL snapshot with its
+// neighbours. Two statements issued separately on the pool are two snapshots,
+// and a row written between them is visible to the second and not the first —
+// which is how a caller that reads a parent row and then its children renders a
+// state neither the old nor the new database ever held. See ReadIndexerCatalog.
+type querier interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}

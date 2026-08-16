@@ -171,8 +171,14 @@ func indexerListSQL(scope Scope, instanceID int64) (string, []any) {
 // indexers". That distinction lives on service_instance.indexers_fetched_at,
 // because it is a fact about the instance and not about any row here.
 func (s *Store) ListIndexers(ctx context.Context, scope Scope, instanceID int64) ([]Indexer, error) {
+	return listIndexers(ctx, s.db.Read(), scope, instanceID)
+}
+
+// listIndexers is ListIndexers's body, over any querier, so ReadIndexerCatalog
+// can run it inside the same snapshot as the instance read.
+func listIndexers(ctx context.Context, q querier, scope Scope, instanceID int64) ([]Indexer, error) {
 	query, args := indexerListSQL(scope, instanceID)
-	rows, err := s.db.Read().QueryContext(ctx, query, args...)
+	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list indexer_catalog for service_instance %d: %w", instanceID, err)
 	}
@@ -196,6 +202,75 @@ func (s *Store) ListIndexers(ctx context.Context, scope Scope, instanceID int64)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list indexer_catalog for service_instance %d: %w", instanceID, err)
+	}
+	return out, nil
+}
+
+// IndexerCatalog is one service instance together with its replicated indexers,
+// read as a pair.
+//
+// The pairing is the point. Instance.IndexersFetchedAt is the ONLY thing that
+// separates "never successfully read" from "read, and this service has zero
+// indexers", so the row count alone cannot be interpreted without it — and a
+// count read at one instant against a timestamp read at another is not a state
+// the database was ever in.
+type IndexerCatalog struct {
+	Instance ServiceInstance
+	Indexers []Indexer
+}
+
+// ReadIndexerCatalog reads instances and their replicated indexers under ONE
+// snapshot. instanceID selects a single instance; 0 means every instance in
+// scope. A named instance that is not visible is ErrNotFound, exactly as
+// GetServiceInstance reports it.
+//
+// THE READ TRANSACTION IS THE WHOLE POINT, and it is the read-side half of
+// ReplaceIndexers's write transaction above. That write stamps
+// service_instance.indexers_fetched_at and rewrites indexer_catalog atomically
+// so no reader can see one without the other — but atomicity on the write side
+// only buys that if the read side asks once. Two statements on the read pool are
+// two WAL snapshots: issued either side of a replication commit, the first
+// returns indexers_fetched_at NULL and the second returns the freshly written
+// rows, and the caller renders an instance that says "UsArr has not yet read the
+// indexer list" while listing the indexers it just read. That torn read was
+// reproducible on GET /api/v1/indexers at roughly 1 request in 100 on a loaded
+// four-core box; it is closed here, in the store, because it is a property of
+// the pair rather than of any one caller.
+//
+// It reads the catalogue for every instance it returns, including instances the
+// caller will discard as disabled or non-indexer: the role and enabled policy
+// belongs to the caller, and each extra read is an indexed equality lookup on a
+// table with single-digit instances in it. Keep the transaction short —
+// db.ReadTx's note about starving the WAL checkpointer applies.
+func (s *Store) ReadIndexerCatalog(ctx context.Context, scope Scope, instanceID int64) ([]IndexerCatalog, error) {
+	var out []IndexerCatalog
+	err := s.db.ReadTx(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		var instances []ServiceInstance
+		if instanceID > 0 {
+			si, err := getServiceInstance(ctx, tx, scope, instanceID)
+			if err != nil {
+				return err
+			}
+			instances = []ServiceInstance{si}
+		} else {
+			var err error
+			if instances, err = listServiceInstances(ctx, tx, scope); err != nil {
+				return err
+			}
+		}
+
+		out = make([]IndexerCatalog, 0, len(instances))
+		for _, si := range instances {
+			ixs, err := listIndexers(ctx, tx, scope, si.ID)
+			if err != nil {
+				return err
+			}
+			out = append(out, IndexerCatalog{Instance: si, Indexers: ixs})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return out, nil
 }
