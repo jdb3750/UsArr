@@ -305,10 +305,11 @@
 			<thead role="rowgroup">
 				<!-- svelte-ignore a11y_no_redundant_roles -->
 				<tr role="row" aria-rowindex={1}>
-					{#each columns as column (column.id)}
+					{#each columns as column, c (column.id)}
 						<th
 							role="columnheader"
 							scope="col"
+							aria-colindex={c + 1}
 							class:is-num={column.align === 'end'}
 							data-col={column.id}>{column.header}</th
 						>
@@ -327,9 +328,16 @@
 					-->
 					<!-- svelte-ignore a11y_no_redundant_roles -->
 					<tr role="row" aria-rowindex={rowIndex(i, offset)} data-key={key(row)}>
-						{#each columns as column (column.id)}
+						{#each columns as column, c (column.id)}
+							<!--
+								aria-colindex is 1-based and explicit for the same reason the
+								roles are: the computed display is grid, so nothing in this
+								subtree carries an implicit table position for the
+								accessibility tree to derive one from.
+							-->
 							<td
 								role="cell"
+								aria-colindex={c + 1}
 								class:is-num={column.align === 'end'}
 								data-col={column.id}
 								data-line={stackLine(column)}
