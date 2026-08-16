@@ -704,8 +704,11 @@
             </div></td>
           </tr>
 
-          <!-- Already acknowledged: the write queue holds it, and the chip
-               says so rather than claiming the grab has landed. -->
+          <!-- Already acknowledged: the command is queued and Prowlarr has
+               not answered, and the chip says so rather than claiming the
+               grab has landed. This is the pre-answer transient, not one of
+               17.5's three result states -- nothing has been handed over
+               yet, so none of the three is true of it. -->
           <tr data-when="live partial denied" role="row" aria-rowindex="8">
             <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r5">Select this release</label><input type="checkbox" id="r5" data-act="rowselect"></td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
@@ -723,12 +726,13 @@
             </div></td>
           </tr>
 
-          <!-- verifying: it might have landed. Distinct from failed. -->
+          <!-- Sent, then Prowlarr reported a problem. Beside sent, not
+               beside failure, and no Retry. ARCHITECTURE 17.5. -->
           <tr data-when="live" role="row" aria-rowindex="9">
             <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r6">Select this release</label><input type="checkbox" id="r6" data-act="rowselect"></td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
             <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>11 days</td>
-            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.2160p.WEB-DL.DV.HDR.DDP5.1.Atmos.H.265-NTb">Dune.Part.Two.2024.2160p.WEB-DL.DV.HDR.DDP5.1.Atmos.H.265-NTb</span><div data-slot="grabstate"><span class="chip chip--pending">verifying, might have landed</span></div></td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.2160p.WEB-DL.DV.HDR.DDP5.1.Atmos.H.265-NTb">Dune.Part.Two.2024.2160p.WEB-DL.DV.HDR.DDP5.1.Atmos.H.265-NTb</span><div data-slot="grabstate"><span class="chip chip--done">sent · a problem was reported after handoff</span></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>PassThePopcorn</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>24.3 GB</td>
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>77</td>
@@ -814,7 +818,7 @@
       </table>
     </div>
 
-    <p class="section note" data-when="live partial denied"><span class="statebar__tag">mockup</span> A grab is acknowledged, not applied optimistically. The button writes a queued command and the row shows <span class="chip chip--pending">pending</span> until Prowlarr answers. A failure changes that chip on the same visible row and raises a message carrying the upstream text verbatim, with Retry and Dismiss. The row never silently reverts. Grabbing the 26-day-old HDBits release above is wired to fail, so that path is reachable from this page.</p>
+    <p class="section note" data-when="live partial denied"><span class="statebar__tag">mockup</span> A grab is acknowledged, not applied optimistically. The button writes a queued command and the row shows <span class="chip chip--pending">pending</span> until Prowlarr answers. An answer changes that chip on the same visible row and raises a message carrying the upstream text verbatim. Which actions the message offers depends on which of the three states the answer lands in: Retry and Dismiss on <span class="mono">not sent</span>, where nothing happened, and Dismiss alone on <span class="mono">sent · a problem was reported after handoff</span>, which points at your download client instead. The row never silently reverts. Grabbing the 26-day-old HDBits release above is wired to fail, so that path is reachable from this page.</p>
 
     <p class="section note" data-when="live partial denied"><span class="statebar__tag">mockup</span> The Indexer flags column renders whatever Prowlarr sends, as an opaque tag. <span class="mono">IndexerFlag</span> is a subclassable class rather than an enum: the base type declares seven, PassThePopcorn subclasses it to add <span class="chip">golden</span> and <span class="chip">approved</span>, and the next indexer definition may add more, so an allowlist here would drop flags invisibly. <span class="chip chip--leech">freeleech</span> and <span class="chip chip--leech">halfleech</span> carry one step of emphasis because they alone are derived from <span class="mono">downloadvolumefactor</span> rather than sent as strings, and they alone change what the download costs your ratio.</p>
 
@@ -835,11 +839,19 @@
        answer "did that one work?" -- which sends the user back to Prowlarr's
        own UI to grab, the outcome this project exists to prevent.
 
-       The vocabulary is the write queue's own, unchanged:
-       pending | inflight | verifying | done | failed. "done" means UsArr
-       handed the release to the download client and the client accepted it.
-       It does not mean the file exists, and nothing here claims to know that,
-       because UsArr does not talk to a download client.
+       The vocabulary is ARCHITECTURE 17.5's three grab-result states, not the
+       write queue's internal five. Two reasons the internal set cannot be the
+       user-facing one. "done" is a word this vocabulary cannot say: UsArr
+       stops observing at handoff, so the strongest true word for every
+       handed-over state is "sent". And the boundary that matters is handed
+       over vs never handed over, not success vs failure -- Prowlarr can accept
+       a release and then fail a later step, returning an error over an
+       operation that already partly succeeded (the owner's own grab, 17.5).
+
+       So: sent | sent, a problem was reported after handoff | not sent.
+       The middle state sits beside "sent" rather than beside failure, and it
+       offers no Retry, because doing it again is exactly what produces two
+       copies of a 68 GB release. It points at the download client instead.
        ===================================================================== -->
   <section class="section" id="recent-grabs" data-when="live partial expired denied empty allfail nosink">
     <div class="section__head">
@@ -864,47 +876,47 @@
             <td data-col="release" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Release</span><span class="mono trunc" title="David Grann - The Wager {Dion Graham} [2023] M4B 125kbps">David Grann - The Wager {Dion Graham} [2023] M4B 125kbps</span></td>
             <td data-col="indexer" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Indexer</span>MyAnonaMouse</td>
             <td data-col="sent-to" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Sent to</span>qBittorrent</td>
-            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip chip--done">done</span><div class="cell-sub">accepted by the client. Nothing imports an audiobook here.</div></td>
+            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip chip--done">sent</span><div class="cell-sub">your download client accepted it. Nothing imports an audiobook here.</div></td>
           </tr>
           <tr role="row" aria-rowindex="3">
             <td data-col="when" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">When</span>14:05<div class="cell-sub">3 minutes ago</div></td>
             <td data-col="release" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Release</span><span class="mono trunc" title="Dune.Part.Two.2024.REPACK.1080p.WEB-DL.DDP5.1.Atmos.H.264-FLUX">Dune.Part.Two.2024.REPACK.1080p.WEB-DL.DDP5.1.Atmos.H.264-FLUX</span></td>
             <td data-col="indexer" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Indexer</span>IPTorrents</td>
-            <td data-col="sent-to" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Sent to</span>qBittorrent</td>
-            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip chip--pending">pending</span><div class="cell-sub">queued in UsArr, not sent yet</div></td>
+            <td data-col="sent-to" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Sent to</span><span class="muted">—</span></td>
+            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip chip--failed">not sent</span><div class="cell-sub">Prowlarr rejected the release, so nothing was sent and nothing is running. Retry to send it again.</div></td>
           </tr>
           <tr role="row" aria-rowindex="4">
             <td data-col="when" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">When</span>14:04<div class="cell-sub">4 minutes ago</div></td>
             <td data-col="release" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Release</span><span class="mono trunc" title="Dune.Part.Two.2024.2160p.WEB-DL.DV.HDR.DDP5.1.Atmos.H.265-NTb">Dune.Part.Two.2024.2160p.WEB-DL.DV.HDR.DDP5.1.Atmos.H.265-NTb</span></td>
             <td data-col="indexer" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Indexer</span>PassThePopcorn</td>
             <td data-col="sent-to" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Sent to</span>qBittorrent</td>
-            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip chip--pending">verifying</span><div class="cell-sub">the call timed out after the write; it might have landed</div></td>
+            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip chip--done">sent · a problem was reported after handoff</span><div class="cell-sub">Prowlarr reported a problem after accepting the release, and UsArr cannot tell whether the download is affected. Check qBittorrent.</div></td>
           </tr>
           <tr role="row" aria-rowindex="5">
             <td data-col="when" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">When</span>13:58<div class="cell-sub">10 minutes ago</div></td>
             <td data-col="release" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Release</span><span class="mono trunc" title="Dune.Part.Two.2024.Hybrid.2160p.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-playBD">Dune.Part.Two.2024.Hybrid.2160p.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-playBD</span></td>
             <td data-col="indexer" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Indexer</span>HDBits</td>
             <td data-col="sent-to" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Sent to</span><span class="muted">—</span></td>
-            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip chip--failed">failed</span><div class="cell-sub">the grab window had expired. Search again to grab it.</div></td>
+            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip chip--failed">not sent</span><div class="cell-sub">the grab window had expired, so nothing was sent. Search again to grab it.</div></td>
           </tr>
           <tr role="row" aria-rowindex="6">
             <td data-col="when" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">When</span>13:41<div class="cell-sub">27 minutes ago</div></td>
             <td data-col="release" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Release</span><span class="mono trunc" title="Shogun.S01.1080p.DSNP.WEB-DL.DDP5.1.Atmos.H.264-FLUX">Shogun.S01.1080p.DSNP.WEB-DL.DDP5.1.Atmos.H.264-FLUX</span></td>
             <td data-col="indexer" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Indexer</span>NZBgeek</td>
             <td data-col="sent-to" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Sent to</span>SABnzbd</td>
-            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip chip--pending">inflight</span><div class="cell-sub">handed to Prowlarr, waiting for its answer</div></td>
+            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip chip--done">sent</span><div class="cell-sub">your download client accepted it. Sonarr never requested this release, so nothing here will import it.</div></td>
           </tr>
           <tr role="row" aria-rowindex="7">
             <td data-col="when" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">When</span>15 Aug 2026, 22:12<div class="cell-sub">yesterday</div></td>
             <td data-col="release" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Release</span><span class="mono trunc" title="Boards.of.Canada-Geogaddi-2002-FLAC-16bit-44.1kHz">Boards.of.Canada-Geogaddi-2002-FLAC-16bit-44.1kHz</span></td>
             <td data-col="indexer" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Indexer</span>Redacted</td>
             <td data-col="sent-to" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Sent to</span>qBittorrent</td>
-            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip chip--done">done</span><div class="cell-sub">accepted by the client. Nothing imports music here.</div></td>
+            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip chip--done">sent</span><div class="cell-sub">your download client accepted it. Nothing imports music here.</div></td>
           </tr>
         </tbody>
       </table>
     </div>
-    <p class="note" style="padding-top:8px"><span class="statebar__tag">mockup</span> <span class="mono">done</span> means the download client accepted the release. It does not mean the file exists, is complete, or has been imported by anything: UsArr does not talk to a download client and will not draw a progress bar over a thing it cannot measure. The five states are the write queue's own — <span class="mono">pending</span>, <span class="mono">inflight</span>, <span class="mono">verifying</span>, <span class="mono">done</span>, <span class="mono">failed</span> — and <span class="mono">verifying</span> exists because a call that times out after the write may still have succeeded.</p>
+    <p class="note" style="padding-top:8px"><span class="statebar__tag">mockup</span> <span class="mono">sent</span> means UsArr handed the release to your download client and the client accepted it. It does not mean the file exists, is complete, or has been imported by anything: UsArr stops observing at handoff and will not draw a progress bar over a thing it cannot measure. There are three states, and the boundary between them is handed over against never handed over rather than success against failure: <span class="mono">sent</span>, <span class="mono">sent · a problem was reported after handoff</span>, and <span class="mono">not sent</span>. The middle one sits beside <span class="mono">sent</span> rather than beside <span class="mono">not sent</span>, because Prowlarr can accept a release and then fail a later step, so an error can arrive over a grab that already landed. It offers no Retry: doing it again is what produces two copies of a 68 GB release, so it points at your download client, where the truth is.</p>
   </section>
 
   <!-- =====================================================================
