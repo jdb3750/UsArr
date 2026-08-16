@@ -1629,7 +1629,167 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
   .banner__actions .btn { white-space: normal; text-align: left; }
 }
 
-/* --- 2.12 Mockup state visibility ---------------------------------------
+/* --- 2.12 Per-list grid templates: data, not styling ---------------------
+   Every rule below was an inline style attribute carrying --cols and
+   --row-lines on one
+   <table>, and it moved here for one reason: the production
+   Content-Security-Policy drops inline styles, so a mockup that demonstrates
+   layout through a style attribute is demonstrating something that cannot
+   ship. It rendered correctly here and would render differently in the real
+   app, which is worse than rendering wrong -- nobody re-checks a screen that
+   looks right.
+
+   These are NOT collapsed into shared classes, and the near-duplicates below
+   are deliberate. --cols is this list's own column template and --row-lines is
+   DESIGN-DIRECTION §7.4's per-list measurement -- "--row-lines is declared per
+   list from that list's own rendered rows" -- so two lists that happen to
+   measure the same today are still two measurements. Merging them would make
+   a later remeasure of one silently move the other, which is exactly the
+   failure §7.4 is written against. One class per list, thirty-four of them,
+   and the count is the point.
+
+   A stylesheet rule is the honest analogue rather than a workaround: in the
+   SvelteKit app these become build-time scoped component styles on the same
+   per-list boundary. The name carries the screen, the list and -- where the
+   two installs draw the list separately -- which install it belongs to. */
+
+/* Shared chrome: the keyboard-shortcuts dialog, declared once per screen file
+   and folded into a single instance by build_prototype.py. */
+.cols-shortcuts { --cols: 92px minmax(0,1fr); }
+
+/* Home. §17.2 as amended by ADR-0028: a media-type summary, an attention
+   block, one unified recently-added table. */
+.cols-home-bytype-full { --cols: minmax(0,0.8fr) minmax(0,1.15fr) minmax(0,2.4fr) 132px; --row-lines: 1.22; }
+.cols-home-bytype-v01 { --cols: minmax(0,0.8fr) minmax(0,1.15fr) minmax(0,2.4fr) 132px; --row-lines: 1.72; }
+.cols-home-attention-full { --cols: 92px minmax(0,3.4fr) 118px; --row-lines: 2.06; }
+.cols-home-attention-v01 { --cols: 92px minmax(0,3.4fr) 118px; --row-lines: 2.06; }
+.cols-home-recent-full { --cols: 78px minmax(0,3fr) 64px minmax(0,2fr) 64px minmax(0,1fr) minmax(0,1.2fr); --row-lines: 1.11; }
+.cols-home-recent-v01 { --cols: 78px minmax(0,3fr) 64px minmax(0,2fr) 64px minmax(0,1fr) minmax(0,1.2fr); --row-lines: 1.11; }
+
+/* Services. The annex table is reachable in neither install and is kept as
+   documentation, so it has no -full / -v01 pair. */
+.cols-services-list-full { --cols: minmax(0,1.5fr) 104px 132px 56px minmax(0,2.1fr) minmax(0,1.9fr) minmax(max-content,auto); --row-lines: 2.22; }
+.cols-services-list-v01 { --cols: minmax(0,1.5fr) 104px 132px 56px minmax(0,2.1fr) minmax(0,1.9fr) minmax(max-content,auto); --row-lines: 2.22; }
+.cols-services-annex { --cols: minmax(0,1fr) 92px minmax(0,2fr) minmax(0,3.6fr); --row-lines: 6.06; }
+
+/* Libraries. §17.8: the list, the proposals, a library's catalogue sources,
+   and the v0.3 corrections surface drawn so its bound can be reviewed. */
+.cols-libraries-list-full { --cols: minmax(0,1.1fr) 92px 56px minmax(0,1.7fr) minmax(0,1.3fr) minmax(0,1.5fr) minmax(max-content,auto); --row-lines: 2.17; }
+.cols-libraries-list-v01 { --cols: minmax(0,1.1fr) 92px 56px minmax(0,1.7fr) minmax(0,1.3fr) minmax(0,1.5fr) minmax(max-content,auto); --row-lines: 2.17; }
+.cols-libraries-proposals-full { --cols: minmax(max-content,auto) minmax(0,1.3fr) 128px minmax(0,0.9fr) minmax(0,2fr) minmax(0,2.4fr); --row-lines: 2.06; }
+.cols-libraries-proposals-v01 { --cols: minmax(max-content,auto) minmax(0,1.3fr) 128px minmax(0,0.9fr) minmax(0,2fr) minmax(0,2.4fr); --row-lines: 2.06; }
+.cols-libraries-sources-full { --cols: minmax(0,1.4fr) minmax(0,2fr) 60px minmax(0,1.4fr) 138px 76px 92px; --row-lines: 2.22; }
+.cols-libraries-sources-v01 { --cols: minmax(0,1.4fr) minmax(0,2fr) 60px minmax(0,1.4fr) 138px 76px 92px; --row-lines: 2.22; }
+.cols-libraries-corrections-full { --cols: 116px minmax(max-content,auto) minmax(0,2fr) minmax(0,2.4fr) 76px; --row-lines: 2.06; }
+.cols-libraries-corrections-v01 { --cols: 116px minmax(max-content,auto) minmax(0,2fr) minmax(0,2.4fr) 76px; --row-lines: 2.06; }
+
+/* Search. One group per media type, plus the two expanded child lists and the
+   two library-scoped result tables. The v0.1 install has no ebook, audiobook,
+   comic or music catalogue, so only Movies and Series exist in both. */
+.cols-search-ebooks { --cols: minmax(0,2.6fr) minmax(0,1.3fr) 52px minmax(0,1fr) 80px; --row-lines: 1.11; }
+.cols-search-audiobooks { --cols: minmax(0,2.4fr) minmax(0,1.5fr) minmax(0,1.5fr) 104px; --row-lines: 1.11; }
+.cols-search-movies-full { --cols: minmax(0,2.6fr) 52px 60px minmax(0,1fr) 80px minmax(max-content,auto); --row-lines: 1.11; }
+.cols-search-movies-v01 { --cols: minmax(0,2.6fr) 52px 60px minmax(0,1fr) 80px minmax(max-content,auto); --row-lines: 1.11; }
+.cols-search-comics { --cols: minmax(0,2.2fr) minmax(0,1.2fr) 52px minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.6fr) minmax(max-content,auto); --row-lines: 3.11; }
+.cols-search-music { --cols: minmax(0,2.6fr) minmax(0,1.4fr) 52px 68px; --row-lines: 1.11; }
+.cols-search-series { --cols: minmax(0,2.4fr) 52px minmax(0,1fr) 80px 80px; --row-lines: 1.22; }
+.cols-search-tracks { --cols: 44px minmax(0,4fr) 68px minmax(0,1.6fr) 84px; --row-lines: 1.11; }
+.cols-search-episodes { --cols: 44px minmax(0,4fr) 68px minmax(0,1.6fr) 84px; --row-lines: 1.11; }
+.cols-search-comics-scoped { --cols: minmax(0,2.2fr) minmax(0,1.2fr) 52px minmax(0,1.2fr) minmax(0,0.8fr) minmax(0,1fr) minmax(0,1.4fr) minmax(max-content,auto); --row-lines: 3.89; }
+.cols-search-series-scoped { --cols: minmax(0,2.4fr) 52px minmax(0,1fr) 80px 80px; --row-lines: 1.22; }
+
+/* Requests. The release table is drawn twice -- once for the movie search and
+   once for the audiobook search that has no request destination -- and the two
+   carry different column counts, so they are two lists and not one. */
+.cols-requests-failures { --cols: minmax(0,1fr) 108px minmax(0,4fr) 68px; --row-lines: 2.61; }
+.cols-requests-releases { --cols: 60px 88px 80px minmax(0,3fr) minmax(0,1fr) 80px 68px 84px minmax(0,0.9fr) minmax(0,1fr) minmax(max-content,auto); --row-lines: 2.17; }
+.cols-requests-releases-audiobook { --cols: 60px 88px 80px minmax(0,3fr) minmax(0,1.1fr) 80px 68px 84px minmax(0,1fr) minmax(max-content,auto); --row-lines: 1.39; }
+.cols-requests-grabs { --cols: 116px minmax(0,3fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.9fr); --row-lines: 2.94; }
+.cols-requests-postgrab { --cols: 104px minmax(0,1fr) minmax(0,3.4fr); --row-lines: 2.22; }
+
+/* --- 2.13 Layout nudges, and why every selector is doubled ---------------
+   The other half of the inline-style removal: the genuine one-off adjustments
+   -- a top margin, a width cap, a stacking order -- that used to be written as
+   an inline `margin-top: 8px` and cannot be, because the production CSP
+   drops the attribute.
+
+   EVERY SELECTOR HERE NAMES ITS CLASS TWICE, AND THAT IS NOT A TYPO. An inline
+   declaration outranks every rule in this stylesheet. A class does not, so a
+   one-class replacement is not a faithful one: `.tbl td > .stacklabel + *` is
+   (0,2,0) and sets `margin-top: 0`, `.tbl td > * + *` is (0,1,1) and sets 2px,
+   and `@media (max-width: 560px) .select` caps a select at 96px. A plain
+   `.u-mt-6` loses to the first two and a plain `.u-mw-200` sits at the mercy of
+   source order against the third. Doubling the class makes each rule (0,2,0)
+   and puts it last in the file, which reproduces exactly what the inline
+   declaration used to win -- no more and no less. Measured before and after
+   across five screens, two installs, two viewports and both themes: identical
+   geometry on 734,496 element rects.
+
+   Values use the spacing tokens wherever a token equals the literal the inline
+   declaration carried, so a token change moves these with everything else.
+   10px has no token and stays a literal. */
+
+/* Top and bottom margins. */
+.u-mt-6.u-mt-6 { margin-top: var(--sp-3); }
+.u-mt-8.u-mt-8 { margin-top: var(--sp-4); }
+.u-mt-10.u-mt-10 { margin-top: 10px; }
+.u-mt-12.u-mt-12 { margin-top: var(--sp-5); }
+.u-mt-16.u-mt-16 { margin-top: var(--sp-6); }
+.u-mb-16.u-mb-16 { margin-bottom: var(--sp-6); }
+/* A banner inside a list that already provides the gutter: drop .banner's own
+   16px side margin rather than double it. */
+.u-mx-0.u-mx-0 { margin-left: 0; margin-right: 0; }
+
+/* Padding. */
+.u-pt-8.u-pt-8 { padding-top: var(--sp-4); }
+.u-pb-8.u-pb-8 { padding-bottom: var(--sp-4); }
+.u-pb-12.u-pb-12 { padding-bottom: var(--sp-5); }
+.u-pb-16.u-pb-16 { padding-bottom: var(--sp-6); }
+/* The media-type chip row when it sits directly under a toolbar and has to
+   pick up the toolbar's own inset. */
+.u-p-8-16.u-p-8-16 { padding: var(--sp-4) var(--sp-6); }
+
+/* Width caps on form controls. .input/.select are width:100% by default, so
+   each of these is the field's own sensible maximum: a priority or sort-order
+   number, a name, a kind or format select, a request destination or watch
+   path. */
+.u-mw-120.u-mw-120 { max-width: 120px; }
+.u-mw-180.u-mw-180 { max-width: 180px; }
+.u-mw-200.u-mw-200 { max-width: 200px; }
+.u-mw-260.u-mw-260 { max-width: 260px; }
+.u-mw-320.u-mw-320 { max-width: 320px; }
+
+/* Fan-out meter fill. These three are DATA -- the fraction of indexers that
+   answered -- not styling, and they are named after the value they carry so a
+   reader can see which row is which without opening the stylesheet. §2.10's
+   rule still holds: the meter reports a real count and never a fake bar. */
+.u-w-44.u-w-44 { width: 44%; }
+.u-w-89.u-w-89 { width: 89%; }
+.u-w-100.u-w-100 { width: 100%; }
+
+/* Search result groups stack in reading order: an earlier group's sticky
+   header has to paint over a later group's rows, so the z-index descends down
+   the page. Six groups, six values, and they are declared rather than derived
+   because :nth-of-type would silently renumber when a group is added or an
+   install hides one. */
+.u-z-1.u-z-1 { z-index: 1; }
+.u-z-2.u-z-2 { z-index: 2; }
+.u-z-3.u-z-3 { z-index: 3; }
+.u-z-4.u-z-4 { z-index: 4; }
+.u-z-5.u-z-5 { z-index: 5; }
+.u-z-6.u-z-6 { z-index: 6; }
+
+/* A toolbar that sits directly under another bordered edge would draw a
+   two-pixel rule; it drops its own top border instead. */
+.u-bt-0.u-bt-0 { border-top: 0; }
+
+/* Section-level prose held at the small muted size: the one-paragraph
+   explanation that sits above a table so the fact is stated once instead of
+   repeated in every row. Same three declarations as .note, and deliberately
+   not .note -- .note marks mockup commentary, and this is product copy. */
+.u-sm-muted.u-sm-muted { color: var(--fg-muted); font-size: var(--fs-sm); line-height: var(--lh-sm); }
+
+/* --- 2.14 Mockup state visibility ---------------------------------------
    The states switcher on each screen sets [hidden] on the blocks that do not
    belong to the selected state. This rule sits last so it beats the
    component display values above at equal specificity. */
@@ -1738,7 +1898,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
   <dialog class="dialog" id="shortcut-sheet" aria-labelledby="shortcut-sheet-title">
     <h2 class="dialog__head" id="shortcut-sheet-title">Keyboard shortcuts</h2>
     <div class="dialog__body">
-      <table class="tbl" aria-label="Keyboard shortcuts" style="--cols: 92px minmax(0,1fr)" aria-colcount="2" role="table" aria-rowcount="8">
+      <table class="tbl cols-shortcuts" aria-label="Keyboard shortcuts" aria-colcount="2" role="table" aria-rowcount="8">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Key</th>
@@ -1755,7 +1915,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
           <tr role="row" aria-rowindex="8"><td role="cell" aria-colindex="1"><span class="mono">?</span></td><td role="cell" aria-colindex="2">Open and close this sheet. It works whether or not the switch below is on.</td></tr>
         </tbody>
       </table>
-      <div class="field" style="margin-top:16px">
+      <div class="field u-mt-16">
         <label class="check" for="f-shortcuts-sheet"><input type="checkbox" id="f-shortcuts-sheet" data-act="shortcuts" checked> Single-key shortcuts</label>
         <span class="field__help">Turning this off disables <span class="mono">/</span>, <span class="mono">l</span>, <span class="mono">j</span> and <span class="mono">k</span>. Arrow keys, Escape and shortcuts that need a modifier are unaffected, and <span class="mono">?</span> keeps working so this sheet stays reachable.</span>
       </div>
@@ -2008,7 +2168,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
            reads as though they are, which is the same failure ADR-0031 names
            for artist-level numbers. -->
       <div class="tablewrap">
-        <table aria-rowcount="7" class="tbl tbl--stack tbl--2up" data-roving="tbody tr" aria-label="Library by media type" style="--cols: minmax(0,0.8fr) minmax(0,1.15fr) minmax(0,2.4fr) 132px; --row-lines: 1.22" aria-colcount="4" role="table">
+        <table aria-rowcount="7" class="tbl tbl--stack tbl--2up cols-home-bytype-full" data-roving="tbody tr" aria-label="Library by media type" aria-colcount="4" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Type</th>
@@ -2085,7 +2245,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
         <span class="section__count">6 media types · 2 catalogued</span>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="7" class="tbl tbl--stack tbl--2up" data-roving="tbody tr" aria-label="Library by media type" style="--cols: minmax(0,0.8fr) minmax(0,1.15fr) minmax(0,2.4fr) 132px; --row-lines: 1.72" aria-colcount="4" role="table">
+        <table aria-rowcount="7" class="tbl tbl--stack tbl--2up cols-home-bytype-v01" data-roving="tbody tr" aria-label="Library by media type" aria-colcount="4" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Type</th>
@@ -2149,7 +2309,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
            that those types are missing from the product as well as from the
            catalogue. They are not. Requests searches indexers for all six in
            v0.1, over the Prowlarr free-text path. -->
-      <p class="cell-sub" style="margin-top:8px">The four rows without a count name the service that will catalogue that type and when it arrives; §16 fixes the milestone, and none of them is in v0.1. Requests searches indexers for all six types over Prowlarr today, including those four. <a href="#requests">Open Requests</a></p>
+      <p class="cell-sub u-mt-8">The four rows without a count name the service that will catalogue that type and when it arrives; §16 fixes the milestone, and none of them is in v0.1. Requests searches indexers for all six types over Prowlarr today, including those four. <a href="#requests">Open Requests</a></p>
     </section>
 
     <!-- Block B: the thing neither Jellyfin nor Plex can put on a home screen,
@@ -2163,7 +2323,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
         <span class="section__count num" data-inst="v01" hidden>3 items</span>
       </div>
       <div class="tablewrap" data-inst="full">
-        <table aria-rowcount="5" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Items needing attention" style="--cols: 92px minmax(0,3.4fr) 118px; --row-lines: 2.06" aria-colcount="3" role="table">
+        <table aria-rowcount="5" class="tbl tbl--stack cols-home-attention-full" data-roving="tbody tr" aria-label="Items needing attention" aria-colcount="3" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">State</th>
@@ -2204,7 +2364,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
            so three remain and the count above follows. Nothing else changes,
            because Prowlarr, Radarr and Sonarr Anime are all v0.1 services. -->
       <div class="tablewrap" data-inst="v01" hidden>
-        <table aria-rowcount="4" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Items needing attention" style="--cols: 92px minmax(0,3.4fr) 118px; --row-lines: 2.06" aria-colcount="3" role="table">
+        <table aria-rowcount="4" class="tbl tbl--stack cols-home-attention-v01" data-roving="tbody tr" aria-label="Items needing attention" aria-colcount="3" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">State</th>
@@ -2258,7 +2418,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 
     <div data-panel-for="homeview" data-panel-name="table">
     <div class="tablewrap" data-inst="full">
-      <table aria-rowcount="-1" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Recently added across all media types" style="--cols: 78px minmax(0,3fr) 64px minmax(0,2fr) 64px minmax(0,1fr) minmax(0,1.2fr); --row-lines: 1.11" aria-colcount="7" role="table">
+      <table aria-rowcount="-1" class="tbl tbl--stack cols-home-recent-full" data-roving="tbody tr" aria-label="Recently added across all media types" aria-colcount="7" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Type</th>
@@ -2311,7 +2471,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
          per-type strips would have lost four whole regions and left the
          screen looking broken. -->
     <div class="tablewrap" data-inst="v01" hidden>
-      <table aria-rowcount="9" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Recently added across all media types" style="--cols: 78px minmax(0,3fr) 64px minmax(0,2fr) 64px minmax(0,1fr) minmax(0,1.2fr); --row-lines: 1.11" aria-colcount="7" role="table">
+      <table aria-rowcount="9" class="tbl tbl--stack cols-home-recent-v01" data-roving="tbody tr" aria-label="Recently added across all media types" aria-colcount="7" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Type</th>
@@ -2417,7 +2577,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
     <div class="banner__body">
       <div class="banner__title">This may be a different Sonarr from the one UsArr synced with</div>
       <div class="banner__text">Sync for this instance is paused deliberately, and every library it feeds has stopped recomputing membership. The instance fingerprint changed from <span class="mono">a91c4f</span> to <span class="mono">0d33b8</span>, which happens when the host is rebuilt, restored from a different backup, or repointed at another Sonarr. Re-link only if you know this is the same library; removing and re-adding keeps the 214 works UsArr already holds and attaches the new instance as a separate source, so nothing you named or corrected is lost either way.</div>
-      <div class="verbatim" style="margin-top:8px">instance_id 1: identity_epoch 3 -&gt; 4, max_remote_id_seen 214 -&gt; 6, root_folder /media/tv -&gt; /srv/tv</div>
+      <div class="verbatim u-mt-8">instance_id 1: identity_epoch 3 -&gt; 4, max_remote_id_seen 214 -&gt; 6, root_folder /media/tv -&gt; /srv/tv</div>
     </div>
     <div class="banner__actions"><button type="button" class="btn btn--primary">Re-link — this is the same Sonarr</button><button type="button" class="btn">Not the same instance — remove and re-add</button></div>
   </div>
@@ -2427,11 +2587,11 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
     <div class="banner__body">
       <div class="banner__title">Confirm your password to change a service</div>
       <div class="banner__text">Changing a service credential needs a password confirmation from the last five minutes, and this session's has expired. Nothing is wrong and nothing was lost: the server enforced it rather than this screen, the change you made is still in the form, and it is retried for you once you confirm. This is not a permission problem. An account that may not do this at all would say so and offer no retry, because retrying could not succeed.</div>
-      <div class="field" style="margin-top:10px;max-width:320px">
+      <div class="field u-mt-10 u-mw-320">
         <label class="field__label" for="sudo-pw">Password</label>
         <input class="input" id="sudo-pw" type="password" autocomplete="current-password">
       </div>
-      <div class="cell-sub" style="margin-top:6px">The server's answer, for the record: <span class="mono">PATCH /api/v1/services/3 → 403 sudo_required</span></div>
+      <div class="cell-sub u-mt-6">The server's answer, for the record: <span class="mono">PATCH /api/v1/services/3 → 403 sudo_required</span></div>
     </div>
     <div class="banner__actions"><button type="button" class="btn btn--primary">Confirm</button></div>
   </div>
@@ -2447,7 +2607,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
     <div class="banner__body">
       <div class="banner__title">The stored API key does not move to a new address</div>
       <div class="banner__text">This key is stored encrypted against <span class="mono">http://10.0.0.4:7878</span>, so it cannot be sent to <span class="mono">http://10.0.0.4:7879</span>. Paste the key for the new address, or put the old address back. The stored key is not deleted until you save. The scheme counts too: changing <span class="mono">https</span> to <span class="mono">http</span> on the same port would put a full-admin credential on the wire in clear text, so it is treated as a new address. Changing only the URL base is not a new address and clears nothing.</div>
-      <div class="cell-sub" style="margin-top:6px">The server's answer, for the record: <span class="mono">PATCH /api/v1/services/3 → 400 credential_reentry_required</span></div>
+      <div class="cell-sub u-mt-6">The server's answer, for the record: <span class="mono">PATCH /api/v1/services/3 → 400 credential_reentry_required</span></div>
     </div>
     <div class="banner__actions"><a href="#r-apikey">Go to the API key field</a></div>
   </div>
@@ -2502,7 +2662,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
          chevron does; the sync channels, the verbatim upstream text and the
          reasoning all live inside it. -->
     <div class="tablewrap" data-inst="full">
-      <table aria-rowcount="16" class="tbl tbl--stack tbl--services" data-roving="tbody tr[data-row]" aria-label="Configured services" style="--cols: minmax(0,1.5fr) 104px 132px 56px minmax(0,2.1fr) minmax(0,1.9fr) minmax(max-content,auto); --row-lines: 2.22" aria-colcount="7" role="table">
+      <table aria-rowcount="16" class="tbl tbl--stack tbl--services cols-services-list-full" data-roving="tbody tr[data-row]" aria-label="Configured services" aria-colcount="7" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Service</th>
@@ -2760,7 +2920,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
          The row ids carry a -v01 suffix because the expander they open is a
          second element in the same document, not the same one. -->
     <div class="tablewrap" data-inst="v01" hidden>
-      <table aria-rowcount="10" class="tbl tbl--stack tbl--services" data-roving="tbody tr[data-row]" aria-label="Configured services" style="--cols: minmax(0,1.5fr) 104px 132px 56px minmax(0,2.1fr) minmax(0,1.9fr) minmax(max-content,auto); --row-lines: 2.22" aria-colcount="7" role="table">
+      <table aria-rowcount="10" class="tbl tbl--stack tbl--services cols-services-list-v01" data-roving="tbody tr[data-row]" aria-label="Configured services" aria-colcount="7" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Service</th>
@@ -2927,19 +3087,19 @@ delta polling uses this host's clock, so recent changes can be missed</div>
   <section class="section" id="system" data-when="live reident denied reentry remove">
     <div class="section__head"><h2>System status</h2><span class="section__count">1 error, 2 warnings</span></div>
     <ul>
-      <li class="banner banner--err" style="margin-left:0;margin-right:0">
+      <li class="banner banner--err u-mx-0">
         <svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>
         <div class="banner__body"><div class="banner__title">Prowlarr rejected the stored API key</div>
         <div class="banner__text">Indexer search is unavailable until the key is replaced. Nothing in the catalogue changes: Prowlarr carries no library.</div></div>
         <div class="banner__actions"><button type="button" class="btn btn--sm">Update API key</button></div>
       </li>
-      <li class="banner banner--warn" style="margin-left:0;margin-right:0">
+      <li class="banner banner--warn u-mx-0">
         <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
         <div class="banner__body"><div class="banner__title">Radarr has been unreachable for 2 hours</div>
         <div class="banner__text">The last successful delta poll was 11:47. Movies is served entirely from the replica, because Radarr is its only source.</div></div>
         <div class="banner__actions"><button type="button" class="btn btn--sm">Test connection</button></div>
       </li>
-      <li class="banner banner--warn" style="margin-left:0;margin-right:0">
+      <li class="banner banner--warn u-mx-0">
         <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
         <div class="banner__body"><div class="banner__title">Sonarr Anime clock is 212 seconds ahead of this host</div>
         <div class="banner__text">Delta polling keys off the remote clock, so changes inside the skew window can be missed until the next reconciliation.</div></div>
@@ -2960,7 +3120,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
       <h2>Radarr 4K: the form after the address changed</h2>
       <span class="section__count">3 fields</span>
     </div>
-    <p class="note" style="padding-bottom:12px"><span class="statebar__tag">mockup</span> The port went from <span class="mono">7878</span> to <span class="mono">7879</span>. The key is encrypted against the old address and cannot be opened for the new one, so it is cleared rather than sent. Putting the old address back restores the field, which is the way out for someone who edited the wrong thing.</p>
+    <p class="note u-pb-12"><span class="statebar__tag">mockup</span> The port went from <span class="mono">7878</span> to <span class="mono">7879</span>. The key is encrypted against the old address and cannot be opened for the new one, so it is cleared rather than sent. Putting the old address back restores the field, which is the way out for someone who edited the wrong thing.</p>
     <div class="detail">
       <form class="form" novalidate>
         <div class="field">
@@ -3000,7 +3160,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
            screen, that Services was both a destination and a child of
            something else, with two elements carrying aria-current at once. -->
       <nav class="subnav" aria-label="Settings">
-        <p class="note" style="padding:0 0 8px">Services and Libraries are top-level screens, not settings sections.</p>
+        <p class="note u-pb-8">Services and Libraries are top-level screens, not settings sections.</p>
         <a href="#settings" data-group="settings" data-panel="services" aria-current="true">Service defaults</a>
         <a href="#settings" data-group="settings" data-panel="general" aria-current="false">General</a>
         <a href="#settings" data-group="settings" data-panel="tags" aria-current="false">Tags</a>
@@ -3008,7 +3168,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
       </nav>
 
       <div>
-        <div class="form__row" style="margin-bottom:16px">
+        <div class="form__row u-mb-16">
           <button type="button" class="btn" data-act="advanced" aria-expanded="false" aria-controls="settings-box">Show advanced</button>
           <span class="muted">Advanced fields are marked and hidden by default.</span>
         </div>
@@ -3071,7 +3231,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
 
             <div class="field advanced">
               <label class="field__label" for="f-priority">Priority <span class="adv-tag">advanced</span></label>
-              <input class="input" id="f-priority" type="number" value="10" style="max-width:120px">
+              <input class="input u-mw-120" id="f-priority" type="number" value="10">
               <span class="field__help">When two instances claim the same item, the higher priority authoritative link wins.</span>
             </div>
 
@@ -3096,7 +3256,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
         </div>
         <div data-panel-for="settings" data-panel-name="ui" hidden>
           <p class="muted">Theme and density live in the top bar of every screen, and both persist. There is no colour-impaired mode setting, because every status here is an icon and a word as well as a colour — including the availability tick and cross, whose word is read out rather than shown, because the column header already says which quality it is about.</p>
-          <div class="field" style="margin-top:12px">
+          <div class="field u-mt-12">
             <label class="check" for="f-shortcuts"><input type="checkbox" id="f-shortcuts" data-act="shortcuts" checked> Single-key shortcuts</label>
             <span class="field__help">WCAG 2.2 SC 2.1.4 is a Level A criterion and it is satisfied by exactly one of three things: the shortcut can be turned off, it can be remapped, or it is active only on focus. "It also has a visible mouse equivalent" is not one of them — the criterion exists for speech-input users, whose dictation is typed into the page, and for anyone with a tremor. This switch is the "turn off", it covers <span class="mono">/</span>, <span class="mono">l</span>, <span class="mono">j</span>, <span class="mono">k</span> and <span class="mono">?</span>, and it persists. Shortcuts that need a modifier are unaffected.</span>
           </div>
@@ -3124,9 +3284,9 @@ delta polling uses this host's clock, so recent changes can be missed</div>
       <h2>Annex: services neither install has</h2>
       <span class="section__count">3 rows, in neither install above</span>
     </div>
-    <p class="note" style="padding-bottom:12px"><span class="statebar__tag">mockup</span> These rows are reachable in neither install and are not part of the five screens above — the switcher does not change them. They are kept because each one demonstrates an upstream behaviour UsArr has to survive, and losing the drawing loses the finding.</p>
+    <p class="note u-pb-12"><span class="statebar__tag">mockup</span> These rows are reachable in neither install and are not part of the five screens above — the switcher does not change them. They are kept because each one demonstrates an upstream behaviour UsArr has to survive, and losing the drawing loses the finding.</p>
     <div class="tablewrap">
-      <table aria-rowcount="4" class="tbl tbl--stack tbl--services" aria-label="Services deferred to a later milestone" style="--cols: minmax(0,1fr) 92px minmax(0,2fr) minmax(0,3.6fr); --row-lines: 6.06" aria-colcount="4" role="table">
+      <table aria-rowcount="4" class="tbl tbl--stack tbl--services cols-services-annex" aria-label="Services deferred to a later milestone" aria-colcount="4" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Service</th>
@@ -3141,7 +3301,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
             <td data-col="milestone" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Milestone</span><span class="chip">v1.0</span></td>
             <td data-col="what-it-would-be" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What it would be</span>A request destination for Music. Never a catalogue source: the music server holds the music.</td>
             <td data-col="the-behaviour-worth-drawing" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">The behaviour worth drawing</span>Lidarr writes <span class="mono">status: deleted</span> into its own database when its metadata server returns 404 for an MBID — which is also what an MBID merge produces. Rendering that as a tombstone would hide an artist whose files are still on disk, so UsArr would show it as a claim about metadata, exclude it from the reconciliation sweep, and touch nothing.
-              <div class="verbatim" style="margin-top:6px">artist 412 Supersilent: status deleted, last seen 12:41
+              <div class="verbatim u-mt-6">artist 412 Supersilent: status deleted, last seen 12:41
 14 albums and 1,208 tracks untouched; no tombstone written</div></td>
           </tr>
           <tr role="row" aria-rowindex="3">
@@ -3228,7 +3388,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
              side without needing the dialog open. -->
         <div class="testresult" data-slot="testresult">
           <div class="testresult__title">Not tested yet</div>
-          <p class="muted" style="margin-top:6px">Save stays disabled until the test passes. The test also confirms <em>which</em> application answered, which is the only thing that catches a Radarr URL pasted under the Sonarr kind — both serve <span class="mono">/api/v3/system/status</span>.</p>
+          <p class="muted u-mt-6">Save stays disabled until the test passes. The test also confirms <em>which</em> application answered, which is the only thing that catches a Radarr URL pasted under the Sonarr kind — both serve <span class="mono">/api/v3/system/status</span>.</p>
         </div>
       </form>
     </div>
@@ -3248,12 +3408,12 @@ delta polling uses this host's clock, so recent changes can be missed</div>
       <h2>Adding a service: what the connection test says</h2>
       <span class="section__count">2 outcomes</span>
     </div>
-    <p class="note" style="padding-bottom:12px"><span class="statebar__tag">mockup</span> These two panels are the contents of the Add service dialog after <strong>Test connection</strong>. They are drawn inline here because a modal cannot be reviewed in a screenshot sheet; in the product they replace the "Not tested yet" block inside the dialog.</p>
+    <p class="note u-pb-12"><span class="statebar__tag">mockup</span> These two panels are the contents of the Add service dialog after <strong>Test connection</strong>. They are drawn inline here because a modal cannot be reviewed in a screenshot sheet; in the product they replace the "Not tested yet" block inside the dialog.</p>
 
-    <div class="detail" style="padding-bottom:16px">
+    <div class="detail u-pb-16">
       <div class="testresult testresult--ok">
         <div class="testresult__title"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>Connected</div>
-        <p style="margin-top:6px"><strong>Sonarr 4.0.10.2544</strong> answered on <span class="mono">/api/v3</span> and reports <span class="num">214</span> series across <span class="num">1</span> root folder.</p>
+        <p class="u-mt-6"><strong>Sonarr 4.0.10.2544</strong> answered on <span class="mono">/api/v3</span> and reports <span class="num">214</span> series across <span class="num">1</span> root folder.</p>
         <ul>
           <li>Clock skew <span class="num">+0.4 s</span>, measured from the response's <span class="mono">Date</span> header.</li>
           <li>The address resolved to <span class="mono">10.0.0.4</span> and is pinned for the life of each request.</li>
@@ -3263,10 +3423,10 @@ delta polling uses this host's clock, so recent changes can be missed</div>
 
       <div class="testresult testresult--fail">
         <div class="testresult__title"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>Could not connect</div>
-        <p style="margin-top:6px">Nothing was saved and no credential was sent anywhere except to the address below.</p>
+        <p class="u-mt-6">Nothing was saved and no credential was sent anywhere except to the address below.</p>
         <div class="verbatim">GET https://home.tailnet.ts.net/api/v3/system/status
 404 Not Found (text/html, 1.2 kB, served by nginx)</div>
-        <p class="muted" style="margin-top:8px">A 404 from an HTML server, rather than a refused connection, means something answered but it was not Sonarr. The three usual causes, in the order they happen:</p>
+        <p class="muted u-mt-8">A 404 from an HTML server, rather than a refused connection, means something answered but it was not Sonarr. The three usual causes, in the order they happen:</p>
         <ul>
           <li><strong>A missing URL base.</strong> A reverse proxy serving Sonarr at <span class="mono">/sonarr</span> needs that path in the base URL. This is the most common one on a Tailscale or nginx install.</li>
           <li><strong>The wrong kind.</strong> Sonarr and Radarr both answer <span class="mono">/api/v3/system/status</span>, so a Radarr URL under the Sonarr kind connects and then reports the wrong application. The success panel names what answered for exactly this reason.</li>
@@ -3308,7 +3468,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
        answers "what is in it, what is it called, and where do requests go?".
        No credential field ever appears on this screen: API keys live behind
        Services and a sudo window. -->
-  <p class="section" data-when="list propose edit" style="color:var(--fg-muted);font-size:var(--fs-sm);line-height:var(--lh-sm)">A library is a name you own over containers your services already computed — a whole instance, a root folder, an upstream library id, or an *Arr tag. UsArr never reads a filesystem and never types a path: every container below was offered by the service that owns it. <a href="#services">Services</a> is the other half of this pair, and it is where credentials and health live.</p>
+  <p class="section u-sm-muted" data-when="list propose edit">A library is a name you own over containers your services already computed — a whole instance, a root folder, an upstream library id, or an *Arr tag. UsArr never reads a filesystem and never types a path: every container below was offered by the service that owns it. <a href="#services">Services</a> is the other half of this pair, and it is where credentials and health live.</p>
 
   <div class="section" data-when="unconfigured" hidden>
     <div class="empty">
@@ -3348,8 +3508,8 @@ delta polling uses this host's clock, so recent changes can be missed</div>
          the column was 4/6 identical in value and 4/6 divergent in
          explanation, and the paragraphs were what made those rows 160px tall.
          The shared fact is stated once, here, above the table. -->
-    <p class="section" style="color:var(--fg-muted);font-size:var(--fs-sm);line-height:var(--lh-sm);padding-bottom:8px" data-inst="full">This install connects <strong>no request destination for any media type</strong>, because no milestone up to this one ships a command sink &mdash; the *Arr-backed request path is v0.2 and the rest are later still. The field is specified now so the binding exists from the first migration. Indexer search works for every type and the grab ends in your download client meanwhile. When destinations do ship, Movies and TV have one immediately because Radarr and Sonarr are already their catalogue source; music, books and comics need a service added for the purpose &mdash; Lidarr, LazyLibrarian or Mylar3 &mdash; and Readarr, the *Arr that used to own books, was archived on 27 Jun 2025. That is a deferral of the <em>write</em> half, not of the media type: a library&rsquo;s catalogue source and its request destination are separate bindings, and music already has the first one in Navidrome.</p>
-    <p class="section" style="color:var(--fg-muted);font-size:var(--fs-sm);line-height:var(--lh-sm);padding-bottom:8px" data-inst="v01" hidden>v0.1 connects <strong>no request destination for any media type</strong>, because it ships no command sinks at all &mdash; the *Arr-backed request path is v0.2. The field is specified now so the binding exists from the first migration. Indexer search works for every type and the grab ends in your download client meanwhile. When destinations do ship, Movies and TV have one immediately because Radarr and Sonarr are already their catalogue source; music, books and comics need a service added for the purpose &mdash; Lidarr, LazyLibrarian or Mylar3 &mdash; and Readarr, the *Arr that used to own books, was archived on 27 Jun 2025. That is a deferral of the <em>write</em> half, and on this install the <em>read</em> half is deferred for those four types too: they have no catalogue source yet either, so they have no library on this screen at all.</p>
+    <p class="section u-sm-muted u-pb-8" data-inst="full">This install connects <strong>no request destination for any media type</strong>, because no milestone up to this one ships a command sink &mdash; the *Arr-backed request path is v0.2 and the rest are later still. The field is specified now so the binding exists from the first migration. Indexer search works for every type and the grab ends in your download client meanwhile. When destinations do ship, Movies and TV have one immediately because Radarr and Sonarr are already their catalogue source; music, books and comics need a service added for the purpose &mdash; Lidarr, LazyLibrarian or Mylar3 &mdash; and Readarr, the *Arr that used to own books, was archived on 27 Jun 2025. That is a deferral of the <em>write</em> half, not of the media type: a library&rsquo;s catalogue source and its request destination are separate bindings, and music already has the first one in Navidrome.</p>
+    <p class="section u-sm-muted u-pb-8" data-inst="v01" hidden>v0.1 connects <strong>no request destination for any media type</strong>, because it ships no command sinks at all &mdash; the *Arr-backed request path is v0.2. The field is specified now so the binding exists from the first migration. Indexer search works for every type and the grab ends in your download client meanwhile. When destinations do ship, Movies and TV have one immediately because Radarr and Sonarr are already their catalogue source; music, books and comics need a service added for the purpose &mdash; Lidarr, LazyLibrarian or Mylar3 &mdash; and Readarr, the *Arr that used to own books, was archived on 27 Jun 2025. That is a deferral of the <em>write</em> half, and on this install the <em>read</em> half is deferred for those four types too: they have no catalogue source yet either, so they have no library on this screen at all.</p>
 
     <!-- The row is a row: two lines, hard ceiling. It used to run 80-160px --
          5.7 times the design's own 28px unit -- because the State column
@@ -3372,7 +3532,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
          as the detail view's own Diagnostics panel states, is "?lib=movies"
          with no slash at all. -->
     <div class="tablewrap" data-inst="full">
-      <table aria-rowcount="13" class="tbl tbl--stack" data-roving="tbody tr[data-row]" aria-label="Configured libraries" style="--cols: minmax(0,1.1fr) 92px 56px minmax(0,1.7fr) minmax(0,1.3fr) minmax(0,1.5fr) minmax(max-content,auto); --row-lines: 2.17" aria-colcount="7" role="table">
+      <table aria-rowcount="13" class="tbl tbl--stack cols-libraries-list-full" data-roving="tbody tr[data-row]" aria-label="Configured libraries" aria-colcount="7" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Library</th>
@@ -3535,7 +3695,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
          whose every source is down and still fully browsable, and a library
          over two instances of one service where one is degraded. -->
     <div class="tablewrap" data-inst="v01" hidden>
-      <table aria-rowcount="5" class="tbl tbl--stack" data-roving="tbody tr[data-row]" aria-label="Configured libraries" style="--cols: minmax(0,1.1fr) 92px 56px minmax(0,1.7fr) minmax(0,1.3fr) minmax(0,1.5fr) minmax(max-content,auto); --row-lines: 2.17" aria-colcount="7" role="table">
+      <table aria-rowcount="5" class="tbl tbl--stack cols-libraries-list-v01" data-roving="tbody tr[data-row]" aria-label="Configured libraries" aria-colcount="7" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Library</th>
@@ -3623,7 +3783,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
     </div>
 
     <div class="tablewrap">
-      <table aria-rowcount="6" class="tbl tbl--stack" data-act="proposals" data-roving="tbody tr" aria-label="Proposed libraries" style="--cols: minmax(max-content,auto) minmax(0,1.3fr) 128px minmax(0,0.9fr) minmax(0,2fr) minmax(0,2.4fr); --row-lines: 2.06" aria-colcount="6" role="table">
+      <table aria-rowcount="6" class="tbl tbl--stack cols-libraries-proposals-full" data-act="proposals" data-roving="tbody tr" aria-label="Proposed libraries" aria-colcount="6" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Decision</th>
@@ -3638,8 +3798,8 @@ delta polling uses this host's clock, so recent changes can be missed</div>
 
           <tr role="row" aria-rowindex="2">
             <td data-col="accept" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Accept</span><label class="sr" for="p1">Accept this proposal</label><input type="checkbox" id="p1" checked></td>
-            <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><label class="sr" for="p1n">Library name</label><input class="input" id="p1n" data-act="propname" type="text" value="Audiobooks" style="max-width:180px"><div class="cell-sub" data-slot="mergenote" hidden></div></td>
-            <td data-col="kind" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span><label class="sr" for="p1k">Kind</label><select class="select" id="p1k" style="max-width:120px"><option value="movie">Movies</option><option value="series">TV</option><option value="artist">Music</option><option selected value="book">Books</option><option value="comic">Comics</option></select></td>
+            <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><label class="sr" for="p1n">Library name</label><input class="input u-mw-180" id="p1n" data-act="propname" type="text" value="Audiobooks"><div class="cell-sub" data-slot="mergenote" hidden></div></td>
+            <td data-col="kind" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span><label class="sr" for="p1k">Kind</label><select class="select u-mw-120" id="p1k"><option value="movie">Movies</option><option value="series">TV</option><option value="artist">Music</option><option selected value="book">Books</option><option value="comic">Comics</option></select></td>
             <td data-col="format-filter" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Format filter</span><span class="mono">m4b, mp3</span></td>
             <td data-col="from" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">From</span>Audiobookshelf <span class="cell-sub">upstream library <span class="mono">Audiobooks &amp; Ebooks</span> · 418 items match</span></td>
             <td data-col="why" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Why</span>One library per upstream library, split by format.</td>
@@ -3647,8 +3807,8 @@ delta polling uses this host's clock, so recent changes can be missed</div>
 
           <tr role="row" aria-rowindex="3">
             <td data-col="accept" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Accept</span><label class="sr" for="p2">Accept this proposal</label><input type="checkbox" id="p2" checked></td>
-            <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><label class="sr" for="p2n">Library name</label><input class="input" id="p2n" data-act="propname" type="text" value="Ebooks" style="max-width:180px"><div class="cell-sub" data-slot="mergenote" hidden></div></td>
-            <td data-col="kind" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span><label class="sr" for="p2k">Kind</label><select class="select" id="p2k" style="max-width:120px"><option value="movie">Movies</option><option value="series">TV</option><option value="artist">Music</option><option selected value="book">Books</option><option value="comic">Comics</option></select></td>
+            <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><label class="sr" for="p2n">Library name</label><input class="input u-mw-180" id="p2n" data-act="propname" type="text" value="Ebooks"><div class="cell-sub" data-slot="mergenote" hidden></div></td>
+            <td data-col="kind" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span><label class="sr" for="p2k">Kind</label><select class="select u-mw-120" id="p2k"><option value="movie">Movies</option><option value="series">TV</option><option value="artist">Music</option><option selected value="book">Books</option><option value="comic">Comics</option></select></td>
             <td data-col="format-filter" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Format filter</span><span class="mono">epub, pdf, azw3</span></td>
             <td data-col="from" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">From</span>Audiobookshelf <span class="cell-sub">upstream library <span class="mono">Audiobooks &amp; Ebooks</span> · 1,842 items match</span></td>
             <td data-col="why" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Why</span>The same upstream library, split the other way.</td>
@@ -3656,8 +3816,8 @@ delta polling uses this host's clock, so recent changes can be missed</div>
 
           <tr role="row" aria-rowindex="4">
             <td data-col="accept" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Accept</span><label class="sr" for="p3">Accept this proposal</label><input type="checkbox" id="p3" checked></td>
-            <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><label class="sr" for="p3n">Library name</label><input class="input" id="p3n" data-act="propname" type="text" value="Comics" style="max-width:180px"><div class="cell-sub" data-slot="mergenote" hidden></div></td>
-            <td data-col="kind" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span><label class="sr" for="p3k">Kind</label><select class="select" id="p3k" style="max-width:120px"><option value="movie">Movies</option><option value="series">TV</option><option value="artist">Music</option><option value="book">Books</option><option selected value="comic">Comics</option></select></td>
+            <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><label class="sr" for="p3n">Library name</label><input class="input u-mw-180" id="p3n" data-act="propname" type="text" value="Comics"><div class="cell-sub" data-slot="mergenote" hidden></div></td>
+            <td data-col="kind" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span><label class="sr" for="p3k">Kind</label><select class="select u-mw-120" id="p3k"><option value="movie">Movies</option><option value="series">TV</option><option value="artist">Music</option><option value="book">Books</option><option selected value="comic">Comics</option></select></td>
             <td data-col="format-filter" class="muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Format filter</span>all formats</td>
             <td data-col="from" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">From</span>Kavita <span class="cell-sub">upstream library <span class="mono">Comics</span> · 512 series</span></td>
             <td data-col="why" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Why</span>Kavita reports the library type it was configured with, and the guess is which UsArr kind it maps to.</td>
@@ -3673,8 +3833,8 @@ delta polling uses this host's clock, so recent changes can be missed</div>
                entries and destroys the per-instance availability badge. -->
           <tr role="row" aria-rowindex="5">
             <td data-col="accept" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Accept</span><label class="sr" for="p4">Accept this proposal</label><input type="checkbox" id="p4" checked></td>
-            <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><label class="sr" for="p4n">Library name</label><input class="input" id="p4n" data-act="propname" type="text" value="Manga" style="max-width:180px"><div class="cell-sub" data-slot="mergenote" hidden></div></td>
-            <td data-col="kind" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span><label class="sr" for="p4k">Kind</label><select class="select" id="p4k" style="max-width:120px"><option value="movie">Movies</option><option value="series">TV</option><option value="artist">Music</option><option value="book">Books</option><option selected value="comic">Comics</option></select></td>
+            <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><label class="sr" for="p4n">Library name</label><input class="input u-mw-180" id="p4n" data-act="propname" type="text" value="Manga"><div class="cell-sub" data-slot="mergenote" hidden></div></td>
+            <td data-col="kind" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span><label class="sr" for="p4k">Kind</label><select class="select u-mw-120" id="p4k"><option value="movie">Movies</option><option value="series">TV</option><option value="artist">Music</option><option value="book">Books</option><option selected value="comic">Comics</option></select></td>
             <td data-col="format-filter" class="muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Format filter</span>all formats</td>
             <td data-col="from" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">From</span>Kavita <span class="cell-sub">upstream library <span class="mono">Manga</span> · 0 series</span></td>
             <td data-col="why" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Why</span>Answers and reports 0 series, which is not a failed sync.</td>
@@ -3735,7 +3895,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
     </div>
 
     <div class="tablewrap">
-      <table aria-rowcount="5" class="tbl tbl--stack" data-act="proposals" data-roving="tbody tr" aria-label="Proposed libraries" style="--cols: minmax(max-content,auto) minmax(0,1.3fr) 128px minmax(0,0.9fr) minmax(0,2fr) minmax(0,2.4fr); --row-lines: 2.06" aria-colcount="6" role="table">
+      <table aria-rowcount="5" class="tbl tbl--stack cols-libraries-proposals-v01" data-act="proposals" data-roving="tbody tr" aria-label="Proposed libraries" aria-colcount="6" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Decision</th>
@@ -3750,8 +3910,8 @@ delta polling uses this host's clock, so recent changes can be missed</div>
 
           <tr role="row" aria-rowindex="2">
             <td data-col="accept" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Accept</span><label class="sr" for="pv1">Accept this proposal</label><input type="checkbox" id="pv1" checked></td>
-            <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><label class="sr" for="pv1n">Library name</label><input class="input" id="pv1n" data-act="propname" type="text" value="Movies" style="max-width:180px"><div class="cell-sub" data-slot="mergenote" hidden></div></td>
-            <td data-col="kind" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span><label class="sr" for="pv1k">Kind</label><select class="select" id="pv1k" style="max-width:120px"><option selected value="movie">Movies</option><option value="series">TV</option><option value="artist">Music</option><option value="book">Books</option><option value="comic">Comics</option></select></td>
+            <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><label class="sr" for="pv1n">Library name</label><input class="input u-mw-180" id="pv1n" data-act="propname" type="text" value="Movies"><div class="cell-sub" data-slot="mergenote" hidden></div></td>
+            <td data-col="kind" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span><label class="sr" for="pv1k">Kind</label><select class="select u-mw-120" id="pv1k"><option selected value="movie">Movies</option><option value="series">TV</option><option value="artist">Music</option><option value="book">Books</option><option value="comic">Comics</option></select></td>
             <td data-col="format-filter" class="muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Format filter</span>all formats</td>
             <td data-col="from" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">From</span>Radarr <span class="cell-sub">whole instance · 1,204 films</span></td>
             <td data-col="why" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Why</span>One root folder, so one library over the whole instance.</td>
@@ -3759,8 +3919,8 @@ delta polling uses this host's clock, so recent changes can be missed</div>
 
           <tr role="row" aria-rowindex="3">
             <td data-col="accept" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Accept</span><label class="sr" for="pv2">Accept this proposal</label><input type="checkbox" id="pv2" checked></td>
-            <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><label class="sr" for="pv2n">Library name</label><input class="input" id="pv2n" data-act="propname" type="text" value="TV" style="max-width:180px"><div class="cell-sub" data-slot="mergenote" hidden></div></td>
-            <td data-col="kind" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span><label class="sr" for="pv2k">Kind</label><select class="select" id="pv2k" style="max-width:120px"><option value="movie">Movies</option><option selected value="series">TV</option><option value="artist">Music</option><option value="book">Books</option><option value="comic">Comics</option></select></td>
+            <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><label class="sr" for="pv2n">Library name</label><input class="input u-mw-180" id="pv2n" data-act="propname" type="text" value="TV"><div class="cell-sub" data-slot="mergenote" hidden></div></td>
+            <td data-col="kind" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span><label class="sr" for="pv2k">Kind</label><select class="select u-mw-120" id="pv2k"><option value="movie">Movies</option><option selected value="series">TV</option><option value="artist">Music</option><option value="book">Books</option><option value="comic">Comics</option></select></td>
             <td data-col="format-filter" class="muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Format filter</span>all formats</td>
             <td data-col="from" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">From</span>Sonarr <span class="cell-sub">whole instance · 214 series</span></td>
             <td data-col="why" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Why</span>One root folder, so one library over the whole instance.</td>
@@ -3773,8 +3933,8 @@ delta polling uses this host's clock, so recent changes can be missed</div>
                across two entries and destroys the per-instance badge. -->
           <tr role="row" aria-rowindex="4">
             <td data-col="accept" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Accept</span><label class="sr" for="pv3">Accept this proposal</label><input type="checkbox" id="pv3" checked></td>
-            <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><label class="sr" for="pv3n">Library name</label><input class="input" id="pv3n" data-act="propname" type="text" value="Anime" style="max-width:180px"><div class="cell-sub" data-slot="mergenote" hidden></div></td>
-            <td data-col="kind" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span><label class="sr" for="pv3k">Kind</label><select class="select" id="pv3k" style="max-width:120px"><option value="movie">Movies</option><option selected value="series">TV</option><option value="artist">Music</option><option value="book">Books</option><option value="comic">Comics</option></select></td>
+            <td data-col="proposal" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Proposal</span><label class="sr" for="pv3n">Library name</label><input class="input u-mw-180" id="pv3n" data-act="propname" type="text" value="Anime"><div class="cell-sub" data-slot="mergenote" hidden></div></td>
+            <td data-col="kind" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Kind</span><label class="sr" for="pv3k">Kind</label><select class="select u-mw-120" id="pv3k"><option value="movie">Movies</option><option selected value="series">TV</option><option value="artist">Music</option><option value="book">Books</option><option value="comic">Comics</option></select></td>
             <td data-col="format-filter" class="muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Format filter</span>all formats</td>
             <td data-col="from" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">From</span>Sonarr Anime <span class="cell-sub">whole instance · 61 series</span></td>
             <td data-col="why" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Why</span>A separate instance, so a separate proposal. Rename it to join.</td>
@@ -3844,7 +4004,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
              here as an argument. The argument stands on its own mechanism. -->
         <div class="field">
           <label class="field__label" for="l-kind">Kind</label>
-          <select class="select" id="l-kind" data-act="kind" style="max-width:200px">
+          <select class="select u-mw-200" id="l-kind" data-act="kind">
             <option value="movie">Movies</option><option value="series">TV</option><option value="artist">Music</option><option selected value="book">Books</option><option value="comic">Comics</option>
           </select>
           <span class="field__err" data-slot="kind-warn" hidden><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg><span class="sr">Warning:</span>Saving this re-derives membership for 1,842 items from what the services report. Nothing changes in Audiobookshelf.</span>
@@ -3853,7 +4013,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
 
         <div class="field">
           <label class="field__label" for="l-formats">Format filter</label>
-          <select class="select" id="l-formats" multiple size="5" style="max-width:200px">
+          <select class="select u-mw-200" id="l-formats" multiple size="5">
             <option selected>epub</option>
             <option selected>pdf</option>
             <option selected>azw3</option>
@@ -3866,7 +4026,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
 
         <div class="field">
           <label class="field__label" for="l-order">Display order</label>
-          <input class="input" id="l-order" type="number" value="5" style="max-width:120px">
+          <input class="input u-mw-120" id="l-order" type="number" value="5">
           <span class="field__help">One ordered list drives both the sidebar and the type summary on home.</span>
         </div>
       </form>
@@ -3882,7 +4042,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <span class="field__help">Off keeps the library browsable and out of search results.</span></div>
         <div class="field">
           <label class="field__label" for="l-sort">Default sort</label>
-          <select class="select" id="l-sort" style="max-width:200px">
+          <select class="select u-mw-200" id="l-sort">
             <option>Added, newest first</option>
             <option selected>Author, then title</option>
             <option>Title</option>
@@ -3901,7 +4061,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
         <div class="section__actions"><button type="button" class="btn btn--sm">Add source</button></div>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="2" class="tbl tbl--stack" data-roving-optout="every row is a form: a radio, a checkbox and a button" aria-label="Catalogue sources" style="--cols: minmax(0,1.4fr) minmax(0,2fr) 60px minmax(0,1.4fr) 138px 76px 92px; --row-lines: 2.22" aria-colcount="7" role="table">
+        <table aria-rowcount="2" class="tbl tbl--stack cols-libraries-sources-full" data-roving-optout="every row is a form: a radio, a checkbox and a button" aria-label="Catalogue sources" aria-colcount="7" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Instance</th>
@@ -3926,7 +4086,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           </tbody>
         </table>
       </div>
-      <p class="note" style="padding-top:8px">Add source offers a list the instance reports — Audiobookshelf's <span class="mono">/api/libraries</span>, the library list Kavita reports, an *Arr's <span class="mono">/api/v3/rootfolder</span> or <span class="mono">/api/v3/tag</span>. There is no free-text path field on this screen, and that is deliberate: it is the difference between binding to a container a service already computed and reading a disk.</p>
+      <p class="note u-pt-8">Add source offers a list the instance reports — Audiobookshelf's <span class="mono">/api/libraries</span>, the library list Kavita reports, an *Arr's <span class="mono">/api/v3/rootfolder</span> or <span class="mono">/api/v3/tag</span>. There is no free-text path field on this screen, and that is deliberate: it is the difference between binding to a container a service already computed and reading a disk.</p>
     </section>
 
     <!-- Request sink: a separate thing from the sources, single-valued, and
@@ -3938,14 +4098,14 @@ delta polling uses this host's clock, so recent changes can be missed</div>
       <form class="form" data-act="editform" onsubmit="return false">
         <div class="field">
           <label class="field__label" for="l-sink">Request destination</label>
-          <select class="select" id="l-sink" style="max-width:260px">
+          <select class="select u-mw-260" id="l-sink">
             <option selected>None</option>
           </select>
           <span class="field__help">Only instances whose probed capabilities advertise Add for a book in one of this library's formats are offered, and on this install none does: Readarr was archived on 27 Jun 2025, and the command sinks that could take a book request are deferred behind every catalogue source drawn here. A grab from indexer search still works and still lands in your download client — nothing after that renames it, moves it, or tells UsArr what became of it.</span>
         </div>
         <div class="field">
           <label class="field__label" for="l-watch">Watched folder</label>
-          <input class="input" id="l-watch" type="text" value="/media/books" readonly style="max-width:260px">
+          <input class="input u-mw-260" id="l-watch" type="text" value="/media/books" readonly>
           <span class="field__help">Reported by Audiobookshelf as a watched folder for the library this one is bound to. It is shown because it is the only thing that makes a grab useful without a sink, and it is read-only: UsArr never invents a path and never writes one.</span>
         </div>
       </form>
@@ -3961,7 +4121,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
         <div class="section__actions"><button type="button" class="btn btn--sm">Add correction</button></div>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="5" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Corrections" style="--cols: 116px minmax(max-content,auto) minmax(0,2fr) minmax(0,2.4fr) 76px; --row-lines: 2.06" aria-colcount="5" role="table">
+        <table aria-rowcount="5" class="tbl tbl--stack cols-libraries-corrections-full" data-roving="tbody tr" aria-label="Corrections" aria-colcount="5" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Correction</th>
@@ -4003,9 +4163,9 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           </tbody>
         </table>
       </div>
-      <p class="note" style="padding-top:8px"><span class="statebar__tag">mockup</span> The correction tables ship in migration 0001; this surface is v0.3, and 16.0 caps it there. It is drawn in full here so the bound can be reviewed before the schema is written, not because it ships with the four screens above.</p>
+      <p class="note u-pt-8"><span class="statebar__tag">mockup</span> The correction tables ship in migration 0001; this surface is v0.3, and 16.0 caps it there. It is drawn in full here so the bound can be reviewed before the schema is written, not because it ships with the four screens above.</p>
 
-      <p class="note" style="padding-top:8px">Four verbs and five fields, and that bound is the design. A correction lives in UsArr, is keyed to UsArr's own identity, is never written back to the service, and is never cleared by a sync, a reconciliation sweep or a tombstone expiry. LazyLibrarian's re-adding of books you marked ignored, because a rescan returned them with one piece of metadata different, is exactly what happens when corrections are keyed to the upstream's id instead. (LazyLibrarian is a v0.3 item here and is named as the failure it demonstrates, not as a service this install has.)</p>
+      <p class="note u-pt-8">Four verbs and five fields, and that bound is the design. A correction lives in UsArr, is keyed to UsArr's own identity, is never written back to the service, and is never cleared by a sync, a reconciliation sweep or a tombstone expiry. LazyLibrarian's re-adding of books you marked ignored, because a rescan returned them with one piece of metadata different, is exactly what happens when corrections are keyed to the upstream's id instead. (LazyLibrarian is a v0.3 item here and is named as the failure it demonstrates, not as a service this install has.)</p>
     </section>
 
     <section class="section">
@@ -4074,7 +4234,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
 
         <div class="field">
           <label class="field__label" for="v-kind">Kind</label>
-          <select class="select" id="v-kind" data-act="kind" style="max-width:200px">
+          <select class="select u-mw-200" id="v-kind" data-act="kind">
             <option value="movie">Movies</option><option selected value="series">TV</option><option value="artist">Music</option><option value="book">Books</option><option value="comic">Comics</option>
           </select>
           <span class="field__err" data-slot="kind-warn" hidden><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg><span class="sr">Warning:</span>Saving this re-derives membership for 275 series from what the services report. Nothing changes in Sonarr.</span>
@@ -4083,7 +4243,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
 
         <div class="field">
           <label class="field__label" for="v-formats">Format filter</label>
-          <select class="select" id="v-formats" multiple size="5" style="max-width:200px">
+          <select class="select u-mw-200" id="v-formats" multiple size="5">
             <option>epub</option>
             <option>pdf</option>
             <option>azw3</option>
@@ -4096,7 +4256,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
 
         <div class="field">
           <label class="field__label" for="v-order">Display order</label>
-          <input class="input" id="v-order" type="number" value="2" style="max-width:120px">
+          <input class="input u-mw-120" id="v-order" type="number" value="2">
           <span class="field__help">One ordered list drives both the sidebar and the type summary on home.</span>
         </div>
       </form>
@@ -4112,7 +4272,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <span class="field__help">Off keeps the library browsable and out of search results.</span></div>
         <div class="field">
           <label class="field__label" for="v-sort">Default sort</label>
-          <select class="select" id="v-sort" style="max-width:200px">
+          <select class="select u-mw-200" id="v-sort">
             <option>Added, newest first</option>
             <option>Author, then title</option>
             <option selected>Title</option>
@@ -4130,7 +4290,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
         <div class="section__actions"><button type="button" class="btn btn--sm">Add source</button></div>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="3" class="tbl tbl--stack" data-roving-optout="every row is a form: a radio, a checkbox and a button" aria-label="Catalogue sources" style="--cols: minmax(0,1.4fr) minmax(0,2fr) 60px minmax(0,1.4fr) 138px 76px 92px; --row-lines: 2.22" aria-colcount="7" role="table">
+        <table aria-rowcount="3" class="tbl tbl--stack cols-libraries-sources-v01" data-roving-optout="every row is a form: a radio, a checkbox and a button" aria-label="Catalogue sources" aria-colcount="7" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Instance</th>
@@ -4169,7 +4329,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           </tbody>
         </table>
       </div>
-      <p class="note" style="padding-top:8px">The authority radio decides which instance wins a field-level conflict, and it is one choice for the library rather than a sentence repeated in every row. Add source offers a list the instance reports — an *Arr's <span class="mono">/api/v3/rootfolder</span> or <span class="mono">/api/v3/tag</span>, or the whole instance. There is no free-text path field on this screen, and that is deliberate: it is the difference between binding to a container a service already computed and reading a disk.</p>
+      <p class="note u-pt-8">The authority radio decides which instance wins a field-level conflict, and it is one choice for the library rather than a sentence repeated in every row. Add source offers a list the instance reports — an *Arr's <span class="mono">/api/v3/rootfolder</span> or <span class="mono">/api/v3/tag</span>, or the whole instance. There is no free-text path field on this screen, and that is deliberate: it is the difference between binding to a container a service already computed and reading a disk.</p>
     </section>
 
     <section class="section">
@@ -4177,14 +4337,14 @@ delta polling uses this host's clock, so recent changes can be missed</div>
       <form class="form" data-act="editform" onsubmit="return false">
         <div class="field">
           <label class="field__label" for="v-sink">Request destination</label>
-          <select class="select" id="v-sink" style="max-width:260px">
+          <select class="select u-mw-260" id="v-sink">
             <option selected>None</option>
           </select>
           <span class="field__help">Only instances whose probed capabilities advertise Add for a series are offered, and on this install none does: v0.1 connects no command sink at all. Sonarr is already this library's catalogue source and becomes its destination in v0.2, which is a second binding on the same instance rather than a new service. A grab from indexer search still works and still lands in your download client meanwhile.</span>
         </div>
         <div class="field">
           <label class="field__label" for="v-watch">Watched folder</label>
-          <input class="input" id="v-watch" type="text" value="Not applicable" readonly style="max-width:260px">
+          <input class="input u-mw-260" id="v-watch" type="text" value="Not applicable" readonly>
           <span class="field__help">Nothing here watches a folder. Sonarr imports only the releases it asked for itself, so a grab UsArr sent straight to your download client is not one it will pick up — which is the opposite of a media server, where dropping the file in the scanned folder is enough. Requests says the same thing on the row, at the moment of the grab.</span>
         </div>
       </form>
@@ -4197,7 +4357,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
         <div class="section__actions"><button type="button" class="btn btn--sm">Add correction</button></div>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="4" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Corrections" style="--cols: 116px minmax(max-content,auto) minmax(0,2fr) minmax(0,2.4fr) 76px; --row-lines: 2.06" aria-colcount="5" role="table">
+        <table aria-rowcount="4" class="tbl tbl--stack cols-libraries-corrections-v01" data-roving="tbody tr" aria-label="Corrections" aria-colcount="5" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Correction</th>
@@ -4235,9 +4395,9 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           </tbody>
         </table>
       </div>
-      <p class="note" style="padding-top:8px"><span class="statebar__tag">mockup</span> The correction tables ship in migration 0001; this surface is v0.3, and 16.0 caps it there. It is drawn in full here so the bound can be reviewed before the schema is written, not because it ships with the four screens above.</p>
+      <p class="note u-pt-8"><span class="statebar__tag">mockup</span> The correction tables ship in migration 0001; this surface is v0.3, and 16.0 caps it there. It is drawn in full here so the bound can be reviewed before the schema is written, not because it ships with the four screens above.</p>
 
-      <p class="note" style="padding-top:8px">Four verbs and five fields, and that bound is the design. A correction lives in UsArr, is keyed to UsArr's own identity, is never written back to the service, and is never cleared by a sync, a reconciliation sweep or a tombstone expiry.</p>
+      <p class="note u-pt-8">Four verbs and five fields, and that bound is the design. A correction lives in UsArr, is keyed to UsArr's own identity, is never written back to the service, and is never cleared by a sync, a reconciliation sweep or a tombstone expiry.</p>
     </section>
 
     <section class="section">
@@ -4456,7 +4616,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
   </div>
 
   <div class="section" data-when="filtered" hidden>
-    <div class="toolbar" style="border-top:0">
+    <div class="toolbar u-bt-0">
       <span class="toolbar__label">Filter</span>
       <span class="chip">format:flac</span>
       <span class="chip">quality:2160p</span>
@@ -4502,13 +4662,13 @@ delta polling uses this host's clock, so recent changes can be missed</div>
          is in it: the 1965 novel, an exact title match. Group order is
          computed once per query and then frozen; nothing arriving later moves
          a group under the cursor. -->
-    <section data-inst="full" class="section section--group" style="z-index:6">
+    <section data-inst="full" class="section section--group u-z-6">
       <div class="section__head">
         <h2>Ebooks <span class="section__count num">14</span></h2>
         <span class="section__count">all in the <strong>Ebooks</strong> library · all from Audiobookshelf</span>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="15" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Ebook results" style="--cols: minmax(0,2.6fr) minmax(0,1.3fr) 52px minmax(0,1fr) 80px; --row-lines: 1.11" aria-colcount="5" role="table">
+        <table aria-rowcount="15" class="tbl tbl--stack cols-search-ebooks" data-roving="tbody tr" aria-label="Ebook results" aria-colcount="5" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Title</th>
@@ -4555,13 +4715,13 @@ delta polling uses this host's clock, so recent changes can be missed</div>
       </div>
     </section>
 
-    <section data-inst="full" class="section section--group" style="z-index:5">
+    <section data-inst="full" class="section section--group u-z-5">
       <div class="section__head">
         <h2>Audiobooks <span class="section__count num">9</span></h2>
         <span class="section__count">all in the <strong>Audiobooks</strong> library · all from Audiobookshelf · all <span class="mono">M4B</span> except where noted</span>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="10" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Audiobook results" style="--cols: minmax(0,2.4fr) minmax(0,1.5fr) minmax(0,1.5fr) 104px; --row-lines: 1.11" aria-colcount="4" role="table">
+        <table aria-rowcount="10" class="tbl tbl--stack cols-search-audiobooks" data-roving="tbody tr" aria-label="Audiobook results" aria-colcount="4" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Title</th>
@@ -4586,13 +4746,13 @@ delta polling uses this host's clock, so recent changes can be missed</div>
     <!-- The absent 2160p tier is stated once, here, rather than as an
          identical "not configured" cell on every row. It is still not a
          cross: nothing was asked, so nothing can be reported missing. -->
-    <section class="section section--group" style="z-index:4">
+    <section class="section section--group u-z-4">
       <div class="section__head">
         <h2>Movies <span class="section__count num" data-inst="full">3</span><span class="section__count num" data-inst="v01" hidden>4</span></h2>
         <span class="section__count">all in the <strong>Movies</strong> library · all from Radarr · <span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>2160p not configured</span></span>
       </div>
       <div class="tablewrap">
-        <table data-inst="full" aria-rowcount="4" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Movie results" style="--cols: minmax(0,2.6fr) 52px 60px minmax(0,1fr) 80px minmax(max-content,auto); --row-lines: 1.11" aria-colcount="6" role="table">
+        <table data-inst="full" aria-rowcount="4" class="tbl tbl--stack cols-search-movies-full" data-roving="tbody tr" aria-label="Movie results" aria-colcount="6" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Title</th>
@@ -4616,7 +4776,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
             <tr role="row" aria-rowindex="4"><td data-col="title" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Title</span>Jodorowsky's Dune</td><td data-col="year" class="num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Year</span>2013</td><td data-col="1080p" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">1080p</span><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg><span class="sr">Missing</span></span></td><td data-col="quality" class="muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Quality</span>No file</td><td data-col="size" class="is-num muted" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Size</span>—</td><td data-col="action" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Action</span><a href="#requests?q=Jodorowsky%27s+Dune&amp;type=movie&amp;cat=2000">Search indexers →</a></td></tr>
           </tbody>
         </table>
-        <table data-inst="v01" hidden aria-rowcount="5" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Movie results" style="--cols: minmax(0,2.6fr) 52px 60px minmax(0,1fr) 80px minmax(max-content,auto); --row-lines: 1.11" aria-colcount="6" role="table">
+        <table data-inst="v01" hidden aria-rowcount="5" class="tbl tbl--stack cols-search-movies-v01" data-roving="tbody tr" aria-label="Movie results" aria-colcount="6" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Title</th>
@@ -4646,18 +4806,18 @@ delta polling uses this host's clock, so recent changes can be missed</div>
            also why clicking "Movies 3" does not show Dune (2021): it renders
            once, in Ebooks, carrying an "also film, 2021" chip. Saying so costs
            one line and the link data is already there. -->
-      <p class="note" style="padding-top:8px" data-inst="full">1 more film is on a linked row in the <strong>Ebooks</strong> group: <a href="#search?type=ebook">Dune (2021)</a>.</p>
-      <p class="note" style="padding-top:8px" data-inst="v01" hidden>The linked work renders here rather than in Ebooks, because on this install the film is the only medium of it there is. The rule did not change; the library did.</p>
+      <p class="note u-pt-8" data-inst="full">1 more film is on a linked row in the <strong>Ebooks</strong> group: <a href="#search?type=ebook">Dune (2021)</a>.</p>
+      <p class="note u-pt-8" data-inst="v01" hidden>The linked work renders here rather than in Ebooks, because on this install the film is the only medium of it there is. The rule did not change; the library did.</p>
     </section>
 
     <!-- Two distinct libraries in this group, so Library stays a column here.
          The rule is per group, not per screen. -->
-    <section data-inst="full" class="section section--group" style="z-index:3">
+    <section data-inst="full" class="section section--group u-z-3">
       <div class="section__head">
         <h2>Comics <span class="section__count num">2</span></h2>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="3" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Comic results" style="--cols: minmax(0,2.2fr) minmax(0,1.2fr) 52px minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.6fr) minmax(max-content,auto); --row-lines: 3.11" aria-colcount="7" role="table">
+        <table aria-rowcount="3" class="tbl tbl--stack cols-search-comics" data-roving="tbody tr" aria-label="Comic results" aria-colcount="7" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Series</th>
@@ -4705,13 +4865,13 @@ delta polling uses this host's clock, so recent changes can be missed</div>
       </div>
     </section>
 
-    <section data-inst="full" class="section section--group" style="z-index:2">
+    <section data-inst="full" class="section section--group u-z-2">
       <div class="section__head">
         <h2>Music <span class="section__count num">2</span></h2>
         <span class="section__count">all in the <strong>Music</strong> library · all from Navidrome · all <span class="mono">FLAC</span></span>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="3" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Music results" style="--cols: minmax(0,2.6fr) minmax(0,1.4fr) 52px 68px; --row-lines: 1.11" aria-colcount="4" role="table">
+        <table aria-rowcount="3" class="tbl tbl--stack cols-search-music" data-roving="tbody tr" aria-label="Music results" aria-colcount="4" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Album</th>
@@ -4728,13 +4888,13 @@ delta polling uses this host's clock, so recent changes can be missed</div>
       </div>
     </section>
 
-    <section class="section section--group" style="z-index:1">
+    <section class="section section--group u-z-1">
       <div class="section__head">
         <h2>TV <span class="section__count num">1</span></h2>
         <span class="section__count">all in the <strong>TV</strong> library · all from Sonarr</span>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="2" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Series results" style="--cols: minmax(0,2.4fr) 52px minmax(0,1fr) 80px 80px; --row-lines: 1.22" aria-colcount="5" role="table">
+        <table aria-rowcount="2" class="tbl tbl--stack cols-search-series" data-roving="tbody tr" aria-label="Series results" aria-colcount="5" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Title</th>
@@ -4816,7 +4976,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
         <div class="section__actions"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>23 of 23 tracks</span></div>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="24" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Tracks" style="--cols: 44px minmax(0,4fr) 68px minmax(0,1.6fr) 84px; --row-lines: 1.11" aria-colcount="5" role="table">
+        <table aria-rowcount="24" class="tbl tbl--stack cols-search-tracks" data-roving="tbody tr" aria-label="Tracks" aria-colcount="5" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" class="is-num" role="columnheader" aria-colindex="1">#</th>
@@ -4886,7 +5046,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
         <div class="section__actions"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>6 of 6 episodes</span></div>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="7" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Episodes" style="--cols: 44px minmax(0,4fr) 68px minmax(0,1.6fr) 84px; --row-lines: 1.11" aria-colcount="5" role="table">
+        <table aria-rowcount="7" class="tbl tbl--stack cols-search-episodes" data-roving="tbody tr" aria-label="Episodes" aria-colcount="5" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" class="is-num" role="columnheader" aria-colindex="1">#</th>
@@ -4929,7 +5089,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
       <span class="toolbar__label mono">?q=dune&amp;lib=comics,comics-ongoing</span>
     </div>
 
-    <div class="typechips" style="padding:8px 16px">
+    <div class="typechips u-p-8-16">
       <a href="#search?lib=comics,comics-ongoing" aria-current="page">All <span class="num">2</span></a>
       <a href="#search?type=comic&amp;lib=comics,comics-ongoing">Comics <span class="num">2</span></a>
     </div>
@@ -4940,7 +5100,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
         <span class="section__count">29 results in the six libraries the scope excludes</span>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="3" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Comic results in scope" style="--cols: minmax(0,2.2fr) minmax(0,1.2fr) 52px minmax(0,1.2fr) minmax(0,0.8fr) minmax(0,1fr) minmax(0,1.4fr) minmax(max-content,auto); --row-lines: 3.89" aria-colcount="8" role="table">
+        <table aria-rowcount="3" class="tbl tbl--stack cols-search-comics-scoped" data-roving="tbody tr" aria-label="Comic results in scope" aria-colcount="8" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Series</th>
@@ -4996,7 +5156,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
       <span class="toolbar__label mono">?q=dune&amp;lib=tv</span>
     </div>
 
-    <div class="typechips" style="padding:8px 16px">
+    <div class="typechips u-p-8-16">
       <a href="#search?lib=tv" aria-current="page">All <span class="num">1</span></a>
       <a href="#search?type=series&amp;lib=tv">TV <span class="num">1</span></a>
     </div>
@@ -5007,7 +5167,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
         <span class="section__count">4 results in the one library the scope excludes</span>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="2" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Series results in scope" style="--cols: minmax(0,2.4fr) 52px minmax(0,1fr) 80px 80px; --row-lines: 1.22" aria-colcount="5" role="table">
+        <table aria-rowcount="2" class="tbl tbl--stack cols-search-series-scoped" data-roving="tbody tr" aria-label="Series results in scope" aria-colcount="5" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Title</th>
@@ -5171,7 +5331,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
     <div class="banner__body">
       <div class="banner__title">Prowlarr rejected the stored API key, so no indexer was queried</div>
       <div class="banner__text">The search was not sent. Nothing was grabbed and nothing is pending.</div>
-      <div class="verbatim" style="margin-top:8px">GET https://prowlarr.tail9c2e.ts.net/api/v1/search?query=dune+part+two&amp;type=movie 401 Unauthorized
+      <div class="verbatim u-mt-8">GET https://prowlarr.tail9c2e.ts.net/api/v1/search?query=dune+part+two&amp;type=movie 401 Unauthorized
 {"message":"Unauthorized","description":"The request requires a valid X-Api-Key header"}</div>
     </div>
     <div class="banner__actions"><a href="#services">Update API key</a></div>
@@ -5227,7 +5387,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
       </div>
     </div>
     <div class="tablewrap">
-      <table aria-rowcount="6" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Indexer failures" style="--cols: minmax(0,1fr) 108px minmax(0,4fr) 68px; --row-lines: 2.61" aria-colcount="4" role="table">
+      <table aria-rowcount="6" class="tbl tbl--stack cols-requests-failures" data-roving="tbody tr" aria-label="Indexer failures" aria-colcount="4" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Indexer</th>
@@ -5251,7 +5411,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
        below are already grabbable; the remaining indexers only add rows. -->
   <div class="fanout" data-when="partial" role="status" aria-atomic="true" hidden>
     <span class="fanout__count">4 of 9</span> indexers responded
-    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:44%"></span></span>
+    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill u-w-44"></span></span>
     <span>47 releases so far, 5 shown after de-duplication, all of them grabbable now</span>
     <span class="fanout__failed">TorrentDay timed out after 30 s</span>
     <div class="toolbar__spacer"></div>
@@ -5260,19 +5420,19 @@ delta polling uses this host's clock, so recent changes can be missed</div>
 
   <div class="fanout" data-when="live" role="status" aria-atomic="true">
     <span class="fanout__count">9 of 9</span> indexers responded
-    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:100%"></span></span>
+    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill u-w-100"></span></span>
     <span>112 releases, 10 shown after de-duplication</span>
   </div>
 
   <div class="fanout" data-when="expired" role="status" aria-atomic="true" hidden>
     <span class="fanout__count">9 of 9</span> indexers responded
-    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:100%"></span></span>
+    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill u-w-100"></span></span>
     <span>14 releases, 2 shown after de-duplication</span>
   </div>
 
   <div class="fanout" data-when="denied" role="status" aria-atomic="true" hidden>
     <span class="fanout__count">8 of 9</span> indexers responded
-    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:89%"></span></span>
+    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill u-w-89"></span></span>
     <span>96 releases, 9 shown after de-duplication</span>
     <span class="fanout__failed">PassThePopcorn refused the account</span>
   </div>
@@ -5282,7 +5442,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
     <div class="banner__body">
       <div class="banner__title">PassThePopcorn refused this account, so its releases are missing from the list</div>
       <div class="banner__text">Every other indexer answered. The results below are real and grabbable; they are just incomplete, and the count above says so rather than pretending the search was whole.</div>
-      <div class="verbatim" style="margin-top:8px">indexer 4 PassThePopcorn: 403 Forbidden
+      <div class="verbatim u-mt-8">indexer 4 PassThePopcorn: 403 Forbidden
 {"error":"Your account does not have permission to use the API. Enable it in your profile."}</div>
     </div>
     <div class="banner__actions"><a href="#services">Open Services</a></div>
@@ -5368,7 +5528,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
            tooltip either -- sitting 8px from a visually similar icon that
            opens a browser tab. Tab Tab Enter fired a 68 GB grab, and you could
            not tell which of the two you were on. -->
-      <table aria-rowcount="-1" class="tbl tbl--stack" data-roving="tbody tr" data-media="movie" aria-label="Release results" style="--cols: 60px 88px 80px minmax(0,3fr) minmax(0,1fr) 80px 68px 84px minmax(0,0.9fr) minmax(0,1fr) minmax(max-content,auto); --row-lines: 2.17" aria-colcount="11" role="table">
+      <table aria-rowcount="-1" class="tbl tbl--stack cols-requests-releases" data-roving="tbody tr" data-media="movie" aria-label="Release results" aria-colcount="11" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Select</th>
@@ -5646,7 +5806,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
       <div class="section__actions"><a href="#recent-grabs">Show all</a></div>
     </div>
     <div class="tablewrap">
-      <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Recent grabs" style="--cols: 116px minmax(0,3fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.9fr); --row-lines: 2.94" aria-colcount="5" aria-rowcount="7" role="table">
+      <table class="tbl tbl--stack cols-requests-grabs" data-roving="tbody tr" aria-label="Recent grabs" aria-colcount="5" aria-rowcount="7" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">When</th>
@@ -5702,7 +5862,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
         </tbody>
       </table>
     </div>
-    <p class="note" style="padding-top:8px"><span class="statebar__tag">mockup</span> <span class="mono">sent</span> means UsArr handed the release to your download client and the client accepted it. It does not mean the file exists, is complete, or has been imported by anything: UsArr stops observing at handoff and will not draw a progress bar over a thing it cannot measure. There are three states, and the boundary between them is handed over against never handed over rather than success against failure: <span class="mono">sent</span>, <span class="mono">sent · a problem was reported after handoff</span>, and <span class="mono">not sent</span>. The middle one sits beside <span class="mono">sent</span> rather than beside <span class="mono">not sent</span>, because Prowlarr can accept a release and then fail a later step, so an error can arrive over a grab that already landed. It offers no Retry: doing it again is what produces two copies of a 68 GB release, so it points at your download client, where the truth is.</p>
+    <p class="note u-pt-8"><span class="statebar__tag">mockup</span> <span class="mono">sent</span> means UsArr handed the release to your download client and the client accepted it. It does not mean the file exists, is complete, or has been imported by anything: UsArr stops observing at handoff and will not draw a progress bar over a thing it cannot measure. There are three states, and the boundary between them is handed over against never handed over rather than success against failure: <span class="mono">sent</span>, <span class="mono">sent · a problem was reported after handoff</span>, and <span class="mono">not sent</span>. The middle one sits beside <span class="mono">sent</span> rather than beside <span class="mono">not sent</span>, because Prowlarr can accept a release and then fail a later step, so an error can arrive over a grab that already landed. It offers no Retry: doing it again is what produces two copies of a 68 GB release, so it points at your download client, where the truth is.</p>
   </section>
 
   <!-- =====================================================================
@@ -5769,7 +5929,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
 
     <div class="fanout" role="status" aria-atomic="true">
       <span class="fanout__count">5 of 5</span> indexers responded
-      <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:100%"></span></span>
+      <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill u-w-100"></span></span>
       <span>38 releases, 6 shown after de-duplication</span>
     </div>
 
@@ -5782,7 +5942,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
     </div>
 
     <div class="tablewrap">
-      <table aria-rowcount="7" class="tbl tbl--stack" data-roving="tbody tr" data-media="audiobook" aria-label="Audiobook release results" style="--cols: 60px 88px 80px minmax(0,3fr) minmax(0,1.1fr) 80px 68px 84px minmax(0,1fr) minmax(max-content,auto); --row-lines: 1.39" aria-colcount="10" role="table">
+      <table aria-rowcount="7" class="tbl tbl--stack cols-requests-releases-audiobook" data-roving="tbody tr" data-media="audiobook" aria-label="Audiobook release results" aria-colcount="10" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Select</th>
@@ -5913,7 +6073,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
            and an unchanged library. Every sentence below names what will pick
            the file up and what will not. -->
       <div class="tablewrap">
-        <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Post-grab behaviour by media type" style="--cols: 104px minmax(0,1fr) minmax(0,3.4fr); --row-lines: 2.22" aria-colcount="3" aria-rowcount="7" role="table">
+        <table class="tbl tbl--stack cols-requests-postgrab" data-roving="tbody tr" aria-label="Post-grab behaviour by media type" aria-colcount="3" aria-rowcount="7" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Media type</th>
@@ -5955,7 +6115,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           </tbody>
         </table>
       </div>
-      <p class="note" style="padding-top:8px">Two of the six have an *Arr connected and it still does not help, which is the case the copy exists for: a Prowlarr grab never went through Radarr or Sonarr, so neither has a record of it and neither will pick the file up. The *Arr-backed request path that would change that is v0.2. <span data-inst="v01" hidden>On this install the other four have no catalogue source either, so the honest sentence for them is shorter and worse — and it is drawn rather than softened.</span></p>
+      <p class="note u-pt-8">Two of the six have an *Arr connected and it still does not help, which is the case the copy exists for: a Prowlarr grab never went through Radarr or Sonarr, so neither has a record of it and neither will pick the file up. The *Arr-backed request path that would change that is v0.2. <span data-inst="v01" hidden>On this install the other four have no catalogue source either, so the honest sentence for them is shorter and worse — and it is drawn rather than softened.</span></p>
     </section>
 
     <p class="section note"><span class="statebar__tag">mockup</span> The first row of the table above is the whole point of this state. It reads <span class="chip chip--done">grabbed 14:07 · sent to qBittorrent</span>, names the watched folder, says in words that UsArr does not import downloads, and then it stops. There is no progress bar, no percentage and no "importing" step, because nothing on this install imports a book and UsArr would have nothing to measure. Four of the six media types here are in exactly this position; the *Arr-backed request path that would change it for the two that are not is v0.2.</p>

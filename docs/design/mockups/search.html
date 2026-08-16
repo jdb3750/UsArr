@@ -108,7 +108,7 @@
   <dialog class="dialog" id="shortcut-sheet" aria-labelledby="shortcut-sheet-title">
     <h2 class="dialog__head" id="shortcut-sheet-title">Keyboard shortcuts</h2>
     <div class="dialog__body">
-      <table class="tbl" aria-label="Keyboard shortcuts" style="--cols: 92px minmax(0,1fr)" aria-colcount="2" role="table" aria-rowcount="8">
+      <table class="tbl cols-shortcuts" aria-label="Keyboard shortcuts" aria-colcount="2" role="table" aria-rowcount="8">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Key</th>
@@ -125,7 +125,7 @@
           <tr role="row" aria-rowindex="8"><td role="cell" aria-colindex="1"><span class="mono">?</span></td><td role="cell" aria-colindex="2">Open and close this sheet. It works whether or not the switch below is on.</td></tr>
         </tbody>
       </table>
-      <div class="field" style="margin-top:16px">
+      <div class="field u-mt-16">
         <label class="check" for="f-shortcuts-sheet"><input type="checkbox" id="f-shortcuts-sheet" data-act="shortcuts" checked> Single-key shortcuts</label>
         <span class="field__help">Turning this off disables <span class="mono">/</span>, <span class="mono">l</span>, <span class="mono">j</span> and <span class="mono">k</span>. Arrow keys, Escape and shortcuts that need a modifier are unaffected, and <span class="mono">?</span> keeps working so this sheet stays reachable.</span>
       </div>
@@ -394,7 +394,7 @@
   </div>
 
   <div class="section" data-when="filtered" hidden>
-    <div class="toolbar" style="border-top:0">
+    <div class="toolbar u-bt-0">
       <span class="toolbar__label">Filter</span>
       <span class="chip">format:flac</span>
       <span class="chip">quality:2160p</span>
@@ -440,13 +440,13 @@
          is in it: the 1965 novel, an exact title match. Group order is
          computed once per query and then frozen; nothing arriving later moves
          a group under the cursor. -->
-    <section data-inst="full" class="section section--group" style="z-index:6">
+    <section data-inst="full" class="section section--group u-z-6">
       <div class="section__head">
         <h2>Ebooks <span class="section__count num">14</span></h2>
         <span class="section__count">all in the <strong>Ebooks</strong> library · all from Audiobookshelf</span>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="15" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Ebook results" style="--cols: minmax(0,2.6fr) minmax(0,1.3fr) 52px minmax(0,1fr) 80px; --row-lines: 1.11" aria-colcount="5" role="table">
+        <table aria-rowcount="15" class="tbl tbl--stack cols-search-ebooks" data-roving="tbody tr" aria-label="Ebook results" aria-colcount="5" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Title</th>
@@ -493,13 +493,13 @@
       </div>
     </section>
 
-    <section data-inst="full" class="section section--group" style="z-index:5">
+    <section data-inst="full" class="section section--group u-z-5">
       <div class="section__head">
         <h2>Audiobooks <span class="section__count num">9</span></h2>
         <span class="section__count">all in the <strong>Audiobooks</strong> library · all from Audiobookshelf · all <span class="mono">M4B</span> except where noted</span>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="10" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Audiobook results" style="--cols: minmax(0,2.4fr) minmax(0,1.5fr) minmax(0,1.5fr) 104px; --row-lines: 1.11" aria-colcount="4" role="table">
+        <table aria-rowcount="10" class="tbl tbl--stack cols-search-audiobooks" data-roving="tbody tr" aria-label="Audiobook results" aria-colcount="4" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Title</th>
@@ -524,13 +524,13 @@
     <!-- The absent 2160p tier is stated once, here, rather than as an
          identical "not configured" cell on every row. It is still not a
          cross: nothing was asked, so nothing can be reported missing. -->
-    <section class="section section--group" style="z-index:4">
+    <section class="section section--group u-z-4">
       <div class="section__head">
         <h2>Movies <span class="section__count num" data-inst="full">3</span><span class="section__count num" data-inst="v01" hidden>4</span></h2>
         <span class="section__count">all in the <strong>Movies</strong> library · all from Radarr · <span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>2160p not configured</span></span>
       </div>
       <div class="tablewrap">
-        <table data-inst="full" aria-rowcount="4" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Movie results" style="--cols: minmax(0,2.6fr) 52px 60px minmax(0,1fr) 80px minmax(max-content,auto); --row-lines: 1.11" aria-colcount="6" role="table">
+        <table data-inst="full" aria-rowcount="4" class="tbl tbl--stack cols-search-movies-full" data-roving="tbody tr" aria-label="Movie results" aria-colcount="6" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Title</th>
@@ -554,7 +554,7 @@
             <tr role="row" aria-rowindex="4"><td data-col="title" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Title</span>Jodorowsky's Dune</td><td data-col="year" class="num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Year</span>2013</td><td data-col="1080p" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">1080p</span><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg><span class="sr">Missing</span></span></td><td data-col="quality" class="muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Quality</span>No file</td><td data-col="size" class="is-num muted" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Size</span>—</td><td data-col="action" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Action</span><a href="requests.html?q=Jodorowsky%27s+Dune&amp;type=movie&amp;cat=2000">Search indexers →</a></td></tr>
           </tbody>
         </table>
-        <table data-inst="v01" hidden aria-rowcount="5" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Movie results" style="--cols: minmax(0,2.6fr) 52px 60px minmax(0,1fr) 80px minmax(max-content,auto); --row-lines: 1.11" aria-colcount="6" role="table">
+        <table data-inst="v01" hidden aria-rowcount="5" class="tbl tbl--stack cols-search-movies-v01" data-roving="tbody tr" aria-label="Movie results" aria-colcount="6" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Title</th>
@@ -584,18 +584,18 @@
            also why clicking "Movies 3" does not show Dune (2021): it renders
            once, in Ebooks, carrying an "also film, 2021" chip. Saying so costs
            one line and the link data is already there. -->
-      <p class="note" style="padding-top:8px" data-inst="full">1 more film is on a linked row in the <strong>Ebooks</strong> group: <a href="search.html?type=ebook">Dune (2021)</a>.</p>
-      <p class="note" style="padding-top:8px" data-inst="v01" hidden>The linked work renders here rather than in Ebooks, because on this install the film is the only medium of it there is. The rule did not change; the library did.</p>
+      <p class="note u-pt-8" data-inst="full">1 more film is on a linked row in the <strong>Ebooks</strong> group: <a href="search.html?type=ebook">Dune (2021)</a>.</p>
+      <p class="note u-pt-8" data-inst="v01" hidden>The linked work renders here rather than in Ebooks, because on this install the film is the only medium of it there is. The rule did not change; the library did.</p>
     </section>
 
     <!-- Two distinct libraries in this group, so Library stays a column here.
          The rule is per group, not per screen. -->
-    <section data-inst="full" class="section section--group" style="z-index:3">
+    <section data-inst="full" class="section section--group u-z-3">
       <div class="section__head">
         <h2>Comics <span class="section__count num">2</span></h2>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="3" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Comic results" style="--cols: minmax(0,2.2fr) minmax(0,1.2fr) 52px minmax(0,1.2fr) minmax(0,1fr) minmax(0,1.6fr) minmax(max-content,auto); --row-lines: 3.11" aria-colcount="7" role="table">
+        <table aria-rowcount="3" class="tbl tbl--stack cols-search-comics" data-roving="tbody tr" aria-label="Comic results" aria-colcount="7" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Series</th>
@@ -643,13 +643,13 @@
       </div>
     </section>
 
-    <section data-inst="full" class="section section--group" style="z-index:2">
+    <section data-inst="full" class="section section--group u-z-2">
       <div class="section__head">
         <h2>Music <span class="section__count num">2</span></h2>
         <span class="section__count">all in the <strong>Music</strong> library · all from Navidrome · all <span class="mono">FLAC</span></span>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="3" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Music results" style="--cols: minmax(0,2.6fr) minmax(0,1.4fr) 52px 68px; --row-lines: 1.11" aria-colcount="4" role="table">
+        <table aria-rowcount="3" class="tbl tbl--stack cols-search-music" data-roving="tbody tr" aria-label="Music results" aria-colcount="4" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Album</th>
@@ -666,13 +666,13 @@
       </div>
     </section>
 
-    <section class="section section--group" style="z-index:1">
+    <section class="section section--group u-z-1">
       <div class="section__head">
         <h2>TV <span class="section__count num">1</span></h2>
         <span class="section__count">all in the <strong>TV</strong> library · all from Sonarr</span>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="2" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Series results" style="--cols: minmax(0,2.4fr) 52px minmax(0,1fr) 80px 80px; --row-lines: 1.22" aria-colcount="5" role="table">
+        <table aria-rowcount="2" class="tbl tbl--stack cols-search-series" data-roving="tbody tr" aria-label="Series results" aria-colcount="5" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Title</th>
@@ -754,7 +754,7 @@
         <div class="section__actions"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>23 of 23 tracks</span></div>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="24" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Tracks" style="--cols: 44px minmax(0,4fr) 68px minmax(0,1.6fr) 84px; --row-lines: 1.11" aria-colcount="5" role="table">
+        <table aria-rowcount="24" class="tbl tbl--stack cols-search-tracks" data-roving="tbody tr" aria-label="Tracks" aria-colcount="5" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" class="is-num" role="columnheader" aria-colindex="1">#</th>
@@ -824,7 +824,7 @@
         <div class="section__actions"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>6 of 6 episodes</span></div>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="7" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Episodes" style="--cols: 44px minmax(0,4fr) 68px minmax(0,1.6fr) 84px; --row-lines: 1.11" aria-colcount="5" role="table">
+        <table aria-rowcount="7" class="tbl tbl--stack cols-search-episodes" data-roving="tbody tr" aria-label="Episodes" aria-colcount="5" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" class="is-num" role="columnheader" aria-colindex="1">#</th>
@@ -867,7 +867,7 @@
       <span class="toolbar__label mono">?q=dune&amp;lib=comics,comics-ongoing</span>
     </div>
 
-    <div class="typechips" style="padding:8px 16px">
+    <div class="typechips u-p-8-16">
       <a href="search.html?lib=comics,comics-ongoing" aria-current="page">All <span class="num">2</span></a>
       <a href="search.html?type=comic&amp;lib=comics,comics-ongoing">Comics <span class="num">2</span></a>
     </div>
@@ -878,7 +878,7 @@
         <span class="section__count">29 results in the six libraries the scope excludes</span>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="3" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Comic results in scope" style="--cols: minmax(0,2.2fr) minmax(0,1.2fr) 52px minmax(0,1.2fr) minmax(0,0.8fr) minmax(0,1fr) minmax(0,1.4fr) minmax(max-content,auto); --row-lines: 3.89" aria-colcount="8" role="table">
+        <table aria-rowcount="3" class="tbl tbl--stack cols-search-comics-scoped" data-roving="tbody tr" aria-label="Comic results in scope" aria-colcount="8" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Series</th>
@@ -934,7 +934,7 @@
       <span class="toolbar__label mono">?q=dune&amp;lib=tv</span>
     </div>
 
-    <div class="typechips" style="padding:8px 16px">
+    <div class="typechips u-p-8-16">
       <a href="search.html?lib=tv" aria-current="page">All <span class="num">1</span></a>
       <a href="search.html?type=series&amp;lib=tv">TV <span class="num">1</span></a>
     </div>
@@ -945,7 +945,7 @@
         <span class="section__count">4 results in the one library the scope excludes</span>
       </div>
       <div class="tablewrap">
-        <table aria-rowcount="2" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Series results in scope" style="--cols: minmax(0,2.4fr) 52px minmax(0,1fr) 80px 80px; --row-lines: 1.22" aria-colcount="5" role="table">
+        <table aria-rowcount="2" class="tbl tbl--stack cols-search-series-scoped" data-roving="tbody tr" aria-label="Series results in scope" aria-colcount="5" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Title</th>

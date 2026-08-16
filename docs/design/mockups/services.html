@@ -108,7 +108,7 @@
   <dialog class="dialog" id="shortcut-sheet" aria-labelledby="shortcut-sheet-title">
     <h2 class="dialog__head" id="shortcut-sheet-title">Keyboard shortcuts</h2>
     <div class="dialog__body">
-      <table class="tbl" aria-label="Keyboard shortcuts" style="--cols: 92px minmax(0,1fr)" aria-colcount="2" role="table" aria-rowcount="8">
+      <table class="tbl cols-shortcuts" aria-label="Keyboard shortcuts" aria-colcount="2" role="table" aria-rowcount="8">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Key</th>
@@ -125,7 +125,7 @@
           <tr role="row" aria-rowindex="8"><td role="cell" aria-colindex="1"><span class="mono">?</span></td><td role="cell" aria-colindex="2">Open and close this sheet. It works whether or not the switch below is on.</td></tr>
         </tbody>
       </table>
-      <div class="field" style="margin-top:16px">
+      <div class="field u-mt-16">
         <label class="check" for="f-shortcuts-sheet"><input type="checkbox" id="f-shortcuts-sheet" data-act="shortcuts" checked> Single-key shortcuts</label>
         <span class="field__help">Turning this off disables <span class="mono">/</span>, <span class="mono">l</span>, <span class="mono">j</span> and <span class="mono">k</span>. Arrow keys, Escape and shortcuts that need a modifier are unaffected, and <span class="mono">?</span> keeps working so this sheet stays reachable.</span>
       </div>
@@ -278,7 +278,7 @@
     <div class="banner__body">
       <div class="banner__title">This may be a different Sonarr from the one UsArr synced with</div>
       <div class="banner__text">Sync for this instance is paused deliberately, and every library it feeds has stopped recomputing membership. The instance fingerprint changed from <span class="mono">a91c4f</span> to <span class="mono">0d33b8</span>, which happens when the host is rebuilt, restored from a different backup, or repointed at another Sonarr. Re-link only if you know this is the same library; removing and re-adding keeps the 214 works UsArr already holds and attaches the new instance as a separate source, so nothing you named or corrected is lost either way.</div>
-      <div class="verbatim" style="margin-top:8px">instance_id 1: identity_epoch 3 -&gt; 4, max_remote_id_seen 214 -&gt; 6, root_folder /media/tv -&gt; /srv/tv</div>
+      <div class="verbatim u-mt-8">instance_id 1: identity_epoch 3 -&gt; 4, max_remote_id_seen 214 -&gt; 6, root_folder /media/tv -&gt; /srv/tv</div>
     </div>
     <div class="banner__actions"><button type="button" class="btn btn--primary">Re-link — this is the same Sonarr</button><button type="button" class="btn">Not the same instance — remove and re-add</button></div>
   </div>
@@ -288,11 +288,11 @@
     <div class="banner__body">
       <div class="banner__title">Confirm your password to change a service</div>
       <div class="banner__text">Changing a service credential needs a password confirmation from the last five minutes, and this session's has expired. Nothing is wrong and nothing was lost: the server enforced it rather than this screen, the change you made is still in the form, and it is retried for you once you confirm. This is not a permission problem. An account that may not do this at all would say so and offer no retry, because retrying could not succeed.</div>
-      <div class="field" style="margin-top:10px;max-width:320px">
+      <div class="field u-mt-10 u-mw-320">
         <label class="field__label" for="sudo-pw">Password</label>
         <input class="input" id="sudo-pw" type="password" autocomplete="current-password">
       </div>
-      <div class="cell-sub" style="margin-top:6px">The server's answer, for the record: <span class="mono">PATCH /api/v1/services/3 → 403 sudo_required</span></div>
+      <div class="cell-sub u-mt-6">The server's answer, for the record: <span class="mono">PATCH /api/v1/services/3 → 403 sudo_required</span></div>
     </div>
     <div class="banner__actions"><button type="button" class="btn btn--primary">Confirm</button></div>
   </div>
@@ -308,7 +308,7 @@
     <div class="banner__body">
       <div class="banner__title">The stored API key does not move to a new address</div>
       <div class="banner__text">This key is stored encrypted against <span class="mono">http://10.0.0.4:7878</span>, so it cannot be sent to <span class="mono">http://10.0.0.4:7879</span>. Paste the key for the new address, or put the old address back. The stored key is not deleted until you save. The scheme counts too: changing <span class="mono">https</span> to <span class="mono">http</span> on the same port would put a full-admin credential on the wire in clear text, so it is treated as a new address. Changing only the URL base is not a new address and clears nothing.</div>
-      <div class="cell-sub" style="margin-top:6px">The server's answer, for the record: <span class="mono">PATCH /api/v1/services/3 → 400 credential_reentry_required</span></div>
+      <div class="cell-sub u-mt-6">The server's answer, for the record: <span class="mono">PATCH /api/v1/services/3 → 400 credential_reentry_required</span></div>
     </div>
     <div class="banner__actions"><a href="#r-apikey">Go to the API key field</a></div>
   </div>
@@ -363,7 +363,7 @@
          chevron does; the sync channels, the verbatim upstream text and the
          reasoning all live inside it. -->
     <div class="tablewrap" data-inst="full">
-      <table aria-rowcount="16" class="tbl tbl--stack tbl--services" data-roving="tbody tr[data-row]" aria-label="Configured services" style="--cols: minmax(0,1.5fr) 104px 132px 56px minmax(0,2.1fr) minmax(0,1.9fr) minmax(max-content,auto); --row-lines: 2.22" aria-colcount="7" role="table">
+      <table aria-rowcount="16" class="tbl tbl--stack tbl--services cols-services-list-full" data-roving="tbody tr[data-row]" aria-label="Configured services" aria-colcount="7" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Service</th>
@@ -621,7 +621,7 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
          The row ids carry a -v01 suffix because the expander they open is a
          second element in the same document, not the same one. -->
     <div class="tablewrap" data-inst="v01" hidden>
-      <table aria-rowcount="10" class="tbl tbl--stack tbl--services" data-roving="tbody tr[data-row]" aria-label="Configured services" style="--cols: minmax(0,1.5fr) 104px 132px 56px minmax(0,2.1fr) minmax(0,1.9fr) minmax(max-content,auto); --row-lines: 2.22" aria-colcount="7" role="table">
+      <table aria-rowcount="10" class="tbl tbl--stack tbl--services cols-services-list-v01" data-roving="tbody tr[data-row]" aria-label="Configured services" aria-colcount="7" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Service</th>
@@ -788,19 +788,19 @@ delta polling uses this host's clock, so recent changes can be missed</div>
   <section class="section" id="system" data-when="live reident denied reentry remove">
     <div class="section__head"><h2>System status</h2><span class="section__count">1 error, 2 warnings</span></div>
     <ul>
-      <li class="banner banner--err" style="margin-left:0;margin-right:0">
+      <li class="banner banner--err u-mx-0">
         <svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>
         <div class="banner__body"><div class="banner__title">Prowlarr rejected the stored API key</div>
         <div class="banner__text">Indexer search is unavailable until the key is replaced. Nothing in the catalogue changes: Prowlarr carries no library.</div></div>
         <div class="banner__actions"><button type="button" class="btn btn--sm">Update API key</button></div>
       </li>
-      <li class="banner banner--warn" style="margin-left:0;margin-right:0">
+      <li class="banner banner--warn u-mx-0">
         <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
         <div class="banner__body"><div class="banner__title">Radarr has been unreachable for 2 hours</div>
         <div class="banner__text">The last successful delta poll was 11:47. Movies is served entirely from the replica, because Radarr is its only source.</div></div>
         <div class="banner__actions"><button type="button" class="btn btn--sm">Test connection</button></div>
       </li>
-      <li class="banner banner--warn" style="margin-left:0;margin-right:0">
+      <li class="banner banner--warn u-mx-0">
         <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
         <div class="banner__body"><div class="banner__title">Sonarr Anime clock is 212 seconds ahead of this host</div>
         <div class="banner__text">Delta polling keys off the remote clock, so changes inside the skew window can be missed until the next reconciliation.</div></div>
@@ -821,7 +821,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
       <h2>Radarr 4K: the form after the address changed</h2>
       <span class="section__count">3 fields</span>
     </div>
-    <p class="note" style="padding-bottom:12px"><span class="statebar__tag">mockup</span> The port went from <span class="mono">7878</span> to <span class="mono">7879</span>. The key is encrypted against the old address and cannot be opened for the new one, so it is cleared rather than sent. Putting the old address back restores the field, which is the way out for someone who edited the wrong thing.</p>
+    <p class="note u-pb-12"><span class="statebar__tag">mockup</span> The port went from <span class="mono">7878</span> to <span class="mono">7879</span>. The key is encrypted against the old address and cannot be opened for the new one, so it is cleared rather than sent. Putting the old address back restores the field, which is the way out for someone who edited the wrong thing.</p>
     <div class="detail">
       <form class="form" novalidate>
         <div class="field">
@@ -861,7 +861,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
            screen, that Services was both a destination and a child of
            something else, with two elements carrying aria-current at once. -->
       <nav class="subnav" aria-label="Settings">
-        <p class="note" style="padding:0 0 8px">Services and Libraries are top-level screens, not settings sections.</p>
+        <p class="note u-pb-8">Services and Libraries are top-level screens, not settings sections.</p>
         <a href="#settings" data-group="settings" data-panel="services" aria-current="true">Service defaults</a>
         <a href="#settings" data-group="settings" data-panel="general" aria-current="false">General</a>
         <a href="#settings" data-group="settings" data-panel="tags" aria-current="false">Tags</a>
@@ -869,7 +869,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
       </nav>
 
       <div>
-        <div class="form__row" style="margin-bottom:16px">
+        <div class="form__row u-mb-16">
           <button type="button" class="btn" data-act="advanced" aria-expanded="false" aria-controls="settings-box">Show advanced</button>
           <span class="muted">Advanced fields are marked and hidden by default.</span>
         </div>
@@ -932,7 +932,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
 
             <div class="field advanced">
               <label class="field__label" for="f-priority">Priority <span class="adv-tag">advanced</span></label>
-              <input class="input" id="f-priority" type="number" value="10" style="max-width:120px">
+              <input class="input u-mw-120" id="f-priority" type="number" value="10">
               <span class="field__help">When two instances claim the same item, the higher priority authoritative link wins.</span>
             </div>
 
@@ -957,7 +957,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
         </div>
         <div data-panel-for="settings" data-panel-name="ui" hidden>
           <p class="muted">Theme and density live in the top bar of every screen, and both persist. There is no colour-impaired mode setting, because every status here is an icon and a word as well as a colour — including the availability tick and cross, whose word is read out rather than shown, because the column header already says which quality it is about.</p>
-          <div class="field" style="margin-top:12px">
+          <div class="field u-mt-12">
             <label class="check" for="f-shortcuts"><input type="checkbox" id="f-shortcuts" data-act="shortcuts" checked> Single-key shortcuts</label>
             <span class="field__help">WCAG 2.2 SC 2.1.4 is a Level A criterion and it is satisfied by exactly one of three things: the shortcut can be turned off, it can be remapped, or it is active only on focus. "It also has a visible mouse equivalent" is not one of them — the criterion exists for speech-input users, whose dictation is typed into the page, and for anyone with a tremor. This switch is the "turn off", it covers <span class="mono">/</span>, <span class="mono">l</span>, <span class="mono">j</span>, <span class="mono">k</span> and <span class="mono">?</span>, and it persists. Shortcuts that need a modifier are unaffected.</span>
           </div>
@@ -985,9 +985,9 @@ delta polling uses this host's clock, so recent changes can be missed</div>
       <h2>Annex: services neither install has</h2>
       <span class="section__count">3 rows, in neither install above</span>
     </div>
-    <p class="note" style="padding-bottom:12px"><span class="statebar__tag">mockup</span> These rows are reachable in neither install and are not part of the five screens above — the switcher does not change them. They are kept because each one demonstrates an upstream behaviour UsArr has to survive, and losing the drawing loses the finding.</p>
+    <p class="note u-pb-12"><span class="statebar__tag">mockup</span> These rows are reachable in neither install and are not part of the five screens above — the switcher does not change them. They are kept because each one demonstrates an upstream behaviour UsArr has to survive, and losing the drawing loses the finding.</p>
     <div class="tablewrap">
-      <table aria-rowcount="4" class="tbl tbl--stack tbl--services" aria-label="Services deferred to a later milestone" style="--cols: minmax(0,1fr) 92px minmax(0,2fr) minmax(0,3.6fr); --row-lines: 6.06" aria-colcount="4" role="table">
+      <table aria-rowcount="4" class="tbl tbl--stack tbl--services cols-services-annex" aria-label="Services deferred to a later milestone" aria-colcount="4" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Service</th>
@@ -1002,7 +1002,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
             <td data-col="milestone" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Milestone</span><span class="chip">v1.0</span></td>
             <td data-col="what-it-would-be" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What it would be</span>A request destination for Music. Never a catalogue source: the music server holds the music.</td>
             <td data-col="the-behaviour-worth-drawing" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">The behaviour worth drawing</span>Lidarr writes <span class="mono">status: deleted</span> into its own database when its metadata server returns 404 for an MBID — which is also what an MBID merge produces. Rendering that as a tombstone would hide an artist whose files are still on disk, so UsArr would show it as a claim about metadata, exclude it from the reconciliation sweep, and touch nothing.
-              <div class="verbatim" style="margin-top:6px">artist 412 Supersilent: status deleted, last seen 12:41
+              <div class="verbatim u-mt-6">artist 412 Supersilent: status deleted, last seen 12:41
 14 albums and 1,208 tracks untouched; no tombstone written</div></td>
           </tr>
           <tr role="row" aria-rowindex="3">
@@ -1089,7 +1089,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
              side without needing the dialog open. -->
         <div class="testresult" data-slot="testresult">
           <div class="testresult__title">Not tested yet</div>
-          <p class="muted" style="margin-top:6px">Save stays disabled until the test passes. The test also confirms <em>which</em> application answered, which is the only thing that catches a Radarr URL pasted under the Sonarr kind — both serve <span class="mono">/api/v3/system/status</span>.</p>
+          <p class="muted u-mt-6">Save stays disabled until the test passes. The test also confirms <em>which</em> application answered, which is the only thing that catches a Radarr URL pasted under the Sonarr kind — both serve <span class="mono">/api/v3/system/status</span>.</p>
         </div>
       </form>
     </div>
@@ -1109,12 +1109,12 @@ delta polling uses this host's clock, so recent changes can be missed</div>
       <h2>Adding a service: what the connection test says</h2>
       <span class="section__count">2 outcomes</span>
     </div>
-    <p class="note" style="padding-bottom:12px"><span class="statebar__tag">mockup</span> These two panels are the contents of the Add service dialog after <strong>Test connection</strong>. They are drawn inline here because a modal cannot be reviewed in a screenshot sheet; in the product they replace the "Not tested yet" block inside the dialog.</p>
+    <p class="note u-pb-12"><span class="statebar__tag">mockup</span> These two panels are the contents of the Add service dialog after <strong>Test connection</strong>. They are drawn inline here because a modal cannot be reviewed in a screenshot sheet; in the product they replace the "Not tested yet" block inside the dialog.</p>
 
-    <div class="detail" style="padding-bottom:16px">
+    <div class="detail u-pb-16">
       <div class="testresult testresult--ok">
         <div class="testresult__title"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>Connected</div>
-        <p style="margin-top:6px"><strong>Sonarr 4.0.10.2544</strong> answered on <span class="mono">/api/v3</span> and reports <span class="num">214</span> series across <span class="num">1</span> root folder.</p>
+        <p class="u-mt-6"><strong>Sonarr 4.0.10.2544</strong> answered on <span class="mono">/api/v3</span> and reports <span class="num">214</span> series across <span class="num">1</span> root folder.</p>
         <ul>
           <li>Clock skew <span class="num">+0.4 s</span>, measured from the response's <span class="mono">Date</span> header.</li>
           <li>The address resolved to <span class="mono">10.0.0.4</span> and is pinned for the life of each request.</li>
@@ -1124,10 +1124,10 @@ delta polling uses this host's clock, so recent changes can be missed</div>
 
       <div class="testresult testresult--fail">
         <div class="testresult__title"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>Could not connect</div>
-        <p style="margin-top:6px">Nothing was saved and no credential was sent anywhere except to the address below.</p>
+        <p class="u-mt-6">Nothing was saved and no credential was sent anywhere except to the address below.</p>
         <div class="verbatim">GET https://home.tailnet.ts.net/api/v3/system/status
 404 Not Found (text/html, 1.2 kB, served by nginx)</div>
-        <p class="muted" style="margin-top:8px">A 404 from an HTML server, rather than a refused connection, means something answered but it was not Sonarr. The three usual causes, in the order they happen:</p>
+        <p class="muted u-mt-8">A 404 from an HTML server, rather than a refused connection, means something answered but it was not Sonarr. The three usual causes, in the order they happen:</p>
         <ul>
           <li><strong>A missing URL base.</strong> A reverse proxy serving Sonarr at <span class="mono">/sonarr</span> needs that path in the base URL. This is the most common one on a Tailscale or nginx install.</li>
           <li><strong>The wrong kind.</strong> Sonarr and Radarr both answer <span class="mono">/api/v3/system/status</span>, so a Radarr URL under the Sonarr kind connects and then reports the wrong application. The success panel names what answered for exactly this reason.</li>

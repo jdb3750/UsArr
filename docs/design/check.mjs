@@ -714,6 +714,63 @@ head('1c. data-when and data-inst never write hidden on the same element');
   }
 })();
 
+
+/* =============================================================================
+ * 1d. CSP: the mockups never carry an inline style attribute
+ *
+ * §14's production Content-Security-Policy drops inline styles. A mockup that
+ * demonstrates layout through a style attribute is therefore demonstrating
+ * something that CANNOT SHIP: it renders correctly here and would render
+ * differently in the real app. That is worse than rendering wrong, because
+ * nobody re-checks a screen that already looks right — which is why this is a
+ * check and not a review note. 119 of them were removed in one pass; the rule
+ * exists so the 120th never lands.
+ *
+ * WHAT REPLACED THEM, so a reader does not resolve a failure by writing the
+ * declaration back in a different disguise:
+ *   · genuine layout nudges  -> the .u-* classes in usarr.css §2.13
+ *   · --cols / --row-lines   -> the per-list .cols-* classes in §2.12. These
+ *     are DATA, not styling, and §7.4 requires --row-lines be declared per
+ *     list from that list's own rendered rows — so they are one class per
+ *     list and are deliberately not collapsed onto shared values.
+ *
+ * NOT BANNED, and the distinction is the CSP's own: `el.style.setProperty(…)`
+ * from usarr.js. CSP governs the style ATTRIBUTE in markup and the <style>
+ * element; CSSOM mutation from script is not an inline style and is not
+ * blocked. The poster grid's --dc / --dc-fg assignment is that, and it stays.
+ * This rule is therefore evaluated over the HTML sources only.
+ * ========================================================================== */
+head('1d. CSP: no inline style attribute in the five screen files');
+(function noInlineStyle() {
+  const html = FILES.filter((f) => f.kind === 'html');
+  /* Two floors, because the two ways this rule goes quiet are different. A
+     ban rule wants zero hits, so its own hit count can never be the floor —
+     the floor is on the corpus. FILE floor: SOURCES globs the mockup
+     directory, and a screen file that is renamed or moved simply stops being
+     scanned. CHARACTER floor: 550,600 stripped characters across the five
+     today; the largest single file is 121,844, so losing any ONE of them
+     drops the corpus to at most 428,756 and trips this. */
+  if (!floorOk('§14 CSP: inline style', html.length, 5, 'screen file(s)')) return;
+  rule('§14 CSP: no style= attribute in a screen file', /\s(?<attr>style)\s*=\s*["']/, {
+    filter: (f) => f.kind === 'html',
+    floor: 500000,
+  });
+  /* prototype.html is generated from the five and is the file that actually
+     gets opened and published, so it is asserted too — separately, because it
+     is not in SOURCES and a finding here means build_prototype.py went stale
+     rather than that somebody edited a screen. */
+  const proto = strip(readFileSync(join(MOCKUPS, 'prototype.html'), 'utf8'), 'html');
+  if (!floorOk('§14 CSP: prototype.html', proto.length, 400000, 'characters of generated source')) return;
+  const protoHits = [...proto.matchAll(/\s(?:style)\s*=\s*["']/g)];
+  if (protoHits.length) {
+    fail(`§14 CSP: prototype.html carries ${protoHits.length} inline style attribute(s) — ` +
+      `regenerate it with build_prototype.py, and if it is already current then ` +
+      `the builder is injecting them`);
+  } else {
+    ok(`§14 CSP: prototype.html clean too [${proto.length} chars scanned, floor 400000]`);
+  }
+})();
+
 /* =============================================================================
  * 2. Token drift — tokens.css is canonical, the mockup carries a copy
  * ========================================================================== */
