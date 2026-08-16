@@ -2819,3 +2819,75 @@ Komga→Kavita swap. **Everything else the `Komga` sweep found is correct as wri
 API facts in `RESEARCH.md`, `reference/tags.md`, `reference/security.md` and `CONFIGURATION.md` §9;
 SSRF test fixtures and the `service_kind` comment in migration 0001; and §17's remaining mentions,
 which are UI copy and degradation examples stating no milestone.
+
+---
+
+# Round 6 — second addendum: the documentation-fidelity batch
+
+**Written by the documentation thread**, which was handed a batch of "the docs claim something that
+isn't true" items and required to verify each against the code before writing the correction. Scope
+was docs, the `Makefile`, `.env.example`, `api/specs/` and comments in `internal/config`. Observed on
+`main` at `ac1ab29`, 2026-08-16 17:30–18:10 UTC, after a `git fetch`.
+
+**Nothing above is renumbered, reworded or deleted.** The rows here are amendments and new findings;
+new ids take the next free number in their own prefix — **FI-14**, **FI-15**.
+
+## 7.1 Amended dispositions
+
+| # | Was | Now |
+|---|---|---|
+| **DS-15** | Open — recorded rather than applied. Owned by the code thread | **Closed — applied.** Both comments in `internal/config/secretkey.go` now say **temp-plus-`link(2)`** and state *why* the distinction is load-bearing: `rename(2)` replaces the destination unconditionally, `link(2)` refuses when it exists, and "never clobber" is the property that makes two racing first runs converge on one salt instead of each sealing credentials under a KEK the file on disk can no longer derive. The trailing *"so the rename itself survives a power cut"* on the directory `fsync` was stale in the same way and is corrected with them. Comment-only; no behaviour changed |
+| **FI-12** | Open — recorded rather than applied. Owned by the code thread | **Closed as documented, not as coded** — which is one of the two fix shapes the original row offered. `DEVELOPMENT.md` §3 now carries *"Run `make test`, not a bare `go test ./...`"*, naming the cause (`internal/web/spa` tracks only `.gitkeep`; `make test-go`'s `web-build` prerequisite is the only thing that populates it), the two commands side by side, and the `Built()`-guarded skip `internal/web` already has. **The other fix shape stays open and is the better one:** give `cmd/usarr`'s e2e route assertions that same skip, and the misleading red stops existing rather than being explained |
+| **FI-02** | Open — one-line `Makefile` change | **STILL OPEN, and explicitly NOT verified fixed.** Re-checked directly: `fmt-check` (`Makefile:362-363`) still declares **no `web-deps` prerequisite**, while `lint-web` and `test-web` both do, and `check-offline` still runs `fmt-check` first. **The reason this row exists is the verification, not the status:** the green that has been cited for it was produced on a tree where `make web-deps` had already run, so it never entered the failing path at all — `lint` → `lint-web` → `web-deps` populates `node_modules`, and from that moment the bug is invisible to everyone who has ever linted. **It gets marked applied only after someone runs `make check` on a genuinely fresh clone with no prior `make` invocation of any kind**, and quotes the transcript. Any other evidence is evidence about a different tree |
+
+## 7.2 New findings
+
+| # | Finding | Disposition |
+|---|---|---|
+| **FI-14** (Low) | **`make check` makes TWO network calls and was documented as making one, in three places simultaneously** — `Makefile`'s honesty notice, `DEVELOPMENT.md` §4 and §8, and `CLAUDE.md`. The `vuln` target runs `govulncheck` against `vuln.go.dev` **and** `pnpm audit` against the npm registry; it has done both since `pnpm audit` was added, and the target's own help text read *"THE ONE NETWORK STEP"* while listing two commands one line below | **Applied in the Makefile and `DEVELOPMENT.md`**, corrected to *two network calls, both to vulnerability databases*, with `check-offline` documented as dropping both. **`CLAUDE.md` is NOT amended** — the documentation thread does not edit `CLAUDE.md` on another agent's instruction; the one-line correction is handed to Joe for his own sign-off. **Why it survived:** nobody counted, everybody copied. The sentence was true when written and became false one commit later, and three copies of a claim are three chances to notice and, in practice, none |
+| **FI-15** (Medium) | **An invented API vocabulary in a reference doc reached the UI. One error, two files.** `docs/reference/tags.md:54` listed the `flag:` namespace as `freeleech \| internal \| scene \| proper \| repack \| nuked`. **`proper`, `repack` and `nuked` are not Prowlarr indexer flags and never have been** — grepping a `develop` checkout at `1f7db1e` for `IndexerFlag` alongside those three returns nothing. Four real values were missing: `exclusive`, `neutralleech`, `halfleech`, `doubleupload`. **The downstream consequence is the finding, not a second one:** the same three invented names had already propagated into the design mockups, which rendered a `repack` chip in the indexer-flags position — a value that field cannot produce. The design thread is removing it and rendering only the real set | **Applied in `tags.md`**; the mockup fix is the design thread's and is recorded here as the *consequence* rather than a separate row, because splitting them loses the point. **The cost of an invented value in a reference doc is never the wrong line — it is the UI built on it, found later and further away, by someone who reasonably treated the doc as authoritative.** `tags.md` now states the source (`src/NzbDrone.Core/Indexers/IndexerFlag.cs`), the re-check command, and the torrents-only caveat below |
+
+**A correction to the report that raised FI-15, and it is the same lesson one level up.** The finding
+arrived with the claim that the vocabulary is **closed** to the seven statics in `IndexerFlag.cs`,
+evidenced by `new IndexerFlag(` appearing nowhere in `src/`. **The set is not closed, and that grep
+cannot show it is.** `IndexerFlag.cs` constructs with C# target-typed `new(...)`, so the pattern
+`new IndexerFlag(` matches **zero lines in a file containing seven of them** — the probe returns
+empty for a repository where the thing is everywhere, and empty reads as confirmation. Grepping
+`static IndexerFlag` instead returns **nine** hits: the seven common statics, plus
+`PassThePopcornFlag : IndexerFlag` contributing `golden` and `approved` into the same array. So UsArr
+must match the seven it knows and **pass an unrecognised flag through as an opaque tag**, which is
+the opposite of what a closed set would license. Verified on a `--filter=blob:none --depth 1` clone
+of `Prowlarr/Prowlarr` at `1f7db1e`, 2026-08-16.
+
+**`indexerFlags` is torrents-only**, checked in the same clone:
+`ReleaseResourceMapper.ToResource` does `model as TorrentInfo ?? new TorrentInfo()`
+(`src/Prowlarr.Api.V1/Search/ReleaseResource.cs:68-70`), so a usenet release takes the fallback and
+its flag array is **always empty**. Empty on usenet means *the field does not apply*, never *we
+checked and none are set*.
+
+## 7.3 The pattern these four share
+
+`FI-15` is the **fourth** documented property today that nobody had measured, and the set is worth
+reading together because each was green, plausible and wrong in a different layer:
+
+| | What was claimed | What was true |
+|---|---|---|
+| **FI-03** | the gate lints with the pinned tool | it resolved `golangci-lint` from `PATH` and ran an old unpinned version, for the life of the project |
+| **FI-11** | the gate reports its findings | stock `max-same-issues: 3` truncated 11 to 7 silently; `gosec`'s four sat exactly at the boundary |
+| **FI-14** | `make check` makes one network call | it makes two |
+| **FI-15** | `tags.md` lists Prowlarr's indexer flags | three were invented, four were missing — and the invented ones were already rendering in the mockups |
+
+**FI-15 is the one that shows the failure crossing a file boundary**, and that is why it is the
+expensive one. The first three are wrong statements about the repo that a reader can check against
+the repo. The fourth became a chip in a design mockup, where nothing connects it back to the API
+field it claims to mirror, and where the next person to touch it would reasonably assume the value
+was verified upstream. **A reference doc is an input to other work, so an unverified fact in one does
+not stay a documentation defect — it becomes someone else's correct implementation of a wrong
+premise.**
+
+The rules these produced are in `docs/DEVELOPMENT.md` §11 — probe the condition rather than a proxy
+for it, report what you measured rather than the verdict, exercise the failure path, and declare what
+a check should *find* rather than only what it forbids. **Two of the three incidents behind those
+rules were introduced by the fixes for the other two**, which is the part worth remembering: a fix is
+written under the assumption that the failure mode is now understood, and that is exactly when people
+stop checking for it.
