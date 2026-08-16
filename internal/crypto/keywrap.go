@@ -13,10 +13,21 @@ import (
 // Why this and not AES-GCM for the DEK: the stored envelope format in
 // docs/reference/security.md §1.1 fixes wrapped_dek at exactly 40 bytes. RFC
 // 3394 wraps an n-block key into n+1 blocks, so a 32-byte DEK wraps to exactly
-// 40 bytes. No AEAD construction produces 40 bytes for a 32-byte plaintext:
-// GCM would need 48 (32 + a 16-byte tag) before counting a nonce. The 40-byte
-// field in the spec is therefore AES-KW, and this is the derivation of that
-// reading — the document states the length, not the algorithm.
+// 40 bytes, which is the length the spec fixes.
+//
+// That length is CONSISTENT with RFC 3394; it does not by itself prove it. This
+// comment used to argue that "no AEAD construction produces 40 bytes for a
+// 32-byte plaintext, therefore the field is AES-KW", and that argument is not
+// sound: RFC 5649 (AES-KWP) also wraps a 32-byte key into exactly 40 bytes, and
+// so would AES-GCM with a truncated 64-bit tag. The length narrows the field, it
+// does not close it.
+//
+// RFC 3394 is the deliberate choice, on its merits rather than by elimination:
+// it is the plain, fixed-length key-wrap for input that is already an exact
+// multiple of 8 bytes (a 32-byte DEK always is), so AES-KWP's padding machinery
+// buys nothing here; it is deterministic; and it carries its own integrity
+// check. The conclusion the old derivation reached was right — only the
+// reasoning was doing work it could not support.
 //
 // AES-KW is deterministic (no nonce to manage, so a wrapped DEK is stable
 // across re-wraps of the same key) and carries its own integrity check: the

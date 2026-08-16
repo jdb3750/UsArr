@@ -85,13 +85,23 @@ func derive(secret, salt []byte, info string) ([]byte, error) {
 //
 // docs/reference/security.md §1.2:
 //
-//	AAD = table_name || ":" || column_name || ":" || primary_key || ":" || sha256(normalised host:port)
+//	AAD = table_name || ":" || column_name || ":" || primary_key || ":" || sha256(normalised scheme://host:port)
 //
 // Without this, AES-256-GCM authenticates the ciphertext but not its location.
 // Anyone with database write access — a restored backup, a NAS share, an
 // operator, a SQL-injection-equivalent bug — could copy the Radarr row's
 // ciphertext into a service_instance row whose base_url they control, and UsArr
 // would decrypt it and transmit it to them.
+//
+// The bound value is the full ORIGIN, scheme included, not just host:port. It
+// used to be host:port only, which left one edit uncaught by the cryptographic
+// layer: flipping `https://nas:443` to `http://nas:443` changed nothing in the
+// AAD, so the envelope still opened and UsArr would send a full-admin X-Api-Key
+// over plaintext to a host the attacker can now MITM. security.md §1.6 is
+// normative that a SCHEME, host or port change invalidates the credential, and
+// §1.2's whole argument is that the cryptographic layer has to hold when the
+// application layer is bypassed — so the application-layer re-entry rule could
+// not be the only control against the one attack it was written to back up.
 type AAD struct {
 	// Table is the table name, e.g. "service_instance".
 	Table string
@@ -99,19 +109,19 @@ type AAD struct {
 	Column string
 	// PrimaryKey is the row's primary key rendered as text.
 	PrimaryKey string
-	// HostPort is the normalised host:port of the instance the credential is
-	// for, as returned by NormalizeHostPort.
-	HostPort string
+	// Origin is the normalised scheme://host:port of the instance the credential
+	// is for, as returned by NormalizeOrigin.
+	Origin string
 }
 
 // Bytes renders the AAD.
 //
-// The sha256 of the normalised host:port is rendered as lowercase hex rather
-// than raw bytes. The document says "sha256(...)" without fixing an encoding;
-// hex keeps the whole AAD printable, which matters because this value appears
-// in the audit trail when a decryption fails.
+// The sha256 of the normalised origin is rendered as lowercase hex rather than
+// raw bytes. The document says "sha256(...)" without fixing an encoding; hex
+// keeps the whole AAD printable, which matters because this value appears in the
+// audit trail when a decryption fails.
 func (a AAD) Bytes() []byte {
-	sum := sha256.Sum256([]byte(a.HostPort))
+	sum := sha256.Sum256([]byte(a.Origin))
 	var b strings.Builder
 	b.Grow(len(a.Table) + len(a.Column) + len(a.PrimaryKey) + 3 + 2*sha256.Size)
 	b.WriteString(a.Table)
@@ -131,7 +141,7 @@ func (a AAD) Bytes() []byte {
 // ServiceInstanceAAD builds the AAD for service_instance.api_key_enc, the only
 // encrypted column today.
 func ServiceInstanceAAD(id int64, baseURL string) (AAD, error) {
-	hp, err := NormalizeHostPort(baseURL)
+	origin, err := NormalizeOrigin(baseURL)
 	if err != nil {
 		return AAD{}, err
 	}
@@ -139,7 +149,7 @@ func ServiceInstanceAAD(id int64, baseURL string) (AAD, error) {
 		Table:      "service_instance",
 		Column:     "api_key_enc",
 		PrimaryKey: strconv.FormatInt(id, 10),
-		HostPort:   hp,
+		Origin:     origin,
 	}, nil
 }
 
@@ -157,13 +167,17 @@ var defaultPorts = map[string]string{
 // The normalisation is deliberate, because every rule here decides whether an
 // edit to base_url invalidates the stored credential:
 //
-//   - The scheme is lowercased and used only to supply a default port. It is
-//     NOT part of the output, because the documented formula is "host:port".
-//     CONSEQUENCE, flagged: http://nas:443 and https://nas:443 produce the same
-//     AAD, so a same-port scheme downgrade is not caught cryptographically.
-//     docs/reference/security.md §1.6 blocks that edit a second way — changing
-//     the scheme, host or port requires re-entering the key, and a connection
-//     test against a modified base_url uses only the key typed into the form.
+//   - The scheme is lowercased and used only to supply a default port. It is NOT
+//     part of THIS function's output, which is the value internal/ssrf wants for
+//     Options.AllowedHostPort — that field is split with net.SplitHostPort and
+//     must stay a bare host:port.
+//     The AAD does not use this function. It uses NormalizeOrigin, which keeps
+//     the scheme, so that http://nas:443 and https://nas:443 produce DIFFERENT
+//     AADs and a same-port scheme downgrade is caught cryptographically rather
+//     than only by security.md §1.6's re-entry rule. Anything comparing two base
+//     URLs to decide whether the stored credential is still valid must use
+//     NormalizeOrigin, not this: the two have to agree or a legal edit produces
+//     a credential that can never be opened again.
 //   - The host is lowercased and a trailing root dot is stripped, because DNS
 //     names are case-insensitive and "nas." and "nas" are the same host.
 //   - An IP literal is reduced to its canonical form (netip), so ::1, 0:0::1
@@ -212,4 +226,31 @@ func NormalizeHostPort(rawURL string) (string, error) {
 	}
 
 	return net.JoinHostPort(host, port), nil
+}
+
+// NormalizeOrigin reduces a service base URL to the canonical
+// "scheme://host:port" that goes into the AAD.
+//
+// It is NormalizeHostPort plus the lowercased scheme, and it exists because the
+// AAD must bind the scheme: without it, editing https://nas:443 to
+// http://nas:443 leaves the AAD unchanged, the envelope opens, and UsArr sends a
+// full-admin API key in cleartext to a host that can now be MITM'd. That is the
+// exact §1.2 threat ("a restored backup, a NAS share, an operator") which the
+// application-layer re-entry rule is only supposed to be redundant with.
+//
+// Every comparison that decides "is the stored credential still valid for this
+// base URL" must use THIS function, not NormalizeHostPort. If a caller decides
+// re-entry is unnecessary using host:port while the AAD is built from the
+// origin, a scheme-only edit silently produces an unopenable credential.
+func NormalizeOrigin(rawURL string) (string, error) {
+	hostPort, err := NormalizeHostPort(rawURL)
+	if err != nil {
+		return "", err
+	}
+	// NormalizeHostPort has already validated that the scheme is http or https.
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return "", fmt.Errorf("crypto: normalise origin: parse %q: %w", rawURL, err)
+	}
+	return strings.ToLower(u.Scheme) + "://" + hostPort, nil
 }

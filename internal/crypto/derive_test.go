@@ -115,38 +115,75 @@ func TestNormalizeHostPort(t *testing.T) {
 
 // KNOWN GAP, pinned so it is a decision rather than a surprise.
 //
-// The documented AAD formula is "host:port", so the scheme is not in it. Two
-// URLs that differ only in scheme but share a port therefore produce the same
-// AAD, and a same-port scheme downgrade is not caught cryptographically.
-// docs/reference/security.md §1.6 blocks that edit a second way: changing the
-// scheme, host or port requires re-entering the key, and a connection test
-// against a modified base_url uses only the key typed into the form.
-func TestSchemeIsNotInTheAAD(t *testing.T) {
-	plain, err := NormalizeHostPort("http://nas.lan:443")
+// TestSchemeIsBoundIntoTheAAD is the regression test for CRYPTO-01.
+//
+// This test used to be TestSchemeIsNotInTheAAD and asserted the opposite: it
+// pinned the gap in place. The AAD bound only host:port, so editing
+// https://nas.lan:443 to http://nas.lan:443 left the AAD unchanged, the envelope
+// opened, and UsArr would send a full-admin X-Api-Key over cleartext to a host
+// an attacker can now MITM. security.md §1.6 is normative that a SCHEME change
+// invalidates the credential, and §1.2's argument is that the cryptographic
+// layer must hold when the application layer is bypassed — so the re-entry rule
+// could not be the sole control against the very attack it backs up.
+func TestSchemeIsBoundIntoTheAAD(t *testing.T) {
+	// The same-port downgrade is the case that used to slip through.
+	plain, err := NormalizeOrigin("http://nas.lan:443")
 	if err != nil {
 		t.Fatal(err)
 	}
-	secure, err := NormalizeHostPort("https://nas.lan:443")
+	secure, err := NormalizeOrigin("https://nas.lan:443")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plain != secure {
-		t.Fatalf("normalisation now distinguishes schemes (%q vs %q); "+
-			"if that is intended, update the AAD formula in docs/reference/security.md §1.2",
-			plain, secure)
+	if plain == secure {
+		t.Fatalf("http:// and https:// on the same port normalise identically (%q); "+
+			"a same-port scheme downgrade is not caught cryptographically", plain)
 	}
 
-	// The usual case still differs, because the default ports differ.
-	a, err := NormalizeHostPort("http://nas.lan")
+	// And it must reach the AAD proper, not just the normaliser.
+	aPlain, err := ServiceInstanceAAD(7, "http://nas.lan:443")
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := NormalizeHostPort("https://nas.lan")
+	aSecure, err := ServiceInstanceAAD(7, "https://nas.lan:443")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(aPlain.Bytes()) == string(aSecure.Bytes()) {
+		t.Error("ServiceInstanceAAD ignores the scheme; an https->http edit would still decrypt")
+	}
+
+	// The usual case still differs too, via the default ports.
+	a, err := NormalizeOrigin("http://nas.lan")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := NormalizeOrigin("https://nas.lan")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if a == b {
 		t.Error("http:// and https:// with implicit ports must differ")
+	}
+
+	// NormalizeHostPort keeps its own contract: a bare host:port, because
+	// ssrf.Options.AllowedHostPort splits it with net.SplitHostPort.
+	hp, err := NormalizeHostPort("https://nas.lan:8989")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hp != "nas.lan:8989" {
+		t.Errorf("NormalizeHostPort = %q, want a bare host:port", hp)
+	}
+}
+
+// NormalizeOrigin must reject everything NormalizeHostPort rejects: it is the
+// AAD's input, so a URL that slips through here is a credential bound to junk.
+func TestNormalizeOriginRejectsWhatHostPortRejects(t *testing.T) {
+	for _, in := range []string{"", "radarr.lan:7878", "http://", "file:///etc/passwd", "http://radarr.lan:0"} {
+		if got, err := NormalizeOrigin(in); err == nil {
+			t.Errorf("NormalizeOrigin(%q) = %q, want an error", in, got)
+		}
 	}
 }
 
@@ -175,7 +212,7 @@ func TestNormalizeHostPortRejects(t *testing.T) {
 // The AAD renders as table:column:pk:sha256hex, and the digest is a stable
 // lowercase hex string.
 func TestAADBytes(t *testing.T) {
-	aad := AAD{Table: "service_instance", Column: "api_key_enc", PrimaryKey: "42", HostPort: "radarr.lan:7878"}
+	aad := AAD{Table: "service_instance", Column: "api_key_enc", PrimaryKey: "42", Origin: "https://radarr.lan:7878"}
 	got := string(aad.Bytes())
 
 	parts := strings.Split(got, ":")

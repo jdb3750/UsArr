@@ -64,6 +64,63 @@ func TestRedactURL(t *testing.T) {
 	}
 }
 
+// TestPrivateTrackerPasskeysAreRedacted is the regression test for the passkey
+// leak.
+//
+// Prowlarr's ReleaseResource.infoUrl and .commentUrl are indexer-supplied and
+// are surfaced to the browser as info_url via httpapi's redactURLField, which
+// delegates here. Private trackers put the user's personal passkey in the query
+// string of exactly those URLs. The deny-list covered apikey/token/sig/p/t/s but
+// none of the tracker-specific names, so a passkey shipped straight to the
+// client — and on a private tracker a leaked passkey means account termination,
+// because it is what the tracker attributes traffic by.
+//
+// Both entry points are asserted: RedactURL (logging, storage, API responses)
+// and stripCredentials (redirect hops), because they share this one list and a
+// name must never be covered by only one of them.
+func TestPrivateTrackerPasskeysAreRedacted(t *testing.T) {
+	t.Parallel()
+
+	const secret = "PASSKEYVALUE0123456789"
+	names := []string{"passkey", "torrent_pass", "torrentpass", "rsskey", "authkey", "apipasskey", "cookie"}
+
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			raw := "https://tracker.example/details.php?id=42&" + name + "=" + secret
+
+			got := RedactRawURL(raw)
+			if strings.Contains(got, secret) {
+				t.Errorf("RedactRawURL leaked %s: %q\n"+
+					"this URL reaches the browser as info_url on every search result", name, got)
+			}
+			if !strings.Contains(got, "id=42") {
+				t.Errorf("RedactRawURL dropped a non-credential parameter: %q", got)
+			}
+
+			u, err := url.Parse(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			stripCredentials(u)
+			if u.Query().Has(name) {
+				t.Errorf("stripCredentials left %s on a redirect target: %q", name, u.String())
+			}
+			if u.Query().Get("id") != "42" {
+				t.Errorf("stripCredentials dropped a non-credential parameter: %q", u.String())
+			}
+		})
+	}
+
+	// Case-insensitivity: trackers spell these every which way.
+	for _, spelling := range []string{"PassKey", "TORRENT_PASS", "RSSKey"} {
+		got := RedactRawURL("https://tracker.example/rss?" + spelling + "=" + secret)
+		if strings.Contains(got, secret) {
+			t.Errorf("RedactRawURL is case-sensitive on %q: %q", spelling, got)
+		}
+	}
+}
+
 func TestRedactRawURLUnparseable(t *testing.T) {
 	t.Parallel()
 

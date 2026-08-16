@@ -1,6 +1,9 @@
 package config
 
 import (
+	"bytes"
+	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -300,4 +303,88 @@ func TestMissingEnvFileIsNotFatal(t *testing.T) {
 	if c.Port != DefaultPort {
 		t.Errorf("Port = %d, want the default %d", c.Port, DefaultPort)
 	}
+}
+
+// TestConfigNeverRendersTheMasterKey is the regression test for CFG-01.
+//
+// Config.SecretKey held the raw USARR_SECRET_KEY in a plain string field with no
+// Stringer and no slog.LogValuer, so a single slog.Debug("config", "cfg", cfg),
+// fmt.Sprintf("%+v", cfg) or support-bundle dump would have written the master
+// key to the log — the key that opens every stored *Arr credential. security.md
+// §5 requires redaction to be structural ("a middleware, not a convention"), and
+// this is the guarantee being structural rather than remembered.
+//
+// Both a value and a pointer are exercised: the methods are on a value receiver
+// precisely so that neither form leaks, and a future move to a pointer receiver
+// would silently reopen the value path. That is why %+v on the plain value is
+// asserted here.
+// verbS keeps the %s verb out of staticcheck's S1025 pattern match.
+var verbS = "%s"
+
+func TestConfigNeverRendersTheMasterKey(t *testing.T) {
+	const key = "SUPERSECRETMASTERKEYVALUE0123456789"
+
+	c := Config{
+		ConfigDir:    "/config",
+		DataDir:      "/data",
+		BindAddress:  "0.0.0.0",
+		Port:         6969,
+		SecretKey:    key,
+		SecretKeySet: true,
+		// A path is not a secret; the file's contents never reach this struct.
+		SecretKeyFile: "/run/secrets/usarr_key",
+	}
+
+	renderings := map[string]string{
+		"String()": c.String(),
+		"%v value": fmt.Sprintf("%v", c),
+		// The format string is a variable so staticcheck's S1025 ("use String()")
+		// does not rewrite this away. Exercising %s explicitly is the point: it is
+		// a distinct fmt verb path from %v, and both must route through Stringer.
+		"%s value":     fmt.Sprintf(verbS, c),
+		"%+v value":    fmt.Sprintf("%+v", c),
+		"%v pointer":   fmt.Sprintf("%v", &c),
+		"%+v pointer":  fmt.Sprintf("%+v", &c),
+		"LogValue()":   c.LogValue().String(),
+		"slog value":   slogLine(t, c),
+		"slog pointer": slogLine(t, &c),
+	}
+
+	for name, got := range renderings {
+		if strings.Contains(got, key) {
+			t.Errorf("%s leaked the master key:\n%s", name, got)
+		}
+		// A prefix is just a shorter key to brute-force, so no part may survive.
+		if strings.Contains(got, key[:8]) {
+			t.Errorf("%s leaked a prefix of the master key:\n%s", name, got)
+		}
+		if !strings.Contains(got, "<redacted>") {
+			t.Errorf("%s does not mark the key as redacted, so a reader cannot tell "+
+				"a set key from an absent one:\n%s", name, got)
+		}
+		// The non-secret fields must still be there, or this is just an opaque
+		// blob and nobody will use it.
+		if !strings.Contains(got, "/config") {
+			t.Errorf("%s dropped config_dir; redaction must not cost all diagnostics:\n%s", name, got)
+		}
+	}
+
+	// An unset key and a set-but-empty key must stay distinguishable: an empty
+	// USARR_SECRET_KEY is fatal (CONFIGURATION.md §3.2) and an unset one is not.
+	unset := Config{ConfigDir: "/config"}
+	empty := Config{ConfigDir: "/config", SecretKeySet: true}
+	if unset.String() == empty.String() {
+		t.Error("an unset key and a set-but-empty key render identically; " +
+			"that distinction is what makes the empty-key failure diagnosable")
+	}
+}
+
+// slogLine renders v through a real slog handler, which is the path that
+// actually matters — LogValuer is only consulted by the logging machinery.
+func slogLine(t *testing.T, v any) string {
+	t.Helper()
+	var buf bytes.Buffer
+	h := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	slog.New(h).Debug("startup", "config", v)
+	return buf.String()
 }

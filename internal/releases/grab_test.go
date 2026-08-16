@@ -157,6 +157,104 @@ func TestGrabPreflightsDownloadClients(t *testing.T) {
 
 // Prowlarr failures are soft: a flaky secondary probe must not block a grab that
 // would otherwise work.
+// TestGrabPreflightRoutesByDownloadClientIDNotProtocol is the regression test
+// for GRAB-01, in both directions.
+//
+// Prowlarr routes a grab by downloadClientId when the release names one, and
+// consults the protocol ONLY on the other branch (DownloadService.cs:
+// `downloadClientId.HasValue ? _downloadClientProvider.Get(id) : GetDownloadClient(protocol, indexerId)`).
+// The preflight checked the protocol unconditionally, so it was wrong twice:
+// it passed releases whose named client no longer exists — where Prowlarr's
+// `.Single()` throws InvalidOperationException, which is NOT one of the three
+// DownloadClientUnavailableException messages errors.go maps, so the user got a
+// bare 500 with a raw .NET message — and it refused releases whose named client
+// was perfectly fine, merely because nothing matched the protocol.
+func TestGrabPreflightRoutesByDownloadClientIDNotProtocol(t *testing.T) {
+	now := time.Unix(1_755_000_000, 0).UTC()
+
+	t.Run("refuses a stale download client id the protocol check would have passed", func(t *testing.T) {
+		store := newFakeStore()
+		rel := release("g1", "A", 1, "Alpha", servarr.ProtocolTorrent, 2000)
+		// The release names client 9, which Prowlarr no longer has. A torrent
+		// client IS enabled, so the old protocol-only preflight passed this
+		// straight through to a 500.
+		rel.DownloadClientID = servarr.Int32(9)
+		id := storedCandidate(t, store, rel, now)
+
+		c := &fakeClient{clients: enabledClients()}
+		svc, err := NewService(Config{
+			InstanceID: testInstanceID, Client: c, Store: store,
+			Now: func() time.Time { return now },
+		})
+		if err != nil {
+			t.Fatalf("NewService: %v", err)
+		}
+
+		_, err = svc.Grab(context.Background(), ownerScope, id)
+		if !errors.Is(err, ErrNoDownloadClient) {
+			t.Fatalf("err = %v, want ErrNoDownloadClient — the named client is gone, and "+
+				"Prowlarr would answer with a generic 500", err)
+		}
+		if c.grabCalls != 0 {
+			t.Error("the grab was attempted against a download client Prowlarr does not have")
+		}
+		if got := err.Error(); !strings.Contains(got, "search again") {
+			t.Errorf("error = %q; re-searching is the actual recovery, so say so", got)
+		}
+	})
+
+	t.Run("refuses a named client that exists but is disabled", func(t *testing.T) {
+		store := newFakeStore()
+		rel := release("g1", "A", 1, "Alpha", servarr.ProtocolTorrent, 2000)
+		rel.DownloadClientID = servarr.Int32(2)
+		id := storedCandidate(t, store, rel, now)
+
+		c := &fakeClient{clients: []servarr.DownloadClientResource{
+			{ID: 1, Name: "sabnzbd", Enable: true, Protocol: servarr.ProtocolUsenet},
+			{ID: 2, Name: "qbittorrent", Enable: false, Protocol: servarr.ProtocolTorrent},
+		}}
+		svc, err := NewService(Config{
+			InstanceID: testInstanceID, Client: c, Store: store,
+			Now: func() time.Time { return now },
+		})
+		if err != nil {
+			t.Fatalf("NewService: %v", err)
+		}
+
+		if _, err := svc.Grab(context.Background(), ownerScope, id); !errors.Is(err, ErrNoDownloadClient) {
+			t.Fatalf("err = %v, want ErrNoDownloadClient", err)
+		}
+	})
+
+	t.Run("allows a named client even when no client matches the protocol", func(t *testing.T) {
+		store := newFakeStore()
+		rel := release("g1", "A", 1, "Alpha", servarr.ProtocolTorrent, 2000)
+		// Names client 1, which is enabled. No TORRENT client is enabled, so the
+		// old protocol-only preflight refused this grab — but Prowlarr never
+		// looks at the protocol on the by-id branch, so it would have worked.
+		rel.DownloadClientID = servarr.Int32(1)
+		id := storedCandidate(t, store, rel, now)
+
+		c := &fakeClient{clients: []servarr.DownloadClientResource{
+			{ID: 1, Name: "sabnzbd", Enable: true, Protocol: servarr.ProtocolUsenet},
+		}}
+		svc, err := NewService(Config{
+			InstanceID: testInstanceID, Client: c, Store: store,
+			Now: func() time.Time { return now },
+		})
+		if err != nil {
+			t.Fatalf("NewService: %v", err)
+		}
+
+		if _, err := svc.Grab(context.Background(), ownerScope, id); err != nil {
+			t.Fatalf("Grab refused a release naming an enabled client: %v", err)
+		}
+		if c.grabCalls != 1 {
+			t.Errorf("grabCalls = %d, want 1", c.grabCalls)
+		}
+	})
+}
+
 func TestGrabProceedsWhenTheDownloadClientProbeFails(t *testing.T) {
 	now := time.Unix(1_755_000_000, 0).UTC()
 	store := newFakeStore()

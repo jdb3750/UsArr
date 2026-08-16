@@ -383,6 +383,7 @@ func withoutCSRF(r *http.Request) { r.Header.Del("X-CSRF-Token") }
 func withoutSession(r *http.Request) {
 	r.Header.Del("Cookie")
 }
+
 func asFormPost(r *http.Request) { r.Header.Set("Content-Type", "application/x-www-form-urlencoded") }
 
 // raw issues a request and returns the status and body.

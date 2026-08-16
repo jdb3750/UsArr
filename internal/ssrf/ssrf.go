@@ -86,6 +86,21 @@ type Options struct {
 	// closed. This is the supported alternative to verify_tls=0, which UsArr does
 	// not offer at all: an unverified TLS connection would send a full-admin *Arr
 	// key to whatever answered the socket.
+	//
+	// CONSTRAINT, known and currently unfixed: the pin is installed on the whole
+	// transport via VerifyPeerCertificate, so a client built WITH a pin can reach
+	// exactly one https host — the pinned one. For ClassConfigured that is
+	// precisely right, since the dialler already constrains it to AllowedHostPort.
+	// For ClassDerived it is not: security.md §2's table says a derived URL that
+	// is not on the originating instance should fall through to the strict
+	// ClassProvider policy, and with a pin installed those public-CDN fetches are
+	// refused instead. It fails CLOSED, which is the right direction, but it
+	// silently breaks the documented fallback.
+	//
+	// Until that is fixed — by selecting the TLS config per connection, or by
+	// building ClassDerived clients without the pin and relying on the class
+	// policy — do not set SPKIPin on a ClassDerived client that is expected to
+	// reach anything but the instance itself.
 	SPKIPin []byte
 
 	// MaxBytes caps the response body. Use MaxArtworkBytes, MaxMetadataBytes or

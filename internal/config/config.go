@@ -16,6 +16,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -95,6 +96,80 @@ type Config struct {
 }
 
 // Address is the host:port to listen on.
+// redactedMarker is what stands in for the master key in any rendering of
+// Config. It is non-empty so "the key was set" stays distinguishable from "the
+// key was absent" — which is a real diagnostic distinction, since an empty
+// USARR_SECRET_KEY is a fatal condition and an unset one is not.
+const redactedMarker = "<redacted>"
+
+// LogValue implements slog.LogValuer so that `slog.Any("config", cfg)` — at any
+// level, including trace — cannot print the master key.
+//
+// security.md §5 requires redaction to be "a middleware, not a convention", and
+// the *Arr keys already satisfy that structurally: they exist only as sealed
+// envelopes in store, and the servarr client rebuilds transport errors
+// specifically so the key never reaches an error string. The master key was the
+// exception — a plain string field on a struct that any one of
+// slog.Debug("config", "cfg", cfg), fmt.Sprintf("%+v", cfg) or a support-bundle
+// dump would have written out in full. That key opens every stored *Arr
+// credential, so it is the worst single value in the process to leak.
+//
+// The receiver is a VALUE, deliberately: a method on *Config would leave a
+// plain `Config` value unprotected, and the leak paths above are exactly the
+// ones that pass a value.
+//
+// This renders an explicit allow-list of fields rather than reflecting over the
+// struct. A new field is therefore invisible here until someone adds it, which
+// is the right default: forgetting to add a field costs a log line, forgetting
+// to exclude one costs a credential.
+func (c Config) LogValue() slog.Value {
+	return slog.GroupValue(
+		slog.String("config_dir", c.ConfigDir),
+		slog.String("data_dir", c.DataDir),
+		slog.String("bind_address", c.BindAddress),
+		slog.Int("port", c.Port),
+		slog.String("url_base", c.URLBase),
+		slog.String("log_level", c.LogLevel),
+		slog.String("log_format", c.LogFormat),
+		slog.String("secret_key", c.redactedSecretKey()),
+		slog.Bool("secret_key_set", c.SecretKeySet),
+		// The PATH is not a secret and is load-bearing for diagnosing a
+		// first-run key problem; the file's contents never come near this type.
+		slog.String("secret_key_file", c.SecretKeyFile),
+		slog.Int("trusted_proxies", len(c.TrustedProxies)),
+		slog.String("metadata_user_agent", c.MetadataUserAgent),
+		slog.String("timezone", c.Timezone),
+	)
+}
+
+// String implements fmt.Stringer so that %v, %s and %+v on a Config are all
+// safe. %+v is the one that matters: without a String method it prints every
+// field including SecretKey, and it is what someone reaches for when debugging
+// startup. Value receiver for the same reason as LogValue.
+func (c Config) String() string {
+	return fmt.Sprintf(
+		"Config{config_dir:%s data_dir:%s addr:%s:%d url_base:%s log:%s/%s secret_key:%s secret_key_set:%t secret_key_file:%s trusted_proxies:%d tz:%s}",
+		c.ConfigDir, c.DataDir, c.BindAddress, c.Port, c.URLBase,
+		c.LogLevel, c.LogFormat, c.redactedSecretKey(), c.SecretKeySet,
+		c.SecretKeyFile, len(c.TrustedProxies), c.Timezone,
+	)
+}
+
+// redactedSecretKey never returns any part of the key — not a prefix, not a
+// length. A length leaks whether the value is a 32-byte base64 key or a
+// passphrase, and a prefix is simply a shorter key to brute-force.
+func (c Config) redactedSecretKey() string {
+	if !c.SecretKeySet {
+		return ""
+	}
+	if c.SecretKey == "" {
+		// Set-but-empty is the fatal case CONFIGURATION.md §3.2 describes.
+		// Rendering it distinctly is what makes that error diagnosable.
+		return "<empty>"
+	}
+	return redactedMarker
+}
+
 func (c *Config) Address() string {
 	return c.BindAddress + ":" + strconv.Itoa(c.Port)
 }

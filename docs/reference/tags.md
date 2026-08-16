@@ -105,6 +105,21 @@ also emits. **Category `3030` is the only reliable machine signal separating aud
 acquisition time, and `7030` likewise for comics** — which is exactly the `type:book` +
 `format:audiobook` pair. Capture the raw array; never collapse it.
 
+**Three categories in that map have no `type:` value, and the mapper must not invent one.** The
+vocabulary in §2 is `movie | tv | season | episode | music | album | track | book | comic | game`.
+The table above names media types that are not in it:
+
+| Category | Named above as | Resolution |
+|---|---|---|
+| `5070` | anime | **Decided: `type:tv` + `genre:anime`.** §7 already states this — anime is a genre, not a media type, and reinterpreting the user's data as a separate type is explicitly rejected there. `5070` therefore sets `type:tv`, and the genre tag comes from the provider, not from the category. |
+| `7010` | magazine | **Not decided.** No `type:` and no `format:` value exists. The consistent shape, following the `type:book` + `format:audiobook` precedent, is `type:book` + a new `format:magazine`; that is a recommendation, not a decision. |
+| `6000` | adult | **Not decided.** No `type:` value exists, and the choice interacts with whether adult content is filtered or merely typed. |
+
+Until `7010` and `6000` are decided, the mapper assigns **no `type:` tag** for them rather than
+guessing. That is the honest degradation: an untyped item is visibly untyped, whereas laundering a
+magazine into `type:book` produces a library that is quietly wrong and cannot be corrected later
+without knowing which rows were guesses.
+
 ---
 
 ## 4. Virtual parents, aliases, inheritance

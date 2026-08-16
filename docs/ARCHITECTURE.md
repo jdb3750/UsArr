@@ -1206,11 +1206,16 @@ The tailnet removes the "internet-exposed by design" leg and neither of the othe
 4. **Admin-grade API keys never reach the browser.** An \*Arr API key grants full admin with no
    scoping. Images are proxied because `MediaCover` requires it. Nothing leaving UsArr carries a
    backend credential (§5.4).
-5. **Redaction is middleware, not convention.** A fixed deny-list of query parameters (`apiKey`, `p`,
-   `t`, `s`, `token`, `api_key`, `sig`, `access_token`) and the `Authorization`/`X-Api-Key` headers is
-   redacted **before** any log line, audit row, error message, SSE payload or support bundle, at every
-   level including `trace`. The northbound credential rides in the request line of every Subsonic
-   call, so this is not optional. `key_prefix`, never the key, appears in logs.
+5. **Redaction is middleware, not convention.** A fixed deny-list of query parameters — the provider
+   and OpenSubsonic names (`apikey`, `api_key`, `token`, `access_token`, `auth_token`, `sig`,
+   `signature`, `secret`, `secret_key`, `p`, `t`, `s`) **and the private-tracker passkey names**
+   (`passkey`, `torrent_pass`, `torrentpass`, `rsskey`, `authkey`, `apipasskey`, `cookie`) — plus the
+   `Authorization`/`X-Api-Key` headers is redacted **before** any log line, audit row, error message,
+   SSE payload or support bundle, at every level including `trace`. The northbound credential rides in
+   the request line of every Subsonic call, so this is not optional. The tracker names are not
+   optional either: `ReleaseResource.infoUrl` is indexer-supplied and is surfaced to the browser as
+   `info_url`, and private trackers put the user's passkey in exactly that URL. The list lives once,
+   in `internal/ssrf`; see reference/security.md §5. `key_prefix`, never the key, appears in logs.
 6. **Do not outsource the authorization boundary.** Every UsArr response — northbound included — is
    filtered by UsArr's own permission model, with backend policy as a second layer. Never construct a
    UI that hides items the API would still return.

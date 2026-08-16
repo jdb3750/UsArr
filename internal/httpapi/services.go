@@ -237,12 +237,18 @@ func (s *Server) handleUpdateService(w http.ResponseWriter, r *http.Request) err
 		if nerr != nil {
 			return nerr
 		}
-		oldHost, herr := crypto.NormalizeHostPort(existing.BaseURL)
+		// NormalizeOrigin, not NormalizeHostPort: this comparison decides whether
+		// re-entry is required, and it MUST use the same normalisation the AAD is
+		// built from. The AAD binds scheme://host:port, so an https->http edit on
+		// the same port changes the AAD. Comparing only host:port here would let
+		// that edit through without re-entry and leave a credential that can
+		// never be opened again. security.md §1.6.
+		oldHost, herr := crypto.NormalizeOrigin(existing.BaseURL)
 		if herr != nil {
 			return errStatus(http.StatusInternalServerError, "internal",
 				"the stored base URL cannot be parsed").wrapping(herr)
 		}
-		newHost, herr := crypto.NormalizeHostPort(newBase)
+		newHost, herr := crypto.NormalizeOrigin(newBase)
 		if herr != nil {
 			return errStatus(http.StatusBadRequest, "bad_request", redactText(herr.Error()))
 		}
@@ -407,12 +413,15 @@ func (s *Server) handleTestService(w http.ResponseWriter, r *http.Request) error
 			return err
 		}
 	}
-	oldHost, herr := crypto.NormalizeHostPort(existing.BaseURL)
+	// NormalizeOrigin: same reason as in the update path — the scheme is part of
+	// what the stored credential is bound to, so a scheme change is a host change
+	// for the purposes of the re-entry rule.
+	oldHost, herr := crypto.NormalizeOrigin(existing.BaseURL)
 	if herr != nil {
 		return errStatus(http.StatusInternalServerError, "internal",
 			"the stored base URL cannot be parsed").wrapping(herr)
 	}
-	newHost, herr := crypto.NormalizeHostPort(baseURL)
+	newHost, herr := crypto.NormalizeOrigin(baseURL)
 	if herr != nil {
 		return errStatus(http.StatusBadRequest, "bad_request", redactText(herr.Error()))
 	}
@@ -717,12 +726,16 @@ func normalizeBaseURL(raw string) (string, error) {
 	return strings.TrimSuffix(v, "/"), nil
 }
 
+// hostOf renders a base URL for the audit log's metadata. It uses the full
+// origin so that a scheme-only edit — https://nas:443 -> http://nas:443, the
+// downgrade the AAD now binds against — shows up as an actual change in
+// {"old_host":…,"new_host":…} instead of two identical strings.
 func hostOf(rawURL string) string {
-	hp, err := crypto.NormalizeHostPort(rawURL)
+	origin, err := crypto.NormalizeOrigin(rawURL)
 	if err != nil {
 		return ""
 	}
-	return hp
+	return origin
 }
 
 func notFoundOr(err error, what string) error {

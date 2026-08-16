@@ -147,11 +147,14 @@ func TestOpenRejectsWrongAAD(t *testing.T) {
 		name string
 		aad  AAD
 	}{
-		{"different row", AAD{base.Table, base.Column, "43", base.HostPort}},
-		{"different table", AAD{"other_table", base.Column, base.PrimaryKey, base.HostPort}},
-		{"different column", AAD{base.Table, "other_column", base.PrimaryKey, base.HostPort}},
-		{"different host", AAD{base.Table, base.Column, base.PrimaryKey, "attacker.example:7878"}},
-		{"different port", AAD{base.Table, base.Column, base.PrimaryKey, "radarr.lan:8989"}},
+		{"different row", AAD{base.Table, base.Column, "43", base.Origin}},
+		{"different table", AAD{"other_table", base.Column, base.PrimaryKey, base.Origin}},
+		{"different column", AAD{base.Table, "other_column", base.PrimaryKey, base.Origin}},
+		{"different host", AAD{base.Table, base.Column, base.PrimaryKey, "http://attacker.example:7878"}},
+		{"different port", AAD{base.Table, base.Column, base.PrimaryKey, "http://radarr.lan:8989"}},
+		// CRYPTO-01: the scheme is part of the bound origin, so a same-port
+		// downgrade must fail to open just like a host change does.
+		{"scheme downgraded", AAD{base.Table, base.Column, base.PrimaryKey, "https://radarr.lan:7878"}},
 	}
 	for _, tc := range mutations {
 		t.Run(tc.name, func(t *testing.T) {
@@ -183,6 +186,17 @@ func TestChangingBaseURLInvalidatesTheCredential(t *testing.T) {
 	}
 	if _, err := kr.Open(envelope, moved); !errors.Is(err, ErrDecrypt) {
 		t.Fatalf("Open after a base_url change = %v, want ErrDecrypt", err)
+	}
+
+	// Same host, same port, scheme flipped: the CRYPTO-01 case. This is the edit
+	// that would otherwise have sent a full-admin key over cleartext to a host an
+	// attacker can MITM, with the envelope opening happily.
+	downgraded, err := ServiceInstanceAAD(7, "https://sonarr.lan:8989")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := kr.Open(envelope, downgraded); !errors.Is(err, ErrDecrypt) {
+		t.Fatalf("Open after a same-port scheme change = %v, want ErrDecrypt", err)
 	}
 
 	// An equivalent URL — same host and port, tidier spelling — still opens.
@@ -355,7 +369,7 @@ func TestDecryptErrorIsLoudAndClean(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Seal: %v", err)
 	}
-	wrong := AAD{aad.Table, aad.Column, "999", aad.HostPort}
+	wrong := AAD{aad.Table, aad.Column, "999", aad.Origin}
 
 	_, err = kr.Open(envelope, wrong)
 	if err == nil {

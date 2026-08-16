@@ -437,6 +437,21 @@ the raw name is not); **never overwrite provenance on upgrade** — insert a new
 `media_file`, which gives upgrade history for free; and **manual/filesystem imports get
 `protocol='manual'`** — do not launder `unknown` into `torrent`.
 
+**`release_candidate` has no uniqueness on `(service_instance_id, guid)`, and that is a decision, not
+an omission.** Two searches for the same term inside the TTL window insert two full copies of every
+release; the in-search `emitted` dedupe map is per-search only. The bound on that duplication is the
+TTL — 25 minutes for Prowlarr-sourced rows, swept via `ix_rel_expiry` — so the table's size is
+governed by search volume within a 25-minute window, not by uptime. For a single-user homelab that
+is a handful of rows, and each duplicate is independently grabbable, so nothing is incorrect.
+
+The alternative — a unique index plus `INSERT … ON CONFLICT DO UPDATE SET fetched_at=…,
+expires_at=…` — was considered and rejected for v0.1 because it makes every re-search *extend* the
+grab window of a candidate whose upstream cache entry is still pinned to the original 30-minute
+Prowlarr TTL. That converts a visible "search again" into an invisible failure at grab time, which is
+a worse outcome than duplicate rows. Revisit if a multi-user deployment makes write amplification on
+the single writer connection measurable; the fix is additive (a unique index plus an upsert) and
+needs no data migration beyond de-duplicating existing rows.
+
 ---
 
 ## 7. Search · **v0.1**

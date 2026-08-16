@@ -170,6 +170,14 @@ func TestQueryPlans(t *testing.T) {
 // and a homelab has single-digit instances. Pinned here so the scan is a
 // recorded decision rather than something a later reader "fixes" by adding an
 // index to a ten-row table.
+//
+// The assertion below is t.Errorf, not t.Logf. It used to log, which meant the
+// test could not fail: adding an ordering index left it green and silent, so it
+// pinned nothing while claiming to pin a decision. Failing is the point — if
+// someone adds the index, this test forces them to come here and change it
+// deliberately, which is exactly the conversation the comment above wants to
+// have. Removing the pin is a one-line edit; not noticing you removed it is the
+// failure mode being guarded.
 func TestServiceInstanceListScanIsIntentional(t *testing.T) {
 	plan, err := QueryPlan(t.Context(), openTestDB(t).Read(),
 		`SELECT id, name FROM service_instance WHERE deleted_at IS NULL
@@ -178,6 +186,9 @@ func TestServiceInstanceListScanIsIntentional(t *testing.T) {
 		t.Fatalf("QueryPlan: %v", err)
 	}
 	if !strings.Contains(strings.Join(plan, " | "), "SCAN service_instance") {
-		t.Logf("service_instance list is now indexed: %v", plan)
+		t.Errorf("service_instance is no longer planned as a scan: %v\n"+
+			"schema.md §5 specifies no ordering index on this table and a homelab has "+
+			"single-digit instances. If adding one is intended, say so in schema.md §5 "+
+			"and update this test in the same change.", plan)
 	}
 }

@@ -159,13 +159,17 @@ func isURLTerminator(c byte) bool {
 // commentUrl or posterUrl) for a client.
 //
 // It applies the SAME fixed deny-list as everything else, which is the point:
-// one list, one implementation. Be precise about what that buys, because the
-// list is fixed by ARCHITECTURE.md §14.5 and this is not the place to widen it —
-// apiKey/api_key/apikey/token/access_token/sig/signature/p/t/s are removed, and
-// a tracker-specific parameter name such as `torrent_pass`, `passkey` or
-// `rsskey` is NOT. Those are indexer-supplied and vary per tracker; covering
-// them is a change to internal/ssrf's list and to the documented policy behind
-// it, not a second deny-list bolted on here.
+// one list, one implementation. This is not the place to widen it — the list is
+// owned by internal/ssrf and documented in ARCHITECTURE.md §14.5 item 5 and
+// reference/security.md §5, and a second deny-list bolted on here is how a
+// parameter ends up redacted on one code path and not the other.
+//
+// The tracker-specific names — passkey, torrent_pass, torrentpass, rsskey,
+// authkey, apipasskey, cookie — ARE covered now. They were not, and that was a
+// real leak rather than a documented limitation: infoUrl is indexer-supplied and
+// is serialised to the browser as info_url on every search result, and private
+// trackers carry the user's personal passkey in exactly that URL. See
+// TestPrivateTrackerPasskeysAreRedacted in internal/ssrf.
 func redactURLField(raw string) string {
 	if raw == "" {
 		return ""

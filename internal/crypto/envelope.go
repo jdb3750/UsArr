@@ -294,9 +294,11 @@ func newGCM(dek []byte) (cipher.AEAD, error) {
 	return gcm, nil
 }
 
-// location renders the AAD's addressing fields for an error message. The
-// host:port hash is omitted: it is long and the three plain fields already
-// identify the row.
+// location renders the AAD's addressing fields for an error message. The origin
+// hash is omitted: it is long and the three plain fields already identify the
+// row. The origin itself is printed, scheme included — when a decrypt fails
+// because base_url was edited, "which origin was this bound to" is the whole
+// diagnosis, and the scheme is exactly the part that used to be invisible.
 func (a AAD) location() string {
-	return a.Table + "." + a.Column + " id=" + a.PrimaryKey + " host=" + a.HostPort
+	return a.Table + "." + a.Column + " id=" + a.PrimaryKey + " origin=" + a.Origin
 }

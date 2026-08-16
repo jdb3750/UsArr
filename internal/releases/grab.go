@@ -46,9 +46,11 @@ type GrabResult struct {
 //  2. Refuse an expired candidate. Prowlarr's grab cache is a non-rolling 30
 //     minutes; past that the POST will 404 and the user gets a confusing error
 //     instead of "search again".
-//  3. Preflight GET /api/v1/downloadclient. With no ENABLED client matching the
-//     release protocol, the grab returns 500 with a full .NET stack trace, which
-//     no user can act on. Catching it here turns it into an instruction.
+//  3. Preflight GET /api/v1/downloadclient, mirroring Prowlarr's own routing:
+//     by downloadClientId when the release names one, by protocol otherwise.
+//     Either way, with no ENABLED client the grab returns 500 with a full .NET
+//     stack trace, which no user can act on. Catching it here turns it into an
+//     instruction.
 //  4. POST the stored resource. On a 404 cache miss, re-search transparently and
 //     retry exactly once.
 //  5. Record provenance.
@@ -78,7 +80,7 @@ func (s *Service) Grab(ctx context.Context, scope Scope, candidateID int64) (Gra
 		return zero, fmt.Errorf("decoding stored release for candidate %d: %w", cand.ID, err)
 	}
 
-	if err := s.preflightDownloadClient(ctx, rel.Protocol); err != nil {
+	if err := s.preflightDownloadClient(ctx, rel); err != nil {
 		return zero, err
 	}
 
@@ -108,26 +110,63 @@ func (s *Service) Grab(ctx context.Context, scope Scope, candidateID int64) (Gra
 	}, nil
 }
 
-// preflightDownloadClient checks that Prowlarr has an enabled download client for
-// this protocol before the grab is attempted.
+// preflightDownloadClient checks that Prowlarr has an enabled download client
+// that the grab will actually route to.
+//
+// It must mirror Prowlarr's own routing, which is by ID when the release names
+// one and only otherwise by protocol. Verified against upstream `develop`,
+// DownloadService.SendReportToClient:
+//
+//	var downloadClient = downloadClientId.HasValue
+//	    ? _downloadClientProvider.Get(downloadClientId.Value)          // by id — protocol never consulted
+//	    : _downloadClientProvider.GetDownloadClient(release.DownloadProtocol, release.IndexerId);
+//
+// and DownloadClientProvider.Get:
+//
+//	public IDownloadClient Get(int id) =>
+//	    _downloadClientFactory.GetAvailableProviders().Single(d => d.Definition.Id == id);
+//
+// Checking only the protocol got both directions wrong. `.Single()` throws
+// InvalidOperationException — NOT one of the three DownloadClientUnavailableException
+// messages errors.go matches — so a stale or since-disabled downloadClientId
+// sailed past the preflight and produced a bare 500 with a raw .NET message,
+// exactly the outcome the preflight exists to prevent. And symmetrically, a
+// release naming a working client was REFUSED whenever no client happened to
+// match its protocol, because Prowlarr never consults the protocol on that
+// branch. release_candidate rows live 25 minutes and a client can be disabled
+// inside that window, so both are reachable.
 //
 // A failure to LIST the clients is not treated as a failure to grab: Prowlarr
 // failures are soft, and refusing a grab because a secondary probe was flaky would
 // be worse than attempting it and mapping the 500.
-func (s *Service) preflightDownloadClient(ctx context.Context, protocol servarr.DownloadProtocol) error {
+func (s *Service) preflightDownloadClient(ctx context.Context, rel servarr.ReleaseResource) error {
 	clients, err := s.cfg.Client.DownloadClients(ctx)
 	if err != nil {
 		s.log.Warn("could not preflight download clients; attempting the grab anyway",
 			"instance_id", s.cfg.InstanceID, "err", err)
 		return nil
 	}
+
+	// Route by id when the release names one, exactly as Prowlarr does.
+	if rel.DownloadClientID != nil {
+		want := *rel.DownloadClientID
+		for _, c := range clients {
+			if c.ID == want && c.Enable {
+				return nil
+			}
+		}
+		return fmt.Errorf("%w: this release names Prowlarr download client %d, which is no longer "+
+			"enabled — search again to pick up the current client, or re-enable it in Prowlarr "+
+			"(Settings → Download Clients)", ErrNoDownloadClient, want)
+	}
+
 	for _, c := range clients {
-		if c.Enable && c.Protocol == protocol {
+		if c.Enable && c.Protocol == rel.Protocol {
 			return nil
 		}
 	}
 	return fmt.Errorf("%w: enable a %s download client in Prowlarr (Settings → Download Clients)",
-		ErrNoDownloadClient, mapping.SourceValue(protocol))
+		ErrNoDownloadClient, mapping.SourceValue(rel.Protocol))
 }
 
 // grabWithReSearch POSTs the release, and on a cache miss re-searches once.
