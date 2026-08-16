@@ -109,6 +109,11 @@ GOOSE_VERSION         ?= v3.27.3
 GOVULNCHECK_VERSION   ?= v1.7.0
 GITLEAKS_VERSION      ?= v8.30.1
 
+# gitleaks is the one pinned tool whose identity is asserted from its module
+# path rather than its `--version` output, so the module path is a variable:
+# `tools` installs it and `secrets` asserts it, and the two cannot drift apart.
+GITLEAKS_MODULE       ?= github.com/zricethezav/gitleaks/v8
+
 # ─── Resolving the pinned tools ──────────────────────────────────────────────
 # PINNING A VERSION IS NOT THE SAME AS RUNNING IT. `make tools` installs into
 # $GOBIN, which is very often NOT on $PATH — it is not on $PATH in this repo's
@@ -127,11 +132,41 @@ GITLEAKS_VERSION      ?= v8.30.1
 #     same class of bug as the one this block exists to close;
 #   * assertion alone has already resolved and executed the wrong binary in
 #     order to ask it what it is.
-# The assertion is not universal, and cannot be. gitleaks installed by
-# `go install` answers "version is set by build process" — upstream stamps the
-# real version with -ldflags at release time and `go install` does not — so it
-# gets the existence guard alone. That asymmetry is exactly why the absolute
-# path, not the assertion, is the primary mechanism.
+#
+# gitleaks cannot answer the `--version` form. Measured on 2026-08-16 against
+# the binary `make tools` installs:
+#
+#     $ /root/go/bin/gitleaks --version
+#     gitleaks version version is set by build process
+#
+# That string is gitleaks' own default: version/version.go declares
+# `var Version = "version is set by build process"`, and upstream overwrites it
+# with `-ldflags -X` when it cuts a release. `go install` passes no ldflags, so
+# the default survives. For most of this project's life that left gitleaks — the
+# SECRETS scanner, the one binary you would least want to be an unknown build —
+# as the only gate tool running with its identity unasserted.
+#
+# It is asserted now, from the Go build info the TOOLCHAIN stamps into every
+# `go install`ed binary: `go version -m <bin>` reports the module path, the
+# module version and the go.sum hash of what was actually fetched and built.
+# That is the real answer to "which gitleaks is this", and it is not one this
+# Makefile supplied. Two alternatives were tried and rejected:
+#
+#   * re-stamping the version ourselves at install time
+#     (`go install -ldflags '-X …/version.Version=$(GITLEAKS_VERSION)' …`).
+#     It works — verified, the binary then prints `gitleaks version v8.30.1` —
+#     but the assertion becomes the Makefile asking the binary to repeat a
+#     string the Makefile just handed it, and it makes `make tools` produce a
+#     binary unlike every other install route, so a correct gitleaks installed
+#     any other way would be rejected with "wrong version" while its version was
+#     right. A guard that lies in the false direction is still a guard that lies.
+#   * pinning the binary's content hash in-repo. sha256 of a Go binary is not
+#     reproducible across toolchain patch versions, GOOS/GOARCH or build flags,
+#     so the pin would have to be re-recorded per machine and would be updated
+#     reflexively — which is the same as not having it.
+#
+# `go version -m` reads the binary on disk. No network, so `check-offline` keeps
+# its contract.
 #
 # Override the directory if your layout differs: make check GOBIN_DIR=/some/bin
 ifeq ($(origin GOBIN_DIR),undefined)
@@ -156,6 +191,10 @@ GOLANGCI_WANT    := $(GOLANGCI_VERSION:v%=%)
 GOOSE_WANT       := $(GOOSE_VERSION)
 GOVULNCHECK_WANT := $(GOVULNCHECK_VERSION)
 
+# gitleaks is asserted on the build-info `mod` line instead — `module@version`,
+# exactly as `go version -m` prints the two fields.
+GITLEAKS_WANT    := $(GITLEAKS_MODULE)@$(GITLEAKS_VERSION)
+
 # ─── Report what was measured, not just the verdict ──────────────────────────
 # A CHECK THAT REPORTS ONLY PASS/FAIL CANNOT DISTINGUISH "PASSED" FROM "DID NOT
 # RUN." For this project's whole life so far it was the second one: `check: OK`
@@ -172,9 +211,14 @@ GOVULNCHECK_WANT := $(GOVULNCHECK_VERSION)
 # One line per step, deliberately. This is a gate, not a build log; output
 # nobody reads is how the gate got here.
 
-# usage: $(call require_tool,<absolute path>,<expected version substring or empty>)
+# usage: $(call require_tool,<absolute path>,<--version substring or empty>,<module@version or empty>)
 # Fails loudly and tells you to run `make tools` — the guard style `secrets`
 # already used for gitleaks, now applied to every pinned tool.
+#
+# Exactly one of arg 2 and arg 3 is used, arg 2 first. Passing NEITHER is a hard
+# error, not an existence-only fallback: an unasserted pinned binary is the hole
+# this macro exists to close, so a tool added without an identity pin fails the
+# gate instead of quietly opting out of it.
 define require_tool
 	@test -x $(1) || { \
 		echo "missing pinned tool: $(1)"; \
@@ -191,8 +235,28 @@ define require_tool
 			   exit 1 ;; \
 		esac; \
 		echo "tool: $(1) — version $(2), asserted against the pin"; \
+	elif [ -n "$(3)" ]; then \
+		got=$$($(GO) version -m $(1) 2>/dev/null \
+			| awk '$$1=="mod"{print $$2"@"$$3; exit}' || true); \
+		if [ -z "$$got" ]; then \
+			echo "no Go build info in pinned tool: $(1)"; \
+			echo "  want: $(3)"; \
+			echo "  go version -m said: $$($(GO) version -m $(1) 2>&1 | head -1 || true)"; \
+			echo "run: make tools"; \
+			exit 1; \
+		fi; \
+		if [ "$$got" != "$(3)" ]; then \
+			echo "wrong version of pinned tool: $(1)"; \
+			echo "  want: $(3)"; \
+			echo "  got:  $$got"; \
+			echo "run: make tools"; \
+			exit 1; \
+		fi; \
+		echo "tool: $(1) — build-info module $(3), asserted against the pin (--version is unstamped)"; \
 	else \
-		echo "tool: $(1) — version not assertable (go install leaves it unstamped)"; \
+		echo "unasserted pinned tool: $(1)"; \
+		echo "  require_tool needs a --version substring (arg 2) or a module@version (arg 3)."; \
+		exit 1; \
 	fi
 endef
 
@@ -492,7 +556,7 @@ design: ## Run the design check (DESIGN-DIRECTION §13). Needs Chromium. NOT par
 
 .PHONY: secrets
 secrets: ## Scan the working tree for committed credentials. GATING, part of `check`.
-	$(call require_tool,$(GITLEAKS),)
+	$(call require_tool,$(GITLEAKS),,$(GITLEAKS_WANT))
 	@# No count is added here: gitleaks already ends with "scanned ~N bytes in Ns",
 	@# which is exactly the number this step needs to prove it looked at something.
 	$(GITLEAKS) dir . --redact=100 --no-banner --exit-code 1
@@ -605,7 +669,7 @@ tools: ## Install the pinned dev tools into $(GOBIN_DIR)
 	$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
 	$(GO) install github.com/pressly/goose/v3/cmd/goose@$(GOOSE_VERSION)
 	$(GO) install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
-	$(GO) install github.com/zricethezav/gitleaks/v8@$(GITLEAKS_VERSION)
+	$(GO) install $(GITLEAKS_MODULE)@$(GITLEAKS_VERSION)
 	@echo ""
 	@echo "the recipes invoke these by absolute path under $(GOBIN_DIR), so you do"
 	@echo "NOT need them on \$$PATH — and a stray copy on \$$PATH can no longer shadow them."

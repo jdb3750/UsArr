@@ -132,24 +132,61 @@ func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("Referrer-Policy", "no-referrer")
 		// There is no style-src-attr here, so inline style ATTRIBUTES fall back to
-		// style-src 'self' and are refused. One known violation follows from
-		// that: SvelteKit's route announcer, which .svelte-kit/generated/root.svelte
-		// hides with a style attribute, so the browser logs a CSP violation for
+		// style-src and are refused. One known violation follows from that:
+		// SvelteKit's route announcer, which .svelte-kit/generated/root.svelte
+		// hides with a style attribute, so the browser reports a CSP violation for
 		// it on every page load.
 		//
-		// Both of its real effects are already neutralised — `#svelte-announcer {
-		// display: none }` in web/src/app.css hides it and takes it out of the
-		// accessibility tree, and the shell's own polite live region in
-		// +layout.svelte is the one that announces navigations. The console line
-		// is therefore the entire remaining symptom.
+		// THE REFUSAL IS REPORTED BUT NOT ENFORCED, and the difference matters
+		// enough to write down, because this comment used to claim the opposite.
+		// Svelte 5 builds the fragment by assigning to a <template>'s innerHTML
+		// and cloning the content in, and on that path Chromium fires the
+		// violation while the already-parsed declaration survives the clone.
+		// Measured in Chromium 141.0.7390.37 against this exact header:
+		// #svelte-announcer has style.length 11, computed position `absolute`,
+		// clip-path `inset(50%)` and a 1x1 box, and removing the attribute flips
+		// all of them back to static/none/auto. The control says the directive
+		// itself is not toothless — the same declaration reaching the same page
+		// through setAttribute IS blocked, style.length 0 and position `static`.
+		// It is this one construction path that gets past it.
+		//
+		// Tolerated anyway, because what neutralises the announcer is a rule and
+		// not the refusal: `#svelte-announcer { display: none }` in
+		// web/src/app.css hides it and takes it out of the accessibility tree,
+		// and the shell's own polite live region in +layout.svelte is the one
+		// that announces navigations. So the applied style positions an element
+		// that nothing can see and nothing can reach, and the report is the
+		// entire remaining symptom.
 		//
 		// It is deliberately NOT silenced by adding `style-src-attr
 		// 'unsafe-inline'`. That directive is not scoped to the announcer: it
 		// would re-permit every inline style attribute on every page, which is
 		// the exact injection sink this policy exists to close, in exchange for
-		// suppressing one warning that is already understood and bounded.
+		// suppressing one report that is already understood and bounded.
+		//
+		// 'report-sample' rides on style-src and script-src so that a violation
+		// record carries a prefix of the offending declaration. Without it the
+		// announcer's record is unidentifiable: empty `sample`, and a column
+		// offset into a content-hashed minified chunk that changes every build.
+		//
+		// ⚠️ SEAM. Reports are CONSOLE-ONLY today — the policy below has no
+		// report-uri and no report-to, nothing sets Reporting-Endpoints, and
+		// there is no reporting handler in this package — so the sample never
+		// leaves the user's own browser and the exposure is nil. A reporting
+		// endpoint would be configured HERE, and adding one means re-deciding
+		// 'report-sample' at the same time: the sample stops being a console
+		// string and becomes page content posted off the user's machine, which
+		// §14 of docs/ARCHITECTURE.md judges, not this line.
+		//
+		// And it is a hint, not an identifier. The sample truncates at 40
+		// characters, which for the announcer is
+		// "position: absolute; left: 0; top: 0; cli" — a visually-hidden clip
+		// pattern, naming no element and no file. It narrows the search; the
+		// console line's style hash is still what pins the violation to a
+		// specific declaration. Do not read a populated sample as an answer.
 		h.Set("Content-Security-Policy",
-			"default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; "+
+			"default-src 'self'; img-src 'self' data:; style-src 'self' 'report-sample'; "+
+				"script-src 'self' 'report-sample'; "+
 				"connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 		h.Set("Cross-Origin-Opener-Policy", "same-origin")
 		next.ServeHTTP(w, r)

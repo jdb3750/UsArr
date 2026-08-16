@@ -2203,7 +2203,17 @@ primitive, **the row's computed padding is `0`** — padding lives on the *cell*
 `min-height: var(--row-h)` and a 1 px `border-bottom`. So **a one-line row's content box is
 `--row-h`**, not `--row-h` plus padding plus border: the cell padding sits *inside* the row's content
 box rather than outside it. The 37 px figure came from a probe that put the padding on the row, and
-it does not describe what shipped. This is why the shipped expression —
+it does not describe what shipped.
+
+⚠️ **One clause above is right about the value and wrong about the cause, and the cause is what gets
+reused.** "A one-line row's content box is `--row-h`" reads as *the floor sets it*. It does not.
+Re-measured on the shipped primitive: forcing `--row-h: 100px` moves every row to 100 px, so the
+`min-height` is live — but setting `min-height: 0` leaves a one-line row **unchanged**, because the
+natural height sits 1 px over the floor. The floor is live and **slack**; it never binds. The
+content box equals `--row-h` at all three densities by **arithmetic accident**, not by construction.
+Keep the value, drop the derivation.
+
+This is why the shipped expression —
 `contain-intrinsic-size: auto calc(2 * var(--row-pad-y) + var(--row-lines, 1.1) * var(--leading-base))`
 — is correct with the cell padding *added into* the placeholder rather than subtracted from it:
 at compact density that is 2 × 4 px + 1.1 × 18 px ≈ 27.8 px against `--row-h: 28px`. **Corrections
@@ -2435,6 +2445,18 @@ away, and the ~200 figure had no measurement behind it.
   instead of hard-coding three constants (§1 of the amendment above quotes the shipped app's form of
   it). Verified against the mockups rather than assumed: they render exactly 28 / 32 / 36 and
   45 / 49 / 53, with computed placeholders within 0.3% of the border-box height each stands in for.
+
+  ✅ **Re-measured and confirmed, after the harness that produced them was found never to have
+  loaded IBM Plex** — its Vite root declared no `publicDir`, so `@font-face` URLs 404'd for the
+  harness's whole life. At 2,000 rows against the real `List.svelte` and `app.css`, with the face
+  verified by canvas advance-width probe, **all six are byte-identical with the face served and with
+  it blocked**. The reason is that `body { line-height: var(--leading-base) }` is a fixed 18 px
+  *length* rather than a unitless multiplier, so glyph metrics cannot move the line box. The null
+  result is load-bearing rather than lucky because the guard was fired deliberately: forcing
+  `line-height: normal` *does* split the conditions (rich rows 43 / 47 / 51 served against
+  39 / 43 / 47 blocked). ⚠️ **Measured on one list configuration** — `stack: 'two-line'`, the shape
+  this ADR was originally measured against. A `stack: 'labels'` list has one-line rows at
+  26 / 30 / 34 px, below the floor, where `min-height` *would* bind.
   **The same run's other results — the 761,316 px containment confirmation against a Δ of exactly 0
   on `display: table-row`, the ~88% / ~25% mitigation split, and the superlinear 25,000-row point that
   limits the linear fit to a few thousand rows — are recorded in the amendment above rather than

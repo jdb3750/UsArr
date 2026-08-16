@@ -68,6 +68,11 @@ flag:            internal | exclusive | freeleech | neutralleech | halfleech | s
 > array. So treat any value as possible, match the seven you know, and pass an unrecognised flag
 > through as an opaque tag rather than dropping it.
 >
+> **`flag:freeleech` is readable, and not actionable.** Prowlarr's search and grab API has no
+> per-request freeleech-token instruction — `UseFreeleechToken` is a per-indexer *setting*, and the
+> grab replays a server-side cached release rather than accepting one. Render the chip; do not add a
+> control beside it. `arr-apis.md` §7.2 has the primary source.
+>
 > **Re-check it in one command**, against `develop`, and update this list with what you get:
 >
 > ```bash

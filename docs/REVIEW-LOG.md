@@ -765,6 +765,8 @@ slow (D-12, D-21) and one claimed loading tier is not achievable under ADR-0003 
 | **D-39** | MINOR | Base URLs broke mid-token in the Services table: `http://10.0.0.4:898` / `9`. `.tbl td .mono { overflow-wrap: anywhere }` is right for release names and wrong for URLs | **Applied.** The sub-line breaks at word boundaries, the service column has a minimum width, and the verbatim cell is narrowed |
 | **D-41** | MINOR | Inline `style="margin-top:8px"`, `style="margin-left:0"`, `style="max-width:120px"` and similar in five places, against the token rule. The `--dc` dominant-colour properties on cards are legitimate — that is data | **Applied, and the severity was understated.** It was 119 attributes across the five screen files, not five places, and the real defect is not the token rule: §14's production CSP drops inline styles, so every one of them demonstrated styling that **cannot ship** — rendering correctly here and differently in the real app, which is worse than rendering wrong because nobody re-checks a screen that looks right. The 80 genuine nudges became the `.u-*` classes in `usarr.css` §2.13; the 38 `--cols` / `--row-lines` declarations became one `.cols-*` class per list in §2.12, **not** collapsed onto shared values, because §7.4 requires `--row-lines` be measured per list and merging equal-today values would let a later remeasure of one silently move another. Verified by rendering rather than by diffing: 734,496 element rects across 592 screen×state×install×theme×viewport combinations, before and after, **zero differences** — every row height, resolved `grid-template-columns`, header width, `contain-intrinsic-size` and the overflow verdict identical. `check.mjs` §1d now bans the attribute with floors on both the file count and the corpus size. The `--dc` exemption stands and is stated in the rule: CSP governs the style attribute in markup, not `el.style.setProperty` from script |
 | **D-48** | MINOR | **Citation audit.** Ten primary sources re-fetched live. **Nine verified verbatim:** Sonarr `PageSidebarStatus.js` (severity kinds, `return null` at zero); Sonarr `Styles/Themes/dark.js` (`torrentColor: '#00853d'`, `usenetColor: '#17b1d9'`); Sonarr `PageSidebar.js` (Series/Calendar/Activity/Wanted/Settings/System with the stated children, `statusComponent` on Queue and Status); Prowlarr `PageSidebar.js` (Indexers → Stats, Search, History, Settings, System); MDN `content-visibility` (*"the skipped contents must still be available as normal to user-agent features such as find-in-page, tab order navigation, etc."*, Baseline September 2024); NN/g skeleton screens (all three quotes); WCAG 1.4.11 (*"2.999:1 would not meet the 3:1 threshold"*); Krebs (1,590 sites, 16 detectors, 22 / 32 / 46%, 5–10% false positives, Inter and dark-theme contrast both scored); Viget (39 / 39 / 58, 2.82 / 2.41 / 2.29 s, 59 / 74 / 66%, 10.54 / 9.49 / 9.50 s); NN/g animation duration (both quotes); MDN `font-family` (the `system-ui` warning, quoted correctly). Sonarr's `en.json` strings all check out locally, including `KeyboardShortcutsFocusSearchBox` = "Focus Search Box". **One could not be verified:** `wiki.servarr.com/prowlarr/search` renders client-side and returns no body — the Options/Filter vocabulary claim is independently corroborated by Prowlarr's own `en.json`, which ships both `Options` and `Filter`. **One miscitation found and fixed: D-32.** Everything else in the document says what it claims its source says | **Applied** (D-32); the rest **recorded as verified** |
+| **D-49** | MINOR | **The list primitive's row expander had no written contract**, so the three things a hand-written implementation gets wrong were only discoverable by reading `List.svelte`: an open expander is a real row, so `aria-rowindex` has to be a running total rather than `offset + i + 2`; `aria-rowcount` has to include the open expanders too, or index and count disagree and the user is told "row 9 of 7"; and the expander must carry no row identity or the roving model walks rows and expanders alternately and the list stops being one tab stop | **Applied.** §11 now states the contract beside the `aria-rowcount` / `aria-rowindex` rule it extends, including why the expander cannot be a `region` (a `rowgroup` owns rows and nothing else). Written against the shipped `web/src/lib/List.svelte`, which already implements all of it. **Two divergences between mockup and implementation are recorded rather than reconciled:** `--row-lines` (mockup, a unitless multiplier) and `--row-ci` (component, a measured content-box height in px) are the same §7.4 seam in different units, so a number must never be copied between them; and the component writes `--cols` / `--row-ci` through `element.style.setProperty()` against `style-src 'self'`, which independently corroborates D-41 and the CSSOM carve-out in `check.mjs` §1d |
+| **D-50** | **The mockup was the last thing still setting the poster title over the art**, which §9.7 had already ruled against — *"the title and year sit BELOW the tile, on the chrome's own ground, never over the art"*. Because it did, `usarr.js` carried `constrainDominant()`: a runtime WCAG solver that picked a text colour against the computed fill and then moved the **fill** until the pair cleared 4.5:1 | **Applied, and the subsystem is deleted rather than improved.** It could not have been made safe: it constrained against a **single averaged colour**, and real cover art is not one colour — a white title over the light half of a Blue Note sleeve fails whatever the average says. With the title on a known ground the problem disappears: it is ordinary `--fg` / `--fg-muted`, which check.mjs §3 already asserts at 12 and 5.5 against all five grounds in both themes. **The `--dc` fill stays** — it is still the image placeholder — and so does the CSSOM carve-out in §1d; `--dc-fg` is gone. **§11's rule is retained with no call site, and that is stated rather than dressed up:** after this change nothing in the mockups or in `web/src/app.css` sets text on a computed fill, so the CI assertion has nothing to run over and §11 and the §13 checklist both say so instead of reading as passing. 🚩 **The render comparison caught a real bug this change introduced**, which is the argument for measuring rather than eyeballing: `.card__art` is a `<span>`, and removing the old `display: flex` left `aspect-ratio` inapplicable to an inline box — the tile collapsed to **2×19 px**. Fixed with `display: block`. Verified over 1,290,784 element rects across 1,040 combinations: **96 combos differ and every one is a poster panel** (64 on Home, 32 on Search, which has its own poster view), all 944 others identical. Within them the change is exactly title + year moving below the tile — every card +38 px, `.card__art` unchanged in size at 112.8×169.19 and moved only where a row above it grew, `.card__meta` unchanged and merely lower. Two side effects, both checked and both wanted: a title now has the full card width (112.8 px) instead of the art's padded box (94.8 px), so two 2-line titles became 1-line; and title line count now affects card height where the fixed-aspect box used to hide it, so one row is 245 px against 229 px — ragged rows hanging from the row top, which is what `align-items: start` already specified and what Jellyfin and Navidrome both do |
 
 ---
 
@@ -3107,6 +3109,9 @@ Reported to this thread by the deployment thread.
 | # | Finding | Disposition |
 |---|---|---|
 | **SW-24** | **A grab that succeeded end to end was reported as a failure.** The owner's book downloaded in Deluge while UsArr showed **"Grab failed — HTTP 502"**: Prowlarr added the torrent to the download client, then failed on a *post-add labelling step*, and returned 500 for the whole operation. **An upstream failure response can therefore cover an operation that has already partly succeeded**, and the harm is specific — a false *"failed"* invites the user to grab the same release again, and a grab is irreversible from UsArr's side | **Applied to `ARCHITECTURE.md` §17.5.** The grab-result surface has **three** states, not two — succeeded · failed · **the upstream reported failure and the download may already be running** — and **the third state's copy may never assert that a failed grab did not happen**. Which state a result lands in is decided **by how far the request got rather than by whether an error came back**, and that principle held while the first mapping written against it did not. 🚩 **Verified by the code thread: right in principle, wrong in the specific mapping** — which is the useful form of this record, rather than "we were right" or "we were wrong". The claim was that the existing error codes already coincide with the boundary, with `grab_failed` as the sent-unknown bucket. They do not: **`grab_failed` is the unclassified remainder and carries all three outcomes at once** — six definitely-not-sent cases (bad API key, open circuit breaker, SSRF refusal, Prowlarr 400, Prowlarr 409, corrupt blob); one **definitely sent *and confirmed*** (`ErrDecode`, reachable only after a 2xx, where Prowlarr confirmed the grab and UsArr then failed to parse its own response — **a second, independent false-failure bug**, recorded as its own thing rather than folded into Joe's); and only `ErrServer`, `ErrTimeout` and `Canceled` genuinely ambiguous. So the assignment is **backend classification off the error sentinel, not a relabel of one existing code**, implemented additively by the code thread: `grab_failed` narrows and **a new code carries sent-unknown**. ⚠️ **The near miss is recorded as a caution about scope, not about this mapping:** had the wholesale relabel shipped it would have been **the same double-grab invitation pointed the other way** — sending a user to check their download client for a request that never left UsArr's process. The rule was right; applying it to the wrong set would have produced a fresh instance of the harm the rule exists to prevent. **Unaffected by the correction, and stated as such: the no-Retry-under-ambiguity rule and the honest wording stand exactly as written** — they now attach to the new sent-unknown code rather than to `grab_failed`. Retry means *do it again*, and doing it again is what produces two copies of a 68 GB release, so the honest action points the user at their download client, where the truth actually lives, and the row says plainly that UsArr cannot tell. **Treatment, from the frontend thread and adopted:** the boundary that matters is **handed-over vs not-handed-over**, so **sent-unknown is placed beside *sent*, not beside *failed*** — a 200 means Prowlarr accepted the release, not that a download is running, and UsArr stops observing at handoff either way, so those two are the same epistemic state and only the genuinely-failed one is categorically different. A row that treats them as opposites **lies in both directions**. The sharper consequence is written in too: since detection is deliberately not built, **"sent" is the strongest true word for every handed-over state including the successful one** — never *succeeded*, never *downloading*. ✅ Convergence rather than coincidence, and worth noting as evidence: the provenance design had already chosen *sent* over *succeeded*, and Recent grabs' `done` state was already worded *"the client accepted it"*. The mockups were checked against the rule rather than assumed to pass it — the post-grab chip reads *"grabbed · sent to qBittorrent"*, which names the user's action and then makes the one true claim, so **no mockup copy changed**. The reason is written in as structural: **UsArr deliberately stops observing after handoff**, so it *cannot* resolve the ambiguity by looking, and this is the **second** failure mode in §17.5 where the absence of an undo makes wording load-bearing rather than cosmetic — cross-referenced to §9.1a's freeze-while-aimed rule, which rests on the same irreversibility. ✅ **The one question this raised is closed rather than left open, and it closed the same day**: the deployment thread checked Prowlarr's and Deluge's source and the response is **not distinguishable** — Prowlarr returns **no structured partial-success signal at all**, the 200 *is* the confirmation, and the only discriminator inside a failure is locale-dependent string and stack-frame archaeology specific to Deluge that does not generalise across download clients. Their recommendation not to build detection is written into §17.5 explicitly, so that the ambiguity is not later mistaken for an unclosed gap and answered with a parser. **It strengthens the framing rather than confirming it:** the ambiguity is permanent by the upstream API's nature *and* by the stop-observing decision — two independent reasons, either sufficient. **Two copy corrections follow and are specified**: the current message asserts *"the grab did not go through"*, the one claim that cannot be known, and is replaced by wording that says the download client reported an error and the release **may or may not have been added**, with the upstream message verbatim; and `Test connection` is removed as the offered action, because this is not a connectivity failure and the test will pass. **The state has somewhere to live, decided by the code thread:** `provenance` gains **`acquisition_state`** in **migration 0003** — `TEXT NOT NULL DEFAULT 'confirmed'`, partial index on the not-confirmed case, **no `CHECK` constraint on purpose**, since SQLite cannot `ALTER` one later and v0.2's requests may want `pending` (migration 0001's `audit_log` foreign key is the precedent that paid for that caution). So Recent grabs reads sent-unknown **from provenance**, not from an `audit_log` enrichment, and §17.5's union says so. The reasoning generalises past this table and is worth keeping in their words — **an absent row fails visibly; a phantom row lies quietly**: `provenance` has no back-reference to `audit_log`, so an ambiguous row without a discriminator *on the row* would let library sync's join and Recent grabs attach the wrong history silently. Recorded too: **no existing column could carry it** — `confidence` belongs to the v0.3 fuzzy-match tier and its `>= 1.0` partial index would filter out precisely the rows that matter, and `source_system` is a grouped-on enum. 🔍 **One mechanical fact, because it makes this common rather than exotic: the owner never chose a label.** Prowlarr's Add-client form pre-fills a Default Category of `prowlarr`, so saving the form opts you into the labelling step that failed, and the add happens *before* it with no rollback — a configuration trap reachable by accepting defaults, not a user error |
+| **SW-25** | **A rule being applied rather than a defect being found, which is why it is logged.** The Requests thread stopped rendering the outcome detail clause on confirmed rows: it was **constant per row**, and the fact it carried is already stated once in the block header. They cited §9.1's *"a column that cannot vary is not data"* and merged it at `85cae80` | **Noted, and the distinction is the point.** §9.1's rule was written *because* our own review rounds kept finding repeated columns in the mockups — the 2160p column, the four `none` request destinations, the constant Library column in the search groups. This is the **first time another thread has applied it to their own work without being asked**, which is the only real evidence that a written rule is doing anything: a rule nobody reaches for is indistinguishable from a rule nobody wrote. This log is full of findings and thin on rules being used, so the case is recorded as an outcome rather than an incident. Attributed to the Requests thread |
+| **SW-26** | **The frontend thread's list bench never loaded IBM Plex.** Its Vite root declared no `publicDir`, so `app.css`'s `@font-face` URLs 404'd — reproducibly, for the harness's whole life — and every row-height number it ever printed was measured on the fallback face. Six figures this project cites came from it: one-line **28 / 32 / 36** and rich-row **45 / 49 / 53** | **Re-measured, and all six confirmed** — at 2,000 rows against the real `List.svelte` and `app.css`, face verified by canvas advance-width probe rather than by `document.fonts.check` alone, **byte-identical with the face served and with it blocked**. `body { line-height: var(--leading-base) }` is a fixed 18 px *length*, not a unitless multiplier, so glyph metrics cannot move the line box; the missing font could not have moved these numbers even in principle. The null result is trustworthy because the guard was fired deliberately: `line-height: normal` *does* split the conditions (rich 43 / 47 / 51 served against 39 / 43 / 47 blocked), so the probe can distinguish what it is testing. 🚩 **The durable half is the lesson, not the bug, and it is sharper than "a harness measured the wrong font": the harness measured on the wrong face for its whole life and it did not matter — and nobody could have known that without measuring.** Two inferences ran ahead of the evidence in opposite directions and both were wrong: the original claim that the `min-height: var(--row-h)` floor explains the one-line values, and the correction that three of the six were therefore provisional. **A plausible mechanism is not a measurement.** The fix for a suspect number is to measure the number, not to reason about what could have moved it. Applied to `DESIGN-DIRECTION.md` §7.4 and ADR-0029, which also gain the corrected cause: the floor is **live but slack** — forcing `--row-h: 100px` moves every row, yet `min-height: 0` leaves a one-line row unchanged, because the natural height sits 1 px over it. The coincidence with `--row-h` at all three densities is arithmetic accident, and both documents now say to keep the value and drop the derivation. ⚠️ Scope recorded rather than generalised: **one list configuration was measured** (`stack: 'two-line'`); a `stack: 'labels'` list has one-line rows at 26 / 30 / 34 px, below the floor, where `min-height` *would* bind |
+| **SW-27** | **`.tbl td > * + * { margin-top: var(--space-1) }` fires on the span following a `display: none` `.stacksep`, adding 2 px to every cell in a two-line stack.** The neighbouring exemption `.tbl td > .stacklabel + *` exists for exactly this reason and omits `.stacksep`, so the second-line separator re-creates the defect its sibling was written to prevent | **Routed to the frontend thread, not fixed here** — `web/src/app.css` is their file. Recorded because it is the same adjacent-sibling trap this thread hit from the other side while removing the mockups' inline styles (D-41): `.tbl td > * + *` at (0,1,1) and `.tbl td > .stacklabel + *` at (0,2,0) are the two rules that make a naive class replacement change spacing, and an element that is `display: none` is still an element sibling. Worth knowing in both stylesheets |
 
 ---
 
@@ -3342,3 +3347,201 @@ deliberate skip. It now lives once, in `internal/servarr/mapping`, and the plann
   homelab has single-digit instances.
 - **No filtering of disabled indexers.** They are listed and marked. Hiding one makes *"why is my
   indexer missing?"* unanswerable from the screen that is supposed to answer it.
+
+---
+
+# RG-01 — the Recent-grabs batch, reviewed adversarially and re-checked against a moved `main`
+
+**Origin: an adversarial pass over the Requests thread's Recent-grabs work at `85cae80`.** `main`
+had moved by the time the findings were recorded — `dd15d95` landed `GET /api/v1/indexers` and
+`ec2a21d` merged it — so **every finding below was re-verified by reading the current tree at
+`ec2a21d` rather than the review's diff.** None was overtaken; the closed item at the end was
+already closed at `85cae80` and is confirmed closed here for the second time, by a different method.
+
+Seven findings, one follow-up and one closure. **One is applied (RG-01.2), one routes to another
+thread (RG-01.1), one is deferred pending coordination (RG-01.3), and four are rebutted
+(RG-01.4 to RG-01.7)** — written down rather than dropped, because a rebuttal that is not on paper
+gets re-litigated by the next reviewer to notice the same shape.
+
+## RG-01.1 — §17.5 still specifies a Recent-grabs block that did not ship. **Open; routes to the design thread.**
+
+`docs/ARCHITECTURE.md` §17.5 (the *"A grab leaves a record"* paragraph, line 3019, and §16's cost
+note at line 2286) specifies the block as **one keyset-paginated read joining `write_queue` to
+`provenance`**, rendering *"the library or media type the category resolved to"* and **last known
+state from the write queue's own vocabulary — `pending | inflight | verifying | done | failed`**.
+
+**What shipped is none of those.** Six columns (When · Release · Indexer · Protocol · Size ·
+Outcome); `provenance.acquisition_state` rendered through a two-value wire vocabulary; **no join**;
+**no keyset pagination** — a `LIMIT` with a server-clamped ceiling instead.
+
+**Every deviation is deliberate and each has a stated reason** — nothing writes `write_queue` yet,
+and the category resolver lives in `internal/servarr/mapping`, which `internal/httpapi` may not
+import (`doc.go`). **The defect is not the deviation, it is where the reason lives:** a 19-line
+comment at `internal/httpapi/grabs.go:17-35`, which is an honest record in the one place a reader
+consulting the design will never look. §16 is authoritative for *what ships*; §17.5 is still the
+only prose description of *this block*, and it describes something else.
+
+⚠️ **Not fixed here, deliberately. §17 belongs to the design thread** under this repo's
+file-ownership convention, and a code thread editing another thread's section is how two threads
+produce one conflict. **Routed there** with the three specifics: the state vocabulary, the resolved
+media-type column, and the pagination shape.
+
+## RG-01.2 — the secret-leak guard was a denylist. **Applied.**
+
+`internal/httpapi/grabs_test.go` asserted the response carries none of `download_url · downloadUrl ·
+magnet · apikey · api_key · apiKey · passkey · nzb_info_url · info_url · http:// · https://`.
+
+**A denylist passes everything it does not enumerate, and this one did not enumerate enough.**
+`provenance` carries four columns the list had no entry for — **`guid` / `release_guid` /
+`torrent_info_hash` / `download_url`** (`internal/store/releases.go:310`) — and **a Newznab `guid` is
+frequently the download URL itself**, therefore passkey-bearing on a private tracker. This is the
+same credential class that reached permanent storage once already (IX-01.2, `release_candidate.info_url`).
+
+**Not exploitable as it stood, and that is not a defence.** The SELECT list at
+`internal/store/releases.go:422-423` is explicit and omits all four, so nothing leaks today. The
+guard's job is to catch the *next* field, and a name-based ban list fails at exactly that: the field
+nobody thought to ban is the field that ships.
+
+**Converted to an allowlist over the marshalled JSON keys** (`internal/httpapi/grabs_test.go:145-234`):
+the response is unmarshalled, **every object key at every depth** is walked — nesting matters,
+because a leak inside `grabs[]` is still a leak — and any key not in `recentGrabsWireKeys` fails.
+Adding a member to `recentGrabResponse` now fails a test until its name is added to the constant
+deliberately, which is the review step expressed as code.
+
+**This is IX-01.2's idiom, reused rather than reinvented.** `mapping.TestCatalogProjectionCannotCarryAnIndexerCredential`
+settled on an allowlist over the marshalled bytes for the same reason; two shapes of the same guard
+is how one of them rots.
+
+**The value half was kept, not dropped.** The allowlist governs *keys*; a URL smuggled into an
+allowed key's *value* would pass it. So `passkey · magnet: · http:// · https://` still run as a
+substring assertion over the body, and the seeded row's `nzb_info_url` is a passkey-bearing tracker
+URL precisely so that half has something real to catch. The floor assertion is unchanged: the
+response must contain the seeded release title first, so *"found nothing"* and *"looked at nothing"*
+cannot produce the same green (DEVELOPMENT §11 rule 4).
+
+**The guard was fired deliberately before it was trusted**, in two probes, both reverted:
+
+- **A key probe** — `ReleaseGUID string \`json:"release_guid,omitempty"\`` added to
+  `recentGrabResponse` with the entirely **benign** value `"a-benign-looking-guid"`. The test failed
+  on the *key*, nested inside `grabs[]`. **The old denylist would have passed this response
+  untouched** — which is the finding, reproduced.
+- **A value probe** — `SourceSystem` (an allowed key) set to
+  `http://tracker.example/rss?passkey=deadbeef`. The test failed twice, on `passkey` and on `http://`.
+
+Both reverted; the suite is green.
+
+## RG-01.3 — `provenance.id` on the wire is a cross-user volume oracle. **Deferred pending coordination.**
+
+`internal/httpapi/grabs.go:46` ships `ID int64 \`json:"id"\``, which is `provenance.id` — `INTEGER
+PRIMARY KEY`, therefore **a globally monotonic rowid shared across every user**.
+
+Under multi-user — **which principle 4 says the schema is already built for**, and migration 0002
+gave `provenance` its `user_id` — a caller who sees `id:104` on one of their own grabs and `id:341`
+on the next **learns that 236 rows were written by other users in between**. The scope filter is
+correct and the rows themselves never cross; **the count leaks through the identifier**, which is
+why the filter does not stop it.
+
+**This is not an authorization break** and is not being reported as one. Today there is exactly one
+user, so the oracle has nobody to inform.
+
+**Deferred rather than applied, because the field is load-bearing on a screen another thread just
+shipped:** `web/src/routes/requests/+page.svelte:535` keys list rows on it
+(`key={(g) => String(g.id)}`) and `web/src/lib/api.ts`'s `toRecentGrab` **rejects any row without it** (line 1329 as of `1d7fa01`; that file is churning, so the symbol is the citation) — a change
+here blanks the block rather than degrading it.
+
+**Recommended fix, for whoever coordinates it:** an opaque per-row identifier, or a per-user
+sequence, exposed instead of the rowid. ⚠️ **It is far cheaper now than later.** One published shape
+and one consumer pin it today; every additional client pins it harder, and this is the last cheap
+moment.
+
+## RG-01.4 — the `ORDER BY` is not a DoS. **Rebutted on measurement.**
+
+The suspicion: `ORDER BY grabbed_at DESC, id DESC` over a user-scoped `IN (…)` predicate forces a
+full sort of the user's history on every call, so a large `provenance` makes a cheap endpoint
+expensive.
+
+**Measured, it does not.** Each `IN` branch arrives **pre-ordered from `ix_prov_user_grabbed`**
+(`user_id, grabbed_at DESC, id DESC`, migration 0002 line 94), so SQLite merges two ordered streams
+into a bounded sorter and **early-terminates at the limit**. The scoped read is **flat from 1k to
+100k rows — 238µs → 120µs** (the fall is noise, not a speed-up). The control, a genuinely unindexed
+sort over the same tables, **grows 90× across the same range: 587µs → 53.7ms**. A control that grows
+is what makes the flat line evidence rather than an absent measurement.
+
+**And the ceiling is enforced twice, independently:** `handleRecentGrabs`
+(`internal/httpapi/grabs.go`) clamps to `store.RecentProvenanceMaxLimit`, and
+`recentProvenanceSQL` (`internal/store/releases.go:415-419`) clamps again inside the store — so a
+future caller that reaches the store without the handler cannot lift the cap.
+`RecentProvenanceMaxLimit = 200`, `RecentProvenanceDefaultLimit = 10`. The query plan is already
+pinned by `internal/store/provenance_recent_test.go:217`, which asserts
+`SEARCH … USING INDEX ix_prov_user_grabbed`.
+
+## RG-01.5 — no upstream error string reaches the client. **Rebutted.**
+
+No path on this endpoint returns an upstream body, header or error text. Every failure goes through
+`(*Server).writeError` (`internal/httpapi/json.go:130-158`), which emits **only** `errorBody{Error,
+Message, Action}` — `Message` and `Action` each passed through `redactText`, and the underlying cause
+sent to the log (also redacted) rather than to the body. §17.5's *"a `failed` row carries the
+verbatim upstream error"* is a **write-queue** row, which this endpoint does not render at all
+(see RG-01.1), so the verbatim-error path is not merely redacted here — it is absent.
+
+## RG-01.6 — no rollup existence oracle. **Rebutted.**
+
+The concern: a total row count would tell a caller how much exists beyond what they may read.
+**The response carries no server-side total.** `recentGrabsResponse` is `{grabs, limit}`, and `limit`
+is the *applied* limit, echoed because the server clamps — not a count of anything.
+
+The header count on the screen is **derived client-side and only when it is unambiguous**:
+`web/src/routes/requests/+page.svelte:160` reads
+`grabs.length < grabsLimit ? grabs.length : undefined`, so a short page shows an exact number it
+already holds and **a full page shows none** — the block degrades to *"the ten most recent"*. Nothing
+is inferred about rows the caller cannot see, because nothing counts them.
+
+## RG-01.7 — the route is authenticated and its scope is in the SQL. **Rebutted.**
+
+`handleRecentGrabs` takes its session from `sessionFrom(r)` and returns **401 with no body content**
+if there is none; `TestRecentGrabsRequiresASessionCookie`
+(`internal/httpapi/grabs_test.go:270-282`) drives it through the **real handler stack** and asserts
+both the 401 **and that the body contains no `release_title`** — refusing is not enough if the
+refusal leaks the thing it refused. `TestRecentGrabsShowsOnlyTheCallersGrabs` covers the positive
+case on the bytes.
+
+📝 **One correction to the finding as originally worded**, recorded because precision here is the
+whole point. The rebuttal cited `storeScope` failing closed as `1=0`. **That clause is the
+*instance* predicate, and it is not what filters this read.** `storeScope`
+(`internal/httpapi/auth.go:77-85`) returns `store.Scope{UserID: …}` with `AllInstances` false for a
+non-owner, and the recent-provenance query filters through `Scope.userPredicate`
+(`internal/store/store.go:116-118`) → **`user_id IN (?, ?)`** — the system sentinel `0` plus the
+caller. The sentinel is deliberate: migration 0002 backfilled every pre-attribution row to it, and
+reading it as *"not mine"* would hide the owner's own history from them. **The rebuttal stands** —
+authenticated route, user-scoped SQL, asserted on the bytes — **on the correct mechanism.**
+
+## RG-01.8 — JSON responses set `nosniff` but not `Cache-Control: no-store`. **Open, and NOT part of this batch.**
+
+`writeJSON` (`internal/httpapi/json.go:81-82`) sets `Content-Type` and `X-Content-Type-Options:
+nosniff`, and **no `Cache-Control`**. A body of release titles is exactly the thing that should not
+sit in a shared or intermediary cache, and Recent grabs is not special here — **this is every JSON
+endpoint in `internal/httpapi`**, which is why it is recorded as its own item rather than folded
+into RG-01.
+
+**Deliberately not fixed in this commit.** A one-line change in `writeJSON` alters the headers of
+every API response at once; that is a change with its own blast radius and its own review, not a
+rider on a test conversion.
+
+## RG-01.9 — the `outcomeSentUnknown` constant collision. **Closed by `0cb1a18`, re-verified here.**
+
+Verified **against the current tree at `ec2a21d`, not against the fixing diff** — a diff shows what
+one commit did, not what the tree now holds after other merges landed beside it:
+
+- **Six distinct declarations, no duplicate identifier.** `internal/httpapi/grabs.go:112-114`
+  (`wireOutcomeSent` · `wireOutcomeSentUnknown` · `wireOutcomeStateUnknown`) and
+  `internal/httpapi/grab.go:169-171` (`outcomeNotSent` · `outcomeSentUnknown` · `outcomeSentConfirmed`).
+- **All seven non-test call sites resolve to the intended vocabulary.** `grabs.go:147,149,151` take
+  the `wire` set; `grab.go:107,109,128,276` take the `audit_log.metadata_json` set. No site reaches
+  across.
+- **The wire values match what the client pins by string.** `sent` · `sent_outcome_unknown` ·
+  `unknown` against `web/src/lib/requests.ts:205-207`.
+
+**Nothing left to rename**, and the `wire` prefix is documented in place as lore-bearing rather than
+decorative — the two vocabularies genuinely disagree (`sent_unknown` there, `sent_outcome_unknown`
+here) and **must** stay apart: one is an internal record with its own history, the other is a
+published shape a client pins.
