@@ -2,7 +2,7 @@
    Vanilla JS, no dependencies, no animation library.
    Scope, deliberately narrow: theme toggle, density control, sidebar toggle,
    the library scope chip, section/tab switching, the dialog, the states
-   switcher, roving tabindex, the dominant_color contrast rule, and the
+   switcher, roving tabindex, the dominant_color placeholder fill, and the
    acknowledged-write demonstration on the requests screen.
    Nothing here animates anything on a render path. */
 (function () {
@@ -946,70 +946,32 @@
 
   /* ---- dominant_color: the one colour in this design that is data ------
      ARCHITECTURE 4.4.1 computes dominant_color as one average over the 92px
-     art fetch, so it is whatever the cover happens to be. Nothing constrains
-     it, and a mid-luminance fill puts both black and white near 3.5:1 -- the
-     shipped #7d6a4f swatch measured 3.57:1 for a 12px semibold title, which is
-     normal text under WCAG (large is >= 18.66px bold or >= 24px), so 4.5:1
-     applies. This is the rule, run where the pipeline would run it:
+     art fetch, so it is whatever the cover happens to be. It is the image
+     PLACEHOLDER: a reserved box carrying the cover's real average colour,
+     present because 4.4.1 makes dominant_color available before ThumbHash. It
+     is not a shimmer and it never pulses.
 
-       pick the foreground with the better ratio, then, if it still misses the
-       floor, move the *fill* until it clears. The fill is decoration and the
-       title is content, so the fill is what gives way.
+     What used to live here was constrainDominant(): a WCAG ratio solver that
+     picked a text colour against the fill and then moved the fill until the
+     pair cleared 4.5:1. It is gone, and it was not a bug fix -- it was doing
+     its job correctly. It existed only to keep a title legible ON TOP OF the
+     fill, and DESIGN-DIRECTION 9.7 had already ruled that the title and year
+     sit BELOW the tile, on the chrome's own ground. The mockup had simply not
+     caught up. With the title on a known ground the whole runtime-contrast
+     problem disappears: the title and year are ordinary --fg / --fg-muted
+     text, which check.mjs section 3 already asserts against both themes.
 
-     Nothing here is a render-path cost in production: it is computed once per
-     cover at import and stored beside dominant_color. It runs in the browser
-     here only because the mockup has no import step. */
-  function srgbToLin(c) {
-    c = c / 255;
-    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
-  }
-  function lum(rgb) {
-    return 0.2126 * srgbToLin(rgb[0]) + 0.7152 * srgbToLin(rgb[1]) + 0.0722 * srgbToLin(rgb[2]);
-  }
-  function ratio(a, b) {
-    var la = lum(a), lb = lum(b);
-    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
-  }
-  function hexToRgb(h) {
-    h = h.trim().replace('#', '');
-    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
-    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
-  }
-  function rgbToHex(c) {
-    return '#' + c.map(function (v) {
-      var s = Math.max(0, Math.min(255, Math.round(v))).toString(16);
-      return s.length === 1 ? '0' + s : s;
-    }).join('');
-  }
-  function mix(c, towards, t) {
-    return [c[0] + (towards[0] - c[0]) * t, c[1] + (towards[1] - c[1]) * t, c[2] + (towards[2] - c[2]) * t];
-  }
+     Note that constrainDominant could not have been made safe by improving
+     it. It constrained against a SINGLE AVERAGED colour, and real cover art is
+     not one colour -- a white title over the light half of a Blue Note sleeve
+     fails whatever the average says. Deleting the subsystem is the fix.
 
-  var DC_FLOOR = 4.5;
-  function constrainDominant(hex) {
-    var fill = hexToRgb(hex);
-    /* The two theme text tokens, not the pure poles: the ramp is warm and
-       near-dark / near-light by rule, and the ratio has to be computable from
-       the tokens that actually ship. */
-    var dark = hexToRgb('#16130e');
-    var light = hexToRgb('#f7f5f1');
-    var useDark = ratio(fill, dark) >= ratio(fill, light);
-    var fg = useDark ? dark : light;
-    /* Push the fill away from the text until the floor clears. 24 steps of 4%
-       always terminates: at t = 1 the fill is the text colour's opposite pole. */
-    var pole = useDark ? light : dark;
-    for (var i = 0; i < 24 && ratio(fill, fg) < DC_FLOOR; i++) {
-      fill = mix(fill, pole, 0.04);
-    }
-    return { dc: rgbToHex(fill), fg: rgbToHex(fg), ratio: ratio(fill, fg) };
-  }
-
+     setProperty rather than a style attribute: the production CSP drops inline
+     styles, and CSSOM mutation is not covered by the directive. check.mjs 1d
+     bans the attribute and carves this out by name. */
   var arts = document.querySelectorAll('[data-dc]');
   for (var a = 0; a < arts.length; a++) {
-    var picked = constrainDominant(arts[a].getAttribute('data-dc'));
-    arts[a].style.setProperty('--dc', picked.dc);
-    arts[a].style.setProperty('--dc-fg', picked.fg);
-    arts[a].setAttribute('data-dc-ratio', picked.ratio.toFixed(2));
+    arts[a].style.setProperty('--dc', arts[a].getAttribute('data-dc'));
   }
 
   /* ---- prototype.html only: hash routing between the five screens ------ */
