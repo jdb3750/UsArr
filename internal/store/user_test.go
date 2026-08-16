@@ -265,13 +265,85 @@ func TestSessionCascadesOnUserDelete(t *testing.T) {
 	}
 }
 
+// TestUserDeleteSucceedsWhenTheUserHasAuditRows is the regression test for DB-02.
+//
+// TestSessionCascadesOnUserDelete above deletes a user who has sessions but no
+// audit rows, which is why it never caught this. audit_log.actor_user_id used to
+// read `REFERENCES user(id) ON DELETE SET NULL`; SET NULL performs an implicit
+// UPDATE on audit_log, trg_audit_no_update RAISE(ABORT)s it, and the whole
+// DELETE FROM user fails with "audit_log is append-only". Logging in writes an
+// audit row, so no user who had ever logged in could be deleted — baked into
+// migration 0001.
+//
+// Note that ON DELETE NO ACTION does not fix this either: it leaves the FK
+// violated instead of firing the trigger, so the delete still fails, only with a
+// different message. The column carries no reference at all, and this test locks
+// in both halves of that: the delete succeeds, AND the audit row still names who
+// acted. Nulling the actor would destroy exactly the record the log exists for.
+func TestUserDeleteSucceedsWhenTheUserHasAuditRows(t *testing.T) {
+	ctx := t.Context()
+	s := newTestStore(t)
+
+	actor, err := s.CreateUser(ctx, User{Username: "joe", AuthSource: "local", IsOwner: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AppendAudit(ctx, AuditEntry{
+		TS:          testNow,
+		ActorUserID: sql.NullInt64{Int64: actor, Valid: true},
+		ActorIP:     "192.168.1.2",
+		Action:      "user.delete",
+		TargetType:  "user",
+		TargetID:    "9",
+		Result:      "ok",
+	}); err != nil {
+		t.Fatalf("AppendAudit: %v", err)
+	}
+
+	if err := s.DB().Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `DELETE FROM user WHERE id = ?`, actor)
+		return err
+	}); err != nil {
+		t.Fatalf("deleting a user who has audit rows failed: %v\n"+
+			"audit_log.actor_user_id must not carry a foreign key to user(id) — any "+
+			"ON DELETE action fights the append-only trigger and makes deletion impossible", err)
+	}
+
+	if _, err := s.GetUser(ctx, actor); !errors.Is(err, ErrNotFound) {
+		t.Errorf("the user survived the delete: %v", err)
+	}
+
+	// The audit row must survive intact, still naming the (now deleted) actor.
+	entries, err := s.ListAuditLog(ctx, 10)
+	if err != nil {
+		t.Fatalf("ListAuditLog: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("got %d audit entries, want 1", len(entries))
+	}
+	got := entries[0]
+	if !got.ActorUserID.Valid || got.ActorUserID.Int64 != actor {
+		t.Errorf("actor_user_id = %+v, want %d — the log must still record who acted "+
+			"after that user is gone; that is what the log is for", got.ActorUserID, actor)
+	}
+	if got.Action != "user.delete" {
+		t.Errorf("action = %q", got.Action)
+	}
+
+	// The hash chain must still verify: nothing rewrote the row underneath it.
+	if _, err := s.VerifyAuditChain(ctx); err != nil {
+		t.Errorf("audit chain broken after a user delete: %v", err)
+	}
+}
+
 // ─── Audit log ───────────────────────────────────────────────────────────────
 
 func TestAuditAppendAndChain(t *testing.T) {
 	ctx := t.Context()
 	s := newTestStore(t)
 
-	// actor_user_id is a real foreign key, so the actor has to exist.
+	// actor_user_id carries no foreign key (see TestUserDeleteSucceedsWhenTheUserHasAuditRows),
+	// but a real actor row is what the realistic case looks like.
 	actor, err := s.CreateUser(ctx, User{Username: "joe", AuthSource: "local", IsOwner: true})
 	if err != nil {
 		t.Fatal(err)

@@ -588,10 +588,22 @@ func (s *Service) runLeg(ctx context.Context, l leg) legResult {
 
 // persist writes release candidates and returns the client-facing results.
 //
-// raw_release_json is stored verbatim because the grab has to echo it back —
-// and it therefore holds Prowlarr's admin API key inside downloadUrl/magnetUrl.
-// See the comment on Candidate.RawReleaseJSON. Result has no field it could be
-// copied into, which is the mechanical guarantee behind that comment.
+// raw_release_json is stored SANITISED — servarr.SanitizeRelease drops
+// downloadUrl and magnetUrl, the two fields into which Prowlarr's
+// SearchController.MapReleases splices its own FULL ADMIN API KEY on every
+// result. It is stored for the provenance fields (protocol, indexer, categories,
+// indexerFlags, infoHash, infoUrl, guid, title, publishDate, downloadClientId),
+// NOT because the grab needs the resource echoed back verbatim: Client.Grab
+// sends rel.GrabBody(), which is guid + indexerId + downloadClientId and nothing
+// else, and Prowlarr resolves the release from its own cache keyed
+// "{indexerId}_{guid}". Neither dropped field is read by any production path —
+// see the note on Candidate.RawReleaseJSON.
+//
+// Sanitising here rather than at the read boundary is deliberate. provenance
+// rows and release_candidate.download_url are already left empty for the stated
+// reason that "a credential written here is in every backup forever"; this blob
+// lands in the same file, the same VACUUM INTO backup and the same support
+// bundle, so the same rule has to apply to it.
 func (s *Service) persist(ctx context.Context, ix servarr.IndexerResource, rels []servarr.ReleaseResource) ([]Result, error) {
 	if len(rels) == 0 {
 		return nil, nil
@@ -601,7 +613,9 @@ func (s *Service) persist(ctx context.Context, ix servarr.IndexerResource, rels 
 
 	cands := make([]Candidate, 0, len(rels))
 	for _, rel := range rels {
-		raw, err := json.Marshal(rel)
+		// SanitizeRelease before marshalling, never after: the credential must not
+		// reach the byte slice that gets handed to the store at all.
+		raw, err := json.Marshal(servarr.SanitizeRelease(rel))
 		if err != nil {
 			return nil, fmt.Errorf("encoding release %q: %w", rel.GUID, err)
 		}

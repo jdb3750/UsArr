@@ -70,7 +70,23 @@ CREATE UNIQUE INDEX ux_wq_idem ON write_queue(user_id, idempotency_key);
 CREATE TABLE audit_log (
   id INTEGER PRIMARY KEY,
   ts TEXT NOT NULL DEFAULT (datetime('now')),
-  actor_user_id INTEGER REFERENCES user(id) ON DELETE SET NULL,
+  -- actor_user_id carries NO foreign key, deliberately. It is a HISTORICAL id:
+  -- the user it names may since have been deleted, and the whole point of this
+  -- log is that it still says who did the thing.
+  --
+  -- It used to be `REFERENCES user(id) ON DELETE SET NULL`, which made deleting
+  -- any user who had ever acted IMPOSSIBLE. ON DELETE SET NULL performs an
+  -- implicit UPDATE on audit_log, trg_audit_no_update below RAISE(ABORT)s it,
+  -- and the whole DELETE FROM user fails. Since a login writes an audit row,
+  -- that is every user.
+  --
+  -- ON DELETE NO ACTION does NOT fix it — verified by execution: it leaves the
+  -- constraint violated instead, so the DELETE still fails, just with
+  -- "FOREIGN KEY constraint failed" rather than "audit_log is append-only".
+  -- Dropping the reference is the only option that both permits the delete and
+  -- keeps the actor recorded. SET NULL would have destroyed exactly the record
+  -- the log exists for (security.md §6: "who deleted this").
+  actor_user_id INTEGER,
   actor_ip TEXT, action TEXT NOT NULL,
   target_type TEXT, target_id TEXT,
   result TEXT NOT NULL, metadata_json TEXT,   -- secret VALUES never appear here; see security.md §5
@@ -248,7 +264,11 @@ CREATE TABLE write_queue (
   payload         TEXT NOT NULL,          -- JSON
   state           TEXT NOT NULL DEFAULT 'pending' CHECK (state IN (
                     'pending','inflight','verifying','done','failed')),
-  fail_reason     TEXT CHECK (fail_reason IN (NULL,'rejected','unknown','exhausted')),
+  -- `x IN (NULL, ...)` yields NULL, not FALSE, when x matches nothing, and a
+  -- CHECK passes on NULL. Putting NULL in the list therefore made this
+  -- constraint accept EVERY value. NULL has to be tested separately.
+  fail_reason     TEXT CHECK (fail_reason IS NULL OR fail_reason IN (
+                    'rejected','unknown','exhausted')),
   attempts        INTEGER NOT NULL DEFAULT 0,
   max_attempts    INTEGER NOT NULL DEFAULT 6,
   next_attempt_at TEXT,

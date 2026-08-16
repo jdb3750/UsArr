@@ -375,6 +375,8 @@ func TestSearchPersistsCandidatesWithTheGrabWindow(t *testing.T) {
 		t.Fatalf("got %d results", len(results))
 	}
 
+	const guardGUID = "g1"
+
 	cand, err := store.Candidate(context.Background(), ownerScope, results[0].CandidateID)
 	if err != nil {
 		t.Fatalf("Candidate: %v", err)
@@ -386,12 +388,19 @@ func TestSearchPersistsCandidatesWithTheGrabWindow(t *testing.T) {
 	if results[0].ExpiresAt != cand.ExpiresAt {
 		t.Error("the client-facing result must carry the same expiry the row does")
 	}
-	// raw_release_json is stored verbatim because the grab echoes it back.
-	if !strings.Contains(string(cand.RawReleaseJSON), "SECRETKEY") {
-		t.Error("raw_release_json must be the verbatim resource, credential and all")
+	// raw_release_json is stored SANITISED. This assertion used to be inverted —
+	// it required the credential to be present, on the belief that the grab
+	// echoes the resource back verbatim. It does not: Grab sends GrabBody(),
+	// which is guid + indexerId + downloadClientId. See TestPersistedBlobNeverCarriesTheAPIKey.
+	if strings.Contains(string(cand.RawReleaseJSON), "SECRETKEY") {
+		t.Error("raw_release_json must not carry Prowlarr's API key")
 	}
-	// ...which is exactly why it must never be on the client-facing type. Result
-	// embeds mapping.Release, which has no field for it.
+	// The blob still has to be usable: the provenance fields are what it is for.
+	if !strings.Contains(string(cand.RawReleaseJSON), guardGUID) {
+		t.Error("raw_release_json lost the guid the grab is resolved by")
+	}
+	// It must also never reach the client-facing type. Result embeds
+	// mapping.Release, which has no field for it.
 	if strings.Contains(resultDebug(results[0]), "SECRETKEY") {
 		t.Fatal("a credential reached the client-facing Result")
 	}
@@ -399,6 +408,127 @@ func TestSearchPersistsCandidatesWithTheGrabWindow(t *testing.T) {
 	if len(cand.Categories) != 2 || cand.Categories[1] != 2045 {
 		t.Errorf("categories = %v, want the raw array", cand.Categories)
 	}
+}
+
+// TestPersistedBlobNeverCarriesTheAPIKey is the regression test for SEC-01.
+//
+// Prowlarr's SearchController.MapReleases splices its own full-admin API key
+// into downloadUrl and magnetUrl on EVERY search result. persist() used to
+// marshal the resource unsanitised, so every release_candidate row wrote that
+// key to SQLite in plaintext — in the same file whose service_instance.api_key_enc
+// column is AES-256-GCM-enveloped precisely to stop that, and therefore in every
+// VACUUM INTO backup, every support bundle and every restored volume, forever.
+//
+// The second half of this test is the part that matters most: it grabs the
+// candidate that was persisted from the sanitised blob and asserts the grab
+// still succeeds with every provenance field intact. That is what makes the fix
+// provably safe rather than merely safer — the grab is resolved by
+// {indexerId}_{guid} out of Prowlarr's own cache, so the two dropped fields were
+// never load-bearing.
+func TestPersistedBlobNeverCarriesTheAPIKey(t *testing.T) {
+	now := time.Unix(1_755_000_000, 0).UTC()
+	store := newFakeStore()
+
+	rel := release("g1", "Dune.Part.Two.2024.2160p", 1, "Alpha", servarr.ProtocolTorrent, 2000, 2045)
+	hash := "d1e2f3"
+	rel.InfoHash = &hash
+	rel.IndexerFlags = []string{"freeleech"}
+	rel.InfoURL = "https://alpha.test/details/1"
+	rel.DownloadClientID = servarr.Int32(2)
+	// Both credential-bearing fields populated, as Prowlarr populates them.
+	magnet := "http://prowlarr.test:9696/1/download?apikey=SECRETKEY&link=magnet"
+	rel.MagnetURL = &magnet
+
+	c := &fakeClient{
+		indexers:        []servarr.IndexerResource{indexer(1, "Alpha", 10, servarr.ProtocolTorrent)},
+		clients:         enabledClients(),
+		searchByIndexer: map[int32][]servarr.ReleaseResource{1: {rel}},
+	}
+	svc, err := NewService(Config{
+		InstanceID: testInstanceID, Client: c, Store: store,
+		Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	ch, err := svc.Search(context.Background(), ownerScope, Query{Text: "dune"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	results, _, _ := collect(ch)
+	if len(results) != 1 {
+		t.Fatalf("got %d results, want 1", len(results))
+	}
+
+	cand, err := store.Candidate(context.Background(), ownerScope, results[0].CandidateID)
+	if err != nil {
+		t.Fatalf("Candidate: %v", err)
+	}
+	blob := string(cand.RawReleaseJSON)
+
+	// The key itself, and the parameter that carries it, in either field.
+	for _, forbidden := range []string{"SECRETKEY", "apikey=", "downloadUrl", "magnetUrl"} {
+		if strings.Contains(blob, forbidden) {
+			t.Errorf("raw_release_json contains %q — Prowlarr's admin API key is being "+
+				"written to SQLite in plaintext (SEC-01). persist() must marshal "+
+				"servarr.SanitizeRelease(rel), not rel.\nblob: %s", forbidden, blob)
+		}
+	}
+
+	// Everything the blob is actually stored FOR must have survived.
+	for _, required := range []string{"g1", "Dune.Part.Two.2024.2160p", "d1e2f3", "freeleech", "2045"} {
+		if !strings.Contains(blob, required) {
+			t.Errorf("raw_release_json lost %q — sanitising must drop the two credential "+
+				"fields and nothing else", required)
+		}
+	}
+
+	// ---- the grab still works from the sanitised blob -----------------------
+
+	got, err := svc.Grab(context.Background(), ownerScope, cand.ID)
+	if err != nil {
+		t.Fatalf("Grab from a sanitised candidate failed: %v\n"+
+			"this would mean the blob really is needed verbatim; it is not — "+
+			"Client.Grab sends GrabBody() (guid + indexerId + downloadClientId)", err)
+	}
+	if got.ReleaseTitle != "Dune.Part.Two.2024.2160p" {
+		t.Errorf("ReleaseTitle = %q", got.ReleaseTitle)
+	}
+	if got.DownloadClientID == nil || *got.DownloadClientID != 2 {
+		t.Errorf("DownloadClientID = %v, want 2 — the field the grab body actually honours", got.DownloadClientID)
+	}
+	if got.ProvenanceID == 0 {
+		t.Fatal("no provenance row was recorded")
+	}
+
+	// The three fields the grab body is built from reached the client.
+	if len(c.grabbed) != 1 {
+		t.Fatalf("Grab called %d times, want 1", len(c.grabbed))
+	}
+	sent := c.grabbed[0]
+	if sent.GUID != "g1" || sent.IndexerID != 1 || sent.DownloadClientID == nil || *sent.DownloadClientID != 2 {
+		t.Errorf("grab body inputs lost: guid=%q indexerId=%d clientId=%v",
+			sent.GUID, sent.IndexerID, sent.DownloadClientID)
+	}
+	// And the credential did not survive the round trip to reappear on the wire.
+	if sent.DownloadURL != nil || sent.MagnetURL != nil {
+		t.Error("a decoded stored release still carries downloadUrl/magnetUrl")
+	}
+
+	// Provenance keeps every field it reads off the decoded release.
+	if len(store.provenance) != 1 {
+		t.Fatalf("got %d provenance rows, want 1", len(store.provenance))
+	}
+	p := store.provenance[0]
+	if p.ReleaseGUID != "g1" || p.IndexerName != "Alpha" || p.IndexerID != 1 ||
+		p.TorrentInfoHash != "d1e2f3" || p.NZBInfoURL != "https://alpha.test/details/1" ||
+		len(p.IndexerCategories) != 2 || len(p.IndexerFlags) != 1 {
+		t.Errorf("provenance lost a field it reads off the stored release: %+v", p)
+	}
+	// There is deliberately no assertion that provenance.download_url is empty:
+	// releases.Provenance has no such field, so it is a compile-time guarantee
+	// rather than a runtime one. Adding the field back breaks this file.
 }
 
 func TestSearchClampsLimitToIndexerCapabilities(t *testing.T) {

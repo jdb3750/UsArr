@@ -31,6 +31,8 @@ SHELL       := /bin/bash
 BINARY      ?= usarr
 MAIN_PKG    ?= ./cmd/usarr
 WEB_DIR     ?= web
+# Where web/scripts/sync-embed.mjs mirrors the SPA so //go:embed can reach it.
+EMBED_DIR   ?= internal/web/spa
 MIGRATIONS  ?= internal/db/migrations
 DIST_DIR    ?= dist
 
@@ -46,12 +48,25 @@ LDFLAGS     := -s -w \
 # Static binary. No CGO — SQLite is pure Go (ncruces/go-sqlite3 ships a
 # wasm2go-translated SQLite; there is no Wasm runtime in the dependency graph).
 # If this ever needs a C toolchain, something has gone wrong. DEVELOPMENT.md §1.
+#
+# This is the DEFAULT, so anything that produces a shipping artifact inherits it
+# and a new build target added later cannot silently pick up the ambient value.
+# The test recipes override it to 1 with a target-scoped variable, because the
+# race detector requires cgo on every supported platform — see the note above
+# GOTESTFLAGS. Overriding on the test side rather than removing the default here
+# keeps the "no CGO in anything we ship" invariant fail-safe.
 export CGO_ENABLED := 0
 
 # Dependency integrity: never let a build silently mutate go.mod/go.sum.
 export GOFLAGS := -mod=readonly
 
 GO          ?= go
+
+# -race requires cgo. Every recipe that consumes GOTESTFLAGS therefore carries a
+# target-scoped `export CGO_ENABLED := 1`; without it `go test` refuses to start
+# and the whole gate dies before running a single test. Tests are not a shipping
+# artifact, so building them against the cgo resolvers is a non-issue — the
+# binary in `make build` is still CGO_ENABLED=0.
 GOTESTFLAGS ?= -race -shuffle=on
 PNPM        ?= pnpm
 
@@ -147,14 +162,28 @@ endef
 test: test-go test-web ## Run all tests (offline; no Docker, no network)
 
 .PHONY: test-go
-test-go: ## Go tests with the race detector. Includes the EXPLAIN QUERY PLAN gates.
-	$(GO) test $(GOTESTFLAGS) ./...
+test-go: export CGO_ENABLED := 1
+test-go: web-build ## Go tests with the race detector. Includes the EXPLAIN QUERY PLAN gates.
+	@if [ -f $(WEB_DIR)/package.json ]; then \
+		USARR_REQUIRE_WEB_BUILD=1 $(GO) test $(GOTESTFLAGS) ./...; \
+	else \
+		$(GO) test $(GOTESTFLAGS) ./...; \
+	fi
+
+# Why `test-go` depends on `web-build`, and why USARR_REQUIRE_WEB_BUILD is set:
+# internal/web's content assertions — above all TestEmbeddedFSCarriesAppDir, the
+# only thing that catches a lost `all:` prefix — skip when nothing is embedded.
+# Skipping is correct for a bare `go test` in a fresh clone, but it meant the
+# gate went green on a tree where the trap was live. The dependency produces the
+# build; the env var turns the skip into a failure once a frontend exists, so the
+# guard cannot silently disarm itself again.
 
 .PHONY: test-web
 test-web: web-deps ## Frontend unit tests (vitest)
 	$(call pnpm_if_web,test)
 
 .PHONY: test-integration
+test-integration: export CGO_ENABLED := 1
 test-integration: ## Tests behind the `integration` tag. Needs a live stack. NEVER run in CI.
 	@test "$${USARR_INTEGRATION:-}" = "1" || { \
 		echo "refusing: set USARR_INTEGRATION=1 and have a live stack up"; \
@@ -217,8 +246,16 @@ secrets: ## Scan the working tree for committed credentials. GATING, part of `ch
 # real ones (docs/DEVELOPMENT.md §7.1).
 
 .PHONY: modverify
-modverify: ## Verify downloaded module contents against go.sum
+modverify: ## Verify module contents against go.sum, and that go.mod/go.sum are tidy
 	$(GO) mod verify
+	@# `go mod verify` only checks that the downloaded module CONTENT matches the
+	@# recorded checksums. It cannot see that go.mod is untidy — that is how four
+	@# directly-imported modules sat marked `// indirect` with go.sum entries
+	@# missing and the gate stayed green. `-diff` exits non-zero and prints the
+	@# patch instead of writing it, so the gate reports drift without mutating the
+	@# tree under GOFLAGS=-mod=readonly. It reads the module cache, not the
+	@# network, so it stays inside the `check-offline` contract.
+	$(GO) mod tidy -diff
 
 .PHONY: vuln
 vuln: ## govulncheck + pnpm audit. GATING, part of `check`. THE ONE NETWORK STEP.
@@ -299,6 +336,13 @@ tools: ## Install the pinned dev tools into $GOBIN
 clean: ## Remove build artifacts and the dev database
 	rm -f $(BINARY) cover.out cover.html
 	rm -rf $(DIST_DIR) $(WEB_DIR)/build $(WEB_DIR)/.svelte-kit ./.dev
+	@# The embed mirror too. //go:embed cannot reach outside internal/web, so the
+	@# SPA is synced into $(EMBED_DIR) by web/scripts/sync-embed.mjs. Removing
+	@# web/build without removing the mirror leaves a STALE build embedded in the
+	@# next binary — `make clean && make build` would ship whatever was there
+	@# before. .gitkeep survives: it is what keeps //go:embed compiling in a tree
+	@# where the frontend has never been built.
+	@find $(EMBED_DIR) -mindepth 1 -not -name .gitkeep -delete 2>/dev/null || true
 
 .PHONY: check
 check: check-offline vuln ## THE PRE-COMMIT GATE. No Docker. One network call (vuln.go.dev).

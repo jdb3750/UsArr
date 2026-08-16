@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"net/netip"
@@ -152,7 +153,7 @@ func (s *Server) recoverMiddleware(next http.Handler) http.Handler {
 			}
 			// http.ErrAbortHandler is the documented way to abandon a response;
 			// it is not a bug and must not be logged as one.
-			if rec == http.ErrAbortHandler {
+			if err, ok := rec.(error); ok && errors.Is(err, http.ErrAbortHandler) {
 				panic(rec)
 			}
 			s.log.Error("panic serving request",

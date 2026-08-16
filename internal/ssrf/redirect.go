@@ -19,11 +19,27 @@ const MaxRedirects = 3
 // subset, and only when the hop crosses domains; that is not enough here, where
 // X-Api-Key is a full-admin *Arr credential and the next host may be attacker-
 // nominated even within the same domain.
+//
+// Referer is in this list and it is not like the others: nothing in UsArr sets
+// it. Go's http.Client synthesises it from the PREVIOUS request's full URL,
+// query string and all, and it does so BEFORE calling CheckRedirect
+// (net/http/client.go, refererForURL — which suppresses it only on an
+// https->http downgrade, a hop this client already refuses for other reasons).
+// So stripping the query off the redirect target is not sufficient on its own:
+// without this entry the credential simply rides to the next host in a header
+// instead of in the URL. It matters most for ClassProvider, since TMDB v3,
+// Fanart.tv and Comic Vine all authenticate by query parameter and all of them
+// redirect to CDNs. security.md §5 names Referer explicitly as a leak surface.
+//
+// Deleting it outright rather than rewriting it from the stripped previous URL:
+// no upstream UsArr talks to requires a Referer, and "there is no Referer" is a
+// far easier invariant to keep true than "the Referer is the redacted one".
 var credentialHeaders = []string{
 	"Authorization",
 	"Proxy-Authorization",
 	"Cookie",
 	"Cookie2",
+	"Referer",
 	"X-Api-Key",
 	"X-Emby-Token",
 	"X-MediaBrowser-Token",

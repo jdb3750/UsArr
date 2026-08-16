@@ -75,12 +75,12 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 	// The file holds every wrapped DEK, every password hash and the whole audit
 	// log, so "whatever umask happened to be" is not an acceptable answer.
 	if err := restrictDatabaseModes(cfg.DatabasePath()); err != nil {
-		database.Close()
+		_ = database.Close()
 		return nil, err
 	}
 	schemaVersion, err := database.Version(ctx)
 	if err != nil {
-		database.Close()
+		_ = database.Close()
 		return nil, err
 	}
 	log.Info("database ready", "path", cfg.DatabasePath(), "schema_version", schemaVersion)
@@ -91,15 +91,15 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 	if errors.Is(keyErr, config.ErrKeyAbsent) {
 		encrypted, err := st.CountEncryptedCredentials(ctx)
 		if err != nil {
-			database.Close()
+			_ = database.Close()
 			return nil, err
 		}
 		if encrypted > 0 {
-			database.Close()
+			_ = database.Close()
 			return nil, cfg.ErrMissingKeyForExistingData(encrypted)
 		}
 		if masterKey, err = cfg.GenerateMasterKey(); err != nil {
-			database.Close()
+			_ = database.Close()
 			return nil, err
 		}
 		// One line, loud, naming the real path. Losing this key means every
@@ -116,17 +116,17 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 	// credential KEK and the URL-signing key independently rotatable.
 	salt, err := cfg.ResolveKEKSalt()
 	if err != nil {
-		database.Close()
+		_ = database.Close()
 		return nil, err
 	}
 	kek, err := crypto.DeriveKEK(masterKey.Key, salt)
 	if err != nil {
-		database.Close()
+		_ = database.Close()
 		return nil, err
 	}
 	keyring, err := crypto.NewKeyring(1, kek)
 	if err != nil {
-		database.Close()
+		_ = database.Close()
 		return nil, err
 	}
 
@@ -164,7 +164,7 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 		Logger:         log,
 	})
 	if err != nil {
-		database.Close()
+		_ = database.Close()
 		return nil, err
 	}
 

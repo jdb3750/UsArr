@@ -420,7 +420,7 @@ func (e *testEnv) raw(t *testing.T, method, path string, body any, opts ...reqOp
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	e.captureCookies(resp)
 
 	blob, err := io.ReadAll(resp.Body)
@@ -506,19 +506,19 @@ func (e *testEnv) openStream(t *testing.T) *sseStream {
 		t.Fatalf("open SSE: %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		cancel()
 		t.Fatalf("SSE returned %d", resp.StatusCode)
 	}
 	if ct := resp.Header.Get("Content-Type"); !strings.HasPrefix(ct, "text/event-stream") {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		cancel()
 		t.Fatalf("SSE Content-Type = %q", ct)
 	}
 
 	stream := &sseStream{events: make(chan sseEvent, 64), cancel: cancel}
 	go func() {
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		scanner := bufio.NewScanner(resp.Body)
 		scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 

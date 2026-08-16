@@ -69,20 +69,27 @@ type Candidate struct {
 	InfoHash         string
 	DownloadClientID *int32
 
-	// RawReleaseJSON is the full ReleaseResource, verbatim, because the grab has to
-	// echo it back.
+	// RawReleaseJSON is the ReleaseResource as returned by Prowlarr, put through
+	// servarr.SanitizeRelease first. That drops downloadUrl and magnetUrl, and
+	// dropping them is what keeps this column free of a credential.
 	//
-	// !! THIS COLUMN HOLDS A CREDENTIAL. !!
+	// Why it is safe to drop them, and why the grab still works.
+	// SearchController.MapReleases rewrites both fields into
+	// `{serverUrl}{urlBase}/{indexerId}/download?apikey={ApiKey}&link=…`, so
+	// unsanitised they carry Prowlarr's FULL ADMIN API KEY in plaintext on every
+	// result — into this DB file, into every VACUUM INTO backup, and into every
+	// restored copy of the volume, forever. The grab does not need them: Grab
+	// POSTs rel.GrabBody(), which is guid + indexerId + downloadClientId (see
+	// ReleaseResource.GrabBody — sending the whole resource "buys nothing and
+	// would echo the embedded API key back over the wire"), and Prowlarr resolves
+	// the release from its own cache keyed "{indexerId}_{guid}". No production
+	// path anywhere reads DownloadURL or MagnetURL off a decoded stored release.
 	//
-	// Prowlarr's SearchController.MapReleases rewrites downloadUrl and magnetUrl
-	// into `{serverUrl}{urlBase}/{indexerId}/download?apikey={ApiKey}&link=…`,
-	// embedding Prowlarr's FULL ADMIN API KEY in plaintext in both fields. So this
-	// blob is not "the release data" — it is the release data plus a full-admin key
-	// to the user's indexer manager.
-	//
-	// It must never be selected into an API response, an SSE frame, a log line, an
-	// error message or a support bundle. The only code that may read it is Grab.
-	// Result deliberately has no field it could be assigned to.
+	// This column is still server-side only: it must never be selected into an API
+	// response, an SSE frame, a log line, an error message or a support bundle.
+	// The only code that reads it is Grab, and Result deliberately has no field it
+	// could be assigned to. That is defence in depth now rather than the sole
+	// control, which is the point of sanitising on the way in.
 	RawReleaseJSON []byte
 
 	Rejected         bool

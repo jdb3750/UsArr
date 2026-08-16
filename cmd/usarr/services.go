@@ -123,7 +123,7 @@ func (g *registry) entry(ctx context.Context, instanceID int64) (*registryEntry,
 	service, err := releases.NewService(releases.Config{
 		InstanceID: si.ID,
 		Client:     client,
-		Store:      newReleaseStore(g.st),
+		Store:      releases.NewStoreAdapter(g.st),
 		Logger:     g.log.With("instance_id", si.ID, "instance", si.Name),
 	})
 	if err != nil {

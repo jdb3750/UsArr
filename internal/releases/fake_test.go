@@ -119,6 +119,10 @@ type fakeClient struct {
 
 	searchCalls []searchCall
 	grabCalls   int
+
+	// grabbed records every resource handed to Grab, so a test can assert on what
+	// actually crossed the client boundary rather than on a call count.
+	grabbed []servarr.ReleaseResource
 }
 
 func (f *fakeClient) Indexers(context.Context) ([]servarr.IndexerResource, error) {
@@ -166,6 +170,7 @@ func (f *fakeClient) Grab(_ context.Context, rel servarr.ReleaseResource) (serva
 	defer f.mu.Unlock()
 	i := f.grabCalls
 	f.grabCalls++
+	f.grabbed = append(f.grabbed, rel)
 	if i < len(f.grabResponses) && f.grabResponses[i] != nil {
 		return servarr.ReleaseResource{}, f.grabResponses[i]
 	}

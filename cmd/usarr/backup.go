@@ -78,12 +78,15 @@ func backupBeforeMigrate(ctx context.Context, cfg *config.Config) (string, error
 	if err != nil {
 		return "", fmt.Errorf("open %s for backup: %w", dbPath, err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// VACUUM INTO takes a literal, not a bound parameter, so the path is
 	// escaped by doubling single quotes. The path comes from the operator's own
 	// configuration, not from a request, but escaping it costs one line.
 	literal := "'" + strings.ReplaceAll(target, "'", "''") + "'"
+	// #nosec G202 -- VACUUM INTO takes a literal, not a bind parameter. The path
+	// is built from USARR_CONFIG_DIR and a timestamp this function formats; no
+	// request input reaches it, and the single quotes are doubled above.
 	if _, err := conn.ExecContext(ctx, "VACUUM INTO "+literal); err != nil {
 		return "", fmt.Errorf("VACUUM INTO %s: %w", target, err)
 	}
@@ -102,7 +105,7 @@ func appliedSchemaVersion(ctx context.Context, dbPath string) (int64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("open %s: %w", dbPath, err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	var version sql.NullInt64
 	err = conn.QueryRowContext(ctx,

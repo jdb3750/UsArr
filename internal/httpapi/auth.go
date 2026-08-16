@@ -84,10 +84,19 @@ func storeScope(a authSession) store.Scope {
 	return store.Scope{UserID: a.User.ID}
 }
 
-// releasesScope adapts the store scope to internal/releases, whose Scope carries
-// an explicit instance list because Allows is a membership test.
+// releasesScope adapts the store scope to internal/releases, which declares its
+// own Scope type so the two packages could settle independently. The invariant
+// that matters is that the parameter exists and is derived from the caller, not
+// which package owns the struct.
 func (s *Server) releasesScope(r *http.Request, a authSession) (releases.Scope, error) {
-	instances, err := s.store.ListServiceInstances(r.Context(), storeScope(a))
+	scope := storeScope(a)
+	if scope.AllInstances {
+		return releases.Scope{UserID: a.User.ID, AllInstances: true}, nil
+	}
+	// Enumerating is only for a scope that is genuinely partial. An empty list
+	// with AllInstances false means "sees nothing", and both packages fail
+	// closed on it — which is the whole point of carrying the parameter.
+	instances, err := s.store.ListServiceInstances(r.Context(), scope)
 	if err != nil {
 		return releases.Scope{}, errStatus(http.StatusInternalServerError, "internal",
 			"the configured services could not be read").wrapping(err)

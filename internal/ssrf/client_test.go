@@ -511,6 +511,18 @@ func TestRedirectStripsCredentials(t *testing.T) {
 			t.Errorf("%s survived the redirect with value %q", h, v)
 		}
 	}
+	// Referer is the one Go sets itself, and it sets it to the PREVIOUS request's
+	// full URL — query string included — before CheckRedirect is ever called.
+	// net/http's refererForURL only suppresses it on an https->http downgrade,
+	// which this client rejects for other reasons anyway. So stripping the query
+	// off the redirect target is not enough on its own: the credential rides to
+	// the next host in the header instead. TMDB, Fanart.tv and Comic Vine all
+	// authenticate by query parameter, and all of them redirect to CDNs.
+	if ref := second.Header.Get("Referer"); ref != "" {
+		t.Errorf("Referer survived the redirect with value %q — it carries the previous "+
+			"request's full URL including credential query parameters", ref)
+	}
+
 	q := second.URL.Query()
 	for _, name := range []string{"apikey", "token", "sig", "s", "t", "p", "api_key"} {
 		if q.Has(name) {

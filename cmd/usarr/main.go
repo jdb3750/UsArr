@@ -113,7 +113,8 @@ func run() error {
 
 	// Listen before Serve so a bound-port failure is a startup error naming the
 	// variable, not a goroutine that dies silently a moment later.
-	listener, err := net.Listen("tcp", cfg.Address())
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", cfg.Address())
 	if err != nil {
 		return fmt.Errorf("USARR_BIND_ADDRESS/USARR_PORT: cannot listen on %s: %w", cfg.Address(), err)
 	}

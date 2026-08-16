@@ -222,7 +222,14 @@ type DownloadClientResource struct {
 // `{serverUrl}{urlBase}/{indexerId}/download?apikey={ApiKey}&link=…&file=…`.
 // Both fields therefore contain PROWLARR'S FULL ADMIN API KEY IN PLAINTEXT on
 // every single search result. Run SanitizeRelease before anything crosses the
-// boundary toward a browser, an SSE frame or a log line.
+// boundary toward a browser, an SSE frame, a log line — or PERSISTENCE. Writing
+// to disk is a boundary too, and the worst of them: the process memory holding
+// this resource is gone in minutes, whereas a row in SQLite is in every backup
+// and every restored volume forever. internal/releases.persist sanitises before
+// it marshals for exactly that reason.
+//
+// Dropping the two fields costs nothing: the grab sends GrabBody(), which does
+// not include them, and no code reads them back off a stored release.
 //
 // The proxy link's host comes from Request.GetServerUrl(), which honours
 // X-Forwarded-Proto and Front-End-Https, so it is header-influenceable and must be

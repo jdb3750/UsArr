@@ -208,6 +208,52 @@ func TestAllTablesAreStrict(t *testing.T) {
 	}
 }
 
+// TestNullableCheckConstraintsActuallyConstrain is the regression test for DB-01.
+//
+// `write_queue.fail_reason` read `CHECK (fail_reason IN (NULL,'rejected',...))`,
+// which enforced nothing: `x IN (NULL, 'a')` evaluates to NULL — not FALSE —
+// when x matches no entry, and a CHECK passes when its expression is NULL. One
+// NULL in the list makes every value legal. The constraint read as enforcement
+// and enforced nothing, in a migration that is never edited once merged.
+//
+// `state` is the control: the identical pattern without NULL in the list. If
+// only the state assertions pass, the nullable form has regressed.
+func TestNullableCheckConstraintsActuallyConstrain(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	insert := func(t *testing.T, id int, col, val string) error {
+		t.Helper()
+		q := fmt.Sprintf(
+			`INSERT INTO write_queue (id, idempotency_key, kind, payload, %s) VALUES (?, ?, 'grab', '{}', %s)`,
+			col, val)
+		return d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, q, id, fmt.Sprintf("k%d", id))
+			return err
+		})
+	}
+
+	// The legal values, including NULL, must still be accepted.
+	for i, v := range []string{"'rejected'", "'unknown'", "'exhausted'", "NULL"} {
+		if err := insert(t, 10+i, "fail_reason", v); err != nil {
+			t.Errorf("fail_reason=%s was rejected but is legal: %v", v, err)
+		}
+	}
+
+	// Garbage must not be.
+	if err := insert(t, 20, "fail_reason", "'TOTAL-GARBAGE'"); err == nil {
+		t.Error("fail_reason='TOTAL-GARBAGE' was ACCEPTED — the CHECK is a no-op.\n" +
+			"A nullable column must use `CHECK (col IS NULL OR col IN (...))`; " +
+			"putting NULL inside the IN list poisons the comparison and accepts everything.")
+	}
+
+	// Control: the same pattern without NULL in the list rejects correctly. If
+	// this fails, something broader is wrong with CHECK enforcement.
+	if err := insert(t, 21, "state", "'TOTAL-GARBAGE'"); err == nil {
+		t.Error("state='TOTAL-GARBAGE' was accepted; CHECK constraints are not being enforced at all")
+	}
+}
+
 // dumpSchema renders the schema in a stable, diffable order.
 func dumpSchema(ctx context.Context, q *sql.DB) (string, error) {
 	rows, err := q.QueryContext(ctx, `

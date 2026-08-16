@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path"
 	"strings"
 	"testing"
@@ -13,11 +14,25 @@ import (
 
 // requireBuilt skips a test when no frontend build is embedded. That is the
 // state of a fresh clone before `make web-build` has run; it is not a failure,
-// and `make test` must not turn it into one. Everything below that asserts on
-// build *content* goes through here.
+// and a bare `go test ./...` must not turn it into one. Everything below that
+// asserts on build *content* goes through here.
+//
+// USARR_REQUIRE_WEB_BUILD=1 turns the skip into a failure. `make test-go` sets
+// it, because it depends on `web-build` and has therefore just produced the
+// build these tests need. Without that, the skip was load-bearing in the wrong
+// direction: the gate ran in a tree with nothing embedded, so
+// TestEmbeddedFSCarriesAppDir — the only thing that catches a lost `all:`
+// prefix, which silently drops the entire application bundle — never executed,
+// and a commit reintroducing the trap would have gone green.
 func requireBuilt(t *testing.T) fs.FS {
 	t.Helper()
 	if !Built() {
+		if os.Getenv("USARR_REQUIRE_WEB_BUILD") == "1" {
+			t.Fatal("USARR_REQUIRE_WEB_BUILD=1 but no frontend build is embedded: " +
+				"web/scripts/sync-embed.mjs did not populate internal/web/spa. " +
+				"This test must not be allowed to skip inside the gate — it is the " +
+				"regression test for the //go:embed `all:` prefix.")
+		}
 		t.Skip("no frontend build embedded — run `make web-build` (see docs/DEVELOPMENT.md §3)")
 	}
 	return FS()

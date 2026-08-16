@@ -62,6 +62,9 @@ func (s *Store) UpdateServiceInstance(
 
 		if len(sets) > 0 {
 			args = append(args, id)
+			// #nosec G202 -- every element of sets is a string literal from the
+			// block above; the VALUES are bound parameters. SQLite has no way to
+			// bind a column name, so a variable SET clause has to be assembled.
 			res, err := tx.ExecContext(ctx,
 				`UPDATE service_instance SET `+strings.Join(sets, ", ")+
 					` WHERE id = ? AND deleted_at IS NULL`, args...)
