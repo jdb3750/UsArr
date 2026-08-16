@@ -409,6 +409,34 @@ hyphen-free UUID, a git sha — is redacted too, because it is indistinguishable
 passkey. UsArr's own routes carry no path segment near 20 characters, so nothing of its own is
 affected. The heuristic is **not** applied to `stripCredentials`: removing a path segment from a
 redirect target changes which resource is being requested.
+
+### 5.1 Credentials already written to `provenance`
+
+`provenance.nzb_info_url` is indexer-supplied and **permanent by design** — it records which tracker
+and which release page a grab came from, and provenance rows are never overwritten. Rows written
+before the grab path started redacting therefore hold a private tracker's passkey verbatim.
+`release_candidate` heals itself (a 25-minute TTL and the sweeper), and `provenance` has no such
+mechanism, so the repair is explicit.
+
+> **`redactStoredCredentials` runs on every start, in `buildApp`, before the HTTP server exists.**
+> It puts every stored `nzb_info_url` through `servarr.RedactURL` — the *same* helper the write path
+> calls, so a stored value and a served value cannot disagree about what a secret is — and updates
+> only the rows whose redacted form differs. It logs at **warn** when it changed anything, because
+> that says a credential *was* on disk and the operator has to act.
+
+It is in Go and not in a migration, deliberately: the repair needs the one deny-list *and* the path
+heuristic, both of which live in `internal/ssrf`. Expressing either in SQL would create the second,
+drifting copy that the deny-list's own comment forbids, and SQLite has no regular expressions, so the
+path half could not have been written there at all. It runs every start rather than once because it
+is idempotent by construction and because a run-once gate has the wrong failure mode for a security
+repair: a process killed mid-pass would leave the remaining rows unredacted with the gate already
+satisfied.
+
+> ⚠️ **This repairs the live database only, and the problem is not fully erased.** A passkey already
+> copied into a `VACUUM INTO` backup, a filesystem or volume snapshot, or a support bundle is still
+> in that copy, and nothing UsArr does can reach it. **Rotate the passkey at the tracker and delete
+> the affected backups.** Pre-migration backups (§`ARCHITECTURE.md` §15) are exactly the copies most
+> likely to hold one, because one is taken immediately before the upgrade that lands this pass.
 >
 > Related, and already covered correctly by the existing rules — noted because it is a live example
 > of the class the earlier threat model omitted: **Kavita exposes `GET /api/Image/web-link?url=…`**,

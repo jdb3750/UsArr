@@ -2,7 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 	"time"
+
+	"github.com/jdb3750/UsArr/internal/servarr"
+	"github.com/jdb3750/UsArr/internal/store"
 )
 
 // candidateSweepInterval is how often expired release_candidate rows are
@@ -78,4 +83,48 @@ func (a *app) sweepCandidatesOnce(ctx context.Context) {
 	case n > 0:
 		a.log.Debug("swept expired release candidates", "rows", n)
 	}
+}
+
+// redactStoredCredentials repairs credentials already written to disk, once per
+// start, before the server exists.
+//
+// THE PROBLEM IT FIXES. provenance.nzb_info_url is indexer-supplied and
+// permanent by design: it records which tracker and which release page a grab
+// came from, and provenance rows are never overwritten. Rows written before the
+// grab path started redacting hold a private tracker's PASSKEY verbatim, and on
+// a private tracker a leaked passkey means account termination, because it is
+// what the tracker attributes traffic by. release_candidate heals itself — a
+// 25-minute TTL and the sweeper above — and provenance does not, which is why
+// this exists and the sweeper is not enough.
+//
+// IT USES THE WRITE PATH'S OWN REDACTOR. servarr.RedactURL is what
+// releases.recordProvenance calls, and it is ssrf.RedactRawURL underneath: one
+// deny-list, one path heuristic, no second copy. A stored value and a served
+// value therefore cannot disagree about what counts as a secret, which is the
+// property that makes this a repair rather than a second opinion.
+//
+// A FAILURE IS FATAL, unlike the sweep. The sweep is housekeeping and a failure
+// costs disk; this is a credential still readable through the API, so refusing
+// to start is the correct answer and buildApp propagates the error.
+//
+// WHAT IT CANNOT REACH. Only the live database. A passkey already copied into a
+// VACUUM INTO backup, a filesystem snapshot or a support bundle is still in that
+// copy and nothing here can touch it — the remedy is to rotate the passkey at
+// the tracker and delete the old copies. Said again in reference/security.md §5
+// so an operator meets it somewhere other than a source comment.
+func redactStoredCredentials(ctx context.Context, st *store.Store, log *slog.Logger) error {
+	n, err := st.RedactStoredProvenanceURLs(ctx, servarr.RedactURL)
+	if err != nil {
+		return fmt.Errorf("redacting credentials already stored in provenance: %w", err)
+	}
+	if n > 0 {
+		// Warn, not info. This says a credential WAS on disk, which an operator
+		// has to act on: the rows are clean now, but any backup taken before
+		// this run still holds the passkey verbatim.
+		log.Warn("redacted credentials found in stored provenance URLs; "+
+			"these rows are clean now, but any backup taken before this run still holds them — "+
+			"rotate the passkey at the tracker and delete those backups",
+			"rows", n)
+	}
+	return nil
 }

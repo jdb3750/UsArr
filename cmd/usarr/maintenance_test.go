@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -127,5 +129,47 @@ func TestCandidateSweeperSweepsOnStartAndStopsOnCancel(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the sweeper did not stop when its context was cancelled; " +
 			"shutdown would hang and the database would close under a live writer")
+	}
+}
+
+// TestRedactStoredCredentialsRunsAtStartup.
+//
+// internal/store proves the pass itself. This proves it is WIRED: a repair that
+// nobody calls is exactly the defect the candidate sweeper above was written to
+// fix — ExpireReleaseCandidates and EvictExpired both existed and nothing in the
+// binary ever called either.
+func TestRedactStoredCredentialsRunsAtStartup(t *testing.T) {
+	ctx := t.Context()
+	a := sweeperTestApp(t)
+
+	const passkey = "0123456789abcdef0123456789abcdef"
+	var id int64
+	if err := a.db.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, `
+			INSERT INTO provenance (protocol, release_title, source_system, nzb_info_url)
+			VALUES ('torrent', 'Some.Release-GROUP', 'prowlarr', ?)`,
+			"https://tracker.example/rss/"+passkey+"/torrents")
+		if err != nil {
+			return err
+		}
+		id, err = res.LastInsertId()
+		return err
+	}); err != nil {
+		t.Fatalf("seed a pre-redaction provenance row: %v", err)
+	}
+
+	if err := redactStoredCredentials(ctx, a.store, a.log); err != nil {
+		t.Fatalf("redactStoredCredentials: %v", err)
+	}
+
+	var got sql.NullString
+	if err := a.db.Read().QueryRowContext(ctx,
+		`SELECT nzb_info_url FROM provenance WHERE id = ?`, id).Scan(&got); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(got.String, passkey) {
+		t.Errorf("startup left a passkey in provenance: %q\n"+
+			"buildApp must run this before the server exists, or the first request can serve it",
+			got.String)
 	}
 }

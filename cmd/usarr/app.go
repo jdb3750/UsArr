@@ -91,6 +91,26 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 
 	st := store.New(database)
 
+	// Repair credentials already on disk, before anything can serve them.
+	//
+	// It runs HERE, in Go, and not inside a migration. The repair has to use the
+	// exact deny-list and path heuristic the write path uses, and both live in
+	// internal/ssrf; reimplementing either in SQL would be the second, drifting
+	// copy that internal/ssrf's own comment forbids, and SQLite has no regular
+	// expressions, so the path heuristic could not be expressed there at all.
+	// Doing it after migrations rather than as one keeps internal/db free of a
+	// dependency on URL policy, which is the wrong direction for that package.
+	//
+	// It runs on EVERY start, not once. It is idempotent by construction, the
+	// scan touches only rows that hold a URL at all, and after the first pass it
+	// changes nothing. A run-once gate would have the wrong failure mode for a
+	// security repair: a process killed mid-pass would leave the remaining rows
+	// unredacted with the gate already satisfied.
+	if err := redactStoredCredentials(ctx, st, log); err != nil {
+		_ = database.Close()
+		return nil, err
+	}
+
 	// The two branches the ladder could not decide before the database was
 	// open. Both ask the same question — does the database already hold
 	// ciphertext? — so it is asked once, lazily, and shared.
