@@ -50,15 +50,19 @@
  *   2  token drift                      — tokens.css vs the mockup's copy
  *   3  contrast                         — worst of all five grounds, both themes
  *   1c install invariant               — data-when and data-inst never collide
- *   4  overflow                         — 5 widths x 5 screens x every state x 2 installs
+ *   4  overflow                         — 5 widths x 5 screens x every state x 2 installs x every panel
  *   5  row heights                      — against the three density bands
  *   6  availability accessible names    — no silent ✓/✗
  *   7  one tab stop per list            — roving tabindex, or a declared opt-out
  *   8  containment is live              — the content-visibility-on-<tr> guard
  *   8b install switcher                 — two installs, and every screen answers
+ *   8c panel switchers                  — every panel reachable, defaults asserted
  *   9  webfont                          — IBM Plex actually resolves
  *
- * EVERY RENDERED SWEEP RUNS OVER BOTH INSTALLS. The mockups draw a full stack
+ * EVERY RENDERED SWEEP RUNS OVER BOTH INSTALLS, AND OVER EVERY PANEL. Three
+ * screens hide content behind a `[data-group][data-panel]` switcher, nothing
+ * here had ever clicked one, and the two poster grids therefore sat outside
+ * every sweep in this file for its whole existence. See PANEL TRAVERSAL below. The mockups draw a full stack
  * (six populated media types) and the v0.1 install (Sonarr, Radarr, Prowlarr),
  * and half the layouts this file protects only exist on one of the two.
  *
@@ -322,6 +326,109 @@ const setInstall = async (page, install) => {
   await page.selectOption('#install', install);
   await page.waitForTimeout(40);
 };
+
+/* ---------------------------------------------------------------------------
+ * PANEL TRAVERSAL, and the hole it closes.
+ *
+ * Every rendered sweep below used to walk install × screen × state and stop
+ * there. Three screens also carry a PANEL SWITCHER — a `[data-group]
+ * [data-panel]` control that toggles sibling `[data-panel-for]` blocks — and
+ * nothing in this file had ever clicked one. Whatever loads hidden stayed
+ * hidden for the whole run, so five blocks of markup were outside every sweep
+ * for the entire life of this file:
+ *
+ *   home     homeview = table | POSTERS
+ *   search   viewmode = table | POSTERS
+ *   services settings = services | GENERAL | TAGS | UI
+ *
+ * The two poster grids are the ones that matter, and they are the ones this
+ * file most needed to be looking at: they are the only card surface in the
+ * product, the only place text was ever set over a computed `dominant_color`
+ * fill, and Search's are `data-inst`-scoped on top of being panel-scoped.
+ *
+ * THE EVIDENCE THAT THE GAP WAS REAL, rather than a theory about the code.
+ * Commit a5c9399 added 84 `title=` attributes to poster cards. The §13 copy
+ * corpus counts `title` strings, and it counted 74 on the tree before that
+ * commit and 74 on the tree after it. A corpus that cannot see 84 new
+ * instances of exactly the thing it counts is not measuring the page, and
+ * every floor derived from it was a floor over a page with two panels missing.
+ * That is also why b417a53's poster-title migration could claim completeness
+ * it did not have and pass this gate: Search's ten cards still nested the
+ * title inside `.card__art`, and no sweep here had ever rendered them.
+ *
+ * HOW IT TRAVERSES. `panelsOf` enumerates the switcher controls that are
+ * actually reachable in the current install/screen/state — a switcher inside a
+ * `[data-when]` block does not exist in every state — and returns the full
+ * cross product of the groups it found, so a screen with no switcher costs
+ * exactly one pass and nothing changes for it. Every pass names every group
+ * explicitly rather than relying on what the previous pass left behind.
+ *
+ * `resetPanels` puts a screen back to its default before the sweep moves on,
+ * because panel selection is DOM state that outlives a state change and a hash
+ * route. The default is the FIRST control in DOM order, and that is asserted
+ * rather than assumed — see check 8c, which loads the page fresh and fails if
+ * the first control is not the one carrying aria-pressed / aria-current true.
+ *
+ * Trap 3 from the header applies to every click here: a panel control can be
+ * an `<a href="#settings">`, following a fragment scrolls the page, and every
+ * geometry read in this file is viewport-relative. Both helpers normalise
+ * scroll before they return.
+ * ------------------------------------------------------------------------- */
+const PANEL_CTL = '[data-group][data-panel]';
+const panelLabel = (pass) => (pass.length ? ' ' + pass.map((p) => p.group + '=' + p.panel).join(',') : '');
+
+async function panelsOf(page, screen) {
+  return page.evaluate(({ s, sel }) => {
+    const root = document.querySelector('#pg-' + s);
+    if (!root) return [[]];
+    const groups = [];
+    root.querySelectorAll(sel).forEach((c) => {
+      /* Reachable means reachable: a switcher the current state hides is not
+         a control the user has, and clicking it would measure a combination
+         the product cannot reach. */
+      if (c.closest('[hidden]') || !c.offsetParent) return;
+      const g = c.getAttribute('data-group');
+      let e = groups.find((x) => x.group === g);
+      if (!e) groups.push((e = { group: g, panels: [] }));
+      const v = c.getAttribute('data-panel');
+      if (!e.panels.includes(v)) e.panels.push(v);
+    });
+    let passes = [[]];
+    for (const e of groups) {
+      const next = [];
+      for (const p of passes) for (const v of e.panels) next.push(p.concat([{ group: e.group, panel: v }]));
+      passes = next;
+    }
+    return passes;
+  }, { s: screen, sel: PANEL_CTL });
+}
+
+async function setPanels(page, screen, pass) {
+  await page.evaluate(({ s, pass }) => {
+    for (const p of pass) {
+      const el = document.querySelector(
+        '#pg-' + s + ' [data-group="' + p.group + '"][data-panel="' + p.panel + '"]');
+      if (el) el.click();
+    }
+    window.scrollTo(0, 0);
+  }, { s: screen, pass });
+  if (pass.length) await page.waitForTimeout(30);
+}
+
+async function resetPanels(page, screen) {
+  await page.evaluate(({ s, sel }) => {
+    const root = document.querySelector('#pg-' + s);
+    if (!root) return;
+    const seen = new Set();
+    root.querySelectorAll(sel).forEach((c) => {
+      const g = c.getAttribute('data-group');
+      if (seen.has(g)) return;
+      seen.add(g);
+      c.click();
+    });
+    window.scrollTo(0, 0);
+  }, { s: screen, sel: PANEL_CTL });
+}
 
 let failures = 0;
 const fail = (msg) => { failures++; console.log('FAIL  ' + msg); };
@@ -945,10 +1052,17 @@ async function statesOf(page, screen) {
 
 /* --- 4. overflow --------------------------------------------------------- */
 head('4. Overflow: nothing past the viewport, nothing past its own .tablewrap');
-/* 5 screens × 37 states × 2 installs = 74 combinations per width. The floor is
- * 70: below that a state option has gone missing, an install stopped switching,
- * or the sweep silently ran over one install twice. */
-const COMBO_FLOOR = 70;
+/* 5 screens × 37 states × 2 installs, each state expanded over the panel
+ * switchers it actually offers = 110 combinations per width. The floor is 104:
+ * below that a state option has gone missing, an install stopped switching, a
+ * panel switcher stopped being enumerated, or the sweep silently ran over one
+ * install twice.
+ *
+ * It was 70 against 74 combinations while no panel was ever opened. The 36 new
+ * combinations are the poster panels on Home and Search and the three extra
+ * Settings panes on Services, in both installs — which is 36 combinations of
+ * this product that this check had never rendered. */
+const COMBO_FLOOR = 104;
 for (const width of WIDTHS) {
   const ctx = await browser.newContext({ viewport: { width, height: 900 } });
   const page = await ctx.newPage();
@@ -960,9 +1074,12 @@ for (const width of WIDTHS) {
     await page.evaluate((s) => { window.location.hash = '#' + s; }, screen);
     await page.waitForTimeout(60);
     for (const state of await statesOf(page, screen)) {
-      combos++;
       await page.selectOption('#pg-' + screen + ' [data-act="state"]', state);
       await page.waitForTimeout(40);
+      for (const pass of await panelsOf(page, screen)) {
+      combos++;
+      await setPanels(page, screen, pass);
+      const where = `${width}px ${install}/${screen}/${state}${panelLabel(pass)}`;
       const r = await page.evaluate((s) => {
         const main = document.querySelector('#pg-' + s);
         let over = 0, worst = 0; const ex = [], clip = [];
@@ -987,19 +1104,21 @@ for (const width of WIDTHS) {
         });
         return { over, worst: Math.round(worst), ex, clip, doc: document.documentElement.scrollWidth };
       }, screen);
-      if (r.clip.length) fail(`${width}px ${install}/${screen}/${state}: sheared by overflow-x:clip on .tablewrap\n        ` + r.clip.join('\n        '));
+      if (r.clip.length) fail(`${where}: sheared by overflow-x:clip on .tablewrap\n        ` + r.clip.join('\n        '));
       if (r.over) {
         worstOver = Math.max(worstOver, r.worst - width);
-        worstWhere = `${width}px ${install}/${screen}/${state}: ${r.over} over, worst right=${r.worst}\n        ${r.ex.join('\n        ')}`;
+        worstWhere = `${where}: ${r.over} over, worst right=${r.worst}\n        ${r.ex.join('\n        ')}`;
       }
-      if (r.doc > width) fail(`${width}px ${install}/${screen}/${state}: document scrolls sideways (${r.doc})`);
+      if (r.doc > width) fail(`${where}: document scrolls sideways (${r.doc})`);
+      }
     }
+    await resetPanels(page, screen);
   }
   }
-  if (!floorOk(`overflow at ${width}px`, combos, COMBO_FLOOR, 'screen×state×install combination(s)')) {
+  if (!floorOk(`overflow at ${width}px`, combos, COMBO_FLOOR, 'screen×state×install×panel combination(s)')) {
     /* already failed */
   } else if (worstOver > 0) fail('overflow ' + worstWhere);
-  else ok(`overflow at ${width}px: ${combos} screen×state×install combinations (floor ${COMBO_FLOOR}), nothing past the viewport or its wrapper`);
+  else ok(`overflow at ${width}px: ${combos} screen×state×install×panel combinations (floor ${COMBO_FLOOR}), nothing past the viewport or its wrapper`);
   await ctx.close();
 }
 
@@ -1043,11 +1162,22 @@ if (!Number.isFinite(COMPACT_ROW_H) || COMPACT_ROW_H <= 0) {
     `CEILING_COMPACT is written against`);
 }
 
-/* Rows measured per screen, over both installs and every state. The floor is
- * per screen because the screens differ by an order of magnitude — Home renders
- * hundreds of rows across its states, Libraries tens — and one global floor
- * would be satisfied by Home alone while Libraries silently measured nothing. */
-const ROW_FLOOR = { home: 180, services: 55, libraries: 24, search: 60, requests: 145 };
+/* Rows measured per screen, over both installs, every state and every panel.
+ * The floor is per screen because the screens differ by an order of magnitude —
+ * Home renders hundreds of rows across its states, Libraries tens — and one
+ * global floor would be satisfied by Home alone while Libraries silently
+ * measured nothing.
+ *
+ * n counts ROW RENDERINGS, not distinct rows, and panel traversal raised it on
+ * the two screens that have a switcher: Home 205 -> 274 and Services 65 -> 221,
+ * with Libraries, Search and Requests unmoved because they have no panel. Most
+ * of that rise is the same table measured once per panel pass rather than new
+ * markup — the poster panels contain no <tr> at all. Re-measuring an unchanged
+ * table costs nothing and misreports nothing: this check asserts a min, a
+ * median and a max against a band, none of which a duplicate moves. The floors
+ * are restated against the new figures anyway, because a floor left at 180 over
+ * a population of 274 is a floor that cannot fail. */
+const ROW_FLOOR = { home: 240, services: 190, libraries: 24, search: 60, requests: 145 };
 
 for (const density of DENSITIES) {
   await page.evaluate((d) => { document.documentElement.setAttribute('data-density', d); }, density);
@@ -1064,11 +1194,15 @@ for (const density of DENSITIES) {
         if (state === 'annex') continue; /* labelled as documentation for services neither install has */
         await page.selectOption('#pg-' + screen + ' [data-act="state"]', state);
         await page.waitForTimeout(30);
-        hs.push(...await page.evaluate((s) => [...document.querySelectorAll('#pg-' + s + ' tbody tr')]
-          .filter((r) => !r.hidden && !r.closest('[hidden]') && r.offsetParent)
-          .map((r) => Math.round(r.getBoundingClientRect().height)).filter((h) => h > 0), screen));
+        for (const pass of await panelsOf(page, screen)) {
+          await setPanels(page, screen, pass);
+          hs.push(...await page.evaluate((s) => [...document.querySelectorAll('#pg-' + s + ' tbody tr')]
+            .filter((r) => !r.hidden && !r.closest('[hidden]') && r.offsetParent)
+            .map((r) => Math.round(r.getBoundingClientRect().height)).filter((h) => h > 0), screen));
+        }
       }
       await page.selectOption('#pg-' + screen + ' [data-act="state"]', states[0]);
+      await resetPanels(page, screen);
     }
     hs.sort((a, b) => a - b);
     const ceiling = CEILING_COMPACT[screen] + shift;
@@ -1088,7 +1222,10 @@ await page.evaluate(() => { document.documentElement.setAttribute('data-density'
 head('6. Availability glyphs carry a word');
 {
   let bad = 0, total = 0;
-  const AVAIL_FLOOR = 165;
+  /* 165 against 195 while no panel was ever opened. 375 with the traversal:
+     the poster card carries an .avail of its own, and 42 of them across the two
+     grids had never once been looked at by this check. */
+  const AVAIL_FLOOR = 320;
   for (const install of INSTALLS) {
     await setInstall(page, install);
     for (const screen of SCREENS) {
@@ -1097,17 +1234,21 @@ head('6. Availability glyphs carry a word');
       for (const state of await statesOf(page, screen)) {
         await page.selectOption('#pg-' + screen + ' [data-act="state"]', state);
         await page.waitForTimeout(30);
-        const r = await page.evaluate((s) => {
-          let bad = 0, total = 0;
-          document.querySelectorAll('#pg-' + s + ' .avail').forEach((el) => {
-            if (el.closest('[hidden]')) return;
-            total++;
-            if (!el.textContent.trim()) bad++;
-          });
-          return { bad, total };
-        }, screen);
-        bad += r.bad; total += r.total;
+        for (const pass of await panelsOf(page, screen)) {
+          await setPanels(page, screen, pass);
+          const r = await page.evaluate((s) => {
+            let bad = 0, total = 0;
+            document.querySelectorAll('#pg-' + s + ' .avail').forEach((el) => {
+              if (el.closest('[hidden]')) return;
+              total++;
+              if (!el.textContent.trim()) bad++;
+            });
+            return { bad, total };
+          }, screen);
+          bad += r.bad; total += r.total;
+        }
       }
+      await resetPanels(page, screen);
     }
   }
   await setInstall(page, 'full');
@@ -1120,8 +1261,15 @@ head('6. Availability glyphs carry a word');
 /* --- 7. one tab stop per list -------------------------------------------- */
 head('7. One tab stop per list (roving tabindex, or a declared opt-out)');
 {
-  let checked = 0, bad = 0;
-  const LIST_FLOOR = 78;
+  let checked = 0, bad = 0, nonTable = 0;
+  /* 78 while the corpus was tables-only and no panel was ever opened. Both
+     floors below are restated against what the traversal actually finds, and
+     the non-table floor is separate on the same argument the copy corpus makes
+     per source: one combined floor would be satisfied by the tables alone
+     while the card grids silently contributed nothing, which is exactly the
+     condition this check was in for its whole life. */
+  const LIST_FLOOR = 120;
+  const NON_TABLE_FLOOR = 10;
   for (const install of INSTALLS) {
   await setInstall(page, install);
   for (const screen of SCREENS) {
@@ -1131,35 +1279,73 @@ head('7. One tab stop per list (roving tabindex, or a declared opt-out)');
     for (const state of states) {
       await page.selectOption('#pg-' + screen + ' [data-act="state"]', state);
       await page.waitForTimeout(30);
+      for (const pass of await panelsOf(page, screen)) {
+      await setPanels(page, screen, pass);
+      const where = `${install}/${screen}/${state}${panelLabel(pass)}`;
       const r = await page.evaluate((s) => {
         const out = [];
-        document.querySelectorAll('#pg-' + s + ' table[role="table"]').forEach((t) => {
-          if (t.closest('[hidden]') || t.hidden) return;
-          const rows = [...t.querySelectorAll('tbody tr')].filter((x) => !x.hidden && x.offsetParent);
-          if (!rows.length) return;
+        /* THE CORPUS IS EVERY ROVING LIST, NOT EVERY TABLE. It used to be
+           `table[role="table"]` alone, which meant the four poster grids —
+           `.grid[data-roving=".card"]`, two on Home and two on Search — were
+           outside the check that exists to guarantee a list is one tab stop.
+           They were doubly outside it: not a table, and inside a panel nothing
+           ever opened. The roving model in usarr.js is declared by attribute
+           and says nothing about tables, so the corpus is declared the same
+           way. `[data-roving-optout]` is collected too, so an opt-out is a
+           thing this check has SEEN and dismissed rather than a thing it never
+           found. */
+        const root = document.querySelector('#pg-' + s);
+        const seen = new Set([
+          ...root.querySelectorAll('table[role="table"]'),
+          ...root.querySelectorAll('[data-roving]'),
+          ...root.querySelectorAll('[data-roving-optout]'),
+        ]);
+        for (const t of seen) {
+          if (t.closest('[hidden]') || t.hidden) continue;
+          const isTable = t.tagName === 'TABLE';
+          /* The declared selector is the list's own definition of an item; the
+             `tbody tr` fallback is for a table that declares nothing, which is
+             the defect the `inner` branch below hunts. */
+          const sel = t.getAttribute('data-roving') || 'tbody tr';
+          const rows = [...t.querySelectorAll(sel)].filter((x) => !x.hidden && x.offsetParent);
+          if (!rows.length) continue;
           out.push({
             label: t.getAttribute('aria-label'),
+            kind: isTable ? 'table' : t.tagName.toLowerCase() + (t.className ? '.' + t.className.split(/\s+/)[0] : ''),
+            items: rows.length,
             optout: t.hasAttribute('data-roving-optout'),
             roving: t.hasAttribute('data-roving'),
-            inner: t.querySelectorAll('tbody a[href], tbody button, tbody input, tbody select').length,
+            /* Focusables the list would hand the user as extra tab stops. For
+               a table that is what the cells hold; for a card grid the item
+               IS the link, so its own descendants are what count and there
+               are none. */
+            inner: isTable
+              ? t.querySelectorAll('tbody a[href], tbody button, tbody input, tbody select').length
+              : rows.reduce((n, r) => n + r.querySelectorAll('a[href], button, input, select').length, 0),
             zero: rows.filter((x) => x.tabIndex === 0).length,
           });
-        });
+        }
         return out;
       }, screen);
       for (const l of r) {
         checked++;
+        if (l.kind !== 'table') nonTable++;
         if (l.optout) continue;
-        if (l.inner > 0 && !l.roving) { bad++; fail(`roving: ${install}/${screen}/${state} "${l.label}" has ${l.inner} focusable descendants, no data-roving and no declared opt-out`); }
-        else if (l.roving && l.zero !== 1) { bad++; fail(`roving: ${install}/${screen}/${state} "${l.label}" has ${l.zero} rows at tabindex 0`); }
+        if (l.inner > 0 && !l.roving) { bad++; fail(`roving: ${where} "${l.label}" (${l.kind}) has ${l.inner} focusable descendants, no data-roving and no declared opt-out`); }
+        else if (l.roving && l.zero !== 1) { bad++; fail(`roving: ${where} "${l.label}" (${l.kind}, ${l.items} items) has ${l.zero} items at tabindex 0`); }
+      }
       }
     }
     await page.selectOption('#pg-' + screen + ' [data-act="state"]', states[0]);
+    await resetPanels(page, screen);
   }
   }
   await setInstall(page, 'full');
-  if (!bad && floorOk('roving', checked, LIST_FLOOR, 'list rendering(s)')) {
-    ok(`roving: every rendered list is one tab stop or declares why not (${checked} list renderings checked, floor ${LIST_FLOOR}, both installs)`);
+  if (!bad && floorOk('roving', checked, LIST_FLOOR, 'list rendering(s)') &&
+      floorOk('roving non-table', nonTable, NON_TABLE_FLOOR, 'non-table list rendering(s)')) {
+    ok(`roving: every rendered list is one tab stop or declares why not (${checked} list renderings ` +
+      `checked, floor ${LIST_FLOOR}; ${nonTable} of them card grids rather than tables, floor ` +
+      `${NON_TABLE_FLOOR}; both installs, every panel)`);
   }
 }
 
@@ -1349,6 +1535,84 @@ head('8b. The install switcher: two installs, and every screen answers to it');
   }
 }
 
+/* --- 8c. the panel switchers, and the traversal's one assumption ---------- */
+head('8c. The panel switchers: every panel is reachable, and the default is the first');
+/* The traversal above resets a screen by clicking the FIRST `[data-group]
+ * [data-panel]` control of each group, which is only the default because the
+ * markup happens to put it first. That is an assumption, and an assumption a
+ * sweep depends on is a thing to assert, not a thing to comment. This runs on
+ * a FRESH page — nothing here has clicked anything — so "at load" means at
+ * load.
+ *
+ * It also prints the inventory, which is the point of check design rule 1: a
+ * traversal that silently stopped finding switchers would otherwise look
+ * exactly like a traversal that found them all and had nothing to say. */
+{
+  const pctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const ppage = await pctx.newPage();
+  await ppage.goto(URL);
+  await ppage.waitForTimeout(150);
+  /* These three are set AT today's figures, not below them, and that is the
+     one place in this file where that is right. They are an inventory, not a
+     population: every sweep above is scoped by what this inventory finds, so a
+     switcher that stops being found silently shrinks every corpus below it —
+     which is the exact failure being fixed here. Losing a panel should cost
+     whoever removes it one line in this file. */
+  const GROUP_FLOOR = 3, CTL_FLOOR = 8, PANEL_FLOOR = 8;
+  const inv = await ppage.evaluate((sel) => {
+    const groups = {};
+    document.querySelectorAll(sel).forEach((c) => {
+      const g = c.getAttribute('data-group');
+      (groups[g] ||= { panels: [], first: null, marked: [] });
+      groups[g].panels.push(c.getAttribute('data-panel'));
+      if (groups[g].first === null) groups[g].first = c.getAttribute('data-panel');
+      if (c.getAttribute('aria-pressed') === 'true' || c.getAttribute('aria-current') === 'true') {
+        groups[g].marked.push(c.getAttribute('data-panel'));
+      }
+    });
+    const blocks = {};
+    document.querySelectorAll('[data-panel-for]').forEach((p) => {
+      const g = p.getAttribute('data-panel-for');
+      (blocks[g] ||= []).push({ name: p.getAttribute('data-panel-name'), hidden: p.hidden });
+    });
+    return { groups, blocks };
+  }, PANEL_CTL);
+
+  const names = Object.keys(inv.groups);
+  const ctls = names.reduce((n, g) => n + inv.groups[g].panels.length, 0);
+  const blocks = Object.values(inv.blocks).reduce((n, b) => n + b.length, 0);
+  if (floorOk('panels: groups', names.length, GROUP_FLOOR, 'switcher group(s)') &&
+      floorOk('panels: controls', ctls, CTL_FLOOR, 'switcher control(s)') &&
+      floorOk('panels: blocks', blocks, PANEL_FLOOR, 'panel block(s)')) {
+    ok(`panels: ${names.length} switcher groups, ${ctls} controls, ${blocks} panel blocks — ` +
+      names.map((g) => `${g}[${inv.groups[g].panels.join('|')}]`).join(' '));
+  }
+  const before = failures;
+  for (const g of names) {
+    const e = inv.groups[g];
+    if (e.marked.length !== 1) {
+      fail(`panels: group "${g}" has ${e.marked.length} controls marked current at load, so it has no unambiguous default`);
+    } else if (e.marked[0] !== e.first) {
+      fail(`panels: group "${g}" loads with "${e.marked[0]}" selected but "${e.first}" is first in DOM order — ` +
+        `the traversal resets to the first control, so those two must agree`);
+    }
+    const have = (inv.blocks[g] || []).map((b) => b.name);
+    const missing = e.panels.filter((p) => !have.includes(p));
+    if (missing.length) fail(`panels: group "${g}" offers [${missing.join(', ')}] with no [data-panel-for="${g}"] block behind it`);
+    const shown = (inv.blocks[g] || []).filter((b) => !b.hidden).map((b) => b.name);
+    if (shown.length !== 1) fail(`panels: group "${g}" shows ${shown.length} panels at load, not 1`);
+  }
+  if (failures === before) {
+    ok('panels: every group has one default, one visible block at load, and a block behind every control');
+  }
+  /* The hidden blocks are the whole reason this section exists: a panel that
+     loads hidden is invisible to any sweep that does not click for it, and
+     these are the ones that were. */
+  const dark = Object.entries(inv.blocks).flatMap(([g, b]) => b.filter((x) => x.hidden).map((x) => g + '=' + x.name));
+  note(`panels: ${dark.length} block(s) load hidden and are reached only by the traversal — ${dark.join(', ')}`);
+  await pctx.close();
+}
+
 /* --- 9. webfont ---------------------------------------------------------- */
 head('9. The webfont actually resolves');
 {
@@ -1448,19 +1712,31 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
    * the one that matters most, since 0 was the status quo. */
   const CORPUS_FLOORS = {
     'document.title': 1,
-    'aria-label': 240,   /* 286 today */
-    'title': 60,         /* 74 today, and low BY DESIGN: most title= in these
-                            screens sits inside a <td> -- a release name, a
-                            timestamp -- and is excluded as data, same as the
-                            rendered walk excludes cell text. */
-    'placeholder': 130,  /* 156 today */
-    'option': 1150,      /* 1298 today */
+    'aria-label': 400,   /* 468 today, 286 before panel traversal */
+    'title': 340,        /* 406 today, 74 before panel traversal, AND THE 74 IS
+                            THE REASON THIS FILE NOW CLICKS PANELS. a5c9399 put
+                            84 new title= attributes on the poster cards -- 123
+                            to 207 across the five screen files -- and this
+                            number did not move: 74 on the tree before that
+                            commit and 74 on the tree after it, both measured by
+                            running each tree's own copy of this file. A corpus
+                            that cannot see 84 new instances of the exact
+                            attribute it counts is not measuring the page, and
+                            the old comment here explained the small number as a
+                            <td> exclusion working as designed. It was not. It
+                            was two whole panels the sweep had never opened. */
+    'placeholder': 245,  /* 288 today, 156 before panel traversal */
+    'option': 1400,      /* 1602 today, 1298 before panel traversal */
   };
   const seenBySource = {};
   const countSource = (src, n) => { seenBySource[src] = (seenBySource[src] || 0) + n; };
 
   let strings = 0, exempted = 0; const bad = [];
-  const STRING_FLOOR = 2000;
+  /* 2000 against 4203 while no panel was ever opened; 6685 with the traversal.
+     The old figure was slack enough that it would still have passed over a page
+     missing both poster panels AND one install, which is the kind of floor that
+     exists only to be quoted. */
+  const STRING_FLOOR = 5800;
 
   /* One place the three §13 rules are applied, so the rendered walk and the
      attribute sweep cannot drift into checking different things. */
@@ -1496,6 +1772,9 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
     for (const state of states) {
       await page.selectOption('#pg-' + screen + ' [data-act="state"]', state);
       await page.waitForTimeout(20);
+      for (const pass of await panelsOf(page, screen)) {
+      await setPanels(page, screen, pass);
+      const where = `${install}/${screen}/${state}${panelLabel(pass)}`;
       /* The invisible-to-layout half of the corpus, gathered under exactly the
        * structural exclusions the rendered walk uses. `<option>` is collected
        * from a closed menu on purpose: that is the only state it is ever in
@@ -1527,7 +1806,7 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
       }, { s: screen, ATTRS });
       for (const a of attrs) {
         countSource(a.src, 1);
-        checkCopy(`${install}/${screen}/${state} [${a.src}]`, a.text);
+        checkCopy(`${where} [${a.src}]`, a.text);
       }
 
       const r = await page.evaluate((s) => {
@@ -1552,9 +1831,11 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
         });
         return out;
       }, screen);
-      for (const t of r) checkCopy(`${install}/${screen}/${state}`, t);
+      for (const t of r) checkCopy(where, t);
+      }
     }
     await page.selectOption('#pg-' + screen + ' [data-act="state"]', states[0]);
+    await resetPanels(page, screen);
   }
   }
   await setInstall(page, 'full');
