@@ -17,6 +17,9 @@ import {
 	rollupCount,
 	stampOf,
 	stateLabel,
+	testOutcome,
+	testTitle,
+	testTone,
 	syncCell,
 	type ServiceRow
 } from './services';
@@ -111,6 +114,17 @@ describe('the State column speaks UsArr, not the mechanism', () => {
 	it('leaves a healthy row with nothing to qualify', () => {
 		const label = stateLabel(row(), NOW);
 		expect(label).toMatchObject({ word: 'healthy', tone: 'ok', detail: '' });
+	});
+
+	it('refuses to call a never-probed instance healthy, whatever the API state says', () => {
+		// handleServicesHealth answers `healthy` on a stored last_ok_at alone, so
+		// this row is the one a service that answered once when it was added and
+		// has not been contacted since produces. A green tick here claims a
+		// measurement that was never taken.
+		const label = stateLabel(row({ state: 'healthy', stale: true }), NOW);
+		expect(label.word).toBe('not checked yet');
+		expect(label.tone).not.toBe('ok');
+		expect(label.detail).toBe('no probe has run');
 	});
 });
 
@@ -292,6 +306,26 @@ describe('the connected panel names what actually answered', () => {
 		expect(connectedHeadline(undefined, undefined, '/api/v1')).toBe(
 			'Something answered on /api/v1'
 		);
+	});
+});
+
+describe('a test never claims more than it observed', () => {
+	it('splits ok:true into two outcomes on key_proven_valid', () => {
+		expect(testOutcome({ ok: true, keyProvenValid: true })).toBe('connected');
+		expect(testOutcome({ ok: true, keyProvenValid: false })).toBe('reachable');
+		expect(testOutcome({ ok: false, keyProvenValid: false })).toBe('failed');
+	});
+
+	it('never draws an unverified credential with the confidence of a verified one', () => {
+		expect(testTone('connected')).toBe('ok');
+		expect(testTone('reachable')).not.toBe('ok');
+		expect(testTone('failed')).toBe('err');
+	});
+
+	it('says in the title that the key was not verified', () => {
+		expect(testTitle('reachable')).toContain('not verified');
+		expect(testTitle('connected')).toContain('accepted');
+		expect(testTitle('failed')).toBe('Could not connect');
 	});
 });
 

@@ -173,12 +173,23 @@ export function stateLabel(row: ServiceRow, now: Date): StateLabel {
 	if (h.state === 'degraded') {
 		return label('some attempts are failing', 'warn', attempts(failures));
 	}
+	// STALE OUTRANKS `healthy`, AND THAT IS THE POINT OF THE FLAG.
+	//
+	// handleServicesHealth answers `healthy` on the strength of a stored
+	// `last_ok_at` alone, so a service that answered once when it was added and
+	// has not been contacted since arrives here as `healthy`, `stale: true`. That
+	// is a fact about the past, and rendering it as a green tick claims a
+	// measurement UsArr has not taken. §10's rule for the column is that it says
+	// what was observed, and what was observed is nothing.
+	if (h.stale) {
+		return label('not checked yet', 'none', 'no probe has run');
+	}
 	if (h.state === 'healthy') {
 		return label('healthy', 'ok', '');
 	}
-	// `unknown`, which on a freshly added service means exactly one thing: no
-	// probe has been taken. An honest "not measured" beats a green tick.
-	return label('not checked yet', 'none', h.stale ? 'no probe has run' : '');
+	// `unknown` with a probe behind it: the probe ran and could not classify the
+	// instance. An honest "not measured" still beats a green tick.
+	return label('not checked yet', 'none', '');
 }
 
 function label(word: string, tone: Tone, detail: string): StateLabel {
@@ -484,6 +495,54 @@ export function connectedHeadline(
 	if (!apiVersion) return `${application} answered`;
 	if (application === '') return `Something answered on ${apiVersion}`;
 	return `${application} answered on ${apiVersion}`;
+}
+
+/**
+ * WHAT THE CONNECTION TEST ACTUALLY PROVED, which is not always what `ok: true`
+ * looks like.
+ *
+ * `ok: true` with `key_proven_valid: false` is a real and common answer: an
+ * instance with `AuthenticationRequired = DisabledForLocalAddresses` returns 200
+ * to a request from a local address WITH NO KEY AT ALL, so the 200 proved the
+ * host is reachable and proved nothing whatsoever about the credential. Drawing
+ * that as a flat "Connected" is a claim UsArr did not observe, and the user acts
+ * on it — they save a service with a wrong key and meet it later as a health
+ * failure with no visible cause.
+ *
+ * So `ok` is two outcomes, not one, and the caller renders them with different
+ * confidence. The server writes the wording for the unverified case itself
+ * (toTestResponse, and the tester's own message); it is used as it stands rather
+ * than replaced with something cheerier.
+ */
+export type TestOutcome = 'connected' | 'reachable' | 'failed';
+
+export function testOutcome(result: { ok: boolean; keyProvenValid: boolean }): TestOutcome {
+	if (!result.ok) return 'failed';
+	return result.keyProvenValid ? 'connected' : 'reachable';
+}
+
+/** The panel title for each outcome. UsArr's own words; the body stays verbatim. */
+export function testTitle(outcome: TestOutcome): string {
+	switch (outcome) {
+		case 'connected':
+			return 'Connected, and the API key was accepted';
+		case 'reachable':
+			return 'Reachable. The API key was not verified';
+		default:
+			return 'Could not connect';
+	}
+}
+
+/** The tone each outcome may be drawn in. `reachable` is never `ok`. */
+export function testTone(outcome: TestOutcome): Tone {
+	switch (outcome) {
+		case 'connected':
+			return 'ok';
+		case 'reachable':
+			return 'warn';
+		default:
+			return 'err';
+	}
 }
 
 /**
