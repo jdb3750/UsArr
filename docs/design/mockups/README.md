@@ -659,8 +659,28 @@ There is no allowlist and there must not be one.
 `internal`, `exclusive`, `freeleech`, `neutralleech`, `halfleech`, `scene`, `doubleupload`
 (`src/NzbDrone.Core/Indexers/IndexerFlag.cs`) — and `PassThePopcornFlag : IndexerFlag` subclasses it
 to add `golden` and `approved`
-(`src/NzbDrone.Core/Indexers/Definitions/PassThePopcorn/PassThePopcorn.cs`, lines 85–88). That is
-nine today, and any future indexer definition can add a tenth without a line of UsArr changing.
+(`src/NzbDrone.Core/Indexers/Definitions/PassThePopcorn/PassThePopcorn.cs`, lines 85–88).
+
+🚩 **The two groups are different kinds of thing and must never be flattened into one list.** The
+seven are the **common set** any indexer can emit. `golden` and `approved` are **one indexer's
+private additions**, and they are in this document as *examples of an unbounded category*, not as
+members eight and nine of a fixed one. A flat list of nine invites the original error one layer
+along: a reader re-checks, counts nine, and treats *that* as the closed set. The count is a
+snapshot; the openness is the fact.
+
+**Re-check it in one command**, in a Prowlarr checkout on `develop`:
+
+```bash
+grep -rn "static IndexerFlag" src/          # 9 hits as of 2026-08-16
+```
+
+⚠️ **Grep for `static IndexerFlag`, never for `new IndexerFlag(`.** The latter returns **zero
+matches in a file containing seven of them**, because `IndexerFlag.cs` constructs with C#
+target-typed `new(...)` and the type name never appears at the declaration sites. It is the obvious
+probe to reach for, empty output reads as *"the set is empty"*, and it is exactly how the closed-set
+reading arrived here (`REVIEW-LOG.md` FI-15). `docs/reference/tags.md` and `ARCHITECTURE.md` §8.5
+carry the same command and the same warning; this is their third copy on purpose, because this file
+is where the column is drawn.
 
 A seven-name allowlist would therefore drop `golden` today and every later indexer's flags forever
 — and drop them **invisibly**, because the row would simply show fewer chips than the indexer sent
@@ -1116,35 +1136,40 @@ Also absent, and permanently: any in-app player, any transcoding path, any FFmpe
 Because v0.1 is single-user, the approval queue and all user-management surfaces are hidden
 entirely rather than shown disabled.
 
-## Routed elsewhere: three changes this thread found and did not make
+## Routed elsewhere: two indexer-flag items that have since LANDED, and one standing note
 
-These are outside `docs/design/`, so they are stated here with exact text rather than edited.
+These are outside `docs/design/`, so they were stated here with exact text rather than edited.
+**Items 1 and 2 are now closed on `main` and are kept only as a pointer to the landed wording** —
+an earlier revision of this section asked for work that was already done, because it was written
+against a pre-merge branch. Do not go and fix either of them.
 
-**1. `docs/reference/tags.md` line 54 is where the invented indexer flags came from.** It reads:
+**1. `docs/reference/tags.md`'s `flag:` line — CLOSED, and it was already correct before this
+section first claimed otherwise.** The invented `proper | repack | nuked` had been removed on `main`
+by the time this file reported it; we were reading a branch that predated the fix, and the routed
+"suggested replacement" printed here was **also wrong in its own way** — it rendered the vocabulary
+as one flat list of nine with `golden` and `approved` sitting as peers of the seven common statics.
+The code thread was right to decline it. **The landed line keeps the two groups apart**, and this is
+the shape to match rather than paraphrase:
 
 ```
-flag:            freeleech | internal | scene | proper | repack | nuked
+flag:            internal | exclusive | freeleech | neutralleech | halfleech | scene
+                 | doubleupload                       ← Prowlarr IndexerFlag, TORRENTS ONLY
+                 (+ indexer-specific: PassThePopcorn adds golden | approved)
 ```
 
-`proper`, `repack` and `nuked` are **not** indexer flags. `proper` and `repack` are release-title
-qualifiers the \*Arrs parse out of the name, and `nuked` is not in Prowlarr's `IndexerFlag` at all.
-The line also presents a closed set, which the field is not. Suggested replacement, which keeps the
-tag namespace open and stops it teaching a fixed list:
+It travels with the re-check command — `grep -rn "static IndexerFlag" src/`, **not**
+`grep "new IndexerFlag("`, which matches nothing in a file containing seven — and with the
+torrents-only caveat: `ReleaseResourceMapper.ToResource` does `model as TorrentInfo ?? new
+TorrentInfo()`, so a usenet release always takes the empty fallback and an absent `flag:freeleech`
+never means the download counts fully toward ratio.
 
-```
-flag:            <indexer flag verbatim>   ← Prowlarr IndexerFlag.Name, an open set
-                 e.g. freeleech | halfleech | internal | exclusive | neutralleech |
-                      scene | doubleupload | golden | approved
-```
-
-A note worth adding beside it: `indexerFlags` is emitted for **torrents only**, so a usenet release
-carries an empty array and the absence of `flag:freeleech` never means the download counts fully
-toward ratio.
-
-**2. `docs/ARCHITECTURE.md` §8 (around line 1490) derives `flag:` from `indexerFlags`** and inherits
-the same closed-set reading from `tags.md`. It needs one clause saying the vocabulary is open,
-because `IndexerFlag` is a subclassable class rather than an enum, so the tag layer must pass flag
-names through rather than validate them against a list.
+**2. `docs/ARCHITECTURE.md` §8.5's `flag:` derivation — CLOSED, landed as `4171b35`** ("docs: say in
+§8 that the indexer-flag vocabulary is open"). §8.5 now states that `flag:` comes from `indexerFlags`
+as **an open vocabulary**, that `IndexerFlag` is an ordinary subclassable class rather than an enum,
+that the seven statics are the common set while `PassThePopcornFlag : IndexerFlag` contributes
+`golden` and `approved` into the same array, and that the tag layer **matches the names it knows and
+passes the rest through** rather than filtering against a list. It carries the same re-check command
+and the same `new IndexerFlag(` trap. Nothing further is routed for §8.
 
 **3. `web/package.json` pins `playwright-core@1.56.1`, and `check.mjs` now actually resolves it** —
 the ladder asks for both `playwright` and `playwright-core` at every location. No change is needed

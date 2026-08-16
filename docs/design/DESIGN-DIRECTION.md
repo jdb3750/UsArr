@@ -1462,6 +1462,75 @@ treatment by media type.** Same slots, same positions, different values.
   UsArr ships **table** and **posters** in v0.1; "overview" (a wide row with thumbnail plus
   synopsis) is the natural third and is not required to ship first.
 
+### 9.1a Ordering under an engaged user — *instability is acceptable only while nobody is aiming at anything*
+
+**Settled 2026-08-16, in four rounds across three threads, and closed.** The sentence in the heading
+is the rule; everything below is how to apply it. It is written here rather than only on the screen
+that produced it because **it governs every list in UsArr that can change while a user is looking at
+it**, and because the next such list should not have to rediscover it.
+
+The condition that decides whether a list may reorder itself is **whether a person is committed to a
+target** — not whether the *application* considers itself settled. That distinction is the whole
+rule. "The fan-out finished, so the order is final now" is the app's own state and it is the wrong
+thing to key on: the user reaching for the third row does not care that more results are still
+arriving, and the user idly reading the screen is not harmed by a row moving. **Aim, not
+readiness.**
+
+**The general form, which is not specific to any one screen:**
+
+- 🚩 **A list must not move a destructive or outward-facing affordance under an engaged pointer.**
+  *Outward-facing* means the control spends something outside UsArr that UsArr cannot take back — a
+  grab handed to a download client, a delete, a write to an \*Arr, an outbound request. Ordering may
+  change freely around a read-only list nobody is pointing at. It may not change under a hand
+  already aimed at a button that acts on the world.
+- 🚩 **Identity, not position** — for **focus, hover, selection and pending row state**. Key every
+  one of them to the row's **stable id**, never to its index. A list keyed by index reassigns all
+  four the moment the order changes, so the highlighted row, the focused row and the row with a
+  request in flight all silently become different rows. **Every mutable list in the product inherits
+  this**, not only the one below.
+- **A list fed by an incremental source re-sorts live while that source is still delivering, and
+  freezes its order on completion** until the user explicitly re-sorts. Explicit means the user
+  operated a sort control — a column header, the toolbar's sort, or the control in the next rule.
+- 🚩 **While the pointer is inside the results region OR focus is within it, the order is frozen**,
+  regardless of what the source is doing. Anything that would have reordered the list instead
+  surfaces as **one explicit control** carrying its own count — `3 new results · re-sort` — so an
+  ordering change under an engaged user only ever happens **because the user asked for it**.
+- **A late arrival is not a special case.** It is just another thing that would have reordered, it is
+  counted by that same control, and it does not enter the rendered list until the user re-sorts.
+  **There is no separate append-below-marked-late mechanism**, and this is a rejection rather than an
+  omission: appending a straggler below a *late* marker is a second rendering rule and a second
+  vocabulary for one condition, the marker is meaningless the instant the list is re-sorted, and
+  appending still changes the list under an engaged user — the row count moves, the scroll extent
+  moves, and a pointer resting near the foot of the list gets a new row under it. One condition, one
+  control.
+- **0 ms, and never animate a re-sort.** §6 already puts sort at 0 ms on the critical path; the
+  addition is that a reorder must not be animated *anywhere*, because an animated reorder is
+  strictly worse than an instant one for this rule — it stretches the window in which the row under
+  the pointer is neither where it was nor where it is going, and a click landing mid-flight is the
+  ambiguous case the rule exists to remove.
+- **Sort keys live in the URL**, so a sorted view is linkable, survives reload, and is restored
+  identically rather than approximately. Same discipline as §8.5's `&type=` chips.
+
+**Why this earns a rule of its own — the reason matters more than the mechanism, because the reason
+is what survives a refactor.** On the Requests screen the affordance in question is **Grab**, and a
+grab is **irreversible from UsArr's side**: the release is handed to a download client that UsArr
+deliberately stops observing after handoff (ARCHITECTURE §17.5, §8.5), so a mis-click cannot be
+detected, cannot be reported and cannot be reversed. There is no undo to fall back on. **Where there
+is no undo, prevention is the only lever available**, which is what justifies spending a rule, a
+frozen order and a visible control on it. A future list that carries a comparably irreversible
+action inherits the rule for the same reason; a list of purely local reads does not need it and
+should not pay for it.
+
+**Why the freeze keys on pointer-within *or* focus-within, and why either alone is insufficient.**
+Identity-keyed focus already protects the keyboard user completely: focus is attached to a row, so
+the row can move and take the focus with it, and Enter still fires on the row the user chose. **The
+physical pointer has no such attachment.** It sits at a screen coordinate; nothing in the DOM moves
+it, and re-keying every state by identity does not help it at all. If rows move under a resting
+pointer, the click lands on whatever is now at that coordinate — a *different release*, grabbed
+irreversibly, with no error and nothing on screen to indicate the substitution. **The two input
+paths fail differently and both need the guarantee**, which is why one condition covers both and why
+neither half may be dropped as redundant.
+
 ### 9.2 The poster grid — the one place a card is correct
 
 A card is justified when the item's primary content is an image, which is true here and nowhere

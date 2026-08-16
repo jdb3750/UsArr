@@ -3024,6 +3024,59 @@ no approval queue, no `pending → approved → routed → available`, no per-us
 For v0.2 and later, this screen also carries the user's own request list with state and, for an
 admin, the pending-approval queue. In single-user mode the approval UI is hidden entirely (§8.3).
 
+**The result list re-sorts while the fan-out is running and freezes the moment anybody is aiming at
+anything.** This is the sort-stability rule for release results, settled 2026-08-16 in four rounds
+across three threads and closed; `design/DESIGN-DIRECTION.md` §9.1a carries the general form, which
+every mutable list in UsArr inherits. Six clauses, and the governing sentence is the first:
+
+1. **Instability is acceptable only while nobody is aiming at anything.** The condition keys on
+   whether a **person is committed to a target**, not on whether the **app considers itself
+   settled** — that distinction is the point of the whole rule, and a re-derivation that keys on
+   fan-out completion alone has already lost it.
+2. **Re-sort live while the fan-out is running; freeze the order on completion**, and leave it
+   frozen until the user explicitly re-sorts. A leg landing after that never silently rearranges a
+   list the user has begun reading.
+3. **Freeze while the pointer is inside the results region OR focus is within it**, whatever the
+   fan-out is doing. While frozen, anything that would have reordered the list surfaces instead as
+   **one explicit control**, carrying its own count — **`3 new results · re-sort`** — so an
+   ordering change under an engaged user happens only because the user asked for it. The results
+   region is the result rows and their header; the toolbar's sort control sits outside it, so
+   operating it is always an explicit re-sort. ⚠️ **A late straggler is not a separate case**: it is
+   another thing that would have reordered, it is counted by that same control, and it does not
+   enter the rendered list until the user re-sorts. **There is no append-below-marked-late
+   mechanism** — that alternative was considered and rejected, because one condition with two
+   surfaces is two rendering rules to maintain, the *late* marker is meaningless the instant the
+   list is re-sorted, and appending still moves the list under an engaged user.
+4. **Identity, not position, for focus, hover, selection and pending row state.** Key each to the
+   row's stable id, never to its index — otherwise a reorder hands the highlight, the focus ring and
+   the in-flight grab to different rows than the ones they belong to.
+5. **0 ms transitions, and never animate a re-sort** (`DESIGN-DIRECTION.md` §6). An animated reorder
+   widens the window in which the row under the pointer is neither where it was nor where it is
+   going.
+6. **The sort key and direction live in the URL** — `&sort=` and `&dir=`, alongside the scope
+   parameters — so a sorted view is linkable and survives a reload exactly rather than
+   approximately.
+
+**Why the rule is this strict, and why the pointer clause is not redundant with the focus clause.**
+The affordance being protected is **Grab**, and a grab is **irreversible from UsArr's side**: the
+release goes to a download client that UsArr deliberately stops observing after handoff — the same
+property that makes the post-grab sentence below necessary — so a mis-click cannot be detected,
+cannot be reported and cannot be reversed. **Where there is no undo, prevention is the only lever**,
+which is what a frozen order and a visible re-sort control are buying. Identity-keyed focus (clause
+4) fully protects the keyboard user, because focus travels with its row. **The physical pointer does
+not travel with anything** — it sits at a screen coordinate that no amount of identity keying moves
+— so a row shifting under a resting pointer puts a *different release* under the click, grabbed for
+real, with no error raised and nothing on screen recording the substitution. Both input paths need
+the guarantee and they fail differently, which is why the condition is pointer-within **or**
+focus-within and why neither half may be dropped.
+
+> ⚠️ **The mockups do not demonstrate this, and should not be read as if they did.** They are static
+> documents with invented data: there is no fan-out to run, so there is nothing to re-sort live,
+> nothing to arrive late and no count for the `re-sort` control to carry honestly. Drawing a frozen
+> screenshot of the control would assert a behaviour the artefact cannot exercise, which is the
+> failure `CLAUDE.md`'s "no invented status" rule exists to prevent. This clause is specification for
+> the implementation, verified there or not at all.
+
 **The grab control carries a visible text label, and the grab window's promise must be true rather
 than aspirational.** An irreversible multi-gigabyte action may not be an unlabelled icon eight pixels
 from a benign one — particularly a download arrow, which means "download this file to my computer"

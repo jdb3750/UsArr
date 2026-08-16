@@ -52,7 +52,7 @@ distinctions now matter and are used consistently below:
 | [0026](#adr-0026) | A library is a user-owned binding to upstream containers, with a correction layer | **Accepted** — refines ADR-0004, extends ADR-0014 |
 | [0027](#adr-0027) | Two axes: media type is navigation, a library is scope | **Accepted** — settles §17.2's open question |
 | [0028](#adr-0028) | Home is three fixed blocks, not one strip per media type | **Accepted** — **amends** ARCHITECTURE §17.2 |
-| [0029](#adr-0029) | "Load more" + `content-visibility`; virtualization is a benchmarked escalation | **Accepted** — **amends** §4.5, corrects an argument in ADR-0003 |
+| [0029](#adr-0029) | "Load more" + `content-visibility`; virtualization is a benchmarked escalation | **Accepted** — **amends** §4.5, corrects an argument in ADR-0003; ⚠️ **amended 2026-08-16** — the required benchmark ran against the shipped primitive: the decision is unchanged, correction (c)'s arithmetic, the mitigation ranking and the row-ceiling extrapolation are corrected, the page size is **200 rows**, and two benchmark gaps are recorded |
 | [0030](#adr-0030) | `work.kind` gains `comic_issue`; manga is not a separate kind | **Accepted** — refines ADR-0009 |
 | [0031](#adr-0031) | Track position is edition-scoped; attribution is many-to-many | **Accepted** — refines ADR-0009 |
 | [0032](#adr-0032) | Read-only catalogue sources move early; command sinks defer | **Accepted** — **amends** §16; **one member reversed by [ADR-0035](#adr-0035)** |
@@ -2169,7 +2169,132 @@ strips. Strips remain legitimate on an item-detail page ("More from this artist"
 
 **Status:** Accepted · **Amends [`ARCHITECTURE.md`](./ARCHITECTURE.md) §4.5**, which said "virtualize
 everything over ~200 rows", and **corrects a supporting argument in [ADR-0003](#adr-0003)** without
-reopening its conclusion. Closes `design/DESIGN-DIRECTION.md` OQ-1, which the owner delegated.
+reopening its conclusion. Closes `design/DESIGN-DIRECTION.md` OQ-1, which the owner delegated. ·
+⚠️ **amended 2026-08-16** — the required benchmark has been run against the shipped list primitive;
+**the decision is unchanged** and three supporting numbers below are corrected by it.
+
+### ⚠️ Amendment, 2026-08-16 — the benchmark ran; the decision stands and three of its numbers move
+
+**The measurement this ADR made a required task now exists**, taken against the list primitive that
+actually shipped — `web/src/app.css` §2.6, grid rows carrying explicit `role="table"` / `role="row"`
+/ `role="columnheader"` / `role="cell"`, which is what the Decision above specifies. **Nothing here
+touches the Decision.** "Load more" over keyset pages plus `content-visibility: auto` is still the
+default renderer, virtualization is still an escalation, and the escalation threshold is still set
+from a benchmark rather than from judgement — the rejected alternative *"picking a new threshold now,
+from judgement"* is **not** reopened, because §3 below is the benchmark this ADR demanded, arriving
+on the condition this ADR set. What moves is the arithmetic underneath, plus two gaps that are
+written down rather than left as folklore.
+
+**Conditions for everything below**, since a bare millisecond figure with no conditions is the class
+of claim this ADR exists to correct: **desktop x86 Chromium, the shipped grid-row primitive, 5,000
+rows in the DOM, density toggle**, unless a line says otherwise. The Pi-class figures are this ADR's
+own 3–5× reference-hardware factor applied to those desktop numbers, and are marked 🔍 inference
+wherever they appear, exactly as the original extrapolation was.
+
+**1. Correction (c) over-counts on the shipped primitive.** It reads:
+
+> **`contain-intrinsic-size` sizes the *content* box**, so padding and border are added on top —
+> a 24 px row with `auto 28px` produced a **37 px** placeholder (28 + 8 + 1).
+
+**The CSS fact is right; its application to the shipped row is not.** Measured on the shipped
+primitive, **the row's computed padding is `0`** — padding lives on the *cell*
+(`.tbl td { padding: var(--row-pad-y) var(--row-pad-x) }`), while `.tbl tbody tr` declares only
+`min-height: var(--row-h)` and a 1 px `border-bottom`. So **a one-line row's content box is
+`--row-h`**, not `--row-h` plus padding plus border: the cell padding sits *inside* the row's content
+box rather than outside it. The 37 px figure came from a probe that put the padding on the row, and
+it does not describe what shipped. This is why the shipped expression —
+`contain-intrinsic-size: auto calc(2 * var(--row-pad-y) + var(--row-lines, 1.1) * var(--leading-base))`
+— is correct with the cell padding *added into* the placeholder rather than subtracted from it:
+at compact density that is 2 × 4 px + 1.1 × 18 px ≈ 27.8 px against `--row-h: 28px`. **Corrections
+(a) and (b) are untouched and still hold**, and so does the "measured content-box height per row
+shape" rule they lead to.
+
+**2. The three mitigations are not peers, and two of them are an order of magnitude apart.** The ADR
+lists them flat:
+
+> Three mitigations are available before any redesign: `table-layout: fixed` (never set anywhere)
+> halves it for free; scoping the density attribute to the list container rather than `:root` bounds
+> the invalidation; and an explicit 150 ms "applying" state on a density change is honest where a
+> silent multi-second freeze is not.
+
+**Measured, density toggle, 5,000 rows, shipped primitive, all four combinations:**
+
+| Containment | Density attribute scope | Density toggle |
+|---|---|---|
+| on | list-scoped | **80 ms** |
+| on | `:root` | **107 ms** |
+| off | list-scoped | **701 ms** |
+| off | `:root` | **911 ms** |
+
+**Containment buys ~88 %** (911 → 107 ms at `:root` scope; 701 → 80 ms list-scoped). **Scoping buys
+~25 %** (911 → 701 ms uncontained; 107 → 80 ms contained), **and at 1,000 rows scoping buys nothing
+measurable at all.** Read the list accordingly: **containment is the mitigation**, scoping trims the
+remainder once containment has already done the work, and the 150 ms "applying" state is an honesty
+measure that makes nothing faster. `table-layout: fixed` is **moot on the shipped primitive** — the
+rows are `display: grid`, so there is no table layout left to fix; the 1.5–5× it was bracketed with
+was always the containment path's, and containment is what delivered it.
+
+⚠️ **Note what the table does not say.** Contained and `:root`-scoped — the shipped configuration —
+is **107 ms at 5,000 rows**, still over Tier 0's 100 ms hard fail. The mitigations do not on their
+own make an unbounded list safe; the page size in §3 is what does, and it is doing real work rather
+than belt-and-braces.
+
+**3. The page size is 200 rows, and this is the arithmetic.** The extrapolation being sharpened:
+
+> 🔍 **The escalation threshold this settles is a DOM-row ceiling in the hundreds, not the tens of
+> thousands — inference, with the extrapolation shown.** The measured cost is 0.15–0.26 ms per row
+> for a density change on desktop … which puts the 100 ms Tier-0 hard fail at roughly **100–300 rows
+> in the DOM** as the markup stands, or **300–600** with `table-layout: fixed` and a working
+> containment path
+
+Measured on the shipped primitive, the density-toggle cost curve is **0.0146 ms/row + 6.4 ms fixed**,
+which puts the 100 ms Tier-0 hard fail at **≈ 6,400 rows on desktop**. The **worst** per-row cost
+observed across row shapes and densities is **0.214 ms/row**, i.e. a desktop hard fail at **≈ 500
+rows** — inside this ADR's own **300–600** band for the containment path, reached by a separate run
+on a separate harness. 🔍 **At the 3–5× Pi-5 factor that worst case is 100–167 rows on reference
+hardware**, and the shipped curve at the same factor is roughly 930–1,840 rows.
+
+> **The default page size is 200 rows**, appended one page per "Load more" press. Against the shipped
+> cost curve that is **roughly six presses of headroom** on Pi-class hardware before the density
+> toggle reaches Tier 0's 100 ms hard fail.
+
+⚠️ **Two limits on that number, both stated rather than smoothed over.**
+
+- **The linear fit is good only to a few thousand rows.** The 25,000-row data point is
+  **superlinear**, so ≈ 6,400 rows is an extrapolation past the range the fit was taken over and is
+  **not** a ceiling anyone should build against. The operative number is the page size; the
+  extrapolated ceiling is context for it.
+- **On the worst-case row shape, one 200-row page is already at the Pi-class limit** (200 against
+  100–167). Heavy row shapes — the six-line services row, not the one-line search row — therefore
+  carry the residual risk of this page size, and the required `make bench` line above is what settles
+  whether such a list needs a smaller page. That is left to the measurement, not decided here.
+
+**4. The `<tr>` finding was independently reproduced; nothing is amended.** A separate run on a
+separate harness reproduces both halves exactly: containment on `<div>` rows moves the container's
+`scrollHeight` by **761,316 px** against a wrong placeholder, and moves it by **exactly zero** on
+table rows. The blocker, the spec citation and the grid-row primitive all stand as written. **This is
+recorded rather than left silent**, because a reproduced finding that nobody writes down is
+indistinguishable from one nobody re-checked.
+
+**5. Two gaps in the benchmark, recorded here rather than left as folklore.**
+
+- **Arrow-key traversal at 25,000 rows is unmeasured.** Chromium exhausts memory building that many
+  rich rows — **2.7 GB resident at 5,000 rows** — so the harness cannot reach the 25k point that the
+  required `make bench` line above asks for. A **full** run of the frontend thread's list benchmark
+  therefore **exits non-zero**, while its `--quick` subset passes.
+- **What would close it:** a lower-memory row shape for the 25k point specifically, so the row count
+  the required line names can be reached without the traversal case OOMing first.
+
+  ⚠️ **Status, stated precisely:** that harness (`pnpm bench:list`) is **not on `main` at the time of
+  writing** — `web/package.json` declares no such script — so this records a known gap and its exit
+  behaviour, not a command anyone can run from a clone today.
+
+**A sixth measurement is the design thread's to record, not this one's**, and is named here in one
+clause only because it would trip an assertion this ADR owns: `contain-intrinsic-size: auto`
+remembers the size it measured at the *previous* density, so a node-reusing list can show a
+measurably wrong scrollbar immediately after a density switch — which is the < 2 % drift gate below,
+and the *"relying on `auto`'s remembered-size behaviour for the rest"* clause it guards. The finding,
+its number and its fix belong to the design documents and are not restated here.
 
 ### Context
 
