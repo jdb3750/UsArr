@@ -20,7 +20,9 @@
 | `git` | any recent | — | — |
 | `make` | GNU make | The `Makefile` uses GNU-isms (`.PHONY`, `?=`, `define`). BSD make will not work. | — |
 
-Installed by `make tools` **(not yet)**, all **version-pinned in the Makefile**:
+Installed by `make tools`, all **version-pinned in the Makefile**. This target **works and is
+required** — `make check` invokes all five by absolute path and fails closed if one is missing, so
+run it before your first `make check` on a new machine:
 
 | Tool | Purpose |
 |---|---|
@@ -37,6 +39,13 @@ version there is a supply-chain hole, not merely a flaky gate.
 **You do not need these on `$PATH`, and putting a different copy there cannot shadow them.** `go
 install` writes to `$GOBIN` (or `$(go env GOPATH)/bin`), and every recipe invokes them from there by
 absolute path, asserting `--version` against the pin first. See §9.
+
+**Measured 2026-08-16**, in this repo's agent container: `make tools` installed all five into
+`/root/go/bin` and they answer at the pinned versions — `gofumpt v0.11.0 (go1.25.13)`,
+`golangci-lint has version 2.12.2`, `goose version: v3.27.3`, `govulncheck@v1.7.0`, and
+`go version -m /root/go/bin/gitleaks` reporting `github.com/zricethezav/gitleaks/v8 v8.30.1`
+(gitleaks cannot answer `--version`; §9 explains why its identity comes from the build info
+instead). An earlier revision of this line marked the target **(not yet)**, which was stale.
 
 **There is no FFmpeg dependency, and there never will be.** UsArr does not transcode, remux or
 otherwise process media — video routes to the backend that owns it, and the audio/ebook bytes UsArr
