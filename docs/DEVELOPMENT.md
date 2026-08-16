@@ -1,8 +1,9 @@
 # UsArr Development Guide
 
-> **Status: pre-alpha, zero lines of application code.** This describes the intended toolchain,
-> layout and workflows. Commands referencing files that do not exist yet are marked **(not yet)**.
-> Nothing here describes working software; it is the contract the first commits must satisfy.
+> **Status: pre-alpha. The first code has landed** — the Prowlarr Search-and-Grab path, the storage
+> and security layers under it, and an embedded SPA shell — so the build, test and check workflows
+> below are real and do run. Most of the *layout* is still contract rather than description:
+> commands referencing files that do not exist yet are marked **(not yet)**.
 >
 > Roadmap shorthand: **v0.1** unified library + search · **v0.2** requests · **v0.3** cross-media ·
 > **v0.4** gateway · **v1.0** breadth. `docs/ARCHITECTURE.md` §16 is authoritative.

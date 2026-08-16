@@ -1,9 +1,11 @@
 # UsArr Configuration Reference
 
-> **Status: pre-alpha, zero application code.** This is the *specification* the implementation is
-> being built against, not a description of shipped behaviour. Design decisions not yet exercised
-> against real services are marked **(proposed)**; facts nobody verified from a primary source are
-> marked **⚠️ unverified**.
+> **Status: pre-alpha.** A first group of keys is now read by shipped code — the listener, the URL
+> base, the data and config directories, logging, trusted proxies, the metadata User-Agent and the
+> secret key (including `_FILE`). The rest of this page remains the *specification* the
+> implementation is being built against, not a description of shipped behaviour. Design decisions not yet exercised against real
+> services are marked **(proposed)**; facts nobody verified from a primary source are marked
+> **⚠️ unverified**.
 >
 > **Scope authority:** `docs/ARCHITECTURE.md` §16 owns the roadmap. Where this document states that
 > something is available at a milestone, §16 wins. **§5 of this document (the directory layout) is

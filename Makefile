@@ -1,11 +1,11 @@
 # UsArr Makefile
 #
 # ─── HONESTY NOTICE ──────────────────────────────────────────────────────────
-# UsArr is PRE-ALPHA and currently has ZERO application code. Most targets below
-# reference paths that do not exist yet: ./cmd/usarr, ./internal/..., ./web/,
-# ./deploy/Dockerfile, ./internal/db/migrations/. They WILL fail until those are
-# created. That is intentional — this file is the build contract the first
-# commits are written against, not a description of a working build.
+# UsArr is PRE-ALPHA. The build is real now: ./cmd/usarr, ./internal/..., ./web/
+# and ./internal/db/migrations/ all exist, so build, test and check work. What is
+# still missing is ./deploy/Dockerfile, so `make docker` WILL fail. Targets that
+# reference a path that does not exist yet remain the build contract the commits
+# that create it are written against, not a description of a working build.
 #
 # Three rules this file must keep obeying as code lands:
 #   1. `make check` is the pre-commit gate. It must pass with NO Docker daemon
@@ -98,7 +98,7 @@ BASE_IMAGE ?= gcr.io/distroless/static-debian12:nonroot@sha256:1b7b9f0f0e0a1d215
 
 .PHONY: help
 help: ## Show this help
-	@echo "UsArr — pre-alpha. Most targets fail until the code they reference exists."
+	@echo "UsArr — pre-alpha. Build, test and check work; targets whose paths do not exist yet fail."
 	@echo ""
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 		| sort \
@@ -132,13 +132,13 @@ web-build: web-deps ## Build the SvelteKit SPA -> web/build (embedded by `make b
 	$(call pnpm_if_web,build)
 
 # Frontend dependency guard.
-# While the project is pre-alpha there is no web/ yet, so every web target
-# no-ops loudly instead of dying with a cryptic "No rule to make target".
-# Delete the guard branch once web/package.json exists.
+# web/package.json now exists, so the guard branch below is no longer taken on a
+# normal checkout; it survives only so a web-less tree no-ops loudly instead of
+# dying with a cryptic "No rule to make target". Safe to delete outright.
 .PHONY: web-deps
 web-deps:
 	@if [ ! -f $(WEB_DIR)/package.json ]; then \
-		echo "SKIP: $(WEB_DIR)/package.json not present yet (pre-alpha) — skipping frontend step"; \
+		echo "SKIP: $(WEB_DIR)/package.json not present — skipping frontend step"; \
 		exit 0; \
 	fi; \
 	$(PNPM) -C $(WEB_DIR) install --frozen-lockfile

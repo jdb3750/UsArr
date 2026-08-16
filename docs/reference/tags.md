@@ -1,8 +1,10 @@
 # Reference — Tag taxonomy
 
-**Status:** designed, not implemented. **Scope:** derived system tags (`type:`, `format:`,
-`source:`, `quality:`, `indexer:`) are **v0.1**; aliases, implications, the rule engine, saved
-filters and \*Arr tag import are **v1.0**.
+**Status:** partly implemented. `source:`, `type:`, `format:` and `indexer:` are derived from
+Prowlarr search results today and carried on the API response; `quality:`, persistence into the
+`tag` tables and any filtering by tag are designed, not implemented. **Scope:** derived system tags
+(`type:`, `format:`, `source:`, `quality:`, `indexer:`) are **v0.1**; aliases, implications, the
+rule engine, saved filters and \*Arr tag import are **v1.0**.
 **Parent:** [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §10. DDL: [`schema.md`](./schema.md) §8.
 
 ---

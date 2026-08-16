@@ -1,8 +1,9 @@
 # Reference — Security model
 
-**Status:** designed, not implemented. **Scope:** §1 (credential encryption, including rotation),
-§2 (SSRF) and §5 (redaction) are **v0.1**. §4's authorization checks land with the surfaces they
-protect.
+**Status:** partly implemented. §1's envelope, AAD binding and `kek_id` column are built (the
+`usarr key rotate` command is not), and §2 and §5 are built. The rest is designed, not implemented.
+**Scope:** §1 (credential encryption, including rotation), §2 (SSRF) and §5 (redaction) are **v0.1**.
+§4's authorization checks land with the surfaces they protect.
 **Parent:** [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §14.
 
 UsArr's threat profile is unusual: it is **a credential vault for a dozen services and an SSRF

@@ -7,17 +7,22 @@
  *   GET  /api/events                   one SSE stream, reconnects with Last-Event-ID
  *   POST /api/v1/releases/{id}/grab    grab a release candidate
  *
- * None of it is implemented yet (the repo is pre-alpha). Everything below is
- * therefore written to degrade honestly: a missing endpoint surfaces the actual
- * status and the actual upstream text, never a blank screen and never "an error
- * occurred". ARCHITECTURE.md §17.3 and §17.7 make that a product rule.
+ * All five are implemented by internal/httpapi. The repo is still pre-alpha and
+ * the rest of the surface is not, so everything below is written to degrade
+ * honestly: a missing endpoint surfaces the actual status and the actual
+ * upstream text, never a blank screen and never "an error occurred".
+ * ARCHITECTURE.md §17.3 and §17.7 make that a product rule.
  *
- * ASSUMPTION, flagged because it is not pinned down anywhere yet: the SSE
- * envelope. This shell accepts either a named SSE event (`search.result`,
- * `search.status`, `search.done`) or a default `message` event whose JSON
- * payload carries an equivalent `type` field, and it tolerates unknown fields.
- * Whichever shape the API settles on, `normalizeStreamEvent` is the one place
- * that changes.
+ * The SSE envelope is deliberately accepted in two shapes: a named SSE event
+ * (`search.result`, `search.status`, `search.done`) or a default `message`
+ * event whose JSON payload carries an equivalent `type` field, tolerating
+ * unknown fields. `normalizeStreamEvent` is the one place that changes.
+ *
+ * MISMATCH, not yet reconciled: internal/httpapi/events.go emits
+ * `search.started`, `search.indexer`, `search.results`, `search.done` and
+ * `search.failed`. Only `search.done` is a name this file listens for, so
+ * results do not currently reach the page. Fixing it is a change to these
+ * names, not to the shape.
  */
 
 export class ApiError extends Error {

@@ -1,6 +1,8 @@
 # Reference — The provider model
 
-**Status:** designed, not implemented. **Scope:** Tier 0 (Sonarr, Radarr, Prowlarr) is **v0.1**;
+**Status:** partly implemented. There is a Prowlarr client and a working connection test (§4); the
+registry seam (§1) and the Go provider interface (§2) are designed, not implemented, and no code
+has been written for Sonarr or Radarr. **Scope:** Tier 0 (Sonarr, Radarr, Prowlarr) is **v0.1**;
 Tier 1 manifests are **v0.3**. A WASM tier is **deferred, not rejected** — see
 [`../FUTURE.md`](../FUTURE.md) §1.
 **Parent:** [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §11.
