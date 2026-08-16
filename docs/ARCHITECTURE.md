@@ -473,7 +473,10 @@ lazy loading as the best-performing pattern. Three consequences, all normative:
    remembered-size behaviour for the rest, with (e) above as the assertion. The measured values are
    **28 / 32 / 36 px for a one-line row** and **45 / 49 / 53 px for a rich one**, at compact /
    standard / relaxed, with **0.76 / 0.70 / 0.65% drift against a 2% budget** — measured by the
-   frontend thread's `pnpm bench:list`, and recorded in [`design/DESIGN-DIRECTION.md`](./design/DESIGN-DIRECTION.md)
+   frontend thread's `pnpm bench:list`. ⚠️ **The one-line figure is uniform; the rich one is a
+   bimodal population and `45 / 49 / 53` is its mean content box, which is also its modal border
+   box** — see §7.4 before "correcting" it by a border width in either direction. Recorded in
+   [`design/DESIGN-DIRECTION.md`](./design/DESIGN-DIRECTION.md)
    §7.4 and [ADR-0029](./DECISIONS.md#adr-0029), so **this is an implementable rule rather than a
    direction**. §7.4 also carries the rule that **a row-height change must invalidate the remembered
    intrinsic size**, which is required rather than advisory.

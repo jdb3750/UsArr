@@ -689,6 +689,20 @@ this warning is about, and the box is named because `contain-intrinsic-size` tak
 while every height quoted from a rect is the border box — a 1 px error per row that `auto` then
 silently corrects.
 
+🚩 **THE RICH ROW HAS NO SINGLE HEIGHT, AND `45 / 49 / 53` IS TWO DIFFERENT STATISTICS AT ONCE.**
+The one-line row is uniform; the rich row is **bimodal**, because rows with more chips wrap. Measured
+by the frontend thread at compact over 2,000 rows, the content boxes split **44 px × 1,308 rows and
+48 px × 692 rows** — so the *mode* is content box 44 / 48 / 52 and the *mean* is 45.4 / 49.4 / 53.4.
+That makes **`45 / 49 / 53` simultaneously the mean content box and the modal border box**, which is
+exactly why it has read all this time as one unambiguous number. ⚠️ **The live consequence is a
+correction that must not be applied.** `RELEASE_ROW_INTRINSIC` in `web/src/lib/requests.ts` holds
+`45 / 49 / 53` and feeds `contain-intrinsic-size`, which takes the content box — so it looks like the
+`ROW_INTRINSIC` case one paragraph up (*border box, therefore subtract one, therefore 44 / 48 / 52*)
+and it is not. It is **correct as the mean**, which is the statistic a whole-list placeholder wants;
+"correcting" it to the mode reintroduces the same class of error in the opposite direction. `list.ts`
+carries this warning at the call site; it is carried here because this section is where the figure is
+quoted from. **Name the statistic as well as the box whenever the population is not uniform.**
+
 One consequence worth stating because it is easy to violate: SC 2.5.8 requires 24 × 24 CSS px
 targets, with a spacing exception for undersized targets whose 24 px circles do not intersect
 (<https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html>). **A 28 px compact row
@@ -978,8 +992,12 @@ border box − 1* throughout, and the natural content box is exactly
 
 ⏳ **The rich row did not move, and that is measured rather than carried over**: on both the pre-fix
 and post-fix trees it is **border box 45 / 49 / 53 px, content box 44 / 48 / 52 px**, with the floor
-**slack** on it at every density. (The sample is bimodal — 45 px × 128 and 49 px × 72 at compact —
-because rows with more chips wrap; the figures above are the mode.)
+**slack** on it at every density. ⚠️ **Those are the MODE, and the rich row is bimodal** — rows with
+more chips wrap. At compact the split is 45 px × 128 and 49 px × 72 in this run's 200-row sample, and
+44 px × 1,308 against 48 px × 692 content box in the frontend thread's 2,000-row one; the **mean**
+content box is 45.4 / 49.4 / 53.4. So `45 / 49 / 53` is the modal *border* box here and the mean
+*content* box in `RELEASE_ROW_INTRINSIC`, which is the collision §7.4 flags: two statistics wearing
+the same three digits.
 
 🚩 **Why the fix passes the rich row by is worth writing down, because the obvious answer is wrong
 and was written here first.** It is *not* that some other cell is taller: measured at compact, the
@@ -1807,6 +1825,17 @@ else. Rules:
   assertion has nothing to run over until one appears. Recording it that way is the point: a rule
   described as active over a surface that does not exist is the invented status `CLAUDE.md` bans,
   and it is also how a deleted subsystem grows back.
+- 🚩 **The title is one line, ellipsised, with the full string in `title`.** Moving it below the art
+  made card height a function of title length, so a row of cards ended ragged — measured, five of 42
+  card renderings took two lines and stood 16 px taller than their 2:3 neighbours. `overflow:
+  hidden; white-space: nowrap; text-overflow: ellipsis` restores level rows; `-webkit-line-clamp` is
+  refused because the ellipsis is what makes the cut visible, which is what §9.1 tier 1 demands of an
+  identity field. **The tooltip is the native `title` attribute, set unconditionally on both the
+  title and the art** — measuring each card to decide whether a tooltip is needed is a layout read
+  per card on the render path, which §2's first principle rules out; a redundant attribute on a short
+  title is far cheaper than a forced reflow per grid paint. Cards still differ in height where the
+  *aspect* differs, and that is this section's own rule about aspect coming from the item's art, not
+  raggedness.
 - Design to the **fixed width allowlist**: `92, 154, 200, 342, 500, 780, orig`. An arbitrary `?w=`
   is refused as a cache-poisoning DoS (§4.4).
 - Availability renders per §6.3's rollup rule: `have == total && total > 0` → ✓; `have == 0` → ✗;
