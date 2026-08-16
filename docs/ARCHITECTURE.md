@@ -1502,6 +1502,18 @@ Sonarr, Radarr or media server to get a library."*
   `ReleaseResource` body**, and `ReleaseResource.downloadClientId` selects one of *Prowlarr's own*
   configured download clients. Both verified from the shipped spec. **UsArr therefore needs no
   download-client integration**, which is what makes the mode affordable in v0.1.
+- **The indexer and category filters are populated from a LOCAL REPLICA, not from a live call.**
+  `GET /api/v1/indexers` reads `indexer_catalog` (schema.md §5.1, migration 0004), which the
+  background prober refreshes on the same schedule and by the same code path that already refreshes
+  health warnings and blocked indexers. This is §2 applied literally: **the picker paints before the
+  search runs, so it is a render path**, and proxying Prowlarr's `GET /api/v1/indexer` under it —
+  even to build a small projection — would put a remote call under a browser's paint. The replica
+  carries `fetched_at` so the UI shows staleness instead of paying for freshness in latency, and it
+  survives a restart and an upstream outage, which a process-lifetime cache would not.
+  🚩 The upstream resource's `fields[]` carries the user's tracker **passkey**, RSS key, API key and
+  cookies. Three successive allowlists — `mapping.CatalogIndexer`, the `indexer_catalog` column set,
+  and the HTTP response struct — mean it has nowhere to land; there is no redaction pass over a
+  pass-through anywhere on the path.
 - **Results carry derived tags immediately, with no library behind them:** `source:` from
   `ReleaseResource.protocol` (byte-identical across the Prowlarr, Sonarr and Radarr specs), `type:`
   from the Newznab category, `indexer:`, `indexer-privacy:`, and `flag:` from `indexerFlags` —

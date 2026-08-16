@@ -58,7 +58,7 @@ func TestMigrationRoundTrip(t *testing.T) {
 // asserted rather than derived so that adding a migration is a deliberate edit
 // here too — a version the tests do not know about is a migration nobody
 // round-tripped.
-const latestSchemaVersion int64 = 3
+const latestSchemaVersion int64 = 4
 
 // Down is not a supported user path, but it must work, because it is the
 // cheapest way to test a migration locally. A Down that leaves objects behind
@@ -553,6 +553,113 @@ func dumpSchema(ctx context.Context, q *sql.DB) (string, error) {
 		return "", fmt.Errorf("read sqlite_schema: %w", err)
 	}
 	return b.String(), nil
+}
+
+// TestMigration0004NeedsNoRebuild pins 0004's header, and pins the one thing
+// about indexer_catalog that is a security property rather than a performance
+// one: ITS COLUMN LIST IS AN ALLOWLIST.
+//
+// Prowlarr's IndexerResource carries fields[] — a private tracker's passkey,
+// RSS key, API key and session cookie. UsArr closes that leak class
+// structurally, by never having anywhere to put one, and the cheapest place for
+// that to rot is a well-meaning "let's also keep the raw resource so we don't
+// have to re-fetch it" column. This test is what makes adding one a deliberate
+// act rather than an oversight.
+func TestMigration0004NeedsNoRebuild(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	// 1. The exact column set of indexer_catalog. Not "these columns exist" —
+	//    the WHOLE set, so a new one fails here and has to be argued for.
+	want := []string{
+		"service_instance_id", "indexer_id", "name", "protocol", "privacy",
+		"enabled", "priority", "supports_search", "supports_rss",
+		"supports_pagination", "search_types", "limits_max", "limits_default",
+		"categories", "fetched_at",
+	}
+	got := func() []string {
+		rows, err := d.Read().QueryContext(ctx,
+			`SELECT name FROM pragma_table_info('indexer_catalog') ORDER BY cid`)
+		if err != nil {
+			t.Fatalf("indexer_catalog does not exist: %v", err)
+		}
+		defer func() { _ = rows.Close() }()
+
+		var names []string
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				t.Fatal(err)
+			}
+			names = append(names, name)
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		return names
+	}()
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("indexer_catalog columns = %v\nwant %v\n"+
+			"This table is an ALLOWLIST: a credential from Prowlarr's fields[] can only reach "+
+			"SQLite if a named column puts it there. Adding a column — above all a raw-resource "+
+			"or JSON-blob column — reopens the leak class migration 0004 closed. If the addition "+
+			"is genuinely wanted, say so in 0004's successor and update this list in the same "+
+			"change.", got, want)
+	}
+
+	// 2. indexer_catalog is STRICT, so a passkey cannot arrive as an untyped
+	//    blob in an INTEGER column either.
+	var strict int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT strict FROM pragma_table_list WHERE name = 'indexer_catalog'`).Scan(&strict); err != nil {
+		t.Fatalf("reading pragma_table_list for indexer_catalog: %v", err)
+	}
+	if strict != 1 {
+		t.Error("indexer_catalog is not STRICT")
+	}
+
+	// 3. service_instance survived ADD COLUMN as a STRICT table — the claim
+	//    0004's header rests on, checked rather than remembered.
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT strict FROM pragma_table_list WHERE name = 'service_instance'`).Scan(&strict); err != nil {
+		t.Fatalf("reading pragma_table_list for service_instance: %v", err)
+	}
+	if strict != 1 {
+		t.Error("service_instance is no longer STRICT after ADD COLUMN")
+	}
+
+	// 4. indexers_fetched_at is NULLABLE with no default, and that is the whole
+	//    mechanism: NULL means "never successfully read", which is a different
+	//    state from "read, and this service has zero indexers". A NOT NULL
+	//    column with a default would collapse the two and make the endpoint
+	//    say "you have no indexers" to someone whose Prowlarr UsArr has simply
+	//    never reached.
+	var notNull int
+	var dflt sql.NullString
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT "notnull", dflt_value FROM pragma_table_info('service_instance')
+		  WHERE name = 'indexers_fetched_at'`).Scan(&notNull, &dflt); err != nil {
+		t.Fatalf("service_instance has no indexers_fetched_at column: %v", err)
+	}
+	if notNull != 0 {
+		t.Error("indexers_fetched_at is NOT NULL; there would then be no way to say 'never read'")
+	}
+	if dflt.Valid {
+		t.Errorf("indexers_fetched_at defaults to %q; a default is a claim of a fetch that did not happen", dflt.String)
+	}
+
+	// 5. The foreign key is enforced, so a catalogue row cannot outlive the
+	//    service it replicates. Foreign keys really are on — 0002 pins that —
+	//    and this is the insert that would silently succeed if they were not.
+	err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO indexer_catalog (service_instance_id, indexer_id, name, fetched_at)
+			VALUES (999, 1, 'Orphan', '2026-08-16 00:00:00')`)
+		return err
+	})
+	if err == nil {
+		t.Error("a catalogue row for a non-existent service was accepted")
+	}
 }
 
 // userObjects lists every non-internal schema object.

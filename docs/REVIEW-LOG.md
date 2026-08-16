@@ -3244,3 +3244,101 @@ each failing if an error moves:
 - **No UI change.** Design owns the position that ambiguous rows get no Retry affordance.
 - **No stack-trace parsing.** See GR-01.1.
 - **No health-screen logic** for the green-test trap; recorded only.
+
+---
+
+# IX-01 — `GET /api/v1/indexers`, and the two ways it could have shipped wrong
+
+**Origin: real use, then a design correction mid-implementation.** Joe asked to filter release search
+by category or by a specific indexer. The frontend thread found there was no endpoint listing a
+service's indexers at all — their picker was populated from `search.indexer` SSE frames, so it was
+empty until a search had already run, and the screen said so. They judged the endpoint small. It is
+small; the two ways it could have shipped wrong are not.
+
+## IX-01.1 The render-path trap, and why the obvious shape is the forbidden one
+
+`GET /api/v1/indexer` on Prowlarr is one cheap call, so proxying it looks harmless. It is not: **the
+picker paints before the search runs**, which makes this a render path, and no render path may block
+on an *Arr (ARCHITECTURE §2.3 rule 1). The trap is that the violation hides behind a projection —
+"the handler only builds a small struct" is still a remote call under a browser's paint, and it is
+the shape a reviewer waves through.
+
+**An in-process cache was considered and rejected, and the rejection is the useful record.** It was
+offered as an acceptable cheaper option and turned down by the coordinating thread on one argument
+that settles it: a process-lifetime map does not remove the caveat, it **relocates** it — *empty
+until you have searched once* becomes *empty until the first probe after every restart*, and the
+screen still has to apologise for itself. The endpoint exists to delete that sentence.
+
+So: **migration 0004, `indexer_catalog`**, written by the background prober — the same loop, the same
+schedule and the same `ProbeNow` hook that already refresh health warnings and blocked indexers, so
+service-add and a successful connection test both refresh it for free and no new timer exists. The
+handler reads the replica and returns. Precedent, not novelty: `service_instance`'s health columns
+are persisted for the stated reason that *"a restart must not blank the Services screen"*.
+
+Three consequences that only a replica gets, and each is tested:
+
+- **A failed refresh writes nothing.** The last good copy stands, and `fetched_at` says how old it
+  is. An empty picker is worse than a stale one.
+- **The replica outlives the upstream.** `TestEndToEndIndexerCatalogue` tears down the Prowlarr
+  double and asserts the endpoint still serves all three indexers.
+- **Three empty-ish states stay distinguishable**, because they are three different sentences: no
+  indexer service configured · configured but never successfully read · read, and genuinely zero
+  indexers. Zero rows cannot separate the last two, so the fetch time is stamped on the *instance*
+  (`service_instance.indexers_fetched_at`, nullable with no default — NULL means never). Returning
+  an empty list for all three would be the empty-screen-that-looks-broken failure wearing a 200.
+
+⚠️ **The endpoint answers 200 for all four states** where the search path answers 409. That is not an
+inconsistency: search was *asked to do something it cannot do*, while this is a list, and a picker
+that 4xx's on a fresh install paints an error box on a screen where nothing is wrong. Only a
+malformed request fails — `?instance=` that is not an id, is not visible, or names a non-indexer.
+
+## IX-01.2 The credential, and why redaction was not on the table
+
+`IndexerResource.fields[]` carries the indexer's own credentials under
+`privacy ∈ {password, apiKey, userName}`: on a private tracker that is the user's **passkey**, its
+RSS key, its API key and its session cookie. A leaked passkey is account termination, because it is
+what the tracker attributes traffic by. **This project has already paid for this leak class once** —
+`release_candidate.info_url` held tracker passkeys verbatim in SQLite, and therefore in every backup,
+while the HTTP responses looked clean.
+
+The frontend thread endorsed the warning and asked for it stronger; the coordinating thread agreed
+and specified the mechanism: **a field-by-field allowlist, not a denylist and not a redaction pass
+over a pass-through.** Shipped as three successive allowlists, so the value has nowhere to land at
+any layer:
+
+| Layer | Type | What makes it an allowlist |
+|---|---|---|
+| Projection | `mapping.CatalogIndexer` | Every member assigned by name. No `out := ix`, no embedding, no `map[string]any`. `Presets` dropped too — preset entries are `IndexerResource` values and carry their own `fields[]` |
+| Storage | `indexer_catalog` | No `fields` column, no cookie column, no raw-resource column. `search_types` and `categories` hold **UsArr's own JSON**, marshalled from the projection, never re-serialised upstream JSON |
+| Wire | `httpapi.indexerResponse` | Declared members only; the two JSON columns decode into declared shapes |
+
+**Note what is *not* done: nothing filters `fields[]` by `privacy`.** The fixture's cookie entry
+carries no `privacy` marker at all, which is exactly why filtering would have leaked it. The array is
+never carried, so the marker never has to be trusted.
+
+**The guards were fired deliberately rather than trusted.** `FromProwlarrIndexer` was temporarily
+edited to append every field value to the indexer's name; both
+`TestCatalogProjectionCannotCarryAnIndexerCredential` (unit) and `TestEndToEndIndexerCatalogue`
+(whole stack, through the real HTTP boundary) failed, and the edit was reverted. Both assertions run
+over the **marshalled byte string**, not over parsed members, so they cannot pass because the test
+forgot to look at a field — which is precisely the failure being guarded. `TestMigration0004NeedsNoRebuild`
+pins the exact column set, so adding a "let's keep the raw resource so we needn't re-fetch it" column
+fails a test rather than passing a review.
+
+## IX-01.3 Also fixed, in passing
+
+`supportsSearchType` had one home in `internal/releases`' fan-out planner. The picker needs the same
+answer — which indexers can serve the selected search type — and a second copy would have let the
+picker offer an indexer the planner then skips, which reads as a broken filter rather than as a
+deliberate skip. It now lives once, in `internal/servarr/mapping`, and the planner delegates to it.
+
+## IX-01.4 Not done, and why
+
+- **No new configuration key** for the refresh interval. It is the prober's existing 60 s
+  (`probeInterval`, `cmd/usarr/services.go`), and a second knob for the same loop is surface without
+  a question behind it.
+- **No `IN (…)` read across instances.** One instance per call, so `service_instance_id = ?` is an
+  equality on the index's leading column and `name` supplies the `ORDER BY`; a set read cannot, and a
+  homelab has single-digit instances.
+- **No filtering of disabled indexers.** They are listed and marked. Hiding one makes *"why is my
+  indexer missing?"* unanswerable from the screen that is supposed to answer it.

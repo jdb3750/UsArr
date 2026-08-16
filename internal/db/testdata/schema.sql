@@ -7,6 +7,9 @@ CREATE INDEX ix_audit_ts ON audit_log(ts DESC);
 -- index ix_cc_user
 CREATE INDEX ix_cc_user ON client_credential(user_id, revoked_at);
 
+-- index ix_indexer_catalog_instance
+CREATE INDEX ix_indexer_catalog_instance ON indexer_catalog(service_instance_id, name);
+
 -- index ix_prov_dlid
 CREATE INDEX ix_prov_dlid     ON provenance(download_id);
 
@@ -116,6 +119,39 @@ CREATE TABLE client_credential (
   last_used_at TEXT, revoked_at TEXT
 ) STRICT;
 
+-- table indexer_catalog
+CREATE TABLE indexer_catalog (
+  service_instance_id INTEGER NOT NULL
+                        REFERENCES service_instance(id) ON DELETE CASCADE,
+  -- indexer_id is the id the SERVICE uses, not a UsArr id: it is what
+  -- ?indexer= sends back to GET /api/v1/search, and what the search fan-out
+  -- addresses one request at a time.
+  indexer_id          INTEGER NOT NULL,
+  name                TEXT NOT NULL,
+  protocol            TEXT NOT NULL DEFAULT 'unknown',  -- usenet|torrent|unknown
+  privacy             TEXT NOT NULL DEFAULT '',         -- public|semi-private|private
+  enabled             INTEGER NOT NULL DEFAULT 0,
+  -- 1-50 and LOWER WINS. Same field the cross-indexer dedupe tiebreaks on.
+  priority            INTEGER NOT NULL DEFAULT 0,
+  supports_search     INTEGER NOT NULL DEFAULT 0,
+  supports_rss        INTEGER NOT NULL DEFAULT 0,
+  supports_pagination INTEGER NOT NULL DEFAULT 0,
+  -- JSON array of UsArr's own search-type vocabulary: search|tvsearch|movie|
+  -- music|book. Derived from capabilities.*SearchParams, so the picker can grey
+  -- out an indexer that cannot serve the selected type instead of letting the
+  -- user pick one that will be skipped with a reason after the fact.
+  search_types        TEXT NOT NULL DEFAULT '[]',
+  limits_max          INTEGER,   -- NULL means the indexer advertised none
+  limits_default      INTEGER,
+  -- JSON array of {id, name, sub_categories}: the RAW Newznab/Torznab tree,
+  -- never collapsed (3030 is the only reliable audiobook-vs-music signal, 7030
+  -- likewise for comics). This is what makes filtering by category possible on
+  -- a screen that has not run a search yet.
+  categories          TEXT NOT NULL DEFAULT '[]',
+  fetched_at          TEXT NOT NULL,
+  PRIMARY KEY (service_instance_id, indexer_id)
+) STRICT;
+
 -- table provenance
 CREATE TABLE provenance (
   id                 INTEGER PRIMARY KEY,
@@ -198,7 +234,7 @@ CREATE TABLE service_instance (
   last_delta_sync_at TEXT,
   config_json        TEXT,
   deleted_at         TEXT              -- tombstone; id stays burned
-) STRICT;
+, indexers_fetched_at TEXT) STRICT;
 
 -- table session
 CREATE TABLE session (
