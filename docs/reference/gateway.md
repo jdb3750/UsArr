@@ -43,6 +43,12 @@ Every auth refusal carries `helpUrl`.
 **Not in the gateway milestone, each its own later milestone with its own criterion:** OPDS
 (§5), multi-instance aggregation (§2), write-back (§6), and the wider client matrix.
 
+> ✅ **One Navidrome is a checked assumption, not a guess.** The owner confirmed on **2026-08-16**
+> that he runs Navidrome for music and Audiobookshelf for audiobooks — a single Navidrome, which is
+> the install this subset was scoped against. 🔍 Other users' installs are still an assumption, and
+> multi-instance aggregation stays v1.0 either way. See [`../ARCHITECTURE.md`](../ARCHITECTURE.md)
+> §16, v0.4.
+
 ---
 
 ## 2. Authentication
