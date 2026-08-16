@@ -932,6 +932,27 @@ them** — and they are recorded here because §7.4 is where the containment pol
 Scrollbar drift over a full scroll at the one-line values is **0.76 / 0.70 / 0.65%** against the 2%
 budget stated below, so all three densities clear it with better than a factor of two in hand.
 
+✅ **All six figures are confirmed on a genuinely-loaded IBM Plex, and the reason they are stable is
+worth more than the confirmation.** The bench that produced them had been running without the
+webfont — its Vite root declared no `publicDir`, so `app.css`'s `@font-face` URLs 404'd for the
+harness's whole life. Re-measured at 2,000 rows against the real `List.svelte` and `app.css`, with
+the face verified by canvas advance-width probe rather than by `document.fonts.check` alone, **every
+number is byte-identical with the face served and with it blocked**: one-line content box
+28.0 / 32.0 / 36.0, rich rows rounding to 45 / 49 / 53. Nothing is provisional.
+
+**The mechanism is `body { line-height: var(--leading-base) }` being a fixed 18 px *length* rather
+than a unitless multiplier**, so glyph metrics cannot move the line box — the missing font could not
+have moved these numbers even in principle. 🚩 **And the null result is trustworthy because the
+guard was fired rather than assumed:** forcing `line-height: normal` on the row *does* split the two
+conditions (rich rows 43 / 47 / 51 served against 39 / 43 / 47 blocked). A probe that cannot
+distinguish the conditions it is testing proves nothing; this one can.
+
+⚠️ **Scope, stated because it bounds the claim: one list configuration was measured** — `stack:
+'two-line'`, the Search-and-Grab release columns ADR-0029 was originally measured against. A list
+configured `stack: 'labels'` has one-line rows at **26 / 30 / 34 px**, *below* the floor, where
+`min-height` would bind and where a floor-based explanation of the numbers would be the correct one.
+Do not generalise these six figures past the shape they were measured on.
+
 **Those are the rendered *border-box* heights, and the declaration is not written as those three
 numbers**, because `contain-intrinsic-size` sizes the **content** box — the row's padding and its
 1 px bottom border are added on top of whatever it says. The mockups compute it instead, as
@@ -990,6 +1011,15 @@ Kept here because each one is a way to arrive at a wrong placeholder again:
    the one property with no effect on the real height. The grid-row primitive above fixes this as a
    side effect, since `min-height` does apply to a grid item — but the table below must then be
    read as what it is.
+   ✅ **Confirmed on the shipped grid row, and it corrects a second-order claim at the same time:**
+   forcing `--row-h: 100px` there moves every row to 100 px, so the property is live where it was
+   inert on the `<tr>`. **But it is live and *slack*, not load-bearing** — setting `min-height: 0`
+   leaves a one-line row unchanged, because the natural height sits 1 px over the floor and the
+   floor therefore never binds. So the one-line values are **not produced by `--row-h`**; that they
+   coincide with it at all three densities is arithmetic accident, from
+   `2 × --row-pad-y + 1.1 × --leading-base` landing within a rounding step of it. Anything that
+   reasons from "the row is `--row-h` tall because the floor says so" is reasoning from a
+   coincidence.
 2. **Row heights are not the six values in §5.3's table.** Measured on the shipped search screen at
    compact density there are **six distinct heights — 28, 30, 45, 47, 59, 62 px, mean 42.0** — and
    **eighteen across the three densities**, because real rows wrap. Estimating 25,000 rows at 28 px
