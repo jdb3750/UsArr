@@ -216,7 +216,7 @@ These are not new. They are restated because every decision below is downstream 
 | **ARCHITECTURE §17.1 / §4.4.1** | **No skeleton shimmer.** The image placeholder is a `dominant_color` block with the title in it: informative, not decorative |
 | **ARCHITECTURE §2.3 / §5.5 / §17.7** | Degraded ≠ blocked. A small **non-modal** banner. **The catalogue never greys out and never shows a spinner** |
 | **ARCHITECTURE §13** | Client-side prefix filter p50 < 5 ms, p99 < 16 ms — one frame. The UI's own budget, not the server's |
-| **ARCHITECTURE §16** (amended, ADR-0032) | **v0.1 is six media types, read-only beyond video**: Sonarr + Radarr, plus the read-only catalogue sources **Navidrome, Audiobookshelf, Komga, Kavita**, plus Prowlarr. The **command sinks** (Lidarr, LazyLibrarian, Mylar3, Kapowarr) are v1.0. Requests in v0.1 is the **Prowlarr Search-and-Grab path only — for all six types** |
+| **ARCHITECTURE §16** (amended, ADR-0032) | **v0.1 is six media types, read-only beyond video**: Sonarr + Radarr, plus the read-only catalogue sources **Navidrome, Audiobookshelf and Komga**, plus Prowlarr. **Kavita is v0.2**, not v0.1 — ADR-0032 moved it out, and ARCHITECTURE §16 and §7.1a are authoritative. The **command sinks** (Lidarr, LazyLibrarian, Mylar3, Kapowarr) are v1.0. Requests in v0.1 is the **Prowlarr Search-and-Grab path only — for all six types** |
 | **ARCHITECTURE §6.5 / ADR-0026** | **User-defined libraries exist and are configured separately from services.** They are a *scope*, never a navigation axis (§8.1) |
 
 One more, from the ecosystem rather than from the repo: in this software family **stability of
@@ -561,8 +561,9 @@ are verbs: "Add", "Retry", "Test connection", "Search indexers".
 
 ### 5.1 The unit
 
-**4 px base; scale `2 4 6 8 12 16 24 32 48`.** The 2 and 6 steps exist so a 28 px row is possible;
-above 16 the scale goes in 8s. Every padding, margin, gap, offset and icon box in the app is one of
+**4 px base; scale `2 4 6 8 12 16 24 32 48`.** The 2 and 6 steps are the off-4 values §5.3's row
+heights need — 6 px is the standard row's vertical padding, 2 px the hairline gap inside a chip —
+and above 16 the scale goes in 8s. Every padding, margin, gap, offset and icon box in the app is one of
 those nine values. The rule comes from Müller-Brockmann — every measurement derives from one unit
 (*Grid Systems in Graphic Design*, 1981) — and its stated payoff is not aesthetic: information laid
 out this way "is not only read more quickly and easily, but is also more easily understood and

@@ -225,12 +225,32 @@
   --ring-offset:   1px;
 }
 
+/* OPEN, raised by docs/design/mockups/usarr.css and recorded here rather than
+ * invented there. Building the first five real screens needed two roles this
+ * file does not have, and the mockup declares them locally:
+ *
+ *   --inset  #fdfcfb light / #100f0e dark — the interior of an input. It is
+ *            one step AWAY from the page ground rather than towards it, so a
+ *            field reads as a well rather than as a raised surface; --n-0 on
+ *            --n-1 chrome is invisible and --n-1 on --n-0 is a button.
+ *   --hover  #eceae5 light / #26241f dark — a row/control hover fill DISTINCT
+ *            from --bg-selected. §4 currently maps hover and raised to the
+ *            same --n-1 and selected to --n-2, which leaves hover-over-a-
+ *            selected-row with nothing to say.
+ *
+ * Neither is adopted here yet. Adopting them means either two more ramp steps
+ * or admitting the ramp is nine values with two interstitials, and that is a
+ * decision for the pass that writes web/src/app.css, not for a mockup. Until
+ * then this note is the record that the mockup did not invent colour silently.
+ */
+
 /* -----------------------------------------------------------------------------
  * §5. Space — 4px base unit
  *
- * Scale: 2 4 6 8 12 16 24 32 48. The 2 and 6 steps exist so a 28px row is
- * possible; above 16 the scale goes in 8s. Every padding, margin, gap and
- * offset in the app is one of these nine values.
+ * Scale: 2 4 6 8 12 16 24 32 48. The 2 and 6 steps are the off-4 values the
+ * §8 row heights need: 6 is the standard row's vertical padding and 2 is the
+ * hairline gap inside a chip. Above 16 the scale goes in 8s. Every padding,
+ * margin, gap and offset in the app is one of these nine values.
  * Origin of the rule: Müller-Brockmann, *Grid Systems in Graphic Design*
  * (1981) — every measurement derives from one unit. Cross-checked against
  * Carbon's data-table row heights (24/32/40/48/64), all divisible by 4:
@@ -242,9 +262,9 @@
 
   --space-0: 0;
   --space-1: 2px;   /* hairline gap: icon-to-label inside a chip               */
-  --space-2: 4px;   /* intra-row: gap between adjacent inline elements         */
-  --space-3: 6px;   /* vertical padding inside a 28px compact row              */
-  --space-4: 8px;   /* vertical padding inside a 32px row; icon-to-text        */
+  --space-2: 4px;   /* intra-row gap; vertical padding in a 28px compact row   */
+  --space-3: 6px;   /* vertical padding inside a 32px standard row             */
+  --space-4: 8px;   /* vertical padding inside a 36px relaxed row; icon-to-text*/
   --space-5: 12px;  /* horizontal cell padding; gap between row groups         */
   --space-6: 16px;  /* form field spacing; dialog padding                      */
   --space-7: 24px;  /* inter-region: gap between page sections                 */
@@ -356,22 +376,34 @@
  * clickable icons — compact rows are for reading. Rows with inline actions use
  * the relaxed step.
  * https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html
+ *
+ * THE PADDING IS DERIVED FROM THE FLOOR, NOT CHOSEN NEXT TO IT. The vertical
+ * padding used to be 6/8/8, and that is arithmetically impossible: a min-height
+ * is only a floor if the content box fits under it, and one line of --text-base
+ * is --leading-base = 18px. 18 + 2x6 = 30 against a 28px compact floor, and
+ * 18 + 2x8 = 34 against a 32px standard floor — both overshoot, so the row that
+ * rendered was not the row this table names. The two-line steps say the same
+ * thing: 18 + 16 = 34, and 34 + 2x6 = 46 against a 44px compact floor.
+ * At 4/6/8 all six numbers fit — 26<=28, 42<=44, 30<=32, 46<=48, 34<=36,
+ * 50<=52 — and the mockup, which is where this was caught, measures a compact
+ * row at exactly 28.0px. If a future size step moves, redo this arithmetic;
+ * do not pick a padding that looks right.
  * --------------------------------------------------------------------------- */
 
 :root,
 :root[data-density="compact"] {
   --row-h:          28px; /* read-only data row. THE DEFAULT.                  */
   --row-h-two-line: 44px; /* title 13/18 over meta 11/16                       */
-  --row-h-thumb:    52px; /* 40px cover + 6px padding                          */
-  --row-pad-y:      var(--space-3); /* 6px                                     */
+  --row-h-thumb:    52px; /* 40px cover inside a 52px floor                    */
+  --row-pad-y:      var(--space-2); /* 4px  — 18 + 8  = 26 <= 28               */
   --row-pad-x:      var(--space-5); /* 12px                                    */
 }
 
 :root[data-density="standard"] {
-  --row-h:          32px; /* 13px text, 8px vertical padding                   */
+  --row-h:          32px;
   --row-h-two-line: 48px;
   --row-h-thumb:    56px;
-  --row-pad-y:      var(--space-4); /* 8px                                     */
+  --row-pad-y:      var(--space-3); /* 6px  — 18 + 12 = 30 <= 32               */
   --row-pad-x:      var(--space-5);
 }
 
@@ -379,7 +411,7 @@
   --row-h:          36px; /* fits 28px inline action buttons with clearance    */
   --row-h-two-line: 52px;
   --row-h-thumb:    60px;
-  --row-pad-y:      var(--space-4);
+  --row-pad-y:      var(--space-4); /* 8px  — 18 + 16 = 34 <= 36               */
   --row-pad-x:      var(--space-6);
 }
 
