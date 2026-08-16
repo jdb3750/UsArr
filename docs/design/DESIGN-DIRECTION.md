@@ -1018,7 +1018,16 @@ each of which is a decision:
    about what it hid.
 3. **It renders `null` at 0 or 1 library.** No control appears for a distinction the user does not
    have — the same discipline as Sonarr's `PageSidebarStatus` returning `null` at zero (§8.2).
-4. **Native checkboxes in a popover.**
+4. **Native checkboxes in a popover — with a maximum height, an internal scroll, and a filter once
+   the list is long.** 🚩 The popover shipped with `max-height: none` and `overflow-y: visible`:
+   measured at ~34 px per row it is ~310 px at the nine libraries drawn, **551 px at sixteen**, and
+   it reaches the bottom of a 900 px viewport at roughly **24 libraries** and of a 768 px laptop at
+   **19** — past which the list is clipped or overflows with no way to scroll it. **This is the one
+   control §17.2 designates as *the* answer to unbounded cardinality** — *"libraries are unbounded,
+   and therefore never a nav list"* — so a control that does not itself survive them defeats its own
+   justification. `max-height: min(60vh, 420px)` with `overflow-y: auto`, a filter input above the
+   list once the count exceeds ~12, and `Select all` / `Select none`. All three are what Navidrome's
+   `LibrarySelector` and Jellyfin's user-view picker already do.
 5. 🚩 **It is reachable at every viewport whenever the scope is not "all libraries".** Below 900 px
    the sidebar is a collapsed overlay drawer and takes the chip with it, so the only statement of an
    active scope is invisible until the drawer is opened — on the device §17.1 singles out, after a

@@ -939,10 +939,25 @@ composition**, so recordings of one classical work are grouped by release, not b
 amount of aggregation fixes it — the sources do not carry the concept. `work_credit(role)`
 (ADR-0031) makes a composer *representable as a credit*, which is the **seam**, not the disclosure;
 reading it as the disclosure inverts the finding. **Where the consequence is visible, UsArr says
-so** — on a composer's page and on a box set — in the same register as the *"not identified"* badge
-below and the comics gap list (§6.1). Classical is not a niche; it is the case where a unified
+so — as one inline note on the artist or album it concerns, never as a table, a heading or a section
+of its own** — in the same register as the *"not identified"* badge below and the comics gap list
+(§6.1). Rendered as a `role="table"` under a heading reading *"Composers, and what UsArr cannot do
+with them"*, with columns headed *"Artist as UsArr holds it"* and *"What is actually there"*, it
+becomes an essay wearing a data screen's clothes: the heading enters a screen reader's heading list
+as the title of an argument, *"what is actually there"* is a footnote that has been given a column,
+and it lands at the foot of an album drill-down where nothing in any hierarchy puts it. The sentence
+is the whole of it — *"Nine albums here are recordings of the same work. UsArr groups by release,
+because no connected service models a composition."* Classical is not a niche; it is the case where a unified
 catalogue looks most obviously wrong to the person who owns it, and being quiet about it is worse
 than being unable to fix it. Evidence: [`RESEARCH.md`](./RESEARCH.md) Track 06 §6.4.
+
+**The badge is named in the user's words, and it carries its reason wherever it appears.** It
+shipped as `no work identity` — `work` is a table in §6.1, so a user reading it on a book they own
+learns nothing and has no action attached — while the same chip in another state carried the useful
+sentence (*"Komga reports no external identifier of any kind, so this series is matched by title"*).
+**The chip reads `matched by title`**, which is a phrase every \*Arr's manual-import screen has
+already taught this audience, and the sub-line travels with it everywhere the chip appears, not only
+where it was remembered.
 
 **A work with no resolvable identity is kept, marked, and stays searchable — and that is a v0.1
 rule, not a later one.** Whatever the backend reports, UsArr writes the row: a title, a file, and a
@@ -2343,6 +2358,17 @@ Block C   Recently added        ONE unified table across all types, with a Type 
   on line one, availability and sync time on line two, and no `Type` label, because the value *is*
   the row's identity), **and Block B moves above it.** Block B is hidden when empty, so it costs
   nothing when nothing is wrong — which is exactly why it can go first.
+  **What Block A's columns mean while an import is running, stated because that is where the
+  first-run user spends their first several minutes.** `Items` is **the source's declared total from
+  first contact**, and it says so once above the block — *"Totals reported by each service."* —
+  because UsArr cannot know the real total before the walk finishes. `Have` is **null with a
+  progress fraction until phase A commits**, never a computed `have/wanted` split, which cannot be
+  known 68% of the way through an import and which shipped beside a banner saying the import was
+  68% done. `Synced` reads `importing`. And one noun per type across the banner, the block and the
+  sidebar: comics are `series` in all three places, not `comic series` in one of them.
+  **The `Have` column has one grammar and its chroma marks what is wrong**, not what is fine
+  (`design/DESIGN-DIRECTION.md` §9.5): `have / total · N missing`, with a complete row rendered as a
+  muted `✓` in neutral text and an incomplete row carrying its gap figure in the warn role.
 - **Block B is the differentiator, and no surveyed tool has anything to put in it**, because neither
   Jellyfin nor Plex knows what is *missing*: wanted-but-absent items, failed grabs, a degraded
   instance, an import that has not run, an instance needing re-identification (§7.4 guard 2). It is
@@ -2378,6 +2404,17 @@ page ("More from this artist", ≤5 items). It does not appear on Home in any vi
 Posters view renders Block C as **one wrapping grid across all types**, which is what #16615 asked
 for.
 
+**Where the two axes meet, and it is the two-axis model's hardest case: the sidebar reflects what you
+*own*, and never changes shape with the scope.** §17.2's hard rule (below) removes a type the user
+does not have; §8.1 says the sidebar counts respect the scope chip. Scoping to Comics takes the
+Movies count to zero — and the two rules together did not say whether the `Movies` row then
+disappears. **It does not.** A nav list whose entries appear and vanish as a side effect of ticking
+checkboxes *inside a popover that overlays it* is the most disorienting thing a sidebar can do, and
+it makes the sidebar's height jump under the user's cursor. **Only the counts narrow, and a narrowed
+count renders as `0 of 1,204` rather than `0`**, so the row states why it is empty instead of
+looking broken. Clicking it lands on the `scope-empty` state (§17.7), which names the scope and
+offers the control that clears it. Ownership decides shape; scope decides numbers.
+
 **What is unchanged from the earlier text, and is now a hard rule everywhere:** a type the user does
 not have is **not shown at all** — not in Block A, not in the sidebar, not as a search group. That
 rule is not a UsArr invention: Komga ships `v-if="collectionsCount > 0"`, Navidrome's
@@ -2399,8 +2436,32 @@ One row per configured service, always visible at a glance:
 | State | `healthy` / `degraded` / `down` / `needs re-identification`, from the breaker (§7.5) |
 | Last successful sync | Absolute and relative ("14:02, 6 minutes ago"), per channel: full, delta, reconcile. **A source on channel 3b (§7.1a) is labelled `page-walk delta`, and one with no ordering guarantee reads `no change feed — full compare at 09:12` rather than showing a blank or borrowing the global time.** A freshness number not backed by a delta must never render with the same weight as one that is |
 | Items | How many works this instance contributes |
-| Problem | **The actual error text**, verbatim, not "an error occurred" |
-| Action | The one button that fixes it |
+| Problem | **The actual error text**, verbatim, not "an error occurred" — **and nothing else.** The column holds one object: what the upstream said, or `—`. It does not hold a rendering decision made on another screen, a rebuttal of a reviewer, or a sentence beginning *"Nothing is wrong."*, which inverts the meaning of the one column a user scans for what is broken. `not configured` is already a first-class state with its own token; use it and let the Action column carry the fix |
+| Action | The one button that fixes it. `—` when there is none, not `No action needed` |
+
+**The `State` column is UsArr's own words, in plain language.** The verbatim-upstream rule is right
+and it stops at the `Problem` column: `State` and every banner title are UsArr speaking, and they
+shipped as implementation vocabulary — `degraded / breaker open`, `needs re-identification`,
+`managed_by user`, `identity_epoch 3 -> 4, max_remote_id_seen 214 -> 6` as the *body* of a banner
+explaining a decision to a human. The mechanism is real, correct and valuable; it belongs on the
+second line and behind the expander, which already carries it precisely
+(`State OPEN · Next probe 14:19, in 4 minutes · Consecutive failures 7 · Backoff 4m00s`). So:
+**`paused — 7 failed attempts, retrying 14:19`** rather than `degraded / breaker open`; **`this may
+be a different Sonarr`** rather than `needs re-identification`; **`matched by title`** rather than
+`no work identity` (§6.4), which reads to a normal person as "something is broken with my copy of
+this book" when it means "Komga gave us no ISBN".
+
+**The `Libraries` column names both relationships in full**, because this is where a user meets the
+two terms: *"TV — catalogue source, request destination"* and *"Music — catalogue source; no request
+destination"*, not bare prose that drops both nouns on the screen of first contact. And a library
+name beside a media-type name carries the noun `library` (`design/DESIGN-DIRECTION.md` §8.1).
+
+**A problem is stated canonically once per screen.** Every failure currently appears twice on
+Services — in the row's `Problem` cell with its Action button, and again ~900 px below in the
+`System status` list with the same title and the same button. The roll-up is worth keeping and is
+Sonarr's shape; **the second rendering links to the row rather than duplicating its action**, so
+there is one place the fix is pressed. (The sidebar severity badge is a third *appearance* and is
+not a duplicate: it is a count with no action, which is §8.2's design.)
 
 Expanding a row shows: the circuit-breaker state and when it next retries; the \*Arr's **own** health
 warnings, surfaced from its `/health` endpoint (genuinely valuable — today you visit five web UIs to
@@ -2408,13 +2469,35 @@ notice one is unhappy); the last few sync-report entries for that instance; and 
 measured from its `Date` header (§7.3), warned when large.
 
 **The actions are the point.** Each failure state names its fix: *unreachable* → Test connection;
-*401/403* → Update API key (sudo mode, §12.1); *TLS pin changed* → show both fingerprints and require
+*401/403* → Update API key (sudo mode, §12.1) — **and a sudo re-prompt is not an error state**: §10
+requires verbatim upstream text for *errors*, and leading a routine "confirm your password" step
+with `PUT /api/v1/services/3 403: {"error":"sudo_required"}` makes a normal security step look like
+a fault. It is a prompt, in UsArr's own words, with no verbatim block; *TLS pin changed* → show both fingerprints and require
 an explicit accept; *needs re-identification* (§7.4 guard 2) → explain that the instance's identity
-changed, that sync is paused deliberately, and offer Re-link; *degraded, partial data* → Run full
-sync now.
+changed, that sync is paused deliberately, and offer **two** actions, not one; *degraded, partial
+data* → Run full sync now.
+
+**The re-identification banner needs both branches, because its own copy tells you not to press its
+only button.** It says *"Re-link only if you know this is the same library"* and then offers
+`Re-link` and nothing else — so a user who knows it is **not** the same instance is told to stop and
+given no way to proceed. The correct action in that case is real and namable: remove this service
+and add the new one as a separate instance, preserving nothing. **Two buttons: `Re-link — this is
+the same Sonarr` and `Not the same instance — remove and re-add`**, the second stating in one line
+what happens to the works and to the libraries that instance feeds. This is the most destructive
+decision in the product and it was a one-way prompt with a warning attached.
 
 The same screen hosts **Add service** — the wizard from §11 with its mandatory connection test — and
 a global banner elsewhere in the app links here whenever any instance is not healthy.
+
+**Services and Libraries are top-level screens and are not also items inside a Settings navigation.**
+Both statements shipped on the same screen at once — the sidebar marking Services `aria-current`,
+and an in-page `Settings sections` nav listing `Services · Libraries · General · Tags · UI` marking
+it current again — so two navigation trees claimed one node with two different parents. ADR-0027 and
+§17.8 already decided the first answer. **The in-page nav is labelled `Settings` and lists only
+`General · Tags · UI`**, with one line above it saying that Services and Libraries are top-level.
+The sidebar follows the same discipline: `Status` and `Backup` are System sub-items, indented under
+an expanded System, not siblings of it (`design/DESIGN-DIRECTION.md` §8.1's row budget assumes
+exactly that, and drawing them as top-level rows is what took the sidebar to fifteen).
 
 **The add flow asks for a name, and §17.7's "three fields" is corrected to four.** The wizard was
 specified as kind, base URL and API key, and the field the whole screen is keyed on was missing from
@@ -2479,7 +2562,14 @@ carries eleven groups in a `SearchResultGroup`.
 
 1. **A group with zero hits does not render** — no header, no empty state, no "0 results in Music".
 2. **Group order is by the group's best-scoring hit, descending — not a fixed type order — and it is
-   computed once per query and then frozen.** With two types a fixed order was harmless; with six it
+   computed once per query and then frozen. The toolbar states it in four words** — *"Groups ordered
+   by best match."* — because the rendered order is otherwise indistinguishable from descending by
+   count, which is what a user will infer and which is not the rule; and because the neighbouring
+   `Sort: Relevance | Title | Year | Added` control has **three available readings** (rows within
+   each group, rows across all groups, or the groups themselves) and the UI picked none. **The sort
+   control is labelled with its scope: `Sort rows within each group:`.** Both fit the toolbar and
+   neither costs a row. The only explanation of either shipped inside a `mockup`-tagged note, which
+   by definition does not ship. With two types a fixed order was harmless; with six it
    buries an unambiguous album hit under two thin film rows. Late-arriving unowned results over SSE
    never reorder a rendered group and never move a group: §17.4's stability guarantee is about a
    *rendered result set* not moving under the cursor, which recomputing on a new query is not.
@@ -2489,12 +2579,24 @@ carries eleven groups in a `SearchResultGroup`.
    `cap = clamp(floor(40 / groups_with_hits), 3, 10)` — so 1–4 groups get 10 each, 5 gets 8, 6 gets
    6. Each truncated group's last row is `Show all 34 movies →` **carrying the real total**, because
    Baymard's finding is that silent truncation makes users believe they have seen everything.
+   **These links are the copy template for the whole product** — `Show all 14 ebooks matching dune`
+   carries the count, the type *and* the query, so it survives being read out of context in a screen
+   reader's links list, which a bare `Show all →` does not. **The rule generalises: a "show all" link
+   names its count, its type and its parent scope**, so a drill-down's `Show all 23 tracks` reads
+   `Show all 23 tracks on Geogaddi`.
    🔍 The numbers are chosen, not measured: 40 from the design's own above-the-fold heuristic, 10
    from Komga's shipping value, 3 as the floor below which a header costs more rows than it saves.
 4. **A cross-media linked work appears exactly once**, in the group of its highest-scoring medium,
    with the other media as availability chips on that one row. *Annihilation* is legitimately a film,
    a novel, an audiobook and an ebook; a naïve grouping shows it four times, which is the specific
    incoherence a hub creates that a single-type tool cannot.
+   **And the group that does *not* get the row says so at its foot.** The rule is right and its IA
+   consequence was unaddressed: a user who types `dune`, clicks **Movies 3** — the most natural
+   action for someone looking for the film — gets *Dune: Part Two*, *Dune* (1984) and
+   *Jodorowsky's Dune*, and **not** *Dune* (2021), which is filed under Ebooks on a linked row, with
+   nothing on screen explaining the absence. So: *"1 more film is on a linked row in the **Ebooks**
+   group: Dune (2021). — [Show it]"*. The data is already there; it is what renders the
+   `also film, 2021` chip.
 
 5. **The library column renders only when it varies *within the group it is in*.** The earlier rule
    was "only when the user has ≥2 libraries", which is not the same test and does not fire where it
@@ -2540,6 +2642,15 @@ six groups do not compute six different layouts for one content column. Kavita's
 where it varies.
 
 ### 17.5 Requests — one surface, two paths
+
+**The sidebar entry stays `Requests`, and the screen's own sub-caption says what it is in this
+milestone.** In v0.1 the screen carries no request list, no approval queue and no
+`pending → approved → routed → available`, so the label is ahead of its content — and the sub-caption
+closes the gap without renaming a top-level destination between milestones: *"Free-text indexer
+search through Prowlarr, a grab sent to Prowlarr's own download client, and your recent grabs."* The
+discovery cost that a rename would buy is largely paid off by §17.4 rule 6, which routes the user
+here **from the row that made them want it** rather than requiring them to guess a sidebar label.
+See REVIEW-LOG §5.4 for the argument against the rename.
 
 Requests are **one coherent screen** with two entry paths, and the user should not have to know which
 one they are on until it matters:
@@ -2587,6 +2698,30 @@ no approval queue, no `pending → approved → routed → available`, no per-us
 
 For v0.2 and later, this screen also carries the user's own request list with state and, for an
 admin, the pending-approval queue. In single-user mode the approval UI is hidden entirely (§8.3).
+
+**The grab control carries a visible text label, and the grab window's promise must be true rather
+than aspirational.** An irreversible multi-gigabyte action may not be an unlabelled icon eight pixels
+from a benign one — particularly a download arrow, which means "download this file to my computer"
+in every other application and here means "send this to your download client via Prowlarr"
+(`design/DESIGN-DIRECTION.md` §13). And the toolbar states *"an expired release is never offered as
+grabbable"*, which is only true if the client acts on it: **the countdown lives in a `role="status"`
+that updates at 5, 2 and 1 minutes remaining, and at zero the grab controls go `aria-disabled` with a
+row-level note and the screen offers `Search again`.** Otherwise a user who read "closes in 18
+minutes", worked through the list and pressed Grab receives a 400 they were promised could not
+happen.
+
+**A failure offers the action that can succeed, and never one that structurally cannot.** An expired
+grab returns a 400 whose meaning is *the release is no longer in Prowlarr's cache*; retrying the same
+opaque release id returns the same 400 for ever, and the screen already models this condition
+correctly elsewhere — the `expired` state replaces every grab control with **`Search again`**. So the
+failure path branches on the upstream code: for an expired-cache 400 the button is `Search again` and
+the chip reads `expired — search again`, not `failed: rejected`, which reads as "the tracker refused
+you". **And where the correct action is not something UsArr can offer, naming the non-action beats
+offering a fake one**: when the all-indexers-failed correlation concludes a host-level resolution
+failure inside Prowlarr's own container, `Open Services` and `Retry` are both dead ends — Services
+will correctly show Prowlarr as reachable, because it is — and the honest surface is the sentence
+plus `Retry the search`. A screen that reasons its way to a correct diagnosis and then hands the user
+two buttons that cannot act on it is worse than one that says so.
 
 **The post-grab confirmation names what will and will not import the file, per media type, and it is
 never truncated to the first clause.** §8.5 owns the copy rule and the reasoning; the requirement on
@@ -2670,6 +2805,13 @@ sub-page of it**, and the split is meaningful:
 > **Services answers "is the pipe up, and how do I fix it?". Libraries answers "what is in it, what
 > is it called, and where do requests go?".**
 
+**The definition of a library is shipping copy under the page title, not a note.** One sentence —
+*"A library is a name you own over containers your services already computed: a whole instance, a
+root folder, an upstream library id, or an \*Arr tag."* — because this is the newest concept in the
+product, nothing else in the ecosystem works this way, and the sentence already exists. It cannot
+live in a `mockup`-tagged aside: strip the not-shipping prose and the screen contains no definition
+of a library anywhere. Cost: one line.
+
 They cross-link both ways: a degraded source on a library row links to that instance's Services row,
 and a Services row lists the libraries it feeds and warns before removal — *"Audiobookshelf feeds 2
 libraries. Removing it will leave Ebooks and Audiobooks with no source."* **No credential field ever
@@ -2685,6 +2827,18 @@ Prowlarr**, which has no library. Two proposals are decisions rather than defaul
   new one.** Two Radarrs → *one* Movies library with two sources, which is what makes the
   "1080p ✓ / 4K ✗" badge render on one card. Getting this default wrong quietly destroys the
   project's most visible power-user feature.
+  **Renaming a proposal to match an existing name joins rather than creates — and the screen must
+  show that it happened.** As drawn, typing `Comics` into the Manga proposal's name field produced
+  two rows both named `Comics`, both ticked, a banner still reading *"UsArr proposes 4 libraries"*
+  and a button still reading *"Accept 4 proposals"*: a rename silently changed the shape of the data
+  model and left the count on the button wrong. **On collision the two rows merge visually into one
+  with two `From` entries, the button becomes `Accept 3 proposals`, and the merged row carries an
+  inline note** — *"Joining Komga Manga into Comics as a second source."* **The merge key is stated
+  rather than left to be discovered: case-insensitive, whitespace-trimmed, per user.**
+  **And the one-way door is marked per row.** *"Editing any proposal marks that library
+  user-managed, after which a later connect can only offer to add sources — never reshape it"* is a
+  permanent decision delivered as helper text beside the Accept button, with no indicator of which
+  rows have crossed it. Each edited row carries the mark, in the row.
 - **Audiobookshelf is offered as *two* libraries — Ebooks and Audiobooks — over its one
   `mediaType=book` library**, which ABS itself cannot do: it distinguishes the two only at item
   level (`ebookFileFormat` present vs audio files present). That is a concrete, demonstrable
@@ -2693,20 +2847,89 @@ Prowlarr**, which has no library. Two proposals are decisions rather than defaul
   edition_id)`, because one `book` work holds both editions and a work-grained key would put an
   audiobook-only work in Ebooks (§6.5, `reference/schema.md` §13.3). Podcasts and Kavita's `Image`
   type are **declined with a reason**, not silently dropped, because UsArr has no `work.kind` for
-  either.
+  either. **The column holding both outcomes is headed `Decision`, not `Accept`** — accepted rows
+  keep their checkbox, the declined row keeps its word, and an `Accept` header over a cell reading
+  `declined` is a header contradicting its own cell.
 
 **Row view:** name · kind · item count · source chips with per-source health · request destination ·
 state · reorder handle, plus **Add library** and the auto-proposal banner.
 
+- **`Add library` is specified rather than named, because it is the recovery path when the
+  auto-proposal got it wrong** — which is the single most likely reason a user opens this screen at
+  all (*one Radarr, and I want `Movies` and `Kids films` split by tag*). Without it the proposal is
+  the only way a library comes into existence and it is a one-shot. The flow is the **proposal row's
+  own field set** — name, kind, format filter — **plus one `Add source` picker**, which is four
+  fields reusing two components that already exist. `Add source` keeps its rule: a container picked
+  from a list the instance reports, never a free-text path.
+- **The `Kind` control is labelled in the product's vocabulary, not the schema's.** The select
+  offered `book · comic · movie · series · artist`, which appears nowhere else in the interface, and
+  the Music library's answer was **`artist`** — a level in a hierarchy, not a kind of thing — with
+  nothing on screen mapping `artist → Music` or `series → TV`. The user should not have to infer
+  §17.2's `(kind, formats)` table, which they will never read. **Label it `Movies · TV · Music ·
+  Books · Comics`**, let the schema value be the value, and put one help line under Books:
+  *"Books covers ebooks and audiobooks. The format filter below decides which this library holds."*
+  The list's `Kind` column follows the same labels. (`person` is not offered — a library of authors
+  is not a thing, ADR-0033.)
+- **The row's identifier is not rendered as a path.** Every row carried its `slug` beneath the name
+  as mono text with a leading slash — `/movies`, `/tv`, `/comics-ongoing` — on the screen whose
+  banner says *"UsArr never reads a filesystem and never types a path"*, in the face §4.2 reserves
+  for machine data, on the same row as a `Request destination` cell reading
+  `Sonarr HD-1080p · /media/tv`, which **is** a real root folder. A self-hoster burned by a scanner
+  reading the wrong folder will read `/movies` and conclude UsArr scans `/movies`. **Drop the slash
+  and the mono face**; the detail view's Diagnostics panel already renders it correctly as *"In the
+  URL as `?lib=ebooks`"*, and that is the only place it earns a row.
+- **A control labelled as an operation performs it.** `Test Radarr` and `Run full sync` on a broken
+  library row were `<a href="#services">`, landing the user at the top of an eight-row screen with
+  nothing indicating which row they came for — and a user who clicks `Run full sync` reasonably
+  believes a sync started. Nothing started. Either perform it inline (both are already buttons on
+  the Services rows, so the handler exists) or label it as navigation — `Radarr health →` — and
+  deep-link with the row anchored and highlighted.
+
+**The detail view declares its save model, and it did not have one.** The full control set is Name,
+Kind, Format filter, Display order, three checkboxes, Default sort, Metadata authority, per-source
+enable, Request destination, `Add source`, `Remove`, `Add correction`, four `Undo`s and
+`Delete library` — with **no Save, no Cancel, no dirty indicator and no "changes saved"**, while the
+Add-service form 400 px away on the Services screen has an explicit `Test` plus a `Save` disabled
+and labelled `No changes`. Two of the most similar forms in the product had opposite and undeclared
+models. It is not academic: the `Kind` select's own help text says *"Changing it re-derives
+membership from what the services report"*, which is 1,842 items recomputed, triggered by a bare
+native `<select>` that changes value on one arrow keypress with no menu open. **The model is
+explicit save: a sticky footer reading `3 unsaved changes · Save · Discard`**, plus a confirmation
+on `Kind` specifically — *"This will re-derive membership for 1,842 items. Nothing changes in
+Audiobookshelf."*
+
 **Detail view**, grouped: *Identity* (name — with upstream's own name beneath it, greyed and
 non-editable; kind; formats; icon; order) · *Visibility* (enabled, show on home, include in search,
 default sort) · *Sources* (one row per `library_source`: instance, container, items contributed,
-state, **metadata authority** as a single radio, enabled, remove — and **Add source picks a container
+state, **metadata authority** as a single radio — **suppressed entirely below two sources**, because with
+one source it is a radio group with exactly one option, already selected and impossible to change or
+clear, which conveys nothing; §17.4 rule 5's principle applied to a control instead of a column —
+enabled, remove — and **Add source picks a container
 from a list the instance reports**, `/api/v3/rootfolder`, `/api/v1/libraries`, `/api/v3/tag`, **never
 a free-text path**, which is what keeps UsArr off the filesystem) · *Requests* (destination, or
 **None** with the reason inline; quality profile, root folder and tags fetched live from the chosen
 destination when the panel opens — a settings screen may block on an upstream call, a *render* path
 may not) · *Corrections* (v0.3) · *Diagnostics* · *Danger zone*.
+
+**The Corrections table is named after what the user did, not after the schema's discriminator.**
+The column shipped as **`Verb`** over the values `exclude`, `include`, `relink`, `field` — a schema
+word (nobody has ever thought *"I performed a verb"*), and `field` **is not a verb** while the other
+three are, which is what happens when a column is generated from an enum's column name. The
+neighbouring header, `What it does`, was doing the work. **Rename the column `Correction` and put
+the values in the past tense, because every row is something that already happened:** `Excluded`,
+`Included`, `Re-linked`, `Field overridden`. Keep the `What it does` column — a literal one-line
+definition of each verb is exemplary and is the only place they are defined. ⚠️ **In v0.1 they are
+defined nowhere**, because that panel is v0.3; if the four verbs appear anywhere in v0.1 copy they
+carry their definitions with them.
+
+**The `Request destination` column states its shared fact once and keeps only the per-row
+exceptions.** Four of six rows read `none` and each carried its own explanatory paragraph, which is
+§17.4 rule 5's own rule (a column whose value is identical for every row is not data) firing on a
+column that survived it — and one of those paragraphs ran to sixty-two words of competitive analysis
+inside a table cell. **Above the table, once:** *"v0.1 connects no request destination for music,
+audiobooks, ebooks or comics. Indexer search still works and the grab ends in your download
+client."* **In the cells:** `None`. **Kept as a per-row footnote:** the Ebooks row's Readarr note,
+which is a real, dated, specific fact a user cannot infer.
 
 **Deleting a library says exactly what it does — including the part that is destructive:** *"This
 removes the library from UsArr. It does not delete anything from Radarr, Komga, or your disks. It
