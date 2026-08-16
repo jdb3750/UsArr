@@ -55,18 +55,52 @@ zero-results screen says so rather than leaving the user guessing.
 movie, series, artist, album, book, comic, game
 ```
 
-`season`, `episode` and `track` are **excluded**. The reference library is ~400k episode rows
+`season`, `episode`, `track`, **`comic_issue`** and **`person`** are **excluded**. The reference library is ~400k episode rows
 against ~13k top-level works; indexing episode titles means a corpus of "Pilot", "Part One" and
 "The Beginning" swamps every query, and the `title_idf` penalty was tuned for short *movie* titles,
 not for that. Episodes and tracks are reachable by **scoped search from within a parent's detail
 view**, which queries `work` by `parent_work_id` directly and never touches FTS.
 
-CI asserts `SELECT COUNT(*) FROM search_doc WHERE kind IN ('season','episode','track')` is 0.
+A large manga library does to the corpus with chapter titles exactly what episode titles do
+(ADR-0030), which is why `comic_issue` is a kind at all.
 
-**Permission filtering happens in the join, not after it.** `search_doc.instance_scope` carries the
-instances a row is visible through; the fusion query joins against the caller's access scope
-(ARCHITECTURE §1.3 rule 2). Post-filtering FTS hits silently breaks keyset page sizes and leaks
-existence through result counts and ranking positions.
+`person` (ADR-0033) is excluded for a different reason from the other four: it is not a volume
+problem, it is a destination problem — there is no person screen in any milestone, so a person hit
+would be a result row with nowhere to go. ⚠️ **The consequence is that "find everything by this
+author" is unanswered in v0.1.** The cheap candidate is to fold credited names into the `alt_titles`
+column of the works they are credited on, so the query returns the books rather than the person, but
+that is a decision for whoever writes the document builder and it is not specified here. Adding
+`person` to the corpus later is a predicate change plus a re-index — not a migration, which is why
+it can wait and the kind itself could not.
+
+CI asserts
+`SELECT COUNT(*) FROM search_doc WHERE kind IN ('season','episode','track','comic_issue','person')`
+is 0.
+
+**Permission filtering happens in the join, not after it**, and **the mechanism is a junction table,
+`search_doc_library(library_id, doc_rowid)` `PRIMARY KEY (library_id, doc_rowid) WITHOUT ROWID`** —
+not a `library_scope` column on `search_doc`. It replaces `instance_scope` (ADR-0026: a library can
+be a *subset* of an instance, so instance-level scoping is too coarse and leaks existence), and the
+junction rather than a column is the load-bearing part: **a JSON array in a `TEXT` column cannot
+participate in an index join.** Filtering it needs `json_each()` or a `LIKE`, both of which are
+scans, so the column bought a full scan of the fused candidate set in service of the requirement
+this paragraph states. The scoped fusion query joins against the caller's access scope
+(ARCHITECTURE §1.3 rule 2):
+
+```sql
+… JOIN search_doc_library sdl ON sdl.doc_rowid = sd.rowid AND sdl.library_id IN (:scope…)
+```
+
+a covered index seek per scoped library. **CI asserts `SEARCH sdl USING PRIMARY KEY` and the absence
+of `SCAN search_doc_library`**, so it cannot silently regress. Post-filtering FTS hits silently
+breaks keyset page sizes and leaks existence through result counts and ranking positions.
+
+⚠️ **A row visible through no library matches no scope and disappears from search for every user
+including the owner** — a state the old `instance_scope` could not reach, because every replicated
+row came from some instance. Reserved `library.id = 0` (*Unfiled*) upholds the invariant that every
+`search_doc` row has at least one `search_doc_library` row, and CI asserts that too. 🔍 That the
+library scope can fully replace the instance scope with no second column is **inference**, argued in
+ADR-0026 rather than measured, and it should be checked against the first real scoped query written.
 
 ---
 

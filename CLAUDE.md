@@ -56,9 +56,13 @@ Utilitarian over stylish. Tried and true beats novel: standard, familiar pattern
 and snappy above all. No visual flair that costs render time — if an effect buys nothing but
 looks, it does not ship. **Navidrome is the reference point for the bar to hit.**
 
-Four screens are essential; the first three ship in v0.1:
-- **Home**, sectioned by media type.
+Five screens are essential, and all five ship in v0.1:
+- **Home**, three fixed blocks — a media-type summary, an attention block hidden when empty, and one
+  unified recently-added table across all types. Not one strip per media type. See
+  `docs/ARCHITECTURE.md` §17.2, as amended by ADR-0028.
 - **Service setup and health**, which must show what in the pipeline is broken and how to fix it.
+- **Libraries**, where a user-defined library is bound to the upstream containers a service already
+  named, and given a request destination. See §17.8.
 - **Search** across your media.
 - **Requests**, covering both the *Arr-backed path and the Prowlarr free-text indexer
   search-and-grab path. The Prowlarr path is in v0.1 (Search-and-Grab mode); the *Arr-backed
@@ -181,7 +185,8 @@ AGPL-compatibility check: MIT, BSD and Apache-2.0 are fine, GPL-2.0-only is not.
 
 Detail lives in `docs/ARCHITECTURE.md` §16, which wins over this summary.
 
-- **v0.1** — unified library + search. Prove the replica thesis on real data.
+- **v0.1** — unified library + search across all six media types, plus the Prowlarr
+  search-and-grab request path. Prove the replica thesis on real data.
 - **v0.2** — requests.
 - **v0.3** — cross-media linking.
 - **v0.4** — the gateway, narrowed: an OpenSubsonic read-only subset over one Navidrome.

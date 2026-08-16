@@ -68,6 +68,13 @@ the maintainer's `wasm2go` translator and now lists Go and `x/sys` as its only d
 A WASM host is a **new** dependency with its own cost, and the case must be argued on wazero's own
 merits (pure Go, zero CGO, real sandboxing), not on shared-runtime economy.
 
+**New evidence, in the other direction:** **Navidrome has shipped an Extism + wazero plugin system**
+(`plugins/` on `master`). That is a reference implementation in the same language, in the same
+domain, on the same hardware class — which does not change the deferral (the reason was staffing and
+blast radius, not feasibility) but it does change the *trigger*: it is now possible to read a working
+answer to the host-function and sandbox-budget questions above rather than inventing one. Read it
+before writing any of this.
+
 ---
 
 ## 2. An external search engine (Meilisearch, or another)
@@ -253,6 +260,14 @@ release dates from every Radarr, album release dates from Lidarr, book publicati
 book services — in one view, with per-media-type filtering, and exportable as an iCal feed a phone
 calendar can subscribe to.
 
+⚠️ **Which of those sources can actually supply a date, stated because the sentence above promises
+aggregation over services that cannot.** **Only the \*Arrs expose a `/calendar` endpoint.** Lidarr is
+v1.0, and v0.1's book, audiobook and comic sources — Audiobookshelf, Komga, and Kavita from v0.2 —
+expose **no calendar endpoint at all**. So a catalogue-only source contributes `work.release_date`
+where it happens to have one and nothing where it does not, and the calendar must be honest about
+which media types it can cover rather than rendering four empty lanes. The **seam**
+(`work.release_date`) is unaffected; the **promise** needed narrowing.
+
 **Why deferred.** It is genuinely valuable and genuinely additive, and it is not v0.1 only because
 v0.1 has one job: prove the replica thesis on a real library. It is also the kind of feature that is
 cheap *if* the data model already holds the dates and expensive if it does not — which is why the
@@ -298,7 +313,10 @@ own. Both are already specified (`reference/gateway.md` §6).
 **The seam.** Three decisions in the v0.1/v1.0 design that exist partly for this:
 
 1. **`play_history` is append-only, one row per play event**, with
-   `UNIQUE (user_id, work_id, started_at)` — **not** a counter. The stated rule is that *play counts
+   `UNIQUE (user_id, work_id, edition_id, started_at)` — **not** a counter. **The `edition_id` is a
+   correction ADR-0031 forced and this seam had not absorbed**: position is edition-scoped, and
+   ARCHITECTURE §6.1 makes an audiobook an `edition` of a `book` work, so two editions of one work
+   consumed on the same day collide under a work-keyed uniqueness constraint. The stated rule is that *play counts
    merge by union of events, never by taking a max*, because taking a max from a backend that reset
    would silently delete history. An append-only event log is exactly what statistics need, and a
    counter is exactly what they cannot be reconstructed from.
@@ -324,5 +342,234 @@ than no statistics, because people believe them.
 | **Download-client visibility** (SAB, NZBGet, qBittorrent, Deluge, Transmission) | Needs session-establishment and JSON-RPC transports that manifests cannot express (`reference/providers.md` §3.2) | Tier 0 providers via the same registry; Search-and-Grab already routes grabs through Prowlarr's own clients, so nothing is blocked meanwhile |
 | **Recyclarr/Configarr automation absorption** | Proven collapsible by arr-dashboard, but it would dilute the speed story | UsArr already reads custom formats and is required never to clobber them |
 | **Optimistic write apply with inverse-patch rollback** | Replaced by a durable command queue; it bought ~200 ms on a rare operation at the cost of the project's hardest correctness problem (ADR-0012a) | The queue's state machine already distinguishes `failed_rejected` from `verifying`, which is the hard half |
-| **Cross-media "continue" row** spanning video, audiobook and ebook position | Depends on §9's event stream | `playback_state` is keyed `(user_id, work_id)` across all kinds already |
+| **Cross-media "continue" row** spanning video, audiobook and ebook position | Depends on §9's event stream | `playback_state` is keyed **`(user_id, work_id, edition_id)`** across all kinds. ⚠️ **The work-keyed form previously recorded here was not a seam for this feature — it was its opposite.** The EPUB and the M4B of *Piranesi* are two editions of one `book` work (ARCHITECTURE §6.1), so `(user_id, work_id)` cannot represent "40% through the ebook, 12% through the audiobook", which is the entire content of this row. Corrected in `reference/schema.md`'s appendix |
 | **Emby / Plex** | Emby is a feature-flagged Jellyfin variant; Plex paywalled remote playback of personal media on 29 April 2025 | Both are Tier 0 providers behind the registry |
+
+---
+
+## 11. slskd as a music request sink
+
+**What.** Soulseek acquisition through `slskd`'s REST API: start a search, poll it, pick a user, and
+enqueue the download. slskd fetches the bytes, exactly as qBittorrent does for Sonarr.
+
+**Why deferred.** It is the single best-fit non-\*Arr acquisition integration surfaced in the whole
+research pass — AGPL-3.0 (the licence UsArr itself now carries), a clean REST API, an `X-API-Key`
+**request header** which is precisely the credential shape UsArr already handles for the \*Arrs, and
+**no byte involvement for UsArr at all**. It is deferred because it is a *second* request path with a
+*different shape*: slskd search is **two-phase and asynchronous** (start → poll → choose a user →
+enqueue), where Prowlarr is a one-shot fan-out. That is the whole integration cost, and *cut before
+you add* applies.
+
+**What it would cost.** A provider with `Caps.MediaKinds = [(album, *), (track, *)]` and **no
+catalogue role** — slskd has no library to replicate. A durable-command-queue verb that can express
+"search, then enqueue from a chosen result". Queue polling on the delta channel. Nothing else: no byte
+proxying, no import engine, no new protocol surface, no metadata provider.
+
+**What it cannot do, stated so nobody expects it to.** slskd results are **filenames from strangers'
+shares** — a path, a size, a bitrate hint and a queue position. There is no release group, no MBID and
+no structured metadata, so **UsArr cannot turn a slskd result into a catalogue row**. It can only
+record "you asked for X, slskd fetched these files", and any album-completeness claim after a Soulseek
+grab is guesswork until Navidrome re-scans.
+
+**The seam.** The provider registry plus the durable command queue (ADR-0012a). **The one property to
+protect is that the queue's verb model can express a two-phase asynchronous operation** — if every
+verb is assumed to be a single request with a single outcome, this becomes a rewrite rather than a
+provider.
+
+**Trigger.** A user who actually runs slskd asks, *and* the request path (v0.2) has shipped and
+settled.
+
+---
+
+## 12. Suwayomi as a comics catalogue source
+
+**What.** `Suwayomi-Server` as a southbound catalogue source and byte owner for manga. It runs Mihon
+extensions and pulls chapters from aggregator sites, so it is a library and a byte owner — and
+**never a request sink**, which is a genuine structural difference from Mylar3 and Kapowarr.
+
+**Why deferred.** Its API is **GraphQL** (`POST /api/graphql`), which ARCHITECTURE §11.2 puts firmly
+outside the manifest tier: a manifest describes a read-mostly JSON-over-HTTP service with stateless
+auth, and GraphQL is neither shape. So this is a **Tier 0 Go adapter**, which is the expensive kind,
+for a service that overlaps heavily with Komga and Kavita for users who already run one.
+
+**What it would cost.** A Tier 0 provider with a GraphQL client, a query set, and its own pagination
+model. ⚠️ Its endpoint path, its three auth modes and whether the legacy REST API at `/api/v1` still
+exists were **all unverified** — the project wiki failed to render and the facts came from secondary
+sources. Verify before scoping.
+
+**The seam.** The provider registry (§1). A Tier 0 provider is a factory; the sync engine never names
+a concrete type. `Caps` already carries the ability to advertise `LibrarySync` without `Add`, which is
+exactly Suwayomi's shape.
+
+**Trigger.** A user running Suwayomi *without* Komga or Kavita, so it is the only comics catalogue
+they have.
+
+---
+
+## 13. OPDS 2.0, after 1.2 ships
+
+**What.** `application/opds+json` feeds alongside the Atom ones.
+
+**Why deferred behind 1.2 rather than instead of it — re-argued 2026-08-16, because the fact this
+rested on stopped being true.** The previous reason was that **KOReader, the single most important
+client for a self-hoster with a Kobo or Kindle, does not speak 2.0**, citing `koreader#14681` as an
+*open* feature request. ✅ **Verified against the issue and the release notes: #14681 is Closed,
+milestone 2026.07, and KOReader 2026.07 "Sailing Walrus" shipped `OPDS 2.0 basic support`
+(PR #15696), with 2026.07.1 following up on the OPDS 2.0 HTTP header and the author field.** So
+"KOReader does not speak 2.0" must not be repeated anywhere.
+
+**The ordering survives on the half that was always the stronger ground, and only that half: the
+long tail is entirely 1.2.** Aldiko, Moon+, MapleRead, FBReader and Marvin all speak 1.x and nothing
+else, and Komga is the only server in the whole survey that serves both. A 2.0-only surface excludes
+every one of them; a 1.2 surface excludes nobody, KOReader included, since it gained 2.0 in addition
+to 1.x rather than instead of it. **What has changed is that shipping 2.0 second is now a real gain
+for a real client rather than a hedge** — which raises this entry's priority without reversing its
+order. ⚠️ Re-verify before the milestone is scoped; this claim has already moved once.
+
+**What it would cost.** One route returning `application/opds+json`: a `title` in `metadata`, a
+`self` link, and at least one collection with role `navigation`, `publications` or `groups`. Search
+and pagination are optional in 2.0. Genuinely small — which is why it is a follow-on rather than a
+milestone.
+
+**The seam.** The gateway is surface-agnostic below the protocol layer: the ID codec, the
+authorization-on-resolution rule and the byte proxy are shared, and `client_credential.protocol` is a
+CHECK-constrained enum that takes another value. **1.2's requirements are the demanding ones and they
+are what the byte proxy must satisfy anyway** — `Range` support on acquisition URLs is *not* optional,
+because KOReader and several iOS readers resume partial downloads, and paging via `rel="next"` is
+mandatory in practice because KOReader chokes on 5,000-entry feeds.
+
+**Trigger.** OPDS 1.2 shipped and stable, plus a client that actually wants 2.0.
+
+---
+
+## 14. Chaptarr, if it stabilises
+
+**What.** Chaptarr as a book request sink and a secondary catalogue source.
+
+**Why deferred.** Its **data model is the closest thing in the ecosystem to what UsArr wants** — a
+real `Book` → `Edition[]` split with `HardcoverBookId` / `OpenLibraryWorkId` / `GoodreadsWorkId` on
+the work and `Isbn13` / `Isbn10` / `Asins[]` / `Narrator` / `DurationSeconds` / `ChapterCount` on the
+edition — and it is Servarr-shaped (`/api/v1`, `[V1ApiController]`), so the adapter would be nearly
+free. It is deferred on three specific things, not on quality: it is **self-declared beta**; its
+metadata resolution runs through **a centralised `api2.chaptarr.com`**, which is architecturally the
+same single-point dependency that killed Readarr and is a privacy consideration the Services screen
+would have to surface; and it is an *acquisition manager*, so its "library" is what it acquired
+rather than what is on your shelf.
+
+**What it would cost.** A Tier 0 or manifest adapter over a familiar shape. ⚠️ Unverified: its exact
+auth header (`X-Api-Key` is inference from Servarr convention plus its README's "constant-time API-key
+comparison") and whether it exposes an `updatedAt` or delta filter at all.
+
+**The seam.** The provider registry, plus one property worth protecting deliberately: **the ingest
+normaliser must be able to accept a work id and an edition id from the same response**. Chaptarr is
+the only service in the survey that hands both over at once, so where a user has it, its identifiers
+should be *preferred* in the §6.4 cascade. Designing the normaliser so it can do that costs nothing
+now.
+
+**Trigger.** Chaptarr leaves beta *and* either self-hostable metadata arrives or the central
+dependency is judged acceptable and documented.
+
+---
+
+## 15. MangaBaka as a manga metadata provider
+
+**What.** A metadata provider for manga identity, filling the gap Comic Vine and Metron leave.
+
+**Why deferred.** v0.1 ships **zero external metadata providers** by design, and manga identity is
+mostly obtainable from the backends themselves where Kavita+ is present. This is a provider, and
+providers are the thing the roadmap deliberately postpones.
+
+**What it makes attractive when the time comes.** No auth at all; 180 req/min (30/min for search);
+cached GETs free — and, the part that actually matters, **nightly JSON / JSONL / SQLite dumps**. A
+SQLite dump is the same shape as the Wikidata edge artifact (ADR-0007): a file UsArr can ship or fetch
+per release, query locally, and never put on a render path. Licence is **CC BY-NC-SA 4.0**, which is
+usable for a non-commercial self-hosted tool and must be attributed. Contrast the alternatives:
+**Comic Vine's terms are incompatible with a first-party UsArr provider** (non-commercial only, no
+reproduction in other formats, 200 req/resource/hour plus velocity detection) — UsArr may *store*
+Comic Vine ids that other tools produced and should not fetch from it; **GCD has no API at all**, only
+a registration-gated bulk SQLite download with no cover URLs, and ⚠️ its licence could not be
+determined because `comics.org` is behind a Cloudflare challenge; **AniList** is the best free manga
+identity source with adaptation edges, but ⚠️ its documented rate limit could not be read (403 to
+automated fetches) and it has run degraded well below its nominal figure for long periods.
+
+**The seam.** The provider registry, and `external_id.source` — `mangabaka` is a value, not a schema
+change. The dump-shipped-per-release pattern is already established by ADR-0007.
+
+**Trigger.** UsArr ships any external metadata provider at all, at which point this is the one to
+start manga with.
+
+---
+
+## 16. The cross-media ebook ↔ audiobook link
+
+**What.** Knowing that the EPUB and the M4B on your shelf are the same book — one card, two formats,
+one "you own this" answer.
+
+**Why it is here rather than in the roadmap as a solved thing.** The *schema* already handles it:
+ARCHITECTURE §6.1 makes an audiobook an `edition` of a `book` work, which is exactly the shape. What
+is deferred is the **work-level identity pass that populates it**, because **no backend supplies a
+work identifier at all.** Audiobookshelf gives `isbn` and `asin` and nothing else — and those are an
+*edition* key each, one for print/ebook and one for audio, sitting on the same row meaning different
+things. Komga and Kavita give ISBN. Calibre gives whatever the user's plugins wrote. Chaptarr does it
+properly and only inside its own library. **ABS pairs an ebook with its audiobook only when the files
+happen to be in the same folder**; everything else treats them as unrelated.
+
+**So the honest framing is that UsArr computes this — no backend hands it over — and it is the single
+most valuable book feature UsArr can offer.**
+
+**What it would cost.** A resolution pass, off any render path, on a worker: ISBN →
+`openlibrary.org/isbn/{isbn}.json` → follow `works[0].key` → `OL…W`; ASIN → Audnexus `/books/{asin}`
+→ title + author → as above; no identifier → title + author, thresholded, written at tier-3 confidence
+with `evidence`. Cached in `cache.db`, obeying Open Library's 1 req/s (3 with an identifying
+`User-Agent`) and Audnexus's 100 req/min. **And it must follow `/type/redirect`** — a merged Open
+Library work becomes a redirect record, so an OLID stored last month can resolve to a redirect today.
+
+**The seam.** Three things, all already present: `edition.format` distinguishes `ebook` from
+`audiobook`; `external_id` is `(source, value, work_id, edition_id)`, so an ISBN can be written to the
+edition side and an OLID to the work side without a schema change; and `work_relation` carries
+`confidence` and `evidence`. **The rule that keeps the seam usable is in ADR-0031 and §6.4: never let
+an ISBN or an ASIN satisfy `ux_extid_work_strong`.** Break that and the pass has nothing to attach to.
+
+**A companion requirement, and it is *not* deferred with the rest of this entry — it moved out.** A
+visible **"not identified"** state: whatever the backend reports, UsArr keeps the row — a book with
+a title and a file and a quiet marker, still searchable. That single behaviour is what
+LazyLibrarian's absence of disqualifies it as a catalogue, and it costs one nullable column and one
+badge. **It is a v0.1 requirement**, not a v0.3-or-later one, because v0.1 ships Komga, which
+supplies **no external identifiers at all** — so the state is reachable on day one. It now lives in
+ARCHITECTURE §6.4 as a rule; it is recorded here only so the connection is not lost.
+
+**Trigger.** ⚠️ **Rewritten, because the previous one — *"the milestone that ships any book
+catalogue source with real user data behind it"* — is satisfied by v0.1** under ADR-0032, which
+would make this a deferred entry whose reopening condition fires one milestone *before* the roadmap
+line that used to claim it. **The trigger is now: after v0.3, once the Wikidata edge pipeline has
+proved the confidence/evidence path on real data.** That is the machinery this pass writes into, and
+until it exists there is nowhere to put a computed link.
+
+**ARCHITECTURE §16's v0.3 line is corrected to match**, and now says that the ebook↔audiobook link is
+the case v0.3 does **not** solve rather than describing it as v0.3's flagship. One feature had three
+homes — a roadmap line, this entry, and a trigger that fired before both — and §16 is authoritative,
+so this entry says plainly that it is not on a milestone.
+
+---
+
+## 17. Per-library OPDS feeds
+
+**What.** One OPDS feed per UsArr library, rather than one feed over everything.
+
+**Why deferred.** The first OPDS surface should prove the *unified* catalogue — one feed spanning
+Audiobookshelf's audiobooks, Calibre's ebooks and Komga's graphic novels under one credential, which
+is the thing no single backend can offer and which, for an ABS user, is the **only** first-party-ish
+OPDS path that exists at all (ABS has no OPDS router; the feature requests are closed as not planned).
+Splitting it per library is a refinement of a surface that does not exist yet.
+
+**What it would cost.** Routing and one extra navigation level. Kavita's surface is already
+library-shaped (`/api/Opds/{apiKey}/libraries`, `…/libraries/{libraryId}`), so the shape is known.
+⚠️ Note what **not** to copy from it: Kavita carries the API key **in the URL path segment**, which
+leaks into proxy logs, browser history and referrers.
+
+**The seam.** `library` exists from migration 0001 (ADR-0026) with `include_in_search` and
+`display_order` already on it, and `user_library_access` is the multi-user half. An OPDS root of "one
+entry per library" is then a query, not a redesign — which is the same seam that makes v0.4's
+`getMusicFolders` return the user's `artist`-kind libraries.
+
+**Trigger.** The OPDS surface has shipped and a user with several libraries asks for the split.

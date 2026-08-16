@@ -40,9 +40,14 @@ everything you might want, that plugs into the players you already use.
   endpoint, one credential, the union of every backend library.
 - **Southbound** — the services UsArr aggregates: Navidrome, Jellyfin, Audiobookshelf, Komga/Kavita
   for libraries; Sonarr, Radarr, Lidarr, Prowlarr and the post-Readarr book tools for acquisition.
+  **The two roles are separate bindings, and that is the normal case** (§8.3): Navidrome catalogues
+  music and Lidarr or Prowlarr takes the request; Komga and Kavita catalogue comics and nothing
+  downstream of them accepts a release at all.
 
-Between them: **one canonical library database** across movies, TV, music, books and comics, with
-cross-media links, one tag vocabulary, one search box, one request flow.
+Between them: **one canonical library database** across six media types — movies, TV, music, ebooks,
+audiobooks and comics — with cross-media links, one tag vocabulary, one search box, one request flow,
+and **user-defined libraries that are UsArr's organisation rather than a copy of upstream's** (§6.5).
+Media type is the navigation axis and a library is a scope; the two are never merged (§17.2).
 
 > **UsArr coexists with the ecosystem; it does not replace it.** Sonarr keeps doing acquisition,
 > Jellyfin keeps doing playback, Navidrome keeps being an excellent music server. UsArr is the layer
@@ -82,7 +87,12 @@ v0.1 ships single-user: one implicit owner, user-management UI hidden. Two hard 
 
 1. **Every table that should be user-scoped carries `user_id`:** `request`, `tag_assignment`,
    `playback_state`, `play_history`, `playlist`, `saved_filter`, `client_credential`, `session`,
-   `audit_log`, `write_queue`. Retrofitting multi-tenancy touches every query; hiding a UI is free.
+   `audit_log`, `write_queue`, **`library`** and **`library_override`** (§6.5). Retrofitting
+   multi-tenancy touches every query; hiding a UI is free. The two library tables are named
+   explicitly because they arrived after this list was written and the two statements of the same
+   rule had drifted apart. `library.user_id` is the **owner**; `user_library_access` (§12.2, v1.0)
+   is a **grant to a different user**, and the two are not alternatives — DDL and the reasoning in
+   [`reference/schema.md`](./reference/schema.md) §13.1.
 2. **Every read path that aggregates across instances takes an access-scope parameter** — in the
    query signature, not bolted on later, defaulting in v0.1 to the owner's full scope. This covers
    the grid, search, the client prefix index, the availability rollup and every northbound surface. A
@@ -148,21 +158,35 @@ Spend the budget on scheduling, I/O and **images** (§4.4: posters are 5–9 MB 
 
 ### 2.2 What it costs, and where it stops
 
-The price is cache coherency, and one conflict rule: **the \*Arr owns the truth; UsArr owns the
-cache.** On divergence with no in-flight write, the \*Arr wins. Unambiguity prevents a category of
-flip-flopping bugs — and makes two guards mandatory, because "the \*Arr always wins" is dangerous
-when the \*Arr is lying (§7.4).
+The price is cache coherency, and one conflict rule — **stated on three axes, because an
+unqualified form of it is wrong** (ADR-0026 narrows ADR-0004 here, and this is the section that owns
+the rule, so the narrowing lives here rather than only in the ADR):
+
+> **The \*Arr owns the truth about the \*Arr's own state. It never owned the truth about the user's
+> organisation.** On divergence with no in-flight write, the \*Arr wins **on the state axis**, and
+> only there.
+
+| Axis | Owner | Wins on divergence |
+|---|---|---|
+| **State** — does the remote item exist, is it monitored, is there a file, which quality profile, which root folder | The \*Arr / backend | **Upstream, always. No override tier exists.** These are the inputs to the write queue (§7.6); a user-editable copy means the UI claims "monitored" while Sonarr disagrees, the queue issues commands against a fiction, and the sweep fights the user forever. |
+| **Organisation** — which library a work is in, what it is called, what kind it is, what feeds it, where its requests go | **UsArr (the user)** | **UsArr, always.** Upstream never had an opinion about this, or had a bad one (§6.5). |
+| **Display identity** — title, sort title, year, cover, and "is this link really this work" | Upstream by default | **An explicit user correction**, then §6.3's authority rule. Both values are retained; the override never writes back upstream. |
+
+Unambiguity on the state axis prevents a category of flip-flopping bugs — and makes two guards
+mandatory, because "the \*Arr always wins" is dangerous when the \*Arr is lying (§7.4).
 
 | Concern | Model |
 |---|---|
 | Metadata, browse, sort, filter; catalogue search over **owned** items; availability; cross-media edges | **Replicated.** Local SQLite. |
-| Tags, requests, users, playback position | **Owned outright.** Nobody upstream has this. |
+| Tags, requests, users, playback position, **library organisation and display-identity corrections** | **Owned outright.** Nobody upstream has this, or upstream has it and is wrong. |
 | **Search over unowned items** | **Not replicated.** Live, out of band, SSE-streamed, not persisted (§8.6). UsArr does not and will not hold a copy of TMDB. |
 | **Media bytes** | **Live pass-through.** Video: link out. Audio/ebook on UsArr's own surfaces: `io.Copy` proxy (§5.4). |
 | **Release search across indexers** | **Live**, behind progressive disclosure (§8.4). |
 
 The unifying rule: **UsArr replicates everything a screen renders from its own library, never a byte
-stream, and never a third party's catalogue.**
+stream, and never a third party's catalogue.** A replica that can be more correct than its source is
+still a replica — it is one with an owned overlay, and the overlay is the two rows above plus the
+organisation axis.
 
 ### 2.3 Two rules that make it non-negotiable in code
 
@@ -237,6 +261,15 @@ flowchart TB
    dashed deep link from the SPA; UsArr never carries it.
 3. The red `ext` box is reachable only from `META`, only in the background, never from a handler
    blocking a response.
+
+⚠️ **The three OpenSubsonic clients named in the diagram are not an implemented client matrix, and
+two of them cannot connect.** Verified from source: **Amperfy** has zero occurrences of `apiKey` in
+its entire Swift source and builds `u` + `t`/`s` only; **Feishin**'s Subsonic controller has no
+`apiKey` path either. Both implement salt/token exclusively, so **neither can authenticate to an
+`apiKey`-only server**. The policy is still right — the alternative is storing recoverable passwords
+— but the consequence belongs in the milestone rather than in a demo. **Symfonium** is the reference
+client, and ⚠️ **its own `apiKeyAuthentication` support is unverified**: its documentation does not
+mention API keys and it is closed-source (§16, v0.4).
 
 There is **no Jellyfin-compatible northbound surface** in the diagram or the roadmap (deferred —
 FUTURE.md §6). An earlier draft deferred it in the text and drew it as first-class here; diagrams are
@@ -321,7 +354,26 @@ impression the architecture exists to avoid. Four rules:
    defer larger widths and AVIF — ThumbHash coverage then races ahead of poster coverage by an order
    of magnitude.
 3. **`dominant_color` is available before ThumbHash** (one average over the 92px fetch), so the empty
-   card is title and year over a colour fill, never a grey box.
+   card is title and year over a colour fill, never a grey box. **The foreground colour is chosen in
+   the pipeline, not in CSS, and it is the one colour in the system that is data rather than a
+   token** — so it needs a rule, and it did not have one:
+
+   > **Pick the theme text token, light or dark, that scores the higher contrast ratio against the
+   > computed `dominant_color`. If the winner is still below 4.5:1, adjust `dominant_color`'s
+   > lightness — away from the text colour, in 2% steps in OKLCh, preserving hue and chroma — until
+   > it clears 4.5:1. The fill is decoration; the title is content, and content wins.**
+
+   Two supporting rules, because otherwise the ratio is not computable from what ships.
+   **Neither the title nor the year may carry `opacity`** — a composited opacity changes the
+   effective ratio (~0.45 on the measured pair) by a mechanism no contrast check sees, so the year
+   uses a real colour token. And **12 px semibold is normal text under WCAG, not large** (large is
+   ≥18.66 px bold or ≥24 px), so 4.5:1 applies to both lines with no 3:1 shortcut.
+   **Asserted where the colour is produced:** a CI check over the fixture posters recomputes the
+   ratio for every `(dominant_color, foreground)` pair the pipeline emits and fails below 4.5:1.
+   The mockups' own sample data already contains a failing pair — `#16130e` on `#7d6a4f` is
+   **3.57:1** for the title and 3.12:1 for the year — which is what a mid-luminance fill does: with
+   an average taken over arbitrary cover art, mid-luminance is common and *both* black and white
+   land near 3.5:1 on it. One bad swatch would be a nit; having no rule is the finding.
 4. **Progressive rendering.** The grid paints from `work` rows as import phase A commits (§7.2);
    images fill in behind, and the grid is never blocked on the image queue.
 
@@ -331,19 +383,118 @@ between "fast" and "broken" on the only run most evaluators ever do. Budget rows
 ### 4.5 Web client
 
 SvelteKit `adapter-static`, embedded via `embed.FS`, no Node in production. UI philosophy in §17.1.
-**Virtualize everything over ~200 rows**; **never load full item records** (keyset windows of ~100,
-prefetching ±2 pages); **service worker** stale-while-revalidate for `/api/*` and cache-first for
-`/img/*`; **prefetch on intent**; and **pending-write chips** keyed by the ULID idempotency key that
-resolve from SSE — a chip, not an optimistic overlay (§7.6).
+**Keyset-paginated "Load more" plus `content-visibility: auto` is the default list renderer**
+(revised — see below); **never load full item records** (keyset windows of ~100, prefetching ±2
+pages); **service worker** stale-while-revalidate for `/api/*` and cache-first for `/img/*`;
+**prefetch on intent**; and **pending-write chips** keyed by the ULID idempotency key that resolve
+from SSE — a chip, not an optimistic overlay (§7.6).
+
+**List rendering, revised — this replaces "virtualize everything over ~200 rows" (ADR-0029).**
+That earlier rule was written before anyone costed what virtualization takes away. Virtualization
+removes off-screen rows from the DOM, and *"accessible landmark navigation, find in page, or
+intra-page anchor navigation are based solely on DOM structure, and virtualized content is by
+definition not in the DOM"* (<https://github.com/WICG/virtual-scroller>). **Ctrl+F for the album is
+exactly what a power user does in a library browser**, so that is a functional regression, not a
+theoretical one. `content-visibility: auto` skips *rendering* without removing content: *"the
+skipped contents must still be available as normal to user-agent features such as find-in-page, tab
+order navigation, etc."* (<https://developer.mozilla.org/en-US/docs/Web/CSS/content-visibility>,
+Baseline September 2024). Infinite scroll is refused outright — NN/g finds it *"can be downright
+harmful to usability — in particular, for search results"*, and Baymard measured "Load more" plus
+lazy loading as the best-performing pattern. Three consequences, all normative:
+
+1. **The default is "Load more" over keyset pages, with `content-visibility: auto` on rows.** The
+   two positions are closer than they look: with ~100-row windows and ±2 pages prefetched the
+   *mounted* set is small either way; what differs is whether unmounted rows are absent from the DOM
+   or present-but-unpainted.
+2. 🚩 **A UsArr list row is not a `<tr>`, and this constraint is the reason.** `content-visibility:
+   auto` is defined entirely in terms of size, layout and paint containment, and **CSS Containment
+   Module Level 2 excludes internal table boxes from all three**
+   (<https://drafts.csswg.org/css-contain-2/>, fetched 2026-08-16): *"giving an element **size
+   containment** has no effect if any of the following are true: … if its principal box is an
+   **internal table box**"*, and the same exclusion for layout and paint containment *"other than
+   table-cell"*. A `<tr>` is `display: table-row` — an internal table box, and not a table-cell — so
+   the declaration is applied, reads back as `auto`, and does nothing. **Measured in Chromium at
+   5,000 rows: document height 120,000 px with and without the declaration, identical; the same test
+   on `<div>` rows produces the 185,000 px placeholder height, i.e. the mechanism works.** `<tbody>`
+   is also an internal table box, so chunking does not rescue it, and `<td>` *can* take containment
+   but collapses the cells to 9 px — visible corruption. **There is no element inside a `<table>`
+   that `content-visibility` can usefully sit on.**
+
+   Therefore the list primitive is named rather than assumed: **rows are `display: grid` elements
+   carrying explicit `role="table"` / `role="row"` / `role="columnheader"` / `role="cell"`.** The
+   responsive stacking fork below 760 px already builds half of this, so the cost is convergence
+   rather than a new component.
+
+   **This creates an accessibility obligation and it is not optional.** An ARIA grid must carry by
+   hand everything a native `<table>` gives for free: the roles above on every element, header
+   association, `aria-rowcount`/`aria-colcount` where the rendered set is a window onto a larger
+   one, and — since the sticky header row is now a `role="row"` of `role="columnheader"` cells
+   rather than a `<thead>` — a name for each column that survives the ≤760 px stacked view. **That
+   is a required component test, not a review item.**
+3. **Virtualization is an escalation, not a default, and its threshold is set from a benchmark that
+   does not exist yet — but the benchmark must measure the operations that are actually expensive.**
+   No number is chosen here, deliberately: the earlier "~200" had no measurement behind it and
+   inventing a replacement would repeat the mistake. **`make bench` gains a required line**, and its
+   scope is the correction: **scrolling a list costs 0.1–0.3 ms at every size and is not the
+   constraint.** The two operations that are O(all loaded rows) are the **density toggle** and the
+   **theme toggle**, because each sets an attribute on `<html>` and invalidates every element that
+   reads a custom property — measured on desktop x86 Chromium against the real markup at **153 ms
+   at 1,000 rows, 1,199 ms at 5,000 and 6,508 ms at 25,000** for density, and **1,356–4,514 ms at
+   25,000** for theme. Both are top-bar controls present on every screen, both are pure-local
+   no-data interactions, and both are therefore **Tier 0 by the design's own definition, whose hard
+   fail is 100 ms** (`design/DESIGN-DIRECTION.md` §7.2). So the required line measures, at 1k / 5k /
+   25k rows, in both themes and at all three densities, on the §13 reference hardware:
+   **(a)** density-toggle wall clock, **(b)** theme-toggle wall clock, **(c)** filter and sort
+   wall clock, **(d)** scroll frame time, and **(e)** scrollbar drift as
+   `|scrollHeight after a full scroll − scrollHeight at load| / scrollHeight`, which must stay
+   under 2%. Frame time alone cannot detect (e), and none of (a)–(c) is visible from a scroll test.
+
+   🔍 **The honest DOM-row ceiling is in the hundreds, not the tens of thousands — inference, with
+   the extrapolation shown.** The measured desktop cost is 0.15–0.26 ms per row for a density
+   change. A Pi 5 is conservatively 3–5× slower at style recalculation and layout, which puts the
+   100 ms Tier-0 hard fail at roughly **100–300 rows in the DOM** as the markup stands, or **300–600**
+   with `table-layout: fixed` and a working containment path. **That number, not the scroll
+   threshold, is what the benchmark exists to settle**, and the earlier text's implied 25,000-row
+   ceiling was reading the wrong operation.
+4. ⚠️ **`contain-intrinsic-size` still has no value, and the previously prescribed one is wrong
+   three ways.** The browser uses it as the placeholder height for skipped elements; when it is
+   wrong the scrollbar drifts as content scrolls in, which reads as *slowness*. The earlier
+   prescription — `contain-intrinsic-size: auto var(--row-h)` — fails because: **(a)** `--row-h` is
+   inert on the row it is meant to describe (`min-height` does not apply to `display: table-row`;
+   forcing `--row-h: 100px` leaves the row at 28.0 px, and the density control works only through
+   `--row-py` padding) — which the grid-row primitive in point 2 also fixes, since `min-height` does
+   apply to a grid item; **(b)** even used correctly it is off by ~50%, because real rows are not
+   one height — measured on the search screen at compact density there are **six distinct row
+   heights (28, 30, 45, 47, 59, 62 px, mean 42.0)**, eighteen across the three densities, so
+   estimating 25,000 rows at 28 px understates the scroll height by ~350,000 px (33%); and **(c)**
+   `contain-intrinsic-size` sizes the **content box**, so padding and border are added on top — a
+   24 px row with `auto 28px` produced a 37 px placeholder. **What ships is
+   `contain-intrinsic-size: auto <measured content-box height>` per row shape**, relying on `auto`'s
+   remembered-size behaviour for the rest, with (e) above as the assertion. Until that measurement
+   exists, this section is a direction, not an implementable rule.
 
 The one deliberate exception to "never load the whole library" is the **client-side prefix index,
 over *top-level works only*** (`movie, series, artist, album, book, comic, game`) — never seasons,
-episodes or tracks. For the §13 reference library that is ~13k rows, not the ~412k `work` rows it
-actually contains. Fields `{id, title, year, kind, availability_state}` in a columnar payload plus
-ThumbHashes as raw bytes in a side `ArrayBuffer` (~25 B each, not ~34 base64 chars) →
-**~1.5–2.1 MB at 13k items** at a realistic 110–160 B/item. **Hard cap 25,000 items:** above it the
-client ships no index, Tier 1 falls back to server search, and the UI says so. Built per access
-scope and ETagged by `(user_id, access_scope_version)` (§1.3).
+episodes, tracks, comic issues **or `person` works** (ADR-0033: a credited author is not something
+the user browses, and shipping every author and illustrator to the client would spend the byte budget
+on rows with no destination). Fields `{id, title, year, kind, availability_state}` in a columnar
+payload plus ThumbHashes as raw bytes in a side `ArrayBuffer` (~25 B each, not ~34 base64 chars),
+at a realistic 110–160 B/item. **Hard cap 25,000 items.** Against §13's six-type reference library
+that is **~27,500 top-level works — over the cap**, and the cap's failure mode is that the single
+mechanism the whole perceived-speed story rests on turns itself off. So the degradation is specified
+properly rather than left as "ship nothing":
+
+- **Under the cap** the client ships the full index (~1.5–2.1 MB at 13k items, ~3.0–4.4 MB at 27.5k),
+  and Tier 1 answers every top-level query locally.
+- **Over the cap the client ships a *partial* index, not none**: every work in the currently scoped
+  libraries (§17.2's `?lib=` chip, which is usually a small fraction of the corpus), plus the
+  top-N by `popularity` from the remainder to fill the budget. **The UI says so** — the search box's
+  hint line reads *"instant results cover your current library scope; press Enter to search
+  everything"* — and Tier 2 server search is one keystroke away rather than a silent fallback.
+  A partial index beats no index, and the seam already exists because the index is built per access
+  scope and ETagged by `(user_id, access_scope_version)` (§1.3).
+- **The cap is a byte budget, not a row count**, and 25,000 is the row figure that budget currently
+  buys. When the six-type payload is measured rather than estimated, the cap moves with it.
 
 ---
 
@@ -407,6 +558,13 @@ usarr_id := crockford_base32( varint(instance_id) || kind_byte || enc_byte || na
 ```
 
 - `instance_id` is `service_instance.id`, assigned once and **never reused**.
+- **`kind_byte` encodes the *remote* kind, not `work.kind`**, and that distinction is worth stating
+  because the two vocabularies are not the same size: the map already carries `author` (LazyLibrarian's
+  own remote kind) and `file`, neither of which is a `work.kind`. ADR-0033's new `work.kind = 'person'`
+  therefore takes **`kind_byte` 13**, allocated in the same commit as `comic_issue`'s 12 and before any
+  client caches an id, for services that report a creator entity under a name other than `author`;
+  remote `author` keeps byte 10, and both resolve to `work.kind = 'person'`. The full map is in
+  [`reference/gateway.md`](./reference/gateway.md) §3.
 - **`kind_byte` is required, not decoration.** The only unique index on `service_item_link` is
   `(service_instance_id, remote_kind, remote_id)`; without the kind at lookup time SQLite uses only
   the leftmost column and every resolve degrades to a scan over one instance's links — ~400k rows for
@@ -520,7 +678,70 @@ book". And the UI can say **"Based on the novella by Denis Johnson"** instead of
 2013 Granta paperback, **the audiobook**, the Portuguese translation) → `media_file` (concrete
 bytes).
 
-**`work.kind` is:** `movie, series, season, episode, artist, album, track, book, comic, game`.
+**`work.kind` is:** `movie, series, season, episode, artist, album, track, book, comic, comic_issue,
+person, game`.
+
+> **`person` is new in this revision, and it is migration 0001 or never (ADR-0033).** `work_credit`
+> (ADR-0031) is M:N and required for books and comics explicitly — *"it is needed for books too,
+> where role matters: author, translator, editor, illustrator"* — and its creator column pointed at a
+> `work` whose only available kind was `artist`. So a book's author and a comic's penciller were
+> stored as **`artist`-kind works**, with two consequences that are not theoretical: §17.2's
+> navigation enum maps `artist` to **Music**, so every author and illustrator appeared in the Music
+> media type; and §4.5's Tier 1 prefix index counts `artist` as a top-level work, so every credit
+> consumed the client-side byte budget that §13 already shows is over its cap. `person` fixes both by
+> existing.
+>
+> **The rule for which kind a credit points at** — because "just use `person` for everyone" loses the
+> Music type: **a credit points at an `artist` work when a connected service models it as a top-level
+> catalogue entity in its own right** (Navidrome and Lidarr artists, which have albums, a page and a
+> library row), **and at a `person` work otherwise** (authors, translators, editors, illustrators,
+> writers, pencillers, inkers, colorists, letterers, cover artists, and narrators reported only as a
+> string). A human who is both — a musician who also writes books — is two rows, one per kind, joined
+> by nothing in v0.1; that is a real and stated loss, and it is smaller than the two failures above.
+> 🔍 The rule is inference from how the sources model their own data, not a citation.
+>
+> **`person` is excluded from the navigation enum (§17.2), from the Tier 1 prefix index (§4.5) and
+> from the FTS corpus (§8.2)** — the last because there is no person screen in any milestone, so a
+> person hit would be a search result with nowhere to land. It is reachable as a credit link on an
+> item (§17.6). Adding it to the corpus later is a predicate change plus an FTS re-index; adding the
+> *kind* later is a CHECK-constraint change (a SQLite table rebuild), a rebuild of every client prefix
+> index, and a `kind_byte` allocation that §5.3 states is unchangeable once clients cache ids. That
+> asymmetry is the whole timing argument, and it is ADR-0030's argument in a second place.
+
+> **`comic_issue` is new in this revision, and migration 0001 is the only cheap moment to add it
+> (ADR-0030).** Every other multi-level medium got its levels — TV has `series`/`season`/`episode`,
+> music has `artist`/`album`/`track` — and comics had exactly one member, `comic`, with a
+> `work_comic` subtype whose columns (`issue_number`, `volume`) describe an *issue* while the search
+> corpus, the Tier 1 prefix index, the `kind_byte` map and the grid all treat `comic` as
+> **top-level**. Those two readings are inconsistent in precisely the way the `audiobook`
+> kind-vs-edition contradiction was. With one member you either lose issues entirely (no "43 of 60",
+> no per-issue availability, no read progress) or you put series and issues in one kind and
+> distinguish on `parent_work_id IS NULL` — which breaks §8.2's corpus rule, because that rule
+> filters on `kind`, so every chapter title enters the FTS corpus and a large manga library swamps
+> every query. Fixing it now is one line. Fixing it later is a CHECK-constraint change (a SQLite
+> table rebuild), an FTS re-index, a rebuild of every client prefix index, and a change to the
+> `kind_byte` codec, which §5.3 states is **unchangeable once clients cache ids**. `comic` is the
+> series; `comic_issue` is the issue or chapter, excluded from the corpus. Both bytes are allocated
+> in the same commit, before any client caches anything.
+>
+> **There is no third level for Kavita's Volume, and no `manga` kind.** Kavita has a Volume node;
+> Komga, Mylar3 and Kapowarr do not, so a third tier would be empty on four backends out of five and
+> would render "Volume 1 › Chapter 1" for one of them over the same files. It is carried as
+> `work_comic_issue.volume_label` + `volume_sort` — a grouping attribute, not a node, and a
+> deliberate loss of fidelity against Kavita that is written down as one. Manga is not a separate
+> kind either: Komga models no manga/comic distinction at all (only `ReadingDirection`), and
+> Kavita's `LibraryType` members `Manga` / `Comic (Flexible)` / `Comic (ComicVine)` are
+> filename-parsing modes over one identical entity tree. Splitting the kind would also make §6.4's
+> "never auto-merge across `kind`" a liability: the same series in Komga (undifferentiated) and
+> Kavita (in a Manga library) would land in two kinds and could never be merged. The real
+> differences live where they cost nothing: `work_comic.reading_direction`, `external_id.source`
+> (AniList/MAL/MangaBaka vs Comic Vine/Metron), routing caps, and a derived `type:manga` system tag.
+> **The Newznab category is *not* on that list**, and an earlier draft put it there: §8.5 establishes
+> that there is no manga category in the Newznab standard at all — `7030 Books/Comics` is the only
+> comics category, `7000` is its parent rather than its sibling, and a search filtered on `7030`
+> returns *zero* manga because Nyaa maps its Literature categories to `7000`. So the category
+> separates comics-and-manga from everything else and never manga from western comics. The four
+> remaining items carry the argument on their own.
 
 > **`audiobook` is not a `work.kind`. An audiobook is an `edition` of a `book` work**
 > (`edition.format = 'audiobook'`). The earlier draft asserted both readings in one document, which
@@ -532,14 +753,93 @@ bytes).
 > `format:` namespace and `type:audiobook` is gone; `Caps.MediaKinds` becomes a list of
 > `(kind, format)` pairs (§11).
 
-**The `edition` table stays**, against a review recommendation to cut it: books, audiobooks and
-ebooks genuinely need it — it is what makes the Portuguese translation *Sonhos e Comboios* the same
-work as *Train Dreams*, and what makes ebook-vs-audiobook routing a schema property rather than
-adapter special-casing. One narrow table and a foreign key.
+**The `edition` table stays**, against a review recommendation to cut it, and the six-media-type
+expansion turned that from a defensible call into an obvious one. Books, audiobooks and ebooks
+genuinely need it — it is what makes the Portuguese translation *Sonhos e Comboios* the same work as
+*Train Dreams*, and what makes ebook-vs-audiobook routing a schema property rather than adapter
+special-casing. Three independent confirmations arrived with the expansion: **Chaptarr**, the only
+new \*Arr-lineage book manager, converged on exactly `Book` → `Edition[]` with `IsEbook`,
+`Narrator`, `DurationSeconds` and `ChapterCount` on the edition; **MusicBrainz's *Recording*
+definition** excludes mastering-only output from being a new recording — *"A recording itself is
+never produced solely through copying or mastering"* — so a straight remaster is the same album
+work, the same track works and a new `edition`, which is the split doing its job; and **five
+scanlations of one manga chapter** are five `edition` rows on one issue work, `label` = group,
+`language`, `published_at` each. One narrow table and a foreign key.
 
-**Every kind has a subtype table or a stated reason not to.** `work_track` carries `disc_number` and
-`track_number` — without them a multi-disc album is unrepresentable and `getAlbum` cannot order
-tracks, which blocks the whole OpenSubsonic surface. `work_comic` carries `issue_number`.
+> ⚠️ **Two corrections to that middle confirmation, both of which were tidied away on the way in.**
+> **MusicBrainz does not define "remaster" anywhere** — the quoted phrase is from the *Recording*
+> page, and the *Release Group* page carries no definition of the term; the step from "not a new
+> recording" to "therefore a new edition of the same work" is **UsArr's inference**, not a citation.
+> And **the common real-world remaster takes a different path**: when a label reissues with bonus
+> discs and a changed title (*"OK Computer OKNOTOK 1997 2017"*) MusicBrainz gives it **its own
+> release group**, which makes it a *different album work* joined to the original by a
+> `work_relation` edge — not a new `edition` of the same work. **Both paths must exist**, and
+> ADR-0031's edition-keyed rollup describes only the first. The `edition` layer still earns its
+> place on the other two confirmations; this one is weaker than it read.
+
+**Three `edition` columns the books and music work adds**, all of them properties of a production
+rather than of a work or of a file: **`narrators` (a list)**, **`duration_seconds`** and
+**`abridged`**. A 30-file audiobook has one runtime, different productions have different narrators,
+and an abridged reading is a materially different thing users care about. Chaptarr, Audiobookshelf
+(`Book.narrators`, `Book.duration`, `Book.abridged`) and Audnexus all put them at this level.
+**`edition.format` carries the medium, never the codec** — a 2000 UK CD release can be on disk as
+FLAC, so the medium belongs to the release and the codec to `media_file`. 🔍 That separation is
+inference from the two models, not a cited rule, and it is the one place `edition.format` is easy to
+overload. The `format` CHECK list must also agree with this document's prose: it needs `cbz`, `cbr`
+and `pdf` as comic/ebook file shapes, which the DDL currently lacks.
+
+**Every kind has a subtype table or a stated reason not to.**
+
+- **`work_track` is edition-scoped, not work-scoped, and that is a correction.** The earlier text
+  hung `disc_number` and `track_number` off a `work`. But the same recording is track 4 on the
+  original CD and track 6 on the 2017 deluxe reissue, with a different track MBID each time:
+  **position is a property of the (track-work, edition) pair.** So `work_track` carries
+  `edition_id`, keyed `(work_id, edition_id)`. Adding that column later is a backfill over the
+  largest table in the schema; adding it in migration 0001 costs eight bytes a row. **The seam ships
+  in 0001; the multi-edition UI does not.** The `NOT NULL` has a consequence that must be stated
+  rather than discovered: **every album work carries exactly one synthetic primary `edition` from
+  migration 0001**, because Lidarr and Navidrome report no release concept and the adapter has to
+  synthesise one before a track row can exist. **It is resolved, never re-allocated** — the adapter
+  looks up `edition WHERE work_id = ? AND is_primary = 1` and inserts only on a miss — and
+  `work_track.edition_id` is `ON DELETE RESTRICT` rather than `CASCADE`, so an adapter that
+  re-synthesises cannot destroy the track set. Full rule and the CI invariant in
+  [`reference/schema.md`](./reference/schema.md) §1.1.
+- **`track_number` is `TEXT`, with a derived `track_position INTEGER` sort key.** Lidarr ships it as
+  a string and keeps a separate integer alongside, because real track numbers are `A1`, `B2`,
+  `1.01`. An integer column sorts a double LP randomly. The same rule holds one level down for
+  comics: `work_comic_issue.number_text TEXT` plus `number_sort REAL`, because issue numbers are
+  `1.MU`, `-1`, `0`, `Annual 1`, `1A`.
+- **Artist attribution is an M:N `work_credit`, never an `artist_id` column on the album.** The
+  moment attribution is a scalar, Various-Artists compilations, collaborations and classical roles
+  are unrepresentable — which is Lidarr's own limitation (`AlbumResource.artistId` is singular) and
+  there is no reason to inherit it. This mirrors MusicBrainz artist credits and Navidrome's
+  `Participants` model.
+- **`work_comic` splits with the kind.** Series level: `volume_label`, `volume_year`,
+  `reading_direction`, `publisher`, `total_issues_declared`, `total_issues_source`. Issue level
+  (`work_comic_issue`): `number_text`, `number_sort`, `volume_label`, `volume_sort`, `is_special`,
+  `is_oneshot`, `special_version`, `page_count`.
+- **`person` has no subtype table, deliberately** (ADR-0033). A credited human is a name, optional
+  `external_id` rows (OLIDs, Comic Vine person ids) and the credits pointing at it — all of which
+  `work`, `external_id` and `work_credit` already carry. A `work_person` table would hold a birth
+  year and a biography that no v0.1 source reports for an author, so it would be columns nothing
+  writes.
+
+**The availability rollup is keyed by whatever the medium's denominator actually is** (§6.3), and
+for two of the six types the denominator is not a quality tier:
+
+- **Music: the rollup is edition-keyed.** Choosing the 2017 remaster over the 2000 original changes
+  the track list, the count and the durations, so `total` is a property of the edition, not of the
+  album work. Render the edition label beside the fraction or the fraction is a guess.
+- **Comics: there is usually no honest denominator at all, and UsArr must say so.** Every "total" in
+  the domain is a *declaration* — Komga's `totalBookCount` and Kavita's `totalCount` both derive
+  from ComicInfo `Count`, and the Anansi specification itself concedes *"The `Count` could be
+  different on each book in a series"*; Mylar3's total comes from Comic Vine, whose own code
+  comments that *"comicvine isn't as up-to-date with issue counts"*. *One Piece* has no total. So:
+  show `43 / 60` **only** when the series status is `ENDED`/`Completed`/`Cancelled` **and** a total
+  is declared — both Komga and Kavita report status, so the gate is cheap — and otherwise show
+  `43 issues` with no denominator. The rollup gains a `total_source` field so the provenance is
+  visible. The number that is *always* honest is **contiguity**, computed locally from `number_sort`
+  with no upstream help: *"43 issues · #7, #12 and #30–32 missing"* is more useful than any fraction.
 
 **File identity.** `media_file` rows are **per-instance observations**, so the unique index is
 `(service_instance_id, path)`, never `path` alone — a unique index on `path` makes it impossible for
@@ -609,6 +909,213 @@ Three rules that prevent the classic disasters: **never auto-merge across `kind`
 novella are linked, never merged); **merges are recorded and reversible**; **`normalized_title` is
 deterministic and versioned**, so `norm_version` tells you which rows are stale.
 
+**Four amendments the six-type expansion forces, each because a medium breaks an assumption the
+video-only cascade could make:**
+
+1. **Tier 3 takes the primary author for books, not just the year.** Book titles collide far more
+   than film titles — *The Gift*, *Home*, *Origin* — so `normalized_title` + year ±1 + kind is not
+   discriminating enough on its own.
+2. **`work_merge` ships with the first music milestone, not with tiers 2–5.** MBIDs are
+   redirect-capable — the Servarr metadata server carries `oldids` for exactly this — and Open
+   Library merges leave a `/type/redirect` record behind, so **an OLID stored last month can resolve
+   to a redirect today**. Any Open Library adapter must detect `"type": {"key": "/type/redirect"}`
+   and follow `location` **before** writing the id. Upstream renames the key; UsArr has to survive
+   it, and that is tier-1 work, not fuzzy-tier work.
+3. **Identity parsed out of a free-text field is never strong.** Komga supplies no external
+   identifiers at all; the only ids available from it are whatever a user typed into
+   `metadata.links[]`. Those get confidence 0.90, never 1.00, because a confidence-1.00 write hits
+   `ux_extid_work_strong` and *merges works* — a mistyped link must not be able to do that. This is
+   §11.2's manifest rule generalised. Related, and concrete: **strip a trailing parenthesised
+   4-digit year from a Komga series title into `year` before normalising**, or *Saga (2012)* never
+   matches Kavita's *Saga* + `releaseYear 2012`.
+4. **An ISBN or an ASIN must never satisfy `ux_extid_work_strong`.** Both are edition identifiers —
+   a hardback, its paperback, its EPUB and its US and UK printings all carry different ISBNs, and
+   the audiobook usually has an ASIN and no ISBN at all. Writing either as a work id silently claims
+   a paperback and an audiobook are the same edition. Publishers also reuse ISBNs and put one on an
+   omnibus, so **two works are never merged on ISBN agreement alone.** Work-strong book sources are
+   `openlibrary_work`, `hardcover_book` and `goodreads_work`, and nothing else.
+
+**UsArr models no composition tier for music, and a composer therefore renders as an artist.** This
+is an honest impossibility rather than a gap to close later: **neither Navidrome nor Lidarr models a
+composition**, so recordings of one classical work are grouped by release, not by work, and no
+amount of aggregation fixes it — the sources do not carry the concept. `work_credit(role)`
+(ADR-0031) makes a composer *representable as a credit*, which is the **seam**, not the disclosure;
+reading it as the disclosure inverts the finding. **Where the consequence is visible, UsArr says
+so — as one inline note on the artist or album it concerns, never as a table, a heading or a section
+of its own** — in the same register as the *"not identified"* badge below and the comics gap list
+(§6.1). Rendered as a `role="table"` under a heading reading *"Composers, and what UsArr cannot do
+with them"*, with columns headed *"Artist as UsArr holds it"* and *"What is actually there"*, it
+becomes an essay wearing a data screen's clothes: the heading enters a screen reader's heading list
+as the title of an argument, *"what is actually there"* is a footnote that has been given a column,
+and it lands at the foot of an album drill-down where nothing in any hierarchy puts it. The sentence
+is the whole of it — *"Nine albums here are recordings of the same work. UsArr groups by release,
+because no connected service models a composition."* Classical is not a niche; it is the case where a unified
+catalogue looks most obviously wrong to the person who owns it, and being quiet about it is worse
+than being unable to fix it. Evidence: [`RESEARCH.md`](./RESEARCH.md) Track 06 §6.4.
+
+**The badge is named in the user's words, and it carries its reason wherever it appears.** It
+shipped as `no work identity` — `work` is a table in §6.1, so a user reading it on a book they own
+learns nothing and has no action attached — while the same chip in another state carried the useful
+sentence (*"Komga reports no external identifier of any kind, so this series is matched by title"*).
+**The chip reads `matched by title`**, which is a phrase every \*Arr's manual-import screen has
+already taught this audience, and the sub-line travels with it everywhere the chip appears, not only
+where it was remembered.
+
+**A work with no resolvable identity is kept, marked, and stays searchable — and that is a v0.1
+rule, not a later one.** Whatever the backend reports, UsArr writes the row: a title, a file, and a
+quiet *"not identified"* marker. It is v0.1 because v0.1 ships Komga, which supplies **no external
+identifiers at all**, so the state is reachable on day one rather than at the milestone that
+computes cross-media links. It costs one nullable column and one badge, and it is precisely what
+LazyLibrarian's absence of disqualifies it as a catalogue (§6.5): a file its matcher cannot bind gets
+no row at all. The badge is never a synonym for "broken" — an unidentified book is a book you own,
+and the honest statement is that UsArr could not find an identifier for it, not that it is missing.
+
+**The kind decision is UsArr's, made once at ingest.** A graphic novel with an ISBN sits in a Komga
+library and in a Calibre library; if one is ingested as `comic` and the other as `book` the cascade
+forbids them ever merging. The rule that resolves it is that `work.kind` is derived from a rule UsArr
+controls — the library's declared kind (§6.5) — and never inherited from whichever backend answered
+first.
+
+---
+
+### 6.5 Libraries: the user's organisation, which upstream never owned
+
+> **A UsArr library is a user-owned, named, single-kind, format-filtered *binding* to containers the
+> upstream services already computed — a whole instance, a root folder, an upstream library id or an
+> \*Arr tag — with materialised membership, one declared request sink, and a narrow user-owned
+> correction layer. UsArr never reads a filesystem.** (ADR-0026.)
+
+The motivating problem is not storage control. It is that **an upstream service's own idea of a
+library is often wrong, and the user wants UsArr's organisation to be better than the service's.**
+LazyLibrarian is the worked example and the evidence is in its source rather than in an opinion: a
+file its fuzzy matcher cannot bind to a provider record has **no row written at all** — the failure
+is recorded in a local dict that produces a debug-log line and an *"N unmatched items"* banner, and
+never a database row — so its library view is its *provider's* view intersected with what a
+threshold accepted. Its own documentation sets match ratios at *"somewhere around 80% to 90%"* and
+warns that looser matching *"will get matches against the wrong books"*. (The load-bearing half is
+that **no row is written**, which is verified in `librarysync.py`; the earlier "only a summary log
+line" flourish was not — the same dict drives a user-visible alert.)
+
+**Three ownership axes, and keeping them apart is the whole design.** The table is in **§2.2**, which
+is the section that owns the conflict rule and has been amended to carry it; it is not repeated here.
+The refinement it makes to ADR-0004 is narrow: *the \*Arr owns the truth about the \*Arr's own state;
+it never owned the truth about the user's organisation.* A replica that can be more correct than its
+source is still a replica — it is one with an owned overlay, which §2.2 grants for tags, requests,
+playback position **and, since that amendment, library organisation and display-identity
+corrections**.
+
+**Four tables, all in migration 0001.** Full DDL, CHECK lists, keys, `ON DELETE` behaviour and
+indexes: [`reference/schema.md`](./reference/schema.md) **§13**.
+
+| Table | What it holds |
+|---|---|
+| `library` | `user_id` (the **owner** — §1.3 rule 1), name, slug, **exactly one `work.kind`**, a `formats` filter over `edition.format`, icon, `sort_order`, enabled, `include_in_search`, default sort, the `sink_*` columns (§8.3), `managed_by ∈ {auto,user}`, `orphaned_at` |
+| `library_source` | M:N to `service_instance`, plus `container_kind ∈ {instance, root_folder, remote_library, tag, series_type}` and `container_ref` — **the container is always one the upstream itself reported**, `container_identity` to survive id reuse, `is_metadata_authority`, `missing_since` |
+| `library_member` | **materialised** membership, keyed `(library_id, sort_title, work_id, edition_id)`, written in the link-write transaction and dirty-marked/flushed per 250 ms batch exactly like the availability rollup (§6.3) |
+| `library_override` | the correction layer: four verbs — `exclude`, `include`, `relink`, `field` — with `user_id NOT NULL DEFAULT 0` on the sentinel pattern §10 already uses. `exclude`/`include` are library-scoped; **`relink` and `field` are global**, with `library_id IS NULL`, because identity and display identity are not library-scoped concepts |
+
+**Three things about those keys that are design, not DDL detail:**
+
+- **Membership is edition-grained**, not work-grained, and that is what makes §17.8's flagship
+  Ebooks/Audiobooks split over one Audiobookshelf library implementable. `library.formats` filters
+  `edition.format` while `library.kind` filters `work.kind`, and a `book` work with an EPUB edition
+  and an M4B edition is one `work` row — so a `(library_id, work_id)` key puts an audiobook-only
+  work in the Ebooks library unless the format filter is re-evaluated at query time, which defeats
+  the materialisation and makes every item count wrong.
+- **`sort_title` is denormalised into the membership key**, which is what turns the library-scoped
+  keyset query into a single covered seek. See the ⚠️ at the end of this section: the mitigation this
+  document previously offered assumed a topology the design's own flagship example does not have.
+- **`relink` and `field` are global corrections that record which library they were made from**, not
+  library-scoped values. Otherwise a work in two libraries either renders under two names or its
+  `library_id` is a lie, and nothing said which.
+
+**Five rules that are the whole value of the feature:**
+
+1. **A correction is keyed to UsArr identity (`work_id` / `link_id` + `target_identity_hash`) and is
+   never cleared by a sync, a reconciliation sweep, a tombstone expiry or an id resurrection.** This
+   rule exists for a specific documented failure: ⚠️ LazyLibrarian GitLab issue #2407 — books marked
+   ignored are reported to **come back after an author rescan**, because the rescan returns the book
+   with a different provider id. **That report has no maintainer resolution and the reporter says
+   they may be reading the wrong code**, so it is carried as unverified. The rule is right
+   regardless — storing the correction upstream, or keying it to the upstream's id, reproduces the
+   failure by construction — but it should not lean on an unconfirmed user report as though it were
+   observed behaviour.
+2. **Library membership is never an input to identity.** jellyfin#10985 is the counter-example: the
+   same film in three per-language libraries collapsed into one item and watch state leaked across
+   all three (closed as not planned). UsArr's identity is `external_id` plus the §6.4 cascade,
+   computed with no knowledge of libraries. **CI asserts that no query in the identity path
+   references `library_member`, `library_source` or `library_override`.** The third name is not
+   redundant: `library_override`'s `relink` verb *does* feed identity by design, so the assertion is
+   stated as two paths — the identity **cascade** references none of the three, and the correction
+   **applier**, which runs after the cascade and overrides its output, references `library_override`
+   and nothing else.
+3. **Membership is a deterministic predicate, never a similarity score**, and the container is always
+   an object the upstream named. UsArr compares exactly one path — `root_folder_path`, as a prefix,
+   on a value the upstream itself reported — and never parses a filename. The other four container
+   kinds are equality on an id the upstream reported, held in
+   `service_item_link.remote_library_id` / `remote_tag_ids` / `remote_subtype`
+   ([`reference/schema.md`](./reference/schema.md) §13.2 tabulates the predicate and the source
+   field per adapter). That is the whole difference between this and a scanner, and the scanner is
+   the component whose misidentification failures fill this section's citations: Jellyfin's own
+   documentation calls its mixed library type *"broken and deprecated"*, and its removal proposal
+   says the detector is *"very poorly implemented"*.
+4. **A library's kind is required and editable.** Every tool that scans disk types its libraries and
+   is right to; UsArr can additionally let the user *change* the type, precisely because nothing is
+   parsed from a path — changing it re-derives membership from typed API resources and no rescan
+   exists. ⚠️ **Plex is reported not to allow this, and that report is a community feature request
+   rather than an official statement** — it is unverified against Plex's own documentation or a
+   current build. The capability is real on its own terms; the comparison is not evidence, and it
+   was carried into five places as fact.
+5. **A library with zero sources is retained, marked orphaned, and shown with its reason.** It
+   carries a user's name, its access grants, and the `exclude`/`include` corrections scoped to it;
+   auto-deleting owned data to tidy up replicated data is the wrong trade. A **manual** delete does
+   discard those scoped corrections, and §17.8's confirmation copy says so with the count.
+6. **Every replicated work is a member of at least one library, and CI asserts it.** A work in no
+   library is visible through no scope and therefore vanishes from search for every user *including
+   the owner* — a failure state the previous `instance_scope` could not reach, because every
+   replicated row came from some instance. Two paths reach it by design: a `root_folder`-scoped
+   library covering part of an instance, and an `exclude` against a work's last remaining library.
+   Reserved `library.id = 0`, **Unfiled**, catches both. It is owner-scoped, never listed on the
+   Libraries screen, never offered in the scope chip and never proposed; its only job is to keep the
+   row findable. **`exclude` removes a work from `library_member` for one library and never from
+   search** — those must not be the same mechanism, and now they are not.
+
+**What this is not.** A library is not a tag (tags are cross-kind labels) and not a saved filter
+(v1.0, a query). Cross-kind grouping — "Kids", "Christmas" — is a tag or a saved filter, never a
+library. And **libraries are not navigation**: they are unbounded in number, so they are a scope, not
+a sidebar entry (§17.2, ADR-0027).
+
+**It supplies three referents the design had already promised and left dangling**, which is why it is
+smaller than it looks: `user_library_access` (§12.2 names it with no `library` table to point at),
+§8.3's *"a routing rule"* (named, never defined), and v0.4's `getMusicFolders` (an endpoint with
+nothing to return without a library concept). One existing column changes with it:
+**`search_doc.instance_scope` is replaced by a `search_doc_library(library_id, doc_rowid)` junction
+table** (§8.2), because a library can be a *subset* of an instance and instance-level scoping would
+then leak the existence of items a user cannot see — the existence-oracle risk §1.3 exists to
+prevent. 🔍 **That the library scope can fully replace the instance scope without a second column is
+an inference and should be checked against the first real scoped search query written**; it is
+argued rather than measured. **A junction table rather than a scope column on `search_doc`, because
+§8.2 requires the filter to run in the index join and a JSON array in a `TEXT` column cannot
+participate in one.** With one auto-created library per instance the two sets are identical in v0.1,
+so the change costs nothing now and is a full-corpus backfill later.
+
+⚠️ **The one performance risk, and the mitigation this document used to offer does not hold.** The
+grid query becomes `library_member ⋈ work` with keyset pagination, and §13 already notes that
+`ix_work_kind_sort` *serves* rather than covers it. **Still unmeasured.** The previous mitigation was
+*"a library is single-kind and the default topology is one library per kind, so the common case is
+`work.kind = ?` with membership as a one-row lookup"* — **and that common case is false in the
+design's own flagship example**, which has seven libraries over six kinds: two `book` libraries (the
+Ebooks/Audiobooks split this feature exists to demonstrate, §17.8) and two `comic` libraries. For a
+1%-selective library the keyset page either probes membership per candidate (≈18 index rows scanned
+per row returned, so ~1,800 probes for a 100-row page) or fetches every member and sorts before the
+window can be cut. So **the denormalisation that was the fallback is now the default**: the sort key
+lives on `library_member`, keyed `(library_id, sort_title, work_id, edition_id)` `WITHOUT ROWID`,
+which makes the scoped keyset a single covered seek at any selectivity. The write cost is one column
+on an already-materialised table, plus the rule that a title change rewrites its member rows. **CI
+asserts the `EXPLAIN QUERY PLAN` for both topologies — one library per kind and two libraries over
+one kind — because only the second is the interesting one**, and `make bench` carries the wall
+clock.
+
 ---
 
 ## 7. The sync engine
@@ -620,7 +1127,8 @@ Mechanics in full: [`reference/sync.md`](./reference/sync.md).
 | # | Channel | Latency | Covers | In |
 |---|---|---|---|---|
 | 1 | Full import | minutes | Bootstrap, disaster recovery | **v0.1** |
-| 3 | Delta poll (`/history/since`) | 30–120 s | Everything that generates history | **v0.1** |
+| 3 | Delta poll (`/history/since`) | 30–120 s | **Library-bearing acquisition apps only** — Sonarr, Radarr | **v0.1** |
+| **3b** | **Ordered page-walk delta** | **5–15 min** | **The catalogue sources — Navidrome, Audiobookshelf, Komga; Kavita in v0.2. None has a changed-since endpoint** | **v0.1** |
 | 4 | Reconciliation sweep | 6–24 h | Silent drift, out-of-band edits, deletions | **v0.1** |
 | 2 | SignalR stream | < 1 s | Live changes while connected | later |
 | 4b | Webhook receiver | < 1 s | Push from services with no SignalR | later |
@@ -640,6 +1148,53 @@ hour on a 20-indexer install, none mapping to a `work`, and `prowlarr.HistoryRes
 `movieId`/`seriesId` fields the loop depends on. Channel 3 applies to **library-bearing acquisition
 apps** only; Prowlarr history is filtered to `eventType=releaseGrabbed` and used as provenance input.
 (Six apps expose `/history/since`, not five — Whisparr is the sixth.)
+
+### 7.1a Channel 3b — the ordered page-walk delta, for the catalogue sources
+
+**Channel 3 does not apply to Navidrome, Audiobookshelf, Komga or Kavita**, and none of them has a
+changed-since endpoint. Verified against the vendored specs: `komga-openapi.json` has **zero**
+parameters matching `since|modified|updated|changed` on any path — 20 `lastModified` *fields* and a
+generic Spring `sort` parameter — and `kavita-openapi.json` exposes `sortByLastModified` on exactly
+two endpoints, `GET /api/Collection` and `POST /api/ReadingList/lists`, and on **neither the Series
+nor Volume nor Chapter endpoints**, so Kavita's actual catalogue has no sortable delta at all and the
+sort lives inside a POST filter body.
+
+Left at that, four of six media types would be refreshed only by the 6–24 h sweep: add an album to
+Navidrome and it is invisible in UsArr for up to six hours, with nothing on screen saying the number
+is stale. That is not the replica thesis, it embarrasses it. So the mechanism is named, budgeted and
+degraded honestly rather than left implicit.
+
+> **Channel 3b: walk the source's item list ordered by its own last-modified field, newest first,
+> and stop at the first page entirely older than the watermark minus an overlap.**
+
+Five properties, each of which is a correctness requirement rather than a detail:
+
+| Property | Rule |
+|---|---|
+| **Watermark** | `service_instance.last_delta_sync_at` holds **the maximum upstream `lastModified` value actually observed**, in the upstream's own clock and format — never `now()`, and never UsArr's clock. Same rule as channel 3's cursor and for the same reason. |
+| **Ordering guarantee** | The source must return items ordered by a monotonic last-modified field it maintains itself. Probed at connect time, not assumed. |
+| **Overlap window** | Re-read `max(5 min, 2 × \|clock_skew_secs\| + poll interval)` **behind** the watermark, from the `Date` header skew already measured per instance (§7.3). Items changed during the walk otherwise fall between pages. |
+| **Page-walk stability** | An ordering key that mutates *while* the walk runs reorders the result set under the cursor, so an item can be skipped. The walk therefore records the first page's top item and **restarts if it is no longer first on the next poll**, rather than continuing into a reordered set. |
+| **Deletions** | A page walk **cannot observe a deletion**, structurally. Channel 4 remains the only deletion path for these sources, which is exactly why the sweep is doing more work here than it does for the \*Arrs. |
+
+**What happens when the ordering guarantee is absent — and it is absent for at least one source
+today.** The instance falls back to **reconciliation only**, and this is surfaced rather than
+swallowed: the Services row (§17.3) reads `no change feed — full compare at 09:12` in place of a
+delta time, and the library row (§17.8) carries the same, with the last full-compare time. A
+freshness number that is not backed by a delta must never be rendered with the same weight as one
+that is.
+
+⚠️ **Per-source status, dated 2026-08-16, and one of these is load-bearing and unverified.**
+
+| Source | Ordering key | Status |
+|---|---|---|
+| Navidrome | `getScanStatus.lastScan` as a cheap change *signal*, then an `updated_at`-ordered walk of the native API | 🔍 inference from the model; probe at connect |
+| Audiobookshelf | `LibraryItem.updatedAt` | 🔍 probe at connect |
+| Komga | `sort=lastModified,desc` on the series list | ⚠️ **Could not be verified from the spec** — Spring `Pageable` sort properties are not enumerated and the DTO field name may not be the entity property name. **The whole Komga delta strategy rests on it**, which is why §16 makes it a **day-one spike**, before the schema is written. If the probe fails, Komga drops to reconciliation-only and says so on its row. |
+| Kavita (v0.2) | — | ⚠️ **None.** `sortByLastModified` does not exist on the Series, Volume or Chapter endpoints. Kavita is reconciliation-only unless a probe finds otherwise, and it is deferred to v0.2 partly for this reason (ADR-0032). |
+
+Budget rows for the walk are in §13. **Until this section existed, §16 claimed "sync channels 1, 3
+and 4" for a v0.1 in which channel 3 covers two of its services; that claim is corrected to name 3b.**
 
 ### 7.2 Channel 1 — full import
 
@@ -828,11 +1383,29 @@ statistics sweeps the list. Four things previously implicit, each a correctness 
   is an FTS5 syntax error. Queries under 3 characters skip the trigram leg, which requires ≥3
   characters.
 - **The corpus is top-level works only** (`movie, series, artist, album, book, comic, game`).
-  `season`, `episode` and `track` are excluded — a 400k-row corpus of episode titles swamps every
-  query — and are reachable by scoped search from a parent's detail view. CI asserts it.
+  `season`, `episode`, `track` **and `comic_issue`** are excluded — a 400k-row corpus of episode
+  titles swamps every query, and a large manga library does the same with chapter titles — and are
+  reachable by scoped search from a parent's detail view. **`person` is excluded too, for a different
+  reason: there is no person screen in any milestone (ADR-0033), so a person hit would be a result
+  row with nowhere to go.** ⚠️ **This leaves "find everything by this author" unanswered in v0.1 and
+  says so rather than implying otherwise.** The cheap candidate is to fold credited names into the
+  FTS `alt_titles` column of the *works* they are credited on, so the query returns the books rather
+  than the person — but that is a decision for whoever writes the FTS document builder, it is not
+  specified here, and it must not be assumed. CI asserts the exclusions.
 
-Permission filtering happens **in the index join, not after it**: `search_doc` carries the instance
-scope, so a filtered search cannot silently break page sizes or leak existence through result counts.
+Permission filtering happens **in the index join, not after it**, so a filtered search cannot
+silently break page sizes or leak existence through result counts. **The mechanism is a junction
+table, `search_doc_library(library_id, doc_rowid)`, `PRIMARY KEY (library_id, doc_rowid)`
+`WITHOUT ROWID`** — not a `library_scope` column on `search_doc`. That distinction is the whole
+point: the earlier design put a JSON array of library ids in a `TEXT` column, and **a JSON array in
+a `TEXT` column cannot participate in an index join**. Filtering it needs `json_each()` or a `LIKE`,
+both of which are scans, so the column bought a full scan of the fused candidate set to satisfy the
+requirement it was written for. With the junction table the scoped query is
+`… JOIN search_doc_library sdl ON sdl.doc_rowid = sd.rowid AND sdl.library_id IN (…)`, a covered
+seek per scoped library, and **CI asserts `SEARCH sdl USING PRIMARY KEY` so it cannot silently
+regress** (§13 keeps `EXPLAIN QUERY PLAN` assertions). A second CI assertion guards the other half:
+every `search_doc` row has at least one `search_doc_library` row, upheld by the reserved *Unfiled*
+library (§6.5 rule 6), because a row visible through no library is invisible to its own owner.
 
 **There is no Tier 3 today.** An external engine is **deferred, not rejected** (FUTURE.md §2). The
 `SearchProvider` interface boundary stays, and — the part that actually matters — **retrieval is
@@ -850,6 +1423,27 @@ Open; `partial` (some editions or children present) → **"1080p ✓ / 4K ✗"**
 **Routing**, first match wins: explicit user choice → a routing rule → capability filter (instances
 whose probed `Caps.MediaKinds` contain this `(kind, format)` and that advertise `Add`) → highest
 `priority` among healthy survivors → `unroutable` **with the reason surfaced**. Never silently drop.
+
+> **The library *is* the routing rule** (§6.5) — the object this list named and never defined. A
+> library declares one request sink, and that sink is a **pin inside the capability filter, not a
+> bypass**: an instance that does not probe `Caps.MediaKinds ∋ (kind, format)` and advertise `Add`
+> cannot be chosen, is not offered in the UI, and if its capabilities change underneath, the library
+> says *"Ebooks: LazyLibrarian no longer advertises Add"* rather than failing silently. The sink is
+> single-valued **because the format filter exists**: "ebooks here, audiobooks there" is two
+> libraries, not a second table. (*Cut before you add.*)
+
+**Catalogue source and request sink are separate bindings, and that is the normal case rather than
+the books exception.** Navidrome is an excellent music catalogue and cannot accept a request; Lidarr
+or Prowlarr takes the request. Audiobookshelf or a Calibre library catalogues books; LazyLibrarian
+takes the request and its catalogue is ignored — which is the direct expression of the owner's
+point, because without the split, adding LazyLibrarian to get requests would import its bad catalogue
+as the price. Komga and Kavita both catalogue comics and **nothing** downstream of them accepts a
+release at all. So:
+
+- **A library may have no sink, and that is a first-class state, not an error.** `unroutable` becomes
+  specific — *"Comics has no request destination. Add a service that accepts comic requests, or use
+  indexer search."* — instead of the generic refusal.
+- **A sink is never a catalogue source unless the user also adds it as one.**
 
 **Single-user mode:** the owner holds `requests.autoapprove.*`, so Add → routed immediately and the
 approval UI is hidden. The rows and the state machine still exist — §1.3 in practice. Per-season TV
@@ -889,13 +1483,91 @@ Sonarr, Radarr or media server to get a library."*
   download-client integration**, which is what makes the mode affordable in v0.1.
 - **Results carry derived tags immediately, with no library behind them:** `source:` from
   `ReleaseResource.protocol` (byte-identical across the Prowlarr, Sonarr and Radarr specs), `type:`
-  from the Newznab parent category, `indexer:`, `indexer-privacy:`, and `flag:` from `indexerFlags`.
+  from the Newznab category, `indexer:`, `indexer-privacy:`, and `flag:` from `indexerFlags`.
   The source-tagging differentiator working with zero library.
+
+  > 🚩 **Deriving `type:` from the *parent* category is a live bug for two of the six media types,
+  > and it is fixed here rather than papered over.** Verified against Prowlarr's
+  > `NewznabStandardCategory.cs`: **audiobooks are `3030`, under `Audio` (3000), not under `Books`
+  > (7000)** — so a parent-category rule tags every audiobook release `type:audio`. And **there is no
+  > manga category in the Newznab standard at all**: `7030 Books/Comics` is the only comics
+  > category, and Nyaa — the dominant public manga tracker — maps its Literature categories to
+  > `7000 Books`, so a search filtered on `7030` returns **zero manga**.
+  >
+  > **The five special cases, all consulted before the parent rule, verified in
+  > `NewznabStandardCategory.cs`:**
+  >
+  > | Category | Maps to | Why it is a special case |
+  > |---|---|---|
+  > | `3030 Audio/Audiobook` | `(book, audiobook)` | Its parent is `Audio` (3000), so the parent rule tags every audiobook `type:audio` |
+  > | `5070 TV/Anime` | `type:anime` **in addition to** `type:tv` | Its parent is `TV` (5000), which is right — but anime routing needs the leaf, and a parent-only rule discards it |
+  > | `7010 Books/Mags` | `type:magazine` | Its parent is `Books` (7000), so the parent rule calls a magazine an ebook |
+  > | `7020 Books/EBook` | `(book, ebook)` | The ebook filter proper; `7000/7040/7060` are also accepted, since indexers file ebooks under the parent and under Technical/Foreign |
+  > | `7030 Books/Comics` | `(comic, …)` as a **ranking** signal only | The comics-and-manga *filter* is the parent `7000`, because `7030` returns zero manga |
+  >
+  > `5070` and `7010` were named in the review disposition that produced this block and were not
+  > actually written into it; they are here now. Capture the raw category array; never collapse it.
+
+- **Prowlarr search is free text and nothing more, and the UI must say so.** `SearchResource` carries
+  only `query`, `type`, `indexerIds`, `categories`, `limit`, `offset` — there is **no `author` and no
+  `title` field** — and `SearchController` only ever populates `q`, `t`, `cat`, `limit`, `offset`.
+  So even against an indexer that advertises `book-search: [q, title, author]`, Prowlarr's own HTTP
+  API can send free text only. That is not a simplification in UsArr's `SearchQuery{Text: …}` shape
+  (§11); it is the whole of what Prowlarr offers.
 - Grabbed releases are recorded in `provenance`, so when a library-bearing service is later added and
   imports the file, the provenance join (§10) has something to attach to.
 
 **What it is not:** not a library, no import, no tracking of what happened to the download — and the
 UI says so. Grid, catalogue search, requests and cross-media are hidden, because they would be empty.
+
+**And that caveat is per media type, because for some of them it is the entire outcome rather than a
+footnote.** For a movie the user probably has Radarr and the gap is a moment. For comics **nothing
+downstream can accept the release**: Mylar3 needs the indexer configured inside Mylar3 and operates
+on issues it already knows from Comic Vine, Kapowarr has no indexer concept at all, and Komga and
+Kavita are libraries rather than importers — they pick a file up only if it lands inside a library
+root and the filename parses. Books are the same shape unless LazyLibrarian is present, whose
+`forceProcess` + `getDownloadProgress` genuinely close the loop and are the strongest argument for
+keeping it as a sink after demoting its catalogue. So the grab confirmation is type-specific and
+literal, and **UsArr never renders a progress bar or a "Downloading" state for a Prowlarr grab**,
+because it cannot know. `Grabbed <timestamp>` and stop. The `provenance` row is the whole of what
+UsArr knows, and for comics it is the *only* trace the acquisition ever leaves.
+
+> 🚩 **The confirmation must name what will and will not import the file, and the sentence is
+> incomplete without the second half.** *"Sent to \<download client\>. UsArr does not import
+> downloads."* is true and is **not sufficient for movies and TV**, which are exactly the two types
+> where the reader's prior knowledge fills the gap wrongly: every self-hoster running
+> Prowlarr → Radarr knows that Radarr imports what Radarr grabbed, so *"UsArr does not import
+> downloads"* full stop reads as *"…but obviously Radarr does"*. **It will not.** This grab did not go
+> through Radarr — UsArr posted the release to Prowlarr, which handed it to Prowlarr's own download
+> client — so Radarr has no record of it and will never pick it up. The failure is silent and
+> cumulative.
+>
+> **Three shapes, chosen from the library's request destination and the type, all of them
+> complete:**
+>
+> | Case | Sentence |
+> |---|---|
+> | A watched-folder importer is configured for the type (Audiobookshelf, Komga, Navidrome) | *"Sent to qBittorrent. UsArr does not import downloads. Audiobookshelf watches `/media/books` and will show it once the file is there."* |
+> | An \*Arr owns the type but did not request this release (Sonarr, Radarr — the v0.1 case for every grab) | *"Sent to qBittorrent. Nothing will import this. Radarr did not request this release, so it will not pick it up — the file stays in your download client until you move it into the library folder yourself."* |
+> | No connected service accepts the type at all (comics with no Mylar3, music with no Lidarr) | *"Sent to qBittorrent. Nothing will import this. No connected service accepts a comic, so the file stays in your download client."* |
+>
+> Every input is already computed: the library's request destination is `none` for four types and an
+> \*Arr for two (§6.5, §17.8), and the watched folder is read from the source for the first case. The
+> named folder is quoted from the source's own report and never typed by UsArr (ADR-0026). **The
+> naming of the *non*-importer is the load-bearing half** — the same principle as §17.7's rule that a
+> reassuring wrong number is worse than none.
+
+**And one qualification that applies to the whole mode, because "runs over just Prowlarr" is
+materially weaker for two of the six types.** ✅ **403 of Prowlarr's 543 shipped indexer definitions
+are `type: private`**, and the dedicated music trackers — Redacted, Orpheus, DICMusic, Libble — are
+all **invite-only**, as are the book trackers (MyAnonaMouse, Bibliotik). Of the 543 definitions,
+**only three are comic- or manga-specific**, and **GetComics — the dominant western-comics DDL
+source, and the only source Kapowarr searches — is not a Prowlarr indexer at all.** So: on public
+indexers alone, Search-and-Grab for **music and books is materially thinner than for film**, and for
+comics it is thin outright. For a user who holds those invites the coverage is excellent; for one
+who does not, deferring the command sinks defers *capability*, not just convenience — which is the
+half of ADR-0032's argument that the ADR states unqualified. This is a positioning claim rather than
+an implementation detail, so it is **carried, not resolved** (REVIEW-LOG R4 item 3).
 
 ### 8.6 Where unowned results come from
 
@@ -1038,9 +1710,43 @@ placement and target host and requires explicit admin confirmation before being 
 credential.
 
 **Stated scope:** a manifest describes a **read-mostly JSON-over-HTTP service with stateless auth**.
-Out of scope and needing Tier 0: session establishment (qBittorrent, Deluge), challenge-retry
-handshakes (Transmission), JSON-RPC envelopes (NZBGet, Transmission, Deluge) and XML (Plex).
-Concretely it covers LazyLibrarian, Komga, Kavita, Audiobookshelf, Calibre-Web and \*Arr forks.
+Out of scope and needing Tier 0: session establishment (qBittorrent, Deluge, **Navidrome**),
+challenge-retry handshakes (Transmission), JSON-RPC envelopes (NZBGet, Transmission, Deluge) and XML
+(Plex). Concretely it covers LazyLibrarian, Komga, Kavita, Audiobookshelf and \*Arr forks.
+
+> 🚩 **In v0.1 the catalogue sources are Tier 0 Go adapters, not manifests, and §16 and this section
+> previously implied otherwise.** The manifest tier does not exist until v0.3, which ships
+> LazyLibrarian as the *first* Tier 1 manifest. So the three sources this list covers — Komga,
+> Audiobookshelf, and Kavita when it lands in v0.2 — are **hand-written Go in the milestone they
+> ship in**, and Navidrome is Tier 0 by this section's own exclusion, because `POST /auth/login`
+> returning a JWT plus a `(subsonicSalt, subsonicToken)` pair is session establishment. The list
+> above describes what a manifest *could* express once the tier exists, not how v0.1 ships. That is
+> **three hand-written Go adapters in v0.1** (Navidrome, Audiobookshelf, Komga) rather than "the
+> marginal cost of a provider adapter" — priced honestly in §16.0.
+>
+> Two further consequences worth naming, because the \*Arr machinery does not have them: **auth here
+> is three schemes, and one has a lifecycle.** Navidrome is a login round trip yielding a JWT;
+> Audiobookshelf is a Bearer JWT *or* a scoped API key **with an expiry**; Komga is a static
+> `X-API-Key` (and Basic on OPDS only); Kavita is a static `x-api-key`. The \*Arr shape is a static
+> header credential with **no lifecycle at all**, so token refresh and credential *expiry* are new
+> failure modes needing a new Services state — *"this key expired"* — that no earlier document
+> named. And §11.2's rule that **a manifest may never write a strong identity** means that even in
+> v0.3 the manifest route cannot supply the identity a six-type catalogue needs; that is Tier 0
+> work by construction.
+
+> 🚩 **Calibre-Web was on that list and is removed, because it has no REST API.** It exposes OPDS
+> (Atom) and `/ajax/listbooks`, which is session-cookie authenticated — neither is a manifest target,
+> and reconstructing a library by parsing Atom on a schedule is slow, fragile and lossy, since no
+> identifiers survive the feed. The right adapter is **Tier 0 Go code opening Calibre's own
+> `metadata.db` read-only**, which is the best ebook data most self-hosters own: `identifiers(book,
+> type, val)` is a native typed external-id table that feeds `external_id` losslessly,
+> `books.uuid` is a durable key, `data(book, format)` is genuinely multi-format, `series_index` is
+> `REAL` so it sorts correctly, and `last_modified` is a real delta key. **That means a filesystem
+> read, which is an explicit exception to this section and is written down as one** — it is a
+> read-only handle on a single SQLite file, not a scanner and not a library concept (§6.5).
+> Calibre-Web itself stays as the link-out target and the byte server. Also note Calibre has **no
+> audiobook concept whatsoever**, so a Calibre-only user has no audiobook catalogue at all.
+> **Suwayomi** is likewise not manifest-describable: it is GraphQL, so Tier 0 or nothing.
 
 `Caps` reports `Search, LibrarySync, DeltaSync, Push, Add, Monitor, Delete, Queue, Grab, Images`,
 plus `MediaKinds []MediaKind` where `MediaKind` is a `(Kind, Format)` pair, `APIVersion` and an
@@ -1128,11 +1834,45 @@ blocked real work. **What stays in CI:** `EXPLAIN QUERY PLAN` assertions and **r
 on hot queries — deterministic, hardware-independent, fast, and a better proxy for what is being
 protected than wall-clock time.
 
-Reference hardware: a Raspberry Pi 5, 10k movies / 2k series (~400k episode rows).
+**Reference hardware: a Raspberry Pi 5. Reference library: six media types, not two.** The earlier
+figure — *"10k movies / 2k series (~400k episode rows)"* — described the product before ADR-0032,
+and every budget below was set against a corpus that no longer describes it. The six-type reference
+library is:
+
+| Kind | Rows | Note |
+|---|---|---|
+| `movie` | 10,000 | |
+| `series` | 2,000 | ~400,000 `episode` rows and ~10,000 `season` rows behind them |
+| `artist` | 1,500 | |
+| `album` | 5,000 | ~50,000 `track` rows behind them |
+| `book` | 6,000 | ebook + audiobook editions; ~9,000 `edition` rows |
+| `comic` | 3,000 | ~90,000 `comic_issue` rows behind them |
+| `person` | ~6,000 | authors, translators, editors, illustrators, writers, pencillers, inkers, colorists, letterers, cover artists (ADR-0033). **Not top-level: excluded from the prefix index, the FTS corpus and the navigation enum** |
+| **Top-level works** | **27,500** | the corpus for FTS (§8.2) and the Tier 1 prefix index (§4.5) |
+| **All `work` rows** | **~880,000** | |
+
+🔍 *The non-video counts are chosen, not measured: they are a plausible six-type self-hoster, floored
+by the mockups' own install (1,204 movies, 275 series, 612 artists, 4,118 albums, 2,469 books, 733
+comics = 9,411 top-level works) and scaled to the same ratio the video figures already assumed. The
+~6,000 `person` figure is chosen the same way — comics credit five or six roles per issue over a
+small pool of people, books one to three — and it is the one row where being wrong by 2× changes
+nothing, because the row is excluded from every budget it could have pressed on.*
+
+**The number that matters is 27,500, because §4.5's client prefix index is hard-capped at 25,000 —
+so tripping the cap is the *expected* outcome for the target user rather than the exotic one**, and
+§4.5 now specifies a partial index rather than "no index" for that case. **The `person` row is what
+keeps that number at 27,500 rather than ~33,500.** Before ADR-0033 a book's author and a comic's
+writer were `artist`-kind works, and `artist` is top-level: those ~6,000 credits would have entered
+the prefix index and the FTS corpus as browsable rows, taking the overshoot from **10% over the cap
+to 34% over it**, and putting every author into the Music media type on the way (§17.2). The kind
+does not make the index smaller than it was designed to be; it stops a schema accident from making it
+a third larger. Every p50/p99 below is against this library.
 
 | Operation | p50 | p99 |
 |---|---|---|
 | `GET /api/v1/library?kind=movie` (100 items, keyset) | < 8 ms | < 25 ms |
+| `GET /api/v1/library?lib=…` (100 items, keyset, **library-scoped**, 1%-selective library over a 25k-row kind) | < 8 ms | < 25 ms |
+| **Scope-chip toggle: 1 keyset page + 6 sidebar `COUNT(*)` over `library_member ⋈ work`** | < 15 ms | < 50 ms |
 | `GET /api/v1/search?q=…` (FTS hybrid + rerank) | < 15 ms | < 50 ms |
 | Client-side prefix filter (Tier 1) | < 5 ms | < 16 ms (one frame) |
 | `GET /img/{k}?w=342` (**cache hit**) | < 3 ms | < 10 ms |
@@ -1152,6 +1892,10 @@ Reference hardware: a Raspberry Pi 5, 10k movies / 2k series (~400k episode rows
 | Time to 100% `dominant_color` coverage | < 3 min |
 | Time to 100% ThumbHash coverage (92px-first) | < 10 min |
 | Time to 100% poster coverage at display width | background best-effort, **not** a gate |
+| **Full import + first sweep, per new catalogue source** — Navidrome (1.5k artists / 5k albums / 50k tracks), Audiobookshelf (6k items), Komga (3k series / 90k issues) | measured and published; **there was no row for any of them** |
+| **Channel 3b page walk** (§7.1a), per poll, per source: pages fetched, rows compared, bytes | measured and published |
+| **Channel 4 sweep at 3,000 Komga series** — the sources with no delta lean on it hardest | measured and published |
+| **List rendering, and the scope is the correction (§4.5 point 3):** density-toggle and theme-toggle wall clock, filter/sort wall clock, scroll frame time, and scrollbar drift < 2%, at 1k / 5k / 25k rows, both themes, all three densities | **measured and published — the density and theme toggles are Tier 0 controls that hard-fail at 100 ms and were not previously being measured at all; this is what sets the DOM-row ceiling (§4.5), which is deliberately not chosen in advance** |
 
 **The memory numbers are ⚠️ deliberately, because a claim was corrected.** The earlier draft
 justified "< 80 MB idle" by citing Navidrome as *"the existence proof that Go + embedded SQLite idles
@@ -1297,23 +2041,143 @@ elsewhere is the one that must ship soonest.* The previous order put the gateway
 differentiators last, so a one-to-two-person project had to survive its largest milestone before
 delivering anything the owner asked for.
 
-**v0.1 — "It reads your library, it is fast, and you can act on it."** Go binary + embedded SPA;
-SQLite + WAL with the §7.7 discipline; goose migrations. Tier 0 **Sonarr, Radarr**; **Prowlarr in
-Search-and-Grab mode** (§8.5). Sync channels **1, 3 and 4** — full import + delta + **reconciliation
-with 7-day tombstones and both sweep guards**; SignalR and webhooks are **out**. **Minimal write
-path** (`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue; no optimistic apply.
-`work`/`edition`/`media_file`/`external_id`/`service_item_link` with **identity tier 1 only**.
-Library grid, virtualized, keyset pagination, image pipeline **including the §4.4.1 cold-start plan**.
+### 16.0 The scope amendment, argued rather than asserted (ADR-0032)
+
+The owner's scope moved from two media types to six. That is a bigger claim, so it has to be paid
+for, and "cut before you add" means saying what enters, what leaves and what is refused.
+
+**What enters: the read-only catalogue sources.** Navidrome, Audiobookshelf and Komga move from v1.0
+into the earliest milestone that can carry them. **Kavita does not — it moves to v0.2**, and that is
+the payment; see below. They are precisely what makes *"everything in one place"* true rather than
+aspirational: **without them, five of the six media types are empty screens**, and the product's
+one-sentence claim is a claim about Sonarr and Radarr.
+
+**What they cost, priced honestly rather than minimised.** An earlier draft of this section said all
+four were *"the same shape … with no write path, no state machine and no new subsystem"*, and that
+was wrong in four ways the repository's own documents contradict. The honest version: **three
+hand-written Tier 0 Go adapters, three auth schemes, one token lifecycle, three hierarchies, and one
+new delta channel they all share.**
+
+- **They are Tier 0, not manifests.** §11.2's manifest list covers them, but the manifest *tier*
+  does not exist until v0.3 (which ships LazyLibrarian as the first one), and Navidrome is excluded
+  from it by §11.2's own rule against session establishment. So v0.1 writes three Go adapters.
+- **Auth is three schemes and one of them expires.** Navidrome is a login round trip yielding a JWT
+  plus a `(subsonicSalt, subsonicToken)` pair; Audiobookshelf is a Bearer JWT or a **scoped API key
+  with an expiry**; Komga is a static `X-API-Key`. The \*Arr machinery is a static header credential
+  with no lifecycle, so refresh, expiry and a *"this key expired"* Services state are new.
+- **None of them has a changed-since endpoint**, so they need **channel 3b** (§7.1a) — an ordered
+  page-walk delta with a watermark, an overlap window and a stated fallback. That is a new channel,
+  specified now rather than left as an assumption, and it is the single largest thing this amendment
+  adds.
+- **The read machinery is genuinely shared.** `RemoteItem`, the registry, the circuit breaker, the
+  import phasing, the write-queue-free read path and the reconciliation sweep all already exist for
+  Sonarr and Radarr and are reused unchanged. That part of the original claim holds.
+
+**What is deferred, and why: the command sinks.** Lidarr, LazyLibrarian, Mylar3 and Kapowarr stay
+out. A write path is per-service and expensive — routing, capability probing, an idempotent verb
+mapping, queue verification semantics, and one bespoke failure mode each. The specific ones are
+already documented: Lidarr writes `artist.status = 'deleted'` into its own database when its metadata
+server 404s, and exposes no health signal for the subsystem that causes it, so a correct adapter
+needs a guard built on day one; LazyLibrarian returns HTTP 200 with `Success: false`; Mylar3 has no
+spec, no pagination and no delta; Kapowarr's API documentation reads *"Coming Soon"*. Meanwhile
+**Prowlarr free-text search-and-grab already covers requesting for every one of the six media types
+in v0.1** — **ebooks at `7020`, audiobooks at `3030`** (which is under `Audio`, not under `Books`,
+and merging the two here misstated §8.5), comics and manga at `7000`, music at `3000` — so deferring
+the sinks defers *convenience*, not *capability*. That is the trade, stated plainly.
+
+**What has to move out to pay for it: Kavita, to v0.2.** An earlier answer here was *"nothing is
+cut, and one thing is capped"*, and the capped thing was the library correction UI — which the very
+next sentence argued has no work to do in v0.1. A cap on a declared no-op is not a payment.
+`CLAUDE.md`'s rule carries no exemption clause, so the amendment pays.
+
+**Kavita earns the cut on the evidence already gathered, and no media type is lost.** Komga covers
+comics, so **all six media types still have a catalogue source in v0.1** — Sonarr and Radarr for film
+and TV, Navidrome for music, Audiobookshelf for ebooks and audiobooks, Komga for comics. Against
+that, Kavita is the weakest of the four adapters on both axes that matter: **its identifier fields
+are gated behind a paid subscription**, so on a free instance every external id is null and it
+contributes the *least* identity value and the *most* honest-gap UI per adapter; and its
+**Series → Volume → Chapter → File hierarchy is the deepest of the four**, and the one §6.1 already
+flattens deliberately (Volume becomes `volume_label` + `volume_sort`, a grouping attribute rather
+than a node). It is also the source with **no catalogue delta at all** — `sortByLastModified` exists
+on `GET /api/Collection` and `POST /api/ReadingList/lists` and on none of the Series, Volume or
+Chapter endpoints — so it is the one source channel 3b cannot serve.
+
+**What is kept, with its remaining cost stated rather than argued away.** The libraries subsystem
+(§6.5) and the auto-proposal flow stay in v0.1, because they are what makes the six-type claim
+*usable*: without them a six-type install is one undifferentiated grid, and the Ebooks/Audiobooks
+split over one Audiobookshelf library — the concrete improvement over upstream's own organisation —
+is the demonstration. The cost that remains, plainly: **four tables in migration 0001, materialised
+membership with a 250 ms dirty-flush and a denormalised sort key, a derivation with five container
+predicates, an auto-proposal engine with join-vs-create defaults, and a second first-class settings
+screen (§17.8).** It is true that the Libraries screen *replaces* hard-coded per-type sections rather
+than adding a screen; it is not true that the tables, the derivation and the proposal engine replace
+anything. The correction **UI** is still capped to v0.3 — §6.4 establishes that tier 1 resolves
+essentially 100% of the v0.1 identity problem for Sonarr and Radarr — but that cap is now correctly
+described as a *scheduling detail*, not as the payment.
+
+🔍 **The scoping observation behind moving Navidrome specifically, marked as inference:** v0.4's
+success criterion is *"Symfonium connects to UsArr with one API key, browses, searches and plays"*,
+which requires a **populated music replica before the surface exists**. As previously written, v0.4
+contained both a new southbound adapter and a new northbound protocol. Splitting them is a scheduling
+correction, not a new feature.
+
+**v0.1 — "It reads your library, it is fast, and you can act on it" — now across six media types.**
+Go binary + embedded SPA; SQLite + WAL with the §7.7 discipline; goose migrations. **Tier 0 Go
+adapters** for **Sonarr, Radarr**, plus the three **read-only catalogue sources — Navidrome,
+Audiobookshelf, Komga** (§16.0; **Kavita moves to v0.2**, and Komga still covers comics, so all six
+media types have a source); **Prowlarr in Search-and-Grab mode** (§8.5), which is the request path
+for **all six** types. **No command sinks** — no Lidarr, no LazyLibrarian, no Mylar3, no Kapowarr.
+Sync channels **1, 3, 3b and 4**: full import for every service; **channel 3 (`/history/since`) for
+Sonarr and Radarr only**, because it applies to library-bearing acquisition apps and to nothing else;
+**channel 3b (the ordered page-walk delta, §7.1a) for the three catalogue sources**, with
+reconciliation-only fallback and a Services row that says so; **reconciliation with 7-day tombstones
+and both sweep guards** for everything. SignalR and webhooks are **out**. **Minimal write path**
+(`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue; no optimistic apply.
+
+**Schema, enumerated — because §16 is authoritative for scope and an implementer reads this line,
+not the ADRs:** `work`/`edition`/`media_file`/`external_id`/`service_item_link`; the **four library
+tables** (§6.5) and the **`search_doc_library` junction**; and the six-type schema that is migration
+0001 **or a backfill over the largest tables in the schema** — `work.kind = 'comic_issue'` with the
+`work_comic` / `work_comic_issue` split and its `kind_byte` (ADR-0030); **`work.kind = 'person'` with
+its own `kind_byte`, excluded from the navigation enum, the prefix index and the FTS corpus, and
+`work_credit.creator_work_id` renamed from `artist_work_id` to match (ADR-0033)**;
+`work_track.edition_id`, `work_track.track_number TEXT` plus the derived `track_position`, the M:N
+**`work_credit`**, and `edition.narrators` / `duration_seconds` / `abridged` (ADR-0031).
+**Identity tier 1 only**; the
+correction *UI* deferred to v0.3. Library auto-proposal on service add, the Libraries settings screen
+(§17.8), Home's three fixed blocks (§17.2). Library grid with **"Load more" + `content-visibility`
+on grid rows carrying explicit ARIA roles (§4.5)**, keyset pagination, image pipeline **including the
+§4.4.1 cold-start plan**.
 Search tiers 1 and 2, corpus limited to top-level kinds, **no typo tolerance**. System tags `type:`,
 `format:`, `source:`, `quality:`, `indexer:` with the `downloadId` provenance join. The **"1080p ✓ /
 4K ✗"** badge — a free consequence of the M:N link and a strong signal to power users, though *not*
-the landing-page claim, since it needs two Radarr instances. **The Services health screen (§17.3).**
+the landing-page claim, since it needs two Radarr instances. **The Services health screen (§17.3),
+whose add flow asks for four fields — kind, name, base URL, API key — plus an optional `URL base`
+for reverse-proxy sub-paths, and draws all four states of the mandatory connection test, failure
+included.**
+
+**A `Recent grabs` block on the Requests screen (§17.5), and what it costs, stated plainly.** Ten
+rows, newest first: time, release name, indexer, protocol, size, resolved type, and last known state.
+**It adds no table, no state machine and no background work.** The states are the durable command
+queue's own — `pending | inflight | verifying | done | failed` (§7.6) — and the rows are the
+`provenance` rows §8.5 already writes per acquisition event, so the cost is: **one keyset-paginated
+read joining `write_queue` to `provenance`, one index to serve it, one API endpoint, and one block on
+an existing screen.** That is the whole of it. **This is a deliberate addition to v0.1 and it is
+listed here because §16 is authoritative**: §17.5 had required a request list, §16 had not funded
+one, and the resolution is not to delete the requirement but to fund the honest, small version of it.
+**It is not the request model** — no approval queue, no `pending → approved → routed → available`, no
+quotas, no `request` table; those stay in v0.2. Without it, v0.1's only write path produces a
+multi-gigabyte download that UsArr forgets on the next navigation, and the acquisition loop the
+project exists to close has no memory.
 Owner account, Argon2id, cookie sessions, CSRF, encrypted credentials **with key versioning, AAD and
 a working `usarr key rotate`**, the SSRF egress policy, redaction middleware. **Zero external metadata
 providers** — Radarr's `MovieResource` and Sonarr's `SeriesResource` already carry everything the
 grid needs, so **no TMDB account is required to see your own library**. Docker image, `VACUUM INTO`
-backups. CI: `EXPLAIN QUERY PLAN` + row-count assertions; `make bench` as a manual release gate; a
-day-one arm64 RSS spike **before the schema is written**.
+backups. CI: `EXPLAIN QUERY PLAN` + row-count assertions; `make bench` as a manual release gate.
+**Two day-one spikes, both before the schema is written:** the arm64 RSS spike (§13), and **a live
+probe of Komga's `sort=lastModified,desc` on its series list** — the whole channel-3b strategy for
+Komga rests on it, it could not be verified from the spec, and if it fails Komga drops to
+reconciliation-only and the Services row says so.
 
 *Landed so far:* the Go binary with the embedded SPA shell; SQLite + WAL and goose migration 0001
 with its automatic pre-migration `VACUUM INTO`; **Prowlarr in Search-and-Grab mode** end to end —
@@ -1331,30 +2195,77 @@ the arm64 RSS spike. (CI query-plan assertions are in place for the tables that 
 
 **v0.2 — "Requests."** Request model, routing rules, approval workflow, quotas, single-user
 auto-approve. **One search box over owned and unowned** (§8.6). One Add that routes; availability
-states; per-season TV. Release search behind progressive disclosure.
+states; per-season TV. Release search behind progressive disclosure. **Kavita** as the fourth
+catalogue source (§16.0) — a second comics source alongside Komga, with its paid-tier identifier gap
+and its reconciliation-only sync surfaced on its Services row.
 
 **v0.3 — "Cross-media" — Train Dreams works end to end.** Ship `wikidata-edges.db` from the committed
 SPARQL script. Tiers 0–2 only; nothing below 0.85; no review inbox. Grouped result cards derived at
-query time. **LazyLibrarian** as the first Tier 1 manifest, proving the mechanism on a genuinely
-hostile API (HTTP 200 + `Success:false`).
+query time. **The ebook↔audiobook link is the case v0.3 does *not* solve, and saying otherwise put
+one feature in two homes.** No backend supplies a work identifier — ABS pairs an ebook with its
+audiobook only when the files share a folder, and everything else treats them as unrelated — so the
+*schema* handles it (an audiobook is an `edition` of a `book` work, §6.1) and the **resolution pass
+that would populate it is deferred**, with its cost and its seam, to [`FUTURE.md`](./FUTURE.md) §16.
+What v0.3 ships is the cross-media machinery the pass would eventually plug into. **The visible
+*"not identified"* state is *not* deferred with it** — it is a v0.1 rule (§6.4), because v0.1 ships
+Komga, which supplies no identifiers at all. **The library correction surface** (`exclude`,
+`include`, `relink`, `field`) plus the Corrections list lands here, with the weak catalogues it
+exists for. **LazyLibrarian** as the first Tier 1 manifest — as a
+**request sink only** — proving the mechanism on a genuinely hostile API (HTTP 200 +
+`Success:false`).
 
 **v0.4 — "Gateway, narrowed": one Navidrome, one client, read-only.**
 > **Success criterion, and nothing else: *Symfonium connects to UsArr with one API key, browses,
 > searches and plays.***
 
-OpenSubsonic **subset only** — `ping`, `getLicense`, `getMusicFolders`, `getIndexes`, `getArtists`,
-`getArtist`, `getAlbum`, `getAlbumList2`, `getSong`, `search3`, `getCoverArt`, `stream`,
-`getOpenSubsonicExtensions`: ~13 endpoints, not ~100. **`apiKeyAuthentication` only.** **One**
-Navidrome; no multi-instance aggregation — but the ID *format* (§5.3) ships from day one, because it
-cannot change later. **No write-back.** The `io.Copy` byte proxy with its test matrix. OPDS,
-aggregation, write-back and the wider client matrix are each their own later milestone with their own
-success criterion.
+OpenSubsonic **subset only**, **raised from ~13 methods to ~20** on client evidence: `ping`,
+`getLicense`, `getMusicFolders`, `getIndexes`, `getArtists`, `getArtist`, `getAlbum`,
+`getAlbumList2`, `getSong`, `search3`, `getCoverArt`, `stream`, `getOpenSubsonicExtensions`, plus
+`getGenres`, `getPlaylists`, `getPlaylist`, `getUser`, `download`, `getMusicDirectory`, **and a
+spec-correct error responder for every unimplemented method** (Navidrome's `501`/`410` pattern is the
+model — a probe must get a clean protocol error, never a 500, because Amperfy probes `getPodcasts` by
+*calling* it and catching). Still not ~100.
 
-**v1.0 — "Breadth."** Remaining providers (Lidarr, Whisparr, Kavita, Calibre-Web, Audiobookshelf,
-Komga, Jellyfin); multi-user (roles, permissions, grants, library visibility, user import); the OPDS
-surface; multi-instance aggregation; northbound write-back; the full tag system; identity cascade
-tiers 2–5 with `work_merge`; `tsnet` + `WhoIs`; SignalR and webhooks as latency optimisations; 6–8
-bundled reviewed manifests.
+> 🚩 **`search3` with an EMPTY query must enumerate the whole library, paged, with all six
+> `artistCount`/`artistOffset`/`albumCount`/`albumOffset`/`songCount`/`songOffset` parameters.** It is
+> Symfonium's primary enumeration mechanism; without it Symfonium falls back to compatibility mode,
+> which walks `getIndexes` + `getMusicDirectory` and uses `download` rather than `stream`. Either way
+> the milestone's success criterion is at risk. This was described as a search implementation, which
+> it is not.
+
+**`apiKeyAuthentication` only**, and the client matrix must be stated honestly rather than implied:
+**Amperfy and Feishin cannot connect** — both implement `u` + salt/token only, verified in their
+source — so the matrix is *Symfonium works; Amperfy and Feishin do not, and that is the price of
+refusing to store recoverable passwords*. ⚠️ **And Symfonium's own `apiKeyAuthentication` support is
+unverified**: its documentation does not mention API keys and the app is closed-source. **This
+milestone's entire success criterion rests on an unverified capability — verify it against a live
+Symfonium before writing a line of gateway code.**
+
+**One** Navidrome instance northbound; no multi-instance aggregation — but the ID *format* (§5.3)
+ships from day one, because it cannot change later. `getMusicFolders` returns the user's
+`artist`-kind libraries (§6.5), which is the endpoint that had nothing to return before. **No
+write-back**: `star`, `unstar`, `setRating` and `scrobble` return a clean protocol error, never a
+500. The `io.Copy` byte proxy with its test matrix. OPDS, aggregation, write-back and the wider
+client matrix are each their own later milestone with their own success criterion.
+
+**v1.0 — "Breadth."** The **command sinks** deferred in §16.0 — **Lidarr** (with the
+`status: 'deleted'` guard built on day one, not later), **Mylar3**, **Kapowarr** — plus Whisparr,
+Jellyfin, and **Calibre as a Tier 0 adapter reading `metadata.db` read-only** (Calibre-Web has no
+REST API; §11.2). Multi-user (roles, permissions, grants, `user_library_access`, user import); the
+**OPDS surface — 1.2 first, 2.0 second**, and **the reason has changed because the fact it rested on
+did**: `koreader#14681` was cited here as an *open* feature request for OPDS 2.0, and as of
+2026-08-16 it is **Closed, milestone 2026.07 — and KOReader 2026.07 "Sailing Walrus" shipped
+`OPDS 2.0 basic support` (PR #15696)**, with 2026.07.1 following up on the OPDS 2.0 HTTP header and
+author field. So *"KOReader does not speak 2.0"* is simply no longer true and must not be repeated.
+**The ordering survives on the half that was always the stronger ground: the long tail is entirely
+1.2** — Aldiko, Moon+, MapleRead, FBReader, Marvin — and Komga is the only server in the whole
+survey serving both, so a 2.0-only surface excludes every 1.x reader while a 1.2 surface excludes
+nobody, KOReader included. ⚠️ Re-verify before the milestone is scoped; this ecosystem moves, and
+this claim has now moved once. Multi-instance aggregation; northbound write-back; the full tag system; identity
+cascade tiers 2–5; `tsnet` + `WhoIs`; SignalR and webhooks as latency optimisations; 6–8 bundled
+reviewed manifests. **Note that `work_merge` is *not* in this list** — it moves forward to the
+milestone that ships music (§6.4), because MBIDs and OLIDs are redirect-capable and upstream renaming
+a key is a tier-1 problem.
 
 **Explicitly never:** native video transcoding or any FFmpeg dependency · an in-app media player ·
 native TV or mobile apps · a required sidecar · reimplementing the \*Arr download/import engines.
@@ -1370,6 +2281,12 @@ explicitly not a justification.
 An earlier revision specified the schema to the column and never said what the user looks at. This
 section is written **before** the first UI commit, and it is deliberately low-fidelity: prose, not
 pixels.
+
+**The visual system that renders these screens** — colour, type, density, motion, the loading
+policy, the component conventions and §17.2's navigation resolution — lives in
+[`design/DESIGN-DIRECTION.md`](./design/DESIGN-DIRECTION.md), with its canonical values in
+[`design/tokens.css`](./design/tokens.css) and its stack decision in ADR-0025. This section stays
+authoritative over both.
 
 ### 17.1 The UI philosophy, as a design constraint
 
@@ -1393,24 +2310,160 @@ Concretely, this constrains implementation:
 - **No skeleton shimmer.** A skeleton is a `dominant_color` block with the title in it (§4.4.1) —
   informative, not decorative.
 
-### 17.2 Home — sections per media type
+### 17.2 Navigation and Home
 
-The default route after login is **`/` — a sectioned home page**, one section per media type present
-in the library (Movies, TV, Music, Books, Comics), each showing a horizontal strip of recently added
-items with a "see all" link into that type's full grid.
+**Two axes, held apart and never merged (ADR-0027).**
 
-Two reasons: it answers "what do I have?" for *every* type in one screen, which is the product's
-one-sentence claim; and it makes the mixed-media library visible without forcing a mixed-media grid,
-which is hard to sort meaningfully.
+| Axis | What it is | Where it lives | Cardinality |
+|---|---|---|---|
+| **Media type** | a closed enum — movies, TV, music, ebooks, audiobooks, comics | **navigation**: one sidebar entry per type *that has content* | **bounded at 6, by construction** |
+| **Library** | a user-defined grouping (§6.5), configured separately from services | **scope**: a multi-select chip above the nav, reflected in the URL | **unbounded — and therefore never a nav list** |
 
-**Navigation model is a v0.1 decision, deliberately left open here between two acceptable options:**
-sections on the home page (the default assumed above), or per-type tabs in a top navbar with the home
-page as an overview. Both are standard; pick one on first contact with real data and do not
-relitigate. What is *not* open: a type the user does not have is **not shown at all** — no empty
-"Music" section on a movies-only install.
+**"Media type" is not `work.kind`, and the mapping has to be written down or the sidebar cannot be
+built.** `work.kind` has eleven members; the navigation enum has six; and for two of the six the
+media type is a `(kind, formats)` **pair**, because §6.1 deliberately makes an audiobook an `edition`
+of a `book` work rather than a kind of its own. The enum, in full:
 
-Each section is empty-state aware: a type that exists but has not finished importing shows its
-progress inline rather than an empty strip.
+| # | Media type | `(kind, formats)` | "has content" is |
+|---|---|---|---|
+| 1 | Movies | `('movie', *)` | `EXISTS (SELECT 1 FROM work WHERE kind='movie' AND deleted_at IS NULL)` |
+| 2 | TV | `('series', *)` | the same over `kind='series'` |
+| 3 | Music | `('artist'\|'album', *)` | the same over `kind IN ('artist','album')` |
+| 4 | **Ebooks** | `('book', ['print','ebook','cbz','cbr','pdf'])` | `EXISTS (SELECT 1 FROM edition e JOIN work w ON w.id=e.work_id WHERE w.kind='book' AND e.format IN (…))` |
+| 5 | **Audiobooks** | `('book', ['audiobook'])` | the same over `e.format='audiobook'` |
+| 6 | Comics | `('comic', *)` | the same over `kind='comic'` |
+
+Two consequences an implementer hits on the first screen. **Rows 4 and 5 need an existence query
+over `edition.format`, not the `work.kind` count every other type uses**, and `ix_edition_work` is
+`(work_id, is_primary DESC)`, which does not serve it — so migration 0001 carries
+`CREATE INDEX ix_edition_format ON edition(format, work_id)`. And **the Tier 1 client prefix index
+ships `{id, title, year, kind, availability_state}` with no format**, so a *client-side* type filter
+cannot separate ebooks from audiobooks: **the Ebooks/Audiobooks split is server-side only in v0.1**,
+and the type chips in the client index resolve to five values, not six. Stated here rather than
+discovered when the sixth chip does nothing. The machinery to express the pair already exists and is
+reused: `Caps.MediaKinds` is a list of `(Kind, Format)` pairs (§11), and the tag vocabulary has
+`type:` and `format:` namespaces (§10).
+
+**`work.kind = 'person'` maps to no media type and must be excluded from the enum explicitly**
+(ADR-0033). A book's author and a comic's writer are `person` works; they are creative *credits*, not
+things the user has a library of, and there is no Persons screen in any milestone. The exclusion has
+to be written down because the mapping above is `kind`-driven and the previous shape — authors stored
+as `artist`-kind works — would have filed every author under **Music**. `artist` still means a music
+artist and still maps to Music; `person` is reachable only as a credit link on an item, never as a
+navigation destination.
+
+**Libraries are scope, not navigation, and the reason is a documented failure rather than a
+preference.** Jellyfin's drawer maps `items.map(...)` over every user view with no cap, no pin, no
+overflow and no reorder — add a library, get a sidebar row, for ever. Calibre-Web reached seventeen
+`SIDEBAR_*` visibility bits on **one** library. Kavita had to impose "10 items + Home, everything
+else under More" after the fact. UsArr's sidebar is already committed to Home · Search · Requests ·
+Services · Settings · System, and to Calendar and Stats later — **eight fixed entries** (six today)
+before a single user-defined library exists. So the model is **Navidrome's `LibrarySelector`**: a multi-select chip
+that reads "All libraries (4)" or "2 of 4 libraries", **absent entirely at 0 or 1 library**,
+defaulting to *everything*, stating its scope in words, and carried as `?lib=` on routes that already
+exist — **zero new page types**. **Whenever the scope is not "all libraries", the chip is rendered at
+every viewport** — in the sidebar above 900 px, and hoisted into the top bar below it, where the
+sidebar is a collapsed drawer. A scope is state the content cannot express (an absence looks like an
+absence, not like a filter), it survives in the URL across devices, and its terminal case empties the
+application entirely (§17.7, `scope-empty`). A control whose whole job is to state what it hid may
+not itself be hidden. Multi-select rather than single-select is load-bearing: it is a
+filter, not a mode, so cross-library search and browse survive. Audiobookshelf's own documentation
+records the alternative's cost — *"Most actions in the server apply to the currently selected
+library, including browsing and searching"*, and an author with series in two libraries shows as
+**two separate author entries** — which would make UsArr's one-sentence claim unimplementable.
+
+**Home is three fixed blocks, and its height is O(1) in the number of media types (ADR-0028).** This
+**amends** the earlier "one section per media type, each a horizontal strip of recently added items",
+which does not survive the expansion:
+
+```
+Block A   Library summary       ≤6 rows, one per present type
+Block B   Attention             hidden entirely when empty
+Block C   Recently added        ONE unified table across all types, with a Type column
+```
+
+- **Block A** answers "what do I have?" completely in six lines — name, count, availability rollup,
+  last import, "see all" — and *gains* from more types instead of degrading. A media-type summary's
+  primary content is a **count**, so per §17.1 it is a table, not tiles. **Each count names its
+  unit in the cell**, because the six are not comparable: `1,204 films` and `612 artists` and
+  `733 series` sit in one column, and rendered bare, `Music 612` reads as a smaller library than
+  `Movies 1,204` when it is 4,118 albums and 51,204 tracks. ADR-0031 already establishes the
+  principle for exactly this — *"two artist-level numbers must never be rendered bare"* — and it
+  generalises: a mixed-unit column labels its unit or it is misinformation. The sidebar counts
+  follow the same rule.
+  ⚠️ **That "gains from more types" claim is desktop-only, and the phone case needs a different
+  layout.** Measured at 390×844, the stacked row treatment turns each type row into four labelled
+  lines and costs **~105 px per media type**, which pushes Block B — the block that reports that
+  Prowlarr rejected the API key — to **914 px down an 844 px viewport**, below the fold, with 6
+  items visible against 25 on desktop. §17.1 singles this device out precisely because *"that is
+  where a request gets made from the sofa"*, so scrolling a full screen of counts before learning
+  anything is broken is the wrong order. **Below 760 px: Block A is a two-line row** (name and count
+  on line one, availability and sync time on line two, and no `Type` label, because the value *is*
+  the row's identity), **and Block B moves above it.** Block B is hidden when empty, so it costs
+  nothing when nothing is wrong — which is exactly why it can go first.
+  **What Block A's columns mean while an import is running, stated because that is where the
+  first-run user spends their first several minutes.** `Items` is **the source's declared total from
+  first contact**, and it says so once above the block — *"Totals reported by each service."* —
+  because UsArr cannot know the real total before the walk finishes. `Have` is **null with a
+  progress fraction until phase A commits**, never a computed `have/wanted` split, which cannot be
+  known 68% of the way through an import and which shipped beside a banner saying the import was
+  68% done. `Synced` reads `importing`. And one noun per type across the banner, the block and the
+  sidebar: comics are `series` in all three places, not `comic series` in one of them.
+  **The `Have` column has one grammar and its chroma marks what is wrong**, not what is fine
+  (`design/DESIGN-DIRECTION.md` §9.5): `have / total · N missing`, with a complete row rendered as a
+  muted `✓` in neutral text and an incomplete row carrying its gap figure in the warn role.
+- **Block B is the differentiator, and no surveyed tool has anything to put in it**, because neither
+  Jellyfin nor Plex knows what is *missing*: wanted-but-absent items, failed grabs, a degraded
+  instance, an import that has not run, an instance needing re-identification (§7.4 guard 2). It is
+  principle 3 on the home screen, and it is **hidden when empty** rather than showing a green
+  "all good" panel.
+- **Block C** is the "one place, not N tools in a trenchcoat" requirement made literal: one table
+  sorted by `added_at DESC` spanning every type, with the same small-multiple row as search. A sixth
+  type adds rows to an existing list rather than a sixth region to scan; it sorts, it filters, it
+  Ctrl+Fs (§4.5), and it is a single local read.
+
+**Why six strips fail UsArr's own published test.** At the 154 px poster width, ~8 cards fit a
+~1200 px content column; a portrait card plus its meta line is ~260 px, plus header and gap ≈ 300 px
+per section, so a 900 px viewport minus the toolbar shows **2.8 sections** and about **16 items above
+the fold** — under the design's own 25-item floor, on the screen whose entire job is inventory. The
+external evidence points the same way and is weaker than the arithmetic: **Runyon's ND.edu
+instrumentation — 28,928 tracked feature clicks over ~3 months, mid-October 2012 to 22 January 2013
+(<https://erikrunyon.com/2013/01/carousel-interaction-stats/>) — found ~1% click-through with 84% of
+it on the first slide; a five-site follow-up
+(<https://erikrunyon.com/2013/07/carousel-interaction-stats/>) found position-1 shares of 54–89% and
+click-through ranging 1.1–9.4%**, which is a fairer thing to quote because of the 9.4% outlier. (The
+earlier wording gave 28,928 as an aggregate "across five properties" and "~1%" as the figure; it is
+one property, and ~1% is the lowest of five values. No URL was cited in any of the three places this
+appeared.) NN/g advises *"5 or fewer frames"* and notes people often scroll past carousels entirely,
+and
+jellyfin/jellyfin#16615 — asking for a wrapping grid instead of horizontal rows — was **closed as not
+planned**. 🔍 **Carry the caveat that matters: none of that research measures a recently-added strip
+in a media library.** The transfer argument is that the interaction is identical — content reachable
+only by horizontal travel, truncated with no count — and that the content here is *weaker* than a
+marketing hero, not stronger. It is reasoning, not a finding.
+
+**Horizontal strips are not banned, they are relocated.** A strip is legitimate on an *item detail*
+page ("More from this artist", ≤5 items). It does not appear on Home in any view mode; choosing the
+Posters view renders Block C as **one wrapping grid across all types**, which is what #16615 asked
+for.
+
+**Where the two axes meet, and it is the two-axis model's hardest case: the sidebar reflects what you
+*own*, and never changes shape with the scope.** §17.2's hard rule (below) removes a type the user
+does not have; §8.1 says the sidebar counts respect the scope chip. Scoping to Comics takes the
+Movies count to zero — and the two rules together did not say whether the `Movies` row then
+disappears. **It does not.** A nav list whose entries appear and vanish as a side effect of ticking
+checkboxes *inside a popover that overlays it* is the most disorienting thing a sidebar can do, and
+it makes the sidebar's height jump under the user's cursor. **Only the counts narrow, and a narrowed
+count renders as `0 of 1,204` rather than `0`**, so the row states why it is empty instead of
+looking broken. Clicking it lands on the `scope-empty` state (§17.7), which names the scope and
+offers the control that clears it. Ownership decides shape; scope decides numbers.
+
+**What is unchanged from the earlier text, and is now a hard rule everywhere:** a type the user does
+not have is **not shown at all** — not in Block A, not in the sidebar, not as a search group. That
+rule is not a UsArr invention: Komga ships `v-if="collectionsCount > 0"`, Navidrome's
+`LibrarySelector` returns `null` at ≤1 library, and Sonarr's status badge returns `null` at zero.
+Each block is empty-state aware: a type that exists but has not finished importing shows its progress
+inline rather than an empty row.
 
 ### 17.3 Services — setup and health
 
@@ -1424,10 +2477,34 @@ One row per configured service, always visible at a glance:
 |---|---|
 | Service | Name and kind ("Radarr 4K", radarr), plus its base URL |
 | State | `healthy` / `degraded` / `down` / `needs re-identification`, from the breaker (§7.5) |
-| Last successful sync | Absolute and relative ("14:02, 6 minutes ago"), per channel: full, delta, reconcile |
+| Last successful sync | Absolute and relative ("14:02, 6 minutes ago"), per channel: full, delta, reconcile. **A source on channel 3b (§7.1a) is labelled `page-walk delta`, and one with no ordering guarantee reads `no change feed — full compare at 09:12` rather than showing a blank or borrowing the global time.** A freshness number not backed by a delta must never render with the same weight as one that is |
 | Items | How many works this instance contributes |
-| Problem | **The actual error text**, verbatim, not "an error occurred" |
-| Action | The one button that fixes it |
+| Problem | **The actual error text**, verbatim, not "an error occurred" — **and nothing else.** The column holds one object: what the upstream said, or `—`. It does not hold a rendering decision made on another screen, a rebuttal of a reviewer, or a sentence beginning *"Nothing is wrong."*, which inverts the meaning of the one column a user scans for what is broken. `not configured` is already a first-class state with its own token; use it and let the Action column carry the fix |
+| Action | The one button that fixes it. `—` when there is none, not `No action needed` |
+
+**The `State` column is UsArr's own words, in plain language.** The verbatim-upstream rule is right
+and it stops at the `Problem` column: `State` and every banner title are UsArr speaking, and they
+shipped as implementation vocabulary — `degraded / breaker open`, `needs re-identification`,
+`managed_by user`, `identity_epoch 3 -> 4, max_remote_id_seen 214 -> 6` as the *body* of a banner
+explaining a decision to a human. The mechanism is real, correct and valuable; it belongs on the
+second line and behind the expander, which already carries it precisely
+(`State OPEN · Next probe 14:19, in 4 minutes · Consecutive failures 7 · Backoff 4m00s`). So:
+**`paused — 7 failed attempts, retrying 14:19`** rather than `degraded / breaker open`; **`this may
+be a different Sonarr`** rather than `needs re-identification`; **`matched by title`** rather than
+`no work identity` (§6.4), which reads to a normal person as "something is broken with my copy of
+this book" when it means "Komga gave us no ISBN".
+
+**The `Libraries` column names both relationships in full**, because this is where a user meets the
+two terms: *"TV — catalogue source, request destination"* and *"Music — catalogue source; no request
+destination"*, not bare prose that drops both nouns on the screen of first contact. And a library
+name beside a media-type name carries the noun `library` (`design/DESIGN-DIRECTION.md` §8.1).
+
+**A problem is stated canonically once per screen.** Every failure currently appears twice on
+Services — in the row's `Problem` cell with its Action button, and again ~900 px below in the
+`System status` list with the same title and the same button. The roll-up is worth keeping and is
+Sonarr's shape; **the second rendering links to the row rather than duplicating its action**, so
+there is one place the fix is pressed. (The sidebar severity badge is a third *appearance* and is
+not a duplicate: it is a count with no action, which is §8.2's design.)
 
 Expanding a row shows: the circuit-breaker state and when it next retries; the \*Arr's **own** health
 warnings, surfaced from its `/health` endpoint (genuinely valuable — today you visit five web UIs to
@@ -1435,13 +2512,162 @@ notice one is unhappy); the last few sync-report entries for that instance; and 
 measured from its `Date` header (§7.3), warned when large.
 
 **The actions are the point.** Each failure state names its fix: *unreachable* → Test connection;
-*401/403* → Update API key (sudo mode, §12.1); *TLS pin changed* → show both fingerprints and require
+*401/403* → Update API key (sudo mode, §12.1) — **and a sudo re-prompt is not an error state**: §10
+requires verbatim upstream text for *errors*, and leading a routine "confirm your password" step
+with `PATCH /api/v1/services/3 403: {"error":"sudo_required"}` makes a normal security step look
+like a fault. It is a prompt, in UsArr's own words, with no verbatim block, and §17.3.3 specifies
+it; *TLS pin changed* → show both fingerprints and require
 an explicit accept; *needs re-identification* (§7.4 guard 2) → explain that the instance's identity
-changed, that sync is paused deliberately, and offer Re-link; *degraded, partial data* → Run full
-sync now.
+changed, that sync is paused deliberately, and offer **two** actions, not one; *degraded, partial
+data* → Run full sync now.
+
+**The re-identification banner needs both branches, because its own copy tells you not to press its
+only button.** It says *"Re-link only if you know this is the same library"* and then offers
+`Re-link` and nothing else — so a user who knows it is **not** the same instance is told to stop and
+given no way to proceed. The correct action in that case is real and namable: remove this service
+and add the new one as a separate instance, preserving nothing. **Two buttons: `Re-link — this is
+the same Sonarr` and `Not the same instance — remove and re-add`**, the second stating in one line
+what happens to the works and to the libraries that instance feeds. This is the most destructive
+decision in the product and it was a one-way prompt with a warning attached.
 
 The same screen hosts **Add service** — the wizard from §11 with its mandatory connection test — and
 a global banner elsewhere in the app links here whenever any instance is not healthy.
+
+**Services and Libraries are top-level screens and are not also items inside a Settings navigation.**
+Both statements shipped on the same screen at once — the sidebar marking Services `aria-current`,
+and an in-page `Settings sections` nav listing `Services · Libraries · General · Tags · UI` marking
+it current again — so two navigation trees claimed one node with two different parents. ADR-0027 and
+§17.8 already decided the first answer. **The in-page nav is labelled `Settings` and lists only
+`General · Tags · UI`**, with one line above it saying that Services and Libraries are top-level.
+The sidebar follows the same discipline: `Status` and `Backup` are System sub-items, indented under
+an expanded System, not siblings of it (`design/DESIGN-DIRECTION.md` §8.1's row budget assumes
+exactly that, and drawing them as top-level rows is what took the sidebar to fifteen).
+
+**The add flow asks for a name, and §17.7's "three fields" is corrected to four.** The wizard was
+specified as kind, base URL and API key, and the field the whole screen is keyed on was missing from
+the one flow that creates a row. `service_instance.name` is what tells two Radarrs apart — it is the
+first column of this table, it is what the `Radarr 4K` row is called, and the **"1080p ✓ / 4K ✗"**
+badge §16 names as v0.1's power-user signal is unrenderable if the second instance arrives
+indistinguishable from the first. **The field is defaulted from the probed application and instance
+(`Radarr`, then `Radarr (2)` on collision) and is editable in place**, so the common single-instance
+case is still three things typed; it is not an extra question, it is a pre-filled answer. It must be
+unique per user, which the inline settings form's own help text already states and the add flow never
+enforced. **Four is the count of answers the wizard requires**; §17.3.1 adds `URL base` as a fifth
+input which is optional, defaults to empty, and is left empty by every deployment that does not sit
+behind a reverse proxy.
+
+**The connection test's result is a specified surface, in all four of its states.** §17.7 makes the
+test mandatory and blocking — *"a live connection test that must pass before Save is enabled"* — and
+nothing anywhere specified what the user sees when it runs. That matters most for the state the
+document never named: **failure**. §17.3's verbatim-error contract covers *configured* services — the
+`Problem` column, the expanded row, the System status list — and a service that fails its test is
+never saved, so it has no row and the verbatim error has nowhere to go. This is the first thing every
+user does and its most likely outcome is a failure: wrong port, `https` against a plain-HTTP service,
+a trailing slash, a Tailscale name that resolves in the browser but not from the container, or a
+**reverse-proxy URL base**, which is how a large share of this audience reaches its \*Arrs
+(`https://host.tailnet.ts.net/sonarr`) and which produces a connection that resolves and then 404s.
+
+| Test state | What the dialog shows, below the API-key field |
+|---|---|
+| `idle` | nothing; Save is disabled and labelled with the reason |
+| `testing` | the request in flight, cancellable; Save stays disabled. §7's per-request timeout applies, so this state is bounded |
+| `connected` | **the probed application, its version and its API path, plus one count** — *"Sonarr 4.0.10.2544, `/api/v3`, 214 series"*. Naming the probed application is the only thing that catches "the Kind select still said `sonarr` and I pasted a Radarr URL", which the dialog otherwise cannot catch at all, since both serve `/api/v3/system/status` |
+| `failed` | **the verbatim upstream text or transport error in mono**, exactly as the `Problem` column renders it, plus the two or three most likely causes for that error class as prose. A 404 names the URL base; a TLS error names the pin; a refused connection names the port |
+
+#### 17.3.1 `URL base` is a field, not help text on another field
+
+**The base URL and the URL base are two values and they get two inputs.** The schema has carried
+`service_instance.url_base` as a column distinct from `base_url` since migration 0001, the HTTP API
+accepts `url_base` on `POST /api/v1/services`, on `PATCH /api/v1/services/{id}` and on both
+connection-test endpoints, and the upstream client is built over the **concatenation** of the two.
+A Prowlarr reached at `https://home.tailnet.ts.net/prowlarr` is an ordinary self-hoster deployment
+and it cannot be described with one input; a form that only *mentions* the sub-path inside the base
+URL's help text is a form that cannot express the setup it is describing. So:
+
+| | |
+|---|---|
+| Label | `URL base` |
+| Placeholder | `/prowlarr` |
+| Required | No. Empty is the common case, empty is the default, and empty is valid |
+| Where | **Both the add wizard and the edit form**, and **not** behind `Show advanced`. A field the wizard does not have is a field a first-time user cannot reach, and the reverse-proxy sub-path is the single most likely reason their first connection test fails |
+| Help text | *"Leave this empty unless a reverse proxy serves the application under a path. If you reach Prowlarr at `https://home.tailnet.ts.net/prowlarr`, the base URL is `https://home.tailnet.ts.net` and the URL base is `/prowlarr`. It is the same value the application calls `urlBase` in its own settings."* |
+| Validation | A leading `/` is required and a trailing `/` is refused; empty passes both. The two are checked because the upstream URL is `base_url + url_base` with no normalising join, so a missing leading slash yields an unparseable host and a trailing slash yields a doubled separator. **The form normalises rather than only complaining** — it adds the leading slash and trims the trailing one on blur, and only reports an error for something it cannot repair (a scheme, a host, a query string) |
+| Effect on the stored credential | **None**, and the field says so where it matters. The AAD binds the credential to the normalised *origin* only, so moving a service to a different sub-path is the one URL edit that does **not** invalidate the key |
+
+**The base URL field's help text stops naming the sub-path** and names the URL base field instead.
+Its own job is the other half: the address *this host* can reach, which is not always the one the
+browser uses.
+
+#### 17.3.2 `credential re-entry` — a named state, not a generic error
+
+**Changing a saved service's origin invalidates its stored API key**, because the encryption binds
+the ciphertext to the normalised `scheme://host:port` and the envelope cannot be opened for anything
+else. `CLAUDE.md`'s security rules forbid sending a stored \*Arr credential to a host the user has
+just edited, and that rule needs a screen or it is not enforced.
+
+**What counts as a change, precisely,** because the screen has to pre-empt exactly this set and no
+larger one:
+
+- **Triggers re-entry:** the scheme, the host, or the port. `https://nas:443` → `http://nas:443` is a
+  change, and it is the one an earlier draft of this section got wrong by writing *"a path or scheme
+  change alone does not count"*: a same-port downgrade to plaintext is precisely the edit that would
+  put a full-admin key on the wire, so it is bound cryptographically and it counts.
+- **Does not trigger re-entry:** the path, `url_base`, host letter-case, a trailing root dot, an
+  IP-literal spelling (`::1` and `0:0::1`), or writing the scheme's default port out in full
+  (`http://nas` and `http://nas:80` are the same origin). Editing `url_base` alone never touches the
+  credential, which is what makes the sub-path fix in §17.3.1 a safe edit rather than a re-key.
+
+**The API's answer is `400` with `error: credential_reentry_required`** and
+`action: "Re-enter the API key"`, from `PATCH /api/v1/services/{id}` and from
+`POST /api/v1/services/{id}/test` alike — testing against a host the user has just typed uses only
+the key in the form and never the stored one.
+
+The state is reached two ways and looks the same in both: **the form pre-empts it locally** while
+the user types, and **the server can still answer it** if the client did not. The screen must
+therefore render it from the response code as well as from its own comparison, because a form that
+only pre-empts it turns the server's refusal into an unexplained failure.
+
+| | |
+|---|---|
+| Trigger | The origin of `Base URL` differs from the saved one, on edit or on test |
+| Title | *"The stored API key does not move to a new address"* |
+| Body | *"This key is stored encrypted against `http://10.0.0.4:7878`, so it cannot be sent to `http://10.0.0.4:7879`. Paste the key for the new address. The old key is not deleted until you save."* |
+| Field behaviour | The key field clears, its placeholder becomes `Re-enter the API key`, and it is what focus moves to |
+| Commit | Save and Test are `aria-disabled` (§9.3: never `disabled`, or a keyboard user never meets the blocked control) and labelled with the reason |
+| Recovery | Typing the key re-enables both. **Restoring the original address also clears the state**, which is the escape hatch for the user who edited the wrong field |
+| What it is not | Not the `error` state of §10: there is no upstream text to render verbatim, because nothing was sent upstream. It is a form state, in UsArr's own words |
+
+#### 17.3.3 `re-authentication required` — a named state, and not an authorisation failure
+
+**Every write on this screen sits behind sudo mode**, a window that opens on sign-in and on each
+password confirmation and closes **five minutes** later. Five endpoints are gated, which is every
+way this screen changes anything: create, update, delete, test-an-unsaved-service, and
+test-a-saved-service. Both test endpoints are gated because a test is what sends a credential
+somewhere.
+
+**The response is `403` with `error: sudo_required`** and `action: "Confirm your password"`. The
+screen branches on `error`, never on the status alone, because 403 is also how an ordinary
+authorisation failure and a CSRF mismatch arrive, and the three need different screens:
+
+| Status | `error` | What it means | What the screen does |
+|---|---|---|---|
+| 403 | `sudo_required` | The session is fine; the sudo window closed | Password prompt, then **retry the pending action** |
+| 403 | `forbidden` | The account may not do this at all | State it plainly; offer no retry, because retrying cannot succeed |
+| 403 | `csrf` | The page's token is stale | *"Reload the page"* — its own `action` says so |
+
+**It is a prompt, not an error.** §10 requires verbatim upstream text for *errors*, and leading a
+routine confirmation with a raw status line makes a normal security step look like a fault. The
+title is UsArr's words, there is no verbatim block, and the raw code appears only on a
+`for the record` line beneath the body, where it is diagnostic rather than the message.
+
+| | |
+|---|---|
+| Title | *"Confirm your password to change a service"* |
+| Body | *"Changing a service credential needs a password confirmation from the last five minutes, and this session's has expired. Nothing is wrong and nothing was lost: the change you made is still in the form."* |
+| Control | One password field and `Confirm`. Focus moves to the field |
+| On success | **The pending write is retried automatically.** Making the user find and press the original button again is the failure mode this state exists to avoid |
+| On failure | *"That password does not match"* inline, and the prompt stays open |
+| For the record | `PATCH /api/v1/services/3 → 403 sudo_required`, one line, muted, in mono |
 
 ### 17.4 Search
 
@@ -1453,9 +2679,109 @@ separated rather than interleaved, because interleaving reorders the list under 
 Linked works render as **one grouped card** with per-medium availability (the film and the novella on
 one card, each with its own state) rather than two rows. Zero results: the query echoed back, the
 honest note that search does prefix and substring matching but not typos (§8.1), and a "search
-indexers instead" action that goes to 17.5.
+indexers instead" action that goes to 17.5 — **which is no longer the only route to that screen; see
+rule 6.**
+
+**Separation survives six types and gets *more* right, but it needs four rules two types never
+needed.** The IR literature calls this *aggregated search* and splits it into vertical selection and
+results presentation; Sushmita et al. (CIKM 2010, 1,296 sessions, 48 participants) found that
+**result position is significant only in the blended interface, not in the per-source one** — so
+blending manufactures a ranking bias exactly where relevance is being compared across a film and an
+audiobook on incomparable signals. Grouping removes the need to make that comparison. Both closest
+shipping tools group: Komga renders four groups at `pageSize: 10` with a "SEARCH ALL" escape, Kavita
+carries eleven groups in a `SearchResultGroup`.
+
+1. **A group with zero hits does not render** — no header, no empty state, no "0 results in Music".
+2. **Group order is by the group's best-scoring hit, descending — not a fixed type order — and it is
+   computed once per query and then frozen. The toolbar states it in four words** — *"Groups ordered
+   by best match."* — because the rendered order is otherwise indistinguishable from descending by
+   count, which is what a user will infer and which is not the rule; and because the neighbouring
+   `Sort: Relevance | Title | Year | Added` control has **three available readings** (rows within
+   each group, rows across all groups, or the groups themselves) and the UI picked none. **The sort
+   control is labelled with its scope: `Sort rows within each group:`.** Both fit the toolbar and
+   neither costs a row. The only explanation of either shipped inside a `mockup`-tagged note, which
+   by definition does not ship. With two types a fixed order was harmless; with six it
+   buries an unambiguous album hit under two thin film rows. Late-arriving unowned results over SSE
+   never reorder a rendered group and never move a group: §17.4's stability guarantee is about a
+   *rendered result set* not moving under the cursor, which recomputing on a new query is not.
+   🔍 The freeze boundary is inference, drawn on the same line this section already draws between
+   owned and unowned.
+3. **The per-group cap comes from a total row budget, not from a constant.**
+   `cap = clamp(floor(40 / groups_with_hits), 3, 10)` — so 1–4 groups get 10 each, 5 gets 8, 6 gets
+   6. Each truncated group's last row is `Show all 34 movies →` **carrying the real total**, because
+   Baymard's finding is that silent truncation makes users believe they have seen everything.
+   **These links are the copy template for the whole product** — `Show all 14 ebooks matching dune`
+   carries the count, the type *and* the query, so it survives being read out of context in a screen
+   reader's links list, which a bare `Show all →` does not. **The rule generalises: a "show all" link
+   names its count, its type and its parent scope**, so a drill-down's `Show all 23 tracks` reads
+   `Show all 23 tracks on Geogaddi`.
+   🔍 The numbers are chosen, not measured: 40 from the design's own above-the-fold heuristic, 10
+   from Komga's shipping value, 3 as the floor below which a header costs more rows than it saves.
+4. **A cross-media linked work appears exactly once**, in the group of its highest-scoring medium,
+   with the other media as availability chips on that one row. *Annihilation* is legitimately a film,
+   a novel, an audiobook and an ebook; a naïve grouping shows it four times, which is the specific
+   incoherence a hub creates that a single-type tool cannot.
+   **And the group that does *not* get the row says so at its foot.** The rule is right and its IA
+   consequence was unaddressed: a user who types `dune`, clicks **Movies 3** — the most natural
+   action for someone looking for the film — gets *Dune: Part Two*, *Dune* (1984) and
+   *Jodorowsky's Dune*, and **not** *Dune* (2021), which is filed under Ebooks on a linked row, with
+   nothing on screen explaining the absence. So: *"1 more film is on a linked row in the **Ebooks**
+   group: Dune (2021). — [Show it]"*. The data is already there; it is what renders the
+   `also film, 2021` chip.
+
+5. **The library column renders only when it varies *within the group it is in*.** The earlier rule
+   was "only when the user has ≥2 libraries", which is not the same test and does not fire where it
+   matters: measured on the six-group search screen, four of six groups carry **one distinct library
+   value for every row** — a column of one repeated string, costing ~120 px of a 1,232 px content
+   column and forcing 12 of the 13 rows above the fold to wrap onto two or three lines. That is what
+   took search from 20 items above the fold at two types to **12–13 at six**, against the design's
+   own ≥25 floor. It is D-05's finding — a column that cannot vary is not data — reappearing
+   somewhere new. **The rule is therefore: render `library` when the user has ≥2 libraries *and* the
+   group contains more than one distinct value; otherwise state it once in the group header.** The
+   same applies to any per-group column with one distinct value.
+   **When the collapsed value is stated in the header beside the media-type name, the noun
+   `library` is mandatory** — *"all in the **Ebooks** library · all from Audiobookshelf"*, never
+   *"all in Ebooks"*. The `<h2>` is a media type (a closed enum of six) and the collapsed value is a
+   library (unbounded, user-named); on the common install they are the same string, so without the
+   noun the line reads as a tautology and teaches that the two axes ADR-0027 exists to separate are
+   one axis. The general rule is `design/DESIGN-DIRECTION.md` §8.1.
+
+6. **Every result row whose availability is incomplete carries a secondary `Search indexers →`
+   action, and it is in v0.1.** "Incomplete" means anything that is not a full ✓: a cross, a partial
+   fraction, or a tier the user does not hold (`2160p ✗`). The action links to §17.5 with the query
+   pre-filled from the row's title and the Newznab category preselected from the row's media type
+   (§8.5's five special cases decide the mapping). **Without it, v0.1 has no exit from the one screen
+   where the user definitively learns they are missing something.** §17.5 makes Add the primary
+   action and "search indexers" its secondary, and Add is v0.2 (§16) — so in the exact configuration
+   v0.1 draws, the primary action does not exist and the secondary was only ever specified as its
+   accompaniment. The zero-results state (above) carries the same action, which is the case where the
+   user has learned *nothing* was found; this rule covers the case where the product has told them,
+   correctly and prominently, that they do not have the thing they searched for. That is the
+   difference between a catalogue and a hub, and it is one link.
+
+**Every result row is one template *within its group*, and the claim needs that qualifier.** Type
+chip, title, secondary metadata, availability, library — varying only in data. But the six groups
+genuinely carry six different column sets (`Title/Author/Year/Formats/Size` versus
+`Title/Author/Narrator/Duration/Format` versus `Series/Publisher/Year/Issues/Format`), which is six
+templates by any honest reading, and asserting one template across all six contradicted the
+per-type column configuration the same design ships. The invariant that actually holds and is worth
+holding: **slot order and slot meaning are identical across groups** — identity first, creator
+second, date third, availability last — so the eye lands in the same place in every group even
+where the column names differ. Column *widths* are declared per group rather than auto-derived, so
+six groups do not compute six different layouts for one content column. Kavita's
+`in {{libraryName}}` line is still the cheapest thing that makes a heterogeneous list coherent —
+where it varies.
 
 ### 17.5 Requests — one surface, two paths
+
+**The sidebar entry stays `Requests`, and the screen's own sub-caption says what it is in this
+milestone.** In v0.1 the screen carries no request list, no approval queue and no
+`pending → approved → routed → available`, so the label is ahead of its content — and the sub-caption
+closes the gap without renaming a top-level destination between milestones: *"Free-text indexer
+search through Prowlarr, a grab sent to Prowlarr's own download client, and your recent grabs."* The
+discovery cost that a rename would buy is largely paid off by §17.4 rule 6, which routes the user
+here **from the row that made them want it** rather than requiring them to guess a sidebar label.
+See REVIEW-LOG §5.4 for the argument against the rename.
 
 Requests are **one coherent screen** with two entry paths, and the user should not have to know which
 one they are on until it matters:
@@ -1469,12 +2795,75 @@ one they are on until it matters:
    action is **Grab**, which posts the release back to Prowlarr within the 30-minute cache window.
 
 They share one screen because they are one user intent. Which path is offered depends on what is
-configured: with a library-bearing service, Add is primary and "search indexers" is a secondary
-action on the same item; with only Prowlarr, the free-text path **is** the screen (§8.5) and the
-catalogue affordances are hidden rather than shown broken.
+configured — **and the v0.1 case is the free-text path standing alone, not accompanying anything.**
+With a library-bearing service *and* the request model (v0.2, §16), Add is primary and "search
+indexers" is a secondary action on the same item. **In v0.1 there is no Add**, so the free-text path
+is the whole of this screen on every install, whether or not a Sonarr and a Radarr are configured —
+it is not a fallback for the Prowlarr-only case. The earlier wording specified it only as the
+accompaniment to an action that does not ship until v0.2, and as the *screen* only when Prowlarr is
+the sole service, which left the ordinary six-service v0.1 install with a specified primary action
+that does not exist. The catalogue affordances that belong to the v0.2 path are hidden rather than
+shown broken, exactly as they are in Search-and-Grab mode.
 
-Also on this screen: the user's own request list with state and, for an admin, the pending-approval
-queue. In single-user mode the approval UI is hidden entirely (§8.3).
+**A grab leaves a record, and that is v0.1.** The second block on this screen is **Recent grabs** —
+the ten most recent, newest first: time (absolute and relative, §17.3's rule), release name, indexer,
+protocol, size, the library or media type the category resolved to, and **last known state**. It is a
+local read and nothing else; it introduces no new table and no new state machine, because the states
+it renders are the write queue's own — `pending | inflight | verifying | done | failed` (§7.6) —
+joined to the `provenance` row §8.5 already writes per acquisition event. A `failed` row carries the
+verbatim upstream error and the same Retry the toast offers.
+
+**The reason it is not a nicety.** UsArr's only write path in v0.1 produces a multi-gigabyte download,
+and the confirmation currently lives in a chip inside a *search result row*, which is transient: one
+navigation away and there is no UsArr-side record that anything happened, no way to tell whether you
+already grabbed something an hour ago, no way to recover a release name after a restart, and no
+answer to *"did that one work?"*. A hub whose acquisition loop has no memory is a slower way to reach
+Prowlarr's own UI, which does keep a history. It also closes a three-document gap: this section
+required *"the user's own request list with state"*, §16's v0.1 did not fund one (the request model
+is v0.2), and §16 wins by its own rule — so the shipping answer was "no grab history in v0.1", stated
+nowhere.
+
+**The request model itself is still v0.2.** Recent grabs is not it, and must not be presented as it:
+no approval queue, no `pending → approved → routed → available`, no per-user quota, no
+`request` table. It is a read over rows v0.1 already writes.
+
+For v0.2 and later, this screen also carries the user's own request list with state and, for an
+admin, the pending-approval queue. In single-user mode the approval UI is hidden entirely (§8.3).
+
+**The grab control carries a visible text label, and the grab window's promise must be true rather
+than aspirational.** An irreversible multi-gigabyte action may not be an unlabelled icon eight pixels
+from a benign one — particularly a download arrow, which means "download this file to my computer"
+in every other application and here means "send this to your download client via Prowlarr"
+(`design/DESIGN-DIRECTION.md` §13). And the toolbar states *"an expired release is never offered as
+grabbable"*, which is only true if the client acts on it: **the countdown lives in a `role="status"`
+that updates at 5, 2 and 1 minutes remaining, and at zero the grab controls go `aria-disabled` with a
+row-level note and the screen offers `Search again`.** Otherwise a user who read "closes in 18
+minutes", worked through the list and pressed Grab receives a 400 they were promised could not
+happen.
+
+**A failure offers the action that can succeed, and never one that structurally cannot.** An expired
+grab returns a 400 whose meaning is *the release is no longer in Prowlarr's cache*; retrying the same
+opaque release id returns the same 400 for ever, and the screen already models this condition
+correctly elsewhere — the `expired` state replaces every grab control with **`Search again`**. So the
+failure path branches on the upstream code: for an expired-cache 400 the button is `Search again` and
+the chip reads `expired — search again`, not `failed: rejected`, which reads as "the tracker refused
+you". **And where the correct action is not something UsArr can offer, naming the non-action beats
+offering a fake one**: when the all-indexers-failed correlation concludes a host-level resolution
+failure inside Prowlarr's own container, `Open Services` and `Retry` are both dead ends — Services
+will correctly show Prowlarr as reachable, because it is — and the honest surface is the sentence
+plus `Retry the search`. A screen that reasons its way to a correct diagnosis and then hands the user
+two buttons that cannot act on it is worse than one that says so.
+
+**The post-grab confirmation names what will and will not import the file, per media type, and it is
+never truncated to the first clause.** §8.5 owns the copy rule and the reasoning; the requirement on
+this screen is that the sentence rendered at the moment of the grab is the complete one for that
+row's type. *"UsArr does not import downloads."* full stop is read by a Radarr owner as *"UsArr
+doesn't, but obviously Radarr does"* — and Radarr will not, because the grab went from UsArr to
+Prowlarr to the download client and Radarr never requested that release, so it has no record of it.
+The failure is silent and cumulative: five films over a week become five orphaned downloads and an
+unchanged library. The four sink-less types already get a complete sentence; the two with an \*Arr
+are exactly the two where the user's prior knowledge produces the wrong belief, and they were the two
+getting the incomplete one.
 
 ### 17.6 Item detail
 
@@ -1490,8 +2879,10 @@ backend's own client** (§5.4), and the button says so.
 
 Each is a named screen, not an accident.
 
-- **First run** — the wizard is **mandatory and blocking**; there is no way around it. Three fields
-  (kind, base URL, API key) plus a live connection test that must pass before Save is enabled. On
+- **First run** — the wizard is **mandatory and blocking**; there is no way around it. **Four fields**
+  (kind, **name**, base URL, API key — the name defaulted from the probe and editable, §17.3) plus a
+  live connection test that must pass before Save is enabled, **whose four result states are
+  specified in §17.3 rather than left to the implementer**. On
   save the import starts, the wizard hands off to home, and a progress affordance shows real counts
   ("1,240 of 10,000 movies") fed by SSE. **Sections populate live as import phase A commits** — it is
   not a spinner in front of an empty screen. If the only configured instance advertises no
@@ -1505,9 +2896,193 @@ Each is a named screen, not an accident.
   showing cached data from 14:02") linking to the Services screen. **The catalogue does not grey
   out**; browse, search, sort and filter keep working from the replica. Writes to that instance are
   accepted with the label "queued — Radarr 4K is unreachable" (§7.5).
+  **The timestamp in a degraded banner is that instance's own last successful sync, never the global
+  delta time.** It looks like a detail and it is the whole job of the banner: the number tells the
+  user how stale the data is, and quoting the global time on an instance that has been failing for
+  two hours overstates freshness by exactly the interval that matters. A banner whose number is
+  reassuring and wrong is worse than no banner, and it is the precise failure the replica
+  principle's honesty rules exist to prevent. Where an instance has **no delta channel at all**
+  (§7.1a), the number is its last full compare and the sentence says so: *"Komga is unreachable —
+  showing cached data from the last full compare at 09:12"*.
 - **Instance needs re-identification** → a blocking banner on that instance's rows and on the Services
   screen, explaining that its identity changed and sync is paused, with a Re-link action. Loud on
   purpose: silently doing the wrong thing here destroys a library.
 - **Search returned nothing** → 17.4.
+- **Library scope excludes everything (`scope-empty`)** → a named state on Home, on Search and on
+  every per-type grid, replacing the ordinary empty state: *"Your library scope is set to 0 of 8
+  libraries, so nothing is shown."* plus **Show all libraries**. It is reachable in two clicks — the
+  scope chip's `Everything` checkbox unticks every library and the chip's own label goes to
+  `No libraries selected` — and without this state the whole application renders as an application
+  with no content. §17.4 rule 1 makes it worse rather than better on Search: a group with zero hits
+  does not render at all, so a scoped-out search draws literally nothing, with no header saying why.
+  **The scope is a third thing, neither the query nor the filter**, so neither `empty` nor
+  `filtered-empty` covers it and neither says the true sentence.
+  **And the control that caused it must be reachable at the viewport the user is on.** Below 900 px
+  the sidebar collapses to a drawer and takes the scope chip with it, so on a phone the only
+  explanation of an empty application is invisible until the drawer is opened — the case where a
+  scope set on a laptop is carried to the sofa on the same `?lib=` URL. **Whenever the scope is not
+  "all libraries", the chip renders in the top bar at every viewport**, next to the search box, and
+  it is never the drawer's only home. This is the design's own rule — *a switcher that hides content
+  is only dangerous when it is silent about what it hid* — applied to the case where it hides all of
+  it. See `design/DESIGN-DIRECTION.md` §8.1 and §10.
 - **A command failed** → an inline chip on the affected item plus a toast carrying the upstream error
   **verbatim**, with **Retry** and **Dismiss**. Never a silent revert.
+
+### 17.8 Libraries — setup, membership and corrections
+
+**`/settings/libraries` is a second first-class settings screen alongside Services (§17.3), not a
+sub-page of it**, and the split is meaningful:
+
+> **Services answers "is the pipe up, and how do I fix it?". Libraries answers "what is in it, what
+> is it called, and where do requests go?".**
+
+**The definition of a library is shipping copy under the page title, not a note.** One sentence —
+*"A library is a name you own over containers your services already computed: a whole instance, a
+root folder, an upstream library id, or an \*Arr tag."* — because this is the newest concept in the
+product, nothing else in the ecosystem works this way, and the sentence already exists. It cannot
+live in a `mockup`-tagged aside: strip the not-shipping prose and the screen contains no definition
+of a library anywhere. Cost: one line.
+
+They cross-link both ways: a degraded source on a library row links to that instance's Services row,
+and a Services row lists the libraries it feeds and warns before removal — *"Audiobookshelf feeds 2
+libraries. Removing it will leave Ebooks and Audiobooks with no source."* **No credential field ever
+appears on this screen**; API keys live only behind Services plus sudo mode (§12.1).
+
+**Nothing about libraries is asked before a service exists.** The §17.7 wizard is unchanged; on a
+successful connect and capability probe UsArr **proposes** libraries as one pre-checked "Accept" step,
+each editable inline — one `movie` library per Radarr, one `series` per Sonarr, one per upstream
+library for Audiobookshelf / Komga / Navidrome (Kavita from v0.2, Jellyfin from v1.0), and **none for
+Prowlarr**, which has no library. Two proposals are decisions rather than defaults:
+
+- **Adding a second instance of the same kind proposes joining the existing library, not creating a
+  new one.** Two Radarrs → *one* Movies library with two sources, which is what makes the
+  "1080p ✓ / 4K ✗" badge render on one card. Getting this default wrong quietly destroys the
+  project's most visible power-user feature.
+  **Renaming a proposal to match an existing name joins rather than creates — and the screen must
+  show that it happened.** As drawn, typing `Comics` into the Manga proposal's name field produced
+  two rows both named `Comics`, both ticked, a banner still reading *"UsArr proposes 4 libraries"*
+  and a button still reading *"Accept 4 proposals"*: a rename silently changed the shape of the data
+  model and left the count on the button wrong. **On collision the two rows merge visually into one
+  with two `From` entries, the button becomes `Accept 3 proposals`, and the merged row carries an
+  inline note** — *"Joining Komga Manga into Comics as a second source."* **The merge key is stated
+  rather than left to be discovered: case-insensitive, whitespace-trimmed, per user.**
+  **And the one-way door is marked per row.** *"Editing any proposal marks that library
+  user-managed, after which a later connect can only offer to add sources — never reshape it"* is a
+  permanent decision delivered as helper text beside the Accept button, with no indicator of which
+  rows have crossed it. Each edited row carries the mark, in the row.
+- **Audiobookshelf is offered as *two* libraries — Ebooks and Audiobooks — over its one
+  `mediaType=book` library**, which ABS itself cannot do: it distinguishes the two only at item
+  level (`ebookFileFormat` present vs audio files present). That is a concrete, demonstrable
+  improvement over the upstream's own organisation, and it costs one `formats` column **plus an
+  edition-grained membership key** — `library_member` is `(library_id, sort_title, work_id,
+  edition_id)`, because one `book` work holds both editions and a work-grained key would put an
+  audiobook-only work in Ebooks (§6.5, `reference/schema.md` §13.3). Podcasts and Kavita's `Image`
+  type are **declined with a reason**, not silently dropped, because UsArr has no `work.kind` for
+  either. **The column holding both outcomes is headed `Decision`, not `Accept`** — accepted rows
+  keep their checkbox, the declined row keeps its word, and an `Accept` header over a cell reading
+  `declined` is a header contradicting its own cell.
+
+**Row view:** name · kind · item count · source chips with per-source health · request destination ·
+state · reorder handle, plus **Add library** and the auto-proposal banner.
+
+- **`Add library` is specified rather than named, because it is the recovery path when the
+  auto-proposal got it wrong** — which is the single most likely reason a user opens this screen at
+  all (*one Radarr, and I want `Movies` and `Kids films` split by tag*). Without it the proposal is
+  the only way a library comes into existence and it is a one-shot. The flow is the **proposal row's
+  own field set** — name, kind, format filter — **plus one `Add source` picker**, which is four
+  fields reusing two components that already exist. `Add source` keeps its rule: a container picked
+  from a list the instance reports, never a free-text path.
+- **The `Kind` control is labelled in the product's vocabulary, not the schema's.** The select
+  offered `book · comic · movie · series · artist`, which appears nowhere else in the interface, and
+  the Music library's answer was **`artist`** — a level in a hierarchy, not a kind of thing — with
+  nothing on screen mapping `artist → Music` or `series → TV`. The user should not have to infer
+  §17.2's `(kind, formats)` table, which they will never read. **Label it `Movies · TV · Music ·
+  Books · Comics`**, let the schema value be the value, and put one help line under Books:
+  *"Books covers ebooks and audiobooks. The format filter below decides which this library holds."*
+  The list's `Kind` column follows the same labels. (`person` is not offered — a library of authors
+  is not a thing, ADR-0033.)
+- **The row's identifier is not rendered as a path.** Every row carried its `slug` beneath the name
+  as mono text with a leading slash — `/movies`, `/tv`, `/comics-ongoing` — on the screen whose
+  banner says *"UsArr never reads a filesystem and never types a path"*, in the face §4.2 reserves
+  for machine data, on the same row as a `Request destination` cell reading
+  `Sonarr HD-1080p · /media/tv`, which **is** a real root folder. A self-hoster burned by a scanner
+  reading the wrong folder will read `/movies` and conclude UsArr scans `/movies`. **Drop the slash
+  and the mono face**; the detail view's Diagnostics panel already renders it correctly as *"In the
+  URL as `?lib=ebooks`"*, and that is the only place it earns a row.
+- **A control labelled as an operation performs it.** `Test Radarr` and `Run full sync` on a broken
+  library row were `<a href="#services">`, landing the user at the top of an eight-row screen with
+  nothing indicating which row they came for — and a user who clicks `Run full sync` reasonably
+  believes a sync started. Nothing started. Either perform it inline (both are already buttons on
+  the Services rows, so the handler exists) or label it as navigation — `Radarr health →` — and
+  deep-link with the row anchored and highlighted.
+
+**The detail view declares its save model, and it did not have one.** The full control set is Name,
+Kind, Format filter, Display order, three checkboxes, Default sort, Metadata authority, per-source
+enable, Request destination, `Add source`, `Remove`, `Add correction`, four `Undo`s and
+`Delete library` — with **no Save, no Cancel, no dirty indicator and no "changes saved"**, while the
+Add-service form 400 px away on the Services screen has an explicit `Test` plus a `Save` disabled
+and labelled `No changes`. Two of the most similar forms in the product had opposite and undeclared
+models. It is not academic: the `Kind` select's own help text says *"Changing it re-derives
+membership from what the services report"*, which is 1,842 items recomputed, triggered by a bare
+native `<select>` that changes value on one arrow keypress with no menu open. **The model is
+explicit save: a sticky footer reading `3 unsaved changes · Save · Discard`**, plus a confirmation
+on `Kind` specifically — *"This will re-derive membership for 1,842 items. Nothing changes in
+Audiobookshelf."*
+
+**Detail view**, grouped: *Identity* (name — with upstream's own name beneath it, greyed and
+non-editable; kind; formats; icon; order) · *Visibility* (enabled, show on home, include in search,
+default sort) · *Sources* (one row per `library_source`: instance, container, items contributed,
+state, **metadata authority** as a single radio — **suppressed entirely below two sources**, because with
+one source it is a radio group with exactly one option, already selected and impossible to change or
+clear, which conveys nothing; §17.4 rule 5's principle applied to a control instead of a column —
+enabled, remove — and **Add source picks a container
+from a list the instance reports**, `/api/v3/rootfolder`, `/api/v1/libraries`, `/api/v3/tag`, **never
+a free-text path**, which is what keeps UsArr off the filesystem) · *Requests* (destination, or
+**None** with the reason inline; quality profile, root folder and tags fetched live from the chosen
+destination when the panel opens — a settings screen may block on an upstream call, a *render* path
+may not) · *Corrections* (v0.3) · *Diagnostics* · *Danger zone*.
+
+**The Corrections table is named after what the user did, not after the schema's discriminator.**
+The column shipped as **`Verb`** over the values `exclude`, `include`, `relink`, `field` — a schema
+word (nobody has ever thought *"I performed a verb"*), and `field` **is not a verb** while the other
+three are, which is what happens when a column is generated from an enum's column name. The
+neighbouring header, `What it does`, was doing the work. **Rename the column `Correction` and put
+the values in the past tense, because every row is something that already happened:** `Excluded`,
+`Included`, `Re-linked`, `Field overridden`. Keep the `What it does` column — a literal one-line
+definition of each verb is exemplary and is the only place they are defined. ⚠️ **In v0.1 they are
+defined nowhere**, because that panel is v0.3; if the four verbs appear anywhere in v0.1 copy they
+carry their definitions with them.
+
+**The `Request destination` column states its shared fact once and keeps only the per-row
+exceptions.** Four of six rows read `none` and each carried its own explanatory paragraph, which is
+§17.4 rule 5's own rule (a column whose value is identical for every row is not data) firing on a
+column that survived it — and one of those paragraphs ran to sixty-two words of competitive analysis
+inside a table cell. **Above the table, once:** *"v0.1 connects no request destination for music,
+audiobooks, ebooks or comics. Indexer search still works and the grab ends in your download
+client."* **In the cells:** `None`. **Kept as a per-row footnote:** the Ebooks row's Readarr note,
+which is a real, dated, specific fact a user cannot infer.
+
+**Deleting a library says exactly what it does — including the part that is destructive:** *"This
+removes the library from UsArr. It does not delete anything from Radarr, Komga, or your disks. It
+**will** discard the N items you excluded from this library."* The earlier copy stopped at the
+reassurance, which was true of the replicated data and false of the owned data: `exclude` and
+`include` are keyed to `library_id` and cascade with the row. §6.5 rule 5 refuses to *auto*-delete a
+source-less library precisely because it carries owned corrections, so a manual delete must not
+discard them silently. `relink` and `field` corrections are global (§6.5) and survive the delete, and
+the copy does not claim otherwise. When N is zero the sentence is omitted rather than rendered as
+"0 items".
+
+**Named per-library states**, each mapping to an existing §17.7 pattern: *importing* (populated-so-far
+grid with real counts) · *one source degraded* (non-modal banner naming it; **the grid does not grey
+out**) · *all sources down* (fully browsable from the replica — this is the replica principle's demo)
+· *sources healthy, zero items* (*"Komga is connected and reports 0 series"*, which is a different
+sentence from "not synced yet") · *orphaned* (shown with its reason, Delete offered, never
+auto-deleted) · *no sink* (requests disabled with the reason) · *needs re-identification* (blocking
+banner, membership recompute paused, because membership derived from an untrustworthy id space is
+worse than stale membership) · **no change feed** (*"Komga has no changed-since endpoint. Last full
+compare 09:12."* — the steady state for a source on channel 3b's reconciliation-only fallback,
+§7.1a, and it must be a named state rather than an absent delta time, because "no number" and "a
+number from four hours ago" read identically otherwise).
+
+**Overrides must be listable in one place** — what was excluded, re-linked or overridden, by whom,
+when and why, each revertible in one click — or they become invisible magic nobody can undo.
