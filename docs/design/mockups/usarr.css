@@ -342,7 +342,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .app {
   display: grid;
   grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
-  grid-template-rows: var(--toolbar-h) minmax(0, 1fr);
+  /* minmax rather than a fixed track: the top bar wraps below 560px, and a
+     fixed row let its second and third lines render UNDER the page instead of
+     pushing it down -- the brand and the search box overlapped the mockup
+     notice. --toolbar-h stays the MINIMUM and the sticky offset; the row grows
+     with what is actually in the bar. */
+  grid-template-rows: minmax(var(--toolbar-h), auto) minmax(0, 1fr);
   grid-template-areas: "topbar topbar" "sidebar main";
   min-height: 100vh;
 }
@@ -389,6 +394,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
   color: var(--fg-muted);
 }
 .mocknote__short { display: none; }
+/* The install switcher. It is sized to hold its longest option in full,
+   because the option text is where the milestone is stated and a select that
+   ellipsises "Full stack — a later milestone" down to "Full stack…" drops
+   exactly the half that stops the drawing being read as v0.1. */
+.mocknote__install { max-width: none; flex: 0 0 auto; }
 @media (max-width: 1180px) {
   .mocknote__long { display: none; }
   .mocknote__short { display: inline; }
@@ -846,6 +856,26 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
   color: var(--fg-muted);
   white-space: nowrap;
 }
+/* Indexer flags are an OPEN vocabulary -- `IndexerFlag` is a subclassable
+   class, not an enum, so a bare .chip is the default and every flag string
+   Prowlarr sends renders in it, including ones no version of UsArr has heard
+   of. Only two names get their own treatment, and not because they are more
+   important: `freeleech` and `halfleech` are the two that are DERIVED rather
+   than indexer-supplied -- TorznabRssParser sets them from downloadvolumefactor
+   == 0.0 and == 0.5 -- and they are the two that change what the download costs
+   the user's ratio. That is worth one step of emphasis in the scan.
+
+   The emphasis is weight and fill, never a hue. A colour here would have to
+   clear the contrast sweep on all five grounds in both themes for a difference
+   the design does not need, and the only semantically obvious hue is a green
+   sitting two columns from the torrent protocol dot's green. */
+.chip--leech {
+  color: var(--fg);
+  font-weight: 600;
+  background: var(--inset);
+  border-color: var(--fg-muted);
+}
+
 .chip--pending { color: var(--st-warn); border-color: currentColor; }
 .chip--failed  { color: var(--st-err);  border-color: currentColor; }
 .chip--done    { color: var(--st-ok);   border-color: currentColor; }
@@ -1426,10 +1456,15 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
      first row and pushes the density and theme controls onto their own line.
      Two rows is the budget: controls, then the notice. */
   .topbar__spacer { display: none; }
-  .mocknote { flex: 1 0 100%; order: -1; }
+  .mocknote { flex: 1 0 100%; order: -1; flex-wrap: wrap; row-gap: var(--sp-2); }
   .mocknote__short { display: inline; }
   .searchbox { flex: 1 1 80px; min-width: 80px; }
   .select { max-width: 96px; }
+  /* 96px would truncate the milestone out of both options, so the switcher
+     keeps its own width here. 180px is a basis rather than a full row: it sits
+     beside the `mockup` tag on the notice's first line and the short notice
+     wraps below it, which is two lines of notice rather than three. */
+  .mocknote__install { max-width: none; flex: 1 1 180px; }
 }
 
 /* The Requests search form is the primary input on the one screen that takes

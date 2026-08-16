@@ -46,11 +46,32 @@
          shares. DESIGN-DIRECTION.md 13 forbids fabricated data in a shipped
          surface and makes a labelled mockup the one exception; this is the
          label. -->
-    <p class="mocknote">
+    <!-- The install switcher lives INSIDE the mockup notice, not beside it in
+         the product chrome. It is not a UsArr control and there is no setting
+         it corresponds to; putting it in the top bar proper would draw a
+         product affordance that does not exist. Inside the label, it reads as
+         part of the label — "this is a mockup, and here is which install it is
+         drawn over" — which is also the only place a control that changes the
+         sidebar, the counts and the notice itself can honestly sit.
+
+         Both options name a milestone rather than only a stack, because the
+         default view is six populated media types and a reader who takes that
+         for v0.1 has been misled by the drawing. "A later milestone" is the
+         strongest true statement available: §16 sequences the catalogue
+         sources one at a time after v0.1 and has not fixed which lands in
+         which release, so naming v0.2 here would invent a status. -->
+    <div class="mocknote">
       <span class="statebar__tag">mockup</span>
-      <span class="mocknote__long">Static design mockup of UsArr, which is pre-alpha software: none of these screens is implemented and every value on them is invented.</span>
-      <span class="mocknote__short">Pre-alpha mockup, invented data</span>
-    </p>
+      <label class="sr" for="install">Which install these screens are drawn over</label>
+      <select id="install" class="select mocknote__install" data-act="install">
+        <option value="full">Full stack — a later milestone</option>
+        <option value="v01">v0.1 — Sonarr, Radarr, Prowlarr</option>
+      </select>
+      <span class="mocknote__long" data-inst="full">Static design mockup of UsArr, which is pre-alpha software: none of these screens is implemented and every value on them is invented. Drawn over an install with every catalogue source connected, which is later than v0.1.</span>
+      <span class="mocknote__long" data-inst="v01" hidden>Static design mockup of UsArr, which is pre-alpha software: none of these screens is implemented and every value on them is invented. Drawn over the three services v0.1 connects.</span>
+      <span class="mocknote__short" data-inst="full">Pre-alpha mockup, invented data, full stack</span>
+      <span class="mocknote__short" data-inst="v01" hidden>Pre-alpha mockup, invented data, v0.1 install</span>
+    </div>
     <div class="searchbox">
       <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
       <label class="sr" for="topsearch">Search your library</label>
@@ -126,8 +147,10 @@
 
     <!-- Navidrome's LibrarySelector model, including the part that matters:
          the component renders nothing at all when the user has 0 or 1 library,
-         so no control appears for a distinction they do not have. This install
-         has eight, so it appears. -->
+         so no control appears for a distinction they do not have. The full
+         stack has eight libraries and the v0.1 install has two, so the chip
+         appears on both — and every number it states is counted over the
+         libraries the selected install actually has, never over the markup. -->
     <div class="scope">
       <button type="button" class="scope__btn" data-act="scope" aria-expanded="false" aria-haspopup="dialog" aria-controls="scope-pop" data-scoped="false">
         <span data-slot="scope-label">All libraries (8)</span>
@@ -148,12 +171,16 @@
           <label class="check"><input type="checkbox" data-act="scope-all" checked> Everything</label>
           <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="movies" checked> Movies</label>
           <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="tv" checked> TV</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="music" checked> Music</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="audiobooks" checked> Audiobooks</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="ebooks" checked> Ebooks</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="comics" checked> Comics</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="manga" checked> Manga</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="comics-ongoing" checked> Ongoing comics</label>
+          <!-- Six of the eight libraries are made of containers Navidrome,
+               Audiobookshelf and Kavita named, so on the v0.1 install they do
+               not exist to be scoped. The chip's total falls to two with them,
+               which is what "All libraries (2)" is counted from. -->
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="music" checked> Music</label>
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="audiobooks" checked> Audiobooks</label>
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="ebooks" checked> Ebooks</label>
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="comics" checked> Comics</label>
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="manga" checked> Manga</label>
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="comics-ongoing" checked> Ongoing comics</label>
         </fieldset>
         <!-- Libraries are unbounded, which is why they are a scope chip and
              not a nav list, so ticking twenty of them one at a time is a real
@@ -168,7 +195,7 @@
     </div>
 
     <ul class="nav__group">
-      <li><a class="nav__link" href="index.html" data-route="home" data-primary aria-current="page">Home</a></li>
+      <li><a class="nav__link" href="index.html" data-route="home" data-primary>Home</a></li>
     </ul>
 
     <!-- Media types: a closed enum, hard maximum six, and a type with no items
@@ -176,14 +203,24 @@
          The unit is not the same word for every type -- music counts artists
          and comics counts series -- so each number carries its unit, silently
          for a sighted reader who has the type name beside it and explicitly
-         for a screen reader, which reads the number on its own. -->
+         for a screen reader, which reads the number on its own.
+
+         On the v0.1 install four of the six are absent HERE and present in
+         Home's Block A, which is not two rules fighting: the bound is content,
+         not items. A nav entry can carry a name and a number and nothing else,
+         so a nav entry for a type with no catalogue source would be a link to
+         an empty screen with no cause and no action attached to it. A Block A
+         row carries a state, a cause, the service that will populate it and an
+         action, which is the most useful thing the product can say. Same rule,
+         and the difference is what the two surfaces can hold.
+         ARCHITECTURE.md 17.2, DESIGN-DIRECTION rule 13. -->
     <ul class="nav__group">
       <li><a class="nav__link" href="search.html?type=movie" data-route="search">Movies <span class="nav__num">1,204<span class="sr"> films</span></span></a></li>
       <li><a class="nav__link" href="search.html?type=series" data-route="search">TV <span class="nav__num">275<span class="sr"> series</span></span></a></li>
-      <li><a class="nav__link" href="search.html?type=music" data-route="search">Music <span class="nav__num">612<span class="sr"> artists</span></span></a></li>
-      <li><a class="nav__link" href="search.html?type=audiobook" data-route="search">Audiobooks <span class="nav__num">418<span class="sr"> books</span></span></a></li>
-      <li><a class="nav__link" href="search.html?type=ebook" data-route="search">Ebooks <span class="nav__num">1,842<span class="sr"> books</span></span></a></li>
-      <li><a class="nav__link" href="search.html?type=comic" data-route="search">Comics <span class="nav__num">553<span class="sr"> series</span></span></a></li>
+      <li data-inst="full"><a class="nav__link" href="search.html?type=music" data-route="search">Music <span class="nav__num">612<span class="sr"> artists</span></span></a></li>
+      <li data-inst="full"><a class="nav__link" href="search.html?type=audiobook" data-route="search">Audiobooks <span class="nav__num">418<span class="sr"> books</span></span></a></li>
+      <li data-inst="full"><a class="nav__link" href="search.html?type=ebook" data-route="search">Ebooks <span class="nav__num">1,842<span class="sr"> books</span></span></a></li>
+      <li data-inst="full"><a class="nav__link" href="search.html?type=comic" data-route="search">Comics <span class="nav__num">553<span class="sr"> series</span></span></a></li>
     </ul>
 
     <ul class="nav__group">
@@ -492,6 +529,50 @@
     </div>
 
     <div class="tablewrap">
+      <!-- ===============================================================
+           Indexer flags: an OPEN vocabulary, rendered as opaque tags.
+
+           `IndexerFlag` is a class, not an enum, and any indexer definition
+           may subclass it. Prowlarr's own base type declares seven -- internal,
+           exclusive, freeleech, neutralleech, halfleech, scene, doubleupload
+           (`src/NzbDrone.Core/Indexers/IndexerFlag.cs`, all seven written with
+           C#'s target-typed `new(...)`) -- and `PassThePopcornFlag : IndexerFlag`
+           adds two more, `golden` and `approved`
+           (`src/NzbDrone.Core/Indexers/Definitions/PassThePopcorn/PassThePopcorn.cs`
+           lines 85-88). Nine today, and the next indexer definition may add a
+           tenth without anything here changing.
+
+           So UsArr renders whatever string arrives, styled generically. An
+           allowlist would drop `golden` today and every future indexer's flags
+           forever, and it would drop them INVISIBLY: the row would simply show
+           fewer chips than the indexer sent, with nothing saying anything was
+           discarded. `golden` is drawn on the PassThePopcorn row below so the
+           open case is exercised rather than merely permitted.
+
+           Two names are treated distinctly, because they are not
+           indexer-supplied strings at all -- they are derived from the numeric
+           volume factors, and they are the two that change what a download
+           costs you. `TorznabRssParser.GetFlags` does exactly this:
+
+               if (downloadFactor == 0.5) flags.Add(IndexerFlag.HalfLeech);
+               if (downloadFactor == 0.0) flags.Add(IndexerFlag.FreeLeech);
+
+           Which is why AN ABSENT FLAG MEANS UNKNOWN, NEVER "not freeleech".
+           The comparison is exact equality against 0.0 and 0.5 on a double
+           defaulting to 1, so a 25% or a 75% promo produces no flag at all.
+           And `GetFlags` is called only inside `if (torrentInfo != null)` --
+           `NewznabRssParser` never touches an IndexerFlag -- so every usenet
+           result yields an empty array whatever the indexer is offering.
+           A usenet row therefore says "not reported", a torrent row with an
+           empty array says "none reported", and neither says "None", which a
+           reader would take as the ratio-safe claim it is not.
+
+           What is NOT here: `repack` and `proper`. Both are release-title
+           qualifiers the *Arrs parse out of the name -- the REPACK below is
+           visible in the release title where it belongs -- and neither is ever
+           emitted in `indexerFlags`. Drawing them in this column invented a
+           status our own artefact then taught to a reader.
+           =============================================================== -->
       <!-- The only list in the product that abandoned the roving model, on the
            only v0.1 screen with a stateful outbound action: 28 individual tab
            stops inside 10 rows, no row reachable by Tab at all, so the arrow
@@ -529,7 +610,7 @@
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>214</td>
             <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>41 / 9<span class="sr"> — 41 seeders, 9 leechers</span></td>
             <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/UHD</td>
-            <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip">internal</span> <span class="chip">freeleech</span></td>
+            <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip">internal</span> <span class="chip chip--leech">freeleech</span></td>
             <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
               <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
               <a class="btn btn--icon btn--sm" href="#" title="Open the TorrentLeech page for this release, in a new tab" aria-label="Open the TorrentLeech page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
@@ -548,7 +629,7 @@
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>214</td>
             <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>41 / 9<span class="sr"> — 41 seeders, 9 leechers</span></td>
             <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/UHD</td>
-            <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip">internal</span> <span class="chip">freeleech</span></td>
+            <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip">internal</span> <span class="chip chip--leech">freeleech</span></td>
             <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
               <button type="button" class="btn btn--sm">Search again</button>
               <a class="btn btn--icon btn--sm" href="#" title="Open the TorrentLeech page for this release, in a new tab" aria-label="Open the TorrentLeech page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
@@ -565,7 +646,7 @@
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>1,208</td>
             <td data-col="peers" class="is-num muted" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>n/a</td>
             <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/UHD</td>
-            <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span>None</td>
+            <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="sr">Flags are </span>not reported<span class="sr">: this is a usenet result and Prowlarr emits indexer flags for torrents only</span></td>
             <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
               <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
               <a class="btn btn--icon btn--sm" href="#" title="Open the NZBgeek page for this release, in a new tab" aria-label="Open the NZBgeek page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
@@ -582,7 +663,7 @@
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>1,208</td>
             <td data-col="peers" class="is-num muted" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>n/a</td>
             <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/UHD</td>
-            <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span>None</td>
+            <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="sr">Flags are </span>not reported<span class="sr">: this is a usenet result and Prowlarr emits indexer flags for torrents only</span></td>
             <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
               <button type="button" class="btn btn--sm">Search again</button>
               <a class="btn btn--icon btn--sm" href="#" title="Open the NZBgeek page for this release, in a new tab" aria-label="Open the NZBgeek page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
@@ -599,7 +680,7 @@
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>512</td>
             <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>122 / 18<span class="sr"> — 122 seeders, 18 leechers</span></td>
             <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/HD</td>
-            <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span>None</td>
+            <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="sr">Flags are </span>none reported<span class="sr">: the indexer sent an empty list, which is not a claim that the download counts fully toward ratio</span></td>
             <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
               <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
               <a class="btn btn--icon btn--sm" href="#" title="Open the TorrentDay page for this release, in a new tab" aria-label="Open the TorrentDay page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
@@ -616,7 +697,7 @@
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>306</td>
             <td data-col="peers" class="is-num muted" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>n/a</td>
             <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/HD</td>
-            <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span>None</td>
+            <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="sr">Flags are </span>not reported<span class="sr">: this is a usenet result and Prowlarr emits indexer flags for torrents only</span></td>
             <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
               <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
               <a class="btn btn--icon btn--sm" href="#" title="Open the DrunkenSlug page for this release, in a new tab" aria-label="Open the DrunkenSlug page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
@@ -635,7 +716,7 @@
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>98</td>
             <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>64 / 5<span class="sr"> — 64 seeders, 5 leechers</span></td>
             <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/HD</td>
-            <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip">repack</span></td>
+            <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip chip--leech">halfleech</span></td>
             <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
               <button type="button" class="btn btn--sm" data-act="grab" aria-disabled="true"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
               <a class="btn btn--icon btn--sm" href="#" title="Open the IPTorrents page for this release, in a new tab" aria-label="Open the IPTorrents page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
@@ -653,7 +734,7 @@
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>77</td>
             <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>19 / 2<span class="sr"> — 19 seeders, 2 leechers</span></td>
             <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/UHD</td>
-            <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip">internal</span></td>
+            <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip">internal</span> <span class="chip">golden</span></td>
             <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
               <button type="button" class="btn btn--sm" data-act="grab" aria-disabled="true"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
               <a class="btn btn--icon btn--sm" href="#" title="Open the PassThePopcorn page for this release, in a new tab" aria-label="Open the PassThePopcorn page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
@@ -670,7 +751,7 @@
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>41</td>
             <td data-col="peers" class="is-num muted" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>n/a</td>
             <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/HD</td>
-            <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span>None</td>
+            <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="sr">Flags are </span>not reported<span class="sr">: this is a usenet result and Prowlarr emits indexer flags for torrents only</span></td>
             <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
               <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
               <a class="btn btn--icon btn--sm" href="#" title="Open the NZBFinder page for this release, in a new tab" aria-label="Open the NZBFinder page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
@@ -687,7 +768,7 @@
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>402</td>
             <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>88 / 11<span class="sr"> — 88 seeders, 11 leechers</span></td>
             <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/HD</td>
-            <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span>None</td>
+            <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="sr">Flags are </span>none reported<span class="sr">: the indexer sent an empty list, which is not a claim that the download counts fully toward ratio</span></td>
             <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
               <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
               <a class="btn btn--icon btn--sm" href="#" title="Open the TorrentLeech page for this release, in a new tab" aria-label="Open the TorrentLeech page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
@@ -722,7 +803,7 @@
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>155</td>
             <td data-col="peers" class="is-num muted" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>n/a</td>
             <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/HD</td>
-            <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip">proper</span></td>
+            <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="sr">Flags are </span>not reported<span class="sr">: this is a usenet result and Prowlarr emits indexer flags for torrents only</span></td>
             <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
               <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
               <a class="btn btn--icon btn--sm" href="#" title="Open the abNZB page for this release, in a new tab" aria-label="Open the abNZB page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
@@ -734,6 +815,10 @@
     </div>
 
     <p class="section note" data-when="live partial denied"><span class="statebar__tag">mockup</span> A grab is acknowledged, not applied optimistically. The button writes a queued command and the row shows <span class="chip chip--pending">pending</span> until Prowlarr answers. A failure changes that chip on the same visible row and raises a message carrying the upstream text verbatim, with Retry and Dismiss. The row never silently reverts. Grabbing the 26-day-old HDBits release above is wired to fail, so that path is reachable from this page.</p>
+
+    <p class="section note" data-when="live partial denied"><span class="statebar__tag">mockup</span> The Indexer flags column renders whatever Prowlarr sends, as an opaque tag. <span class="mono">IndexerFlag</span> is a subclassable class rather than an enum: the base type declares seven, PassThePopcorn subclasses it to add <span class="chip">golden</span> and <span class="chip">approved</span>, and the next indexer definition may add more, so an allowlist here would drop flags invisibly. <span class="chip chip--leech">freeleech</span> and <span class="chip chip--leech">halfleech</span> carry one step of emphasis because they alone are derived from <span class="mono">downloadvolumefactor</span> rather than sent as strings, and they alone change what the download costs your ratio.</p>
+
+    <p class="section note" data-when="live partial denied"><span class="statebar__tag">mockup</span> An absent flag means unknown, and never <em>not freeleech</em>. Prowlarr compares the factor by exact equality against <span class="mono">0.0</span> and <span class="mono">0.5</span> only, so a 25% or a 75% promotion produces no flag at all, and it reads the field for torrents alone, so a usenet result yields an empty array whatever the indexer is offering. That is why a usenet row reads <span class="mono">not reported</span> and a torrent row with an empty list reads <span class="mono">none reported</span>, and why neither reads <span class="mono">None</span>. The release titles below still carry REPACK and PROPER where those belong, in the name the *Arrs parse; they are not indexer flags and no longer appear in this column.</p>
 
     <p class="section note" data-when="live partial denied"><span class="statebar__tag">mockup</span> The external-link icon on each row opens the indexer's own page for that release. It is never a download link. Prowlarr's <span class="mono">downloadUrl</span> and <span class="mono">magnetUrl</span> carry its API key in the query string, and that key is full-admin, so neither field is sent to the browser at all: Grab posts an opaque release id to UsArr, and UsArr talks to Prowlarr.</p>
 
@@ -879,7 +964,7 @@
       <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
       <div class="banner__body">
         <div class="banner__title">Nothing on this install imports a book, so a grab ends in your download client</div>
-        <div class="banner__text">Neither Audiobooks nor Ebooks has a request destination, and neither does Music or Comics: v0.1 connects no command sink, and Readarr — the *Arr that used to own books — was archived on 27 Jun 2025. Grabbing works and the file will download; after that no service renames it, moves it into a library, or tells UsArr what became of it. Audiobookshelf will show the book once the file is in <span class="mono">/media/books</span>, which is the folder it reports as watched for this library.</div>
+        <div class="banner__text"><span data-inst="full">Neither Audiobooks nor Ebooks has a request destination, and neither does Music or Comics: this install connects no command sink, and Readarr — the *Arr that used to own books — was archived on 27 Jun 2025.</span><span data-inst="v01" hidden>No media type has a request destination, because v0.1 connects no command sink at all — and books have no catalogue source on this install either, so there is no Audiobooks or Ebooks library for a grab to land in. Readarr, the *Arr that used to own books, was archived on 27 Jun 2025.</span> Grabbing works and the file will download; after that no service renames it, moves it into a library, or tells UsArr what became of it. <span data-inst="full">Audiobookshelf will show the book once the file is in <span class="mono">/media/books</span>, which is the folder it reports as watched for this library.</span><span data-inst="v01" hidden>Nothing on this install will show it either: there is no books catalogue source connected yet, so the file sits in your download client until you file it yourself and UsArr has no library row to attach it to.</span></div>
       </div>
       <div class="banner__actions"><a href="libraries.html">Open Libraries</a></div>
     </div>
@@ -922,7 +1007,7 @@
             <td data-col="select" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span>n/a</td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
             <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>3 years</td>
-            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="David Grann - The Wager {Dion Graham} [2023] M4B 125kbps">David Grann - The Wager {Dion Graham} [2023] M4B 125kbps</span><div data-slot="grabstate"><span class="chip chip--done">grabbed 14:07 · sent to qBittorrent</span><div class="cell-sub">UsArr does not import downloads. Audiobookshelf watches <span class="mono">/media/books</span> and will show it once the file is there.</div></div></td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="David Grann - The Wager {Dion Graham} [2023] M4B 125kbps">David Grann - The Wager {Dion Graham} [2023] M4B 125kbps</span><div data-slot="grabstate"><span class="chip chip--done">grabbed 14:07 · sent to qBittorrent</span><div class="cell-sub"><span data-inst="full">UsArr does not import downloads. Audiobookshelf watches <span class="mono">/media/books</span> and will show it once the file is there.</span><span data-inst="v01" hidden>UsArr does not import downloads, and no service on this install catalogues books, so nothing will show it until one is connected.</span></div></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>MyAnonaMouse</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>682 MB</td>
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>1,904</td>
@@ -1051,28 +1136,28 @@
             </tr>
             <tr role="row" aria-rowindex="4">
               <td data-col="media-type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Media type</span>Music</td>
-              <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub">Navidrome is a catalogue, not an importer</div></td>
-              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span>UsArr does not import downloads, and no connected service accepts a music request. Navidrome shows what is already inside the folder it scans, so the file stays in your download client until you move it there.</td>
+              <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub"><span data-inst="full">Navidrome is a catalogue, not an importer</span><span data-inst="v01" hidden>no music catalogue source connected</span></div></td>
+              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span><span data-inst="full">UsArr does not import downloads, and no connected service accepts a music request. Navidrome shows what is already inside the folder it scans, so the file stays in your download client until you move it there.</span><span data-inst="v01" hidden>UsArr does not import downloads, and no connected service accepts a music request. A music server would show the file once it were inside the folder it scans; this install has none yet, so the file stays in your download client.</span></td>
             </tr>
             <tr role="row" aria-rowindex="5">
               <td data-col="media-type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Media type</span>Audiobooks</td>
-              <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub">Audiobookshelf watches a folder</div></td>
-              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span>UsArr does not import downloads. Audiobookshelf watches <span class="mono">/media/books</span> and will show it once the file is there.</td>
+              <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub"><span data-inst="full">Audiobookshelf watches a folder</span><span data-inst="v01" hidden>no audiobook catalogue source connected</span></div></td>
+              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span><span data-inst="full">UsArr does not import downloads. Audiobookshelf watches <span class="mono">/media/books</span> and will show it once the file is there.</span><span data-inst="v01" hidden>UsArr does not import downloads, and no connected service catalogues audiobooks. Audiobookshelf would show the file once it were inside the folder it watches; connecting it is what makes that true.</span></td>
             </tr>
             <tr role="row" aria-rowindex="6">
               <td data-col="media-type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Media type</span>Ebooks</td>
               <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub">Readarr archived 27 Jun 2025</div></td>
-              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span>UsArr does not import downloads, and Readarr — the *Arr that used to own books — was archived on 27 Jun 2025. Audiobookshelf watches <span class="mono">/media/books</span> and will show it once the file is there.</td>
+              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span><span data-inst="full">UsArr does not import downloads, and Readarr — the *Arr that used to own books — was archived on 27 Jun 2025. Audiobookshelf watches <span class="mono">/media/books</span> and will show it once the file is there.</span><span data-inst="v01" hidden>UsArr does not import downloads, and Readarr — the *Arr that used to own books — was archived on 27 Jun 2025. No connected service catalogues ebooks either, so the file stays in your download client and no library row appears for it.</span></td>
             </tr>
             <tr role="row" aria-rowindex="7">
               <td data-col="media-type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Media type</span>Comics</td>
-              <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub">Komga is a catalogue, not an importer</div></td>
-              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span>UsArr does not import downloads, and no connected service accepts a comic request. Komga shows what is already inside the folder it scans, so the file stays in your download client until you move it there.</td>
+              <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub"><span data-inst="full">Kavita is a catalogue, not an importer</span><span data-inst="v01" hidden>no comics catalogue source connected</span></div></td>
+              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span><span data-inst="full">UsArr does not import downloads, and no connected service accepts a comic request. Kavita shows what is already inside the folder it scans, so the file stays in your download client until you move it there.</span><span data-inst="v01" hidden>UsArr does not import downloads, and no connected service accepts a comic request. A comics server would show the file once it were inside the folder it scans; this install has none yet, so the file stays in your download client.</span></td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="note" style="padding-top:8px">Two of the six have an *Arr connected and it still does not help, which is the case the copy exists for: a Prowlarr grab never went through Radarr or Sonarr, so neither has a record of it and neither will pick the file up. The *Arr-backed request path that would change that is v0.2.</p>
+      <p class="note" style="padding-top:8px">Two of the six have an *Arr connected and it still does not help, which is the case the copy exists for: a Prowlarr grab never went through Radarr or Sonarr, so neither has a record of it and neither will pick the file up. The *Arr-backed request path that would change that is v0.2. <span data-inst="v01" hidden>On this install the other four have no catalogue source either, so the honest sentence for them is shorter and worse — and it is drawn rather than softened.</span></p>
     </section>
 
     <p class="section note"><span class="statebar__tag">mockup</span> The first row of the table above is the whole point of this state. It reads <span class="chip chip--done">grabbed 14:07 · sent to qBittorrent</span>, names the watched folder, says in words that UsArr does not import downloads, and then it stops. There is no progress bar, no percentage and no "importing" step, because nothing on this install imports a book and UsArr would have nothing to measure. Four of the six media types here are in exactly this position; the *Arr-backed request path that would change it for the two that are not is v0.2.</p>

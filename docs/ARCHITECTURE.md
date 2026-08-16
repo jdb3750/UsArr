@@ -2306,6 +2306,21 @@ policy, the component conventions and §17.2's navigation resolution — lives i
 [`design/tokens.css`](./design/tokens.css) and its stack decision in ADR-0025. This section stays
 authoritative over both.
 
+⚠️ **This section specifies one product over two installs, and the mockups draw both.** Every rule
+below is written for the product; what changes between installs is which services are connected and
+therefore which media types have a catalogue source. The clickable prototype in
+[`design/mockups/`](./design/mockups/) carries a **milestone-labelled install switcher**, and the two
+positions are the ones the rules have to survive:
+
+| Install | Services | What the screens show |
+|---|---|---|
+| **Full stack** (the mockups' default) | Sonarr, Radarr, Prowlarr, Navidrome, Audiobookshelf, Kavita | All six media types catalogued. This is the default because six populated types is the case the layout has to survive, and a design judged only on two has not been judged. **It is a later milestone than v0.1** — §16 is authoritative, and it sequences the catalogue sources one at a time *after* v0.1 — so no screen, count or caption may present it as what v0.1 ships. |
+| **v0.1** | Sonarr, Radarr, Prowlarr | Movies and TV catalogued; music, audiobooks, ebooks and comics present as media types with **no catalogue source**, each naming the service that will populate it (§17.2). Requests still covers all six over the Prowlarr free-text path. |
+
+Where a rule below reads differently on the two — Block A's sourceless rows (§17.2), the group set
+on Search (§17.4), `matched by title` (§17.3), a library's binding (§17.8) — the difference is marked
+at the rule rather than left for the reader to infer. **The rules themselves do not fork.**
+
 ### 17.1 The UI philosophy, as a design constraint
 
 > **Utilitarian over stylish. Density and speed over animation. Standard patterns over novel ones.
