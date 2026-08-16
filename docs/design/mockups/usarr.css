@@ -511,7 +511,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
   font-weight: 600;
   border-left-color: var(--fg);
 }
-.nav__link--sub { padding-left: var(--sp-8); font-size: var(--fs-sm); }
 .nav__count {
   margin-left: auto;
   font-size: var(--fs-xs);
@@ -901,7 +900,6 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 .avail--full { color: var(--st-ok); }
 .avail--none { color: var(--st-err); }
 .avail--part { color: var(--fg-muted); }
-.avail__q { color: var(--fg-muted); font-size: var(--fs-xs); }
 
 /* --- 2.5 Banners, callouts, empty states --------------------------------- */
 
@@ -1177,7 +1175,6 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 }
 .tbl .cell-sub { color: var(--fg-muted); font-size: var(--fs-sm); line-height: var(--lh-sm); }
 .tbl .cell-actions { display: flex; gap: var(--sp-3); align-items: center; }
-.tbl tr.is-expand > td { background: var(--surface); }
 
 /* Verbatim upstream text is machine data: mono, wrapped, never truncated. */
 .verbatim {
@@ -1205,10 +1202,25 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
    string, so the two cannot drift. */
 .stacklabel { display: none; }
 
-.synclist { display: flex; flex-direction: column; gap: var(--sp-1); font-size: var(--fs-sm); line-height: var(--lh-sm); }
-.synclist__row { display: flex; gap: var(--sp-3); }
-.synclist__ch { color: var(--fg-muted); min-width: 62px; }
-.synclist__t { font-variant-numeric: tabular-nums; }
+/* SEVEN RULES WERE DELETED HERE AND ABOVE, and this note is what stops the
+   next sweep rediscovering them. They styled markup that no longer exists, so
+   they had no call site anywhere in the five screens or in usarr.js:
+     .synclist / __row / __ch / __t  -- the per-service full/delta/reconcile
+       timestamp stack, whose markup came out of services.html at db24c1c and
+       whose four rules were left behind
+     .avail__q                       -- an availability "?" affordance that was
+       never in any screen, in any commit
+     .nav__link--sub                 -- sub-nav indentation, out of the markup
+       since db24c1c
+     .tbl tr.is-expand > td          -- an expanded-row ground for an expansion
+       the tables do not have
+   WHAT WAS DELIBERATELY NOT DELETED, on one rule: a RUNG OF A DECLARED SCALE
+   is not dead just because nothing reads it today -- the scale is stated in
+   full because it is a contract, and half a ramp is worse than an unused one.
+   That keeps --r-0, --t-instant and --t-menu-in (radius and motion scales),
+   .textarea in the .input/.select/.textarea primitive set, and
+   .nav__count--warn, whose --err sibling IS in the markup. The distinction is
+   component versus scale, not used versus unused. */
 
 .detail { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--sp-5) var(--sp-7); padding: var(--sp-2) 0 var(--sp-4); }
 .detail h4 { font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: 600; margin-bottom: var(--sp-3); color: var(--fg-muted); }
