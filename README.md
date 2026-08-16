@@ -15,12 +15,13 @@ that plugs into the players you already use.**
 ## What it is
 
 UsArr is a self-hosted **aggregation gateway** for the whole media-acquisition ecosystem, and it
-arrives in stages rather than all at once. **v0.1 aggregates Sonarr, Radarr and Prowlarr for
-acquisition, and Navidrome, Audiobookshelf and Komga for libraries.** Kavita follows in v0.2, and
-Lidarr, LazyLibrarian, Mylar3, Kapowarr, Jellyfin and the post-Readarr book tools in later
-milestones — [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §16 is authoritative for which. All of
-it is presented as **one library, one search box, one tag vocabulary, one request flow, one
-credential.**
+arrives in stages rather than all at once. **v0.1 aggregates Sonarr, Radarr and Prowlarr** — the
+\*Arr library sync plus free-text search-and-grab. **The library servers then arrive one at a time
+after it**, in the order §16.1 sets: Navidrome and Kavita (whichever the delta probe favours), then
+Audiobookshelf, then Komga. Lidarr, LazyLibrarian, Mylar3, Kapowarr, Jellyfin and the post-Readarr
+book tools come in later milestones —
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §16 is authoritative for which. All of it is
+presented as **one library, one search box, one tag vocabulary, one request flow, one credential.**
 
 **It coexists with your stack; it does not replace it.** Sonarr keeps doing acquisition, Jellyfin
 keeps doing playback, Navidrome keeps being an excellent music server. UsArr is the layer that makes
@@ -57,8 +58,9 @@ nothing below is built: the Search-and-Grab path is the one shipped feature.
 
 | Feature | Status |
 |---|---|
-| Unified library across **six media types** — movies, TV, music, ebooks, audiobooks, comics | 📋 Planned — v0.1 |
-| Read-only catalogue sources: **Navidrome, Audiobookshelf, Komga** (plus Sonarr + Radarr) — Kavita in v0.2 | 📋 Planned — v0.1 |
+| **Six-media-type foundation** — the schema covers movies, TV, music, ebooks, audiobooks and comics, and requesting covers all six; **the v0.1 catalogue itself is film and TV**, because the library servers arrive after v0.1 | 📋 Planned — v0.1 |
+| **\*Arr library sync — Sonarr and Radarr** — full import, delta and reconciliation, which is what proves the local-first thesis on a real library | 📋 Planned — v0.1 |
+| Read-only catalogue sources: **Navidrome, Audiobookshelf, Kavita, then Komga** — one at a time after v0.1, each its own milestone. Order set by a delta-watermark probe (ARCHITECTURE §16.1) | 📋 Planned — after v0.1 |
 | **User-defined libraries**, configured separately from services, with a correction layer | 📋 Planned — v0.1 (correction UI v0.3) |
 | **Six-type schema** — `work_credit` M:N attribution, edition-scoped `work_track`, the `comic_issue` kind, **the `person` kind**, audiobook edition columns | 📋 Planned — v0.1 (migration 0001 or never — ADR-0030, ADR-0031, ADR-0033) |
 | Local-first reads; no upstream call on any render path | 📋 Planned — v0.1 |
@@ -66,7 +68,7 @@ nothing below is built: the Search-and-Grab path is the one shipped feature.
 | Instant search: client prefix index → FTS5 hybrid (prefix + substring; **no typo tolerance**) | 📋 Planned — v0.1 |
 | Source tagging: **usenet / torrent**, first-class and filterable | 🚧 Partial — v0.1: derived and served on search results; not yet filterable |
 | Minimal write path — monitor, unmonitor, delete, add — on a durable command queue | 📋 Planned — v0.1 |
-| Sync: full import + `/history/since` delta (Sonarr/Radarr) + **an ordered page-walk delta for the catalogue sources, none of which has a changed-since endpoint** + **reconciliation with 7-day tombstones** | 📋 Planned — v0.1 |
+| Sync: full import + `/history/since` delta (Sonarr/Radarr) + **reconciliation with 7-day tombstones**. The ordered page-walk delta for the catalogue sources is specified now and built with the first of them | 📋 Planned — v0.1 |
 | **Services health screen** — what is broken, why, and the button that fixes it | 📋 Planned — v0.1 |
 | **Recent grabs** — the last ten grabs with their state, so the acquisition loop has a memory. Not the request model, which is v0.2 | 📋 Planned — v0.1 |
 | Image pipeline: proxy, downscale, ThumbHash, **viewport-prioritised cold start** | 📋 Planned — v0.1 |
@@ -78,7 +80,7 @@ nothing below is built: the Search-and-Grab path is the one shipped feature.
 | Feature | Status |
 |---|---|
 | Requests: one Add that routes, availability states, per-season TV, approval workflow | 📋 Planned — v0.2 |
-| **Kavita** as the fourth read-only catalogue source | 📋 Planned — v0.2 |
+| **The catalogue sources, one milestone each** — Navidrome and Kavita first (order set by the delta-watermark probe), then Audiobookshelf, then Komga. Each lights up its media types in the grid and search | 📋 Planned — after v0.1, ahead of v0.4 for Navidrome |
 | One search box spanning owned **and** unowned (out-of-band provider search, streamed) | 📋 Planned — v0.2 |
 | **Cross-media linking** via a prebuilt Wikidata CC0 edge artifact — *Train Dreams* end to end | 📋 Planned — v0.3 |
 | Declarative YAML service manifests (add a service without code) | 📋 Planned — v0.3 |

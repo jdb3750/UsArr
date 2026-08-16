@@ -185,8 +185,9 @@ AGPL-compatibility check: MIT, BSD and Apache-2.0 are fine, GPL-2.0-only is not.
 
 Detail lives in `docs/ARCHITECTURE.md` §16, which wins over this summary.
 
-- **v0.1** — unified library + search across all six media types, plus the Prowlarr
-  search-and-grab request path. Prove the replica thesis on real data.
+- **v0.1** — the \*Arr library sync (Sonarr, Radarr) + search, on a six-type schema, plus the
+  Prowlarr search-and-grab request path. Prove the replica thesis on real data. **No catalogue
+  source ships in v0.1**; Navidrome, Audiobookshelf, Kavita and Komga follow one at a time (§16.1).
 - **v0.2** — requests.
 - **v0.3** — cross-media linking.
 - **v0.4** — the gateway, narrowed: an OpenSubsonic read-only subset over one Navidrome.

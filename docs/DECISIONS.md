@@ -58,7 +58,8 @@ distinctions now matter and are used consistently below:
 | [0032](#adr-0032) | Read-only catalogue sources move early; command sinks defer | **Accepted** — **amends** §16; **one member reversed by [ADR-0035](#adr-0035)** |
 | [0033](#adr-0033) | `work.kind` gains `person`; a credit is not a music artist | **Accepted** — owner-decided 2026-08-16; refines ADR-0009, ADR-0031 |
 | [0034](#adr-0034) | The project keeps the name UsArr | **Accepted** — owner-decided 2026-08-16; naming only, nothing in the codebase moves |
-| [0035](#adr-0035) | Kavita, not Komga, is v0.1's comics-and-books catalogue source | **Accepted** — owner-decided 2026-08-16; **reverses one member of [ADR-0032](#adr-0032)**, confirms [ADR-0030](#adr-0030) |
+| [0035](#adr-0035) | Kavita, not Komga, is v0.1's comics-and-books catalogue source | **Accepted** — owner-decided 2026-08-16; **reverses one member of [ADR-0032](#adr-0032)**, confirms [ADR-0030](#adr-0030); **its milestone re-sequenced by [ADR-0036](#adr-0036)**, its §2 probe intact |
+| [0036](#adr-0036) | No catalogue source ships in v0.1; they arrive one at a time after it | **Accepted** — owner-decided 2026-08-16; **amends** §16; **re-sequences [ADR-0032](#adr-0032) and [ADR-0035](#adr-0035)** without rejecting any source |
 
 ---
 
@@ -2466,9 +2467,11 @@ way, superseding its single `ArtistID`/`AlbumArtistID` fields with a `Participan
 
 **Status:** Accepted · **Amends [`ARCHITECTURE.md`](./ARCHITECTURE.md) §16**, which is authoritative
 for scope. The README's generated status tables follow §16. · 🚩 **One member is reversed by
-[ADR-0035](#adr-0035): Kavita is v0.1's comics-and-books source and Komga is v0.2**, because the
-owner runs Kavita. Everything else in this ADR — the shape, the payment, the deferral of the command
-sinks, and every argument below — stands unchanged; read the swapped pair through ADR-0035.
+[ADR-0035](#adr-0035): Kavita is the comics-and-books source and Komga follows it**, because the
+owner runs Kavita. · 🚩 **The milestone is re-sequenced by [ADR-0036](#adr-0036): no catalogue source
+ships in v0.1.** All four still arrive, one at a time after v0.1. **This is re-sequencing, not
+rejection** — the deferral of the command sinks, the honest costing, and every argument below stand
+unchanged; only *when* the catalogue sources land moves. Read this ADR through both amendments.
 
 ### Context
 
@@ -2854,7 +2857,13 @@ recorded here so the next attempt does not rediscover them the expensive way.
 **Status:** Accepted · **owner-decided 2026-08-16** · **Reverses one member of
 [ADR-0032](#adr-0032)**, whose shape is otherwise untouched · **amends
 [`ARCHITECTURE.md`](./ARCHITECTURE.md) §16**, which remains authoritative for scope ·
-**re-examines [ADR-0030](#adr-0030)** and confirms it.
+**re-examines [ADR-0030](#adr-0030)** and confirms it. · 🚩 **Re-sequenced by
+[ADR-0036](#adr-0036): Kavita does not ship in v0.1** — no catalogue source does. **What survives
+intact is everything this ADR actually establishes**: Kavita is the comics-and-books source and Komga
+follows it (the *ordering* of §16.1's sequence, not membership of v0.1); §1's identity consequence,
+which now attaches to the milestone Kavita lands in; and §2's watermark probe with its three-clause
+pass condition, which still decides build order but **runs before the first catalogue adapter rather
+than on day one**. Read "v0.1" throughout this ADR as "the first catalogue milestone".
 
 ### Context
 
@@ -2885,8 +2894,9 @@ it sounds: one member of a four-item list changes place.
 > and **no media type loses its v0.1 source**: Kavita covers comics and manga, and covers books as
 > well.
 >
-> **The build *order* inside v0.1 is not fixed by this ADR. It is decided by the day-one watermark
-> spike in §3 below**, whose result is falsifiable and whose two branches are written down in advance.
+> **The build *order* is not fixed by this ADR. It is decided by the watermark spike in §2 below**,
+> whose result is falsifiable and whose two branches are written down in advance. *(The spike is §2;
+> an earlier revision of this line said §3, which is ADR-0030's re-examination.)*
 
 ### 1. Identity gets weaker in v0.1, and it is now the default path rather than an edge case
 
@@ -3029,3 +3039,143 @@ v0.2 concern, so it is re-examined here rather than inherited.
   hardest source — but the spike decides *order*, not *membership*, and membership is decided by
   which service the owner runs. Holding the ADR open would leave §16 naming a source nobody can test
   against.
+
+---
+
+<a id="adr-0036"></a>
+
+## ADR-0036 — No catalogue source ships in v0.1; they arrive one at a time after it
+
+**Status:** Accepted · **owner-decided 2026-08-16** · **Amends
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) §16**, which remains authoritative for scope ·
+**Re-sequences [ADR-0032](#adr-0032) and [ADR-0035](#adr-0035)** · **Rejects nothing** — every source
+either of them names still arrives.
+
+### Context
+
+The owner was asked whether v0.1 should grow from two providers to five, and handed the decision
+back: *"I'm fine with starting small, it's honestly sort of whatever to me."* That is a real answer
+and it points one way. "Starting small" is the constraint; the question is what small means when two
+Accepted ADRs have already argued the other direction.
+
+**ADR-0032 moved four catalogue sources out of the v1.0 "Breadth" bucket and put three of them into
+v0.1. ADR-0035 changed which three.** Neither changed the count. Both were right about the
+*roadmap* — leaving five of six media types empty until the last milestone makes the product's
+one-sentence claim a claim about Sonarr and Radarr — and neither asked the separate question of
+whether v0.1 specifically can carry three of them at once.
+
+**§16.0 already priced them, correctly, and then did not act on the price:** four hand-written Tier 0
+Go adapters, four auth schemes, one with a lifecycle, four hierarchies, and **one entirely new sync
+channel** (channel 3b, §7.1a) that no \*Arr needs. Against that, **what is actually built today is
+the Prowlarr search-and-grab path** — the \*Arr *library* sync, the schema tables it writes, the
+grid, the image pipeline and local search are all still design. So ADR-0032's v0.1 asked for three
+adapters to be written on top of shared read machinery that has never imported anything, and for a
+new delta channel to be proven at the same time as the delta channel it sits beside.
+
+**And the repository had begun to disagree with itself about it**, which is the practical cost:
+`ARCHITECTURE.md` §6.4 still justified a v0.1 rule by *"v0.1 ships Komga"* after ADR-0035 said it did
+not, §7.1a's Kavita row still read *"no delta at all"* after ADR-0035 verified the sortable keys, and
+`SETUP-CHECKLIST.md` still filed Audiobookshelf and Komga under v1.0. Every one of those is drift
+from a scope line that had been amended twice without the documents following.
+
+### Decision
+
+> **v0.1 ships Sonarr, Radarr and Prowlarr. No catalogue source ships in v0.1.**
+>
+> **The \*Arr library sync lands first**, because it is the thing that proves the replica thesis on
+> real data — a real Sonarr and a real Radarr, imported, delta-synced, reconciled, searched and
+> rendered fast.
+>
+> **The catalogue sources then arrive one at a time, after v0.1** — Navidrome, Audiobookshelf and
+> Kavita, then Komga — **each behind a milestone that ships on its own**, with its own success
+> criterion: *this source's library appears in the grid, is searchable, delta-syncs, and its Services
+> row is honest about what it cannot do.*
+>
+> **The order within that sequence is decided by the [ADR-0035](#adr-0035) §2 watermark probe, not
+> fixed here: Kavita first if it passes, Navidrome first if it fails.** Komga is last regardless.
+> **Navidrome must precede v0.4**, whose success criterion needs a populated music replica.
+>
+> **This is re-sequencing, not rejection.** Every source ADR-0032 named still arrives. Nothing is
+> cut; the count of milestones goes up and the size of each goes down.
+
+### Why this and not the alternatives
+
+**1. It is the only reading of the owner's answer that is actually smaller.** He declined to pick,
+which puts the burden on the design thread to choose the option that fails least badly if the
+estimate is wrong. Three adapters in v0.1 fails by not shipping; four milestones of one adapter each
+fails by shipping later than hoped, with working software at every step.
+
+**2. `CLAUDE.md`'s stated biggest risk is never shipping, and this is the shape of that risk.**
+A milestone whose job is *"prove the replica thesis"* and which simultaneously introduces three new
+services, three auth schemes and a new sync channel is not proving a thesis; it is testing four
+things at once and learning nothing clean from a failure.
+
+**3. Shared machinery has to exist before it can be shared.** §16.0's honest bullet is that
+`RemoteItem`, the registry, the circuit breaker, the import phasing and the reconciliation sweep are
+reused unchanged by every catalogue adapter. They are reused unchanged *once they exist and have run*.
+Writing the first catalogue adapter against machinery that has never imported a real library is how
+the shared layer gets shaped around whichever source happened to go first.
+
+**4. Each catalogue source is independently valuable and independently demonstrable**, which is the
+test for whether a sequence is a sequence or a stalling tactic. "Navidrome ships and your music is in
+the grid" is a release note. So is Kavita's. Nothing in the sequence needs the next item to be
+useful.
+
+**5. The probe is a better gate one step later than on day one.** ADR-0035 made the Kavita
+`LastChapterAdded` spike day-one *because it decided build order inside v0.1*. With no catalogue
+source in v0.1 it gates nothing on day one, and running it early would mean running it before there
+is anything to apply the answer to. It moves to immediately before the first catalogue adapter is
+written, **with its three-clause pass condition unchanged and still written down in advance** — that
+was the point of writing it down, and deferring the run must not turn it back into a guess.
+
+### Consequences
+
+- **v0.1's six-type claim narrows, and has to be said out loud rather than implied.** The **schema**
+  is six-type — it must be, migration 0001 can never be edited. **Requesting** is six-type — Prowlarr
+  Search-and-Grab covers all six categories, which is already shipped. **The catalogue is film and
+  TV.** §16's v0.1 entry and the README rows now say exactly that. Anything that keeps claiming
+  "unified library across six media types" for v0.1 is the drift this ADR exists to stop.
+- **A media type with no configured source must degrade honestly**, which is principle 3 and is the
+  same path an install with no Navidrome would take anyway. This makes the honest-degradation path
+  the *common* path in v0.1 rather than an edge case — which is a benefit, because it gets exercised
+  from the first release instead of being discovered later.
+- **Channel 3b (§7.1a) is specified now and built with the first catalogue adapter.** The
+  specification stays in v0.1's documents because the watermark column, the overlap rule and the
+  page-walk-stability restart are what the adapters get written against, and because the probe needs
+  its pass condition on paper. **Nothing about it is implemented in v0.1.**
+- **The libraries subsystem stays in v0.1, and loses its best demonstration.** Its four tables belong
+  in migration 0001 regardless, its screen is one of the five `CLAUDE.md` calls essential, and a
+  library binding carries the request destination v0.1's write path routes on. But the
+  Ebooks/Audiobooks split over one Audiobookshelf library — the concrete improvement over upstream's
+  own organisation — moves with Audiobookshelf. v0.1 demonstrates it on something narrower and
+  honest: an Anime library bound to a Sonarr tag, or one Films library spanning a 1080p and a 4K
+  Radarr.
+- **ADR-0035's §1 identity consequence is not cancelled, only rescheduled.** Free Kavita's null
+  identifier fields still make *"not identified"* the ordinary case — at the milestone Kavita lands
+  in. The nullable column and the badge stay in v0.1 because they cannot be retrofitted, and §6.4 now
+  says that rather than justifying them with a source v0.1 does not have.
+- **No schema change, and no ADR is reversed.** `work.kind` is untouched, migration 0001 is
+  untouched, and the provider registry absorbs the whole sequence by construction — which is the
+  registry doing exactly the job it was built for.
+- **`SETUP-CHECKLIST.md` gets less useful in the short term and more honest.** The owner does not
+  need to stand up anything new for v0.1 beyond what he runs. Kavita, Navidrome and Audiobookshelf
+  each become "needed at the milestone that adapts them", and Komga becomes "only if you adopt it".
+
+### Alternatives rejected
+
+- **Keeping ADR-0035's three sources in v0.1.** It is the status quo and it is what §16 said an hour
+  ago. Rejected because the price §16.0 states in its own words — four adapters, four auth schemes,
+  a new sync channel — was written down and then not treated as a constraint on the milestone that
+  would pay it.
+- **Growing v0.1 to five providers**, which is the question the owner was actually asked. It is the
+  same mistake one size larger, and "I'm fine with starting small" is not a mandate for it.
+- **Cutting the catalogue sources back to v1.0 entirely.** That is ADR-0032's problem restored: five
+  of six media types are empty screens until the last milestone. ADR-0032's roadmap conclusion was
+  right and is preserved; only its v0.1 membership changes.
+- **Fixing the order now instead of leaving it to the probe.** Tempting because it would let
+  `SETUP-CHECKLIST.md` name a single next service. Rejected for the reason ADR-0035 gives: the
+  evidence says `LastModifiedDate` is unusable and says nothing conclusive about `LastChapterAdded`,
+  and recording a guess is the exact mistake ADR-0032 correctly refused to make about Komga.
+- **Editing ADR-0032 and ADR-0035 in place.** The file's convention is a new entry with the amendment
+  stated and a flag on the amended ADR's Status line, which is what ADR-0035 itself did to ADR-0032.
+  Editing in place would delete reasoning that is still correct about everything except timing.
