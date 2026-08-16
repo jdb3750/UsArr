@@ -3068,12 +3068,18 @@ document now says which half of itself is true today**, so a reader can tell a p
 report — and the four rows above are the checklist for closing the distance, in the order the
 dependencies allow: `write_queue` needs a writer before anything else on this list can move.
 
-**The reason it is not a nicety.** UsArr's only write path in v0.1 produces a multi-gigabyte download,
-and the confirmation currently lives in a chip inside a *search result row*, which is transient: one
-navigation away and there is no UsArr-side record that anything happened, no way to tell whether you
+**The reason it is not a nicety, stated as the argument that WON rather than as a description of
+today.** UsArr's only write path in v0.1 produces a multi-gigabyte download, and before this block
+existed the confirmation lived only in a chip inside the release row: transient, so one navigation
+away there was no UsArr-side record that anything had happened, no way to tell whether you had
 already grabbed something an hour ago, no way to recover a release name after a restart, and no
 answer to *"did that one work?"*. A hub whose acquisition loop has no memory is a slower way to reach
-Prowlarr's own UI, which does keep a history. It also closes a three-document gap: this section
+Prowlarr's own UI, which does keep a history. ⚠️ **Past tense on purpose: both halves of that
+sentence have since moved.** Recent grabs shipped, so the durable record exists; and the release
+results table itself moved off Search onto this screen (`ce32b15`), so the chip is no longer *in a
+search result row* at all. The paragraph is kept because the reasoning is why the block is funded —
+but it must not be read as a report of the current UI, which is exactly the failure the table above
+this one exists to stop. It also closes a three-document gap: this section
 required *"the user's own request list with state"*, §16's v0.1 did not fund one (the request model
 is v0.2), and §16 wins by its own rule — so the shipping answer was "no grab history in v0.1", stated
 nowhere.
@@ -3156,11 +3162,30 @@ correctly elsewhere — the `expired` state replaces every grab control with **`
 failure path branches on the upstream code: for an expired-cache 400 the button is `Search again` and
 the chip reads `expired — search again`, not `failed: rejected`, which reads as "the tracker refused
 you". **And where the correct action is not something UsArr can offer, naming the non-action beats
-offering a fake one**: when the all-indexers-failed correlation concludes a host-level resolution
-failure inside Prowlarr's own container, `Open Services` and `Retry` are both dead ends — Services
-will correctly show Prowlarr as reachable, because it is — and the honest surface is the sentence
-plus `Retry the search`. A screen that reasons its way to a correct diagnosis and then hands the user
-two buttons that cannot act on it is worse than one that says so.
+offering a fake one**: when every indexer in the fan-out fails with the same status and the same
+reason, the screen collapses that to **one banner rather than N**, says that N separate indexers do
+not usually produce one identical error at the same moment so this is one fault, and names the
+**shared path** without claiming which part of it broke. `Open Services` is a dead end there —
+Services will correctly show Prowlarr as reachable, because it is — and the honest surface is that
+sentence plus `Search again`.
+
+⚠️ **A host-level resolution failure inside Prowlarr's own container is this section's EXAMPLE, and
+it is deliberately not the asserted verdict.** Several conditions produce identical evidence, so a
+screen that names one of them is guessing with a confident voice — and the shipped screen does not:
+a test enforces that no copy on it says *DNS*, *resolution*, *container* or *firewall*. Read the
+example as what the correlation is *evidence consistent with*, never as what the banner says. A
+screen that reasons its way to a plausible diagnosis and then hands the user two buttons that cannot
+act on it is worse than one that says what it can see and stops.
+
+📌 **The action is `Search again`, not `Retry the search`, and the reason is the guard rather than
+the merits.** Retrying a *search* costs nothing, so on the merits either wording is fine — the ban on
+`Retry` exists because `Retry` beside an ambiguous grab outcome is how a user ends up with two copies
+of a 68 GB release. But that ban is enforced over rendered strings, and **a guard over words cannot
+see context**: the choice is between a guard that is absolute and a guard that has exceptions, and a
+guard with exceptions is one people argue with rather than obey. A screen that bans a word in one
+paragraph and uses it in another teaches the next author that the ban is soft. `Search again` is the
+screen's own existing vocabulary for this, which is what the Requests thread used when it implemented
+the case; the cost of keeping the guard absolute is one word.
 
 **A grab can report failure after it has already been handed over, so the grab-result surface has
 three states rather than two — and this is a production observation rather than a design inference.**
