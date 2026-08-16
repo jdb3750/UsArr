@@ -1958,7 +1958,8 @@ server 404s, and exposes no health signal for the subsystem that causes it, so a
 needs a guard built on day one; LazyLibrarian returns HTTP 200 with `Success: false`; Mylar3 has no
 spec, no pagination and no delta; Kapowarr's API documentation reads *"Coming Soon"*. Meanwhile
 **Prowlarr free-text search-and-grab already covers requesting for every one of the six media types
-in v0.1** — books at `7020` and `3030`, comics and manga at `7000`, music at `3000` — so deferring
+in v0.1** — **ebooks at `7020`, audiobooks at `3030`** (which is under `Audio`, not under `Books`,
+and merging the two here misstated §8.5), comics and manga at `7000`, music at `3000` — so deferring
 the sinks defers *convenience*, not *capability*. That is the trade, stated plainly.
 
 **What has to move out to pay for it: Kavita, to v0.2.** An earlier answer here was *"nothing is
@@ -2213,7 +2214,13 @@ Block C   Recently added        ONE unified table across all types, with a Type 
 
 - **Block A** answers "what do I have?" completely in six lines — name, count, availability rollup,
   last import, "see all" — and *gains* from more types instead of degrading. A media-type summary's
-  primary content is a **count**, so per §17.1 it is a table, not tiles.
+  primary content is a **count**, so per §17.1 it is a table, not tiles. **Each count names its
+  unit in the cell**, because the six are not comparable: `1,204 films` and `612 artists` and
+  `733 series` sit in one column, and rendered bare, `Music 612` reads as a smaller library than
+  `Movies 1,204` when it is 4,118 albums and 51,204 tracks. ADR-0031 already establishes the
+  principle for exactly this — *"two artist-level numbers must never be rendered bare"* — and it
+  generalises: a mixed-unit column labels its unit or it is misinformation. The sidebar counts
+  follow the same rule.
   ⚠️ **That "gains from more types" claim is desktop-only, and the phone case needs a different
   layout.** Measured at 390×844, the stacked row treatment turns each type row into four labelled
   lines and costs **~105 px per media type**, which pushes Block B — the block that reports that

@@ -621,7 +621,22 @@ belongs in the `EXPLAIN QUERY PLAN` assertions in CI (§13 of ARCHITECTURE), not
 
 **Tier 1 — 100 ms to ~1 s, and the wait is unavoidable.** First SPA boot; a cold cover-art fetch.
 No indicator. **Progressive content**: render the shell, the nav, the headers and every field
-already held, and let the missing pieces resolve in place. For images, reserve the box with
+already held, and let the missing pieces resolve in place.
+
+> ⚠️ **On a *cold* boot that instruction is not achievable as written, and it has now been raised
+> twice.** Under ADR-0003's `adapter-static` with no server render, **the shell *is* the
+> JavaScript**: on a first visit, a hard refresh with an empty cache, or a phone on slow Wi-Fi, the
+> document is blank until the bundle downloads, parses and mounts, so there is no shell to render
+> progressively into. Tier 1 quietly assumes a warm cache, and it is the one tier covering the run
+> ARCHITECTURE §4.4.1 calls *"the run that forms the speed opinion"*. **Six media types made it
+> worse in a measurable direction**: the sidebar now carries six typed entries with counts plus the
+> scope chip, and Home is three blocks rather than one strip, so the static chrome the user could
+> have been looking at went up while the blank window did not change. **The fix is unchanged and
+> still cheap: inline the static shell — top bar, sidebar skeleton with the type list, page-title
+> slot — as real HTML into the built fallback `index.html`, and let the SPA hydrate into it.** That
+> is a build-step change before the first UI commit and an expensive retrofit afterwards. It remains
+> **§D3 item 6, open for Joe** — it is a build-config decision under ADR-0025 rather than one this
+> log may take. For images, reserve the box with
 `aspect-ratio` plus the `dominant_color` fill so nothing shifts, and let the image paint when it
 arrives.
 
@@ -1375,6 +1390,25 @@ fixture**, and in the image pipeline where the colour is produced (ARCHITECTURE 
   (<https://www.w3.org/WAI/ARIA/apg/practices/keyboard-interface/#kbd_roving_tabindex>). Ten
   thousand tab stops is not a keyboard model. This is the Motif traversal model, which is the
   ancestor of the pattern (OSF/Motif Style Guide rev 1.2, 1993).
+  **Two rules that decide whether "one tab stop" is true in practice**, both of which a naive roving
+  implementation gets wrong. **(a) The row is the *only* stop**: everything interactive inside it is
+  `tabindex="-1"`, reached by arrowing plus `Enter`/`Space` or a per-row menu. Adding the row as a
+  stop *on top of* the links already in it makes a seven-row table eight tab stops, not one, and
+  arrowing from a focused link then jumps to the next *row* rather than the next link. **(b) The
+  assignment must be idempotent and must run after every append.** ADR-0029 makes "Load more"
+  appending the primary interaction, so a `tabindex` set once at init is wrong within one click: a
+  cloned row inherits `tabindex="0"` and becomes an extra stop, while a row built from a template
+  gets none and `focus()` on it silently does nothing — an arrow key that looks dead. Either call
+  the assignment from the append handler, or use a delegated `:focus-within` model that needs no
+  per-row attribute at all.
+  **And an arrow key needs the *adjacent* row, not a rescan of the list.** A `querySelectorAll` plus
+  an ancestor walk per keypress is O(rows) per key: measured at **1.18 ms at 1,000 rows, 9.69 ms at
+  5,000 and 55.12 ms at 25,000** — 60% of a 16 ms frame at 5,000 on a *desktop*, and 2.25 s of main
+  thread for one second of key repeat at 25,000. Walk `nextElementSibling` / `previousElementSibling`
+  instead, and keep the full scan for `Home`/`End`, which do not repeat. The same path serves
+  `j`/`k`. A row-selection counter has the same shape and the same fix: keep an integer, do not
+  re-run `querySelectorAll(':checked')` over the document on every toggle (**32 ms at 25,000 rows,
+  and O(n²) for a range selection on the screen that has bulk grab**).
 - `/` focuses search; `Esc` clears or closes; `j`/`k` and arrows move; `Enter` opens; `?` opens a
   shortcut sheet; `l` opens the scope popover. Sonarr already ships a keyboard-shortcuts modal in
   the header actions menu, so this is a convention, not an invention.
