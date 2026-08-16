@@ -141,7 +141,11 @@
 		{ id: 'indexer', header: 'Indexer', width: 'minmax(0, 1fr)', stackLine: 2 },
 		{ id: 'size', header: 'Size', width: '88px', align: 'end', stackLine: 2 },
 		{ id: 'grabs', header: 'Grabs', width: '76px', align: 'end', stackLine: 'hidden' },
-		{ id: 'peers', header: 'Peers', width: '88px', align: 'end', stackLine: 'hidden' },
+		// 112px, not 88px: `Not applicable` is the widest thing this cell can hold
+		// (a usenet release has no seeder count at all) and at 88px it wrapped onto
+		// a second line, which set the row height for every cell beside it — the
+		// tallest-cell failure §9.1 names. Measured in the browser, not guessed.
+		{ id: 'peers', header: 'Peers', width: '112px', align: 'end', stackLine: 'hidden' },
 		{ id: 'flags', header: 'Indexer flags', width: 'minmax(0, 1fr)', stackLine: 'hidden' },
 		// minmax(max-content, auto), never a fixed track: §9.1's overflow policy.
 		// A fixed track shears the buttons attached to exactly the rows that are
