@@ -216,6 +216,7 @@
     <span class="pagehead__meta" data-when="expired" hidden>This search is 34 minutes old, so nothing in it can still be grabbed.</span>
     <span class="pagehead__meta" data-when="nosink" hidden>Free-text indexer search through Prowlarr. Nothing on this install imports a book.</span>
     <span class="pagehead__meta" data-when="empty" hidden>All 9 indexers answered and none had a match.</span>
+    <span class="pagehead__meta" data-when="thinmusic" hidden>All 9 indexers answered. Nothing matched, and only 2 of the 9 carry music at all.</span>
     <span class="pagehead__meta" data-when="allfail" hidden>All 9 indexers are in a failure state, so the search did not run.</span>
     <span class="pagehead__meta" data-when="denied" hidden>8 of 9 indexers answered. PassThePopcorn refused the account.</span>
     <span class="pagehead__meta" data-when="error" hidden>Prowlarr rejected the stored API key, so nothing was searched.</span>
@@ -231,6 +232,7 @@
       <option value="expired">Results left open past the grab window</option>
       <option value="nosink">Audiobook search, nothing will import it</option>
       <option value="empty">Search ran, nothing matched</option>
+      <option value="thinmusic">Music search, nothing matched, indexers are private</option>
       <option value="allfail">Search ran, every indexer failed</option>
       <option value="denied">One indexer refused the account</option>
       <option value="error">Prowlarr unreachable</option>
@@ -364,6 +366,28 @@
       <p class="empty__text">All 9 indexers answered, and none has a release whose name contains <span class="mono">dune part twoo</span> in Movies — indexer search matches the release name as the indexer stores it, so a typo returns nothing rather than a near miss.</p>
       <div class="empty__actions">
         <button type="button" class="btn btn--primary">Search all categories</button>
+        <button type="button" class="btn">Edit the query</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- The music case is a different sentence from `empty`, and it is not a
+       consolation message. It is the one place in the product where a correct,
+       working search returns almost nothing for a structural reason the user
+       cannot see, so the screen says what the reason is rather than letting an
+       empty list read as a defect. It is scoped to music because that is where
+       it is TRUE: the same search for a film on the same nine indexers returns
+       a full page. Nothing here says music is a lesser media type in UsArr --
+       Navidrome catalogues it in v0.1 exactly like every other source, and the
+       missing piece is a WRITE-capable service, of which v0.1 ships none for
+       any type. See ARCHITECTURE.md 8.5. -->
+  <div class="section" data-when="thinmusic" hidden>
+    <div class="empty">
+      <h2 class="empty__title">No releases matched, and the reason is the indexers rather than the query</h2>
+      <p class="empty__text">All 9 indexers answered and the search worked. <span class="mono">boards of canada geogaddi</span> in Music matched nothing because only 2 of the 9 carry music at all, and the trackers where music actually lives &mdash; Redacted, Orpheus, MyAnonaMouse &mdash; are private and invite-only. A Prowlarr holding public indexers returns a thin list for music where the same search returns a full page for a film. This is not a fault in UsArr, in Prowlarr or in your query, and it is the same list Prowlarr's own search would return.</p>
+      <p class="empty__text">Adding a private indexer you already have an account on is the thing that changes this. Nothing else on this screen will.</p>
+      <div class="empty__actions">
+        <a class="btn btn--primary" href="services.html">Prowlarr indexers</a>
         <button type="button" class="btn">Edit the query</button>
       </div>
     </div>

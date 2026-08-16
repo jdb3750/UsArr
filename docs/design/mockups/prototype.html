@@ -123,9 +123,17 @@
   /* --- Status semantics. The only saturated colour in the chrome.
      Always rendered as icon + text + colour, never colour alone.
      Grey is a legitimate status: it means "not configured".
-     Ratios: bg / surface / hover / selected / inset. --- */
+     Ratios: bg / surface / hover / selected / inset.
+
+     --st-warn was #8a5300 light / #e0a33a dark, and the owner called the
+     light value a muddy brown on 2026-08-16. It is now #a44c00 / #fb9349:
+     CIE Lab hue 58.0 and 58.6 against #ff7f00's 59.6, so both themes are
+     the same orange at two lightnesses instead of a brown beside a gold.
+     The word still clears 4.5:1 on the worst of the five grounds (4.55),
+     so the glyph does NOT take a separate, more saturated token -- the
+     split DESIGN-DIRECTION 3.2 permits is available and unexercised. --- */
   --st-ok:       #1c6b3a;  /*                    6.21 5.74 5.43 5.11 6.38    */
-  --st-warn:     #8a5300;  /*                    6.02 5.56 5.26 4.95 6.18    */
+  --st-warn:     #a44c00;  /*                    5.53 5.11 4.84 4.55 5.67    */
   --st-err:      #b3251c;  /*                    6.24 5.77 5.46 5.14 6.41    */
   --st-none:     #5a534a;  /*                    7.20 6.66 6.30 5.93 7.40    */
 
@@ -289,7 +297,7 @@
     --fg-faint:  #9a9284;   /* 5.87 5.47 5.03 4.78 6.22 */
     --focus:     #efece5;
     --st-ok:     #5cba7d;   /* 7.56 7.04 6.48 6.15 8.00 */
-    --st-warn:   #e0a33a;   /* 8.15 7.60 6.99 6.63 8.63 */
+    --st-warn:   #fb9349;   /* 8.07 7.52 6.92 6.57 8.55 */
     --st-err:    #f0837a;   /* 7.09 6.61 6.08 5.77 7.51 */
     --st-none:   #b0a89b;
     --shadow-float: 0 2px 10px rgba(8, 7, 6, 0.62);
@@ -309,7 +317,7 @@
   --fg-faint:  #9a9284;   /* 5.87 5.47 5.03 4.78 6.22 */
   --focus:     #efece5;
   --st-ok:     #5cba7d;   /* 7.56 7.04 6.48 6.15 8.00 */
-  --st-warn:   #e0a33a;   /* 8.15 7.60 6.99 6.63 8.63 */
+  --st-warn:   #fb9349;   /* 8.07 7.52 6.92 6.57 8.55 */
   --st-err:    #f0837a;   /* 7.09 6.61 6.08 5.77 7.51 */
   --st-none:   #b0a89b;
   --shadow-float: 0 2px 10px rgba(8, 7, 6, 0.62);
@@ -1071,7 +1079,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 
    So the trade was a fallback for a feature, and measurement says the fallback
    is never reached: scrollWidth - clientWidth is 0 on all 19 tables at 1440,
-   and selftest.mjs asserts nothing exceeds innerWidth at 390/1280/1440/1680/
+   and docs/design/check.mjs asserts nothing exceeds innerWidth at 390/1280/
    1920 on every screen in every state. That assertion is the guard the
    fallback was standing in for, and it is a better one -- it fails the build
    instead of quietly growing a scrollbar. `clip` also keeps overflow-y
@@ -2167,7 +2175,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
       <div class="banner__text">Sync for this instance is paused deliberately, and every library it feeds has stopped recomputing membership. The instance fingerprint changed from <span class="mono">a91c4f</span> to <span class="mono">0d33b8</span>, which happens when the host is rebuilt, restored from a different backup, or repointed at another Sonarr. Re-link only if you know this is the same library; removing and re-adding keeps the 214 works UsArr already holds and attaches the new instance as a separate source, so nothing you named or corrected is lost either way.</div>
       <div class="verbatim" style="margin-top:8px">instance_id 1: identity_epoch 3 -&gt; 4, max_remote_id_seen 214 -&gt; 6, root_folder /media/tv -&gt; /srv/tv</div>
     </div>
-    <div class="banner__actions"><button type="button" class="btn btn--primary">Re-link — this is the same Sonarr</button><button type="button" class="btn">Not the same — remove and re-add</button></div>
+    <div class="banner__actions"><button type="button" class="btn btn--primary">Re-link — this is the same Sonarr</button><button type="button" class="btn">Not the same instance — remove and re-add</button></div>
   </div>
 
   <div class="banner" data-when="denied" role="alert" hidden>
@@ -2904,7 +2912,7 @@ Komga's API exposes none, so matching is by title and cross-media links stay bel
          the column was 4/6 identical in value and 4/6 divergent in
          explanation, and the paragraphs were what made those rows 160px tall.
          The shared fact is stated once, here, above the table. -->
-    <p class="section" style="color:var(--fg-muted);font-size:var(--fs-sm);line-height:var(--lh-sm);padding-bottom:8px">v0.1 connects <strong>no request destination for music, audiobooks, ebooks or comics</strong> — it ships no command sinks at all, and Readarr, the *Arr that used to own books, was archived on 27 Jun 2025. Indexer search still works for all four, and the grab ends in your download client. Movies and TV have a destination only because Radarr and Sonarr are already their source.</p>
+    <p class="section" style="color:var(--fg-muted);font-size:var(--fs-sm);line-height:var(--lh-sm);padding-bottom:8px">v0.1 connects <strong>no request destination for any media type</strong>, because it ships no command sinks at all &mdash; the *Arr-backed request path is v0.2. The field is specified now so the binding exists from the first migration. Indexer search works for every type and the grab ends in your download client meanwhile. When destinations do ship, Movies and TV have one immediately because Radarr and Sonarr are already their catalogue source; music, books and comics need a service added for the purpose &mdash; Lidarr, LazyLibrarian or Mylar3 &mdash; and Readarr, the *Arr that used to own books, was archived on 27 Jun 2025. That is a deferral of the <em>write</em> half, not of the media type: a library&rsquo;s catalogue source and its request destination are separate bindings, and music already has the first one in Navidrome.</p>
 
     <!-- The row is a row: two lines, hard ceiling. It used to run 80-160px --
          5.7 times the design's own 28px unit -- because the State column
@@ -4026,6 +4034,7 @@ Komga's API exposes none, so matching is by title and cross-media links stay bel
     <span class="pagehead__meta" data-when="expired" hidden>This search is 34 minutes old, so nothing in it can still be grabbed.</span>
     <span class="pagehead__meta" data-when="nosink" hidden>Free-text indexer search through Prowlarr. Nothing on this install imports a book.</span>
     <span class="pagehead__meta" data-when="empty" hidden>All 9 indexers answered and none had a match.</span>
+    <span class="pagehead__meta" data-when="thinmusic" hidden>All 9 indexers answered. Nothing matched, and only 2 of the 9 carry music at all.</span>
     <span class="pagehead__meta" data-when="allfail" hidden>All 9 indexers are in a failure state, so the search did not run.</span>
     <span class="pagehead__meta" data-when="denied" hidden>8 of 9 indexers answered. PassThePopcorn refused the account.</span>
     <span class="pagehead__meta" data-when="error" hidden>Prowlarr rejected the stored API key, so nothing was searched.</span>
@@ -4041,6 +4050,7 @@ Komga's API exposes none, so matching is by title and cross-media links stay bel
       <option value="expired">Results left open past the grab window</option>
       <option value="nosink">Audiobook search, nothing will import it</option>
       <option value="empty">Search ran, nothing matched</option>
+      <option value="thinmusic">Music search, nothing matched, indexers are private</option>
       <option value="allfail">Search ran, every indexer failed</option>
       <option value="denied">One indexer refused the account</option>
       <option value="error">Prowlarr unreachable</option>
@@ -4174,6 +4184,28 @@ Komga's API exposes none, so matching is by title and cross-media links stay bel
       <p class="empty__text">All 9 indexers answered, and none has a release whose name contains <span class="mono">dune part twoo</span> in Movies — indexer search matches the release name as the indexer stores it, so a typo returns nothing rather than a near miss.</p>
       <div class="empty__actions">
         <button type="button" class="btn btn--primary">Search all categories</button>
+        <button type="button" class="btn">Edit the query</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- The music case is a different sentence from `empty`, and it is not a
+       consolation message. It is the one place in the product where a correct,
+       working search returns almost nothing for a structural reason the user
+       cannot see, so the screen says what the reason is rather than letting an
+       empty list read as a defect. It is scoped to music because that is where
+       it is TRUE: the same search for a film on the same nine indexers returns
+       a full page. Nothing here says music is a lesser media type in UsArr --
+       Navidrome catalogues it in v0.1 exactly like every other source, and the
+       missing piece is a WRITE-capable service, of which v0.1 ships none for
+       any type. See ARCHITECTURE.md 8.5. -->
+  <div class="section" data-when="thinmusic" hidden>
+    <div class="empty">
+      <h2 class="empty__title">No releases matched, and the reason is the indexers rather than the query</h2>
+      <p class="empty__text">All 9 indexers answered and the search worked. <span class="mono">boards of canada geogaddi</span> in Music matched nothing because only 2 of the 9 carry music at all, and the trackers where music actually lives &mdash; Redacted, Orpheus, MyAnonaMouse &mdash; are private and invite-only. A Prowlarr holding public indexers returns a thin list for music where the same search returns a full page for a film. This is not a fault in UsArr, in Prowlarr or in your query, and it is the same list Prowlarr's own search would return.</p>
+      <p class="empty__text">Adding a private indexer you already have an account on is the thing that changes this. Nothing else on this screen will.</p>
+      <div class="empty__actions">
+        <a class="btn btn--primary" href="#services">Prowlarr indexers</a>
         <button type="button" class="btn">Edit the query</button>
       </div>
     </div>
