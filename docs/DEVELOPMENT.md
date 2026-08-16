@@ -235,14 +235,19 @@ counted; everybody copied. §11 has the general rule.
 `make design` is deliberately **outside** the gate, and the reason is not the obvious one. It is
 hermetic — the mockups load over `file://` and the IBM Plex subsets are inlined as `data:` URIs, so
 it makes no network call at all — and it finishes in about 40 seconds. What keeps it out is that it
-needs a Playwright Chromium, a ~150 MB prerequisite the gate does not otherwise carry, and that
-there is nothing to pin it to: `check.mjs` resolves Playwright at run time — the bare specifier
-first, then `web/node_modules`, then the npm global root — so it runs wherever the module happens
-to be installed, but no manifest declares which version. A gate step that accepts whatever is
-installed is not a gate. It also guards `docs/design/` — prose, tokens and mockups, none of which
-is a shipping artifact, and none of which can break the binary. Run it by hand when the design
-moves, overriding `PW_BROWSERS_PATH` to point at your own browser cache. If Playwright ever lands
-as a pinned `devDependency`, the browser cost is worth re-arguing on its own merits.
+needs a Playwright Chromium, a **~150 MB prerequisite the gate does not otherwise carry**, and on
+its own that is still enough. It also guards `docs/design/` — prose, tokens and mockups, none of
+which is a shipping artifact, and none of which can break the binary. Run it by hand when the design
+moves, overriding `PW_BROWSERS_PATH` to point at your own browser cache.
+
+**The "nothing to pin" half of that argument is now partly discharged, and the Makefile is
+authoritative for where it stands.** `web/package.json` pins `playwright-core` at `1.56.1` exactly,
+no caret; it declares no install script and downloads no browser, so a fresh install pays nothing
+for it. **What is not closed:** `check.mjs`'s resolution ladder asks for the specifier `playwright`,
+and the pinned package is `playwright-core`, so the pin does not satisfy the ladder and a fresh
+machine still falls through to the fallbacks. Finishing that is a change to `docs/design/check.mjs`.
+Until then the version is declared but not enforced, and a gate step that accepts whatever is
+installed is still not a gate.
 
 `docs/design/check.mjs` is on `main`: introduced in `f015655`, merged by `e0d4b26`. **Observed
 present at 2026-08-16 17:34 UTC after a `git fetch`** — a measurement, not a standing guarantee, and
