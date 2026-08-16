@@ -134,6 +134,10 @@ func (s *Server) handleCreateService(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return err
 	}
+	urlBase, err := normalizeServiceURLBase(req.URLBase)
+	if err != nil {
+		return err
+	}
 	if strings.TrimSpace(req.APIKey) == "" {
 		return errStatus(http.StatusBadRequest, "bad_request",
 			"an API key is required: UsArr cannot talk to an *Arr without one").
@@ -145,7 +149,7 @@ func (s *Server) handleCreateService(w http.ResponseWriter, r *http.Request) err
 	// the test would otherwise store a credential against a host nobody has
 	// established is the service it claims to be.
 	result, err := s.runTest(r, TestRequest{
-		Kind: kind, BaseURL: baseURL, URLBase: strings.TrimSpace(req.URLBase), APIKey: req.APIKey,
+		Kind: kind, BaseURL: baseURL, URLBase: urlBase, APIKey: req.APIKey,
 	})
 	if err != nil {
 		return err
@@ -162,7 +166,7 @@ func (s *Server) handleCreateService(w http.ResponseWriter, r *http.Request) err
 		Role:       role,
 		Name:       name,
 		BaseURL:    baseURL,
-		URLBase:    strings.TrimSpace(req.URLBase),
+		URLBase:    urlBase,
 		APIVersion: result.APIVersion,
 		VerifyTLS:  true,
 		TLSSPKIPin: result.TLSSPKIPin,
@@ -225,9 +229,21 @@ func (s *Server) handleUpdateService(w http.ResponseWriter, r *http.Request) err
 
 	update := store.ServiceInstanceUpdate{
 		Name:     trimmedPtr(req.Name),
-		URLBase:  trimmedPtr(req.URLBase),
 		Enabled:  req.Enabled,
 		Priority: req.Priority,
+	}
+
+	// url_base is validated HERE and not only on create, because this is the path
+	// that used to save a broken one in silence: with no api_key in the body no
+	// connection test runs, so `prowlarr` instead of `/prowlarr` was stored, later
+	// concatenated onto base_url as http://host:9696prowlarr, and surfaced only
+	// when the background prober reported the instance down.
+	if req.URLBase != nil {
+		normalized, uerr := normalizeServiceURLBase(*req.URLBase)
+		if uerr != nil {
+			return uerr
+		}
+		update.URLBase = &normalized
 	}
 
 	effectiveBaseURL := existing.BaseURL
@@ -371,13 +387,17 @@ func (s *Server) handleTestUnsaved(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return err
 	}
+	urlBase, err := normalizeServiceURLBase(req.URLBase)
+	if err != nil {
+		return err
+	}
 	if strings.TrimSpace(req.APIKey) == "" {
 		return errStatus(http.StatusBadRequest, "bad_request",
 			"an API key is required to test a service that has not been saved yet")
 	}
 	result, err := s.runTest(r, TestRequest{
 		Kind: strings.ToLower(strings.TrimSpace(req.Kind)), BaseURL: baseURL,
-		URLBase: strings.TrimSpace(req.URLBase), APIKey: req.APIKey,
+		URLBase: urlBase, APIKey: req.APIKey,
 	})
 	if err != nil {
 		return err
@@ -413,6 +433,14 @@ func (s *Server) handleTestService(w http.ResponseWriter, r *http.Request) error
 			return err
 		}
 	}
+	// Validated even though an empty value here means "keep the stored sub-path":
+	// this endpoint is how the screen checks an edit BEFORE saving it, so a test
+	// that quietly ignored a malformed sub-path would report a healthy connection
+	// for a value the save is about to refuse.
+	urlBase, err := normalizeServiceURLBase(req.URLBase)
+	if err != nil {
+		return err
+	}
 	// NormalizeOrigin: same reason as in the update path — the scheme is part of
 	// what the stored credential is bound to, so a scheme change is a host change
 	// for the purposes of the re-entry rule.
@@ -437,7 +465,7 @@ func (s *Server) handleTestService(w http.ResponseWriter, r *http.Request) error
 		InstanceID: id,
 		Kind:       existing.Kind,
 		BaseURL:    baseURL,
-		URLBase:    stringOr(req.URLBase, existing.URLBase),
+		URLBase:    stringOr(urlBase, existing.URLBase),
 		APIKey:     req.APIKey, // empty means "the stored one", allowed only when the host is unchanged
 	})
 	if err != nil {
@@ -724,6 +752,87 @@ func normalizeBaseURL(raw string) (string, error) {
 			withAction("Use a full URL, e.g. http://prowlarr:9696")
 	}
 	return strings.TrimSuffix(v, "/"), nil
+}
+
+// normalizeServiceURLBase validates the reverse-proxy sub-path an instance is
+// served under and returns it as "" (the root) or "/segment[/segment…]".
+//
+// It exists because cmd/usarr/services.go builds the upstream address by plain
+// concatenation — BaseURL + URLBase — so `prowlarr` where `/prowlarr` was meant
+// produces http://host:9696prowlarr. On create the mandatory connection test
+// catches that loudly; on PATCH with no api_key no test runs, so it used to be
+// stored in silence and only reported later, by the background prober, as an
+// instance that is down for no visible reason.
+//
+// This is deliberately NOT config.normalizeURLBase, and the two are not wired
+// together. That one governs USARR_URL_BASE — the prefix UsArr serves ITSELF
+// under, read once at startup from an operator's environment, where a bad value
+// fails the process at boot. This one governs a per-instance column describing
+// where somebody else's *Arr lives, arriving from a browser on four endpoints,
+// and it is stricter: it rejects a host, a query and a fragment as well. Sharing
+// one function would mean either weakening this rule or silently changing the
+// meaning of an environment variable the next time this one is tightened, and it
+// would make internal/httpapi depend on internal/config for a string rule that
+// fits on a screen. The duplication is the cheaper of the two couplings.
+//
+// A missing leading slash is REPAIRED rather than rejected: a bare path segment
+// has exactly one possible meaning here, and repairing it is precisely what
+// stops the concatenation above. Everything whose intent is ambiguous — a
+// scheme, a host, a query, a fragment, a traversal — is rejected, because
+// guessing which half of `http://host/prowlarr` the user meant would be
+// inventing configuration on their behalf.
+func normalizeServiceURLBase(raw string) (string, error) {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return "", nil
+	}
+	reject := func(why string) error {
+		return errStatus(http.StatusBadRequest, "invalid_url_base",
+			fmt.Sprintf("%q is not a sub-path: %s", raw, why)).
+			withAction("Enter a path such as /prowlarr, or leave it blank")
+	}
+	switch {
+	case strings.Contains(v, "://"):
+		return "", reject("it is a full URL, and the address belongs in the base URL instead")
+	case strings.HasPrefix(v, "//"):
+		return "", reject("a leading // names a host, not a path")
+	case strings.ContainsAny(v, "?#"):
+		return "", reject("a sub-path carries no query string and no fragment")
+	case strings.Contains(v, ":"):
+		return "", reject("it names a host and port, and that belongs in the base URL instead")
+	}
+
+	// Trailing slashes are corrected rather than rejected for the same reason the
+	// leading one is added: there is only one thing "/prowlarr/" can mean.
+	v = "/" + strings.Trim(v, "/")
+	if v == "/" {
+		return "", nil
+	}
+	for _, seg := range strings.Split(v[1:], "/") {
+		switch seg {
+		case "":
+			return "", reject("it has an empty path segment")
+		case ".", "..":
+			return "", reject(`it must not contain a "." or ".." segment`)
+		}
+		if i := strings.IndexFunc(seg, func(r rune) bool { return !isURLBaseRune(r) }); i >= 0 {
+			return "", reject(fmt.Sprintf("%q is not allowed in a path; percent-encode it",
+				string([]rune(seg[i:])[0])))
+		}
+	}
+	return v, nil
+}
+
+// isURLBaseRune is RFC 3986's `pchar` minus ":" — which is rejected above as the
+// tell of a host:port — and minus pct-encoding's own decoding, since "%" is
+// simply passed through: this validates the shape of a path, it does not resolve
+// one.
+func isURLBaseRune(r rune) bool {
+	switch {
+	case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		return true
+	}
+	return strings.ContainsRune("-._~%!$&'()*+,;=@", r)
 }
 
 // hostOf renders a base URL for the audit log's metadata. It uses the full

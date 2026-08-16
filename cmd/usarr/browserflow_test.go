@@ -773,10 +773,66 @@ func TestBrowserAddsAProwlarrBehindASubPath(t *testing.T) {
 			"the clear was cosmetic")
 	}
 
-	// Put it back, and prove the round trip left a working instance.
-	restored := b.patchJSON(fmt.Sprintf("/api/v1/services/%d", svc.ID), map[string]any{"url_base": subPath})
+	// ── 6b. a sub-path that is not a path is REFUSED, not stored ────────────
+	//
+	// This is the request that used to fail silently. With no api_key in the body
+	// handleUpdateService runs NO connection test, so the value was taken on
+	// trust; the registry then built the upstream address by plain concatenation
+	// — base_url + url_base — and produced things like http://host:9696prowlarr,
+	// which resolves to nothing. The only report was the background prober,
+	// minutes later, calling the instance down for no visible reason.
+	//
+	// Each of these has more than one plausible reading, so the server refuses
+	// rather than guessing, and it refuses in the coded shape the screen already
+	// branches on for credential_reentry_required.
+	for _, bad := range []string{
+		prowlarr.URL() + subPath, // the whole address pasted into the wrong field
+		"prowlarr:9696",          // a host and port
+		"/prowlarr?apikey=x",     // a query string
+		"/prowlarr/../admin",     // traversal
+	} {
+		refused := b.patchJSON(fmt.Sprintf("/api/v1/services/%d", svc.ID),
+			map[string]any{"url_base": bad})
+		if refused.status != http.StatusBadRequest {
+			t.Fatalf("PATCH url_base=%q = %d, want 400 — saving it produces an address that "+
+				"resolves to nothing: %s", bad, refused.status, refused.body)
+		}
+		var problem errorBodyShape
+		refused.decode(t, &problem)
+		if problem.Error != "invalid_url_base" {
+			t.Fatalf("url_base=%q must be refused with a code the screen can put next to the "+
+				"field, got %q", bad, problem.Error)
+		}
+		if problem.Message == "" || problem.Action == "" {
+			t.Fatalf("url_base=%q was refused with nothing to show the user: %+v", bad, problem)
+		}
+	}
+
+	// And none of that was written. A 400 that saved anyway would be the same
+	// silent breakage wearing a different status code.
+	var stillCleared serviceBody
+	b.mustGet(fmt.Sprintf("/api/v1/services/%d", svc.ID), &stillCleared)
+	if stillCleared.URLBase != "" {
+		t.Fatalf("a refused url_base was stored anyway: %q", stillCleared.URLBase)
+	}
+
+	// ── 6c. the missing leading slash IS repaired ───────────────────────────
+	//
+	// The one repair, and the reason this whole rule exists: `prowlarr` has
+	// exactly one possible meaning as a path, so it is corrected rather than
+	// refused — and the correction is what stops the concatenation above. The
+	// search in §7 runs over this repaired value, so if the repair were cosmetic
+	// nothing below would return a result.
+	restored := b.patchJSON(fmt.Sprintf("/api/v1/services/%d", svc.ID),
+		map[string]any{"url_base": strings.TrimPrefix(subPath, "/")})
 	if restored.status != http.StatusOK {
 		t.Fatalf("PATCH url_base back = %d, want 200: %s", restored.status, restored.body)
+	}
+	var repaired serviceBody
+	restored.decode(t, &repaired)
+	if repaired.URLBase != subPath {
+		t.Fatalf("url_base = %q, want the repaired %q: %q + %q is not a URL",
+			repaired.URLBase, subPath, prowlarr.URL(), strings.TrimPrefix(subPath, "/"))
 	}
 
 	// ── 7. and the thing the user came for, over the prefix ─────────────────

@@ -12,7 +12,8 @@ import {
 	requiresCredentialReentry,
 	testNewService,
 	testService,
-	updateService
+	updateService,
+	urlBaseProblem
 } from './api';
 
 /**
@@ -572,6 +573,79 @@ describe('editing the reverse-proxy sub-path', () => {
 			.map((c) => JSON.parse(c.init.body as string));
 		expect(withSubPath).toEqual({ url_base: '/prowlarr' });
 		expect(without).toEqual({});
+	});
+});
+
+/**
+ * A sub-path is validated SERVER-side, on every endpoint that takes one
+ * (normalizeServiceURLBase in internal/httpapi/services.go): `prowlarr` is
+ * repaired to `/prowlarr`, and anything that is not a path — a full URL, a host,
+ * a query — is refused with `invalid_url_base`.
+ *
+ * This client deliberately does not re-implement that rule. What it owes the
+ * screen is the refusal in a form the screen can act on: a code to branch on and
+ * the server's own message to put under the field, so the user sees why the
+ * value they can still see in the input was not accepted.
+ */
+describe('a refused sub-path', () => {
+	const refusal = {
+		error: 'invalid_url_base',
+		message:
+			'"http://host/prowlarr" is not a sub-path: it is a full URL, and the address ' +
+			'belongs in the base URL instead',
+		action: 'Enter a path such as /prowlarr, or leave it blank'
+	};
+
+	it('reaches the screen as a coded error with the field message and the fix', async () => {
+		stubFetch((url) =>
+			url === '/api/v1/auth/session' ? jsonResponse(sessionBody) : jsonResponse(refusal, 400)
+		);
+
+		const error = await updateService(4, { urlBase: 'http://host/prowlarr' }).catch((e) => e);
+		expect(error).toBeInstanceOf(ApiError);
+		expect(error.status).toBe(400);
+		expect(error.code).toBe('invalid_url_base');
+		// detail, not message: the screen renders the server's sentence, without
+		// the `HTTP 400:` prefix a bare String(error) carries.
+		expect(error.detail).toBe(refusal.message);
+		expect(error.action).toBe(refusal.action);
+	});
+
+	it('is surfaced under the sub-path field, and nothing else is', async () => {
+		// urlBaseProblem is what the Services screen calls to decide whether a
+		// failure belongs beside the input or in the row's problem line. Matching
+		// on the code and not on the prose is the whole point.
+		expect(
+			urlBaseProblem(new ApiError('HTTP 400: nope', 400, '/x', 'invalid_url_base', '', 'nope'))
+		).toBe('nope');
+		expect(
+			urlBaseProblem(new ApiError('HTTP 400: nope', 400, '/x', 'credential_reentry_required'))
+		).toBeUndefined();
+		expect(urlBaseProblem(new ApiError('HTTP 502: down', 502, '/x'))).toBeUndefined();
+		expect(urlBaseProblem(new Error('the network went away'))).toBeUndefined();
+		expect(urlBaseProblem(undefined)).toBeUndefined();
+	});
+
+	it('refuses the same value on create and on both connection tests', async () => {
+		stubFetch((url) =>
+			url === '/api/v1/auth/session' ? jsonResponse(sessionBody) : jsonResponse(refusal, 400)
+		);
+
+		const input = {
+			kind: 'prowlarr',
+			name: 'Prowlarr',
+			baseUrl: 'http://prowlarr:9696',
+			urlBase: 'http://host/prowlarr',
+			apiKey: API_KEY
+		};
+		for (const call of [
+			() => createService(input),
+			() => testNewService(input),
+			() => testService(4, { urlBase: 'http://host/prowlarr' })
+		]) {
+			const error = await call().catch((e) => e);
+			expect(urlBaseProblem(error)).toBe(refusal.message);
+		}
 	});
 });
 

@@ -903,12 +903,27 @@ export interface NewService {
 	 * bound to scheme://host:port and moving a service to a different sub-path
 	 * does not move the credential (internal/crypto/derive.go).
 	 *
-	 * Sent only when non-empty. The server applies no validation beyond
-	 * strings.TrimSpace, so it travels as typed for the same reason base_url's
-	 * trailing slash does: a second normaliser here would be one that could
-	 * quietly disagree with the server's.
+	 * Sent only when non-empty, and as typed. The server owns the rule — it
+	 * repairs a missing leading slash, drops a trailing one, and refuses anything
+	 * that is not a path with `invalid_url_base` (normalizeServiceURLBase in
+	 * internal/httpapi/services.go). Normalising it here too would be a second
+	 * implementation that could quietly disagree with the first, and the value
+	 * that reaches SQLite is the one the server decided on.
 	 */
 	urlBase?: string;
+}
+
+/**
+ * The sub-path field's inline problem, or nothing when this failure is about
+ * something else.
+ *
+ * A screen calls this rather than matching on prose: `invalid_url_base` is the
+ * server's code for "url_base is not a path", and it is the difference between
+ * putting the message under the field the user got wrong and dropping it in a
+ * banner at the top of the form.
+ */
+export function urlBaseProblem(error: unknown): string | undefined {
+	return error instanceof ApiError && error.code === 'invalid_url_base' ? error.detail : undefined;
 }
 
 /** `url_base` for a request body, or nothing at all when there is no sub-path. */

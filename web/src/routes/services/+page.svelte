@@ -39,6 +39,7 @@
 		testNewService,
 		testService,
 		updateService,
+		urlBaseProblem,
 		type ConnectionTestResult,
 		type ServiceHealth,
 		type ServiceInstance
@@ -67,6 +68,12 @@
 	let editUrlBase = $state('');
 	let editApiKey = $state('');
 	let editOriginalBaseUrl = $state('');
+
+	// A refused sub-path belongs UNDER the sub-path field, not in the row's
+	// problem line: `invalid_url_base` names exactly one input, and a message
+	// that says which one is the difference between a fix and a guess.
+	let editUrlBaseProblem = $state('');
+	let addUrlBaseProblem = $state('');
 
 	// The add form.
 	let addName = $state('');
@@ -167,6 +174,7 @@
 		// when the instance is served from the root, which is the common case.
 		editUrlBase = row.instance?.urlBase ?? '';
 		editApiKey = '';
+		editUrlBaseProblem = '';
 	}
 
 	function cancelEdit() {
@@ -180,6 +188,7 @@
 		busyRow = id;
 		rowProblem = { ...rowProblem, [id]: '' };
 		rowMessage = { ...rowMessage, [id]: '' };
+		editUrlBaseProblem = '';
 		try {
 			await guarded(async () => {
 				await updateService(id, {
@@ -198,7 +207,10 @@
 				await load();
 			});
 		} catch (error) {
-			rowProblem = { ...rowProblem, [id]: describe(error) };
+			// The form stays open on a refused sub-path, with the reason under the
+			// field: the value is still in the input, so the fix is one edit away.
+			editUrlBaseProblem = urlBaseProblem(error) ?? '';
+			if (editUrlBaseProblem === '') rowProblem = { ...rowProblem, [id]: describe(error) };
 		} finally {
 			busyRow = undefined;
 		}
@@ -235,6 +247,7 @@
 		addBusy = true;
 		addProblem = '';
 		addMessage = '';
+		addUrlBaseProblem = '';
 		try {
 			await guarded(async () => {
 				const result = await testNewService(newServiceInput());
@@ -242,7 +255,8 @@
 				if (!result.ok) addProblem = testSummary(result);
 			});
 		} catch (error) {
-			addProblem = describe(error);
+			addUrlBaseProblem = urlBaseProblem(error) ?? '';
+			if (addUrlBaseProblem === '') addProblem = describe(error);
 		} finally {
 			addBusy = false;
 		}
@@ -254,6 +268,7 @@
 		addBusy = true;
 		addProblem = '';
 		addMessage = '';
+		addUrlBaseProblem = '';
 		try {
 			await guarded(async () => {
 				const created = await createService(newServiceInput());
@@ -265,7 +280,8 @@
 				await load();
 			});
 		} catch (error) {
-			addProblem = describe(error);
+			addUrlBaseProblem = urlBaseProblem(error) ?? '';
+			if (addUrlBaseProblem === '') addProblem = describe(error);
 		} finally {
 			addBusy = false;
 		}
@@ -452,8 +468,12 @@
 								type="text"
 								autocomplete="off"
 								placeholder="/prowlarr"
+								aria-invalid={editUrlBaseProblem !== '' ? 'true' : undefined}
 								bind:value={editUrlBase}
 							/>
+							{#if editUrlBaseProblem}
+								<p class="field-problem" role="alert">{editUrlBaseProblem}</p>
+							{/if}
 							<p class="field-hint">
 								Needed only behind a reverse proxy, for a Prowlarr reachable at
 								<code>https://host/prowlarr</code> rather than at the root. It is Prowlarr's own Settings
@@ -488,8 +508,23 @@
 							</p>
 						</div>
 						<div class="row-actions">
+							<!--
+								The label says what the server will actually do. handleUpdateService
+								runs the connection test only when the body carries an api_key —
+								with no key there is nothing to test WITH, since the stored one is
+								never decrypted on a write path, and refusing to save while a
+								service is down would block the very edit that fixes it. So a save
+								with a key is "Test and save" and a save without one is "Save";
+								"Test connection" above is how you check the rest.
+							-->
 							<button type="submit" disabled={busyRow === health.id}>
-								{busyRow === health.id ? 'Saving' : 'Test and save'}
+								{#if busyRow === health.id}
+									Saving
+								{:else if editApiKey.trim() !== ''}
+									Test and save
+								{:else}
+									Save
+								{/if}
 							</button>
 							<button type="button" onclick={cancelEdit}>Cancel</button>
 						</div>
@@ -535,8 +570,12 @@
 			type="text"
 			autocomplete="off"
 			placeholder="/prowlarr"
+			aria-invalid={addUrlBaseProblem !== '' ? 'true' : undefined}
 			bind:value={addUrlBase}
 		/>
+		{#if addUrlBaseProblem}
+			<p class="field-problem" role="alert">{addUrlBaseProblem}</p>
+		{/if}
 		<p class="field-hint">
 			Needed only behind a reverse proxy, for a Prowlarr reachable at
 			<code>https://host/prowlarr</code> rather than at the root. It is Prowlarr's own Settings → General
@@ -593,6 +632,13 @@
 	.field-hint {
 		margin: 0;
 		color: var(--fg-muted);
+		font-size: var(--text-sm);
+		line-height: var(--leading-sm);
+	}
+
+	.field-problem {
+		margin: 0;
+		color: var(--status-error);
 		font-size: var(--text-sm);
 		line-height: var(--leading-sm);
 	}
