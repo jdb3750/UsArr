@@ -877,7 +877,17 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 
 .chip--pending { color: var(--st-warn); border-color: currentColor; }
 .chip--failed  { color: var(--st-err);  border-color: currentColor; }
-.chip--done    { color: var(--st-ok);   border-color: currentColor; }
+/* THERE IS NO .chip--done, and its absence is a decision rather than an
+   oversight. It was `color: var(--st-ok)` and it painted a confirmed grab
+   GREEN, against this sheet's own §9.5 -- "chroma marks what is wrong, not
+   what is fine". The shipped screen renders that state as a plain .chip
+   (web/src/routes/requests, merged db93781), Recent grabs already rendered the
+   same stored `sent` row neutral, and two renderings of one fact in two
+   colours was the disagreement that takeover existed to remove.
+   NOT the scale-rung case above: this rung is not merely unread, it is ruled
+   out, so leaving it defined would leave the next author something to reach
+   for. The warn and error rungs keep their chroma -- the withdrawal is
+   success, not status. */
 
 /* Protocol: THERE IS NO SWATCH. The word is the whole of it.
    The withdrawal in 1 took the FILL out of the protocol dot because a torrent
