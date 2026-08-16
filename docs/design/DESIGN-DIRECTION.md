@@ -219,7 +219,7 @@ These are not new. They are restated because every decision below is downstream 
 | **ARCHITECTURE §17.1 / §4.4.1** | **No skeleton shimmer.** The image placeholder is a `dominant_color` block with the title in it: informative, not decorative |
 | **ARCHITECTURE §2.3 / §5.5 / §17.7** | Degraded ≠ blocked. A small **non-modal** banner. **The catalogue never greys out and never shows a spinner** |
 | **ARCHITECTURE §13** | Client-side prefix filter p50 < 5 ms, p99 < 16 ms — one frame. The UI's own budget, not the server's |
-| **ARCHITECTURE §16** (amended, ADR-0032) | **v0.1 is six media types, read-only beyond video**: Sonarr + Radarr, plus the read-only catalogue sources **Navidrome, Audiobookshelf and Komga**, plus Prowlarr. **Kavita is v0.2**, not v0.1 — ADR-0032 moved it out, and ARCHITECTURE §16 and §7.1a are authoritative. The **command sinks are all out of v0.1**, and they do not all land together: **LazyLibrarian is v0.3** (the first Tier 1 manifest, request sink only), while **Lidarr, Mylar3 and Kapowarr are v1.0**. Requests in v0.1 is the **Prowlarr Search-and-Grab path only — for all six types** |
+| **ARCHITECTURE §16** (amended by ADR-0032, then re-sequenced) | **v0.1 connects three services: Sonarr, Radarr and Prowlarr.** The six media types stay in the model and the navigation, but **v0.1 has no catalogue source for music, audiobooks, ebooks or comics** — the read-only catalogue sources (**Navidrome, Audiobookshelf, Kavita**, then Komga) sequence **after** v0.1, one at a time, so the \*Arr library sync proves the replica thesis on real data first. Of the pair, **Kavita is the one that ships and Komga follows it** — ADR-0032 cut Kavita and **ADR-0035 reversed that**, because Kavita is the install the owner actually runs and it covers books, comics and manga in one source. ARCHITECTURE §16 is authoritative for which milestone each lands in. The **command sinks are all out of v0.1**, and they do not all land together: **LazyLibrarian is v0.3** (the first Tier 1 manifest, request sink only), while **Lidarr, Mylar3 and Kapowarr are v1.0**. Requests in v0.1 is the **Prowlarr Search-and-Grab path only — for all six types**, which is what keeps the four sourceless types navigable |
 | **ARCHITECTURE §6.5 / ADR-0026** | **User-defined libraries exist and are configured separately from services.** They are a *scope*, never a navigation axis (§8.1) |
 
 One more, from the ecosystem rather than from the repo: in this software family **stability of
@@ -553,7 +553,7 @@ where it sits inline with sans text.
 feature is only complete if the boundary is drawn where the meaning is.** A **taxonomy word** —
 `movie`, `album`, `issue`, `episode`, `ebook` in a `Type` column — is an enum rendered as English,
 and the `Library` column one cell away holds the same kind of value in sans, so mono there is
-inconsistent within a single row. A **user-chosen label** — `Radarr`, `Komga`, `Sonarr Anime`, the
+inconsistent within a single row. A **user-chosen label** — `Radarr`, `Prowlarr`, `Sonarr Anime`, the
 `name` field of §9.3's wizard — is a string the user typed into a settings form and is exactly as
 human as `Movies`. Both go to sans at `--text-sm` / `--fg-muted`. And **a single value never carries
 two faces**: `ER S12E14 Quintessence of Dust` rendering the episode code in mono grey between two
@@ -1200,7 +1200,16 @@ assumed away.
 ### 8.4 Home — three fixed blocks
 
 **ARCHITECTURE §17.2, amended by ADR-0028.** Home is **not** one recently-added strip per media type.
-Its height is **O(1) in the number of media types**:
+Its height is **O(1) in the number of media types**.
+
+⚠️ **The wireframe below draws the *full stack* — Sonarr, Radarr, Prowlarr, Navidrome,
+Audiobookshelf and Kavita — because six populated types is what this layout has to be judged on.**
+**That is not the v0.1 install.** v0.1 connects Sonarr, Radarr and Prowlarr only; the catalogue
+sources sequence after it, one at a time, so on a v0.1 install music, audiobooks, ebooks and comics
+have **no catalogue source** and Block A renders those four rows in the per-type `unconfigured`
+state, naming the service that will populate each and the milestone it arrives in (ARCHITECTURE
+§17.2, and rule 13 in §13 below for why four stateful rows are not an empty section). Both installs
+are real screens the design owes; neither is the other's placeholder.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────────────┐
@@ -1220,15 +1229,15 @@ Its height is **O(1) in the number of media types**:
 │ Needs attention                                            3 items                    │  BLOCK B — hidden when empty
 │ ───────────────────────────────────────────────────────────────────────────────────── │
 │ ✕ error    Sonarr        401 Unauthorized on /api/v3/series      [Update API key]     │
-│ ▲ warning  Komga         last successful sync 3 d ago            [Run full sync now]  │
-│ ▲ warning  1 work needs re-identification (Lidarr)               [Re-link]            │
+│ ▲ warning  Kavita        last successful sync 3 d ago            [Run full sync now]  │
+│ ▲ warning  1 work needs re-identification (Radarr 4K)            [Re-link]            │
 │                                                                                       │
 │ Recently added                                          across 6 types    see all →   │  BLOCK C
 │ ───────────────────────────────────────────────────────────────────────────────────── │
 │ Type    Title                            Added   Detail              Have   Instance  │
 │ movie   Dune: Part Two                   14:02   Bluray-1080p 14.2G   ✓     Radarr    │
-│ album   Geogaddi — Boards of Canada      13:58   FLAC · 23 tracks     ✓     Lidarr    │
-│ comic   Saga #61                         13:55   CBZ · 24 p           ✓     Komga     │
+│ album   Geogaddi — Boards of Canada      13:58   FLAC · 23 tracks     ✓     Navidrome │
+│ comic   Saga #61                         13:55   CBZ · 24 p           ✓     Kavita    │
 │ tv      ER S12E14 Quintessence of Dust   13:22   HDTV-1080p 1.9G   250/331  Sonarr    │
 │ book    The Overstory — Powers           12:40   EPUB · 2.1 MB        ✓     Kavita    │
 │ audio   Piranesi — Susanna Clarke        12:04   M4B · 6 h 45 m       ✓     ABS       │
@@ -1303,7 +1312,7 @@ Carried across so none of it has to be rediscovered:
 | 10 | Let a linked work appear once per medium | §8.5 rule 4 |
 | 11 | Build per-type screens | Jellyfin serves eight content types from one card builder branching on **aspect ratio, not media type**; §9.1 already forbids varying row treatment by type |
 | 12 | Hide a media type behind "More" | Types are a closed enum capped at six and all fit the row budget. Overflow is for pinned libraries only |
-| 13 | Show a type, section, group or control with no content | §17.2; Komga's `v-if="collectionsCount > 0"`; Navidrome's `LibrarySelector` returning `null` at ≤1 library; Sonarr's status badge returning `null` at zero |
+| 13 | Show a type, section, group or control with no content | §17.2; Komga's `v-if="collectionsCount > 0"`; Navidrome's `LibrarySelector` returning `null` at ≤1 library; Sonarr's status badge returning `null` at zero. ⚠️ **The bound is *no content*, not *no items*.** Home Block A's four sourceless rows in v0.1 (§17.2) are **not** an exception to this rule: a row reading *"Comics — no catalogue source connected · Kavita, after v0.1 · Connect"* carries a state, a cause and an action, which is content. What the rule bans is a region that says nothing. Dropping those four rows instead would leave a Home screen from which the only inference is that UsArr does not do books, music or comics |
 
 ---
 
