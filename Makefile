@@ -386,10 +386,11 @@ fmt-check: ## Verify formatting without modifying files (used by `make check`)
 #      on a machine carrying Go and pnpm and nothing else; a ~150 MB browser
 #      download is a large new prerequisite for every developer and every runner.
 #   2. There is nothing to pin, and this file forbids `@latest` for a reason.
-#      check.mjs imports Playwright from an absolute path OUTSIDE the repo
-#      (/opt/node22/lib/node_modules/playwright), which is not a dependency of
-#      web/package.json and does not resolve anywhere else. A gate step that
-#      only works in one environment is not a gate.
+#      check.mjs resolves Playwright at run time — bare specifier first, then
+#      web/node_modules, then the npm global root — so it runs wherever the
+#      module happens to be, but nothing declares WHICH version. Until a pinned
+#      devDependency lands in web/package.json there is no version to gate on,
+#      and a gate step that accepts whatever is installed is not a gate.
 #   3. It guards docs/design/ — prose, tokens and mockups, none of which is a
 #      shipping artifact. Token drift in a mockup cannot break the binary.
 #
@@ -413,22 +414,17 @@ design: ## Run the design check (DESIGN-DIRECTION §13). Needs Chromium. NOT par
 		echo "no Playwright browser cache at $(PW_BROWSERS_PATH)."; \
 		echo "point at yours with: make design PW_BROWSERS_PATH=~/.cache/ms-playwright"; \
 		exit 1; }
-	@# Fourth guard. The three above check node, the script and the BROWSER cache —
-	@# none of them checks that the Playwright MODULE resolves, so a machine with
-	@# all three still fell through to a bare ERR_MODULE_NOT_FOUND stack trace.
-	@# The specifier is read out of check.mjs rather than duplicated here: it is an
-	@# absolute path outside the repo (see note above), and a guard that checks a
-	@# path the run does not use is the same bug as a pin the gate never runs.
-	@spec=$$(grep -oE "from '[^']*playwright[^']*'" $(DESIGN_CHECK) | head -1 | sed "s/^from '//; s/'$$//"); \
-	if [ -z "$$spec" ]; then \
-		echo "cannot find the Playwright import in $(DESIGN_CHECK) — this guard needs updating."; \
-		exit 1; fi; \
-	$(NODE) --input-type=module -e "await import(process.argv[1])" "$$spec" >/dev/null 2>&1 || { \
-		echo "the Playwright module does not resolve: $$spec"; \
-		echo "$(DESIGN_CHECK) imports it by absolute path from outside the repo, so it is"; \
-		echo "not installed by 'pnpm -C web install'. Install it (npm i -g playwright) or"; \
-		echo "edit that import to point at your own copy."; \
-		exit 1; }
+	@# The three guards above check preconditions check.mjs cannot check for
+	@# itself. Whether the Playwright MODULE resolves is NOT one of them: the
+	@# script resolves it through a fallback ladder and, on failure, prints the
+	@# problem, the pinned install command and every attempt it made before
+	@# exiting 1. A fourth guard here used to duplicate that, and it did so by
+	@# grepping the import specifier out of check.mjs — asserting the SHAPE OF
+	@# THE SCRIPT'S SOURCE rather than the behaviour it actually cared about.
+	@# When the static import became a dynamic ladder the grep matched nothing,
+	@# and under `.SHELLFLAGS := -eu -o pipefail` the assignment itself failed,
+	@# killing the recipe before its own error message could print. Guard the
+	@# behaviour you need or do not guard at all.
 	PLAYWRIGHT_BROWSERS_PATH=$(PW_BROWSERS_PATH) $(NODE) $(DESIGN_CHECK)
 
 # ─── Supply chain ────────────────────────────────────────────────────────────
