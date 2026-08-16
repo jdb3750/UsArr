@@ -38,9 +38,14 @@ everything you might want, that plugs into the players you already use.
   endpoint, one credential, the union of every backend library.
 - **Southbound** — the services UsArr aggregates: Navidrome, Jellyfin, Audiobookshelf, Komga/Kavita
   for libraries; Sonarr, Radarr, Lidarr, Prowlarr and the post-Readarr book tools for acquisition.
+  **The two roles are separate bindings, and that is the normal case** (§8.3): Navidrome catalogues
+  music and Lidarr or Prowlarr takes the request; Komga and Kavita catalogue comics and nothing
+  downstream of them accepts a release at all.
 
-Between them: **one canonical library database** across movies, TV, music, books and comics, with
-cross-media links, one tag vocabulary, one search box, one request flow.
+Between them: **one canonical library database** across six media types — movies, TV, music, ebooks,
+audiobooks and comics — with cross-media links, one tag vocabulary, one search box, one request flow,
+and **user-defined libraries that are UsArr's organisation rather than a copy of upstream's** (§6.5).
+Media type is the navigation axis and a library is a scope; the two are never merged (§17.2).
 
 > **UsArr coexists with the ecosystem; it does not replace it.** Sonarr keeps doing acquisition,
 > Jellyfin keeps doing playback, Navidrome keeps being an excellent music server. UsArr is the layer
@@ -236,6 +241,15 @@ flowchart TB
 3. The red `ext` box is reachable only from `META`, only in the background, never from a handler
    blocking a response.
 
+⚠️ **The three OpenSubsonic clients named in the diagram are not an implemented client matrix, and
+two of them cannot connect.** Verified from source: **Amperfy** has zero occurrences of `apiKey` in
+its entire Swift source and builds `u` + `t`/`s` only; **Feishin**'s Subsonic controller has no
+`apiKey` path either. Both implement salt/token exclusively, so **neither can authenticate to an
+`apiKey`-only server**. The policy is still right — the alternative is storing recoverable passwords
+— but the consequence belongs in the milestone rather than in a demo. **Symfonium** is the reference
+client, and ⚠️ **its own `apiKeyAuthentication` support is unverified**: its documentation does not
+mention API keys and it is closed-source (§16, v0.4).
+
 There is **no Jellyfin-compatible northbound surface** in the diagram or the roadmap (deferred —
 FUTURE.md §6). An earlier draft deferred it in the text and drew it as first-class here; diagrams are
 read as commitments.
@@ -335,7 +349,7 @@ pages); **service worker** stale-while-revalidate for `/api/*` and cache-first f
 **prefetch on intent**; and **pending-write chips** keyed by the ULID idempotency key that resolve
 from SSE — a chip, not an optimistic overlay (§7.6).
 
-**List rendering, revised — this replaces "virtualize everything over ~200 rows" (ADR-0028).**
+**List rendering, revised — this replaces "virtualize everything over ~200 rows" (ADR-0029).**
 That earlier rule was written before anyone costed what virtualization takes away. Virtualization
 removes off-screen rows from the DOM, and *"accessible landmark navigation, find in page, or
 intra-page anchor navigation are based solely on DOM structure, and virtualized content is by
@@ -555,7 +569,7 @@ bytes).
 game`.
 
 > **`comic_issue` is new in this revision, and migration 0001 is the only cheap moment to add it
-> (ADR-0029).** Every other multi-level medium got its levels — TV has `series`/`season`/`episode`,
+> (ADR-0030).** Every other multi-level medium got its levels — TV has `series`/`season`/`episode`,
 > music has `artist`/`album`/`track` — and comics had exactly one member, `comic`, with a
 > `work_comic` subtype whose columns (`issue_number`, `volume`) describe an *issue* while the search
 > corpus, the Tier 1 prefix index, the `kind_byte` map and the grid all treat `comic` as
@@ -765,7 +779,7 @@ first.
 > **A UsArr library is a user-owned, named, single-kind, format-filtered *binding* to containers the
 > upstream services already computed — a whole instance, a root folder, an upstream library id or an
 > \*Arr tag — with materialised membership, one declared request sink, and a narrow user-owned
-> correction layer. UsArr never reads a filesystem.** (ADR-0025.)
+> correction layer. UsArr never reads a filesystem.** (ADR-0026.)
 
 The motivating problem is not storage control. It is that **an upstream service's own idea of a
 library is often wrong, and the user wants UsArr's organisation to be better than the service's.**
@@ -829,7 +843,7 @@ grants for tags, requests and playback position. Corrections join that list.
 **What this is not.** A library is not a tag (tags are cross-kind labels) and not a saved filter
 (v1.0, a query). Cross-kind grouping — "Kids", "Christmas" — is a tag or a saved filter, never a
 library. And **libraries are not navigation**: they are unbounded in number, so they are a scope, not
-a sidebar entry (§17.2, ADR-0026).
+a sidebar entry (§17.2, ADR-0027).
 
 **It supplies three referents the design had already promised and left dangling**, which is why it is
 smaller than it looks: `user_library_access` (§12.2 names it with no `library` table to point at),
@@ -1334,7 +1348,21 @@ credential.
 **Stated scope:** a manifest describes a **read-mostly JSON-over-HTTP service with stateless auth**.
 Out of scope and needing Tier 0: session establishment (qBittorrent, Deluge), challenge-retry
 handshakes (Transmission), JSON-RPC envelopes (NZBGet, Transmission, Deluge) and XML (Plex).
-Concretely it covers LazyLibrarian, Komga, Kavita, Audiobookshelf, Calibre-Web and \*Arr forks.
+Concretely it covers LazyLibrarian, Komga, Kavita, Audiobookshelf and \*Arr forks.
+
+> 🚩 **Calibre-Web was on that list and is removed, because it has no REST API.** It exposes OPDS
+> (Atom) and `/ajax/listbooks`, which is session-cookie authenticated — neither is a manifest target,
+> and reconstructing a library by parsing Atom on a schedule is slow, fragile and lossy, since no
+> identifiers survive the feed. The right adapter is **Tier 0 Go code opening Calibre's own
+> `metadata.db` read-only**, which is the best ebook data most self-hosters own: `identifiers(book,
+> type, val)` is a native typed external-id table that feeds `external_id` losslessly,
+> `books.uuid` is a durable key, `data(book, format)` is genuinely multi-format, `series_index` is
+> `REAL` so it sorts correctly, and `last_modified` is a real delta key. **That means a filesystem
+> read, which is an explicit exception to this section and is written down as one** — it is a
+> read-only handle on a single SQLite file, not a scanner and not a library concept (§6.5).
+> Calibre-Web itself stays as the link-out target and the byte server. Also note Calibre has **no
+> audiobook concept whatsoever**, so a Calibre-only user has no audiobook catalogue at all.
+> **Suwayomi** is likewise not manifest-describable: it is GraphQL, so Tier 0 or nothing.
 
 `Caps` reports `Search, LibrarySync, DeltaSync, Push, Add, Monitor, Delete, Queue, Grab, Images`,
 plus `MediaKinds []MediaKind` where `MediaKind` is a `(Kind, Format)` pair, `APIVersion` and an
@@ -1446,6 +1474,7 @@ Reference hardware: a Raspberry Pi 5, 10k movies / 2k series (~400k episode rows
 | Time to 100% `dominant_color` coverage | < 3 min |
 | Time to 100% ThumbHash coverage (92px-first) | < 10 min |
 | Time to 100% poster coverage at display width | background best-effort, **not** a gate |
+| **List rendering: frame time and scrollbar drift for a `content-visibility` list at 1k / 5k / 25k rows**, both themes, all three densities | **measured and published — this is what sets the virtualization escalation threshold (§4.5), which is deliberately not chosen in advance** |
 
 **The memory numbers are ⚠️ deliberately, because a claim was corrected.** The earlier draft
 justified "< 80 MB idle" by citing Navidrome as *"the existence proof that Go + embedded SQLite idles
@@ -1566,13 +1595,59 @@ elsewhere is the one that must ship soonest.* The previous order put the gateway
 differentiators last, so a one-to-two-person project had to survive its largest milestone before
 delivering anything the owner asked for.
 
-**v0.1 — "It reads your library, it is fast, and you can act on it."** Go binary + embedded SPA;
-SQLite + WAL with the §7.7 discipline; goose migrations. Tier 0 **Sonarr, Radarr**; **Prowlarr in
-Search-and-Grab mode** (§8.5). Sync channels **1, 3 and 4** — full import + delta + **reconciliation
+### 16.0 The scope amendment, argued rather than asserted (ADR-0032)
+
+The owner's scope moved from two media types to six. That is a bigger claim, so it has to be paid
+for, and "cut before you add" means saying what enters, what leaves and what is refused.
+
+**What enters, and why it is cheap: the read-only catalogue sources.** Navidrome, Audiobookshelf,
+Komga and Kavita move from v1.0 into the earliest milestone that can carry them. All four are the
+*same shape* — an HTTP GET returning a list of typed items with a stable id, mapped through the
+existing `RemoteItem` type into `work`/`edition`/`media_file`, with no write path, no state machine
+and no new subsystem. They are the marginal cost of a provider adapter, four times, over machinery
+that already exists for Sonarr and Radarr. And they are precisely what makes *"everything in one
+place"* true rather than aspirational: **without them, five of the six media types are empty
+screens**, and the product's one-sentence claim is a claim about Sonarr and Radarr.
+
+**What is deferred, and why: the command sinks.** Lidarr, LazyLibrarian, Mylar3 and Kapowarr stay
+out. A write path is per-service and expensive — routing, capability probing, an idempotent verb
+mapping, queue verification semantics, and one bespoke failure mode each. The specific ones are
+already documented: Lidarr writes `artist.status = 'deleted'` into its own database when its metadata
+server 404s, and exposes no health signal for the subsystem that causes it, so a correct adapter
+needs a guard built on day one; LazyLibrarian returns HTTP 200 with `Success: false`; Mylar3 has no
+spec, no pagination and no delta; Kapowarr's API documentation reads *"Coming Soon"*. Meanwhile
+**Prowlarr free-text search-and-grab already covers requesting for every one of the six media types
+in v0.1** — books at `7020` and `3030`, comics and manga at `7000`, music at `3000` — so deferring
+the sinks defers *convenience*, not *capability*. That is the trade, stated plainly.
+
+**What has to move out to pay for it.** Honestly: **nothing is cut, and one thing is capped.** The
+four adapters are additive to a milestone that already contains the ingest machinery, and libraries
+(§6.5) *replace* rather than extend the v0.1 UI work — the auto-proposal and the Libraries screen
+land in place of hard-coded per-type sections. What is capped is the **correction surface**: the four
+library tables and the derivation ship in migration 0001, but the exclude / include / relink / field
+override *UI* waits for v0.3. The reason is rigorous rather than convenient — §6.4 already states
+that Sonarr and Radarr rows all carry `tmdbId`/`imdbId`/`tvdbId`, so tier 1 resolves essentially 100%
+of the v0.1 identity problem. **There is nothing to correct in v0.1.** The owner's pain arrives with
+the weak catalogues, and those arrive with the milestone the corrections land in.
+
+🔍 **The scoping observation behind moving Navidrome specifically, marked as inference:** v0.4's
+success criterion is *"Symfonium connects to UsArr with one API key, browses, searches and plays"*,
+which requires a **populated music replica before the surface exists**. As previously written, v0.4
+contained both a new southbound adapter and a new northbound protocol. Splitting them is a scheduling
+correction, not a new feature.
+
+**v0.1 — "It reads your library, it is fast, and you can act on it" — now across six media types.**
+Go binary + embedded SPA; SQLite + WAL with the §7.7 discipline; goose migrations. Tier 0 **Sonarr,
+Radarr**, plus the four **read-only catalogue sources — Navidrome, Audiobookshelf, Komga, Kavita**
+(§16.0); **Prowlarr in Search-and-Grab mode** (§8.5), which is the request path for **all six**
+types. **No command sinks** — no Lidarr, no LazyLibrarian, no Mylar3, no Kapowarr. Sync channels **1, 3 and 4** — full import + delta + **reconciliation
 with 7-day tombstones and both sweep guards**; SignalR and webhooks are **out**. **Minimal write
 path** (`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue; no optimistic apply.
-`work`/`edition`/`media_file`/`external_id`/`service_item_link` with **identity tier 1 only**.
-Library grid, virtualized, keyset pagination, image pipeline **including the §4.4.1 cold-start plan**.
+`work`/`edition`/`media_file`/`external_id`/`service_item_link` **plus the four library tables
+(§6.5)** and `search_doc.library_scope`, with **identity tier 1 only** and **the correction *UI*
+deferred to v0.3**. Library auto-proposal on service add, the Libraries settings screen (§17.8),
+Home's three fixed blocks (§17.2). Library grid with **"Load more" + `content-visibility` (§4.5)**,
+keyset pagination, image pipeline **including the §4.4.1 cold-start plan**.
 Search tiers 1 and 2, corpus limited to top-level kinds, **no typo tolerance**. System tags `type:`,
 `format:`, `source:`, `quality:`, `indexer:` with the `downloadId` provenance join. The **"1080p ✓ /
 4K ✗"** badge — a free consequence of the M:N link and a strong signal to power users, though *not*
@@ -1590,26 +1665,58 @@ states; per-season TV. Release search behind progressive disclosure.
 
 **v0.3 — "Cross-media" — Train Dreams works end to end.** Ship `wikidata-edges.db` from the committed
 SPARQL script. Tiers 0–2 only; nothing below 0.85; no review inbox. Grouped result cards derived at
-query time. **LazyLibrarian** as the first Tier 1 manifest, proving the mechanism on a genuinely
-hostile API (HTTP 200 + `Success:false`).
+query time. **The ebook↔audiobook link is the flagship book case and no backend supplies it** — ABS
+pairs them only when the files share a folder; everything else treats them as unrelated. **The
+library correction surface** (`exclude`, `include`, `relink`, `field`) plus the Corrections list lands
+here, with the weak catalogues it exists for. **LazyLibrarian** as the first Tier 1 manifest — as a
+**request sink only** — proving the mechanism on a genuinely hostile API (HTTP 200 +
+`Success:false`).
 
 **v0.4 — "Gateway, narrowed": one Navidrome, one client, read-only.**
 > **Success criterion, and nothing else: *Symfonium connects to UsArr with one API key, browses,
 > searches and plays.***
 
-OpenSubsonic **subset only** — `ping`, `getLicense`, `getMusicFolders`, `getIndexes`, `getArtists`,
-`getArtist`, `getAlbum`, `getAlbumList2`, `getSong`, `search3`, `getCoverArt`, `stream`,
-`getOpenSubsonicExtensions`: ~13 endpoints, not ~100. **`apiKeyAuthentication` only.** **One**
-Navidrome; no multi-instance aggregation — but the ID *format* (§5.3) ships from day one, because it
-cannot change later. **No write-back.** The `io.Copy` byte proxy with its test matrix. OPDS,
-aggregation, write-back and the wider client matrix are each their own later milestone with their own
-success criterion.
+OpenSubsonic **subset only**, **raised from ~13 methods to ~20** on client evidence: `ping`,
+`getLicense`, `getMusicFolders`, `getIndexes`, `getArtists`, `getArtist`, `getAlbum`,
+`getAlbumList2`, `getSong`, `search3`, `getCoverArt`, `stream`, `getOpenSubsonicExtensions`, plus
+`getGenres`, `getPlaylists`, `getPlaylist`, `getUser`, `download`, `getMusicDirectory`, **and a
+spec-correct error responder for every unimplemented method** (Navidrome's `501`/`410` pattern is the
+model — a probe must get a clean protocol error, never a 500, because Amperfy probes `getPodcasts` by
+*calling* it and catching). Still not ~100.
 
-**v1.0 — "Breadth."** Remaining providers (Lidarr, Whisparr, Kavita, Calibre-Web, Audiobookshelf,
-Komga, Jellyfin); multi-user (roles, permissions, grants, library visibility, user import); the OPDS
-surface; multi-instance aggregation; northbound write-back; the full tag system; identity cascade
-tiers 2–5 with `work_merge`; `tsnet` + `WhoIs`; SignalR and webhooks as latency optimisations; 6–8
-bundled reviewed manifests.
+> 🚩 **`search3` with an EMPTY query must enumerate the whole library, paged, with all six
+> `artistCount`/`artistOffset`/`albumCount`/`albumOffset`/`songCount`/`songOffset` parameters.** It is
+> Symfonium's primary enumeration mechanism; without it Symfonium falls back to compatibility mode,
+> which walks `getIndexes` + `getMusicDirectory` and uses `download` rather than `stream`. Either way
+> the milestone's success criterion is at risk. This was described as a search implementation, which
+> it is not.
+
+**`apiKeyAuthentication` only**, and the client matrix must be stated honestly rather than implied:
+**Amperfy and Feishin cannot connect** — both implement `u` + salt/token only, verified in their
+source — so the matrix is *Symfonium works; Amperfy and Feishin do not, and that is the price of
+refusing to store recoverable passwords*. ⚠️ **And Symfonium's own `apiKeyAuthentication` support is
+unverified**: its documentation does not mention API keys and the app is closed-source. **This
+milestone's entire success criterion rests on an unverified capability — verify it against a live
+Symfonium before writing a line of gateway code.**
+
+**One** Navidrome instance northbound; no multi-instance aggregation — but the ID *format* (§5.3)
+ships from day one, because it cannot change later. `getMusicFolders` returns the user's
+`artist`-kind libraries (§6.5), which is the endpoint that had nothing to return before. **No
+write-back**: `star`, `unstar`, `setRating` and `scrobble` return a clean protocol error, never a
+500. The `io.Copy` byte proxy with its test matrix. OPDS, aggregation, write-back and the wider
+client matrix are each their own later milestone with their own success criterion.
+
+**v1.0 — "Breadth."** The **command sinks** deferred in §16.0 — **Lidarr** (with the
+`status: 'deleted'` guard built on day one, not later), **Mylar3**, **Kapowarr** — plus Whisparr,
+Jellyfin, and **Calibre as a Tier 0 adapter reading `metadata.db` read-only** (Calibre-Web has no
+REST API; §11.2). Multi-user (roles, permissions, grants, `user_library_access`, user import); the
+**OPDS surface — 1.2 first, 2.0 second**, because KOReader, the client that matters most to a
+self-hoster, still has an *open* feature request for 2.0 (`koreader#14681`) and the long tail is
+entirely 1.2; multi-instance aggregation; northbound write-back; the full tag system; identity
+cascade tiers 2–5; `tsnet` + `WhoIs`; SignalR and webhooks as latency optimisations; 6–8 bundled
+reviewed manifests. **Note that `work_merge` is *not* in this list** — it moves forward to the
+milestone that ships music (§6.4), because MBIDs and OLIDs are redirect-capable and upstream renaming
+a key is a tier-1 problem.
 
 **Explicitly never:** native video transcoding or any FFmpeg dependency · an in-app media player ·
 native TV or mobile apps · a required sidecar · reimplementing the \*Arr download/import engines.
@@ -1654,24 +1761,77 @@ Concretely, this constrains implementation:
 - **No skeleton shimmer.** A skeleton is a `dominant_color` block with the title in it (§4.4.1) —
   informative, not decorative.
 
-### 17.2 Home — sections per media type
+### 17.2 Navigation and Home
 
-The default route after login is **`/` — a sectioned home page**, one section per media type present
-in the library (Movies, TV, Music, Books, Comics), each showing a horizontal strip of recently added
-items with a "see all" link into that type's full grid.
+**Two axes, held apart and never merged (ADR-0027).**
 
-Two reasons: it answers "what do I have?" for *every* type in one screen, which is the product's
-one-sentence claim; and it makes the mixed-media library visible without forcing a mixed-media grid,
-which is hard to sort meaningfully.
+| Axis | What it is | Where it lives | Cardinality |
+|---|---|---|---|
+| **Media type** | a closed enum — movies, TV, music, ebooks, audiobooks, comics | **navigation**: one sidebar entry per type *that has content* | **bounded at 6, by construction** |
+| **Library** | a user-defined grouping (§6.5), configured separately from services | **scope**: a multi-select chip above the nav, reflected in the URL | **unbounded — and therefore never a nav list** |
 
-**Navigation model is a v0.1 decision, deliberately left open here between two acceptable options:**
-sections on the home page (the default assumed above), or per-type tabs in a top navbar with the home
-page as an overview. Both are standard; pick one on first contact with real data and do not
-relitigate. What is *not* open: a type the user does not have is **not shown at all** — no empty
-"Music" section on a movies-only install.
+**Libraries are scope, not navigation, and the reason is a documented failure rather than a
+preference.** Jellyfin's drawer maps `items.map(...)` over every user view with no cap, no pin, no
+overflow and no reorder — add a library, get a sidebar row, for ever. Calibre-Web reached seventeen
+`SIDEBAR_*` visibility bits on **one** library. Kavita had to impose "10 items + Home, everything
+else under More" after the fact. UsArr's sidebar is already committed to Home · Search · Requests ·
+Services · Settings · System, and to Calendar and Stats later — eleven fixed entries before a single
+user-defined library exists. So the model is **Navidrome's `LibrarySelector`**: a multi-select chip
+that reads "All libraries (4)" or "2 of 4 libraries", **absent entirely at 0 or 1 library**,
+defaulting to *everything*, stating its scope in words, and carried as `?lib=` on routes that already
+exist — **zero new page types**. Multi-select rather than single-select is load-bearing: it is a
+filter, not a mode, so cross-library search and browse survive. Audiobookshelf's own documentation
+records the alternative's cost — *"Most actions in the server apply to the currently selected
+library, including browsing and searching"*, and an author with series in two libraries shows as
+**two separate author entries** — which would make UsArr's one-sentence claim unimplementable.
 
-Each section is empty-state aware: a type that exists but has not finished importing shows its
-progress inline rather than an empty strip.
+**Home is three fixed blocks, and its height is O(1) in the number of media types (ADR-0028).** This
+**amends** the earlier "one section per media type, each a horizontal strip of recently added items",
+which does not survive the expansion:
+
+```
+Block A   Library summary       ≤6 rows, one per present type
+Block B   Attention             hidden entirely when empty
+Block C   Recently added        ONE unified table across all types, with a Type column
+```
+
+- **Block A** answers "what do I have?" completely in six lines — name, count, availability rollup,
+  last import, "see all" — and *gains* from more types instead of degrading. A media-type summary's
+  primary content is a **count**, so per §17.1 it is a table, not tiles.
+- **Block B is the differentiator, and no surveyed tool has anything to put in it**, because neither
+  Jellyfin nor Plex knows what is *missing*: wanted-but-absent items, failed grabs, a degraded
+  instance, an import that has not run, an instance needing re-identification (§7.4 guard 2). It is
+  principle 3 on the home screen, and it is **hidden when empty** rather than showing a green
+  "all good" panel.
+- **Block C** is the "one place, not N tools in a trenchcoat" requirement made literal: one table
+  sorted by `added_at DESC` spanning every type, with the same small-multiple row as search. A sixth
+  type adds rows to an existing list rather than a sixth region to scan; it sorts, it filters, it
+  Ctrl+Fs (§4.5), and it is a single local read.
+
+**Why six strips fail UsArr's own published test.** At the 154 px poster width, ~8 cards fit a
+~1200 px content column; a portrait card plus its meta line is ~260 px, plus header and gap ≈ 300 px
+per section, so a 900 px viewport minus the toolbar shows **2.8 sections** and about **16 items above
+the fold** — under the design's own 25-item floor, on the screen whose entire job is inventory. The
+external evidence points the same way and is weaker than the arithmetic: Runyon's instrumentation of
+28,928 tracked clicks found ~1% carousel click-through with 84% of it on the first slide, NN/g
+advises *"5 or fewer frames"* and notes people often scroll past carousels entirely, and
+jellyfin/jellyfin#16615 — asking for a wrapping grid instead of horizontal rows — was **closed as not
+planned**. 🔍 **Carry the caveat that matters: none of that research measures a recently-added strip
+in a media library.** The transfer argument is that the interaction is identical — content reachable
+only by horizontal travel, truncated with no count — and that the content here is *weaker* than a
+marketing hero, not stronger. It is reasoning, not a finding.
+
+**Horizontal strips are not banned, they are relocated.** A strip is legitimate on an *item detail*
+page ("More from this artist", ≤5 items). It does not appear on Home in any view mode; choosing the
+Posters view renders Block C as **one wrapping grid across all types**, which is what #16615 asked
+for.
+
+**What is unchanged from the earlier text, and is now a hard rule everywhere:** a type the user does
+not have is **not shown at all** — not in Block A, not in the sidebar, not as a search group. That
+rule is not a UsArr invention: Komga ships `v-if="collectionsCount > 0"`, Navidrome's
+`LibrarySelector` returns `null` at ≤1 library, and Sonarr's status badge returns `null` at zero.
+Each block is empty-state aware: a type that exists but has not finished importing shows its progress
+inline rather than an empty row.
 
 ### 17.3 Services — setup and health
 
@@ -1715,6 +1875,39 @@ Linked works render as **one grouped card** with per-medium availability (the fi
 one card, each with its own state) rather than two rows. Zero results: the query echoed back, the
 honest note that search does prefix and substring matching but not typos (§8.1), and a "search
 indexers instead" action that goes to 17.5.
+
+**Separation survives six types and gets *more* right, but it needs four rules two types never
+needed.** The IR literature calls this *aggregated search* and splits it into vertical selection and
+results presentation; Sushmita et al. (CIKM 2010, 1,296 sessions, 48 participants) found that
+**result position is significant only in the blended interface, not in the per-source one** — so
+blending manufactures a ranking bias exactly where relevance is being compared across a film and an
+audiobook on incomparable signals. Grouping removes the need to make that comparison. Both closest
+shipping tools group: Komga renders four groups at `pageSize: 10` with a "SEARCH ALL" escape, Kavita
+carries eleven groups in a `SearchResultGroup`.
+
+1. **A group with zero hits does not render** — no header, no empty state, no "0 results in Music".
+2. **Group order is by the group's best-scoring hit, descending — not a fixed type order — and it is
+   computed once per query and then frozen.** With two types a fixed order was harmless; with six it
+   buries an unambiguous album hit under two thin film rows. Late-arriving unowned results over SSE
+   never reorder a rendered group and never move a group: §17.4's stability guarantee is about a
+   *rendered result set* not moving under the cursor, which recomputing on a new query is not.
+   🔍 The freeze boundary is inference, drawn on the same line this section already draws between
+   owned and unowned.
+3. **The per-group cap comes from a total row budget, not from a constant.**
+   `cap = clamp(floor(40 / groups_with_hits), 3, 10)` — so 1–4 groups get 10 each, 5 gets 8, 6 gets
+   6. Each truncated group's last row is `Show all 34 movies →` **carrying the real total**, because
+   Baymard's finding is that silent truncation makes users believe they have seen everything.
+   🔍 The numbers are chosen, not measured: 40 from the design's own above-the-fold heuristic, 10
+   from Komga's shipping value, 3 as the floor below which a header costs more rows than it saves.
+4. **A cross-media linked work appears exactly once**, in the group of its highest-scoring medium,
+   with the other media as availability chips on that one row. *Annihilation* is legitimately a film,
+   a novel, an audiobook and an ebook; a naïve grouping shows it four times, which is the specific
+   incoherence a hub creates that a single-type tool cannot.
+
+Every result row is **one template** — type chip, title, secondary metadata, availability, library —
+varying only in data, and the library name renders only when the user has ≥2 libraries. Kavita's
+`in {{libraryName}}` line on every result is the cheapest thing that makes a heterogeneous list
+coherent.
 
 ### 17.5 Requests — one surface, two paths
 
@@ -1772,3 +1965,61 @@ Each is a named screen, not an accident.
 - **Search returned nothing** → 17.4.
 - **A command failed** → an inline chip on the affected item plus a toast carrying the upstream error
   **verbatim**, with **Retry** and **Dismiss**. Never a silent revert.
+
+### 17.8 Libraries — setup, membership and corrections
+
+**`/settings/libraries` is a second first-class settings screen alongside Services (§17.3), not a
+sub-page of it**, and the split is meaningful:
+
+> **Services answers "is the pipe up, and how do I fix it?". Libraries answers "what is in it, what
+> is it called, and where do requests go?".**
+
+They cross-link both ways: a degraded source on a library row links to that instance's Services row,
+and a Services row lists the libraries it feeds and warns before removal — *"Audiobookshelf feeds 2
+libraries. Removing it will leave Ebooks and Audiobooks with no source."* **No credential field ever
+appears on this screen**; API keys live only behind Services plus sudo mode (§12.1).
+
+**Nothing about libraries is asked before a service exists.** The §17.7 wizard is unchanged; on a
+successful connect and capability probe UsArr **proposes** libraries as one pre-checked "Accept" step,
+each editable inline — one `movie` library per Radarr, one `series` per Sonarr, one per upstream
+library for Audiobookshelf / Komga / Kavita / Navidrome / Jellyfin, and **none for Prowlarr**, which
+has no library. Two proposals are decisions rather than defaults:
+
+- **Adding a second instance of the same kind proposes joining the existing library, not creating a
+  new one.** Two Radarrs → *one* Movies library with two sources, which is what makes the
+  "1080p ✓ / 4K ✗" badge render on one card. Getting this default wrong quietly destroys the
+  project's most visible power-user feature.
+- **Audiobookshelf is offered as *two* libraries — Ebooks and Audiobooks — over its one
+  `mediaType=book` library**, which ABS itself cannot do: it distinguishes the two only at item
+  level (`ebookFileFormat` present vs audio files present). That is a concrete, demonstrable
+  improvement over the upstream's own organisation, and it costs one `formats` column. Podcasts and
+  Kavita's `Image` type are **declined with a reason**, not silently dropped, because UsArr has no
+  `work.kind` for either.
+
+**Row view:** name · kind · item count · source chips with per-source health · request destination ·
+state · reorder handle, plus **Add library** and the auto-proposal banner.
+
+**Detail view**, grouped: *Identity* (name — with upstream's own name beneath it, greyed and
+non-editable; kind; formats; icon; order) · *Visibility* (enabled, show on home, include in search,
+default sort) · *Sources* (one row per `library_source`: instance, container, items contributed,
+state, **metadata authority** as a single radio, enabled, remove — and **Add source picks a container
+from a list the instance reports**, `/api/v3/rootfolder`, `/api/v1/libraries`, `/api/v3/tag`, **never
+a free-text path**, which is what keeps UsArr off the filesystem) · *Requests* (destination, or
+**None** with the reason inline; quality profile, root folder and tags fetched live from the chosen
+destination when the panel opens — a settings screen may block on an upstream call, a *render* path
+may not) · *Corrections* (v0.3) · *Diagnostics* · *Danger zone*.
+
+**Deleting a library says exactly what it does:** *"This removes the library from UsArr. It does not
+delete anything from Radarr, Komga, or your disks."*
+
+**Named per-library states**, each mapping to an existing §17.7 pattern: *importing* (populated-so-far
+grid with real counts) · *one source degraded* (non-modal banner naming it; **the grid does not grey
+out**) · *all sources down* (fully browsable from the replica — this is the replica principle's demo)
+· *sources healthy, zero items* (*"Komga is connected and reports 0 series"*, which is a different
+sentence from "not synced yet") · *orphaned* (shown with its reason, Delete offered, never
+auto-deleted) · *no sink* (requests disabled with the reason) · *needs re-identification* (blocking
+banner, membership recompute paused, because membership derived from an untrustworthy id space is
+worse than stale membership).
+
+**Overrides must be listable in one place** — what was excluded, re-linked or overridden, by whom,
+when and why, each revertible in one click — or they become invisible magic nobody can undo.
