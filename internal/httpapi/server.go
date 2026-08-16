@@ -230,7 +230,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	// An unknown /api/ path must 404 as JSON, not as the SPA document: handing
 	// HTML to fetch() produces an unexplainable parse error in the console.
 	mux.Handle("/api/", s.wrap(func(w http.ResponseWriter, r *http.Request) error {
-		return errStatus(http.StatusNotFound, "not_found", "no such endpoint: "+RequestLine(r.Context()))
+		return errStatus(http.StatusNotFound, CodeNotFound, "no such endpoint: "+RequestLine(r.Context()))
 	}))
 }
 

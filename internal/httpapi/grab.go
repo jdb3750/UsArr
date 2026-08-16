@@ -49,7 +49,7 @@ type grabResponse struct {
 func (s *Server) handleGrab(w http.ResponseWriter, r *http.Request) error {
 	a, ok := sessionFrom(r)
 	if !ok {
-		return errStatus(http.StatusUnauthorized, "unauthorized", "this request has no session")
+		return errStatus(http.StatusUnauthorized, CodeUnauthorized, "this request has no session")
 	}
 	candidateID, err := pathInt64(r, "id")
 	if err != nil {
@@ -70,7 +70,7 @@ func (s *Server) handleGrab(w http.ResponseWriter, r *http.Request) error {
 		return notFoundOr(err, "release")
 	}
 	if req.InstanceID != 0 && req.InstanceID != cand.ServiceInstanceID {
-		return errStatus(http.StatusConflict, "instance_mismatch",
+		return errStatus(http.StatusConflict, CodeInstanceMismatch,
 			"that release belongs to a different service instance")
 	}
 
@@ -119,22 +119,22 @@ func (s *Server) handleGrab(w http.ResponseWriter, r *http.Request) error {
 func grabError(err error) error {
 	switch {
 	case errors.Is(err, releases.ErrCandidateNotFound):
-		return errStatus(http.StatusNotFound, "not_found", "no such release")
+		return errStatus(http.StatusNotFound, CodeNotFound, "no such release")
 	case errors.Is(err, releases.ErrForbidden):
-		return errStatus(http.StatusNotFound, "not_found", "no such release")
+		return errStatus(http.StatusNotFound, CodeNotFound, "no such release")
 	case errors.Is(err, releases.ErrCandidateExpired):
-		return errStatus(http.StatusGone, "expired",
+		return errStatus(http.StatusGone, CodeExpired,
 			"this release listing went stale: Prowlarr keeps a grabbable release for 30 minutes").
 			withAction("Search again")
 	case errors.Is(err, releases.ErrGrabCacheMiss):
-		return errStatus(http.StatusGone, "no_longer_offered",
+		return errStatus(http.StatusGone, CodeNoLongerOffered,
 			"that indexer no longer offers this release").
 			withAction("Search again")
 	case errors.Is(err, releases.ErrNoDownloadClient):
-		return errStatus(http.StatusConflict, "no_download_client", redactText(err.Error())).
+		return errStatus(http.StatusConflict, CodeNoDownloadClient, redactText(err.Error())).
 			withAction("Enable a download client in Prowlarr")
 	}
-	return errStatus(http.StatusBadGateway, "grab_failed",
+	return errStatus(http.StatusBadGateway, CodeGrabFailed,
 		"the grab did not go through: "+redactText(err.Error())).
 		withAction("Test connection").wrapping(err)
 }

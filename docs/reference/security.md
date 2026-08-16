@@ -382,6 +382,34 @@ silently change which resource a redirect resolves to. The tracker-specific name
 >    **never** copy this pattern on its own surfaces (its OPDS credential is HTTP Basic, and its
 >    OpenSubsonic key is a query parameter the spec fixes).
 >
+>    **Half of this shipped.** `internal/ssrf`'s `redactPathSegments` now redacts credential-shaped
+>    path segments on every URL that goes through `RedactURL`, which is what closes the
+>    *private-tracker* case: `https://tracker.example/rss/<passkey>/torrents` was untouched by the
+>    parameter deny-list and is the same leak as the query-parameter one with a different URL
+>    layout. What has **not** shipped is the *provider-declared placement* half — Kavita's
+>    `/api/Opds/{apiKey}/…` is matched only if the key happens to fit the heuristic's shape, and
+>    that must not be relied on. When the Kavita client lands it declares where its credential sits
+>    and redacts by position, not by shape.
+
+**The path half is a heuristic, and it is calibrated to miss rather than to over-match.** There is no
+parameter name to key on in a path, so a dot-separated path part is redacted only when it is at least
+**20 characters**, is an unbroken run of `[A-Za-z0-9]` with no separator of any kind, holds at least
+one letter *and* at least one digit, and does not read like words (vowel ratio and consonant-run
+test). The thresholds come from Prowlarr's own log scrubber,
+`src/NzbDrone.Common/Instrumentation/CleanseLogMessage.cs` on `develop`, which had to enumerate real
+tracker URL layouts in order to stop leaking them: its unanchored path rules use `[a-z0-9]{16,}`, and
+the shortest concrete key it names is TorrentLeech's 20-character RSS key. 16 is raised to 20 here
+because upstream's rules are anchored to a host or a path prefix and this one is not — it runs on
+every segment of every URL.
+
+**The direction of error is deliberate.** `provenance` rows are immutable and permanent, so a false
+positive corrupts a record that can never be repaired, while a false negative loses a passkey from a
+log line. The accepted cost is that an opaque high-entropy identifier in a path — a ULID, a
+hyphen-free UUID, a git sha — is redacted too, because it is indistinguishable by shape from a
+passkey. UsArr's own routes carry no path segment near 20 characters, so nothing of its own is
+affected. The heuristic is **not** applied to `stripCredentials`: removing a path segment from a
+redirect target changes which resource is being requested.
+>
 > Related, and already covered correctly by the existing rules — noted because it is a live example
 > of the class the earlier threat model omitted: **Kavita exposes `GET /api/Image/web-link?url=…`**,
 > an image proxy taking an arbitrary URL. Any cover URL UsArr follows from a Kavita response is

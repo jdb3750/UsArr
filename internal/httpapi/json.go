@@ -20,15 +20,15 @@ const maxRequestBody = 1 << 20 // 1 MB
 // fixes it, which is the same contract the Services screen holds itself to
 // (§17.3). Neither ever carries a credential: both go through redactText.
 type errorBody struct {
-	Error   string `json:"error"`
-	Message string `json:"message"`
-	Action  string `json:"action,omitempty"`
+	Error   ErrorCode `json:"error"`
+	Message string    `json:"message"`
+	Action  string    `json:"action,omitempty"`
 }
 
 // apiError is a handler-level failure carrying the status it should produce.
 type apiError struct {
 	Status  int
-	Code    string
+	Code    ErrorCode
 	Message string
 	Action  string
 	Err     error
@@ -36,14 +36,18 @@ type apiError struct {
 
 func (e *apiError) Error() string {
 	if e.Err != nil {
-		return e.Code + ": " + e.Message + ": " + e.Err.Error()
+		return string(e.Code) + ": " + e.Message + ": " + e.Err.Error()
 	}
-	return e.Code + ": " + e.Message
+	return string(e.Code) + ": " + e.Message
 }
 
 func (e *apiError) Unwrap() error { return e.Err }
 
-func errStatus(status int, code, message string) *apiError {
+// errStatus takes an ErrorCode, not a string, so a new code has to be declared
+// in errorcodes.go before a handler can return it. The type is not the whole
+// guard — an untyped literal still converts — so TestErrorCodesAreConstants
+// checks the call sites too.
+func errStatus(status int, code ErrorCode, message string) *apiError {
 	return &apiError{Status: status, Code: code, Message: message}
 }
 
@@ -57,6 +61,13 @@ func (e *apiError) wrapping(err error) *apiError {
 	return e
 }
 
+// encodeFailureBody is the fixed body written when marshalling the real
+// response failed. It is built from CodeEncode rather than typed out, so the
+// one code that can never travel through errStatus is still spelled by the
+// constant and still appears in ErrorCodes().
+var encodeFailureBody = []byte(
+	`{"error":"` + string(CodeEncode) + `","message":"the response could not be encoded"}`)
+
 // writeJSON renders v. It marshals into memory first so that a marshal failure
 // produces a 500 rather than a 200 with a truncated body.
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -64,7 +75,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(`{"error":"encode","message":"the response could not be encoded"}`))
+		_, _ = w.Write(encodeFailureBody)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -82,14 +93,14 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any) error {
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(v); err != nil {
-		return errStatus(http.StatusBadRequest, "bad_request",
+		return errStatus(http.StatusBadRequest, CodeBadRequest,
 			"the request body is not the JSON this endpoint expects: "+redactText(err.Error())).wrapping(err)
 	}
 	// Exactly one JSON document, not a stream: a second one would be silently
 	// discarded, and "the second half of my request was ignored" is a very hard
 	// bug to see from the outside.
 	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return errStatus(http.StatusBadRequest, "bad_request", "the request body holds more than one JSON document")
+		return errStatus(http.StatusBadRequest, CodeBadRequest, "the request body holds more than one JSON document")
 	}
 	return nil
 }
@@ -99,7 +110,7 @@ func pathInt64(r *http.Request, name string) (int64, error) {
 	raw := r.PathValue(name)
 	id, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil || id <= 0 {
-		return 0, errStatus(http.StatusNotFound, "not_found", fmt.Sprintf("%q is not an id", raw))
+		return 0, errStatus(http.StatusNotFound, CodeNotFound, fmt.Sprintf("%q is not an id", raw))
 	}
 	return id, nil
 }
@@ -121,7 +132,7 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 	if !errors.As(err, &ae) {
 		ae = &apiError{
 			Status:  http.StatusInternalServerError,
-			Code:    "internal",
+			Code:    CodeInternal,
 			Message: "the request could not be completed",
 			Err:     err,
 		}
@@ -164,7 +175,7 @@ func queryInt32s(r *http.Request, name string) ([]int32, error) {
 			}
 			n, err := strconv.ParseInt(part, 10, 32)
 			if err != nil {
-				return nil, errStatus(http.StatusBadRequest, "bad_request",
+				return nil, errStatus(http.StatusBadRequest, CodeBadRequest,
 					fmt.Sprintf("%s=%q is not an integer", name, part))
 			}
 			out = append(out, int32(n))

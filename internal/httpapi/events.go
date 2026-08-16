@@ -191,12 +191,12 @@ func (h *Hub) Close() {
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) error {
 	a, ok := sessionFrom(r)
 	if !ok {
-		return errStatus(http.StatusUnauthorized, "unauthorized", "this request has no session")
+		return errStatus(http.StatusUnauthorized, CodeUnauthorized, "this request has no session")
 	}
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		return errStatus(http.StatusInternalServerError, "internal",
+		return errStatus(http.StatusInternalServerError, CodeInternal,
 			"this server cannot stream: the response writer does not flush")
 	}
 

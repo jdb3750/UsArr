@@ -161,7 +161,7 @@ func (s *Server) recoverMiddleware(next http.Handler) http.Handler {
 				"panic", redactText(toString(rec)),
 				"stack", string(debug.Stack()))
 			writeJSON(w, http.StatusInternalServerError, errorBody{
-				Error:   "internal",
+				Error:   CodeInternal,
 				Message: "the request could not be completed",
 			})
 		}()
