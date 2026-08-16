@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -67,20 +68,22 @@ func (s *Server) handleGrab(w http.ResponseWriter, r *http.Request) error {
 	// is a better error than "not found".
 	cand, err := s.store.GetReleaseCandidate(r.Context(), scope, candidateID, time.Time{})
 	if err != nil && !errors.Is(err, store.ErrExpired) {
-		return notFoundOr(err, "release")
+		// cand is the zero value here — there is genuinely no release to name,
+		// and the row says so rather than inventing a title.
+		return s.auditNotSent(r, candidateID, cand, notFoundOr(err, "release"))
 	}
 	if req.InstanceID != 0 && req.InstanceID != cand.ServiceInstanceID {
-		return errStatus(http.StatusConflict, CodeInstanceMismatch,
-			"that release belongs to a different service instance")
+		return s.auditNotSent(r, candidateID, cand, errStatus(http.StatusConflict, CodeInstanceMismatch,
+			"that release belongs to a different service instance"))
 	}
 
 	searcher, err := s.searcherFor(r.Context(), cand.ServiceInstanceID)
 	if err != nil {
-		return err
+		return s.auditNotSent(r, candidateID, cand, err)
 	}
 	rscope, err := s.releasesScope(r, a)
 	if err != nil {
-		return err
+		return s.auditNotSent(r, candidateID, cand, err)
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), grabTimeout)
@@ -101,19 +104,33 @@ func (s *Server) handleGrab(w http.ResponseWriter, r *http.Request) error {
 		// sent-unknown path internal/releases writes an unconfirmed provenance
 		// row to keep the infohash join key, and returns its id alongside the
 		// error. It is 0 on every other failure.
-		auditResult, outcome := "fail", "not_sent"
+		auditResult, outcome := "fail", outcomeNotSent
 		if apiErr.Code == CodeGrabOutcomeUnknown {
-			auditResult, outcome = "warn", "sent_unknown"
+			auditResult, outcome = "warn", outcomeSentUnknown
 		}
-		s.audit(r, "release.grab", "release_candidate", candidateID, auditResult,
-			fmt.Sprintf(`{"instance_id":%d,"outcome":%q,"error":%q,"provenance_id":%d}`,
-				cand.ServiceInstanceID, outcome, apiErr.Code, result.ProvenanceID))
+		s.audit(r, auditGrabAction, "release_candidate", candidateID, auditResult,
+			grabAuditJSON(grabAuditMeta{
+				InstanceID:   cand.ServiceInstanceID,
+				Outcome:      outcome,
+				Error:        string(apiErr.Code),
+				Message:      apiErr.Message,
+				ReleaseTitle: cand.Title,
+				Indexer:      cand.Indexer,
+				Protocol:     cand.Protocol,
+				ProvenanceID: result.ProvenanceID,
+			}))
 		return apiErr
 	}
 
-	s.audit(r, "release.grab", "release_candidate", candidateID, "ok",
-		fmt.Sprintf(`{"instance_id":%d,"indexer":%q,"protocol":%q,"outcome":%q}`,
-			cand.ServiceInstanceID, result.IndexerName, result.Protocol, "sent_confirmed"))
+	s.audit(r, auditGrabAction, "release_candidate", candidateID, "ok",
+		grabAuditJSON(grabAuditMeta{
+			InstanceID:   cand.ServiceInstanceID,
+			Outcome:      outcomeSentConfirmed,
+			ReleaseTitle: result.ReleaseTitle,
+			Indexer:      result.IndexerName,
+			Protocol:     result.Protocol,
+			ProvenanceID: result.ProvenanceID,
+		}))
 
 	msg := "sent to Prowlarr's download client"
 	switch {
@@ -137,6 +154,133 @@ func (s *Server) handleGrab(w http.ResponseWriter, r *http.Request) error {
 		Message:      msg,
 	})
 	return nil
+}
+
+// The grab audit vocabulary, spelled once. `action` is what the Recent-grabs
+// read filters on, and a typo in a string literal here is a row that silently
+// never appears in the list it was written for.
+const (
+	auditGrabAction = "release.grab"
+
+	// outcome names WHERE the release got to, which is the axis Recent grabs
+	// sorts on. It is not a synonym for audit_log.result: sent-unknown is
+	// result="warn", and both sent states are recorded even though only one of
+	// them is a 200.
+	outcomeNotSent       = "not_sent"
+	outcomeSentUnknown   = "sent_unknown"
+	outcomeSentConfirmed = "sent_confirmed"
+)
+
+// grabAuditMeta is audit_log.metadata_json for a grab, as a struct rather than
+// a hand-built string.
+//
+// WHY A STRUCT. This was fmt.Sprintf with %q, which is Go quoting and not JSON
+// quoting — they agree on ASCII and diverge on the rest, and a release title is
+// exactly the field that carries an em dash, a CJK character or a stray control
+// byte straight from an indexer. A row whose metadata will not parse is a row
+// the reader must skip, which is the failure this change exists to remove.
+//
+// WHY THESE FIELDS. A Recent-grabs row renders time, release name, indexer,
+// protocol and state. The failure arm reads from audit_log, so every one of
+// those has to be ON the audit row: before this it carried instance_id, outcome
+// and an error CODE, so even a row that existed had nothing to display but an
+// enum. Message is the user-facing error text — the same sentence the user was
+// shown — so the list can say why without re-deriving it from a code.
+//
+// NO SECRET VALUES. Everything here is a name, a host-free id or a message that
+// has already been through redactText, and Server.audit redacts the rendered
+// JSON again on the way in.
+//
+// InstanceID IS THE ONLY PLACE A GRAB'S SERVICE IS RECORDED, and that asymmetry
+// is deliberate rather than pending. `provenance` has no service_instance_id, so
+// the audit arm of Recent grabs can name which Prowlarr a grab went to and the
+// provenance arm cannot. That is a display gap on one column, not a correctness
+// gap — the union works either way — and docs/FUTURE.md §18 carries the argument
+// for recording it instead of spending migration 0004 on it, along with the two
+// conditions that reopen it.
+type grabAuditMeta struct {
+	InstanceID   int64  `json:"instance_id"`
+	Outcome      string `json:"outcome"`
+	Error        string `json:"error,omitempty"`
+	Message      string `json:"message,omitempty"`
+	ReleaseTitle string `json:"release_title,omitempty"`
+	Indexer      string `json:"indexer,omitempty"`
+	Protocol     string `json:"protocol,omitempty"`
+	ProvenanceID int64  `json:"provenance_id,omitempty"`
+}
+
+// grabAuditJSON renders the metadata. A marshal failure yields the minimum
+// honest object rather than an empty string, so the row still records the
+// outcome even if a field would not encode.
+func grabAuditJSON(m grabAuditMeta) string {
+	buf, err := json.Marshal(m)
+	if err != nil {
+		return fmt.Sprintf(`{"instance_id":%d,"outcome":%q}`, m.InstanceID, m.Outcome)
+	}
+	return string(buf)
+}
+
+// auditNotSent records a grab that failed BEFORE dispatch, and returns the
+// error unchanged so a call site stays one line.
+//
+// WHICH FAILURES REACH HERE, AND WHICH DELIBERATELY DO NOT. handleGrab has
+// seven early returns ahead of the dispatch, and only four of them write a row.
+// The line is whether the request named a release this user could have grabbed:
+//
+//	no session          — NO ROW. There is no actor, so actor_user_id is NULL and
+//	                      the scoped read (`actor_user_id IN (0, :uid)`) can never
+//	                      return it — a row nobody can read is cost without
+//	                      signal. Worse, this is the one branch reachable without
+//	                      credentials, so appending here lets anyone who can
+//	                      reach the port grow an append-only table by request.
+//	                      Scanner traffic, not grab history.
+//	malformed path id   — NO ROW. `/releases/wat/grab` never named a release;
+//	                      target_id would be empty and the row would render as a
+//	                      failed grab of nothing. This is a routing rejection
+//	                      wearing a handler's clothes.
+//	undecodable body    — NO ROW. Same reason one step later: the body is
+//	                      rejected before the candidate is read, so there is no
+//	                      title, no indexer and no instance — none of the three
+//	                      fields the row exists to carry. A client bug belongs in
+//	                      the request log, which already has it.
+//	candidate not found — ROW. A real attempt: the user clicked Grab on something
+//	                      and nothing was sent. The candidate is gone (swept
+//	                      after its TTL) or outside their scope, so the title is
+//	                      genuinely unknown and the row says so by omitting it
+//	                      rather than by guessing. "The listing had been swept" is
+//	                      the answer to "why did that do nothing", and it is the
+//	                      answer only this row can give.
+//	instance mismatch   — ROW, and the best-furnished of them: the candidate
+//	                      resolved, so title, indexer and protocol are all known.
+//	searcherFor failed  — ROW. The release is known and the Prowlarr that owns it
+//	                      could not be opened. Nothing was sent, and this is
+//	                      precisely the "your stack is broken" row the Recent-grabs
+//	                      failure arm is for.
+//	releasesScope failed— ROW. Same shape: the release is known, the scope read
+//	                      failed, nothing dispatched.
+//
+// Everything here is outcome=not_sent and result="fail", never "warn": these
+// all precede the POST, so UsArr genuinely knows the release never left the
+// process. Asserting failure is honest for exactly this set and for no other.
+func (s *Server) auditNotSent(r *http.Request, candidateID int64, cand store.ReleaseCandidate, err error) error {
+	code, message := CodeInternal, ""
+	var ae *apiError
+	if errors.As(err, &ae) {
+		code, message = ae.Code, ae.Message
+	} else if err != nil {
+		message = redactText(err.Error())
+	}
+	s.audit(r, auditGrabAction, "release_candidate", candidateID, "fail",
+		grabAuditJSON(grabAuditMeta{
+			InstanceID:   cand.ServiceInstanceID,
+			Outcome:      outcomeNotSent,
+			Error:        string(code),
+			Message:      message,
+			ReleaseTitle: cand.Title,
+			Indexer:      cand.Indexer,
+			Protocol:     cand.Protocol,
+		}))
+	return err
 }
 
 // grabUnknownMessage is the sent-unknown wording, built once so the two halves

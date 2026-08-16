@@ -991,6 +991,22 @@ newest-first comes out of the index rather than a temp b-tree. `EXPLAIN QUERY PL
 `SEARCH … USING INDEX`: covering-ness depends on the SELECT list, so pinning it would fail the moment
 a caller selects one more column, which is a change to the query and not an index regression.
 
+**The read that uses it is `store.ListAuditLog(ctx, scope, AuditQuery{Actions, Results})`**, and
+until it grew a scope and those filters the index was used by **no query in the codebase at all** —
+an index that had never been exercised, which is indistinguishable from no index. It is now pinned by
+`TestAuditReadUsesTheActorActionIndex`, which `EXPLAIN`s the statement the function itself builds
+rather than a copy pasted into a test.
+
+**With the canonical `actor_user_id IN (0, :uid)` predicate SQLite adds `USE TEMP B-TREE FOR ORDER
+BY`**, exactly as it does for `ix_prov_user_grabbed` on the other arm of the same union and for the
+same reason: it cannot supply order from an index whose *leading* column is constrained by `IN`. The
+sentence above about newest-first coming out of the index holds for the single-user equality form
+only. The index still cuts the walk from every row ever appended to one actor's rows for one action,
+and the sort is over that bounded set under a `LIMIT`; `TestScopedAuditOrderNeedsASort` pins it so
+the gap is recorded rather than rediscovered. A row with `actor_user_id IS NULL` matches no scope —
+`NULL IN (0, 1)` is unknown — so an unauthenticated action is readable by nobody, which is why the
+grab path deliberately writes no audit row for a request that arrived without a session.
+
 ---
 
 ## 10. The write queue · **v0.1**

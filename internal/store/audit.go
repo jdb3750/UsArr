@@ -116,18 +116,92 @@ func actorString(v sql.NullInt64) string {
 	return strconv.FormatInt(v.Int64, 10)
 }
 
-// ListAuditLog reads the most recent audit rows, newest first. Driven by
-// ix_audit_ts.
-func (s *Store) ListAuditLog(ctx context.Context, limit int) ([]AuditEntry, error) {
+// AuditQuery narrows a scoped audit read.
+//
+// Both filters are OR-within, AND-between: an empty slice means "any". They
+// exist because the read that needs them — Recent grabs' not-sent arm, which is
+// `action = 'release.grab' AND result = 'fail'` — is otherwise a full walk of a
+// table that grows forever by design.
+type AuditQuery struct {
+	// Actions restricts to these action names. Leading column of the filter and
+	// the second column of ix_audit_actor_action.
+	Actions []string
+
+	// Results restricts to these result values: "ok", "warn", "fail". Not
+	// indexed — it narrows an already-indexed set.
+	Results []string
+
+	// Limit caps the rows returned. Zero or less means 100.
+	Limit int
+}
+
+// auditListSQL renders one scoped audit read: the statement and its arguments.
+//
+// It is split out from ListAuditLog so TestAuditReadUsesTheActorActionIndex can
+// EXPLAIN the query this function ACTUALLY issues rather than a copy of it
+// pasted into a test, which is the way a query-plan assertion silently stops
+// covering the query it names.
+func auditListSQL(scope Scope, q AuditQuery) (string, []any) {
+	// The scope is applied HERE, in the SQL, not merely accepted in the
+	// signature. That distinction is the whole point of the parameter.
+	userPred, args := scope.userPredicate("actor_user_id")
+
+	var b strings.Builder
+	b.WriteString(`SELECT id, ts, actor_user_id, actor_ip, action, target_type, target_id,
+	       result, metadata_json, prev_hash
+	  FROM audit_log
+	 WHERE ` + userPred)
+	if len(q.Actions) > 0 {
+		b.WriteString(" AND action IN (" + placeholders(len(q.Actions)) + ")")
+		for _, a := range q.Actions {
+			args = append(args, a)
+		}
+	}
+	if len(q.Results) > 0 {
+		b.WriteString(" AND result IN (" + placeholders(len(q.Results)) + ")")
+		for _, r := range q.Results {
+			args = append(args, r)
+		}
+	}
+	limit := q.Limit
 	if limit <= 0 {
 		limit = 100
 	}
-	rows, err := s.db.Read().QueryContext(ctx, `
-		SELECT id, ts, actor_user_id, actor_ip, action, target_type, target_id,
-		       result, metadata_json, prev_hash
-		  FROM audit_log
-		 ORDER BY ts DESC
-		 LIMIT ?`, limit)
+	// id DESC trails ts DESC because ts has one-second resolution: two rows
+	// appended in the same second must still have a total order, or a paged read
+	// repeats one. Same reasoning as ix_prov_user_grabbed's tiebreak.
+	b.WriteString(" ORDER BY ts DESC, id DESC LIMIT ?")
+	return b.String(), append(args, limit)
+}
+
+// ListAuditLog reads audit rows the given scope may see, newest first.
+//
+// IT TAKES THE ACCESS SCOPE IN ITS SIGNATURE AND APPLIES IT IN THE SQL, and
+// both halves are load-bearing (ARCHITECTURE.md §1.3 rule 2). This used to take
+// neither: any caller could read every user's actions, which for the grab path
+// means one user's release titles, indexers and failures. That is the same class
+// of leak GetProvenanceByDownloadID was fixed for, on the other arm of the same
+// Recent-grabs union.
+//
+// A ROW WITH NO ACTOR IS INVISIBLE HERE, DELIBERATELY. The predicate is the
+// canonical `actor_user_id IN (0, :uid)`, and audit_log.actor_user_id is
+// nullable — SQL three-valued logic makes `NULL IN (0, 1)` unknown, so an
+// unauthenticated action is attributable to nobody and is read by nobody. That
+// is the fail-closed default, and it is why internal/httpapi's grab path
+// deliberately writes NO audit row for a request that arrived with no session:
+// a row nothing can ever read is cost without signal, and an unauthenticated
+// endpoint that appends a row per request is a log-flood vector. Chain
+// verification is a different job and reads every row — see VerifyAuditChain.
+//
+// ORDERING COSTS A SORT, and that is recorded rather than hidden.
+// TestScopedAuditOrderNeedsASort pins it: SQLite cannot supply ORDER BY from an
+// index whose LEADING column is constrained by IN, so the plan is a SEARCH on
+// ix_audit_actor_action plus a temp b-tree. The index still cuts the walk from
+// "every row ever appended" to "this actor's rows for this action", and the sort
+// is over that bounded set under a LIMIT.
+func (s *Store) ListAuditLog(ctx context.Context, scope Scope, q AuditQuery) ([]AuditEntry, error) {
+	query, args := auditListSQL(scope, q)
+	rows, err := s.db.Read().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list audit_log: %w", err)
 	}
@@ -158,6 +232,12 @@ func (s *Store) ListAuditLog(ctx context.Context, limit int) ([]AuditEntry, erro
 // VerifyAuditChain recomputes the chain from the oldest row forward and
 // reports the id of the first row whose hash does not match, or 0 if the chain
 // is intact.
+//
+// It takes NO scope, on purpose: a chain is only verifiable whole. Skipping the
+// rows one user may not read would break every link across the gap and report
+// tampering that did not happen. This is an operator-level integrity check over
+// the file, not a user-facing read of its contents — it returns an id and
+// nothing else, so it discloses no row.
 func (s *Store) VerifyAuditChain(ctx context.Context) (int64, error) {
 	rows, err := s.db.Read().QueryContext(ctx, `
 		SELECT id, ts, actor_user_id, actor_ip, action, target_type, target_id,
