@@ -175,6 +175,44 @@ describe('toRelease', () => {
 		});
 	});
 
+	/**
+	 * ⚠️ THE FIELD IS `indexer_flags` ON THE WIRE AND `Flags` IN GO
+	 * (internal/httpapi/search.go). Grepping the Go field name concludes the data
+	 * is not there, which is how a whole slice shipped throwing it away. Same for
+	 * `grabs`, which was on the wire and simply never read.
+	 */
+	it('reads grabs, leechers and indexer_flags, which the first client dropped', () => {
+		const release = toRelease({
+			candidate_id: 7,
+			title: 'Some.Release.2024',
+			indexer_id: 12,
+			protocol: 'torrent',
+			seeders: 41,
+			leechers: 9,
+			grabs: 214,
+			indexer_flags: ['internal', 'freeleech', 'golden']
+		});
+		expect(release?.indexerId).toBe(12);
+		expect(release?.grabs).toBe(214);
+		expect(release?.leechers).toBe(9);
+		// Open vocabulary: `golden` is one indexer's private subclass and must
+		// survive. An allowlist would drop it, and drop it invisibly.
+		expect(release?.indexerFlags).toEqual(['internal', 'freeleech', 'golden']);
+	});
+
+	it('leaves indexerFlags undefined when the server sends none', () => {
+		// Absent means UNKNOWN, never "not freeleech" — a usenet result never
+		// carries flags whatever the indexer is offering, and an empty array must
+		// not become an empty chip list that reads as a claim.
+		expect(toRelease({ candidate_id: 7, title: 't' })?.indexerFlags).toBeUndefined();
+		expect(
+			toRelease({ candidate_id: 7, title: 't', indexer_flags: [] })?.indexerFlags
+		).toBeUndefined();
+		expect(
+			toRelease({ candidate_id: 7, title: 't', indexer_flags: 'freeleech' })?.indexerFlags
+		).toBeUndefined();
+	});
+
 	it('requires a usable candidate id and a title', () => {
 		expect(toRelease({ title: 'no id' })).toBeUndefined();
 		expect(toRelease({ candidate_id: 1 })).toBeUndefined();

@@ -123,11 +123,36 @@ export interface Release {
 	candidateId: number;
 	guid: string;
 	title: string;
+	/** The Prowlarr-side indexer id. It is what `?indexer=` scopes on, so the
+	 * picker cannot be built without it. */
+	indexerId?: number;
 	indexerName?: string;
 	protocol?: string;
 	sizeBytes?: number;
 	seeders?: number;
+	leechers?: number;
+	/** How many times the indexer says this release has been grabbed. */
+	grabs?: number;
 	ageDays?: number;
+	/**
+	 * The indexer's own flags, VERBATIM AND UNFILTERED.
+	 *
+	 * ⚠️ THE WIRE NAME IS `indexer_flags` AND THE GO FIELD IS `Flags`
+	 * (internal/httpapi/search.go). Grepping the Go field name concludes this
+	 * data does not exist; it always did, and the client simply threw it away.
+	 *
+	 * `IndexerFlag` is a subclassable class in Prowlarr, not an enum — the base
+	 * type declares seven and `PassThePopcornFlag` adds two more — so there is
+	 * no known list to match against and there must not be one. An allowlist
+	 * drops every future indexer's flags INVISIBLY, rendering fewer chips than
+	 * the indexer sent with nothing saying anything was discarded.
+	 *
+	 * An ABSENT flag means UNKNOWN, never "not freeleech": `freeleech` and
+	 * `halfleech` are derived from exact equality against a download factor of
+	 * 0.0 and 0.5, so a 25% promotion produces no flag at all, and usenet
+	 * results never carry flags whatever the indexer offers.
+	 */
+	indexerFlags?: string[];
 	infoUrl?: string;
 	expiresAt?: string;
 	/** The candidate this result replaces, when a higher-priority indexer answered later. */
@@ -208,6 +233,18 @@ function bool(value: unknown): boolean {
 }
 
 /**
+ * A wire array of strings, filtered to the non-empty ones.
+ *
+ * Deliberately NOT validated against a known vocabulary: its only caller is
+ * `indexer_flags`, which is open by construction. See Release.indexerFlags.
+ */
+function strArray(value: unknown): string[] | undefined {
+	if (!Array.isArray(value)) return undefined;
+	const out = value.filter((v): v is string => typeof v === 'string' && v.length > 0);
+	return out.length > 0 ? out : undefined;
+}
+
+/**
  * One release off the wire. candidate_id and title are the two fields nothing
  * can be rendered or grabbed without, so a frame missing either is dropped
  * rather than rendered as a row with a dead Grab button.
@@ -221,11 +258,17 @@ export function toRelease(value: unknown): Release | undefined {
 		candidateId,
 		guid: str(value.guid) ?? '',
 		title,
+		indexerId: num(value.indexer_id),
 		indexerName: str(value.indexer_name),
 		protocol: str(value.protocol),
 		sizeBytes: num(value.size_bytes),
 		seeders: num(value.seeders),
+		leechers: num(value.leechers),
+		grabs: num(value.grabs),
 		ageDays: num(value.age_days),
+		// `indexer_flags`, not `flags`. The Go field is Flags and the JSON tag is
+		// not, which is exactly how this field went unread for a whole slice.
+		indexerFlags: strArray(value.indexer_flags),
 		infoUrl: str(value.info_url),
 		expiresAt: str(value.expires_at),
 		supersedesCandidateId: num(value.supersedes_candidate_id)
@@ -1100,8 +1143,46 @@ export async function deleteService(id: number): Promise<void> {
  * carries NO releases, by design (internal/httpapi/search.go): every result
  * arrives on the SSE stream as each indexer answers.
  */
-export async function startSearch(query: string): Promise<SearchAccepted> {
-	const url = `/api/v1/search?query=${encodeURIComponent(query)}`;
+/**
+ * How wide a search is allowed to go.
+ *
+ * The server narrows the fan-out BEFORE the legs are planned
+ * (internal/httpapi/search.go builds releases.Query from these and hands it to
+ * the searcher), so an unselected indexer is never asked and spends none of its
+ * rate limit. That is the whole reason scoping belongs on the request rather
+ * than in a client-side filter over the results.
+ *
+ * An EMPTY or absent `indexerIds` means every indexer, which is the server's own
+ * default. It is not the same as a one-element list, and the difference is
+ * visible to the user, so the caller must not collapse them.
+ */
+export interface SearchScope {
+	/** Prowlarr indexer ids. Repeated as `?indexer=` — the server reads them
+	 * with queryInt32s, which takes the parameter more than once. */
+	indexerIds?: number[];
+	/** Newznab category ids, repeated as `?category=`. */
+	categories?: number[];
+	/** Which configured indexer service to search, when more than one is enabled. */
+	instanceId?: number;
+}
+
+/** Only finite non-negative integers reach the wire: the server answers 400 on
+ * anything else, and a NaN in the URL would fail the whole search rather than
+ * one filter. */
+function appendIds(params: URLSearchParams, name: string, ids: number[] | undefined): void {
+	for (const id of ids ?? []) {
+		if (Number.isSafeInteger(id) && id >= 0) params.append(name, String(id));
+	}
+}
+
+export async function startSearch(query: string, scope: SearchScope = {}): Promise<SearchAccepted> {
+	const params = new URLSearchParams({ query });
+	appendIds(params, 'indexer', scope.indexerIds);
+	appendIds(params, 'category', scope.categories);
+	if (scope.instanceId !== undefined && scope.instanceId > 0) {
+		params.set('instance', String(scope.instanceId));
+	}
+	const url = `/api/v1/search?${params.toString()}`;
 	const payload = await requestJson(url);
 	if (!isRecord(payload)) {
 		throw new ApiError('the backend accepted the search without a search id', 200, url);

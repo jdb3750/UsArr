@@ -112,12 +112,7 @@
 	 * app.css's TRANSITIONAL block carries. The set shrinks to nothing as each
 	 * one is rebuilt, and the block goes with it.
 	 */
-	const TRANSITIONAL = new Set<string>([
-		resolve('/'),
-		resolve('/search'),
-		resolve('/services'),
-		resolve('/login')
-	]);
+	const TRANSITIONAL = new Set<string>([resolve('/'), resolve('/services'), resolve('/login')]);
 
 	/**
 	 * /login is setup on a fresh install and sign-in on every install after it,
