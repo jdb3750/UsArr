@@ -3720,6 +3720,14 @@ fallback's 221.806 px), `content-visibility: visible` forced so no off-screen ro
 Rich rows are unmoved by the fix and measured rather than assumed to be: **border box 45 / 49 / 53,
 content box 44 / 48 / 52**, floor slack, byte-identical on both trees.
 
+⚠️ **AMENDED: those rich-row figures are the MODE, and this entry originally gave them as though the
+rich row had one height.** It does not — it is **bimodal**, because rows carrying more chips wrap.
+Measured by the frontend thread at compact over 2,000 rows, the content boxes split **44 px × 1,308
+and 48 px × 692**, so the mode is content box 44 / 48 / 52 and the **mean** is 45.4 / 49.4 / 53.4.
+🚩 **`45 / 49 / 53` is therefore the mean content box AND the modal border box at the same time**,
+which is precisely why it has never looked ambiguous — it is the same failure mode this entry is
+about, one level up: a figure that keeps its digits while the quantity underneath it changes.
+
 ✅ **THE `labels`-FORK DISAGREEMENT IS RESOLVED, AND NO PARTY TO IT WAS WRONG.** Three figures were
 standing — §7.4's **26 / 30 / 34**, the frontend thread's **28 / 32 / 36**, and a separate
 measurement's **27 / 31 / 35** — and they were not competing readings of one quantity. They are three
@@ -3771,6 +3779,19 @@ history, since the fix is only legible against them. Every figure in both names 
 box alone cannot disambiguate name the floor condition too. ADR-0029's later bullet — *"A
 `stack: 'labels'` list has one-line rows at 26 / 30 / 34 px"* — keeps its digits and gains its box.
 
+🚩 **THE LESSON HAS A THIRD CLAUSE, AND THE RICH ROW IS WHERE IT WAS EARNED.** Name the box; name the
+floor condition where a box alone cannot disambiguate; **and say whether the figure is a MODE or a
+MEAN, whenever the rows are not uniform.** A single number describing a bimodal population is the
+same defect as an unlabelled box, and it is worse in one way: an unlabelled box reads as a fact about
+every row and is a fact about one of two boxes, while an unlabelled mean reads as a fact about every
+row and is a fact about **none of them** — no rich row is 45.4 px tall. The rich row's
+`45 / 49 / 53` slipped past every review this project has run because the two statistics collide on
+one set of digits, and the failure it sets up is a *correction*: apply the `ROW_INTRINSIC` pattern —
+border box, therefore subtract one, therefore 44 / 48 / 52 — to `RELEASE_ROW_INTRINSIC` and you have
+replaced a correct mean with a mode, reintroducing this entry's own bug in the opposite direction.
+Applied to `docs/design/DESIGN-DIRECTION.md` §7.4 (both citation sites), `docs/DECISIONS.md`
+ADR-0029 and `docs/ARCHITECTURE.md` §4.5; `web/src/lib/list.ts` already carries it at the call site.
+
 **Not fixed, reported, because `web/` belongs to another thread.** `ROW_INTRINSIC` in
 `web/src/lib/list.ts` holds `28 / 32 / 36` and `List.svelte` writes it to `--row-ci`, which is
 `contain-intrinsic-size` and takes a **content-box** height. The measured post-fix content box is
@@ -3781,7 +3802,11 @@ the equality it was derived from — *"a one-line row's content box comes out at
 no gate fires, **which is exactly why it would sit there**. `list.test.ts` pins the constant with
 `expect(ROW_INTRINSIC).toEqual({ compact: 28, standard: 32, relaxed: 36 })`, so a correction moves the
 test with it. `RECENT_GRAB_ROW_INTRINSIC` in `web/src/lib/requests.ts` is `44 / 48 / 52` and needs no
-change — that matches the measured rich-row content box.
+change — that matches the measured rich-row **modal** content box, and a recent-grab row is the
+two-line shape rather than the release row's chip-carrying one. ⚠️ **Do not read that sentence as a
+licence to move `RELEASE_ROW_INTRINSIC` to the same digits.** It holds `45 / 49 / 53`, which is the
+release row's **mean** content box over a bimodal population, and the mean is the right statistic for
+a whole-list placeholder. See the third clause of the lesson above.
 
 **Gate**: `node docs/design/check.mjs` passes on the merged tree at `eb78308` (all checks, both
 installs). Measurements were taken in throwaway worktrees off `origin/main` and `3ae0d44^`, not in
