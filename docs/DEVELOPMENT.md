@@ -911,23 +911,31 @@ two.** That is not bad luck. A fix is written under the assumption that the fail
 understood, and that is precisely the moment people stop checking for it. Treat a guard you just
 repaired as the least trustworthy thing in the file, not the most.
 
-**A rule, and a mechanical note, when gathering lint evidence:**
+**Two rules when gathering lint evidence, and one hazard behind both: there are two `golangci-lint`
+binaries on this box.** `/usr/local/bin/golangci-lint` is 2.5.0 and is what a bare name on `PATH`
+resolves to; the gate's own `$(GOBIN_DIR)/golangci-lint` is the pinned 2.12.2 — `/root/go/bin/` here
+— and is what the `Makefile` invokes, by absolute path, in every recipe. The wrong binary bites
+twice: once reporting findings, once clearing a cache.
 
-* **Run `golangci-lint cache clean` before trusting any gate result from a tree where worktrees have
-  come and gone, and say in the report that you did.** Cached diagnostics replay against paths from
-  other trees — a different clone of this repo, or a worktree that no longer exists. Two threads hit
-  it independently on 2026-08-16 with two different linters: four gosec findings against the deleted
-  sibling worktree `../wt-flake/`, and errcheck at `../merge-wt/internal/db/sqlite.go` where the real
-  tree's copy already carries `//nolint:errcheck`. Both cleared on `cache clean`, and both real runs
-  then reported 0 issues — two linters, so the cache keys on paths rather than on anything
-  linter-specific. Both were false *reds*, and that is the whole of the observed evidence. **A stale
-  red is annoying, but a stale green is invisible** — nothing in the output distinguishes a replayed
-  result from a fresh one, so the failure you would never notice is the one that matters. That
-  second half is inference from the same mechanism, not a case anyone has caught here, and it is why
-  this is a rule rather than a note.
-* **A bare `golangci-lint` resolves to whatever is on `PATH`, which is a stale version.** Only
-  `make check` (or `make lint`) is authoritative, because only those go through `require_tool` and
-  assert the pin. Quote the tool line it prints alongside any claim of green.
+* **Never invoke `golangci-lint` by bare name — on `PATH` it is the stale 2.5.0.** Only `make check`
+  (or `make lint`) is authoritative, because only those go through `require_tool` and assert the
+  pin. Quote the tool line it prints alongside any claim of green.
+* **Run `cache clean` with the gate's binary by absolute path — `/root/go/bin/golangci-lint cache
+  clean` — before trusting any gate result from a tree where worktrees have come and gone, and name
+  that path in the report.** Cached diagnostics replay against paths from other trees: a different
+  clone of this repo, or a worktree that no longer exists. Two threads hit that on 2026-08-16 with
+  two different linters — four gosec findings against the deleted sibling worktree `../wt-flake/`,
+  and errcheck at `../merge-wt/internal/db/sqlite.go` where the real tree's copy already carries
+  `//nolint:errcheck`. Both cleared on `cache clean`, and both real runs then reported 0 issues — two
+  linters, so the cache keys on paths rather than on anything linter-specific. A third thread hit the
+  *absolute path* half the same day: a bare `cache clean` emptied 2.5.0's cache, left the gate's
+  untouched, and looked performed — only re-running it as `/root/go/bin/golangci-lint cache clean`
+  gave a trustworthy run. So **"I ran `cache clean`" is evidence of nothing unless it names the
+  binary.** All of that was observed; the two stale-cache cases were false *reds*. **A stale red is
+  annoying, but a stale green is invisible** — nothing in the output distinguishes a replayed result
+  from a fresh one, so the failure you would never notice is the one that matters. That last point
+  alone is inference from the same mechanism, not a case anyone has caught here, and it is why this
+  is a rule rather than a note.
 
 ### Consistency is a property of the read, not only of the write
 
