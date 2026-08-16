@@ -238,12 +238,23 @@ full **(proposed)**:
 
 | State | Behaviour |
 |---|---|
-| Variable **unset** and `$USARR_CONFIG_DIR/keys/secret.key` **absent** and the database holds **no encrypted rows** | Generate 32 bytes from `crypto/rand`, create `keys/` mode `0700`, write `secret.key` mode `0600`, log a one-line "a new master key was generated — back it up, see §3.5" notice, continue. **This is the normal first run and the recommended path.** |
+| Variable **unset** and `$USARR_CONFIG_DIR/keys/secret.key` **absent** and the database holds **no encrypted rows** | Generate 32 bytes from `crypto/rand`, create `keys/` mode `0700`, write `secret.key` mode `0600`, log a one-line "a new master key was generated — back up the whole `keys/` directory, see §3.5" notice, continue. **This is the normal first run and the recommended path.** |
 | Variable unset, key file present | Read the key file. Validate it (below). |
 | Variable set | Use it. Validate it (below). Ignore any key file, and log that the file is being ignored. |
 | Variable **set to the empty string** | **Refuse to start**, naming the variable. Empty is not "absent": the usual way to get an empty value is an unset shell variable interpolated into a compose file (`USARR_SECRET_KEY=${USARR_SECRET_KEY}`), and silently generating a key there would produce a key the operator does not know exists and will not back up. |
 | Variable unset, key file absent, but the database **contains encrypted rows** | **Refuse to start**, naming the missing key and the file path it expected. Never start half-decrypted. |
 | Both `USARR_SECRET_KEY` and `USARR_SECRET_KEY_FILE` set | **Refuse to start.** No guessing. |
+| `kek.salt` absent from `$USARR_CONFIG_DIR` but present at the legacy `keys/kek.salt` | **Copy it forward**, byte for byte, to `$USARR_CONFIG_DIR/kek.salt` (`0600`) via a temp file in that directory plus `rename(2)`, and **leave `keys/kek.salt` in place permanently**. This is the upgrade path for installs created before the salt moved out of `keys/`. It is a copy and **not** a move on purpose: nothing stops two UsArr processes starting against one config directory, and a move has an instant in which neither path holds the salt — a crash there loses key-derivation material for good, which is worse than the bug this guards. A duplicate non-secret costs one 45-byte file, and it means a backup that captured `keys/` still holds a working salt. Safe to run concurrently with itself and idempotent. |
+| `kek.salt` **absent everywhere** and the database holds **no encrypted rows** | Generate 32 bytes from `crypto/rand` and write `$USARR_CONFIG_DIR/kek.salt` mode `0600`. Part of the same first run. |
+| `kek.salt` **absent everywhere** but the database **contains encrypted rows** | **Refuse to start**, naming `kek.salt` by its full path — both the current one and the legacy one — and saying what to restore. `KEK = HKDF-SHA256(master key, salt=kek.salt, info="usarr/kek/v1")`, so a fresh salt is a fresh KEK, and generating one here would **permanently destroy every stored credential** while the process continued, reporting nothing worse than a red connection test. A missing salt is never invented over existing ciphertext. |
+
+The salt rows are not a separate ladder: a missing `kek.salt` is decided exactly like a missing
+`secret.key`, because the consequence is identical — the file's absence is only a first-run
+*candidate* until the database has been asked whether anything is sealed. What differs is **where
+the file lives**, and that is a separate question from how its absence is handled: the salt is not
+secret, so it belongs beside the ciphertext it is an input to, not in `keys/` with the credentials
+that must be stored elsewhere. Keeping it out of `keys/` is what makes the documented backup correct;
+the refusal above is the belt-and-braces guard for anyone who loses it some other way.
 
 **Validation, applied to every supplied key.** All four failures are fatal and named; there is no
 "best effort" branch, no hashing-to-length fallback and no truncation:
@@ -295,7 +306,13 @@ Rotate when: the key was ever committed to a repository or pasted into a chat, a
 was compromised, or a person with access to it left. Rotating does **not** invalidate sessions and
 does **not** force password resets.
 
-### 3.5 If you lose the key
+### 3.5 If you lose the key — or the salt
+
+This section applies equally to losing `keys/secret.key` and to losing `kek.salt`. The KEK is
+`HKDF-SHA256(secret.key, salt=kek.salt, info="usarr/kek/v1")`; without *either* input it cannot be
+re-derived, so the outcome below is identical. Losing the salt while still holding the master key
+feels recoverable and is not — which is why the salt now lives beside `usarr.db`, inside the archive
+you already take, rather than in the directory that archive excludes.
 
 **Unrecoverable:** every stored service credential — each *Arr API key, each Jellyfin/Audiobookshelf
 token, each Navidrome `subsonicSalt`/`subsonicToken` pair, each metadata provider key. No recovery,
@@ -304,9 +321,15 @@ no reset, no support path. AES-256-GCM under a lost key is noise.
 **Survives:** everything else — the library index, works, editions, links, tags, requests, playback
 state, the audit log, user accounts and password hashes all open normally.
 
-**The repair** is mechanical and tedious. Start with a new key; UsArr marks every instance whose
-credential fails to open as `needs_credential`. Open each in the UI and paste the key again. For a
-household stack that is ten minutes and a lot of tab-switching.
+**The repair** is mechanical and tedious. Start with a new key **and a new salt** — move both
+`keys/secret.key` and `kek.salt` aside so first-run generation creates them; UsArr marks every
+instance whose credential fails to open as `needs_credential`. Open each in the UI and paste the key
+again. For a household stack that is ten minutes and a lot of tab-switching.
+
+⚠️ **Do this only when the salt or key is genuinely gone.** If `kek.salt` is merely missing from a
+restore, UsArr refuses to start and names the file — that refusal is protecting recoverable data. Go
+and find the file before you reach for this section; on an install created before the salt moved, it
+is at `keys/kek.salt`.
 
 ### 3.6 Handling rules
 
@@ -395,8 +418,22 @@ mode is explicit and is set by UsArr itself, independent of any process umask.
 $USARR_CONFIG_DIR/                  # /config — IRREPLACEABLE. Back this up. Mode 0700.
 │
 ├── keys/                           # 0700 — EXCLUDED FROM EVERY BACKUP. See §6.
+│   │                               #   SECRETS ONLY. Nothing goes in here that a backup
+│   │                               #   needs; that is what made kek.salt a trap. See below.
 │   ├── secret.key                  # 0600 — the master key, when not supplied by env/secret
 │   └── secret.key.new              # 0600 — present only mid-rotation (§3.4)
+│
+├── kek.salt                        # 0600 — per-install HKDF salt, an input to key
+│                                   #   derivation. NOT a secret — its value does not depend
+│                                   #   on being confidential — but NOT regenerable either:
+│                                   #   KEK = HKDF(master key, kek.salt), so a different salt
+│                                   #   is a different KEK. It sits HERE, beside the database
+│                                   #   it belongs to, precisely so an ordinary backup of
+│                                   #   /config captures it. Startup REFUSES if it is missing
+│                                   #   while the database holds encrypted rows (§3.2), and
+│                                   #   COPIES one found at the old keys/kek.salt,
+│                                   #   which is left in place — §3.2 says why it is
+│                                   #   never a move.
 │
 ├── usarr.db                        # 0600 — SQLite, WAL. Library, services, users, audit log.
 ├── usarr.db-wal                    # 0600 ┐ transient; never copy these by hand — see §6
@@ -438,9 +475,13 @@ Three properties this layout exists to give you, each a defect in the previous v
    `providers/` moved to `CONFIG_DIR` because a hand-written manifest is not regenerable, and there
    are no plugin binaries anywhere — **a WASM plugin tier is deferred** (`FUTURE.md` §1) and no
    milestone ships one, so the directory that used to destroy them on a cache clear does not exist.
-2. **The key is one directory you can exclude with one flag.** `keys/` is the only thing that must
-   stay out of an archive of `/config`, and §6 makes that the documented procedure rather than a
-   warning you are expected to remember.
+2. **The key is one directory you can exclude with one flag, and `keys/` holds nothing else.**
+   `keys/` is the only thing that must stay out of an archive of `/config`, and §6 makes that the
+   documented procedure rather than a warning you are expected to remember. The corollary is the
+   part that used to be missing: **only actual secrets may live there.** `kek.salt` used to, and
+   because it is a non-secret the database cannot be opened without, `--exclude='keys'` quietly
+   produced archives that could not be restored. It now sits beside `usarr.db`, where the backup
+   you were already told to take picks it up.
 3. **Every file both this document and `ARCHITECTURE.md` name is here** — `cache.db`, `providers/`
    and the Wikidata edge artifact were previously named in one and absent from the other.
 
@@ -462,7 +503,8 @@ most common corruption cause for SQLite-backed self-hosted apps.
 | Item | Why | Recoverable without it? |
 |---|---|---|
 | `usarr.db` (via `backups/*.db`) | Library index, services, users, tags, links, requests, audit log | No |
-| The master key | Decrypts every stored credential in that DB | The DB opens; every service credential is noise — re-paste each one (§3.5) |
+| `kek.salt` | The other input to key derivation: `KEK = HKDF-SHA256(secret.key, salt=kek.salt, info="usarr/kek/v1")`. Not a secret, but not regenerable | **Already covered** — it sits beside `usarr.db`, so the archive below contains it. Nothing extra to do |
+| The master key (`keys/secret.key`) | With `kek.salt`, derives the key that decrypts every stored credential in that DB | The DB opens; every service credential is noise — re-paste each one (§3.5) |
 | `providers/*.yaml` | Hand-written service manifests | Only if you still have the originals |
 | `tsnet/` | The node's tailnet identity | Yes — restoring without it registers a **new** device; delete the old one in the admin console |
 | `$USARR_DATA_DIR` | Caches, logs | Yes — rebuilt automatically |
@@ -475,13 +517,26 @@ prevent, and it is the mistake the previous version of this document invited by 
 The rule, mechanically:
 
 ```bash
-# Database → your normal backup rotation.
+# Database → your normal backup rotation. This archive INCLUDES kek.salt, which
+# sits beside usarr.db, and excludes the master key. That is the correct split.
 tar -czf usarr-db.tgz --exclude='keys' /config
 #                     ^^^^^^^^^^^^^^^^ non-negotiable
 
 # Key → a password manager or secrets store. A DIFFERENT PLACE. Once.
 cat /config/keys/secret.key
 ```
+
+⚠️ **If you are upgrading from a build that kept `kek.salt` under `keys/`, take a fresh backup after
+the first restart.** The salt is an input to key derivation — `KEK = HKDF-SHA256(secret.key,
+salt=kek.salt, …)` — so a restore with `secret.key` present and `kek.salt` missing leaves the master
+key you carefully saved unable to open anything: a different salt is a different KEK. Older archives
+taken with `--exclude='keys'` **do not contain the salt**, because it was inside the excluded
+directory. UsArr copies the file to `/config/kek.salt` on the first start — leaving the original in `keys/`
+untouched — after which the command above captures it; until you have re-run that command, your
+newest archive is still missing it.
+UsArr also **refuses to start** with encrypted rows present and no salt, naming the file, rather than
+generating a fresh one over your ciphertext — but a refusal only helps if the file still exists
+somewhere to restore.
 
 UsArr's scheduled job writes `VACUUM INTO` output to `$USARR_CONFIG_DIR/backups/` at mode `0600` in a
 `0700` directory, retains N files, and **never** includes `keys/`. Same for the API backup endpoint
@@ -509,12 +564,18 @@ may not even open.
    restore is confirmed good.
 2. Copy the backup into place as `usarr.db`. There is no `-wal`/`-shm` to restore; SQLite recreates
    them.
-3. **Restore the key separately**, to the value it had when the backup was taken, as
-   `keys/secret.key` (`0600`) or via `USARR_SECRET_KEY_FILE`.
+3. **Restore the master key separately**, to the value it had when the backup was taken, as
+   `keys/secret.key` (`0600`) or via `USARR_SECRET_KEY_FILE`. `kek.salt` needs no separate step —
+   it is inside the archive from step 2, beside `usarr.db`. **From an archive taken before the salt
+   moved**, it is not: recover `kek.salt` from the old install's `keys/` directory and drop it at
+   either `/config/kek.salt` or `/config/keys/kek.salt`, and UsArr will pick it up. Startup refuses
+   and names the file rather than destroying credentials, but it cannot recreate a salt it was
+   never given.
 4. Start. Pending migrations run forward automatically; they are **forward-only (proposed)**, so
    restoring a newer backup into an older binary is not supported.
 5. Open Settings → Services and confirm each instance tests green. A red test with a decryption error
-   means the key does not match the backup.
+   means `keys/` does not match the backup — or that a service's base URL was edited, since the
+   credential is bound to its scheme, host and port (see `reference/security.md` §1.2).
 
 ### 6.4 Moving to a new host
 
@@ -523,7 +584,9 @@ Two steps, deliberately separate, deliberately not one `cp -r`:
 1. Copy the latest `backups/*.db` (and `providers/` if you use manifests) to the new host as
    `$USARR_CONFIG_DIR/usarr.db`. Chown to `65532:65532`, mode `0600`.
 2. Transfer the master key **out of band** — from your password manager, not from the archive — and
-   install it as `keys/secret.key` (`0600`, in a `0700` directory) or as a Docker secret.
+   install it as `keys/secret.key` (`0600`, in a `0700` directory) or as a Docker secret. Copy
+   `/config/kek.salt` across with the database in step 1; it is not a secret, but the credentials
+   do not open without it.
 
 Then start. Service URLs pointing at `localhost` will need editing if the topology changed; this is
 the common gotcha moving from bare metal to Docker, where `http://localhost:8989` must become

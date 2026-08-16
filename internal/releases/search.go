@@ -604,6 +604,16 @@ func (s *Service) runLeg(ctx context.Context, l leg) legResult {
 // reason that "a credential written here is in every backup forever"; this blob
 // lands in the same file, the same VACUUM INTO backup and the same support
 // bundle, so the same rule has to apply to it.
+//
+// The SAME rule covers release_candidate.info_url, which is written from the
+// same resource. infoUrl is INDEXER-supplied, and a private tracker puts the
+// user's personal passkey in it as a query parameter; redaction used to happen
+// only at the HTTP boundary (httpapi.redactURLField), so the API responses were
+// clean while SQLite held the passkey verbatim — in every backup, permanently,
+// and a leaked passkey is account termination on a private tracker. It is
+// redacted rather than dropped: the host and the release path are the provenance
+// this column exists for, and nothing on the grab path reads it at all
+// (GrabBody is guid + indexerId + downloadClientId).
 func (s *Service) persist(ctx context.Context, ix servarr.IndexerResource, rels []servarr.ReleaseResource) ([]Result, error) {
 	if len(rels) == 0 {
 		return nil, nil
@@ -635,12 +645,15 @@ func (s *Service) persist(ctx context.Context, ix servarr.IndexerResource, rels 
 			Seeders:           rel.Seeders,
 			Leechers:          rel.Leechers,
 			AgeDays:           float64(rel.Age),
-			InfoURL:           rel.InfoURL,
-			InfoHash:          infoHash,
-			DownloadClientID:  rel.DownloadClientID,
-			RawReleaseJSON:    raw,
-			FetchedAt:         now,
-			ExpiresAt:         expires,
+			// Redacted, not verbatim: see the note on persist. The same
+			// deny-list the HTTP boundary uses, so the stored value and the
+			// served value cannot disagree.
+			InfoURL:          servarr.RedactURL(rel.InfoURL),
+			InfoHash:         infoHash,
+			DownloadClientID: rel.DownloadClientID,
+			RawReleaseJSON:   raw,
+			FetchedAt:        now,
+			ExpiresAt:        expires,
 		})
 	}
 

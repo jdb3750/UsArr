@@ -35,6 +35,7 @@ type app struct {
 //	→ pre-migration backup
 //	→ open SQLite with the pragmas and apply migrations
 //	→ the "encrypted rows exist but no key" check
+//	→ the "encrypted rows exist but no KEK salt" check
 //	→ build the router
 //
 // Every fatal error names the variable or file the bad value came from. There is
@@ -54,6 +55,9 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 	if keyErr != nil && !errors.Is(keyErr, config.ErrKeyAbsent) {
 		return nil, keyErr
 	}
+	// Whether this run created the master key, so the back-it-up notice fires
+	// once, after the salt exists too.
+	generatedKey := false
 
 	backup, err := backupBeforeMigrate(ctx, cfg)
 	if err != nil {
@@ -87,9 +91,20 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 
 	st := store.New(database)
 
-	// The branch the ladder could not decide before the database was open.
+	// The two branches the ladder could not decide before the database was
+	// open. Both ask the same question — does the database already hold
+	// ciphertext? — so it is asked once, lazily, and shared.
+	//
+	// keys/secret.key and keys/kek.salt are the SAME class of secret with the
+	// SAME consequence: the KEK is HKDF(master key, salt), so a missing salt
+	// makes every stored envelope exactly as unopenable as a missing key. They
+	// therefore follow the same rule. Creating either one over existing
+	// ciphertext is permanent, silent data loss, so neither is ever created
+	// except on a genuine first run with nothing sealed anywhere.
+	countEncrypted := func() (int64, error) { return st.CountEncryptedCredentials(ctx) }
+
 	if errors.Is(keyErr, config.ErrKeyAbsent) {
-		encrypted, err := st.CountEncryptedCredentials(ctx)
+		encrypted, err := countEncrypted()
 		if err != nil {
 			_ = database.Close()
 			return nil, err
@@ -102,9 +117,7 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 			_ = database.Close()
 			return nil, err
 		}
-		// One line, loud, naming the real path. Losing this key means every
-		// stored service credential has to be re-entered by hand.
-		log.Warn(masterKey.BackupNotice())
+		generatedKey = true
 	}
 	log.Info("master key loaded", "source", string(masterKey.Source), "path", masterKey.Path)
 	if masterKey.IgnoredKeyFile != "" {
@@ -114,11 +127,37 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 
 	// The KEK is derived, never used raw: distinct HKDF info labels keep the
 	// credential KEK and the URL-signing key independently rotatable.
-	salt, err := cfg.ResolveKEKSalt()
-	if err != nil {
+	salt, saltErr := cfg.ResolveKEKSalt()
+	if saltErr != nil && !errors.Is(saltErr, config.ErrKEKSaltAbsent) {
 		_ = database.Close()
-		return nil, err
+		return nil, saltErr
 	}
+	if errors.Is(saltErr, config.ErrKEKSaltAbsent) {
+		encrypted, err := countEncrypted()
+		if err != nil {
+			_ = database.Close()
+			return nil, err
+		}
+		if encrypted > 0 {
+			// The restore-shaped failure: secret.key came back, kek.salt did
+			// not. Regenerating here derives a different KEK and destroys every
+			// credential permanently, while the process reports nothing worse
+			// than a red connection test.
+			_ = database.Close()
+			return nil, cfg.ErrMissingSaltForExistingData(encrypted)
+		}
+		if salt, err = cfg.GenerateKEKSalt(); err != nil {
+			_ = database.Close()
+			return nil, err
+		}
+	}
+	if generatedKey {
+		// One line, loud, after BOTH artifacts exist — it tells the operator to
+		// back up the whole directory, so it must not fire while half of it is
+		// still missing.
+		log.Warn(masterKey.BackupNotice())
+	}
+
 	kek, err := crypto.DeriveKEK(masterKey.Key, salt)
 	if err != nil {
 		_ = database.Close()

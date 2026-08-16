@@ -161,6 +161,33 @@ func (s *Server) handleCreateService(w http.ResponseWriter, r *http.Request) err
 			withAction(defaultString(result.Action, "Test connection"))
 	}
 
+	// TLSSPKIPin is deliberately NOT set here, and the column is left NULL.
+	//
+	// TOFU pinning is UNIMPLEMENTED, not half-implemented. This line used to
+	// copy a TestResult field that nothing ever populated, so the pin was always
+	// NULL anyway while the code read as though enrolment worked. Enrolment is
+	// the easy half; the flow providers.md §4 and CONFIGURATION.md §7.1 describe
+	// is "show the fingerprint and have the user accept it", and none of that
+	// UI exists. Recording a pin silently, here, would be worse than recording
+	// nothing:
+	//
+	//  1. A pin REPLACES chain verification — internal/ssrf sets
+	//     InsecureSkipVerify on the pinned path, by design, because the
+	//     certificate it exists for is a self-signed homelab one. Pinning every
+	//     instance that passes a connection test would therefore DOWNGRADE an
+	//     instance behind a publicly-trusted certificate, dropping hostname,
+	//     expiry and revocation checking in exchange for nothing.
+	//  2. There is no way back. store.ServiceInstanceUpdate carries no pin
+	//     field, so nothing in the API can clear or re-accept one. A routine
+	//     key rotation — an ACME renewal, a container regenerating its
+	//     self-signed certificate on restart — would lock the instance out
+	//     permanently with ErrPinMismatch and no supported recovery short of
+	//     hand-editing SQLite.
+	//
+	// The enforcement half is real and tested (ssrf.Options.SPKIPin,
+	// TestSPKIPinIsEnforcedOnAResumedSession): a pin that IS in the column is
+	// checked on every handshake, including resumed ones. What is missing is the
+	// enrolment UI, and that is what has to land before anything writes here.
 	si := store.ServiceInstance{
 		Kind:       kind,
 		Role:       role,
@@ -169,7 +196,6 @@ func (s *Server) handleCreateService(w http.ResponseWriter, r *http.Request) err
 		URLBase:    urlBase,
 		APIVersion: result.APIVersion,
 		VerifyTLS:  true,
-		TLSSPKIPin: result.TLSSPKIPin,
 		Enabled:    boolOr(req.Enabled, true),
 		Priority:   int64Or(req.Priority, 0),
 		ManagedBy:  "ui",

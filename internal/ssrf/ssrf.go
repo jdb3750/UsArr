@@ -88,7 +88,9 @@ type Options struct {
 	// key to whatever answered the socket.
 	//
 	// CONSTRAINT, known and currently unfixed: the pin is installed on the whole
-	// transport via VerifyPeerCertificate, so a client built WITH a pin can reach
+	// transport via VerifyPeerCertificate *and* VerifyConnection — both are
+	// required, because only the latter runs on a resumed session — so a client
+	// built WITH a pin can reach
 	// exactly one https host — the pinned one. For ClassConfigured that is
 	// precisely right, since the dialler already constrains it to AllowedHostPort.
 	// For ClassDerived it is not: security.md §2's table says a derived URL that
@@ -231,6 +233,7 @@ func tlsConfig(class Class, pin []byte) (*tls.Config, error) {
 	// item 2 and CONFIGURATION.md §7.1 are both warning about.
 	cfg.InsecureSkipVerify = true
 	want := append([]byte(nil), pin...)
+
 	cfg.VerifyPeerCertificate = func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 		if len(rawCerts) == 0 {
 			return policyErr("tls", class, "", netip.Addr{}, fmt.Errorf("%w: peer sent no certificate", ErrPinMismatch))
@@ -239,13 +242,43 @@ func tlsConfig(class Class, pin []byte) (*tls.Config, error) {
 		if err != nil {
 			return policyErr("tls", class, "", netip.Addr{}, fmt.Errorf("%w: parse leaf: %w", ErrPinMismatch, err))
 		}
-		got := SPKIPin(leaf)
-		if subtle.ConstantTimeCompare(got, want) != 1 {
-			return policyErr("tls", class, "", netip.Addr{}, ErrPinMismatch)
+		return checkPin(class, want, leaf)
+	}
+
+	// VerifyPeerCertificate ALONE IS NOT ENOUGH, and this is the whole reason
+	// VerifyConnection exists here. crypto/tls does not re-verify certificates on
+	// a resumed session, so it never calls verifyServerCertificate and therefore
+	// never calls VerifyPeerCertificate: see Go 1.25 handshake_client_tls13.go
+	// readServerCertificate (`if hs.usingPSK { ... }`) and handshake_client.go's
+	// TLS 1.2 resumption branch, both of which call ONLY VerifyConnection and
+	// both of which cite golang/go#31641. With InsecureSkipVerify set and no
+	// second check, a resumed handshake would be accepted with no pin check at
+	// all — the pin would be silently bypassed, exactly the failure gosec's G123
+	// describes. VerifyConnection runs on BOTH paths (verifyServerCertificate
+	// calls it after VerifyPeerCertificate on a full handshake), so it is the
+	// pin's real enforcement point and the one that must fail closed.
+	//
+	// The resumed peer certificates are the ones the full handshake pinned
+	// (crypto/tls restores c.peerCertificates from the session), so this is a
+	// cheap equality check, not a re-parse. Enforcing rather than disabling
+	// resumption keeps the pinned path as fast as the unpinned one.
+	cfg.VerifyConnection = func(cs tls.ConnectionState) error {
+		if len(cs.PeerCertificates) == 0 {
+			return policyErr("tls", class, cs.ServerName, netip.Addr{},
+				fmt.Errorf("%w: peer sent no certificate", ErrPinMismatch))
 		}
-		return nil
+		return checkPin(class, want, cs.PeerCertificates[0])
 	}
 	return cfg, nil
+}
+
+// checkPin is the single place the SPKI comparison happens, so the full-handshake
+// and resumed-handshake paths can never drift apart.
+func checkPin(class Class, want []byte, leaf *x509.Certificate) error {
+	if subtle.ConstantTimeCompare(SPKIPin(leaf), want) != 1 {
+		return policyErr("tls", class, "", netip.Addr{}, ErrPinMismatch)
+	}
+	return nil
 }
 
 // ValidateURL checks a URL against a class before it is used or stored, and

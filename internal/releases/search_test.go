@@ -531,6 +531,105 @@ func TestPersistedBlobNeverCarriesTheAPIKey(t *testing.T) {
 	// rather than a runtime one. Adding the field back breaks this file.
 }
 
+// TestPersistedCandidateNeverCarriesATrackerPasskey is the sibling of the test
+// above, for the OTHER credential in a search result.
+//
+// infoUrl, commentUrl and posterUrl are INDEXER-supplied, and a private tracker
+// routinely carries the user's personal passkey in them as a query parameter. A
+// leaked passkey is account termination on a private tracker, because it is what
+// the tracker attributes traffic by.
+//
+// Redaction used to happen only at the HTTP boundary (httpapi.redactURLField),
+// so the API responses were clean while SQLite held the passkey verbatim — in
+// release_candidate.info_url, inside raw_release_json, and from there in every
+// VACUUM INTO backup and every support bundle, permanently. Persistence is the
+// strictest boundary, not the most relaxed one.
+//
+// The assertions are about the STORE, not the wire: what the browser gets was
+// already covered.
+func TestPersistedCandidateNeverCarriesATrackerPasskey(t *testing.T) {
+	now := time.Unix(1_755_000_000, 0).UTC()
+	store := newFakeStore()
+
+	const passkey = "d41d8cd98f00b204e9800998ecf8427e"
+	rel := release("g1", "Dune.Part.Two.2024.2160p", 1, "Alpha", servarr.ProtocolTorrent, 2000)
+	// Every deny-listed name a tracker actually uses, on the three
+	// indexer-supplied URL fields.
+	rel.InfoURL = "https://alpha.test/details/1?passkey=" + passkey + "&torrent_pass=" + passkey
+	rel.CommentURL = "https://alpha.test/comments/1?authkey=" + passkey + "&rsskey=" + passkey
+	rel.PosterURL = "https://alpha.test/cover/1.jpg?apikey=" + passkey
+
+	c := &fakeClient{
+		indexers:        []servarr.IndexerResource{indexer(1, "Alpha", 10, servarr.ProtocolTorrent)},
+		clients:         enabledClients(),
+		searchByIndexer: map[int32][]servarr.ReleaseResource{1: {rel}},
+	}
+	svc, err := NewService(Config{
+		InstanceID: testInstanceID, Client: c, Store: store,
+		Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+
+	ch, err := svc.Search(context.Background(), ownerScope, Query{Text: "dune"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	results, _, _ := collect(ch)
+	if len(results) != 1 {
+		t.Fatalf("got %d results, want 1", len(results))
+	}
+
+	cand, err := store.Candidate(context.Background(), ownerScope, results[0].CandidateID)
+	if err != nil {
+		t.Fatalf("Candidate: %v", err)
+	}
+
+	// The passkey value must appear in NOTHING that was persisted: not the
+	// column, not the blob.
+	persisted := map[string]string{
+		"release_candidate.info_url": cand.InfoURL,
+		"raw_release_json":           string(cand.RawReleaseJSON),
+	}
+	for what, got := range persisted {
+		if strings.Contains(got, passkey) {
+			t.Errorf("%s contains the tracker passkey verbatim — it is now in SQLite, "+
+				"in every VACUUM INTO backup and every support bundle, permanently. "+
+				"persist() must redact indexer-supplied URLs through "+
+				"servarr.SanitizeRelease / servarr.RedactURL.\ngot: %s", what, got)
+		}
+	}
+
+	// Redacted, not dropped: the host and the release path are the provenance
+	// this column exists for, and only the secret had to go.
+	if !strings.Contains(cand.InfoURL, "alpha.test/details/1") {
+		t.Errorf("release_candidate.info_url lost the tracker and the release path: %q", cand.InfoURL)
+	}
+	if !strings.Contains(cand.InfoURL, "REDACTED") {
+		t.Errorf("release_candidate.info_url = %q, want the deny-listed parameters replaced "+
+			"with the shared placeholder", cand.InfoURL)
+	}
+
+	// ---- and the passkey must not reach provenance, which is FOREVER ---------
+
+	if _, err := svc.Grab(context.Background(), ownerScope, cand.ID); err != nil {
+		t.Fatalf("Grab: %v", err)
+	}
+	if len(store.provenance) != 1 {
+		t.Fatalf("got %d provenance rows, want 1", len(store.provenance))
+	}
+	p := store.provenance[0]
+	if strings.Contains(p.NZBInfoURL, passkey) {
+		t.Errorf("provenance.nzb_info_url carries the tracker passkey: %q\n"+
+			"provenance rows are immutable and permanent — this one can never be "+
+			"deleted", p.NZBInfoURL)
+	}
+	if !strings.Contains(p.NZBInfoURL, "alpha.test/details/1") {
+		t.Errorf("provenance.nzb_info_url lost the indexer and release path: %q", p.NZBInfoURL)
+	}
+}
+
 func TestSearchClampsLimitToIndexerCapabilities(t *testing.T) {
 	small := indexer(1, "Small", 10, servarr.ProtocolTorrent)
 	small.Capabilities = caps(20, 2000)

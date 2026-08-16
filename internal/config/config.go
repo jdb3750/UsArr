@@ -176,9 +176,15 @@ func (c *Config) Address() string {
 
 // On-disk layout. docs/CONFIGURATION.md §5 is authoritative for this tree.
 
-// KeysDir holds the master key. It is excluded from every backup, so that
-// "back up this volume" and "never store the key with the ciphertext" are not
-// the same instruction.
+// KeysDir holds the master key, and ONLY actual secrets. It is excluded from
+// every backup, so that "back up this volume" and "never store the key with the
+// ciphertext" are not the same instruction.
+//
+// Nothing goes in here that is not secret. A non-secret that the database
+// cannot be opened without — the KEK salt used to live here — turns the
+// documented `--exclude='keys'` from correct advice into a trap: the operator
+// follows it, the archive silently omits an unrecoverable input, and the
+// restore destroys every stored credential. See KEKSaltPath.
 func (c *Config) KeysDir() string { return filepath.Join(c.ConfigDir, "keys") }
 
 // SecretKeyPath is the master key file written on first run.
@@ -188,14 +194,37 @@ func (c *Config) SecretKeyPath() string { return filepath.Join(c.KeysDir(), "sec
 // rotation was interrupted and must resume. docs/CONFIGURATION.md §3.4.
 func (c *Config) NewSecretKeyPath() string { return filepath.Join(c.KeysDir(), "secret.key.new") }
 
-// KEKSaltPath holds the per-install HKDF salt for key derivation.
+// KEKSaltPath holds the per-install HKDF salt for key derivation. It sits
+// beside usarr.db, NOT in keys/.
 //
 // docs/reference/security.md §1.3 requires a stored per-install salt but does
-// not say where it lives, and the schema has no settings table to hold it. It
-// goes beside the key because the two share a fate: losing either makes every
-// stored credential unrecoverable, so there is nothing gained by separating
-// them. The salt is not itself secret.
-func (c *Config) KEKSaltPath() string { return filepath.Join(c.KeysDir(), "kek.salt") }
+// not say where it lives, and the schema has no settings table to hold it.
+//
+// It used to live in keys/, on the reasoning that it shares the master key's
+// fate — lose either and every stored credential is unrecoverable. That much is
+// true, and the fail-closed check in ResolveKEKSalt exists because it is true.
+// But it is the wrong conclusion about WHERE the file goes, and it produced a
+// data-loss bug: keys/ is the one directory the documented backup deliberately
+// excludes, so a non-secret that the database cannot be opened without was
+// being dropped from every archive an operator was told to take.
+//
+// The salt is not secret — its value does not depend on confidentiality, only
+// on being per-install and stable — so it does not belong with the secrets. It
+// belongs with the ciphertext it is an input to. Beside the database, an
+// ordinary backup of the config volume captures it and `--exclude='keys'` is
+// correct exactly as written, which makes the catastrophic restore unreachable
+// rather than merely documented.
+//
+// ResolveKEKSalt relocates an existing keys/kek.salt here on startup; see
+// LegacyKEKSaltPath. It is 0600 like every other file UsArr writes, which is
+// caution rather than necessity.
+func (c *Config) KEKSaltPath() string { return filepath.Join(c.ConfigDir, "kek.salt") }
+
+// LegacyKEKSaltPath is where the KEK salt lived before it moved beside the
+// database. Installs created before that change still have it here, so startup
+// migrates it forward rather than treating it as missing — treating it as
+// missing would destroy exactly the credentials the move exists to protect.
+func (c *Config) LegacyKEKSaltPath() string { return filepath.Join(c.KeysDir(), "kek.salt") }
 
 // DatabasePath is the main database: library, services, users, audit log.
 func (c *Config) DatabasePath() string { return filepath.Join(c.ConfigDir, "usarr.db") }

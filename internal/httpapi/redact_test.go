@@ -16,7 +16,7 @@ func TestRedactRequestLineCoversTheDenyList(t *testing.T) {
 		"apiKey", "api_key", "apikey", "token", "access_token", "sig", "p", "t", "s",
 	} {
 		t.Run(param, func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, "/rest/ping?"+param+"=SUPERSECRET&f=json", nil)
+			r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/rest/ping?"+param+"=SUPERSECRET&f=json", nil)
 			got := redactRequestLine(r)
 			if strings.Contains(got, "SUPERSECRET") {
 				t.Fatalf("%s was not redacted: %s", param, got)
@@ -34,7 +34,7 @@ func TestRedactMiddlewareRunsBeforeTheHandler(t *testing.T) {
 		seen = RequestLine(r.Context())
 	}))
 	h.ServeHTTP(httptest.NewRecorder(),
-		httptest.NewRequest(http.MethodGet, "/api/v1/search?query=x&apikey=LEAK", nil))
+		httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/search?query=x&apikey=LEAK", nil))
 
 	if seen == "" {
 		t.Fatal("the handler saw no redacted request line at all")

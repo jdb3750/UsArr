@@ -78,9 +78,18 @@ type TestResult struct {
 	Message string
 	Action  string
 
-	// TLSSPKIPin is the TOFU pin observed on this connection, for the caller to
-	// store. Empty for plain HTTP.
-	TLSSPKIPin []byte
+	// There is deliberately NO TLSSPKIPin field.
+	//
+	// One existed, no ConnectionTester ever populated it, and the service-create
+	// handler copied it into service_instance.tls_spki_pin — so the column was
+	// always NULL and the TOFU path read as implemented while being dead code.
+	// It is removed rather than left in place because a field nothing fills is
+	// an invitation to trust it.
+	//
+	// TOFU enrolment is unimplemented on purpose; the reasoning, and what has to
+	// land first, is on the si literal in handleCreateService. Pin ENFORCEMENT
+	// is implemented and tested — see ssrf.Options.SPKIPin — so a pin seeded
+	// into the column by hand is honoured.
 }
 
 // ConnectionTester runs the wizard's mandatory connection test.

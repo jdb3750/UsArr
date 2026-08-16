@@ -210,7 +210,7 @@ func TestPathTraversalIsRefused(t *testing.T) {
 
 func TestNonReadMethodsRejected(t *testing.T) {
 	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodDelete} {
-		req := httptest.NewRequest(method, "/", nil)
+		req := httptest.NewRequestWithContext(t.Context(), method, "/", nil)
 		res := httptest.NewRecorder()
 		Handler().ServeHTTP(res, req)
 		if res.Code != http.StatusMethodNotAllowed {
@@ -226,7 +226,7 @@ func TestNonReadMethodsRejected(t *testing.T) {
 // what is wrong and how to fix it, not serve a blank page.
 func TestUnbuiltHandlerFailsHonestly(t *testing.T) {
 	h := &handler{files: FS(), built: false}
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	res := httptest.NewRecorder()
 	h.ServeHTTP(res, req)
 
@@ -314,7 +314,7 @@ func firstAppScript(t *testing.T, files fs.FS) string {
 
 func get(t *testing.T, target string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, target, nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, target, nil)
 	res := httptest.NewRecorder()
 	Handler().ServeHTTP(res, req)
 	return res

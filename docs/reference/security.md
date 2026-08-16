@@ -229,6 +229,22 @@ tailnet peer is genuinely wrong.
    the layered timeouts from sync.md §4. Never proxy a raw upstream body back to a client verbatim.
 7. **Defence in depth at the network layer** — document a recommended egress policy and a dedicated
    Docker network.
+8. **A TLS pin must be checked with `VerifyConnection`, not `VerifyPeerCertificate` alone.** The
+   SPKI pin in `service_instance.tls_spki_pin` is the *only* server authentication on a pinned
+   instance, because the pinned path also sets `InsecureSkipVerify` to drop chain verification for
+   a self-signed homelab certificate. `crypto/tls` does **not** re-verify certificates on a resumed
+   session: it skips `verifyServerCertificate`, and with it `VerifyPeerCertificate`, calling only
+   `VerifyConnection` (Go 1.25 `handshake_client_tls13.go` `readServerCertificate`, and the TLS 1.2
+   resumption branch of `handshake_client.go`; both cite golang/go#31641). A pin installed only via
+   `VerifyPeerCertificate` is therefore **silently skipped on every resumed handshake** — the
+   connection succeeds with no pin check at all, which is a fail-*open* hole in the one control
+   standing between a full-admin \*Arr API key and whatever answered the socket. `internal/ssrf`
+   sets both hooks and shares one comparison between them. Resumption is enforced rather than
+   disabled, so the pinned path stays as fast as the unpinned one.
+   `TestSPKIPinIsEnforcedOnAResumedSession` is the regression guard, and it asserts the rejection
+   came from the resumed path so it cannot pass by quietly falling back to a full handshake.
+   Reported by gosec **G123**, which is only present in golangci-lint ≥ 2.9 — see §7's note on why
+   the gate must run the pinned linter.
 
 **Tier 1 manifests are inside this boundary, not outside it** — see providers.md §3.1, which
 specifies URL confinement at the template level.
@@ -442,6 +458,14 @@ silently change which resource a redirect resolves to. The tracker-specific name
 - **Supply chain:** base image pinned by digest, `--provenance=true --sbom=true`, cosign signing,
   gating vulnerability scanning in the pre-commit gate, and pinned tool versions. Enforcement lives
   in the `Makefile` and CI, outside this document.
+  **Pinning the version is not the same as running it.** `make tools` installs the pinned
+  `golangci-lint` into `$GOBIN`, but `make lint-go` invokes the bare name `golangci-lint`, so the
+  gate runs whatever `PATH` resolves first. On a machine carrying an older system-wide binary the
+  gate reports `check: OK` while never executing the checks the pin exists to run: v2.5.0 finds
+  **0** issues on the tree where the pinned v2.12.2 finds **11**, because G123 and G124 did not
+  exist yet in the older gosec. A security gate that silently degrades to a weaker gate is worse
+  than no gate, since it produces a green result nobody re-examines. The linter must be invoked by
+  its pinned absolute path, or its `--version` asserted against the pin before it runs.
 - **Internet exposure**, if a user chooses it: HTTPS enforced with HSTS and secure cookie flags;
   reject plaintext HTTP for auth (with an explicit "behind a TLS-terminating proxy" mode); a forced
   admin setup wizard on first run; login rate limiting on by default; a strict CSP (no

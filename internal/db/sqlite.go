@@ -139,11 +139,29 @@ func dsn(path string, writer bool) string {
 		// transaction that upgrades to a write — that path returns
 		// SQLITE_BUSY immediately.
 		q.Set("_txlock", "immediate")
+	} else {
+		// mode=ro makes the single-writer discipline structural instead of a
+		// convention. Without it the read pool is a perfectly ordinary writable
+		// connection, so a stray write through DB.Read() succeeds in
+		// development, and in production races the real writer: the deferred
+		// transaction it starts has to upgrade to a write lock, and that is the
+		// one path busy_timeout does not cover (sync.md §6 rule 2). The symptom
+		// is an intermittent "database is locked" under load, arbitrarily far
+		// from the offending statement.
+		//
+		// With mode=ro the same statement fails immediately and every time,
+		// with "attempt to write a readonly database", at the line that wrote
+		// it. Open() pings the writer first, which creates the file and sets
+		// journal_mode=WAL, so a read-only connection never has to create
+		// anything. Migrations and every other write run on the write pool.
+		q.Set("mode", "ro")
 	}
 	return "file:" + path + "?" + q.Encode()
 }
 
-// Read returns the read pool. Never start a write transaction on it.
+// Read returns the read pool. It is opened mode=ro, so a write attempted on it
+// fails with "attempt to write a readonly database" rather than silently
+// succeeding and racing the writer. Use Write for anything that mutates.
 func (d *DB) Read() *sql.DB { return d.read }
 
 // Writer returns the single-connection write pool. Prefer Write, which

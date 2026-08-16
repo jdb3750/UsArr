@@ -246,7 +246,16 @@ func (s *Server) setCSRFCookie(w http.ResponseWriter, r *http.Request) (string, 
 	if err != nil {
 		return "", errStatus(http.StatusInternalServerError, "internal", "a CSRF token could not be generated").wrapping(err)
 	}
-	http.SetCookie(w, &http.Cookie{
+	// nolint:gosec // G124 fires here for two reasons, and both are the design.
+	// (1) HttpOnly is false ON PURPOSE: double-submit requires the SPA to read
+	// this cookie and echo it in the CSRF header, so an HttpOnly CSRF cookie
+	// would not be a hardening, it would stop the scheme working. The token is
+	// not a credential — it authenticates nothing on its own, and the session
+	// cookie beside it IS HttpOnly. (2) Secure is a function call rather than a
+	// constant true, so gosec cannot prove it; see secureCookies below for why
+	// it is conditional. SameSite=Lax is set. Disagree with (1) only by
+	// replacing double-submit with a different CSRF scheme.
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124: see the note above
 		Name:     csrfCookie,
 		Value:    token,
 		Path:     s.cookiePath(),
@@ -258,7 +267,11 @@ func (s *Server) setCSRFCookie(w http.ResponseWriter, r *http.Request) (string, 
 }
 
 func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, value string) {
-	http.SetCookie(w, &http.Cookie{
+	// G124 fires only because Secure is computed per request rather than a
+	// constant true; gosec cannot see through the call. HttpOnly and
+	// SameSite=Lax are both set unconditionally on the line below. The
+	// conditional Secure is deliberate and argued in secureCookies.
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124: Secure is conditional by design, see secureCookies
 		Name:     sessionCookie,
 		Value:    value,
 		Path:     s.cookiePath(),
@@ -272,7 +285,10 @@ func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, value 
 }
 
 func (s *Server) clearSessionCookie(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{
+	// Same as setSessionCookie: the attributes must match the cookie being
+	// cleared or the browser keeps the original. HttpOnly and SameSite are set;
+	// only the conditional Secure trips G124.
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124: Secure is conditional by design, see secureCookies
 		Name:     sessionCookie,
 		Value:    "",
 		Path:     s.cookiePath(),
