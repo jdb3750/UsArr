@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en" data-density="compact">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UsArr mockup: search</title>
+<link rel="stylesheet" href="usarr.css">
+</head>
+<body>
+
+<!-- SPRITE START -->
+<svg id="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10" cy="10" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l5 5L20 7"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 4 2.6 17.4A2 2 0 0 0 4.3 20.4h15.4a2 2 0 0 0 1.7-3L13.7 4a2 2 0 0 0-3.4 0z"/><path d="M12 9v4.5M12 17.2h.01"/></symbol>
+  <symbol id="i-x-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></symbol>
+  <symbol id="i-dash-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12h7"/></symbol>
+  <symbol id="i-movie" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 4v16M16 4v16M4 8h4M4 16h4M4 12h16M16 8h4M16 16h4"/></symbol>
+  <symbol id="i-tv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M16 3l-4 4-4-4"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 11l5 5 5-5M12 4v12"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 7H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-5M14 4h6v6M10 14 20 4"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8.1 8.1 0 0 0 4.5 9M4 5v4h4M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4"/></symbol>
+</svg>
+<!-- SPRITE END -->
+
+<div class="app" data-sidebar="open">
+
+  <!-- TOPBAR START -->
+  <header class="topbar">
+    <button type="button" class="btn btn--icon" data-act="sidebar" aria-expanded="true" aria-label="Hide the sidebar">
+      <svg class="i" aria-hidden="true"><use href="#i-menu"/></svg>
+    </button>
+    <a class="topbar__brand" href="index.html" data-route="home">UsArr</a>
+    <div class="searchbox">
+      <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+      <label class="sr" for="topsearch">Search your library</label>
+      <input id="topsearch" type="search" placeholder="Search your library" value="the" autocomplete="off">
+      <span class="kbd">/</span>
+    </div>
+    <div class="topbar__spacer"></div>
+    <div class="topbar__right">
+      <label class="sr" for="density">Row density</label>
+      <select id="density" class="select" data-act="density">
+        <option value="compact">Compact</option>
+        <option value="default">Default</option>
+        <option value="relaxed">Relaxed</option>
+      </select>
+      <button type="button" class="btn btn--icon" data-act="theme" aria-label="Switch the theme">
+        <svg class="i" aria-hidden="true"><use href="#i-moon"/></svg>
+      </button>
+    </div>
+  </header>
+  <!-- TOPBAR END -->
+
+  <!-- SIDEBAR START -->
+  <nav class="sidebar" aria-label="Sections">
+    <ul class="nav__group">
+      <li><a class="nav__link" href="index.html" data-route="home" data-primary>Home</a></li>
+      <li><a class="nav__link" href="index.html#movies" data-route="home">Movies</a></li>
+      <li><a class="nav__link" href="index.html#tv" data-route="home">TV</a></li>
+      <li><a class="nav__link" href="search.html" data-route="search" data-primary aria-current="page">Search</a></li>
+      <li><a class="nav__link" href="requests.html" data-route="requests" data-primary>Requests</a></li>
+      <li><a class="nav__link" href="services.html" data-route="services" data-primary>Services</a></li>
+    </ul>
+    <ul class="nav__group">
+      <li><a class="nav__link" href="services.html#settings" data-route="services">Settings</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#settings" data-route="services">General</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#settings" data-route="services">Tags</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#settings" data-route="services">UI</a></li>
+    </ul>
+    <ul class="nav__group">
+      <li><a class="nav__link" href="services.html#system" data-route="services">System
+        <span class="nav__count nav__count--err" title="2 errors">2</span></a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Status</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Tasks</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Backup</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Events</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Log files</a></li>
+    </ul>
+  </nav>
+  <!-- SIDEBAR END -->
+
+<!-- PAGE:search START -->
+<main class="main" id="pg-search" data-page="search" data-state="live">
+
+  <div class="pagehead">
+    <h1>Search</h1>
+    <span class="pagehead__meta">Results render from the local index as you type. There is no loading state on this screen because nothing here waits on a network call.</span>
+  </div>
+
+  <div class="statebar">
+    <span class="statebar__tag">mockup</span>
+    <label for="st-search">States switcher</label>
+    <select id="st-search" class="select" data-act="state" data-scope="pg-search">
+      <option value="live">Results</option>
+      <option value="filtered">All results hidden by the filter</option>
+      <option value="empty">No results for this query</option>
+      <option value="stale">Results, one instance unreachable</option>
+      <option value="unconfigured">No library-bearing service</option>
+    </select>
+    <span class="statebar__note">This control is not part of the product. It switches the screen between the states this design has to cover.</span>
+  </div>
+
+  <div class="banner banner--warn" data-when="stale" role="status" hidden>
+    <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
+    <div class="banner__body">
+      <div class="banner__title">Radarr is unreachable — showing cached data from 14:02</div>
+      <div class="banner__text">Search itself is unaffected: it reads the replica, not Radarr. What can be stale is whether a file has appeared or been deleted in the last two hours.</div>
+    </div>
+    <div class="banner__actions"><a href="services.html">Open Services</a></div>
+  </div>
+
+  <div class="toolbar" data-when="live filtered stale">
+    <span class="toolbar__label">Showing results for <span class="mono">the</span></span>
+
+    <div class="segment" role="group" aria-label="View mode">
+      <button type="button" data-group="viewmode" data-panel="posters" aria-pressed="false">posters</button>
+      <button type="button" data-group="viewmode" data-panel="overview" aria-pressed="false">overview</button>
+      <button type="button" data-group="viewmode" data-panel="table" aria-pressed="true">table</button>
+    </div>
+
+    <button type="button" class="btn">Filter</button>
+    <button type="button" class="btn">Options</button>
+
+    <div class="toolbar__spacer"></div>
+    <label class="toolbar__label" for="sortby">Sort</label>
+    <select id="sortby" class="select">
+      <option>Relevance</option>
+      <option>Title</option>
+      <option>Year</option>
+      <option>Added</option>
+      <option>Size</option>
+    </select>
+  </div>
+
+  <!-- The "Not in your library" unowned section specified in ARCHITECTURE.md
+       17.4 is deliberately absent. One search box over owned and unowned is a
+       v0.2 line item in 16, so v0.1 search is owned-only and this screen must
+       not imply otherwise. Grouped cross-media result cards are v0.3, also
+       absent. -->
+
+  <div class="section" data-when="unconfigured" hidden>
+    <div class="empty">
+      <div class="empty__title">Nothing to search yet</div>
+      <p class="empty__text">No library-bearing service is configured. UsArr is running in Search-and-Grab mode: search your indexers and send grabs to your download client. Add a Sonarr, Radarr or media server to get a library.</p>
+      <div class="empty__actions">
+        <a class="btn btn--primary" href="requests.html">Search indexers</a>
+        <a class="btn" href="services.html">Add a service</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" data-when="empty" hidden>
+    <div class="empty">
+      <div class="empty__title">No results for <span class="mono">the wier</span></div>
+      <p class="empty__text">Search matches from the start of a title and anywhere inside it, and it does not correct typos. Nothing in the library starts with or contains that string. Check the spelling, or search your indexers for something you do not own yet.</p>
+      <div class="empty__actions">
+        <a class="btn btn--primary" href="requests.html">Search indexers instead</a>
+        <button type="button" class="btn">Clear the query</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" data-when="filtered" hidden>
+    <div class="toolbar" style="border-top:0">
+      <span class="toolbar__label">Filter</span>
+      <span class="chip">quality:2160p</span>
+      <span class="chip">instance: Radarr 4K</span>
+      <button type="button" class="btn btn--sm">Clear filter</button>
+    </div>
+    <div class="empty">
+      <div class="empty__title">All results are hidden by the applied filter</div>
+      <p class="empty__text">29 items match <span class="mono">the</span>. The filter removes all of them, because no instance supplies 2160p files. This is a different situation from a query that found nothing, and it has a different fix.</p>
+      <div class="empty__actions">
+        <button type="button" class="btn btn--primary">Clear filter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- posters ----------------------------------------------------------- -->
+  <div class="viewmodes" data-when="live stale">
+  <div data-panel-for="viewmode" data-panel-name="posters" hidden>
+    <section class="section">
+      <div class="section__head"><h2><svg class="i" aria-hidden="true"><use href="#i-movie"/></svg> Movies <span class="section__count num">18</span></h2></div>
+      <div class="strip" role="list" data-roving=".card" data-roving-axis="horizontal" aria-label="Movie results">
+        <a class="card" role="listitem" href="#" style="--dc:#3b3a35;--dc-fg:#f1efea"><span class="card__art"><span class="card__t">The Northman</span><span class="card__y">2022</span></span><span class="card__meta">1080p <span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></span></a>
+        <a class="card" role="listitem" href="#" style="--dc:#55483a;--dc-fg:#f6f2ec"><span class="card__art"><span class="card__t">The Zone of Interest</span><span class="card__y">2023</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" role="listitem" href="#" style="--dc:#5a4038;--dc-fg:#f7f0ed"><span class="card__art"><span class="card__t">The Handmaiden</span><span class="card__y">2016</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" role="listitem" href="#" style="--dc:#2a3b3f;--dc-fg:#eef3f4"><span class="card__art"><span class="card__t">Under the Skin</span><span class="card__y">2013</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" role="listitem" href="#" style="--dc:#463c2f;--dc-fg:#f4f1ec"><span class="card__art"><span class="card__t">The Master</span><span class="card__y">2012</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" role="listitem" href="#" style="--dc:#3d2f2b;--dc-fg:#f3eeec"><span class="card__art"><span class="card__t">There Will Be Blood</span><span class="card__y">2007</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" role="listitem" href="#" style="--dc:#33404a;--dc-fg:#eff3f6"><span class="card__art"><span class="card__t">The Social Network</span><span class="card__y">2010</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" role="listitem" href="#" style="--dc:#2f3a3d;--dc-fg:#eff2f3"><span class="card__art"><span class="card__t">The Lighthouse</span><span class="card__y">2019</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+      </div>
+    </section>
+    <p class="section muted">The posters mode is a poster grid over the same rows. Only the table mode is drawn in full in this mockup.</p>
+  </div>
+
+  <!-- overview ---------------------------------------------------------- -->
+  <div data-panel-for="viewmode" data-panel-name="overview" hidden>
+    <section class="section">
+      <div class="section__head"><h2><svg class="i" aria-hidden="true"><use href="#i-movie"/></svg> Movies <span class="section__count num">18</span></h2></div>
+      <p class="muted">The overview mode is a wide two-line row: poster thumbnail, title, synopsis and the same metadata the table carries. Only the table mode is drawn in full in this mockup.</p>
+    </section>
+  </div>
+
+  <!-- table ------------------------------------------------------------- -->
+  <div data-panel-for="viewmode" data-panel-name="table">
+
+    <section class="section">
+      <div class="section__head">
+        <h2><svg class="i" aria-hidden="true"><use href="#i-movie"/></svg> Movies <span class="section__count num">18</span></h2>
+      </div>
+      <div class="tablewrap">
+        <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Movie results">
+          <thead>
+            <tr>
+              <th scope="col">Title</th>
+              <th scope="col">Year</th>
+              <th scope="col">1080p</th>
+              <th scope="col">2160p</th>
+              <th scope="col">Quality</th>
+              <th scope="col" class="is-num">Size</th>
+              <th scope="col">Tags</th>
+              <th scope="col">Instance</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td data-label="Title" class="cell-title">The Northman</td><td data-label="Year" class="num">2022</td><td data-label="1080p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality" class="muted">no file</td><td data-label="Size" class="is-num muted">n/a</td><td data-label="Tags"><span class="chip mono">type:movie</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Zone of Interest</td><td data-label="Year" class="num">2023</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">9.1 GB</td><td data-label="Tags"><span class="chip mono">source:torrent</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Handmaiden</td><td data-label="Year" class="num">2016</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">16.8 GB</td><td data-label="Tags"><span class="chip mono">source:usenet</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">Under the Skin</td><td data-label="Year" class="num">2013</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">8.9 GB</td><td data-label="Tags"><span class="chip mono">source:torrent</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Master</td><td data-label="Year" class="num">2012</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">13.4 GB</td><td data-label="Tags"><span class="chip mono">source:usenet</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">There Will Be Blood</td><td data-label="Year" class="num">2007</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">15.1 GB</td><td data-label="Tags"><span class="chip mono">source:torrent</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Social Network</td><td data-label="Year" class="num">2010</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">WEBDL-1080p</span></td><td data-label="Size" class="is-num">6.2 GB</td><td data-label="Tags"><span class="chip mono">source:usenet</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Lighthouse</td><td data-label="Year" class="num">2019</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">10.3 GB</td><td data-label="Tags"><span class="chip mono">source:torrent</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Witch</td><td data-label="Year" class="num">2015</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">9.7 GB</td><td data-label="Tags"><span class="chip mono">source:torrent</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Florida Project</td><td data-label="Year" class="num">2017</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">WEBDL-1080p</span></td><td data-label="Size" class="is-num">5.5 GB</td><td data-label="Tags"><span class="chip mono">source:usenet</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Rider</td><td data-label="Year" class="num">2017</td><td data-label="1080p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality" class="muted">no file</td><td data-label="Size" class="is-num muted">n/a</td><td data-label="Tags"><span class="chip mono">type:movie</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Assassination of Jesse James</td><td data-label="Year" class="num">2007</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">17.4 GB</td><td data-label="Tags"><span class="chip mono">source:torrent</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section__head">
+        <h2><svg class="i" aria-hidden="true"><use href="#i-tv"/></svg> TV <span class="section__count num">11</span></h2>
+      </div>
+      <div class="tablewrap">
+        <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Series results">
+          <thead>
+            <tr>
+              <th scope="col">Title</th>
+              <th scope="col">Year</th>
+              <th scope="col">1080p</th>
+              <th scope="col">2160p</th>
+              <th scope="col">Network</th>
+              <th scope="col" class="is-num">Size</th>
+              <th scope="col">Tags</th>
+              <th scope="col">Instance</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td data-label="Title" class="cell-title">The Wire</td><td data-label="Year" class="num">2002</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>60/60</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">HBO</td><td data-label="Size" class="is-num">284 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Sopranos</td><td data-label="Year" class="num">1999</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>86/86</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">HBO</td><td data-label="Size" class="is-num">412 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Bear</td><td data-label="Year" class="num">2022</td><td data-label="1080p"><span class="avail avail--part">18/28</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">FX</td><td data-label="Size" class="is-num">44.1 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Leftovers</td><td data-label="Year" class="num">2014</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>28/28</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">HBO</td><td data-label="Size" class="is-num">168 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Americans</td><td data-label="Year" class="num">2013</td><td data-label="1080p"><span class="avail avail--part">61/75</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">FX</td><td data-label="Size" class="is-num">201 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Expanse</td><td data-label="Year" class="num">2015</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>62/62</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">Prime Video</td><td data-label="Size" class="is-num">176 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Thick of It</td><td data-label="Year" class="num">2005</td><td data-label="1080p"><span class="avail avail--part">14/23</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">BBC Four</td><td data-label="Size" class="is-num">21.8 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Terror</td><td data-label="Year" class="num">2018</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>20/20</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">AMC</td><td data-label="Size" class="is-num">58.3 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Rehearsal</td><td data-label="Year" class="num">2022</td><td data-label="1080p"><span class="avail avail--part">6/12</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">HBO</td><td data-label="Size" class="is-num">14.2 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Knick</td><td data-label="Year" class="num">2014</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>20/20</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">Cinemax</td><td data-label="Size" class="is-num">61.7 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Night Of</td><td data-label="Year" class="num">2016</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>8/8</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">HBO</td><td data-label="Size" class="is-num">32.9 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="section muted">Search matches from the start of a title and anywhere inside it. It does not correct typos, so a misspelling returns nothing rather than a near miss. <a href="requests.html">Search indexers instead</a> for something you do not own.</p>
+  </div>
+
+</div>
+
+</main>
+<!-- PAGE:search END -->
+
+</div>
+
+<div class="toasts" aria-live="polite"></div>
+
+<script src="usarr.js"></script>
+</body>
+</html>

@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="en" data-density="compact">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UsArr mockup: requests</title>
+<link rel="stylesheet" href="usarr.css">
+</head>
+<body>
+
+<!-- SPRITE START -->
+<svg id="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10" cy="10" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l5 5L20 7"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 4 2.6 17.4A2 2 0 0 0 4.3 20.4h15.4a2 2 0 0 0 1.7-3L13.7 4a2 2 0 0 0-3.4 0z"/><path d="M12 9v4.5M12 17.2h.01"/></symbol>
+  <symbol id="i-x-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></symbol>
+  <symbol id="i-dash-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12h7"/></symbol>
+  <symbol id="i-movie" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 4v16M16 4v16M4 8h4M4 16h4M4 12h16M16 8h4M16 16h4"/></symbol>
+  <symbol id="i-tv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M16 3l-4 4-4-4"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 11l5 5 5-5M12 4v12"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 7H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-5M14 4h6v6M10 14 20 4"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8.1 8.1 0 0 0 4.5 9M4 5v4h4M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4"/></symbol>
+</svg>
+<!-- SPRITE END -->
+
+<div class="app" data-sidebar="open">
+
+  <!-- TOPBAR START -->
+  <header class="topbar">
+    <button type="button" class="btn btn--icon" data-act="sidebar" aria-expanded="true" aria-label="Hide the sidebar">
+      <svg class="i" aria-hidden="true"><use href="#i-menu"/></svg>
+    </button>
+    <a class="topbar__brand" href="index.html" data-route="home">UsArr</a>
+    <div class="searchbox">
+      <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+      <label class="sr" for="topsearch">Search your library</label>
+      <input id="topsearch" type="search" placeholder="Search your library" autocomplete="off">
+      <span class="kbd">/</span>
+    </div>
+    <div class="topbar__spacer"></div>
+    <div class="topbar__right">
+      <label class="sr" for="density">Row density</label>
+      <select id="density" class="select" data-act="density">
+        <option value="compact">Compact</option>
+        <option value="default">Default</option>
+        <option value="relaxed">Relaxed</option>
+      </select>
+      <button type="button" class="btn btn--icon" data-act="theme" aria-label="Switch the theme">
+        <svg class="i" aria-hidden="true"><use href="#i-moon"/></svg>
+      </button>
+    </div>
+  </header>
+  <!-- TOPBAR END -->
+
+  <!-- SIDEBAR START -->
+  <nav class="sidebar" aria-label="Sections">
+    <ul class="nav__group">
+      <li><a class="nav__link" href="index.html" data-route="home" data-primary>Home</a></li>
+      <li><a class="nav__link" href="index.html#movies" data-route="home">Movies</a></li>
+      <li><a class="nav__link" href="index.html#tv" data-route="home">TV</a></li>
+      <li><a class="nav__link" href="search.html" data-route="search" data-primary>Search</a></li>
+      <li><a class="nav__link" href="requests.html" data-route="requests" data-primary aria-current="page">Requests</a></li>
+      <li><a class="nav__link" href="services.html" data-route="services" data-primary>Services</a></li>
+    </ul>
+    <ul class="nav__group">
+      <li><a class="nav__link" href="services.html#settings" data-route="services">Settings</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#settings" data-route="services">General</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#settings" data-route="services">Tags</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#settings" data-route="services">UI</a></li>
+    </ul>
+    <ul class="nav__group">
+      <li><a class="nav__link" href="services.html#system" data-route="services">System
+        <span class="nav__count nav__count--err" title="2 errors">2</span></a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Status</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Tasks</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Backup</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Events</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Log files</a></li>
+    </ul>
+  </nav>
+  <!-- SIDEBAR END -->
+
+<!-- PAGE:requests START -->
+<main class="main" id="pg-requests" data-page="requests" data-state="live">
+
+  <div class="pagehead">
+    <h1>Requests</h1>
+    <span class="pagehead__meta">Free-text indexer search through Prowlarr, and a grab sent to Prowlarr's own download client.</span>
+  </div>
+
+  <div class="statebar">
+    <span class="statebar__tag">mockup</span>
+    <label for="st-requests">States switcher</label>
+    <select id="st-requests" class="select" data-act="state" data-scope="pg-requests">
+      <option value="live">Results, fan-out complete</option>
+      <option value="partial">Results, fan-out in progress</option>
+      <option value="empty">Search ran, nothing found</option>
+      <option value="denied">One indexer refused the account</option>
+      <option value="error">Prowlarr unreachable</option>
+      <option value="unconfigured">No Prowlarr configured</option>
+    </select>
+    <span class="statebar__note">This control is not part of the product. It switches the screen between the states this design has to cover.</span>
+  </div>
+
+  <!-- The *Arr-backed Add path described in ARCHITECTURE.md 17.5 is v0.2 and
+       is deliberately absent here, along with the request model, routing
+       rules, quotas and per-season TV. In single-user mode the approval queue
+       is hidden entirely, so there is no approval UI on this screen either. -->
+
+  <div class="section" data-when="unconfigured" hidden>
+    <div class="empty">
+      <div class="empty__title">No indexer service configured</div>
+      <p class="empty__text">This screen searches your indexers through Prowlarr and sends the grab to the download client Prowlarr already has. Without a Prowlarr there is nothing to query, and UsArr does not talk to indexers directly.</p>
+      <div class="empty__actions">
+        <a class="btn btn--primary" href="services.html">Add Prowlarr</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search form: Prowlarr's own shape, in Prowlarr's own words. --------- -->
+  <form class="toolbar" data-when="live partial empty denied error" onsubmit="return false">
+    <label class="toolbar__label" for="q">Query</label>
+    <input class="input" id="q" type="search" value="dune part two" style="flex:1 1 260px">
+
+    <label class="toolbar__label" for="stype">Search type</label>
+    <select class="select" id="stype">
+      <option>Basic</option>
+      <option>TV</option>
+      <option selected>Movie</option>
+    </select>
+
+    <label class="toolbar__label" for="indexers">Indexers</label>
+    <select class="select" id="indexers" multiple size="3" style="flex:0 1 200px">
+      <optgroup label="Torrents">
+        <option selected>TorrentLeech</option>
+        <option selected>IPTorrents</option>
+        <option selected>PassThePopcorn</option>
+        <option selected>HDBits</option>
+        <option selected>TorrentDay</option>
+      </optgroup>
+      <optgroup label="Usenet">
+        <option selected>NZBgeek</option>
+        <option selected>DrunkenSlug</option>
+        <option selected>NZBFinder</option>
+        <option selected>abNZB</option>
+      </optgroup>
+    </select>
+
+    <label class="toolbar__label" for="cats">Category</label>
+    <select class="select" id="cats" multiple size="3" style="flex:0 1 180px">
+      <option selected>Movies</option>
+      <option>Movies/UHD</option>
+      <option>Movies/HD</option>
+      <option>Movies/SD</option>
+      <option>TV</option>
+    </select>
+
+    <button type="submit" class="btn btn--primary">Search</button>
+  </form>
+
+  <div class="banner banner--err" data-when="error" role="alert" hidden>
+    <svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>
+    <div class="banner__body">
+      <div class="banner__title">Prowlarr rejected the stored API key, so no indexer was queried</div>
+      <div class="banner__text">The search was not sent. Nothing was grabbed and nothing is pending.</div>
+      <div class="verbatim" style="margin-top:8px">GET https://prowlarr.tail9c2e.ts.net/api/v1/search?query=dune+part+two&amp;type=movie 401 Unauthorized
+{"message":"Unauthorized","description":"The request requires a valid X-Api-Key header"}</div>
+    </div>
+    <div class="banner__actions"><a href="services.html">Update API key</a></div>
+  </div>
+
+  <div class="section" data-when="empty" hidden>
+    <div class="empty">
+      <div class="empty__title">No search results found</div>
+      <p class="empty__text">All 9 indexers answered and none of them has a release matching <span class="mono">dune part twoo</span> in the Movies categories. Indexer search matches the release name as the indexer stores it, so a typo in the query returns nothing.</p>
+      <div class="empty__actions">
+        <button type="button" class="btn btn--primary">Search all categories</button>
+        <button type="button" class="btn">Edit the query</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tier 3 fan-out: real counts, never a fake progress bar. The releases
+       below are already grabbable; the remaining indexers only add rows. -->
+  <div class="fanout" data-when="partial" role="status" hidden>
+    <span class="fanout__count">4 of 9</span> indexers responded
+    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:44%"></span></span>
+    <span>47 releases so far, all of them grabbable now</span>
+    <span class="fanout__failed">TorrentDay timed out after 30 s</span>
+    <div class="toolbar__spacer"></div>
+    <button type="button" class="btn btn--sm">Stop waiting</button>
+  </div>
+
+  <div class="fanout" data-when="live" role="status">
+    <span class="fanout__count">8 of 9</span> indexers responded
+    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:89%"></span></span>
+    <span>112 releases, 10 shown after de-duplication</span>
+    <span class="fanout__failed">HDBits returned 429 and was skipped</span>
+  </div>
+
+  <div class="fanout" data-when="denied" role="status" hidden>
+    <span class="fanout__count">8 of 9</span> indexers responded
+    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:89%"></span></span>
+    <span>96 releases, 10 shown after de-duplication</span>
+    <span class="fanout__failed">PassThePopcorn refused the account</span>
+  </div>
+
+  <div class="banner banner--warn" data-when="denied" role="status" hidden>
+    <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
+    <div class="banner__body">
+      <div class="banner__title">PassThePopcorn refused this account, so its releases are missing from the list</div>
+      <div class="banner__text">Every other indexer answered. The results below are real and grabbable; they are just incomplete, and the count above says so rather than pretending the search was whole.</div>
+      <div class="verbatim" style="margin-top:8px">indexer 4 PassThePopcorn: 403 Forbidden
+{"error":"Your account does not have permission to use the API. Enable it in your profile."}</div>
+    </div>
+    <div class="banner__actions"><a href="services.html">Open Services</a></div>
+  </div>
+
+  <!-- Results ------------------------------------------------------------ -->
+  <div data-when="live partial denied">
+    <div class="toolbar">
+      <button type="button" class="btn btn--primary" data-act="grab-bulk" disabled>Grab release(s)</button>
+      <button type="button" class="btn">Filter</button>
+      <button type="button" class="btn">Options</button>
+      <div class="toolbar__spacer"></div>
+      <span class="toolbar__label">Sorted by Age ascending. Grab window expires in <span class="num">18</span> minutes; an expired release is never offered as grabbable.</span>
+    </div>
+
+    <div class="tablewrap">
+      <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Release results">
+        <thead>
+          <tr>
+            <th scope="col">Select</th>
+            <th scope="col">Protocol</th>
+            <th scope="col" class="is-num">Age</th>
+            <th scope="col">Title</th>
+            <th scope="col">Indexer</th>
+            <th scope="col" class="is-num">Size</th>
+            <th scope="col" class="is-num">Grabs</th>
+            <th scope="col" class="is-num">Peers</th>
+            <th scope="col">Category</th>
+            <th scope="col">Indexer flags</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <tr>
+            <td data-label="Select"><label class="sr" for="r1">Select this release</label><input type="checkbox" id="r1" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-label="Age" class="is-num">2 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.2160p.UHD.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-FraMeSToR</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">TorrentLeech</td>
+            <td data-label="Size" class="is-num">68.4 GB</td>
+            <td data-label="Grabs" class="is-num">214</td>
+            <td data-label="Peers" class="is-num">41 / 9</td>
+            <td data-label="Category">Movies/UHD</td>
+            <td data-label="Indexer flags"><span class="chip">internal</span> <span class="chip">freeleech</span></td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on TorrentLeech"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <tr>
+            <td data-label="Select"><label class="sr" for="r2">Select this release</label><input type="checkbox" id="r2" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-label="Age" class="is-num">3 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-FLUX</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">NZBgeek</td>
+            <td data-label="Size" class="is-num">21.7 GB</td>
+            <td data-label="Grabs" class="is-num">1,208</td>
+            <td data-label="Peers" class="is-num muted">n/a</td>
+            <td data-label="Category">Movies/UHD</td>
+            <td data-label="Indexer flags" class="muted">None</td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on NZBgeek"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <tr>
+            <td data-label="Select"><label class="sr" for="r3">Select this release</label><input type="checkbox" id="r3" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-label="Age" class="is-num">4 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.1080p.BluRay.x264-SbR</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">TorrentDay</td>
+            <td data-label="Size" class="is-num">12.1 GB</td>
+            <td data-label="Grabs" class="is-num">512</td>
+            <td data-label="Peers" class="is-num">122 / 18</td>
+            <td data-label="Category">Movies/HD</td>
+            <td data-label="Indexer flags" class="muted">None</td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on TorrentDay"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <tr>
+            <td data-label="Select"><label class="sr" for="r4">Select this release</label><input type="checkbox" id="r4" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-label="Age" class="is-num">6 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.1080p.BluRay.DDP5.1.x264-PTer</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">DrunkenSlug</td>
+            <td data-label="Size" class="is-num">14.9 GB</td>
+            <td data-label="Grabs" class="is-num">306</td>
+            <td data-label="Peers" class="is-num muted">n/a</td>
+            <td data-label="Category">Movies/HD</td>
+            <td data-label="Indexer flags" class="muted">None</td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on DrunkenSlug"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <!-- Already acknowledged: the write queue holds it, and the chip
+               says so rather than claiming the grab has landed. -->
+          <tr>
+            <td data-label="Select"><label class="sr" for="r5">Select this release</label><input type="checkbox" id="r5" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-label="Age" class="is-num">8 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.REPACK.1080p.WEB-DL.DDP5.1.Atmos.H.264-FLUX</span><div data-slot="grabstate"><span class="chip chip--pending">pending</span></div></td>
+            <td data-label="Indexer" class="mono">IPTorrents</td>
+            <td data-label="Size" class="is-num">8.6 GB</td>
+            <td data-label="Grabs" class="is-num">98</td>
+            <td data-label="Peers" class="is-num">64 / 5</td>
+            <td data-label="Category">Movies/HD</td>
+            <td data-label="Indexer flags"><span class="chip">repack</span></td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release" disabled><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on IPTorrents"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <!-- verifying: it might have landed. Distinct from failed. -->
+          <tr>
+            <td data-label="Select"><label class="sr" for="r6">Select this release</label><input type="checkbox" id="r6" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-label="Age" class="is-num">11 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.2160p.WEB-DL.DV.HDR.DDP5.1.Atmos.H.265-NTb</span><div data-slot="grabstate"><span class="chip chip--pending">verifying, might have landed</span></div></td>
+            <td data-label="Indexer" class="mono">PassThePopcorn</td>
+            <td data-label="Size" class="is-num">24.3 GB</td>
+            <td data-label="Grabs" class="is-num">77</td>
+            <td data-label="Peers" class="is-num">19 / 2</td>
+            <td data-label="Category">Movies/UHD</td>
+            <td data-label="Indexer flags"><span class="chip">internal</span></td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release" disabled><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on PassThePopcorn"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <tr>
+            <td data-label="Select"><label class="sr" for="r7">Select this release</label><input type="checkbox" id="r7" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-label="Age" class="is-num">14 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.720p.WEBRip.x264-GalaxyRG</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">NZBFinder</td>
+            <td data-label="Size" class="is-num">3.4 GB</td>
+            <td data-label="Grabs" class="is-num">41</td>
+            <td data-label="Peers" class="is-num muted">n/a</td>
+            <td data-label="Category">Movies/SD</td>
+            <td data-label="Indexer flags" class="muted">None</td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on NZBFinder"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <tr>
+            <td data-label="Select"><label class="sr" for="r8">Select this release</label><input type="checkbox" id="r8" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-label="Age" class="is-num">21 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.1080p.AMZN.WEB-DL.DDP5.1.H.264-FLUX</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">TorrentLeech</td>
+            <td data-label="Size" class="is-num">9.2 GB</td>
+            <td data-label="Grabs" class="is-num">402</td>
+            <td data-label="Peers" class="is-num">88 / 11</td>
+            <td data-label="Category">Movies/HD</td>
+            <td data-label="Indexer flags" class="muted">None</td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on TorrentLeech"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <!-- Grabbing this row fails, so the failure path is reachable. -->
+          <tr data-demo="fail">
+            <td data-label="Select"><label class="sr" for="r9">Select this release</label><input type="checkbox" id="r9" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-label="Age" class="is-num">26 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.Hybrid.2160p.BluRay.REMUX.HDR.DV.HEVC.DTS-HD.MA.5.1-playBD</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">HDBits</td>
+            <td data-label="Size" class="is-num">74.9 GB</td>
+            <td data-label="Grabs" class="is-num">12</td>
+            <td data-label="Peers" class="is-num">6 / 1</td>
+            <td data-label="Category">Movies/UHD</td>
+            <td data-label="Indexer flags"><span class="chip">internal</span></td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on HDBits"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <tr>
+            <td data-label="Select"><label class="sr" for="r10">Select this release</label><input type="checkbox" id="r10" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-label="Age" class="is-num">31 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.PROPER.1080p.BluRay.x265-RARBG</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">abNZB</td>
+            <td data-label="Size" class="is-num">6.1 GB</td>
+            <td data-label="Grabs" class="is-num">155</td>
+            <td data-label="Peers" class="is-num muted">n/a</td>
+            <td data-label="Category">Movies/HD</td>
+            <td data-label="Indexer flags"><span class="chip">proper</span></td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on abNZB"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+        </tbody>
+      </table>
+    </div>
+
+    <p class="section muted">A grab is acknowledged, not applied optimistically. The button writes a queued command and the row shows <span class="chip chip--pending">pending</span> until Prowlarr answers. A failure changes that chip on the same visible row and raises a message carrying the upstream text verbatim, with Retry and Dismiss. The row never silently reverts. Grabbing the 26-day-old HDBits release above is wired to fail, so that path is reachable from this page.</p>
+
+    <p class="section muted">Grabs are recorded in <span class="mono">provenance</span>, so if a Sonarr or Radarr is added later and imports the file, the download id joins back to the release these indexers returned. UsArr does not track what happens to the download, and does not talk to a download client itself.</p>
+  </div>
+
+</main>
+<!-- PAGE:requests END -->
+
+</div>
+
+<div class="toasts" aria-live="polite"></div>
+
+<script src="usarr.js"></script>
+</body>
+</html>

@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en" data-density="compact">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UsArr mockup: services</title>
+<link rel="stylesheet" href="usarr.css">
+</head>
+<body>
+
+<!-- SPRITE START -->
+<svg id="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10" cy="10" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l5 5L20 7"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 4 2.6 17.4A2 2 0 0 0 4.3 20.4h15.4a2 2 0 0 0 1.7-3L13.7 4a2 2 0 0 0-3.4 0z"/><path d="M12 9v4.5M12 17.2h.01"/></symbol>
+  <symbol id="i-x-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></symbol>
+  <symbol id="i-dash-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12h7"/></symbol>
+  <symbol id="i-movie" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 4v16M16 4v16M4 8h4M4 16h4M4 12h16M16 8h4M16 16h4"/></symbol>
+  <symbol id="i-tv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M16 3l-4 4-4-4"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 11l5 5 5-5M12 4v12"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 7H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-5M14 4h6v6M10 14 20 4"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8.1 8.1 0 0 0 4.5 9M4 5v4h4M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4"/></symbol>
+</svg>
+<!-- SPRITE END -->
+
+<div class="app" data-sidebar="open">
+
+  <!-- TOPBAR START -->
+  <header class="topbar">
+    <button type="button" class="btn btn--icon" data-act="sidebar" aria-expanded="true" aria-label="Hide the sidebar">
+      <svg class="i" aria-hidden="true"><use href="#i-menu"/></svg>
+    </button>
+    <a class="topbar__brand" href="index.html" data-route="home">UsArr</a>
+    <div class="searchbox">
+      <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+      <label class="sr" for="topsearch">Search your library</label>
+      <input id="topsearch" type="search" placeholder="Search your library" autocomplete="off">
+      <span class="kbd">/</span>
+    </div>
+    <div class="topbar__spacer"></div>
+    <div class="topbar__right">
+      <label class="sr" for="density">Row density</label>
+      <select id="density" class="select" data-act="density">
+        <option value="compact">Compact</option>
+        <option value="default">Default</option>
+        <option value="relaxed">Relaxed</option>
+      </select>
+      <button type="button" class="btn btn--icon" data-act="theme" aria-label="Switch the theme">
+        <svg class="i" aria-hidden="true"><use href="#i-moon"/></svg>
+      </button>
+    </div>
+  </header>
+  <!-- TOPBAR END -->
+
+  <!-- SIDEBAR START -->
+  <nav class="sidebar" aria-label="Sections">
+    <ul class="nav__group">
+      <li><a class="nav__link" href="index.html" data-route="home" data-primary>Home</a></li>
+      <li><a class="nav__link" href="index.html#movies" data-route="home">Movies</a></li>
+      <li><a class="nav__link" href="index.html#tv" data-route="home">TV</a></li>
+      <li><a class="nav__link" href="search.html" data-route="search" data-primary>Search</a></li>
+      <li><a class="nav__link" href="requests.html" data-route="requests" data-primary>Requests</a></li>
+      <li><a class="nav__link" href="services.html" data-route="services" data-primary aria-current="page">Services</a></li>
+    </ul>
+    <ul class="nav__group">
+      <li><a class="nav__link" href="services.html#settings" data-route="services">Settings</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#settings" data-route="services">General</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#settings" data-route="services">Tags</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#settings" data-route="services">UI</a></li>
+    </ul>
+    <ul class="nav__group">
+      <li><a class="nav__link" href="services.html#system" data-route="services">System
+        <span class="nav__count nav__count--err" title="2 errors">2</span></a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Status</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Tasks</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Backup</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Events</a></li>
+      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Log files</a></li>
+    </ul>
+  </nav>
+  <!-- SIDEBAR END -->
+
+<!-- PAGE:services START -->
+<main class="main" id="pg-services" data-page="services" data-state="live">
+
+  <div class="pagehead">
+    <h1>Services</h1>
+    <span class="pagehead__meta">5 rows. 1 down, 2 degraded, 1 not configured. Health is probed per instance, never globally.</span>
+  </div>
+
+  <div class="statebar">
+    <span class="statebar__tag">mockup</span>
+    <label for="st-services">States switcher</label>
+    <select id="st-services" class="select" data-act="state" data-scope="pg-services">
+      <option value="live">Mixed health</option>
+      <option value="reident">An instance needs re-identification</option>
+      <option value="denied">Re-authentication required</option>
+      <option value="unconfigured">No services configured</option>
+    </select>
+    <span class="statebar__note">This control is not part of the product. It switches the screen between the states this design has to cover.</span>
+  </div>
+
+  <!-- Loud on purpose: silently doing the wrong thing here destroys a
+       library (ARCHITECTURE.md 17.7). This one blocks; the stale banner on
+       home does not. -->
+  <div class="banner banner--err" data-when="reident" role="alert" hidden>
+    <svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>
+    <div class="banner__body">
+      <div class="banner__title">Sonarr no longer identifies as the instance UsArr synced with</div>
+      <div class="banner__text">Sync for this instance is paused deliberately. The instance fingerprint changed from <span class="mono">a91c4f</span> to <span class="mono">0d33b8</span>, which happens when the host is rebuilt, restored from a different backup, or repointed at another Sonarr. Re-link only if you know this is the same library.</div>
+      <div class="verbatim" style="margin-top:8px">instance_id 1: identity_epoch 3 -&gt; 4, max_remote_id_seen 214 -&gt; 6, root_folder /media/tv -&gt; /srv/tv</div>
+    </div>
+    <div class="banner__actions"><button type="button" class="btn btn--primary">Re-link</button></div>
+  </div>
+
+  <div class="banner" data-when="denied" role="alert" hidden>
+    <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
+    <div class="banner__body">
+      <div class="banner__title">Re-authentication required before the API key can be changed</div>
+      <div class="banner__text">Changing a service credential opens a five-minute sudo window. UsArr refused the write because the current session has no sudo window, and the server enforced that, not this screen.</div>
+      <div class="verbatim" style="margin-top:8px">PUT /api/v1/services/3 403: {"error":"sudo_required","expires_in":0}</div>
+    </div>
+    <div class="banner__actions"><button type="button" class="btn btn--primary">Confirm your password</button></div>
+  </div>
+
+  <div class="section" data-when="unconfigured" hidden>
+    <div class="empty">
+      <div class="empty__title">No services configured</div>
+      <p class="empty__text">The first-run wizard asks for three things: which kind of service, its base URL, and an API key. The connection is tested before Save is enabled, so a typo does not become a broken install.</p>
+      <div class="empty__actions">
+        <button type="button" class="btn btn--primary" data-act="dialog-open" aria-controls="add-service">Add service</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- The health table -------------------------------------------------- -->
+  <div data-when="live reident denied">
+    <div class="toolbar">
+      <button type="button" class="btn btn--primary" data-act="dialog-open" aria-controls="add-service">Add service</button>
+      <button type="button" class="btn">Test all connections</button>
+      <div class="toolbar__spacer"></div>
+      <span class="toolbar__label">Health probed every 60 seconds. The table renders from the replica and never blocks on a probe.</span>
+    </div>
+
+    <div class="tablewrap">
+      <table class="tbl tbl--stack" data-roving="tbody tr[data-row]" aria-label="Configured services">
+        <thead>
+          <tr>
+            <th scope="col">Service</th>
+            <th scope="col">State</th>
+            <th scope="col">Last successful sync</th>
+            <th scope="col" class="is-num">Items</th>
+            <th scope="col">Problem</th>
+            <th scope="col">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <!-- healthy -->
+          <tr data-row>
+            <td data-label="Service">
+              <div class="cell-title">
+                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-sonarr" aria-label="Show detail for Sonarr">
+                  <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+                </button>
+                Sonarr <span class="chip">sonarr</span>
+              </div>
+              <div class="cell-sub mono">http://10.0.0.4:8989</div>
+            </td>
+            <td data-label="State"><span class="st st--ok"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>healthy</span></td>
+            <td data-label="Last successful sync">
+              <div class="synclist">
+                <div class="synclist__row"><span class="synclist__ch">full</span><span class="synclist__t">03:10, 11 hours ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">delta</span><span class="synclist__t">14:02, 6 minutes ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">reconcile</span><span class="synclist__t">02:00, 12 hours ago</span></div>
+              </div>
+            </td>
+            <td data-label="Items" class="is-num">214</td>
+            <td data-label="Problem" class="muted">None</td>
+            <td data-label="Action" class="muted">No action needed</td>
+          </tr>
+          <tr id="x-sonarr" hidden><td colspan="6">
+            <div class="detail">
+              <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">CLOSED</span></li><li>Consecutive failures <span class="num">0</span></li></ul></div>
+              <div><h4>Health warnings from Sonarr</h4><ul><li class="muted">None reported by <span class="mono">/api/v3/health</span></li></ul></div>
+              <div><h4>Recent sync reports</h4><ul><li><span class="num">14:02</span> delta, 3 changed</li><li><span class="num">13:02</span> delta, 0 changed</li><li><span class="num">12:02</span> delta, 11 changed</li></ul></div>
+              <div><h4>Clock skew</h4><ul><li><span class="num">+0.4 s</span> measured from the <span class="mono">Date</span> header</li></ul></div>
+            </div>
+          </td></tr>
+
+          <!-- degraded, breaker open -->
+          <tr data-row>
+            <td data-label="Service">
+              <div class="cell-title">
+                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-radarr" aria-label="Show detail for Radarr">
+                  <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+                </button>
+                Radarr <span class="chip">radarr</span>
+              </div>
+              <div class="cell-sub mono">http://10.0.0.4:7878</div>
+            </td>
+            <td data-label="State"><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>degraded</span><div class="cell-sub">breaker open</div></td>
+            <td data-label="Last successful sync">
+              <div class="synclist">
+                <div class="synclist__row"><span class="synclist__ch">full</span><span class="synclist__t">03:12, 11 hours ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">delta</span><span class="synclist__t">11:47, 2 hours ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">reconcile</span><span class="synclist__t">02:00, 12 hours ago</span></div>
+              </div>
+            </td>
+            <td data-label="Items" class="is-num">1,204</td>
+            <td data-label="Problem"><div class="verbatim">Get "http://10.0.0.4:7878/api/v3/movie?page=1&amp;pageSize=250": dial tcp 10.0.0.4:7878: connect: connection refused</div></td>
+            <td data-label="Action"><button type="button" class="btn">Test connection</button></td>
+          </tr>
+          <tr id="x-radarr" hidden><td colspan="6">
+            <div class="detail">
+              <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">OPEN</span></li><li>Next probe <span class="num">14:19</span>, in 4 minutes</li><li>Consecutive failures <span class="num">7</span></li><li>Backoff <span class="num">4 m 00 s</span>, capped at 15 m</li></ul></div>
+              <div><h4>Health warnings from Radarr</h4><ul><li class="muted">Not readable while the breaker is open. Last body was empty.</li></ul></div>
+              <div><h4>Recent sync reports</h4><ul><li><span class="num">13:47</span> delta failed, connection refused</li><li><span class="num">12:47</span> delta failed, connection refused</li><li><span class="num">11:47</span> delta, 6 changed</li></ul></div>
+              <div><h4>Clock skew</h4><ul><li class="muted">Not measured since 11:47</li></ul></div>
+            </div>
+            <p class="muted">Browse and search keep working from the replica while this breaker is open. Writes to Radarr are accepted and queued.</p>
+          </td></tr>
+
+          <!-- down, 401 -->
+          <tr data-row>
+            <td data-label="Service">
+              <div class="cell-title">
+                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-prowlarr" aria-label="Show detail for Prowlarr">
+                  <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+                </button>
+                Prowlarr <span class="chip">prowlarr</span>
+              </div>
+              <div class="cell-sub mono">https://prowlarr.tail9c2e.ts.net</div>
+            </td>
+            <td data-label="State"><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>down</span></td>
+            <td data-label="Last successful sync">
+              <div class="synclist">
+                <div class="synclist__row"><span class="synclist__ch">full</span><span class="synclist__t muted">not applicable</span></div>
+                <div class="synclist__row"><span class="synclist__ch">delta</span><span class="synclist__t muted">not applicable</span></div>
+                <div class="synclist__row"><span class="synclist__ch">reconcile</span><span class="synclist__t muted">not applicable</span></div>
+              </div>
+            </td>
+            <td data-label="Items" class="is-num muted">0</td>
+            <td data-label="Problem"><div class="verbatim">GET /api/v1/indexer 401 Unauthorized
+{"message":"Unauthorized","description":"The request requires a valid X-Api-Key header"}</div></td>
+            <td data-label="Action"><button type="button" class="btn btn--primary">Update API key</button></td>
+          </tr>
+          <tr id="x-prowlarr" hidden><td colspan="6">
+            <div class="detail">
+              <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">OPEN</span></li><li>Next probe <span class="num">14:23</span>, in 8 minutes</li><li>Consecutive failures <span class="num">14</span></li></ul></div>
+              <div><h4>Health warnings from Prowlarr</h4><ul><li class="muted">Not readable: the credential is rejected.</li></ul></div>
+              <div><h4>Recent sync reports</h4><ul><li><span class="num">14:07</span> probe failed, 401</li><li><span class="num">13:07</span> probe failed, 401</li><li><span class="num">12:07</span> probe failed, 401</li></ul></div>
+              <div><h4>Clock skew</h4><ul><li><span class="num">+1.1 s</span>, measured on the 401 response</li></ul></div>
+            </div>
+            <p class="muted">Updating a credential opens a five-minute sudo window. Prowlarr carries no library, so nothing in the catalogue changes while this is down; only indexer search is unavailable.</p>
+          </td></tr>
+
+          <!-- healthy but skewed -->
+          <tr data-row>
+            <td data-label="Service">
+              <div class="cell-title">
+                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-anime" aria-label="Show detail for Sonarr Anime">
+                  <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+                </button>
+                Sonarr Anime <span class="chip">sonarr</span>
+              </div>
+              <div class="cell-sub mono">http://10.0.0.9:8989</div>
+            </td>
+            <td data-label="State"><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>degraded</span><div class="cell-sub">clock skew</div></td>
+            <td data-label="Last successful sync">
+              <div class="synclist">
+                <div class="synclist__row"><span class="synclist__ch">full</span><span class="synclist__t">03:20, 11 hours ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">delta</span><span class="synclist__t">14:01, 7 minutes ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">reconcile</span><span class="synclist__t">02:00, 12 hours ago</span></div>
+              </div>
+            </td>
+            <td data-label="Items" class="is-num">61</td>
+            <td data-label="Problem"><div class="verbatim">clock skew +212 s measured from Date: Sun, 16 Aug 2026 14:11:32 GMT
+delta polling uses this host's clock, so recent changes can be missed</div></td>
+            <td data-label="Action"><button type="button" class="btn">Run full sync now</button></td>
+          </tr>
+          <tr id="x-anime" hidden><td colspan="6">
+            <div class="detail">
+              <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">CLOSED</span></li><li>Consecutive failures <span class="num">0</span></li></ul></div>
+              <div><h4>Health warnings from Sonarr Anime</h4><ul><li><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span> System time is off by more than 1 day</li><li><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span> Indexers are unavailable due to failures</li></ul></div>
+              <div><h4>Recent sync reports</h4><ul><li><span class="num">14:01</span> delta, 2 changed</li><li><span class="num">13:01</span> delta, 0 changed</li><li><span class="num">12:01</span> delta, 4 changed</li></ul></div>
+              <div><h4>Clock skew</h4><ul><li><span class="num">+212 s</span>, warned above 60 s</li></ul></div>
+            </div>
+          </td></tr>
+
+          <!-- not configured: grey, not red -->
+          <tr data-row>
+            <td data-label="Service">
+              <div class="cell-title">Radarr 4K <span class="chip">radarr</span></div>
+              <div class="cell-sub muted">No base URL set</div>
+            </td>
+            <td data-label="State"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td>
+            <td data-label="Last successful sync" class="muted">Never</td>
+            <td data-label="Items" class="is-num muted">0</td>
+            <td data-label="Problem" class="muted">Nothing is wrong. A 2160p instance has been named but never connected, so 2160p availability reads "not configured" across the library rather than a cross.</td>
+            <td data-label="Action"><button type="button" class="btn" data-act="dialog-open" aria-controls="add-service">Add service</button></td>
+          </tr>
+
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- System health messages -------------------------------------------- -->
+  <section class="section" id="system" data-when="live reident denied">
+    <div class="section__head"><h2>System status</h2><span class="section__count">2 errors, 1 warning</span></div>
+    <ul>
+      <li class="banner banner--err" style="margin-left:0;margin-right:0">
+        <svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>
+        <div class="banner__body"><div class="banner__title">Prowlarr rejected the stored API key</div>
+        <div class="banner__text">Indexer search is unavailable until the key is replaced.</div></div>
+        <div class="banner__actions"><button type="button" class="btn btn--sm">Update API key</button></div>
+      </li>
+      <li class="banner banner--err" style="margin-left:0;margin-right:0">
+        <svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>
+        <div class="banner__body"><div class="banner__title">Radarr has been unreachable for 2 hours</div>
+        <div class="banner__text">The last successful delta poll was 11:47. Movie rows are served from the replica.</div></div>
+        <div class="banner__actions"><button type="button" class="btn btn--sm">Test connection</button></div>
+      </li>
+      <li class="banner banner--warn" style="margin-left:0;margin-right:0">
+        <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
+        <div class="banner__body"><div class="banner__title">Sonarr Anime clock is 212 seconds ahead of this host</div>
+        <div class="banner__text">Delta polling keys off the remote clock, so changes inside the skew window can be missed until the next reconciliation.</div></div>
+        <div class="banner__actions"><button type="button" class="btn btn--sm">Run full sync now</button></div>
+      </li>
+    </ul>
+  </section>
+
+  <!-- Settings anatomy ---------------------------------------------------
+       The shape self-hosters already know from Sonarr, Radarr and Prowlarr:
+       a second-level section nav, a Show advanced toggle, and a save control
+       that reads "No changes" and is disabled until the form is dirty. -->
+  <section class="section" id="settings" data-when="live reident denied">
+    <div class="section__head"><h2>Settings</h2></div>
+
+    <div class="settings" id="settings-box" data-advanced="off">
+      <nav class="subnav" aria-label="Settings sections">
+        <a href="#settings" data-group="settings" data-panel="services" aria-current="true">Services</a>
+        <a href="#settings" data-group="settings" data-panel="general" aria-current="false">General</a>
+        <a href="#settings" data-group="settings" data-panel="tags" aria-current="false">Tags</a>
+        <a href="#settings" data-group="settings" data-panel="ui" aria-current="false">UI</a>
+      </nav>
+
+      <div>
+        <div class="form__row" style="margin-bottom:16px">
+          <button type="button" class="btn" data-act="advanced" aria-expanded="false" aria-controls="settings-box">Show advanced</button>
+          <span class="muted">Advanced fields are marked and hidden by default.</span>
+        </div>
+
+        <div data-panel-for="settings" data-panel-name="services">
+          <form class="form" data-act="dirtyform" novalidate>
+
+            <!-- GOV.UK error-summary pattern: one list at the top that takes
+                 focus on submit, and the same message repeated inline at each
+                 field it belongs to. -->
+            <div class="errsummary" id="service-errors" tabindex="-1" role="alert" hidden>
+              <div class="errsummary__title">There is a problem</div>
+              <ul>
+                <li><a href="#f-url">Base URL must include a scheme, for example http:// or https://</a></li>
+                <li><a href="#f-apikey">Enter the API key. It was cleared when the host changed.</a></li>
+              </ul>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="f-kind">Kind</label>
+              <select class="select" id="f-kind">
+                <option>sonarr</option>
+                <option selected>radarr</option>
+                <option>prowlarr</option>
+              </select>
+              <span class="field__help">Which application this is. Sonarr and Radarr use <span class="mono">/api/v3</span>; Prowlarr uses <span class="mono">/api/v1</span>. The version is probed, not assumed.</span>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="f-name">Name</label>
+              <input class="input" id="f-name" type="text" value="Radarr 4K">
+              <span class="field__help">The label shown throughout UsArr. It must be unique, because it is how you tell two Radarr instances apart.</span>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="f-url">Base URL</label>
+              <input class="input" id="f-url" type="text" value="10.0.0.4:7879" aria-invalid="true" aria-describedby="f-url-err f-url-help" data-act="host">
+              <span class="field__err" id="f-url-err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>Base URL must include a scheme, for example http:// or https://</span>
+              <span class="field__help" id="f-url-help">The address this host can reach, not the one your browser uses. UsArr resolves it once and pins the address for the life of the request, so a rebinding DNS answer cannot redirect the call.</span>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="f-apikey">API key</label>
+              <input class="input" id="f-apikey" type="password" value="••••••1a2b" aria-describedby="apikey-reentry f-apikey-help">
+              <span class="field__help" id="f-apikey-help">Stored encrypted and never sent back to the browser. An *Arr API key is a full-admin credential.</span>
+              <span class="field__err" id="apikey-reentry" hidden><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>The host changed, so the stored key was cleared. Enter it again before saving.</span>
+            </div>
+
+            <div class="field advanced">
+              <label class="field__label" for="f-urlbase">URL base <span class="adv-tag">advanced</span></label>
+              <input class="input" id="f-urlbase" type="text" placeholder="/radarr">
+              <span class="field__help">Only needed when the application is served under a path by a reverse proxy.</span>
+            </div>
+
+            <div class="field advanced">
+              <label class="field__label" for="f-priority">Priority <span class="adv-tag">advanced</span></label>
+              <input class="input" id="f-priority" type="number" value="10" style="max-width:120px">
+              <span class="field__help">When two instances claim the same item, the higher priority authoritative link wins.</span>
+            </div>
+
+            <div class="field advanced">
+              <label class="check" for="f-tls"><input type="checkbox" id="f-tls" checked> Verify TLS certificate <span class="adv-tag">advanced</span></label>
+              <span class="field__help">Turning this off is only sensible on a private network with a self-signed certificate, and the certificate fingerprint is pinned either way.</span>
+            </div>
+
+            <div class="form__foot">
+              <button type="button" class="btn">Test</button>
+              <button type="submit" class="btn btn--primary" data-act="save" disabled>No changes</button>
+              <span class="muted">Save stays disabled until something changes, and a failed test blocks it.</span>
+            </div>
+          </form>
+        </div>
+
+        <div data-panel-for="settings" data-panel-name="general" hidden>
+          <p class="muted">General settings are not drawn in this mockup. The four v0.1 screens are the scope.</p>
+        </div>
+        <div data-panel-for="settings" data-panel-name="tags" hidden>
+          <p class="muted">Only the system tag namespaces ship in v0.1: <span class="mono">type:</span>, <span class="mono">format:</span>, <span class="mono">source:</span>, <span class="mono">quality:</span>, <span class="mono">indexer:</span>. They render as chips you can filter by but not delete. Aliases, virtual parents and the rule engine are v1.0.</p>
+        </div>
+        <div data-panel-for="settings" data-panel-name="ui" hidden>
+          <p class="muted">Theme and density live in the top bar of every screen, and both persist. There is no colour-impaired mode setting, because every status here is an icon and a word as well as a colour.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <dialog class="dialog" id="add-service">
+    <div class="dialog__head">Add service</div>
+    <div class="dialog__body">
+      <form class="form">
+        <div class="field">
+          <label class="field__label" for="d-kind">Kind</label>
+          <select class="select" id="d-kind">
+            <option>sonarr</option>
+            <option>radarr</option>
+            <option>prowlarr</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field__label" for="d-url">Base URL</label>
+          <input class="input" id="d-url" type="text" placeholder="http://10.0.0.4:7878">
+        </div>
+        <div class="field">
+          <label class="field__label" for="d-key">API key</label>
+          <input class="input" id="d-key" type="password" placeholder="Paste the key from the application's General settings">
+        </div>
+        <p class="muted">The connection test is mandatory. Save stays disabled until it passes.</p>
+      </form>
+    </div>
+    <div class="dialog__foot">
+      <button type="button" class="btn" data-act="dialog-close">Cancel</button>
+      <button type="button" class="btn">Test connection</button>
+      <button type="button" class="btn btn--primary" disabled>Save</button>
+    </div>
+  </dialog>
+
+</main>
+<!-- PAGE:services END -->
+
+</div>
+
+<div class="toasts" aria-live="polite"></div>
+
+<script src="usarr.js"></script>
+</body>
+</html>

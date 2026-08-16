@@ -1,0 +1,2384 @@
+<!doctype html>
+<html lang="en" data-density="compact">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UsArr v0.1 screen prototype</title>
+<style>
+/* ==========================================================================
+   UsArr static mockup stylesheet.
+   Hand-written. No framework, no build step, no external requests.
+
+   Layer 1: tokens.  Layer 2: components.
+
+   This file carries its own copy of the token values on purpose. The
+   canonical token file is docs/design/tokens.css, owned separately; this
+   mockup is meant to open from disk with a single stylesheet and no imports.
+   ========================================================================== */
+
+/* ==========================================================================
+   1. TOKENS
+   ========================================================================== */
+
+:root {
+  /* --- Neutral ramp: warm grey. Achromatic chrome. No brand accent hue. ---
+     Never pure white, never pure black: near-white and near-black only. */
+  --bg:          #faf9f7;  /* page ground */
+  --surface:     #f2f0ec;  /* toolbars, table head, sidebar, dialog body */
+  --inset:       #fdfcfb;  /* input / textarea interior */
+  --hover:       #eceae5;  /* row hover, button hover */
+  --selected:    #e0ddd6;  /* selection is a filled neutral step */
+  --border:      #dad6cf;  /* hairline dividers (decorative) */
+  --border-hi:   #857f75;  /* control boundaries: >= 3.2:1 */
+  --fg:          #1b1917;  /* primary text: >= 12:1 */
+  --fg-muted:    #5e5951;  /* metadata: >= 5.5:1 */
+  --fg-faint:    #736d63;  /* placeholders, disabled label: >= 4.5:1 */
+  --focus:       #14120f;  /* max-contrast focus ring */
+
+  /* --- Status semantics. The only saturated colour in the chrome.
+     Always rendered as icon + text + colour, never colour alone.
+     Grey is a legitimate status: it means "not configured". --- */
+  --st-ok:       #166534;
+  --st-warn:     #7a5200;
+  --st-err:      #a01b1b;
+  --st-none:     #5e5951;
+
+  /* --- Protocol chips. The hues come from the *Arrs' own theme file, so a
+     self-hoster reads them without a legend:
+       torrentColor #00853d, usenetColor #17b1d9
+       https://github.com/Sonarr/Sonarr/blob/develop/frontend/src/Styles/Themes/dark.js
+     Those two upstream literals are tuned for a dark ground and fail 4.5:1 on
+     a light one (#00853d = 3.50:1 on --selected; #17b1d9 = 2.40:1 on --bg).
+     The hue is kept and the lightness is retuned per theme, so the
+     recognition survives and the contrast floor is met. These values match
+     docs/design/tokens.css, which owns them. Nothing else in this stylesheet
+     uses them; they are rendered as a small swatch beside the word
+     "torrent" / "usenet", so the colour is redundant to the label. --- */
+  --proto-torrent: #0a6b34;
+  --proto-usenet:  #0f6479;
+
+  /* --- Type. IBM Plex Sans for UI, IBM Plex Mono for machine data.
+     No webfont is loaded: if Plex is not installed locally the system
+     stack below is the correct and expected result. --- */
+  --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto,
+             "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+               Consolas, "Liberation Mono", monospace;
+
+  /* Six steps. Nothing larger in chrome; 24/32 is permitted in an empty
+     state only. Below --fs-lg, hierarchy is weight and neutral step. */
+  --fs-xs: 11px;   --lh-xs: 16px;   /* w500: counts, sub-labels */
+  --fs-sm: 12px;   --lh-sm: 16px;   /* w400: secondary metadata */
+  --fs-base: 13px; --lh-base: 18px; /* w400: rows, cells, default UI text */
+  --fs-md: 14px;   --lh-md: 20px;   /* w400: inputs, dialog body */
+  --fs-lg: 16px;   --lh-lg: 24px;   /* w600: section headings */
+  --fs-xl: 20px;   --lh-xl: 28px;   /* w600: page title */
+  --fs-empty: 24px; --lh-empty: 32px; /* empty states only */
+
+  /* --- Space. 4px base unit. --- */
+  --sp-1: 2px;  --sp-2: 4px;  --sp-3: 6px;  --sp-4: 8px;
+  --sp-5: 12px; --sp-6: 16px; --sp-7: 24px; --sp-8: 32px; --sp-9: 48px;
+
+  /* --- Geometry. Radius 0 on rows/tables; 2px on inputs and buttons;
+     4px on popovers, dialogs and toasts. Never above 6. --- */
+  --r-0: 0;
+  --r-control: 2px;
+  --r-float: 4px;
+
+  --row-2line: 48px;
+  --row-thumb: 56px;
+  --toolbar-h: 40px;
+  --sidebar-w: 208px;
+
+  /* --- Motion. 0ms on the critical path. Hard ceiling 200ms.
+     Only opacity and transform are ever transitioned. --- */
+  --t-instant: 0ms;
+  --t-hover: 80ms;
+  --t-menu-in: 120ms;  --t-menu-out: 90ms;
+  --t-dialog-in: 150ms; --t-dialog-out: 110ms;
+  --t-toast: 150ms;
+  --ease: ease-out;
+
+  /* Elevation exists only on genuinely floating layers, and it is neutral. */
+  --shadow-float: 0 2px 8px rgba(27, 25, 23, 0.18);
+
+  color-scheme: light dark;
+}
+
+/* Density control. Compact is the default, per ARCHITECTURE.md 17.1
+   ("The grid is compact by default, with a size control for people who
+   want otherwise"). */
+:root,
+:root[data-density="compact"]  { --row-h: 28px; --row-py: var(--sp-2); }
+:root[data-density="default"]  { --row-h: 32px; --row-py: var(--sp-3); }
+:root[data-density="relaxed"]  { --row-h: 36px; --row-py: var(--sp-4); }
+
+/* Dark theme. Defined twice on purpose: once behind the media query for
+   viewers on the system default, once behind the explicit attribute so the
+   in-page toggle wins in both directions. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:        #161513;
+    --surface:   #1e1d1a;
+    --inset:     #100f0e;
+    --hover:     #26241f;
+    --selected:  #2a2823;
+    --border:    #34322d;
+    --border-hi: #7a756c;
+    --fg:        #eeeae4;
+    --fg-muted:  #a8a299;
+    --fg-faint:  #928c82;
+    --focus:     #f8f5f0;
+    --st-ok:     #5cbc85;
+    --st-warn:   #e0a63f;
+    --st-err:    #f2796f;
+    --st-none:   #a8a299;
+    /* Protocol hues retuned for the dark ground; see the note in §1. */
+    --proto-torrent: #4fb377;
+    --proto-usenet:  #4ec3e0;
+    --shadow-float: 0 2px 10px rgba(8, 7, 6, 0.62);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:        #161513;
+  --surface:   #1e1d1a;
+  --inset:     #100f0e;
+  --hover:     #26241f;
+  --selected:  #2a2823;
+  --border:    #34322d;
+  --border-hi: #7a756c;
+  --fg:        #eeeae4;
+  --fg-muted:  #a8a299;
+  --fg-faint:  #928c82;
+  --focus:     #f8f5f0;
+  --st-ok:     #5cbc85;
+  --st-warn:   #e0a63f;
+  --st-err:    #f2796f;
+  --st-none:   #a8a299;
+  /* Protocol hues retuned for the dark ground; see the note in §1. */
+  --proto-torrent: #4fb377;
+  --proto-usenet:  #4ec3e0;
+  --shadow-float: 0 2px 10px rgba(8, 7, 6, 0.62);
+}
+
+/* Every transition and animation in this file reads its duration from a token,
+   so redefining the tokens here collapses all motion without any override. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-hover: 1ms; --t-menu-in: 1ms; --t-menu-out: 1ms;
+    --t-dialog-in: 1ms; --t-dialog-out: 1ms; --t-toast: 1ms;
+  }
+  html { scroll-behavior: auto; }
+}
+
+/* ==========================================================================
+   2. COMPONENTS
+   ========================================================================== */
+
+/* --- 2.1 Reset and base ------------------------------------------------- */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+  font-weight: 400;
+}
+
+h1, h2, h3, p, figure, ul, ol { margin: 0; }
+ul, ol { padding: 0; list-style: none; }
+
+a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+a:hover { text-decoration-thickness: 2px; }
+
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* One focus treatment, everywhere, and it never animates. */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.mono { font-family: var(--font-mono); }
+.num  { font-variant-numeric: tabular-nums; }
+.muted { color: var(--fg-muted); }
+.sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+
+.i { width: 16px; height: 16px; flex: none; display: block; }
+.i--sm { width: 14px; height: 14px; }
+#sprite { display: none; }
+
+/* --- 2.2 Application shell ---------------------------------------------- */
+
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  grid-template-rows: var(--toolbar-h) minmax(0, 1fr);
+  grid-template-areas: "topbar topbar" "sidebar main";
+  min-height: 100vh;
+}
+.app[data-sidebar="collapsed"] { grid-template-columns: 0 minmax(0, 1fr); }
+.app[data-sidebar="collapsed"] .sidebar { display: none; }
+
+/* Top bar */
+.topbar {
+  grid-area: topbar;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 0 var(--sp-5) 0 var(--sp-4);
+  min-height: var(--toolbar-h);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+.topbar__brand {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  letter-spacing: 0;
+  margin-right: var(--sp-2);
+  text-decoration: none;
+}
+.topbar__brand:hover { text-decoration: underline; }
+.topbar__spacer { flex: 1 1 auto; }
+.topbar__right { display: flex; align-items: center; gap: var(--sp-3); }
+
+.searchbox {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 1 380px;
+  min-width: 0;
+}
+.searchbox .i { position: absolute; left: var(--sp-3); color: var(--fg-muted); }
+.searchbox input {
+  width: 100%;
+  min-height: 28px;
+  padding: 0 46px 0 30px;
+  background: var(--inset);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-control);
+  font-size: var(--fs-base);
+}
+.searchbox input::placeholder { color: var(--fg-faint); }
+.kbd {
+  position: absolute;
+  right: var(--sp-3);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--fg-muted);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-control);
+  padding: 0 var(--sp-2);
+  pointer-events: none;
+}
+
+/* Sidebar */
+.sidebar {
+  grid-area: sidebar;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: var(--sp-4) 0;
+  overflow-y: auto;
+  position: sticky;
+  top: var(--toolbar-h);
+  align-self: start;
+  max-height: calc(100vh - var(--toolbar-h));
+}
+.nav__group + .nav__group { margin-top: var(--sp-5); }
+.nav__link {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: var(--row-h);
+  padding: var(--sp-2) var(--sp-5);
+  text-decoration: none;
+  color: var(--fg-muted);
+  border-left: 2px solid transparent;
+  transition: background-color var(--t-hover) var(--ease);
+}
+.nav__link:hover { background: var(--hover); color: var(--fg); text-decoration: none; }
+.nav__link[aria-current="page"] {
+  background: var(--selected);
+  color: var(--fg);
+  font-weight: 600;
+  border-left-color: var(--fg);
+}
+.nav__link--sub { padding-left: var(--sp-8); font-size: var(--fs-sm); }
+.nav__count {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  padding: 0 var(--sp-3);
+  border-radius: var(--r-control);
+  border: 1px solid currentColor;
+}
+.nav__count--err  { color: var(--st-err); }
+.nav__count--warn { color: var(--st-warn); }
+
+/* Main */
+.main {
+  grid-area: main;
+  min-width: 0;
+  padding: 0 0 var(--sp-9);
+}
+
+.pagehead {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--sp-3) var(--sp-5);
+  padding: var(--sp-5) var(--sp-6) var(--sp-4);
+}
+.pagehead h1 {
+  font-size: var(--fs-xl);
+  line-height: var(--lh-xl);
+  font-weight: 600;
+}
+.pagehead__meta { color: var(--fg-muted); font-size: var(--fs-sm); line-height: var(--lh-sm); }
+
+.section { padding: 0 var(--sp-6) var(--sp-7); }
+.section__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 28px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--sp-4);
+}
+.section__head h2 {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-size: var(--fs-lg);
+  line-height: var(--lh-lg);
+  font-weight: 600;
+}
+.section__count { color: var(--fg-muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.section__actions { margin-left: auto; display: flex; gap: var(--sp-4); align-items: center; }
+
+/* --- 2.3 Controls -------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--sp-3);
+  min-height: 28px;
+  padding: 0 var(--sp-4);
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-control);
+  font-size: var(--fs-base);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--t-hover) var(--ease);
+}
+.btn:hover { background: var(--hover); }
+.btn:disabled { color: var(--fg-faint); border-color: var(--border); cursor: not-allowed; }
+.btn:disabled:hover { background: var(--surface); }
+.btn--primary { background: var(--selected); font-weight: 600; }
+.btn--primary:hover { background: var(--hover); }
+.btn--icon { padding: 0 var(--sp-3); min-width: 28px; justify-content: center; }
+.btn--sm { min-height: 24px; font-size: var(--fs-sm); padding: 0 var(--sp-3); }
+
+.field { display: flex; flex-direction: column; gap: var(--sp-2); }
+.field__label { font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: 600; }
+.field__help { font-size: var(--fs-sm); line-height: var(--lh-sm); color: var(--fg-muted); }
+.field__err {
+  display: flex; align-items: flex-start; gap: var(--sp-2);
+  font-size: var(--fs-sm); line-height: var(--lh-sm); color: var(--st-err); font-weight: 600;
+}
+.field__err .i { margin-top: 1px; }
+
+.input, .select, .textarea {
+  min-height: 28px;
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--inset);
+  color: var(--fg);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-control);
+  font-size: var(--fs-base);
+  max-width: 100%;
+}
+.input::placeholder { color: var(--fg-faint); }
+.input[aria-invalid="true"], .select[aria-invalid="true"] { border-color: var(--st-err); border-width: 2px; }
+select[multiple] { min-height: 88px; padding: var(--sp-2); }
+.check { display: flex; align-items: center; gap: var(--sp-3); font-size: var(--fs-base); }
+.check input { width: 14px; height: 14px; accent-color: var(--fg); }
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-3) var(--sp-4);
+  min-height: var(--toolbar-h);
+  padding: var(--sp-3) var(--sp-6);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.toolbar__label { font-size: var(--fs-sm); color: var(--fg-muted); }
+.toolbar__spacer { flex: 1 1 auto; }
+
+.segment { display: inline-flex; border: 1px solid var(--border-hi); border-radius: var(--r-control); overflow: hidden; }
+.segment button {
+  min-height: 26px;
+  padding: 0 var(--sp-4);
+  background: var(--surface);
+  border: 0;
+  border-right: 1px solid var(--border-hi);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: background-color var(--t-hover) var(--ease);
+}
+.segment button:last-child { border-right: 0; }
+.segment button:hover { background: var(--hover); }
+.segment button[aria-pressed="true"] { background: var(--selected); font-weight: 600; }
+
+/* Mockup-only affordance. Marked as such on every screen. */
+.statebar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-6);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-hi);
+  font-size: var(--fs-sm);
+}
+.statebar__tag {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  font-weight: 500;
+  color: var(--fg-muted);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-control);
+  padding: 0 var(--sp-3);
+}
+.statebar__note { color: var(--fg-muted); }
+
+/* --- 2.4 Status ---------------------------------------------------------- */
+
+/* Icon + text + colour, together. Never colour alone. */
+.st { display: inline-flex; align-items: center; gap: var(--sp-2); white-space: nowrap; font-weight: 600; }
+.st--ok   { color: var(--st-ok); }
+.st--warn { color: var(--st-warn); }
+.st--err  { color: var(--st-err); }
+.st--none { color: var(--st-none); font-weight: 400; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  font-weight: 500;
+  padding: 0 var(--sp-3);
+  min-height: 18px;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-control);
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+.chip--pending { color: var(--st-warn); border-color: currentColor; }
+.chip--failed  { color: var(--st-err);  border-color: currentColor; }
+.chip--done    { color: var(--st-ok);   border-color: currentColor; }
+
+/* Protocol swatch: the colour is redundant to the word beside it, so it is
+   decorative; the 1px boundary is what carries the shape at >= 3.2:1. */
+.proto { display: inline-flex; align-items: center; gap: var(--sp-3); white-space: nowrap; }
+.proto__dot {
+  width: 8px; height: 8px; flex: none;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-control);
+}
+.proto--torrent .proto__dot { background: var(--proto-torrent); }
+.proto--usenet  .proto__dot { background: var(--proto-usenet); }
+
+/* Availability rollup, per ARCHITECTURE.md 6.3:
+   have == total && total > 0 -> tick;  have == 0 -> cross;  else the fraction. */
+.avail { display: inline-flex; align-items: center; gap: var(--sp-2); font-variant-numeric: tabular-nums; }
+.avail--full { color: var(--st-ok); }
+.avail--none { color: var(--st-err); }
+.avail--part { color: var(--fg-muted); }
+.avail__q { color: var(--fg-muted); font-size: var(--fs-xs); }
+
+/* --- 2.5 Banners, callouts, empty states --------------------------------- */
+
+/* Non-modal. No left colour strip: a full hairline box plus a status glyph. */
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  margin: var(--sp-4) var(--sp-6);
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--surface);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-control);
+  font-size: var(--fs-base);
+}
+.banner .i { margin-top: 1px; }
+.banner--warn .i { color: var(--st-warn); }
+.banner--err  { border-color: var(--st-err); }
+.banner--err .i { color: var(--st-err); }
+.banner__body { min-width: 0; flex: 1 1 auto; }
+.banner__title { font-weight: 600; }
+.banner__text { color: var(--fg-muted); margin-top: var(--sp-1); }
+.banner__actions { display: flex; gap: var(--sp-4); align-items: center; flex: none; }
+
+.empty {
+  text-align: center;
+  padding: var(--sp-9) var(--sp-6);
+  border: 1px dashed var(--border-hi);
+  border-radius: var(--r-control);
+}
+.empty__title {
+  font-size: var(--fs-empty);
+  line-height: var(--lh-empty);
+  font-weight: 600;
+  margin-bottom: var(--sp-4);
+}
+.empty__text {
+  color: var(--fg-muted);
+  max-width: 60ch;
+  margin: 0 auto var(--sp-5);
+  font-size: var(--fs-md);
+  line-height: var(--lh-md);
+}
+.empty__actions { display: flex; gap: var(--sp-4); justify-content: center; flex-wrap: wrap; }
+
+/* GOV.UK-style error summary: one list at the top, focused on submit,
+   each entry also repeated inline at its own field. */
+.errsummary {
+  border: 2px solid var(--st-err);
+  border-radius: var(--r-control);
+  padding: var(--sp-5);
+  margin-bottom: var(--sp-6);
+}
+.errsummary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.errsummary__title { font-weight: 600; color: var(--st-err); margin-bottom: var(--sp-3); }
+.errsummary ul { display: flex; flex-direction: column; gap: var(--sp-2); }
+.errsummary a { color: var(--st-err); font-weight: 600; }
+
+/* --- 2.6 Tables ---------------------------------------------------------- */
+
+/* Below 1100px the wrapper scrolls sideways; above it the wrapper is not a
+   scroll container, so the sticky header actually sticks to the viewport. */
+.tablewrap { overflow-x: auto; }
+@media (min-width: 1100px) { .tablewrap { overflow-x: visible; } }
+
+.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-base);
+}
+.tbl caption { text-align: left; padding: var(--sp-3) 0; color: var(--fg-muted); font-size: var(--fs-sm); }
+.tbl th {
+  text-align: left;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  font-weight: 500;
+  color: var(--fg-muted);
+  background: var(--surface);
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: 1px solid var(--border-hi);
+  white-space: nowrap;
+  position: sticky;
+  top: var(--toolbar-h);
+  z-index: 10;
+}
+.tbl th.is-num, .tbl td.is-num { text-align: right; font-variant-numeric: tabular-nums; }
+.tbl td {
+  padding: var(--row-py) var(--sp-5);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.tbl tbody tr { min-height: var(--row-h); }
+.tbl tbody tr:hover { background: var(--hover); }
+.tbl tbody tr[aria-selected="true"] { background: var(--selected); }
+.tbl tbody tr:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.tbl td > * + * { margin-top: var(--sp-1); }
+.tbl .cell-title { font-weight: 600; }
+/* Release names have no spaces, so without this a single cell sets the
+   table's min-content width and the page scrolls sideways. */
+.tbl td .mono { overflow-wrap: anywhere; }
+.tbl .cell-sub { color: var(--fg-muted); font-size: var(--fs-sm); line-height: var(--lh-sm); }
+.tbl .cell-actions { display: flex; gap: var(--sp-3); align-items: center; }
+.tbl tr.is-expand > td { background: var(--surface); }
+
+/* Verbatim upstream text is machine data: mono, wrapped, never truncated. */
+.verbatim {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  color: var(--fg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  padding: var(--sp-3);
+  max-width: 46ch;
+}
+
+.synclist { display: flex; flex-direction: column; gap: var(--sp-1); font-size: var(--fs-sm); line-height: var(--lh-sm); }
+.synclist__row { display: flex; gap: var(--sp-3); }
+.synclist__ch { color: var(--fg-muted); min-width: 62px; }
+.synclist__t { font-variant-numeric: tabular-nums; }
+
+.detail { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--sp-5) var(--sp-7); padding: var(--sp-2) 0 var(--sp-4); }
+.detail h4 { font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: 600; margin-bottom: var(--sp-3); color: var(--fg-muted); }
+.detail li { display: flex; gap: var(--sp-3); padding: var(--sp-1) 0; font-size: var(--fs-sm); line-height: var(--lh-sm); }
+
+/* --- 2.7 Poster strips (the one place a card is justified) --------------- */
+
+.strip {
+  display: flex;
+  gap: var(--sp-4);
+  overflow-x: auto;
+  padding-bottom: var(--sp-3);
+  scrollbar-width: thin;
+}
+.card {
+  flex: 0 0 104px;
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+.card:hover { text-decoration: none; }
+.card:hover .card__art { border-color: var(--border-hi); }
+/* dominant_color fill with the title and year set over it. No image files,
+   no grey shimmer box. aspect-ratio reserves the space so nothing shifts. */
+.card__art {
+  aspect-ratio: 2 / 3;
+  background: var(--dc, var(--surface));
+  color: var(--dc-fg, var(--fg));
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: var(--sp-4);
+}
+.card__t { font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: 600; }
+.card__y { font-size: var(--fs-xs); line-height: var(--lh-xs); font-variant-numeric: tabular-nums; opacity: 0.85; }
+.card__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding-top: var(--sp-3);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--fg-muted);
+}
+.card__meta .avail { margin-left: auto; }
+
+/* --- 2.8 Settings anatomy ------------------------------------------------ */
+
+.settings { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: var(--sp-7); padding: 0 var(--sp-6); }
+.subnav { display: flex; flex-direction: column; gap: var(--sp-1); border-right: 1px solid var(--border); padding-right: var(--sp-4); }
+.subnav a {
+  display: block;
+  min-height: var(--row-h);
+  padding: var(--sp-2) var(--sp-4);
+  text-decoration: none;
+  color: var(--fg-muted);
+  transition: background-color var(--t-hover) var(--ease);
+}
+.subnav a:hover { background: var(--hover); color: var(--fg); }
+.subnav a[aria-current="true"] { background: var(--selected); color: var(--fg); font-weight: 600; }
+
+.form { display: flex; flex-direction: column; gap: var(--sp-6); max-width: 560px; }
+.form__row { display: flex; gap: var(--sp-4); align-items: center; flex-wrap: wrap; }
+.form__foot { display: flex; gap: var(--sp-4); align-items: center; padding-top: var(--sp-2); border-top: 1px solid var(--border); }
+.advanced { display: none; }
+.settings[data-advanced="on"] .advanced { display: flex; }
+.adv-tag {
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  font-weight: 500;
+  color: var(--st-warn);
+  border: 1px solid currentColor;
+  border-radius: var(--r-control);
+  padding: 0 var(--sp-2);
+}
+
+/* --- 2.9 Floating layers: the only place a shadow is allowed ------------- */
+
+.dialog {
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-float);
+  background: var(--bg);
+  color: var(--fg);
+  box-shadow: var(--shadow-float);
+  padding: 0;
+  max-width: 460px;
+  width: calc(100vw - var(--sp-8));
+}
+.dialog::backdrop { background: rgba(27, 25, 23, 0.42); }
+.dialog__head { padding: var(--sp-5) var(--sp-6) var(--sp-3); font-size: var(--fs-lg); line-height: var(--lh-lg); font-weight: 600; }
+.dialog__body { padding: 0 var(--sp-6) var(--sp-5); }
+.dialog__foot { display: flex; gap: var(--sp-4); justify-content: flex-end; padding: var(--sp-4) var(--sp-6) var(--sp-5); border-top: 1px solid var(--border); }
+.dialog[open] { animation: fade var(--t-dialog-in) var(--ease); }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+.toasts {
+  position: fixed;
+  right: var(--sp-6);
+  bottom: var(--sp-6);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  width: min(440px, calc(100vw - var(--sp-8)));
+}
+.toast {
+  background: var(--bg);
+  border: 1px solid var(--st-err);
+  border-radius: var(--r-float);
+  box-shadow: var(--shadow-float);
+  padding: var(--sp-5);
+  animation: fade var(--t-toast) var(--ease);
+}
+.toast__title { display: flex; align-items: center; gap: var(--sp-3); font-weight: 600; color: var(--st-err); }
+.toast__body { margin-top: var(--sp-3); }
+.toast__foot { display: flex; gap: var(--sp-4); margin-top: var(--sp-4); }
+
+/* --- 2.10 Fan-out progress (Tier 3: real counts, never a fake bar) ------- */
+
+.fanout {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-6);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+}
+.fanout__count { font-variant-numeric: tabular-nums; color: var(--fg); font-weight: 600; }
+.fanout__meter {
+  flex: 0 0 120px;
+  height: 4px;
+  background: var(--selected);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-control);
+  overflow: hidden;
+}
+.fanout__fill { height: 100%; background: var(--fg-muted); }
+.fanout__failed { color: var(--st-warn); font-weight: 600; }
+
+/* --- 2.11 Responsive: the same layout, degraded. No second design. ------- */
+
+@media (max-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-areas: "topbar" "main"; }
+  .sidebar { display: none; }
+  .app[data-sidebar="open"] { grid-template-columns: var(--sidebar-w) minmax(0, 1fr); grid-template-areas: "topbar topbar" "sidebar main"; }
+  .app[data-sidebar="open"] .sidebar { display: block; }
+  .settings { grid-template-columns: minmax(0, 1fr); gap: var(--sp-5); }
+  .subnav { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--border); padding: 0 0 var(--sp-3); }
+}
+
+@media (max-width: 760px) {
+  .kbd { display: none; }
+  .searchbox input { padding-right: var(--sp-3); }
+
+  /* The wide table becomes a list. Same markup, same data, no mobile fork. */
+  .tbl--stack thead { display: none; }
+  .tbl--stack, .tbl--stack tbody, .tbl--stack tr, .tbl--stack td { display: block; width: 100%; }
+  .tbl--stack tr {
+    border-bottom: 1px solid var(--border-hi);
+    padding: var(--sp-4) var(--sp-5);
+  }
+  .tbl--stack td { border: 0; padding: var(--sp-1) 0; text-align: left; }
+  .tbl--stack td.is-num { text-align: left; }
+  .tbl--stack td[data-label]::before {
+    content: attr(data-label) " ";
+    color: var(--fg-muted);
+    font-size: var(--fs-xs);
+    line-height: var(--lh-xs);
+    display: inline-block;
+    min-width: 84px;
+  }
+  .tbl--stack td[data-label="Title"]::before { display: block; }
+  .verbatim { max-width: none; }
+  .banner { flex-wrap: wrap; }
+  .banner__actions { width: 100%; }
+}
+
+/* --- 2.12 Mockup state visibility ---------------------------------------
+   The states switcher on each screen sets [hidden] on the blocks that do not
+   belong to the selected state. This rule sits last so it beats the
+   component display values above at equal specificity. */
+[hidden] { display: none; }
+
+</style>
+</head>
+<body>
+<!-- Generated from index.html, services.html, search.html and requests.html.
+     Do not edit this file by hand: edit those four and regenerate. -->
+
+<svg id="sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+  <defs>
+    <g id="stroke-defaults" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></g>
+  </defs>
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10" cy="10" r="7"/><path d="M21 21l-4.3-4.3"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l5 5L20 7"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 4 2.6 17.4A2 2 0 0 0 4.3 20.4h15.4a2 2 0 0 0 1.7-3L13.7 4a2 2 0 0 0-3.4 0z"/><path d="M12 9v4.5M12 17.2h.01"/></symbol>
+  <symbol id="i-x-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></symbol>
+  <symbol id="i-dash-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12h7"/></symbol>
+  <symbol id="i-movie" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 4v16M16 4v16M4 8h4M4 16h4M4 12h16M16 8h4M16 16h4"/></symbol>
+  <symbol id="i-tv" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M16 3l-4 4-4-4"/></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M7 11l5 5 5-5M12 4v12"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 7H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-5M14 4h6v6M10 14 20 4"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11A8.1 8.1 0 0 0 4.5 9M4 5v4h4M4 13a8.1 8.1 0 0 0 15.5 2M20 19v-4h-4"/></symbol>
+</svg>
+
+<div class="app" data-sidebar="open">
+
+  <header class="topbar">
+    <button type="button" class="btn btn--icon" data-act="sidebar" aria-expanded="true" aria-label="Hide the sidebar">
+      <svg class="i" aria-hidden="true"><use href="#i-menu"/></svg>
+    </button>
+    <a class="topbar__brand" href="#home" data-route="home">UsArr</a>
+    <div class="searchbox">
+      <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+      <label class="sr" for="topsearch">Search your library</label>
+      <input id="topsearch" type="search" placeholder="Search your library" autocomplete="off">
+      <span class="kbd">/</span>
+    </div>
+    <div class="topbar__spacer"></div>
+    <div class="topbar__right">
+      <label class="sr" for="density">Row density</label>
+      <select id="density" class="select" data-act="density">
+        <option value="compact">Compact</option>
+        <option value="default">Default</option>
+        <option value="relaxed">Relaxed</option>
+      </select>
+      <button type="button" class="btn btn--icon" data-act="theme" aria-label="Switch the theme">
+        <svg class="i" aria-hidden="true"><use href="#i-moon"/></svg>
+      </button>
+    </div>
+  </header>
+  
+
+  <nav class="sidebar" aria-label="Sections">
+    <ul class="nav__group">
+      <li><a class="nav__link" href="#home" data-route="home" data-primary>Home</a></li>
+      <li><a class="nav__link" href="#home" data-route="home">Movies</a></li>
+      <li><a class="nav__link" href="#home" data-route="home">TV</a></li>
+      <li><a class="nav__link" href="#search" data-route="search" data-primary>Search</a></li>
+      <li><a class="nav__link" href="#requests" data-route="requests" data-primary>Requests</a></li>
+      <li><a class="nav__link" href="#services" data-route="services" data-primary>Services</a></li>
+    </ul>
+    <ul class="nav__group">
+      <li><a class="nav__link" href="#services" data-route="services">Settings</a></li>
+      <li><a class="nav__link nav__link--sub" href="#services" data-route="services">General</a></li>
+      <li><a class="nav__link nav__link--sub" href="#services" data-route="services">Tags</a></li>
+      <li><a class="nav__link nav__link--sub" href="#services" data-route="services">UI</a></li>
+    </ul>
+    <ul class="nav__group">
+      <li><a class="nav__link" href="#services" data-route="services">System
+        <span class="nav__count nav__count--err" title="2 errors">2</span></a></li>
+      <li><a class="nav__link nav__link--sub" href="#services" data-route="services">Status</a></li>
+      <li><a class="nav__link nav__link--sub" href="#services" data-route="services">Tasks</a></li>
+      <li><a class="nav__link nav__link--sub" href="#services" data-route="services">Backup</a></li>
+      <li><a class="nav__link nav__link--sub" href="#services" data-route="services">Events</a></li>
+      <li><a class="nav__link nav__link--sub" href="#services" data-route="services">Log files</a></li>
+    </ul>
+  </nav>
+  
+<main class="main" id="pg-home" data-page="home" data-state="live">
+
+  <div class="pagehead">
+    <h1>Home</h1>
+    <span class="pagehead__meta">Rendered from the local replica. Last delta sync 14:02, 6 minutes ago.</span>
+  </div>
+
+  <div class="statebar">
+    <span class="statebar__tag">mockup</span>
+    <label for="st-home">States switcher</label>
+    <select id="st-home" class="select" data-act="state" data-scope="pg-home">
+      <option value="live">Populated</option>
+      <option value="stale">Stale, one instance unreachable</option>
+      <option value="partial">Import in progress</option>
+      <option value="empty">Empty library, services healthy</option>
+      <option value="unconfigured">No services configured</option>
+    </select>
+    <span class="statebar__note">This control is not part of the product. It switches the screen between the states this design has to cover.</span>
+  </div>
+
+  <!-- Non-modal, per ARCHITECTURE.md 17.7. The catalogue below stays live:
+       it does not grey out and there is no spinner over it. -->
+  <div class="banner banner--warn" data-when="stale" role="status" hidden>
+    <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
+    <div class="banner__body">
+      <div class="banner__title">Radarr is unreachable — showing cached data from 14:02</div>
+      <div class="banner__text">Browse, search, sort and filter keep working from the replica. Writes to Radarr are queued until it answers.</div>
+    </div>
+    <div class="banner__actions"><a href="#services">Open Services</a></div>
+  </div>
+
+  <div class="banner" data-when="partial" role="status" hidden>
+    <svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg>
+    <div class="banner__body">
+      <div class="banner__title">First import running</div>
+      <div class="banner__text"><span class="num">1,240</span> of <span class="num">10,412</span> movies, <span class="num">86</span> of <span class="num">214</span> series. Sections fill in as each batch commits.</div>
+    </div>
+    <div class="banner__actions"><a href="#services">Open Services</a></div>
+  </div>
+
+  <div class="section" data-when="unconfigured" hidden>
+    <div class="empty">
+      <div class="empty__title">No services configured</div>
+      <p class="empty__text">UsArr reads your library from Sonarr and Radarr and searches indexers through Prowlarr. Nothing has been connected yet, so there is nothing to show. Adding a service takes a base URL and an API key, and the connection is tested before it is saved.</p>
+      <div class="empty__actions">
+        <a class="btn btn--primary" href="#services">Add a service</a>
+        <a class="btn" href="#requests">Search indexers instead</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" data-when="empty" hidden>
+    <div class="empty">
+      <div class="empty__title">Nothing imported yet</div>
+      <p class="empty__text">Sonarr and Radarr are both healthy, and the full import has not run. An empty library with a healthy service means the import has not started, not that your library is empty.</p>
+      <div class="empty__actions">
+        <button type="button" class="btn btn--primary">Run full sync now</button>
+        <a class="btn" href="#services">Open Services</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Movies ------------------------------------------------------------ -->
+  <section class="section" id="movies" data-when="live stale partial">
+    <div class="section__head">
+      <h2><svg class="i" aria-hidden="true"><use href="#i-movie"/></svg> Movies <span class="section__count num">1,204</span></h2>
+      <div class="section__actions"><a href="#search">See all movies</a></div>
+    </div>
+
+    <!-- A section that is honestly degraded rather than blanked. The strip
+         below still renders: it comes from the replica, not from Radarr. -->
+    <div class="banner banner--warn" data-when="live stale partial" role="status">
+      <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
+      <div class="banner__body">
+        <div class="banner__title">Radarr 4K is not configured, so 2160p availability is unknown</div>
+        <div class="banner__text">Every movie below shows its 1080p state from Radarr. The 2160p column reads "not configured" rather than a cross, because no instance has been asked. Add a second Radarr to fill it in.</div>
+      </div>
+      <div class="banner__actions"><a href="#services">Add a service</a></div>
+    </div>
+
+    <div class="strip" role="list" data-roving=".card" data-roving-axis="horizontal" aria-label="Recently added movies">
+      <a class="card" role="listitem" href="#movies" style="--dc:#7d6a4f;--dc-fg:#16130e"><span class="card__art"><span class="card__t">Dune: Part Two</span><span class="card__y">2024</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>have</span></span></a>
+      <a class="card" role="listitem" href="#movies" style="--dc:#2f3a44;--dc-fg:#eef2f5"><span class="card__art"><span class="card__t">Anatomy of a Fall</span><span class="card__y">2023</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>have</span></span></a>
+      <a class="card" role="listitem" href="#movies" style="--dc:#4a5a63;--dc-fg:#f0f4f6"><span class="card__art"><span class="card__t">Past Lives</span><span class="card__y">2023</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>have</span></span></a>
+      <a class="card" role="listitem" href="#movies" style="--dc:#3b3a35;--dc-fg:#f1efea"><span class="card__art"><span class="card__t">The Northman</span><span class="card__y">2022</span></span><span class="card__meta">1080p <span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>wanted</span></span></a>
+      <a class="card" role="listitem" href="#movies" style="--dc:#6b5744;--dc-fg:#f7f2ec"><span class="card__art"><span class="card__t">Sicario</span><span class="card__y">2015</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>have</span></span></a>
+      <a class="card" role="listitem" href="#movies" style="--dc:#38434a;--dc-fg:#eff3f5"><span class="card__art"><span class="card__t">Arrival</span><span class="card__y">2016</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>have</span></span></a>
+      <a class="card" role="listitem" href="#movies" style="--dc:#2c3330;--dc-fg:#eef1ef"><span class="card__art"><span class="card__t">Prisoners</span><span class="card__y">2013</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>have</span></span></a>
+      <a class="card" role="listitem" href="#movies" style="--dc:#1f2a38;--dc-fg:#eef1f6"><span class="card__art"><span class="card__t">Heat</span><span class="card__y">1995</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>have</span></span></a>
+      <a class="card" role="listitem" href="#movies" style="--dc:#55483a;--dc-fg:#f6f2ec"><span class="card__art"><span class="card__t">The Zone of Interest</span><span class="card__y">2023</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>have</span></span></a>
+      <a class="card" role="listitem" href="#movies" style="--dc:#3f4a3c;--dc-fg:#f0f3ef"><span class="card__art"><span class="card__t">First Cow</span><span class="card__y">2019</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>have</span></span></a>
+      <a class="card" role="listitem" href="#movies" style="--dc:#4c3a44;--dc-fg:#f5eff2"><span class="card__art"><span class="card__t">Burning</span><span class="card__y">2018</span></span><span class="card__meta">1080p <span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>wanted</span></span></a>
+      <a class="card" role="listitem" href="#movies" style="--dc:#2b3f45;--dc-fg:#eef4f6"><span class="card__art"><span class="card__t">Aftersun</span><span class="card__y">2022</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>have</span></span></a>
+    </div>
+
+    <div class="tablewrap">
+      <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Recently added movies">
+        <thead>
+          <tr>
+            <th scope="col">Title</th>
+            <th scope="col">Year</th>
+            <th scope="col">Added</th>
+            <th scope="col">Quality</th>
+            <th scope="col" class="is-num">Size</th>
+            <th scope="col">1080p</th>
+            <th scope="col">2160p</th>
+            <th scope="col">Instance</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td data-label="Title" class="cell-title">Dune: Part Two</td><td data-label="Year" class="num">2024</td><td data-label="Added" class="num">14:02</td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">14.2 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+          <tr><td data-label="Title" class="cell-title">Anatomy of a Fall</td><td data-label="Year" class="num">2023</td><td data-label="Added" class="num">13:51</td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">11.8 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+          <tr><td data-label="Title" class="cell-title">Past Lives</td><td data-label="Year" class="num">2023</td><td data-label="Added" class="num">13:44</td><td data-label="Quality"><span class="mono">WEBDL-1080p</span></td><td data-label="Size" class="is-num">6.4 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+          <tr><td data-label="Title" class="cell-title">The Northman</td><td data-label="Year" class="num">2022</td><td data-label="Added" class="num">13:30</td><td data-label="Quality"><span class="muted">no file</span></td><td data-label="Size" class="is-num muted">n/a</td><td data-label="1080p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+          <tr><td data-label="Title" class="cell-title">The Zone of Interest</td><td data-label="Year" class="num">2023</td><td data-label="Added" class="num">12:58</td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">9.1 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+          <tr><td data-label="Title" class="cell-title">Sicario</td><td data-label="Year" class="num">2015</td><td data-label="Added" class="num">12:40</td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">12.6 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+          <tr><td data-label="Title" class="cell-title">Arrival</td><td data-label="Year" class="num">2016</td><td data-label="Added" class="num">12:21</td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">10.9 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+          <tr><td data-label="Title" class="cell-title">First Cow</td><td data-label="Year" class="num">2019</td><td data-label="Added" class="num">11:56</td><td data-label="Quality"><span class="mono">WEBDL-1080p</span></td><td data-label="Size" class="is-num">5.2 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+          <tr><td data-label="Title" class="cell-title">Prisoners</td><td data-label="Year" class="num">2013</td><td data-label="Added" class="num">11:34</td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">13.7 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+          <tr><td data-label="Title" class="cell-title">Aftersun</td><td data-label="Year" class="num">2022</td><td data-label="Added" class="num">11:02</td><td data-label="Quality"><span class="mono">WEBDL-1080p</span></td><td data-label="Size" class="is-num">4.8 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+          <tr><td data-label="Title" class="cell-title">Burning</td><td data-label="Year" class="num">2018</td><td data-label="Added" class="num">10:47</td><td data-label="Quality"><span class="muted">no file</span></td><td data-label="Size" class="is-num muted">n/a</td><td data-label="1080p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+          <tr><td data-label="Title" class="cell-title">Heat</td><td data-label="Year" class="num">1995</td><td data-label="Added" class="num">10:12</td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">15.3 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+          <tr><td data-label="Title" class="cell-title">The Handmaiden</td><td data-label="Year" class="num">2016</td><td data-label="Added" class="num">09:38</td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">16.8 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+          <tr><td data-label="Title" class="cell-title">Under the Skin</td><td data-label="Year" class="num">2013</td><td data-label="Added" class="num">09:05</td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">8.9 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+          <tr><td data-label="Title" class="cell-title">Memories of Murder</td><td data-label="Year" class="num">2003</td><td data-label="Added" class="num">08:41</td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">12.0 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- TV ---------------------------------------------------------------- -->
+  <section class="section" id="tv" data-when="live stale partial">
+    <div class="section__head">
+      <h2><svg class="i" aria-hidden="true"><use href="#i-tv"/></svg> TV <span class="section__count num">214</span></h2>
+      <div class="section__actions"><a href="#search">See all series</a></div>
+    </div>
+
+    <div class="strip" role="list" data-roving=".card" data-roving-axis="horizontal" aria-label="Recently added series">
+      <a class="card" role="listitem" href="#tv" style="--dc:#26333f;--dc-fg:#eef2f6"><span class="card__art"><span class="card__t">Severance</span><span class="card__y">2022</span></span><span class="card__meta">1080p <span class="avail avail--part">17/19</span></span></a>
+      <a class="card" role="listitem" href="#tv" style="--dc:#4a3b30;--dc-fg:#f6f1eb"><span class="card__art"><span class="card__t">Shogun</span><span class="card__y">2024</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>10/10</span></span></a>
+      <a class="card" role="listitem" href="#tv" style="--dc:#33393b;--dc-fg:#eff1f2"><span class="card__art"><span class="card__t">Andor</span><span class="card__y">2022</span></span><span class="card__meta">1080p <span class="avail avail--part">12/24</span></span></a>
+      <a class="card" role="listitem" href="#tv" style="--dc:#3e4438;--dc-fg:#f0f2ee"><span class="card__art"><span class="card__t">Slow Horses</span><span class="card__y">2022</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>24/24</span></span></a>
+      <a class="card" role="listitem" href="#tv" style="--dc:#5a3a33;--dc-fg:#f7efec"><span class="card__art"><span class="card__t">The Bear</span><span class="card__y">2022</span></span><span class="card__meta">1080p <span class="avail avail--part">18/28</span></span></a>
+      <a class="card" role="listitem" href="#tv" style="--dc:#6b5a33;--dc-fg:#f8f4ea"><span class="card__art"><span class="card__t">Better Call Saul</span><span class="card__y">2015</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>63/63</span></span></a>
+      <a class="card" role="listitem" href="#tv" style="--dc:#3a4144;--dc-fg:#f0f2f4"><span class="card__art"><span class="card__t">Chernobyl</span><span class="card__y">2019</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>5/5</span></span></a>
+      <a class="card" role="listitem" href="#tv" style="--dc:#2e3538;--dc-fg:#eef1f2"><span class="card__art"><span class="card__t">The Wire</span><span class="card__y">2002</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>60/60</span></span></a>
+      <a class="card" role="listitem" href="#tv" style="--dc:#443345;--dc-fg:#f4eff5"><span class="card__art"><span class="card__t">ER</span><span class="card__y">1994</span></span><span class="card__meta">1080p <span class="avail avail--part">250/331</span></span></a>
+      <a class="card" role="listitem" href="#tv" style="--dc:#34443c;--dc-fg:#eff3f1"><span class="card__art"><span class="card__t">The Leftovers</span><span class="card__y">2014</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>28/28</span></span></a>
+      <a class="card" role="listitem" href="#tv" style="--dc:#4b4136;--dc-fg:#f4f1ec"><span class="card__art"><span class="card__t">Deadwood</span><span class="card__y">2004</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>36/36</span></span></a>
+      <a class="card" role="listitem" href="#tv" style="--dc:#2f3d47;--dc-fg:#eff3f6"><span class="card__art"><span class="card__t">Halt and Catch Fire</span><span class="card__y">2014</span></span><span class="card__meta">1080p <span class="avail avail--part">30/40</span></span></a>
+    </div>
+
+    <div class="tablewrap">
+      <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Recently added episodes">
+        <thead>
+          <tr>
+            <th scope="col">Series</th>
+            <th scope="col">Episode</th>
+            <th scope="col">Added</th>
+            <th scope="col">Quality</th>
+            <th scope="col" class="is-num">Size</th>
+            <th scope="col">1080p</th>
+            <th scope="col">2160p</th>
+            <th scope="col">Instance</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td data-label="Series" class="cell-title">Severance</td><td data-label="Episode"><span class="mono">S02E10</span> Cold Harbor</td><td data-label="Added" class="num">13:58</td><td data-label="Quality"><span class="mono">WEBDL-1080p</span></td><td data-label="Size" class="is-num">3.1 GB</td><td data-label="1080p"><span class="avail avail--part">17/19</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+          <tr><td data-label="Series" class="cell-title">Shogun</td><td data-label="Episode"><span class="mono">S01E10</span> A Dream of a Dream</td><td data-label="Added" class="num">13:40</td><td data-label="Quality"><span class="mono">WEBDL-1080p</span></td><td data-label="Size" class="is-num">4.0 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>10/10</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+          <tr><td data-label="Series" class="cell-title">ER</td><td data-label="Episode"><span class="mono">S12E14</span> Quintessence of Dust</td><td data-label="Added" class="num">13:22</td><td data-label="Quality"><span class="mono">HDTV-1080p</span></td><td data-label="Size" class="is-num">1.9 GB</td><td data-label="1080p"><span class="avail avail--part">250/331</span></td><td data-label="2160p"><span class="avail avail--part">40/331</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+          <tr><td data-label="Series" class="cell-title">Andor</td><td data-label="Episode"><span class="mono">S02E12</span> Jedha, Kyber, Erso</td><td data-label="Added" class="num">12:47</td><td data-label="Quality"><span class="mono">WEBDL-1080p</span></td><td data-label="Size" class="is-num">3.6 GB</td><td data-label="1080p"><span class="avail avail--part">12/24</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+          <tr><td data-label="Series" class="cell-title">The Bear</td><td data-label="Episode"><span class="mono">S03E10</span> Forever</td><td data-label="Added" class="num">12:15</td><td data-label="Quality"><span class="mono">WEBDL-1080p</span></td><td data-label="Size" class="is-num">2.4 GB</td><td data-label="1080p"><span class="avail avail--part">18/28</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+          <tr><td data-label="Series" class="cell-title">Slow Horses</td><td data-label="Episode"><span class="mono">S04E06</span> Hello Goodbye</td><td data-label="Added" class="num">11:49</td><td data-label="Quality"><span class="mono">WEBDL-1080p</span></td><td data-label="Size" class="is-num">2.8 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>24/24</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+          <tr><td data-label="Series" class="cell-title">Halt and Catch Fire</td><td data-label="Episode"><span class="mono">S03E04</span> Rock and Roll Suicide</td><td data-label="Added" class="num">11:20</td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">5.4 GB</td><td data-label="1080p"><span class="avail avail--part">30/40</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+          <tr><td data-label="Series" class="cell-title">The Leftovers</td><td data-label="Episode"><span class="mono">S03E08</span> The Book of Nora</td><td data-label="Added" class="num">10:58</td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">6.1 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>28/28</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+          <tr><td data-label="Series" class="cell-title">Better Call Saul</td><td data-label="Episode"><span class="mono">S06E13</span> Saul Gone</td><td data-label="Added" class="num">10:31</td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">7.2 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>63/63</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+          <tr><td data-label="Series" class="cell-title">Deadwood</td><td data-label="Episode"><span class="mono">S03E12</span> Tell Him Something Pretty</td><td data-label="Added" class="num">10:04</td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">6.8 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>36/36</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+          <tr><td data-label="Series" class="cell-title">Chernobyl</td><td data-label="Episode"><span class="mono">S01E05</span> Vichnaya Pamyat</td><td data-label="Added" class="num">09:47</td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">5.9 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>5/5</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+          <tr><td data-label="Series" class="cell-title">The Wire</td><td data-label="Episode"><span class="mono">S05E10</span> Thirty</td><td data-label="Added" class="num">09:18</td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">4.7 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>60/60</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+          <tr><td data-label="Series" class="cell-title">Twin Peaks</td><td data-label="Episode"><span class="mono">S03E18</span> Part 18</td><td data-label="Added" class="num">08:52</td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">6.5 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>18/18</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+          <tr><td data-label="Series" class="cell-title">The Sopranos</td><td data-label="Episode"><span class="mono">S06E21</span> Made in America</td><td data-label="Added" class="num">08:26</td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">5.1 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>86/86</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+          <tr><td data-label="Series" class="cell-title">Mad Men</td><td data-label="Episode"><span class="mono">S07E14</span> Person to Person</td><td data-label="Added" class="num">08:03</td><td data-label="Quality"><span class="mono">WEBDL-1080p</span></td><td data-label="Size" class="is-num">3.3 GB</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>92/92</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Music, books, comics and audiobooks are deliberately absent. v0.1 is
+       Movies and TV only (ARCHITECTURE.md 16), and a type the user does not
+       have is not shown at all (17.2). -->
+
+</main>
+<main class="main" id="pg-services" data-page="services" data-state="live">
+
+  <div class="pagehead">
+    <h1>Services</h1>
+    <span class="pagehead__meta">5 rows. 1 down, 2 degraded, 1 not configured. Health is probed per instance, never globally.</span>
+  </div>
+
+  <div class="statebar">
+    <span class="statebar__tag">mockup</span>
+    <label for="st-services">States switcher</label>
+    <select id="st-services" class="select" data-act="state" data-scope="pg-services">
+      <option value="live">Mixed health</option>
+      <option value="reident">An instance needs re-identification</option>
+      <option value="denied">Re-authentication required</option>
+      <option value="unconfigured">No services configured</option>
+    </select>
+    <span class="statebar__note">This control is not part of the product. It switches the screen between the states this design has to cover.</span>
+  </div>
+
+  <!-- Loud on purpose: silently doing the wrong thing here destroys a
+       library (ARCHITECTURE.md 17.7). This one blocks; the stale banner on
+       home does not. -->
+  <div class="banner banner--err" data-when="reident" role="alert" hidden>
+    <svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>
+    <div class="banner__body">
+      <div class="banner__title">Sonarr no longer identifies as the instance UsArr synced with</div>
+      <div class="banner__text">Sync for this instance is paused deliberately. The instance fingerprint changed from <span class="mono">a91c4f</span> to <span class="mono">0d33b8</span>, which happens when the host is rebuilt, restored from a different backup, or repointed at another Sonarr. Re-link only if you know this is the same library.</div>
+      <div class="verbatim" style="margin-top:8px">instance_id 1: identity_epoch 3 -&gt; 4, max_remote_id_seen 214 -&gt; 6, root_folder /media/tv -&gt; /srv/tv</div>
+    </div>
+    <div class="banner__actions"><button type="button" class="btn btn--primary">Re-link</button></div>
+  </div>
+
+  <div class="banner" data-when="denied" role="alert" hidden>
+    <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
+    <div class="banner__body">
+      <div class="banner__title">Re-authentication required before the API key can be changed</div>
+      <div class="banner__text">Changing a service credential opens a five-minute sudo window. UsArr refused the write because the current session has no sudo window, and the server enforced that, not this screen.</div>
+      <div class="verbatim" style="margin-top:8px">PUT /api/v1/services/3 403: {"error":"sudo_required","expires_in":0}</div>
+    </div>
+    <div class="banner__actions"><button type="button" class="btn btn--primary">Confirm your password</button></div>
+  </div>
+
+  <div class="section" data-when="unconfigured" hidden>
+    <div class="empty">
+      <div class="empty__title">No services configured</div>
+      <p class="empty__text">The first-run wizard asks for three things: which kind of service, its base URL, and an API key. The connection is tested before Save is enabled, so a typo does not become a broken install.</p>
+      <div class="empty__actions">
+        <button type="button" class="btn btn--primary" data-act="dialog-open" aria-controls="add-service">Add service</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- The health table -------------------------------------------------- -->
+  <div data-when="live reident denied">
+    <div class="toolbar">
+      <button type="button" class="btn btn--primary" data-act="dialog-open" aria-controls="add-service">Add service</button>
+      <button type="button" class="btn">Test all connections</button>
+      <div class="toolbar__spacer"></div>
+      <span class="toolbar__label">Health probed every 60 seconds. The table renders from the replica and never blocks on a probe.</span>
+    </div>
+
+    <div class="tablewrap">
+      <table class="tbl tbl--stack" data-roving="tbody tr[data-row]" aria-label="Configured services">
+        <thead>
+          <tr>
+            <th scope="col">Service</th>
+            <th scope="col">State</th>
+            <th scope="col">Last successful sync</th>
+            <th scope="col" class="is-num">Items</th>
+            <th scope="col">Problem</th>
+            <th scope="col">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <!-- healthy -->
+          <tr data-row>
+            <td data-label="Service">
+              <div class="cell-title">
+                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-sonarr" aria-label="Show detail for Sonarr">
+                  <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+                </button>
+                Sonarr <span class="chip">sonarr</span>
+              </div>
+              <div class="cell-sub mono">http://10.0.0.4:8989</div>
+            </td>
+            <td data-label="State"><span class="st st--ok"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>healthy</span></td>
+            <td data-label="Last successful sync">
+              <div class="synclist">
+                <div class="synclist__row"><span class="synclist__ch">full</span><span class="synclist__t">03:10, 11 hours ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">delta</span><span class="synclist__t">14:02, 6 minutes ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">reconcile</span><span class="synclist__t">02:00, 12 hours ago</span></div>
+              </div>
+            </td>
+            <td data-label="Items" class="is-num">214</td>
+            <td data-label="Problem" class="muted">None</td>
+            <td data-label="Action" class="muted">No action needed</td>
+          </tr>
+          <tr id="x-sonarr" hidden><td colspan="6">
+            <div class="detail">
+              <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">CLOSED</span></li><li>Consecutive failures <span class="num">0</span></li></ul></div>
+              <div><h4>Health warnings from Sonarr</h4><ul><li class="muted">None reported by <span class="mono">/api/v3/health</span></li></ul></div>
+              <div><h4>Recent sync reports</h4><ul><li><span class="num">14:02</span> delta, 3 changed</li><li><span class="num">13:02</span> delta, 0 changed</li><li><span class="num">12:02</span> delta, 11 changed</li></ul></div>
+              <div><h4>Clock skew</h4><ul><li><span class="num">+0.4 s</span> measured from the <span class="mono">Date</span> header</li></ul></div>
+            </div>
+          </td></tr>
+
+          <!-- degraded, breaker open -->
+          <tr data-row>
+            <td data-label="Service">
+              <div class="cell-title">
+                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-radarr" aria-label="Show detail for Radarr">
+                  <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+                </button>
+                Radarr <span class="chip">radarr</span>
+              </div>
+              <div class="cell-sub mono">http://10.0.0.4:7878</div>
+            </td>
+            <td data-label="State"><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>degraded</span><div class="cell-sub">breaker open</div></td>
+            <td data-label="Last successful sync">
+              <div class="synclist">
+                <div class="synclist__row"><span class="synclist__ch">full</span><span class="synclist__t">03:12, 11 hours ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">delta</span><span class="synclist__t">11:47, 2 hours ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">reconcile</span><span class="synclist__t">02:00, 12 hours ago</span></div>
+              </div>
+            </td>
+            <td data-label="Items" class="is-num">1,204</td>
+            <td data-label="Problem"><div class="verbatim">Get "http://10.0.0.4:7878/api/v3/movie?page=1&amp;pageSize=250": dial tcp 10.0.0.4:7878: connect: connection refused</div></td>
+            <td data-label="Action"><button type="button" class="btn">Test connection</button></td>
+          </tr>
+          <tr id="x-radarr" hidden><td colspan="6">
+            <div class="detail">
+              <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">OPEN</span></li><li>Next probe <span class="num">14:19</span>, in 4 minutes</li><li>Consecutive failures <span class="num">7</span></li><li>Backoff <span class="num">4 m 00 s</span>, capped at 15 m</li></ul></div>
+              <div><h4>Health warnings from Radarr</h4><ul><li class="muted">Not readable while the breaker is open. Last body was empty.</li></ul></div>
+              <div><h4>Recent sync reports</h4><ul><li><span class="num">13:47</span> delta failed, connection refused</li><li><span class="num">12:47</span> delta failed, connection refused</li><li><span class="num">11:47</span> delta, 6 changed</li></ul></div>
+              <div><h4>Clock skew</h4><ul><li class="muted">Not measured since 11:47</li></ul></div>
+            </div>
+            <p class="muted">Browse and search keep working from the replica while this breaker is open. Writes to Radarr are accepted and queued.</p>
+          </td></tr>
+
+          <!-- down, 401 -->
+          <tr data-row>
+            <td data-label="Service">
+              <div class="cell-title">
+                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-prowlarr" aria-label="Show detail for Prowlarr">
+                  <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+                </button>
+                Prowlarr <span class="chip">prowlarr</span>
+              </div>
+              <div class="cell-sub mono">https://prowlarr.tail9c2e.ts.net</div>
+            </td>
+            <td data-label="State"><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>down</span></td>
+            <td data-label="Last successful sync">
+              <div class="synclist">
+                <div class="synclist__row"><span class="synclist__ch">full</span><span class="synclist__t muted">not applicable</span></div>
+                <div class="synclist__row"><span class="synclist__ch">delta</span><span class="synclist__t muted">not applicable</span></div>
+                <div class="synclist__row"><span class="synclist__ch">reconcile</span><span class="synclist__t muted">not applicable</span></div>
+              </div>
+            </td>
+            <td data-label="Items" class="is-num muted">0</td>
+            <td data-label="Problem"><div class="verbatim">GET /api/v1/indexer 401 Unauthorized
+{"message":"Unauthorized","description":"The request requires a valid X-Api-Key header"}</div></td>
+            <td data-label="Action"><button type="button" class="btn btn--primary">Update API key</button></td>
+          </tr>
+          <tr id="x-prowlarr" hidden><td colspan="6">
+            <div class="detail">
+              <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">OPEN</span></li><li>Next probe <span class="num">14:23</span>, in 8 minutes</li><li>Consecutive failures <span class="num">14</span></li></ul></div>
+              <div><h4>Health warnings from Prowlarr</h4><ul><li class="muted">Not readable: the credential is rejected.</li></ul></div>
+              <div><h4>Recent sync reports</h4><ul><li><span class="num">14:07</span> probe failed, 401</li><li><span class="num">13:07</span> probe failed, 401</li><li><span class="num">12:07</span> probe failed, 401</li></ul></div>
+              <div><h4>Clock skew</h4><ul><li><span class="num">+1.1 s</span>, measured on the 401 response</li></ul></div>
+            </div>
+            <p class="muted">Updating a credential opens a five-minute sudo window. Prowlarr carries no library, so nothing in the catalogue changes while this is down; only indexer search is unavailable.</p>
+          </td></tr>
+
+          <!-- healthy but skewed -->
+          <tr data-row>
+            <td data-label="Service">
+              <div class="cell-title">
+                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-anime" aria-label="Show detail for Sonarr Anime">
+                  <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+                </button>
+                Sonarr Anime <span class="chip">sonarr</span>
+              </div>
+              <div class="cell-sub mono">http://10.0.0.9:8989</div>
+            </td>
+            <td data-label="State"><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>degraded</span><div class="cell-sub">clock skew</div></td>
+            <td data-label="Last successful sync">
+              <div class="synclist">
+                <div class="synclist__row"><span class="synclist__ch">full</span><span class="synclist__t">03:20, 11 hours ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">delta</span><span class="synclist__t">14:01, 7 minutes ago</span></div>
+                <div class="synclist__row"><span class="synclist__ch">reconcile</span><span class="synclist__t">02:00, 12 hours ago</span></div>
+              </div>
+            </td>
+            <td data-label="Items" class="is-num">61</td>
+            <td data-label="Problem"><div class="verbatim">clock skew +212 s measured from Date: Sun, 16 Aug 2026 14:11:32 GMT
+delta polling uses this host's clock, so recent changes can be missed</div></td>
+            <td data-label="Action"><button type="button" class="btn">Run full sync now</button></td>
+          </tr>
+          <tr id="x-anime" hidden><td colspan="6">
+            <div class="detail">
+              <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">CLOSED</span></li><li>Consecutive failures <span class="num">0</span></li></ul></div>
+              <div><h4>Health warnings from Sonarr Anime</h4><ul><li><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span> System time is off by more than 1 day</li><li><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span> Indexers are unavailable due to failures</li></ul></div>
+              <div><h4>Recent sync reports</h4><ul><li><span class="num">14:01</span> delta, 2 changed</li><li><span class="num">13:01</span> delta, 0 changed</li><li><span class="num">12:01</span> delta, 4 changed</li></ul></div>
+              <div><h4>Clock skew</h4><ul><li><span class="num">+212 s</span>, warned above 60 s</li></ul></div>
+            </div>
+          </td></tr>
+
+          <!-- not configured: grey, not red -->
+          <tr data-row>
+            <td data-label="Service">
+              <div class="cell-title">Radarr 4K <span class="chip">radarr</span></div>
+              <div class="cell-sub muted">No base URL set</div>
+            </td>
+            <td data-label="State"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td>
+            <td data-label="Last successful sync" class="muted">Never</td>
+            <td data-label="Items" class="is-num muted">0</td>
+            <td data-label="Problem" class="muted">Nothing is wrong. A 2160p instance has been named but never connected, so 2160p availability reads "not configured" across the library rather than a cross.</td>
+            <td data-label="Action"><button type="button" class="btn" data-act="dialog-open" aria-controls="add-service">Add service</button></td>
+          </tr>
+
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- System health messages -------------------------------------------- -->
+  <section class="section" id="system" data-when="live reident denied">
+    <div class="section__head"><h2>System status</h2><span class="section__count">2 errors, 1 warning</span></div>
+    <ul>
+      <li class="banner banner--err" style="margin-left:0;margin-right:0">
+        <svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>
+        <div class="banner__body"><div class="banner__title">Prowlarr rejected the stored API key</div>
+        <div class="banner__text">Indexer search is unavailable until the key is replaced.</div></div>
+        <div class="banner__actions"><button type="button" class="btn btn--sm">Update API key</button></div>
+      </li>
+      <li class="banner banner--err" style="margin-left:0;margin-right:0">
+        <svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>
+        <div class="banner__body"><div class="banner__title">Radarr has been unreachable for 2 hours</div>
+        <div class="banner__text">The last successful delta poll was 11:47. Movie rows are served from the replica.</div></div>
+        <div class="banner__actions"><button type="button" class="btn btn--sm">Test connection</button></div>
+      </li>
+      <li class="banner banner--warn" style="margin-left:0;margin-right:0">
+        <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
+        <div class="banner__body"><div class="banner__title">Sonarr Anime clock is 212 seconds ahead of this host</div>
+        <div class="banner__text">Delta polling keys off the remote clock, so changes inside the skew window can be missed until the next reconciliation.</div></div>
+        <div class="banner__actions"><button type="button" class="btn btn--sm">Run full sync now</button></div>
+      </li>
+    </ul>
+  </section>
+
+  <!-- Settings anatomy ---------------------------------------------------
+       The shape self-hosters already know from Sonarr, Radarr and Prowlarr:
+       a second-level section nav, a Show advanced toggle, and a save control
+       that reads "No changes" and is disabled until the form is dirty. -->
+  <section class="section" id="settings" data-when="live reident denied">
+    <div class="section__head"><h2>Settings</h2></div>
+
+    <div class="settings" id="settings-box" data-advanced="off">
+      <nav class="subnav" aria-label="Settings sections">
+        <a href="#settings" data-group="settings" data-panel="services" aria-current="true">Services</a>
+        <a href="#settings" data-group="settings" data-panel="general" aria-current="false">General</a>
+        <a href="#settings" data-group="settings" data-panel="tags" aria-current="false">Tags</a>
+        <a href="#settings" data-group="settings" data-panel="ui" aria-current="false">UI</a>
+      </nav>
+
+      <div>
+        <div class="form__row" style="margin-bottom:16px">
+          <button type="button" class="btn" data-act="advanced" aria-expanded="false" aria-controls="settings-box">Show advanced</button>
+          <span class="muted">Advanced fields are marked and hidden by default.</span>
+        </div>
+
+        <div data-panel-for="settings" data-panel-name="services">
+          <form class="form" data-act="dirtyform" novalidate>
+
+            <!-- GOV.UK error-summary pattern: one list at the top that takes
+                 focus on submit, and the same message repeated inline at each
+                 field it belongs to. -->
+            <div class="errsummary" id="service-errors" tabindex="-1" role="alert" hidden>
+              <div class="errsummary__title">There is a problem</div>
+              <ul>
+                <li><a href="#f-url">Base URL must include a scheme, for example http:// or https://</a></li>
+                <li><a href="#f-apikey">Enter the API key. It was cleared when the host changed.</a></li>
+              </ul>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="f-kind">Kind</label>
+              <select class="select" id="f-kind">
+                <option>sonarr</option>
+                <option selected>radarr</option>
+                <option>prowlarr</option>
+              </select>
+              <span class="field__help">Which application this is. Sonarr and Radarr use <span class="mono">/api/v3</span>; Prowlarr uses <span class="mono">/api/v1</span>. The version is probed, not assumed.</span>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="f-name">Name</label>
+              <input class="input" id="f-name" type="text" value="Radarr 4K">
+              <span class="field__help">The label shown throughout UsArr. It must be unique, because it is how you tell two Radarr instances apart.</span>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="f-url">Base URL</label>
+              <input class="input" id="f-url" type="text" value="10.0.0.4:7879" aria-invalid="true" aria-describedby="f-url-err f-url-help" data-act="host">
+              <span class="field__err" id="f-url-err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>Base URL must include a scheme, for example http:// or https://</span>
+              <span class="field__help" id="f-url-help">The address this host can reach, not the one your browser uses. UsArr resolves it once and pins the address for the life of the request, so a rebinding DNS answer cannot redirect the call.</span>
+            </div>
+
+            <div class="field">
+              <label class="field__label" for="f-apikey">API key</label>
+              <input class="input" id="f-apikey" type="password" value="••••••1a2b" aria-describedby="apikey-reentry f-apikey-help">
+              <span class="field__help" id="f-apikey-help">Stored encrypted and never sent back to the browser. An *Arr API key is a full-admin credential.</span>
+              <span class="field__err" id="apikey-reentry" hidden><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>The host changed, so the stored key was cleared. Enter it again before saving.</span>
+            </div>
+
+            <div class="field advanced">
+              <label class="field__label" for="f-urlbase">URL base <span class="adv-tag">advanced</span></label>
+              <input class="input" id="f-urlbase" type="text" placeholder="/radarr">
+              <span class="field__help">Only needed when the application is served under a path by a reverse proxy.</span>
+            </div>
+
+            <div class="field advanced">
+              <label class="field__label" for="f-priority">Priority <span class="adv-tag">advanced</span></label>
+              <input class="input" id="f-priority" type="number" value="10" style="max-width:120px">
+              <span class="field__help">When two instances claim the same item, the higher priority authoritative link wins.</span>
+            </div>
+
+            <div class="field advanced">
+              <label class="check" for="f-tls"><input type="checkbox" id="f-tls" checked> Verify TLS certificate <span class="adv-tag">advanced</span></label>
+              <span class="field__help">Turning this off is only sensible on a private network with a self-signed certificate, and the certificate fingerprint is pinned either way.</span>
+            </div>
+
+            <div class="form__foot">
+              <button type="button" class="btn">Test</button>
+              <button type="submit" class="btn btn--primary" data-act="save" disabled>No changes</button>
+              <span class="muted">Save stays disabled until something changes, and a failed test blocks it.</span>
+            </div>
+          </form>
+        </div>
+
+        <div data-panel-for="settings" data-panel-name="general" hidden>
+          <p class="muted">General settings are not drawn in this mockup. The four v0.1 screens are the scope.</p>
+        </div>
+        <div data-panel-for="settings" data-panel-name="tags" hidden>
+          <p class="muted">Only the system tag namespaces ship in v0.1: <span class="mono">type:</span>, <span class="mono">format:</span>, <span class="mono">source:</span>, <span class="mono">quality:</span>, <span class="mono">indexer:</span>. They render as chips you can filter by but not delete. Aliases, virtual parents and the rule engine are v1.0.</p>
+        </div>
+        <div data-panel-for="settings" data-panel-name="ui" hidden>
+          <p class="muted">Theme and density live in the top bar of every screen, and both persist. There is no colour-impaired mode setting, because every status here is an icon and a word as well as a colour.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <dialog class="dialog" id="add-service">
+    <div class="dialog__head">Add service</div>
+    <div class="dialog__body">
+      <form class="form">
+        <div class="field">
+          <label class="field__label" for="d-kind">Kind</label>
+          <select class="select" id="d-kind">
+            <option>sonarr</option>
+            <option>radarr</option>
+            <option>prowlarr</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="field__label" for="d-url">Base URL</label>
+          <input class="input" id="d-url" type="text" placeholder="http://10.0.0.4:7878">
+        </div>
+        <div class="field">
+          <label class="field__label" for="d-key">API key</label>
+          <input class="input" id="d-key" type="password" placeholder="Paste the key from the application's General settings">
+        </div>
+        <p class="muted">The connection test is mandatory. Save stays disabled until it passes.</p>
+      </form>
+    </div>
+    <div class="dialog__foot">
+      <button type="button" class="btn" data-act="dialog-close">Cancel</button>
+      <button type="button" class="btn">Test connection</button>
+      <button type="button" class="btn btn--primary" disabled>Save</button>
+    </div>
+  </dialog>
+
+</main>
+<main class="main" id="pg-search" data-page="search" data-state="live">
+
+  <div class="pagehead">
+    <h1>Search</h1>
+    <span class="pagehead__meta">Results render from the local index as you type. There is no loading state on this screen because nothing here waits on a network call.</span>
+  </div>
+
+  <div class="statebar">
+    <span class="statebar__tag">mockup</span>
+    <label for="st-search">States switcher</label>
+    <select id="st-search" class="select" data-act="state" data-scope="pg-search">
+      <option value="live">Results</option>
+      <option value="filtered">All results hidden by the filter</option>
+      <option value="empty">No results for this query</option>
+      <option value="stale">Results, one instance unreachable</option>
+      <option value="unconfigured">No library-bearing service</option>
+    </select>
+    <span class="statebar__note">This control is not part of the product. It switches the screen between the states this design has to cover.</span>
+  </div>
+
+  <div class="banner banner--warn" data-when="stale" role="status" hidden>
+    <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
+    <div class="banner__body">
+      <div class="banner__title">Radarr is unreachable — showing cached data from 14:02</div>
+      <div class="banner__text">Search itself is unaffected: it reads the replica, not Radarr. What can be stale is whether a file has appeared or been deleted in the last two hours.</div>
+    </div>
+    <div class="banner__actions"><a href="#services">Open Services</a></div>
+  </div>
+
+  <div class="toolbar" data-when="live filtered stale">
+    <span class="toolbar__label">Showing results for <span class="mono">the</span></span>
+
+    <div class="segment" role="group" aria-label="View mode">
+      <button type="button" data-group="viewmode" data-panel="posters" aria-pressed="false">posters</button>
+      <button type="button" data-group="viewmode" data-panel="overview" aria-pressed="false">overview</button>
+      <button type="button" data-group="viewmode" data-panel="table" aria-pressed="true">table</button>
+    </div>
+
+    <button type="button" class="btn">Filter</button>
+    <button type="button" class="btn">Options</button>
+
+    <div class="toolbar__spacer"></div>
+    <label class="toolbar__label" for="sortby">Sort</label>
+    <select id="sortby" class="select">
+      <option>Relevance</option>
+      <option>Title</option>
+      <option>Year</option>
+      <option>Added</option>
+      <option>Size</option>
+    </select>
+  </div>
+
+  <!-- The "Not in your library" unowned section specified in ARCHITECTURE.md
+       17.4 is deliberately absent. One search box over owned and unowned is a
+       v0.2 line item in 16, so v0.1 search is owned-only and this screen must
+       not imply otherwise. Grouped cross-media result cards are v0.3, also
+       absent. -->
+
+  <div class="section" data-when="unconfigured" hidden>
+    <div class="empty">
+      <div class="empty__title">Nothing to search yet</div>
+      <p class="empty__text">No library-bearing service is configured. UsArr is running in Search-and-Grab mode: search your indexers and send grabs to your download client. Add a Sonarr, Radarr or media server to get a library.</p>
+      <div class="empty__actions">
+        <a class="btn btn--primary" href="#requests">Search indexers</a>
+        <a class="btn" href="#services">Add a service</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" data-when="empty" hidden>
+    <div class="empty">
+      <div class="empty__title">No results for <span class="mono">the wier</span></div>
+      <p class="empty__text">Search matches from the start of a title and anywhere inside it, and it does not correct typos. Nothing in the library starts with or contains that string. Check the spelling, or search your indexers for something you do not own yet.</p>
+      <div class="empty__actions">
+        <a class="btn btn--primary" href="#requests">Search indexers instead</a>
+        <button type="button" class="btn">Clear the query</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" data-when="filtered" hidden>
+    <div class="toolbar" style="border-top:0">
+      <span class="toolbar__label">Filter</span>
+      <span class="chip">quality:2160p</span>
+      <span class="chip">instance: Radarr 4K</span>
+      <button type="button" class="btn btn--sm">Clear filter</button>
+    </div>
+    <div class="empty">
+      <div class="empty__title">All results are hidden by the applied filter</div>
+      <p class="empty__text">29 items match <span class="mono">the</span>. The filter removes all of them, because no instance supplies 2160p files. This is a different situation from a query that found nothing, and it has a different fix.</p>
+      <div class="empty__actions">
+        <button type="button" class="btn btn--primary">Clear filter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- posters ----------------------------------------------------------- -->
+  <div class="viewmodes" data-when="live stale">
+  <div data-panel-for="viewmode" data-panel-name="posters" hidden>
+    <section class="section">
+      <div class="section__head"><h2><svg class="i" aria-hidden="true"><use href="#i-movie"/></svg> Movies <span class="section__count num">18</span></h2></div>
+      <div class="strip" role="list" data-roving=".card" data-roving-axis="horizontal" aria-label="Movie results">
+        <a class="card" role="listitem" href="#" style="--dc:#3b3a35;--dc-fg:#f1efea"><span class="card__art"><span class="card__t">The Northman</span><span class="card__y">2022</span></span><span class="card__meta">1080p <span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></span></a>
+        <a class="card" role="listitem" href="#" style="--dc:#55483a;--dc-fg:#f6f2ec"><span class="card__art"><span class="card__t">The Zone of Interest</span><span class="card__y">2023</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" role="listitem" href="#" style="--dc:#5a4038;--dc-fg:#f7f0ed"><span class="card__art"><span class="card__t">The Handmaiden</span><span class="card__y">2016</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" role="listitem" href="#" style="--dc:#2a3b3f;--dc-fg:#eef3f4"><span class="card__art"><span class="card__t">Under the Skin</span><span class="card__y">2013</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" role="listitem" href="#" style="--dc:#463c2f;--dc-fg:#f4f1ec"><span class="card__art"><span class="card__t">The Master</span><span class="card__y">2012</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" role="listitem" href="#" style="--dc:#3d2f2b;--dc-fg:#f3eeec"><span class="card__art"><span class="card__t">There Will Be Blood</span><span class="card__y">2007</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" role="listitem" href="#" style="--dc:#33404a;--dc-fg:#eff3f6"><span class="card__art"><span class="card__t">The Social Network</span><span class="card__y">2010</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" role="listitem" href="#" style="--dc:#2f3a3d;--dc-fg:#eff2f3"><span class="card__art"><span class="card__t">The Lighthouse</span><span class="card__y">2019</span></span><span class="card__meta">1080p <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+      </div>
+    </section>
+    <p class="section muted">The posters mode is a poster grid over the same rows. Only the table mode is drawn in full in this mockup.</p>
+  </div>
+
+  <!-- overview ---------------------------------------------------------- -->
+  <div data-panel-for="viewmode" data-panel-name="overview" hidden>
+    <section class="section">
+      <div class="section__head"><h2><svg class="i" aria-hidden="true"><use href="#i-movie"/></svg> Movies <span class="section__count num">18</span></h2></div>
+      <p class="muted">The overview mode is a wide two-line row: poster thumbnail, title, synopsis and the same metadata the table carries. Only the table mode is drawn in full in this mockup.</p>
+    </section>
+  </div>
+
+  <!-- table ------------------------------------------------------------- -->
+  <div data-panel-for="viewmode" data-panel-name="table">
+
+    <section class="section">
+      <div class="section__head">
+        <h2><svg class="i" aria-hidden="true"><use href="#i-movie"/></svg> Movies <span class="section__count num">18</span></h2>
+      </div>
+      <div class="tablewrap">
+        <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Movie results">
+          <thead>
+            <tr>
+              <th scope="col">Title</th>
+              <th scope="col">Year</th>
+              <th scope="col">1080p</th>
+              <th scope="col">2160p</th>
+              <th scope="col">Quality</th>
+              <th scope="col" class="is-num">Size</th>
+              <th scope="col">Tags</th>
+              <th scope="col">Instance</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td data-label="Title" class="cell-title">The Northman</td><td data-label="Year" class="num">2022</td><td data-label="1080p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality" class="muted">no file</td><td data-label="Size" class="is-num muted">n/a</td><td data-label="Tags"><span class="chip mono">type:movie</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Zone of Interest</td><td data-label="Year" class="num">2023</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">9.1 GB</td><td data-label="Tags"><span class="chip mono">source:torrent</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Handmaiden</td><td data-label="Year" class="num">2016</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">16.8 GB</td><td data-label="Tags"><span class="chip mono">source:usenet</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">Under the Skin</td><td data-label="Year" class="num">2013</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">8.9 GB</td><td data-label="Tags"><span class="chip mono">source:torrent</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Master</td><td data-label="Year" class="num">2012</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">13.4 GB</td><td data-label="Tags"><span class="chip mono">source:usenet</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">There Will Be Blood</td><td data-label="Year" class="num">2007</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">15.1 GB</td><td data-label="Tags"><span class="chip mono">source:torrent</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Social Network</td><td data-label="Year" class="num">2010</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">WEBDL-1080p</span></td><td data-label="Size" class="is-num">6.2 GB</td><td data-label="Tags"><span class="chip mono">source:usenet</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Lighthouse</td><td data-label="Year" class="num">2019</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">10.3 GB</td><td data-label="Tags"><span class="chip mono">source:torrent</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Witch</td><td data-label="Year" class="num">2015</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">9.7 GB</td><td data-label="Tags"><span class="chip mono">source:torrent</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Florida Project</td><td data-label="Year" class="num">2017</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">WEBDL-1080p</span></td><td data-label="Size" class="is-num">5.5 GB</td><td data-label="Tags"><span class="chip mono">source:usenet</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Rider</td><td data-label="Year" class="num">2017</td><td data-label="1080p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality" class="muted">no file</td><td data-label="Size" class="is-num muted">n/a</td><td data-label="Tags"><span class="chip mono">type:movie</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Assassination of Jesse James</td><td data-label="Year" class="num">2007</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="2160p"><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td><td data-label="Quality"><span class="mono">Bluray-1080p</span></td><td data-label="Size" class="is-num">17.4 GB</td><td data-label="Tags"><span class="chip mono">source:torrent</span></td><td data-label="Instance" class="mono">Radarr</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section__head">
+        <h2><svg class="i" aria-hidden="true"><use href="#i-tv"/></svg> TV <span class="section__count num">11</span></h2>
+      </div>
+      <div class="tablewrap">
+        <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Series results">
+          <thead>
+            <tr>
+              <th scope="col">Title</th>
+              <th scope="col">Year</th>
+              <th scope="col">1080p</th>
+              <th scope="col">2160p</th>
+              <th scope="col">Network</th>
+              <th scope="col" class="is-num">Size</th>
+              <th scope="col">Tags</th>
+              <th scope="col">Instance</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td data-label="Title" class="cell-title">The Wire</td><td data-label="Year" class="num">2002</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>60/60</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">HBO</td><td data-label="Size" class="is-num">284 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Sopranos</td><td data-label="Year" class="num">1999</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>86/86</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">HBO</td><td data-label="Size" class="is-num">412 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Bear</td><td data-label="Year" class="num">2022</td><td data-label="1080p"><span class="avail avail--part">18/28</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">FX</td><td data-label="Size" class="is-num">44.1 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Leftovers</td><td data-label="Year" class="num">2014</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>28/28</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">HBO</td><td data-label="Size" class="is-num">168 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Americans</td><td data-label="Year" class="num">2013</td><td data-label="1080p"><span class="avail avail--part">61/75</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">FX</td><td data-label="Size" class="is-num">201 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Expanse</td><td data-label="Year" class="num">2015</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>62/62</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">Prime Video</td><td data-label="Size" class="is-num">176 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Thick of It</td><td data-label="Year" class="num">2005</td><td data-label="1080p"><span class="avail avail--part">14/23</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">BBC Four</td><td data-label="Size" class="is-num">21.8 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Terror</td><td data-label="Year" class="num">2018</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>20/20</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">AMC</td><td data-label="Size" class="is-num">58.3 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Rehearsal</td><td data-label="Year" class="num">2022</td><td data-label="1080p"><span class="avail avail--part">6/12</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">HBO</td><td data-label="Size" class="is-num">14.2 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Knick</td><td data-label="Year" class="num">2014</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>20/20</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">Cinemax</td><td data-label="Size" class="is-num">61.7 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+            <tr><td data-label="Title" class="cell-title">The Night Of</td><td data-label="Year" class="num">2016</td><td data-label="1080p"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>8/8</span></td><td data-label="2160p"><span class="avail avail--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg></span></td><td data-label="Network">HBO</td><td data-label="Size" class="is-num">32.9 GB</td><td data-label="Tags"><span class="chip mono">type:tv</span></td><td data-label="Instance" class="mono">Sonarr</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="section muted">Search matches from the start of a title and anywhere inside it. It does not correct typos, so a misspelling returns nothing rather than a near miss. <a href="#requests">Search indexers instead</a> for something you do not own.</p>
+  </div>
+
+</div>
+
+</main>
+<main class="main" id="pg-requests" data-page="requests" data-state="live">
+
+  <div class="pagehead">
+    <h1>Requests</h1>
+    <span class="pagehead__meta">Free-text indexer search through Prowlarr, and a grab sent to Prowlarr's own download client.</span>
+  </div>
+
+  <div class="statebar">
+    <span class="statebar__tag">mockup</span>
+    <label for="st-requests">States switcher</label>
+    <select id="st-requests" class="select" data-act="state" data-scope="pg-requests">
+      <option value="live">Results, fan-out complete</option>
+      <option value="partial">Results, fan-out in progress</option>
+      <option value="empty">Search ran, nothing found</option>
+      <option value="denied">One indexer refused the account</option>
+      <option value="error">Prowlarr unreachable</option>
+      <option value="unconfigured">No Prowlarr configured</option>
+    </select>
+    <span class="statebar__note">This control is not part of the product. It switches the screen between the states this design has to cover.</span>
+  </div>
+
+  <!-- The *Arr-backed Add path described in ARCHITECTURE.md 17.5 is v0.2 and
+       is deliberately absent here, along with the request model, routing
+       rules, quotas and per-season TV. In single-user mode the approval queue
+       is hidden entirely, so there is no approval UI on this screen either. -->
+
+  <div class="section" data-when="unconfigured" hidden>
+    <div class="empty">
+      <div class="empty__title">No indexer service configured</div>
+      <p class="empty__text">This screen searches your indexers through Prowlarr and sends the grab to the download client Prowlarr already has. Without a Prowlarr there is nothing to query, and UsArr does not talk to indexers directly.</p>
+      <div class="empty__actions">
+        <a class="btn btn--primary" href="#services">Add Prowlarr</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search form: Prowlarr's own shape, in Prowlarr's own words. --------- -->
+  <form class="toolbar" data-when="live partial empty denied error" onsubmit="return false">
+    <label class="toolbar__label" for="q">Query</label>
+    <input class="input" id="q" type="search" value="dune part two" style="flex:1 1 260px">
+
+    <label class="toolbar__label" for="stype">Search type</label>
+    <select class="select" id="stype">
+      <option>Basic</option>
+      <option>TV</option>
+      <option selected>Movie</option>
+    </select>
+
+    <label class="toolbar__label" for="indexers">Indexers</label>
+    <select class="select" id="indexers" multiple size="3" style="flex:0 1 200px">
+      <optgroup label="Torrents">
+        <option selected>TorrentLeech</option>
+        <option selected>IPTorrents</option>
+        <option selected>PassThePopcorn</option>
+        <option selected>HDBits</option>
+        <option selected>TorrentDay</option>
+      </optgroup>
+      <optgroup label="Usenet">
+        <option selected>NZBgeek</option>
+        <option selected>DrunkenSlug</option>
+        <option selected>NZBFinder</option>
+        <option selected>abNZB</option>
+      </optgroup>
+    </select>
+
+    <label class="toolbar__label" for="cats">Category</label>
+    <select class="select" id="cats" multiple size="3" style="flex:0 1 180px">
+      <option selected>Movies</option>
+      <option>Movies/UHD</option>
+      <option>Movies/HD</option>
+      <option>Movies/SD</option>
+      <option>TV</option>
+    </select>
+
+    <button type="submit" class="btn btn--primary">Search</button>
+  </form>
+
+  <div class="banner banner--err" data-when="error" role="alert" hidden>
+    <svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>
+    <div class="banner__body">
+      <div class="banner__title">Prowlarr rejected the stored API key, so no indexer was queried</div>
+      <div class="banner__text">The search was not sent. Nothing was grabbed and nothing is pending.</div>
+      <div class="verbatim" style="margin-top:8px">GET https://prowlarr.tail9c2e.ts.net/api/v1/search?query=dune+part+two&amp;type=movie 401 Unauthorized
+{"message":"Unauthorized","description":"The request requires a valid X-Api-Key header"}</div>
+    </div>
+    <div class="banner__actions"><a href="#services">Update API key</a></div>
+  </div>
+
+  <div class="section" data-when="empty" hidden>
+    <div class="empty">
+      <div class="empty__title">No search results found</div>
+      <p class="empty__text">All 9 indexers answered and none of them has a release matching <span class="mono">dune part twoo</span> in the Movies categories. Indexer search matches the release name as the indexer stores it, so a typo in the query returns nothing.</p>
+      <div class="empty__actions">
+        <button type="button" class="btn btn--primary">Search all categories</button>
+        <button type="button" class="btn">Edit the query</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tier 3 fan-out: real counts, never a fake progress bar. The releases
+       below are already grabbable; the remaining indexers only add rows. -->
+  <div class="fanout" data-when="partial" role="status" hidden>
+    <span class="fanout__count">4 of 9</span> indexers responded
+    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:44%"></span></span>
+    <span>47 releases so far, all of them grabbable now</span>
+    <span class="fanout__failed">TorrentDay timed out after 30 s</span>
+    <div class="toolbar__spacer"></div>
+    <button type="button" class="btn btn--sm">Stop waiting</button>
+  </div>
+
+  <div class="fanout" data-when="live" role="status">
+    <span class="fanout__count">8 of 9</span> indexers responded
+    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:89%"></span></span>
+    <span>112 releases, 10 shown after de-duplication</span>
+    <span class="fanout__failed">HDBits returned 429 and was skipped</span>
+  </div>
+
+  <div class="fanout" data-when="denied" role="status" hidden>
+    <span class="fanout__count">8 of 9</span> indexers responded
+    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:89%"></span></span>
+    <span>96 releases, 10 shown after de-duplication</span>
+    <span class="fanout__failed">PassThePopcorn refused the account</span>
+  </div>
+
+  <div class="banner banner--warn" data-when="denied" role="status" hidden>
+    <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
+    <div class="banner__body">
+      <div class="banner__title">PassThePopcorn refused this account, so its releases are missing from the list</div>
+      <div class="banner__text">Every other indexer answered. The results below are real and grabbable; they are just incomplete, and the count above says so rather than pretending the search was whole.</div>
+      <div class="verbatim" style="margin-top:8px">indexer 4 PassThePopcorn: 403 Forbidden
+{"error":"Your account does not have permission to use the API. Enable it in your profile."}</div>
+    </div>
+    <div class="banner__actions"><a href="#services">Open Services</a></div>
+  </div>
+
+  <!-- Results ------------------------------------------------------------ -->
+  <div data-when="live partial denied">
+    <div class="toolbar">
+      <button type="button" class="btn btn--primary" data-act="grab-bulk" disabled>Grab release(s)</button>
+      <button type="button" class="btn">Filter</button>
+      <button type="button" class="btn">Options</button>
+      <div class="toolbar__spacer"></div>
+      <span class="toolbar__label">Sorted by Age ascending. Grab window expires in <span class="num">18</span> minutes; an expired release is never offered as grabbable.</span>
+    </div>
+
+    <div class="tablewrap">
+      <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Release results">
+        <thead>
+          <tr>
+            <th scope="col">Select</th>
+            <th scope="col">Protocol</th>
+            <th scope="col" class="is-num">Age</th>
+            <th scope="col">Title</th>
+            <th scope="col">Indexer</th>
+            <th scope="col" class="is-num">Size</th>
+            <th scope="col" class="is-num">Grabs</th>
+            <th scope="col" class="is-num">Peers</th>
+            <th scope="col">Category</th>
+            <th scope="col">Indexer flags</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+
+          <tr>
+            <td data-label="Select"><label class="sr" for="r1">Select this release</label><input type="checkbox" id="r1" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-label="Age" class="is-num">2 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.2160p.UHD.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-FraMeSToR</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">TorrentLeech</td>
+            <td data-label="Size" class="is-num">68.4 GB</td>
+            <td data-label="Grabs" class="is-num">214</td>
+            <td data-label="Peers" class="is-num">41 / 9</td>
+            <td data-label="Category">Movies/UHD</td>
+            <td data-label="Indexer flags"><span class="chip">internal</span> <span class="chip">freeleech</span></td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on TorrentLeech"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <tr>
+            <td data-label="Select"><label class="sr" for="r2">Select this release</label><input type="checkbox" id="r2" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-label="Age" class="is-num">3 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-FLUX</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">NZBgeek</td>
+            <td data-label="Size" class="is-num">21.7 GB</td>
+            <td data-label="Grabs" class="is-num">1,208</td>
+            <td data-label="Peers" class="is-num muted">n/a</td>
+            <td data-label="Category">Movies/UHD</td>
+            <td data-label="Indexer flags" class="muted">None</td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on NZBgeek"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <tr>
+            <td data-label="Select"><label class="sr" for="r3">Select this release</label><input type="checkbox" id="r3" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-label="Age" class="is-num">4 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.1080p.BluRay.x264-SbR</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">TorrentDay</td>
+            <td data-label="Size" class="is-num">12.1 GB</td>
+            <td data-label="Grabs" class="is-num">512</td>
+            <td data-label="Peers" class="is-num">122 / 18</td>
+            <td data-label="Category">Movies/HD</td>
+            <td data-label="Indexer flags" class="muted">None</td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on TorrentDay"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <tr>
+            <td data-label="Select"><label class="sr" for="r4">Select this release</label><input type="checkbox" id="r4" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-label="Age" class="is-num">6 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.1080p.BluRay.DDP5.1.x264-PTer</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">DrunkenSlug</td>
+            <td data-label="Size" class="is-num">14.9 GB</td>
+            <td data-label="Grabs" class="is-num">306</td>
+            <td data-label="Peers" class="is-num muted">n/a</td>
+            <td data-label="Category">Movies/HD</td>
+            <td data-label="Indexer flags" class="muted">None</td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on DrunkenSlug"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <!-- Already acknowledged: the write queue holds it, and the chip
+               says so rather than claiming the grab has landed. -->
+          <tr>
+            <td data-label="Select"><label class="sr" for="r5">Select this release</label><input type="checkbox" id="r5" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-label="Age" class="is-num">8 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.REPACK.1080p.WEB-DL.DDP5.1.Atmos.H.264-FLUX</span><div data-slot="grabstate"><span class="chip chip--pending">pending</span></div></td>
+            <td data-label="Indexer" class="mono">IPTorrents</td>
+            <td data-label="Size" class="is-num">8.6 GB</td>
+            <td data-label="Grabs" class="is-num">98</td>
+            <td data-label="Peers" class="is-num">64 / 5</td>
+            <td data-label="Category">Movies/HD</td>
+            <td data-label="Indexer flags"><span class="chip">repack</span></td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release" disabled><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on IPTorrents"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <!-- verifying: it might have landed. Distinct from failed. -->
+          <tr>
+            <td data-label="Select"><label class="sr" for="r6">Select this release</label><input type="checkbox" id="r6" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-label="Age" class="is-num">11 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.2160p.WEB-DL.DV.HDR.DDP5.1.Atmos.H.265-NTb</span><div data-slot="grabstate"><span class="chip chip--pending">verifying, might have landed</span></div></td>
+            <td data-label="Indexer" class="mono">PassThePopcorn</td>
+            <td data-label="Size" class="is-num">24.3 GB</td>
+            <td data-label="Grabs" class="is-num">77</td>
+            <td data-label="Peers" class="is-num">19 / 2</td>
+            <td data-label="Category">Movies/UHD</td>
+            <td data-label="Indexer flags"><span class="chip">internal</span></td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release" disabled><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on PassThePopcorn"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <tr>
+            <td data-label="Select"><label class="sr" for="r7">Select this release</label><input type="checkbox" id="r7" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-label="Age" class="is-num">14 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.720p.WEBRip.x264-GalaxyRG</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">NZBFinder</td>
+            <td data-label="Size" class="is-num">3.4 GB</td>
+            <td data-label="Grabs" class="is-num">41</td>
+            <td data-label="Peers" class="is-num muted">n/a</td>
+            <td data-label="Category">Movies/SD</td>
+            <td data-label="Indexer flags" class="muted">None</td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on NZBFinder"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <tr>
+            <td data-label="Select"><label class="sr" for="r8">Select this release</label><input type="checkbox" id="r8" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-label="Age" class="is-num">21 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.1080p.AMZN.WEB-DL.DDP5.1.H.264-FLUX</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">TorrentLeech</td>
+            <td data-label="Size" class="is-num">9.2 GB</td>
+            <td data-label="Grabs" class="is-num">402</td>
+            <td data-label="Peers" class="is-num">88 / 11</td>
+            <td data-label="Category">Movies/HD</td>
+            <td data-label="Indexer flags" class="muted">None</td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on TorrentLeech"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <!-- Grabbing this row fails, so the failure path is reachable. -->
+          <tr data-demo="fail">
+            <td data-label="Select"><label class="sr" for="r9">Select this release</label><input type="checkbox" id="r9" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-label="Age" class="is-num">26 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.Hybrid.2160p.BluRay.REMUX.HDR.DV.HEVC.DTS-HD.MA.5.1-playBD</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">HDBits</td>
+            <td data-label="Size" class="is-num">74.9 GB</td>
+            <td data-label="Grabs" class="is-num">12</td>
+            <td data-label="Peers" class="is-num">6 / 1</td>
+            <td data-label="Category">Movies/UHD</td>
+            <td data-label="Indexer flags"><span class="chip">internal</span></td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on HDBits"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+          <tr>
+            <td data-label="Select"><label class="sr" for="r10">Select this release</label><input type="checkbox" id="r10" data-act="rowselect"></td>
+            <td data-label="Protocol"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-label="Age" class="is-num">31 days</td>
+            <td data-label="Title"><span class="mono">Dune.Part.Two.2024.PROPER.1080p.BluRay.x265-RARBG</span><div data-slot="grabstate"></div></td>
+            <td data-label="Indexer" class="mono">abNZB</td>
+            <td data-label="Size" class="is-num">6.1 GB</td>
+            <td data-label="Grabs" class="is-num">155</td>
+            <td data-label="Peers" class="is-num muted">n/a</td>
+            <td data-label="Category">Movies/HD</td>
+            <td data-label="Indexer flags"><span class="chip">proper</span></td>
+            <td data-label="Actions"><div class="cell-actions">
+              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
+              <a href="#" aria-label="Open this release on abNZB"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+            </div></td>
+          </tr>
+
+        </tbody>
+      </table>
+    </div>
+
+    <p class="section muted">A grab is acknowledged, not applied optimistically. The button writes a queued command and the row shows <span class="chip chip--pending">pending</span> until Prowlarr answers. A failure changes that chip on the same visible row and raises a message carrying the upstream text verbatim, with Retry and Dismiss. The row never silently reverts. Grabbing the 26-day-old HDBits release above is wired to fail, so that path is reachable from this page.</p>
+
+    <p class="section muted">Grabs are recorded in <span class="mono">provenance</span>, so if a Sonarr or Radarr is added later and imports the file, the download id joins back to the release these indexers returned. UsArr does not track what happens to the download, and does not talk to a download client itself.</p>
+  </div>
+
+</main>
+</div>
+<div class="toasts" aria-live="polite"></div>
+<script>
+/* UsArr static mockup behaviour.
+   Vanilla JS, no dependencies, no animation library.
+   Scope, deliberately narrow: theme toggle, density control, sidebar toggle,
+   section/tab switching, the dialog, the states switcher, roving tabindex,
+   and the acknowledged-write demonstration on the requests screen.
+   Nothing here animates anything on a render path. */
+(function () {
+  'use strict';
+
+  var root = document.documentElement;
+
+  /* ---- theme ---------------------------------------------------------- */
+  function readStored(key) {
+    try { return window.localStorage.getItem(key); } catch (e) { return null; }
+  }
+  function store(key, value) {
+    try { window.localStorage.setItem(key, value); } catch (e) { /* private mode */ }
+  }
+
+  var storedTheme = readStored('usarr.theme');
+  if (storedTheme === 'light' || storedTheme === 'dark') {
+    root.setAttribute('data-theme', storedTheme);
+  }
+
+  function currentTheme() {
+    var explicit = root.getAttribute('data-theme');
+    if (explicit) return explicit;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  function paintThemeButton(btn) {
+    var dark = currentTheme() === 'dark';
+    btn.setAttribute('aria-label', dark ? 'Switch to the light theme' : 'Switch to the dark theme');
+    btn.querySelector('use').setAttribute('href', dark ? '#i-sun' : '#i-moon');
+  }
+
+  var themeBtn = document.querySelector('[data-act="theme"]');
+  if (themeBtn) {
+    paintThemeButton(themeBtn);
+    themeBtn.addEventListener('click', function () {
+      var next = currentTheme() === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      store('usarr.theme', next);
+      paintThemeButton(themeBtn);
+    });
+  }
+
+  /* ---- density -------------------------------------------------------- */
+  var storedDensity = readStored('usarr.density');
+  root.setAttribute('data-density', storedDensity || 'compact');
+
+  var densitySel = document.querySelector('[data-act="density"]');
+  if (densitySel) {
+    densitySel.value = root.getAttribute('data-density');
+    densitySel.addEventListener('change', function () {
+      root.setAttribute('data-density', densitySel.value);
+      store('usarr.density', densitySel.value);
+    });
+  }
+
+  /* ---- sidebar -------------------------------------------------------- */
+  var app = document.querySelector('.app');
+  var sideBtn = document.querySelector('[data-act="sidebar"]');
+  if (app && sideBtn) {
+    sideBtn.addEventListener('click', function () {
+      var collapsed = app.getAttribute('data-sidebar') === 'collapsed';
+      app.setAttribute('data-sidebar', collapsed ? 'open' : 'collapsed');
+      sideBtn.setAttribute('aria-expanded', collapsed ? 'true' : 'false');
+    });
+  }
+
+  /* ---- states switcher (a mockup affordance, labelled as one) ---------- */
+  function applyState(scope, state) {
+    scope.setAttribute('data-state', state);
+    var blocks = scope.querySelectorAll('[data-when]');
+    for (var i = 0; i < blocks.length; i++) {
+      var wants = blocks[i].getAttribute('data-when').split(/\s+/);
+      blocks[i].hidden = wants.indexOf(state) === -1;
+    }
+  }
+
+  var stateSelects = document.querySelectorAll('[data-act="state"]');
+  for (var s = 0; s < stateSelects.length; s++) {
+    (function (sel) {
+      var scope = document.getElementById(sel.getAttribute('data-scope'));
+      if (!scope) return;
+      applyState(scope, sel.value);
+      sel.addEventListener('change', function () { applyState(scope, sel.value); });
+    })(stateSelects[s]);
+  }
+
+  /* ---- generic aria-pressed / aria-current group switching ------------ */
+  document.addEventListener('click', function (ev) {
+    var seg = ev.target.closest('[data-group]');
+    if (!seg) return;
+    var group = seg.getAttribute('data-group');
+    var peers = document.querySelectorAll('[data-group="' + group + '"]');
+    for (var i = 0; i < peers.length; i++) {
+      var on = peers[i] === seg;
+      if (peers[i].hasAttribute('aria-pressed')) peers[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (peers[i].hasAttribute('aria-current')) peers[i].setAttribute('aria-current', on ? 'true' : 'false');
+    }
+    var panelName = seg.getAttribute('data-panel');
+    if (panelName) {
+      var panels = document.querySelectorAll('[data-panel-for="' + group + '"]');
+      for (var p = 0; p < panels.length; p++) {
+        panels[p].hidden = panels[p].getAttribute('data-panel-name') !== panelName;
+      }
+    }
+  });
+
+  /* ---- expandable table rows ------------------------------------------ */
+  document.addEventListener('click', function (ev) {
+    var trigger = ev.target.closest('[data-act="expand"]');
+    if (!trigger) return;
+    var target = document.getElementById(trigger.getAttribute('aria-controls'));
+    if (!target) return;
+    var open = trigger.getAttribute('aria-expanded') === 'true';
+    trigger.setAttribute('aria-expanded', open ? 'false' : 'true');
+    target.hidden = open;
+    trigger.querySelector('use').setAttribute('href', open ? '#i-chevron-right' : '#i-chevron-down');
+  });
+
+  /* ---- show advanced --------------------------------------------------- */
+  var advBtn = document.querySelector('[data-act="advanced"]');
+  if (advBtn) {
+    advBtn.addEventListener('click', function () {
+      var box = document.getElementById(advBtn.getAttribute('aria-controls'));
+      var on = box.getAttribute('data-advanced') === 'on';
+      box.setAttribute('data-advanced', on ? 'off' : 'on');
+      advBtn.setAttribute('aria-expanded', on ? 'false' : 'true');
+      advBtn.textContent = on ? 'Show advanced' : 'Hide advanced';
+    });
+  }
+
+  /* ---- dirty form: Save reads "No changes" until something changes ----- */
+  var form = document.querySelector('[data-act="dirtyform"]');
+  if (form) {
+    var save = form.querySelector('[data-act="save"]');
+    form.addEventListener('input', function () {
+      save.disabled = false;
+      save.textContent = 'Save';
+    });
+    form.addEventListener('change', function () {
+      save.disabled = false;
+      save.textContent = 'Save';
+    });
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var summary = document.getElementById('service-errors');
+      if (summary) {
+        summary.hidden = false;
+        summary.focus();
+      }
+    });
+  }
+
+  /* ---- API key must be re-entered when the host changes --------------- */
+  var hostField = document.querySelector('[data-act="host"]');
+  if (hostField) {
+    hostField.addEventListener('input', function () {
+      var note = document.getElementById('apikey-reentry');
+      var key = document.getElementById('f-apikey');
+      if (!note || !key) return;
+      note.hidden = false;
+      key.value = '';
+      key.placeholder = 'Re-enter the API key';
+    });
+  }
+
+  /* ---- dialog ---------------------------------------------------------- */
+  document.addEventListener('click', function (ev) {
+    var open = ev.target.closest('[data-act="dialog-open"]');
+    if (open) {
+      var dlg = document.getElementById(open.getAttribute('aria-controls'));
+      if (dlg && dlg.showModal) dlg.showModal();
+      return;
+    }
+    var close = ev.target.closest('[data-act="dialog-close"]');
+    if (close) {
+      var owner = close.closest('dialog');
+      if (owner) owner.close();
+    }
+  });
+
+  /* ---- roving tabindex: a table is one tab stop, arrows move within --- */
+  var grids = document.querySelectorAll('[data-roving]');
+  for (var g = 0; g < grids.length; g++) {
+    (function (grid) {
+      var sel = grid.getAttribute('data-roving');
+      function items() {
+        return Array.prototype.filter.call(grid.querySelectorAll(sel), function (el) {
+          return !el.hidden && el.offsetParent !== null;
+        });
+      }
+      var initial = Array.prototype.slice.call(grid.querySelectorAll(sel));
+      for (var i = 0; i < initial.length; i++) initial[i].tabIndex = i === 0 ? 0 : -1;
+
+      grid.addEventListener('keydown', function (ev) {
+        var horizontal = grid.getAttribute('data-roving-axis') === 'horizontal';
+        var nextKey = horizontal ? 'ArrowRight' : 'ArrowDown';
+        var prevKey = horizontal ? 'ArrowLeft' : 'ArrowUp';
+        if (['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].indexOf(ev.key) === -1) return;
+        var list = items();
+        var current = ev.target.closest(sel);
+        var idx = list.indexOf(current);
+        if (idx === -1) return;
+        var next = idx;
+        if (ev.key === nextKey) next = Math.min(idx + 1, list.length - 1);
+        else if (ev.key === prevKey) next = Math.max(idx - 1, 0);
+        else if (ev.key === 'Home') next = 0;
+        else if (ev.key === 'End') next = list.length - 1;
+        else return;
+        ev.preventDefault();
+        list[idx].tabIndex = -1;
+        list[next].tabIndex = 0;
+        list[next].focus();
+      });
+    })(grids[g]);
+  }
+
+  /* ---- acknowledged, not optimistic ------------------------------------
+     A grab does not flip the row to "grabbed". It writes a pending row on the
+     durable queue and the chip says pending. A failure is a status change on
+     that same visible row plus a toast carrying the upstream text verbatim.
+     Nothing ever silently reverts. */
+  function toast(title, verbatim, onRetry) {
+    var host = document.querySelector('.toasts');
+    if (!host) return;
+    var el = document.createElement('div');
+    el.className = 'toast';
+    el.setAttribute('role', 'alert');
+    el.innerHTML =
+      '<div class="toast__title"><svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>' + title + '</div>' +
+      '<div class="toast__body"><div class="verbatim">' + verbatim + '</div></div>' +
+      '<div class="toast__foot"><button type="button" class="btn btn--sm" data-toast="retry">Retry</button>' +
+      '<button type="button" class="btn btn--sm" data-toast="dismiss">Dismiss</button></div>';
+    el.addEventListener('click', function (ev) {
+      var act = ev.target.closest('[data-toast]');
+      if (!act) return;
+      if (act.getAttribute('data-toast') === 'retry' && onRetry) onRetry();
+      el.remove();
+    });
+    host.appendChild(el);
+  }
+
+  function setChip(row, kind, text) {
+    var cell = row.querySelector('[data-slot="grabstate"]');
+    if (!cell) return;
+    cell.innerHTML = '<span class="chip chip--' + kind + '">' + text + '</span>';
+  }
+
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest('[data-act="grab"]');
+    if (!btn) return;
+    var row = btn.closest('tr');
+    setChip(row, 'pending', 'pending');
+    btn.disabled = true;
+
+    /* This row is scripted to fail, so the failure path is demonstrable. */
+    if (row.getAttribute('data-demo') !== 'fail') return;
+    window.setTimeout(function () {
+      setChip(row, 'failed', 'failed: rejected');
+      toast(
+        'Grab rejected by Prowlarr',
+        'POST /api/v1/search 400: {"message":"Release not found in cache. The 30 minute grab window has expired.","description":"IndexerId 7, guid a41c9f2e"}',
+        function () {
+          setChip(row, 'pending', 'pending');
+          btn.disabled = true;
+        }
+      );
+    }, 700);
+  });
+
+  /* ---- bulk grab ------------------------------------------------------- */
+  var bulk = document.querySelector('[data-act="grab-bulk"]');
+  if (bulk) {
+    bulk.addEventListener('click', function () {
+      var boxes = document.querySelectorAll('[data-act="rowselect"]:checked');
+      for (var i = 0; i < boxes.length; i++) {
+        var row = boxes[i].closest('tr');
+        setChip(row, 'pending', 'pending');
+        boxes[i].checked = false;
+        row.setAttribute('aria-selected', 'false');
+      }
+      bulk.disabled = true;
+    });
+  }
+
+  document.addEventListener('change', function (ev) {
+    var box = ev.target.closest('[data-act="rowselect"]');
+    if (!box) return;
+    box.closest('tr').setAttribute('aria-selected', box.checked ? 'true' : 'false');
+    var any = document.querySelectorAll('[data-act="rowselect"]:checked').length;
+    var b = document.querySelector('[data-act="grab-bulk"]');
+    if (b) b.disabled = any === 0;
+  });
+
+  /* ---- "/" focuses the search box, as the top bar hint says ------------ */
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key !== '/' || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+    var tag = document.activeElement && document.activeElement.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    var box = document.getElementById('topsearch');
+    if (!box) return;
+    ev.preventDefault();
+    box.focus();
+    box.select();
+  });
+
+  /* ---- prototype.html only: hash routing between the four screens ------ */
+  var pages = document.querySelectorAll('[data-page]');
+  if (pages.length > 1) {
+    var route = function () {
+      var name = (window.location.hash || '#home').slice(1);
+      var found = false;
+      for (var i = 0; i < pages.length; i++) {
+        var on = pages[i].getAttribute('data-page') === name;
+        pages[i].hidden = !on;
+        if (on) found = true;
+      }
+      if (!found) { pages[0].hidden = false; name = pages[0].getAttribute('data-page'); }
+      var links = document.querySelectorAll('.nav__link[data-primary]');
+      for (var l = 0; l < links.length; l++) {
+        if (links[l].getAttribute('data-route') === name) links[l].setAttribute('aria-current', 'page');
+        else links[l].removeAttribute('aria-current');
+      }
+      window.scrollTo(0, 0);
+    };
+    window.addEventListener('hashchange', route);
+    route();
+  }
+})();
+
+</script>
+</body>
+</html>

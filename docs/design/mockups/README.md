@@ -1,0 +1,185 @@
+# UsArr v0.1 screen mockups
+
+A static, clickable HTML prototype of the four screens `docs/ARCHITECTURE.md` §17 specifies for
+v0.1: **home, services, search, requests**.
+
+**This is a mockup, not the application.** UsArr is pre-alpha: the docs exist, the code does not.
+Nothing here is wired to a database, an *Arr, or an HTTP API. Every title, size, seeder count,
+timestamp and error string on these pages is fabricated sample data chosen to look like the real
+thing so the layout can be judged, and none of it should be read as evidence that anything is
+implemented. There are no benchmark numbers anywhere, deliberately: this prototype cannot make a
+claim about speed.
+
+## Files
+
+| File | What it is |
+| --- | --- |
+| `usarr.css` | The stylesheet. Layer 1 tokens, layer 2 components. Hand-written, no framework, no build step. |
+| `usarr.js` | The behaviour. Vanilla, no dependencies, ~340 lines. Theme, density, sidebar, tabs, dialog, roving tabindex, the states switcher, and the acknowledged-write demonstration. |
+| `index.html` | Home, sectioned by media type. |
+| `services.html` | Service setup and health, plus the settings anatomy and the system health list. |
+| `search.html` | Search across your library. |
+| `requests.html` | Requests: the Prowlarr free-text search-and-grab path. |
+| `prototype.html` | All four screens plus the CSS and JS inlined into one file, switched by `#hash` links. Generated from the four files above; do not edit it by hand. |
+
+## How to open it
+
+Open `index.html` in a browser directly from disk. No server, no build, no network. The sidebar
+links are real `<a href>`s to the sibling files, so the four screens genuinely click through, and
+they middle-click into new tabs the way links should.
+
+`prototype.html` is the same thing as a single self-contained file for publishing as a web page.
+Its sidebar links are `#home`, `#services`, `#search` and `#requests`.
+
+To regenerate `prototype.html` after editing any of the four screens, re-run the small generator
+script (it lives outside the repo, in the scratchpad, and is intentionally not committed). It
+inlines `usarr.css` and `usarr.js`, splices the four `<main>` blocks between their
+`<!-- PAGE:name START/END -->` markers, and rewrites the four filenames into hash routes.
+
+## The design system, briefly
+
+**Colour.** The chrome is achromatic. There is no brand accent hue. The neutral ramp is warm grey,
+never pure white and never pure black. Selection is a filled neutral step; focus is a 2px
+max-contrast ring on `:focus-visible`; links are underlined rather than coloured. The only
+saturated colour in the whole interface is status semantics (ok green, warning amber, error red,
+and neutral grey for not-configured, which is a legitimate status and not a failure) and the two
+protocol chips. Every status is an icon, a word and a colour together, so nothing depends on colour
+alone and no colour-impaired mode is needed later.
+
+Protocol chips take their *hue* from the ecosystem's own values, `#00853d` for torrent and
+`#17b1d9` for usenet, taken from Sonarr's `Styles/Themes/dark.js`, so a self-hoster reads them
+without a legend. Those two literals are tuned for a dark ground and fail 4.5:1 on a light one
+(`#00853d` measures 3.50:1 on a selected row, `#17b1d9` measures 2.40:1 on the page ground), so
+the hue is kept and the lightness is retuned per theme: `#0a6b34` / `#0f6479` in light and
+`#4fb377` / `#4ec3e0` in dark. These are the values in `docs/design/tokens.css`, which owns them.
+Nothing else in the stylesheet uses them. They render as a small bordered swatch beside the word
+`torrent` or `usenet`, so the colour is redundant to the label rather than load-bearing.
+
+**Measured contrast**, computed against the shipped token values with a WCAG relative-luminance
+check in both themes. Floors held: primary text ≥ 12:1, muted metadata ≥ 5.5:1, borders and focus
+ring ≥ 3.2:1, status text ≥ 4.5:1, protocol chips ≥ 4.5:1. Protocol chips are measured against
+all four grounds they can land on — page, surface, hovered row and selected row — and the figure
+below is the worst of the four.
+
+| Pair | Light | Dark |
+| --- | --- | --- |
+| Primary text on page background | 16.66:1 | 15.23:1 |
+| Primary text on a selected row | 12.92:1 | 12.29:1 |
+| Muted metadata on page background | 6.60:1 | 7.21:1 |
+| Muted metadata on a hovered row | 5.78:1 | 6.12:1 |
+| Placeholder / disabled label | 4.87:1 | 5.47:1 |
+| Control border on a surface | 3.49:1 | 3.68:1 |
+| Focus ring on a selected row | 13.79:1 | 13.54:1 |
+| Status ok | 6.78:1 | 7.81:1 |
+| Status warning | 6.58:1 | 8.43:1 |
+| Status error | 7.48:1 | 6.73:1 |
+| Protocol torrent, worst ground | 4.89:1 | 5.64:1 |
+| Protocol usenet, worst ground | 4.96:1 | 7.16:1 |
+
+Both themes ship via `prefers-color-scheme` and a `data-theme` override, and the top-bar toggle
+wins in both directions. The choice persists in `localStorage`.
+
+**Type.** IBM Plex Sans for the interface, IBM Plex Mono for machine data only: paths, indexer
+names, byte sizes, quality strings, release names, error text, log lines. Both are referenced
+through a `font-family` stack that falls back to the system UI stack. **No webfont is loaded and no
+Google Fonts link exists**, because a font CDN is a privacy leak in self-hosted software. If Plex
+is not installed on the viewing machine the system stack renders instead, and that is the correct
+and expected result: the design does not depend on the specific face, only on the metrics band it
+sits in. Six type steps exist, 11/12/13/14/16/20, with 24 permitted in an empty state only. Below
+16px, hierarchy comes from weight and neutral step rather than size. Every columnar number carries
+`font-variant-numeric: tabular-nums`; prose does not. Copy is sentence case throughout.
+
+**Space and geometry.** 4px base unit, scale 2/4/6/8/12/16/24/32/48. Rows use `min-height`, never
+`height`, so a user forcing WCAG 1.4.12 text spacing does not clip anything. Radius is 0 on rows
+and tables, 2px on inputs and buttons, 4px on the dialog and toasts, and never more. Shadows exist
+only on the dialog and toasts, and they are neutral. There is no `backdrop-filter` anywhere.
+Tables and rows are the default container; a card appears only where cover art is the item's
+primary content, which is the poster strips on home and in the posters view mode. Layout is
+full-width, not a centred column.
+
+At 1440x900 in the default compact density, the Movies section on home shows roughly ten poster
+cards and fifteen table rows above the fold, plus the next section's heading.
+
+**Motion.** Zero on the critical path: navigation, list render, filter, sort, tab switch and row
+expansion have no transition at all. Hover and focus are 80ms, the dialog and toasts 150ms, and the
+ceiling is 200ms. Hover changes colour, never geometry. A `prefers-reduced-motion` block collapses
+every duration to 1ms by redefining the tokens the transitions read, so there is no override to
+maintain.
+
+**Loading.** There are no skeleton screens. Poster placeholders are a `dominant_color` fill with
+the title and year set over it, inside an `aspect-ratio` box so nothing shifts. The only
+remote-wait indicator is the indexer fan-out counter on the requests screen, and it is scoped to
+that one strip with real counts rather than a fake bar.
+
+**Icons.** Fifteen inline SVG glyphs in a sprite, hand-drawn from the Tabler shapes, `currentColor`,
+consistent stroke width. They appear in exactly three places: constrained row and toolbar actions,
+media-type category markers, and status glyphs. Where a word alone would be understood there is no
+icon, which is why nothing in the sidebar has one.
+
+**Keyboard.** `:focus-visible` rings everywhere, never removed. Each table and poster strip is one
+tab stop with a roving `tabindex`; arrow keys, Home and End move within it. `/` focuses the top-bar
+search box, as the visible hint says.
+
+**Responsive.** One layout, degraded. Below 900px the sidebar collapses behind the toggle. Below
+760px the wide tables become stacked lists with their column names as inline labels, using the same
+markup and the same data. There is no separate mobile design.
+
+## Constraints inherited from ARCHITECTURE.md §17
+
+These are not fresh decisions taken here. They are §17.1 and §17.7 applied, and where the brief for
+this mockup differed, §17 won:
+
+- **Native controls** (§17.1). Every select is a native `<select>`, including the multiselects on
+  the requests screen and the density control. There is no bespoke dropdown.
+- **Real links** (§17.1). Navigation is `<a href>`, middle-clickable, not a click handler on a div.
+- **No animation on any list, grid or navigation transition** (§17.1).
+- **Compact is the default density**, not the middle option (§17.1: "The grid is compact by
+  default, with a size control for people who want otherwise"). The control offers compact,
+  default and relaxed, and starts on compact.
+- **No skeleton shimmer** (§17.1); the placeholder is a `dominant_color` block with the title in it.
+- **A degraded backend gets a small non-modal banner and the catalogue never greys out** (§17.7).
+  The stale state on home and search keeps every row live and interactive behind the banner.
+- **Every screen works in a phone browser through responsive layout, not a separate mobile
+  design** (§17.1).
+- **Availability renders exactly as §6.3 defines it**: a tick when `have == total && total > 0`, a
+  cross when `have == 0`, and the fraction otherwise.
+- **A command failure is an inline chip plus a message carrying the upstream error verbatim, with
+  Retry and Dismiss, and never a silent revert** (§17.7).
+
+## The states switcher
+
+Every screen carries a small control marked `mockup` that switches it between the states the design
+has to cover: populated, empty, filtered-empty (with a message different from plain-empty), partial,
+stale, error with verbatim upstream text, unconfigured, and permission-denied where it applies.
+**That control is not part of the product.** It exists because the non-happy paths are the thing
+worth reviewing, and a mockup that only draws the happy path is not showing you the hard part.
+
+On the requests screen the grab button is live. Grabbing any row writes a `pending` chip. Grabbing
+the 26-day-old HDBits release is wired to fail, so the failure path — a status change on the same
+visible row plus a message carrying the upstream text verbatim — is reachable without editing
+anything.
+
+## What is deliberately not shown
+
+Everything here is v0.1 scope only, per `docs/ARCHITECTURE.md` §16, which is authoritative. Absent
+on purpose:
+
+| Not shown | Ships in |
+| --- | --- |
+| Music, books, comics, audiobooks, and every service that supplies them (Lidarr, Navidrome, Audiobookshelf, Komga, Kavita, Jellyfin) | v1.0 |
+| The "Not in your library" unowned search section, and one search box over owned and unowned | v0.2 |
+| The *Arr-backed Add flow and its `pending -> approved -> routed -> available` states | v0.2 |
+| The request model, routing rules, approval workflow, quotas, per-season TV | v0.2 |
+| Release search reached by progressive disclosure from a catalogue item | v0.2 |
+| Cross-media links ("Based on the novella by...") and grouped result cards | v0.3 |
+| The OpenSubsonic surface, stable northbound IDs | v0.4 |
+| OPDS, multi-user, roles, permission strings, the full tag system, saved filters | v1.0 |
+
+Also absent, and permanently: any in-app player, any transcoding path, any FFmpeg dependency.
+
+Two screens §17 names are outside this mockup's four-screen scope and are not drawn: **item detail**
+(§17.6) and the **first-run wizard** as its own blocking screen (§17.7). The wizard's three fields
+and its mandatory connection test do appear, in the Add service dialog on the services screen.
+
+Because v0.1 is single-user, the approval queue and all user-management surfaces are hidden
+entirely rather than shown disabled.
