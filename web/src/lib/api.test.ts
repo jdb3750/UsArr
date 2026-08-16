@@ -4,6 +4,7 @@ import {
 	normalizeStreamEvent,
 	problemsFrom,
 	toIndexerOutcome,
+	toRecentGrab,
 	toRelease,
 	toReport,
 	type StreamEvent
@@ -319,5 +320,55 @@ describe('protocolClass', () => {
 		expect(protocolClass('torrent')).toBe('protocol-torrent');
 		expect(protocolClass('usenet')).toBe('protocol-usenet');
 		expect(protocolClass('carrier-pigeon')).toBe('');
+	});
+});
+
+/**
+ * ⚠️ `RecentGrab.id` IS AN OPAQUE ROW KEY, AND THE TWO WIRE FORMS ARE BOTH
+ * PINNED HERE ON PURPOSE.
+ *
+ * The field used to be the numeric row id, and that leaked: the id is globally
+ * monotonic across users, so somebody seeing 104 and then 341 on two of their
+ * OWN grabs learns 236 rows were written by other people in between — a volume
+ * oracle that survives the scope filter. The server is replacing it with a
+ * keyed hash under the same field name, and is holding that change until a
+ * client that treats the id as opaque is shipping.
+ *
+ * So this client accepts either form and normalises to a string. BOTH are
+ * asserted rather than one: dropping the number case the day the hash lands
+ * would silently break every client that had not updated yet, and a test that
+ * pins only the NEW shape cannot catch a regression to numeric handling.
+ */
+describe('toRecentGrab', () => {
+	const base = { release_title: 'Some.Release.2024', outcome: 'sent' };
+
+	it('normalises today’s numeric id to a string', () => {
+		expect(toRecentGrab({ ...base, id: 104 })?.id).toBe('104');
+	});
+
+	it('carries an opaque non-numeric id through unchanged, and it keys a row', () => {
+		// The keyed hash. Nothing may parse it, order it, or read a length off it
+		// — it is only ever compared for equality as a row key.
+		const opaque = 'g_7Yb3Qx-9vKmA0zN';
+		const grab = toRecentGrab({ ...base, id: opaque });
+		expect(grab?.id).toBe(opaque);
+		// The same value round-trips as the identity a keyed {#each} and the list
+		// primitive's `data-key` compare against.
+		expect(new Map([[grab!.id, grab]]).get(opaque)?.releaseTitle).toBe('Some.Release.2024');
+	});
+
+	it('still rejects a row with no usable id, and one with no title', () => {
+		// Without an id there is nothing to key a row on, and without a title
+		// there is nothing to recognise the grab by — which is the block's job.
+		expect(toRecentGrab({ ...base })).toBeUndefined();
+		expect(toRecentGrab({ ...base, id: '' })).toBeUndefined();
+		expect(toRecentGrab({ ...base, id: null })).toBeUndefined();
+		expect(toRecentGrab({ id: 'g_1' })).toBeUndefined();
+	});
+
+	it('does not promote a missing outcome to the confirmed wording', () => {
+		// $lib/requests renders an unrecognised value as "sent, state not
+		// recognised", which is true of every provenance row.
+		expect(toRecentGrab({ id: 'g_1', release_title: 'x' })?.outcome).toBe('');
 	});
 });

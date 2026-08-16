@@ -1301,7 +1301,23 @@ export async function grabRelease(candidateId: number): Promise<GrabResult> {
  * where a private tracker's passkey lives.
  */
 export interface RecentGrab {
-	id: number;
+	/**
+	 * ⚠️ AN OPAQUE ROW KEY. A STRING, AND NOTHING MAY READ MEANING INTO IT.
+	 *
+	 * It used to be the numeric row id, and that leaked: the id is globally
+	 * monotonic across users, so somebody seeing 104 and then 341 on two of their
+	 * OWN grabs learns that 236 rows were written by other people in between. A
+	 * volume oracle that SURVIVES THE SCOPE FILTER, because the filter decides
+	 * which rows come back and not what their ids reveal about the ones that did
+	 * not. The server is replacing it with a keyed hash under the same field name.
+	 *
+	 * So it keys a row and it does nothing else. Never sort on it, never compare
+	 * it numerically, never do arithmetic with it, never infer anything from its
+	 * shape or its length — an id that looks numeric today is not a promise. The
+	 * rows arrive newest first and that ordering is the SERVER'S; this field is
+	 * not a proxy for it.
+	 */
+	id: string;
 	releaseTitle: string;
 	protocol?: string;
 	indexerName?: string;
@@ -1320,9 +1336,27 @@ export interface RecentGrab {
 	outcome: string;
 }
 
+/**
+ * The row key off the wire, normalised to a string.
+ *
+ * BOTH WIRE FORMS ARE ACCEPTED, and that is a migration order rather than
+ * tolerance for a second spelling. Today's server sends a number; the change
+ * that removes the volume oracle sends an opaque string, and it is being held
+ * until a client that treats the field as opaque is already shipping. Accepting
+ * both is what lets the two land in either order without a broken screen in
+ * between. Neither form is read for anything but identity — see RecentGrab.id.
+ *
+ * A row with no usable id is still rejected: there is nothing to key it on.
+ */
+function rowKey(value: unknown): string | undefined {
+	if (typeof value === 'string') return value.length > 0 ? value : undefined;
+	if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+	return undefined;
+}
+
 export function toRecentGrab(value: unknown): RecentGrab | undefined {
 	if (!isRecord(value)) return undefined;
-	const id = num(value.id);
+	const id = rowKey(value.id);
 	const releaseTitle = str(value.release_title);
 	// Without an id there is nothing to key a row on, and without a title there
 	// is nothing to recognise the grab by — which is the block's entire job.
