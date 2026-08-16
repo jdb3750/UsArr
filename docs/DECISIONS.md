@@ -2200,10 +2200,29 @@ wherever they appear, exactly as the original extrapolation was.
 **The CSS fact is right; its application to the shipped row is not.** Measured on the shipped
 primitive, **the row's computed padding is `0`** — padding lives on the *cell*
 (`.tbl td { padding: var(--row-pad-y) var(--row-pad-x) }`), while `.tbl tbody tr` declares only
-`min-height: var(--row-h)` and a 1 px `border-bottom`. So **a one-line row's content box is
-`--row-h`**, not `--row-h` plus padding plus border: the cell padding sits *inside* the row's content
-box rather than outside it. The 37 px figure came from a probe that put the padding on the row, and
-it does not describe what shipped.
+`min-height: var(--row-h)` and a 1 px `border-bottom`. So a one-line row's content box is **not**
+`--row-h` plus padding plus border: the cell padding sits *inside* the row's content box rather than
+outside it. The 37 px figure came from a probe that put the padding on the row, and it does not
+describe what shipped.
+
+⚠️ **This paragraph used to end "a one-line row's content box is `--row-h`", and that sentence is
+withdrawn as written — it was already false when it was written.** It holds for the **`two-line`
+fork before the frontend thread's `.stacksep` margin fix** and for nothing else. Measured, with
+every figure carrying its box:
+
+| Fork | content box | border box |
+|---|---|---|
+| `two-line`, **before** the `.stacksep` fix | **28 / 32 / 36** | 29 / 33 / 37 |
+| `two-line`, **after** it | 27 / 31 / 35 (natural; the floor now binds) | **28 / 32 / 36** |
+| `labels` (never emitted a `.stacksep`) | 27 / 31 / 35 | **28 / 32 / 36** |
+
+`--row-h` is **28 / 32 / 36**, so the equality held on exactly one fork at one moment. 🚩 **Note the
+shape of the hazard rather than only the correction: "28 / 32 / 36" is true on both sides of that
+merge — as the content box before and the border box after — so nothing about the digits looks stale
+and a reader who checks them against a fresh measurement gets a match either way.** Every row height
+in this ADR now names its box for that reason. The `labels` row above is **reported, not settled**:
+`DESIGN-DIRECTION.md` §7.4 carries a competing 26 / 30 / 34 for that fork and the two are not
+reconciled.
 
 ⚠️ **One clause above is right about the value and wrong about the cause, and the cause is what gets
 reused.** "A one-line row's content box is `--row-h`" reads as *the floor sets it*. It does not.
