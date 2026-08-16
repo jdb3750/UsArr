@@ -1300,12 +1300,40 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
    nothing and are measurable.
 
    display:block because these are spans in a block card; without it the title
-   and year would run together on one line. Titles wrap rather than being
-   clamped: a poster title is an identity field, §9.1 wants ellipsis-plus-title
-   on those rather than silent truncation, and a line clamp is silent. The cost
-   is that cards in a row can differ in height -- .grid already sets
-   align-items: start, so they hang from the row top, which is what Jellyfin
-   and Navidrome both do. */
+   and year would run together on one line.
+
+   THE TITLE IS ONE LINE, ELLIPSISED, WITH THE FULL STRING IN `title`, which is
+   §9.1's tier-1 rule for an identity field applied here at last. The move below
+   the art made card height a function of title length, and a row of cards then
+   ended ragged: measured at 1440 px on the merged tree, Home's poster grid had
+   three cards whose title took two lines, each 16 px taller than its 2:3
+   neighbours -- so the fix restores level rows rather than adding a style.
+
+   The `overflow: hidden; white-space: nowrap; text-overflow: ellipsis` triple
+   is the whole mechanism, and it is deliberately not `-webkit-line-clamp`: the
+   ellipsis is what makes the truncation visible, and §9.1 bans SILENT
+   truncation rather than truncation. `title` is what makes it recoverable.
+
+   THE TOOLTIP IS THE NATIVE `title` ATTRIBUTE, SET UNCONDITIONALLY -- on the
+   title span and on the art, so hovering either answers. Unconditionally is the
+   load-bearing word: the obvious alternative is to measure each card and attach
+   a tooltip only where the text actually overflows, and that is a layout read
+   per card on the render path, which is the synchronous work CLAUDE.md's first
+   principle rules out. A redundant tooltip on a short title costs one attribute
+   in the DOM; a per-card measurement costs a forced reflow on every paint of
+   every grid. The native attribute also needs no JavaScript at all, which is
+   the tried-and-true half of the answer.
+
+   Cards in a row still differ in height where the ASPECT differs -- 2:3 beside
+   1:1 is 56 px, and that is §9.2's rule that aspect comes from the item's own
+   art rather than from its media type, not raggedness. .grid keeps
+   align-items: start so those hang from the row top, as Jellyfin and Navidrome
+   both do.
+
+   The year does NOT get the same treatment, and that is measured rather than
+   assumed: over all 42 poster cards on Home and Search, in both installs, zero
+   year lines wrap and zero overflow their box. A four-digit year cannot fill a
+   154 px track, so the declarations would be inert. */
 .card__t {
   display: block;
   padding-top: var(--sp-3);
@@ -1313,6 +1341,9 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
   line-height: var(--lh-sm);
   font-weight: 600;
   color: var(--fg);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .card__y {
   display: block;
