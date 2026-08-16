@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// The three derived keys must differ. Sharing one secret between the vault KEK
+// The derived keys must all differ. Sharing one secret between the vault KEK
 // and the URL-signing key would mean rotating the vault silently invalidated
 // every outstanding stream URL — the exact failure the distinct info labels in
 // docs/reference/security.md §1.3 exist to prevent.
@@ -27,13 +27,25 @@ func TestDerivedKeysAreDistinct(t *testing.T) {
 		t.Fatalf("DeriveClientCredentialKey: %v", err)
 	}
 
-	for _, k := range [][]byte{kek, stream, client} {
+	grabRow, err := DeriveGrabRowIDKey(secret, salt)
+	if err != nil {
+		t.Fatalf("DeriveGrabRowIDKey: %v", err)
+	}
+
+	named := map[string][]byte{
+		"kek": kek, "stream": stream, "client": client, "grab-row-id": grabRow,
+	}
+	for name, k := range named {
 		if len(k) != DerivedKeyLen {
-			t.Fatalf("derived key length = %d, want %d", len(k), DerivedKeyLen)
+			t.Fatalf("derived key %s length = %d, want %d", name, len(k), DerivedKeyLen)
 		}
 	}
-	if bytes.Equal(kek, stream) || bytes.Equal(kek, client) || bytes.Equal(stream, client) {
-		t.Fatal("derived keys collide; the info labels are not separating them")
+	for a, ka := range named {
+		for b, kb := range named {
+			if a < b && bytes.Equal(ka, kb) {
+				t.Fatalf("derived keys %s and %s collide; the info labels are not separating them", a, b)
+			}
+		}
 	}
 }
 

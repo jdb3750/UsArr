@@ -35,6 +35,17 @@ type Config struct {
 	// plaintext key.
 	Keyring *crypto.Keyring
 
+	// GrabRowIDKey is crypto.DeriveGrabRowIDKey's output: the HMAC key behind
+	// the opaque row identity the Recent-grabs read publishes instead of the
+	// raw provenance rowid. Required, and required for the same reason the
+	// Keyring is — the fallback for a missing key would be shipping the rowid,
+	// which is the leak the key exists to close (review finding RG-01.3).
+	//
+	// It must be the SAME bytes across restarts, which it is because it is
+	// derived from the master key and the KEK salt: a random per-process key
+	// would give a client a different id for the same row on every poll.
+	GrabRowIDKey []byte
+
 	// SchemaVersion is the migration version applied at startup. Readiness is
 	// "migrations applied and the listener accepting", and this is the first
 	// half — recorded once, not re-queried, because ready must touch nothing.
@@ -90,6 +101,10 @@ func New(cfg Config) (*Server, error) {
 	}
 	if cfg.Keyring == nil {
 		return nil, fmt.Errorf("httpapi: Keyring is required")
+	}
+	if len(cfg.GrabRowIDKey) != crypto.DerivedKeyLen {
+		return nil, fmt.Errorf("httpapi: GrabRowIDKey is %d bytes, want %d",
+			len(cfg.GrabRowIDKey), crypto.DerivedKeyLen)
 	}
 	if cfg.URLBase != "" {
 		if !strings.HasPrefix(cfg.URLBase, "/") || strings.HasSuffix(cfg.URLBase, "/") {

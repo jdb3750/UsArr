@@ -1,6 +1,10 @@
 package httpapi
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -20,11 +24,18 @@ import (
 //   - A grab that NEVER LEFT THIS PROCESS. provenance is written only after the
 //     request was dispatched, so a refused SSRF target, an open circuit breaker,
 //     a rejected API key, a Prowlarr 400/409 and a corrupt stored blob leave no
-//     row here at all. audit_log is not a substitute today: ListAuditLog takes
-//     no scope and no filters, seven pre-dispatch paths in grab.go write no
-//     audit row, and the metadata that is written carries no release title. So
-//     §17.5's third state — "genuinely failed, nothing was sent" — is ABSENT
-//     from this surface rather than mis-rendered by it.
+//     row here at all. audit_log CAN now answer for those, and the missing
+//     piece is no longer the data: store.ListAuditLog takes a Scope and applies
+//     it in the SQL, store.AuditQuery narrows by action and result (which is
+//     exactly `action='release.grab' AND result='fail'`), auditNotSent covers
+//     every pre-dispatch return in grab.go that has a candidate id to name, and
+//     grabAuditMeta carries ReleaseTitle, Indexer, Protocol and Message — so the
+//     not-sent arm has both its query and the fields it must render. What is
+//     absent is the READ: nothing on this endpoint touches audit_log, so
+//     §17.5's third state — "genuinely failed, nothing was sent" — is MISSING
+//     from this surface rather than mis-rendered by it. The two returns that
+//     still write no audit row are the ones before a candidate id exists (a
+//     malformed path id, an undecodable body), and neither describes a grab.
 //   - WHICH Prowlarr. provenance has no service_instance_id; source_system is
 //     the system name ("prowlarr"), not an instance. With one indexer instance
 //     in v0.1 those coincide; with two they do not.
@@ -43,7 +54,21 @@ import (
 // also deliberately absent — the block does not render it, and an indexer URL is
 // where a private tracker's passkey lives.
 type recentGrabResponse struct {
-	ID int64 `json:"id"`
+	// ID is an OPAQUE, STABLE row key — never provenance.id.
+	//
+	// Review finding RG-01.3. provenance.id is INTEGER PRIMARY KEY, so it is a
+	// single monotonic sequence shared by every user. A caller who sees 104 and
+	// later 341 on two of their OWN grabs learns that 236 provenance rows were
+	// written in between, and under multi-user — which the schema is built for
+	// from migration 0001 — those rows are other people's. That is a volume and
+	// existence oracle, and it SURVIVES THE ACCESS SCOPE FILTER: the filter
+	// decides which rows come back, not what their ids say about the ones that
+	// did not. Principle 4 names this shape exactly.
+	//
+	// What replaces it is grabRowID's keyed hash. It is a string on the wire
+	// because it is not a number and nothing may treat it as one — the client
+	// keys rows with it for focus and hover and does nothing else with it.
+	ID string `json:"id"`
 
 	// ReleaseTitle is the raw scene/P2P name, verbatim. It is the identifying
 	// string for a grab and it is the reason this read can answer "did that one
@@ -114,9 +139,59 @@ const (
 	wireOutcomeStateUnknown = "unknown"
 )
 
-func toRecentGrabResponse(p store.Provenance) recentGrabResponse {
+// grabRowIDBytes is how much of the HMAC ships. 128 bits is far past any
+// collision or guessing concern for a per-install row key, and truncating a
+// SHA-256 HMAC is the standard construction (RFC 2104 §5). The value is 22
+// base64url characters, which stays copy-safe and short enough to sit in a DOM
+// attribute without comment.
+const grabRowIDBytes = 16
+
+// grabRowID renders a provenance row's identity for the wire.
+//
+// TWO PROPERTIES, and every choice here serves one of them.
+//
+// STABLE. The key comes from crypto.DeriveGrabRowIDKey over the master secret
+// and the KEK salt, so it is the same after a restart, and the input is the
+// row's immutable identity. A random per-response token would be simpler and
+// would break identity-keyed focus and hover on every poll.
+//
+// CARRYING NO ORDER OR VOLUME. HMAC-SHA256 output is indistinguishable from
+// random without the key, so adjacent rowids give unrelated ids: an attacker
+// holding two of their own learns nothing about what was written between them.
+// That is also why this is a keyed hash and not a per-user sequence — a
+// sequence would need a migration, and the schema is where this project's
+// expensive mistakes live.
+//
+// USER_ID IS IN THE INPUT, deliberately. It costs one field and buys per-user
+// domain separation: the same row seen by two users — the shared/system
+// sentinel 0 rows migration 0002 backfilled, or any future view that widens the
+// scope — hashes to two unrelated ids, so nobody can correlate across users by
+// comparing tokens. Nothing joins on this value, so there is no cost to it
+// differing per user. provenance.user_id is historical and never rewritten, so
+// stability holds.
+//
+// Both inputs are fixed-width big-endian rather than text, so there is no
+// separator to get wrong: (user 1, row 23) and (user 12, row 3) cannot render
+// the same 16 bytes.
+func grabRowID(key []byte, userID, rowID int64) string {
+	mac := hmac.New(sha256.New, key)
+	var buf [8]byte
+	// #nosec G115 -- int64 -> uint64 here is a bit reinterpretation into an
+	// HMAC input, not an arithmetic conversion. Every int64 maps to a distinct
+	// uint64, which is the only property this needs: nothing reads the value
+	// back, and a negative id (impossible for a rowid) would still hash
+	// injectively rather than wrap into another row's identity.
+	binary.BigEndian.PutUint64(buf[:], uint64(userID))
+	mac.Write(buf[:])
+	// #nosec G115 -- see above.
+	binary.BigEndian.PutUint64(buf[:], uint64(rowID))
+	mac.Write(buf[:])
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)[:grabRowIDBytes])
+}
+
+func (s *Server) toRecentGrabResponse(p store.Provenance) recentGrabResponse {
 	out := recentGrabResponse{
-		ID:               p.ID,
+		ID:               grabRowID(s.cfg.GrabRowIDKey, p.UserID, p.ID),
 		ReleaseTitle:     p.ReleaseTitle,
 		Protocol:         p.Protocol,
 		IndexerName:      p.IndexerName,
@@ -205,7 +280,7 @@ func (s *Server) handleRecentGrabs(w http.ResponseWriter, r *http.Request) error
 
 	out := make([]recentGrabResponse, 0, len(rows))
 	for _, p := range rows {
-		out = append(out, toRecentGrabResponse(p))
+		out = append(out, s.toRecentGrabResponse(p))
 	}
 	writeJSON(w, http.StatusOK, recentGrabsResponse{Grabs: out, Limit: effective})
 	return nil
