@@ -882,13 +882,23 @@ The retune fixed the contrast and left the real problem. The torrent value is **
 swatch and *worse* in the theme that otherwise works better. A column of green dots on Requests,
 read by someone who has just come from a Home screen where green means "nothing missing", says
 torrents are healthy and usenet is something else. Retuning lightness cannot fix a hue collision,
-and `DESIGN-DIRECTION.md` §1.1 bans the obvious escape (indigo, violet, purple). So the swatch is
-**achromatic** — a 1px `--border-hi` boundary with nothing inside it — and the words `torrent` and
-`usenet` carry the distinction, which they already did in the same cell. `--proto-torrent` and
-`--proto-usenet` are gone from this file and from `docs/design/tokens.css`, which owns them;
-`DESIGN-DIRECTION.md` §3.3 records the reasoning and keeps the upstream hexes as the ecosystem
-reference they came from. Reversible in one rule. Flagged to Joe as a change of *visible
-character*, not a defect fix (`REVIEW-LOG.md` V-10).
+and `DESIGN-DIRECTION.md` §1.1 bans the obvious escape (indigo, violet, purple). So the fill went
+and the words `torrent` and `usenet` carry the distinction, which they already did in the same cell.
+`--proto-torrent` and `--proto-usenet` are gone from this file and from `docs/design/tokens.css`,
+which owns them; `DESIGN-DIRECTION.md` §3.3 records the reasoning and keeps the upstream hexes as
+the ecosystem reference they came from. Flagged to Joe as a change of *visible character*, not a
+defect fix (`REVIEW-LOG.md` V-10).
+
+⚠️ **And then the swatch itself went, which is the second half and was a separate mistake.** Taking
+the fill out left an 8px `--border-hi` outline that is *identical on both protocols* — eighteen
+copies of one mark down a column, distinguishing nothing beside a word that already says it. That is
+`DESIGN-DIRECTION.md` §1.4's own test (*if a label sits next to it and the label alone would be
+understood, delete the decoration*) failing on the **leftover** rather than on the fill, which the
+withdrawal note had applied and then stopped one element short of. `.proto__dot` and its eighteen
+spans in `requests.html` are deleted; `.proto` keeps only `white-space: nowrap`, and the
+`.proto--torrent` / `.proto--usenet` modifiers stay as the filter hook. Restoring the ecosystem's
+colour cue now means restoring a **dot and** a hue, not a fill — so it is no longer "reversible in
+one rule", and §3.3 says that rather than repeating the promise.
 
 **Measured contrast**, computed against the shipped token values with a WCAG relative-luminance
 check in both themes. **Every figure below is the worst of the five grounds a foreground can land
@@ -896,8 +906,9 @@ on** — page, surface, hovered row, selected row and input interior — not the
 token values are unchanged from the reviewed set; the six-type work added no new colour.
 
 Floors held on every ground: primary text ≥ 12:1, muted metadata ≥ 5.5:1, placeholder ≥ 4.5:1,
-control borders and focus ring ≥ 3.2:1, status text ≥ 4.5:1. The protocol swatch is no longer a
-foreground colour at all; its 1px boundary is `--border-hi`, the control-border row below.
+control borders and focus ring ≥ 3.2:1, status text ≥ 4.5:1. The protocol swatch is not in the table
+because it is not in the interface: it has no colour and no longer any box, so there is no ratio to
+measure. The `torrent` / `usenet` words are ordinary primary text, the top row.
 
 | Foreground | Light, worst ground | Dark, worst ground |
 | --- | --- | --- |

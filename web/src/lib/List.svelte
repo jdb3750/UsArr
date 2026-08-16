@@ -141,6 +141,26 @@
 		rowExtra?: Snippet<[T]>;
 		/** Whether `rowExtra` renders for this row. Ignored without `rowExtra`. */
 		expanded?: (row: T) => boolean;
+		/**
+		 * THE SORT, ON THE COLUMN HEADERS.
+		 *
+		 * `sortKey` is the id of the column currently sorted, `sortDir` its
+		 * direction, and `onsort` is handed a column id when its header is
+		 * activated. The primitive decides NOTHING about what that means: the
+		 * comparator, the direction toggle, the URL and — on a list that carries
+		 * an irreversible action — ADR-0038's freeze rule all stay with the
+		 * screen. This renders the affordance and reports the press.
+		 *
+		 * ALL THREE ARE OPTIONAL AND OMITTING THEM IS THE OLD BEHAVIOUR. A list
+		 * that passes none, and columns that do not set `sortable`, render the
+		 * same plain `<th>` text they always did. `aria-sort` is emitted ONLY on
+		 * columns that declared `sortable`, because the attribute marks a column
+		 * the user can sort — putting `none` on a column that can never be sorted
+		 * announces an affordance that is not there.
+		 */
+		sortKey?: string;
+		sortDir?: 'asc' | 'desc';
+		onsort?: (columnId: string) => void;
 	}
 
 	let {
@@ -170,8 +190,33 @@
 		onactivate,
 		class: extraClass = '',
 		rowExtra,
-		expanded
+		expanded,
+		sortKey,
+		sortDir,
+		onsort
 	}: Props = $props();
+
+	/** A column is a sort control only if it asked to be AND there is something
+	 * to call. A button that does nothing is worse than a plain header. */
+	function sortsOn(column: ListColumn): boolean {
+		return column.sortable === true && onsort !== undefined;
+	}
+
+	/**
+	 * `aria-sort` for one header. ARIA spells the directions out — `asc` is not a
+	 * value it accepts — and at most one column may carry anything other than
+	 * `none`, which falls out of `sortKey` being a single id.
+	 *
+	 * `$lib/sortspec` exports the same function over a `SortSpec`; this one takes
+	 * the two props apart because the primitive deliberately does not import the
+	 * sort module. The two agree by having one rule each rather than by sharing a
+	 * type the primitive would then be coupled to.
+	 */
+	function ariaSortFor(column: ListColumn): 'ascending' | 'descending' | 'none' | undefined {
+		if (!sortsOn(column)) return undefined;
+		if (column.id !== sortKey) return 'none';
+		return sortDir === 'desc' ? 'descending' : 'ascending';
+	}
 
 	let tableEl = $state<HTMLTableElement | null>(null);
 
@@ -358,9 +403,41 @@
 							role="columnheader"
 							scope="col"
 							aria-colindex={c + 1}
+							aria-sort={ariaSortFor(column)}
 							class:is-num={column.align === 'end'}
-							data-col={column.id}>{column.header}</th
+							data-col={column.id}
 						>
+							{#if sortsOn(column)}
+								<!--
+									A real <button> INSIDE the <th>, never a click handler on the
+									<th> itself: `columnheader` is not a focusable role, so a
+									handler on the cell is a control no keyboard can reach.
+
+									The direction glyph is aria-hidden because `aria-sort` on the
+									<th> carries the same fact to the accessibility tree already —
+									announcing both reads it twice.
+
+									NO TRANSITION HERE OR ON THE REORDER IT CAUSES.
+									DESIGN-DIRECTION §6 puts sort at 0 ms on the critical path and
+									§9.1a extends it to say a reorder is never animated anywhere,
+									because an animation widens the window in which the row under
+									the pointer is neither where it was nor where it is going.
+								-->
+								<button
+									type="button"
+									class="th__sort"
+									class:th__sort--on={column.id === sortKey}
+									onclick={() => onsort?.(column.id)}
+								>
+									<span class="th__sortlabel">{column.header}</span>
+									<span class="th__arrow" aria-hidden="true"
+										>{column.id !== sortKey ? '' : sortDir === 'desc' ? '▾' : '▴'}</span
+									>
+								</button>
+							{:else}
+								{column.header}
+							{/if}
+						</th>
 					{/each}
 				</tr>
 			</thead>

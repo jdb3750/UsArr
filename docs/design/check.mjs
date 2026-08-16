@@ -61,6 +61,47 @@
  * EVERY RENDERED SWEEP RUNS OVER BOTH INSTALLS. The mockups draw a full stack
  * (six populated media types) and the v0.1 install (Sonarr, Radarr, Prowlarr),
  * and half the layouts this file protects only exist on one of the two.
+ *
+ * THREE THINGS ANY GEOMETRY MEASUREMENT OVER THESE PAGES GETS WRONG FIRST TIME.
+ * All three were found the expensive way while verifying a change against a
+ * before/after render comparison, and every one of them produces a difference
+ * that reads exactly like a layout regression. They are written here rather
+ * than in a scratch file because the next person to add a measurement to this
+ * file will hit them in the same order.
+ *
+ *   1. THE WEBFONT IS A RACE. The five screen files LINK fonts.css, so text
+ *      metrics change when it lands. A fixed settle after goto() sometimes
+ *      measures pre-font metrics and sometimes post-, and the flip is not
+ *      deterministic across runs because it depends on how big the other files
+ *      are. Symptom: sub-pixel row-height drift concentrated in one long list,
+ *      with fractional y-offsets accumulating down the page. Fix:
+ *      `await page.evaluate(() => document.fonts.ready)` before measuring.
+ *
+ *   2. content-visibility: auto MAKES OFF-SCREEN ROWS REPORT A PLACEHOLDER.
+ *      A skipped row's getBoundingClientRect() returns its
+ *      contain-intrinsic-size, not its laid-out height, and WHICH rows are
+ *      skipped depends on render history rather than on layout. Symptom:
+ *      heights that look like real numbers with a suspiciously constant
+ *      fractional part (47.06, 3567.05, 64.05), differing between two trees
+ *      that lay out identically. Fix: force `content-visibility: visible` for
+ *      the duration of the measurement and compare the placeholder separately
+ *      as a computed value. This one is the dangerous one: it looks like a
+ *      regression in exactly the lists a list change would have touched.
+ *
+ *   3. getBoundingClientRect IS VIEWPORT-RELATIVE. Anything that scrolls the
+ *      page between two measurements -- a panel click, a hash assignment, a
+ *      focus() -- shifts every rect on the page uniformly. Symptom: a constant
+ *      offset (here, the 40px sticky topbar) applied to element 0 onward. Fix:
+ *      scrollTo(0, 0) before measuring.
+ *
+ * AND ONE THING THE MOCKUP STYLESHEET DOES ON PURPOSE, because it looks like a
+ * typo: every selector in usarr.css §2.13 names its class twice
+ * (`.u-mt-6.u-mt-6`). Those classes replaced inline style attributes, an inline
+ * declaration outranks every rule in the sheet, and a single-class replacement
+ * therefore loses to rules the inline used to beat -- `.tbl td > .stacklabel +
+ * *` at (0,2,0) and a media-query `.select` cap among them. Doubling restores
+ * exactly the precedence the attribute had. The reasoning is in §2.13; do not
+ * "fix" it here.
  * ============================================================================= */
 
 import { readFileSync, readdirSync } from 'node:fs';
@@ -737,7 +778,9 @@ head('1c. data-when and data-inst never write hidden on the same element');
  * NOT BANNED, and the distinction is the CSP's own: `el.style.setProperty(…)`
  * from usarr.js. CSP governs the style ATTRIBUTE in markup and the <style>
  * element; CSSOM mutation from script is not an inline style and is not
- * blocked. The poster grid's --dc / --dc-fg assignment is that, and it stays.
+ * blocked. The poster grid's --dc assignment is that, and it stays. (--dc-fg
+ * went with §9.7's move of the poster title off the fill; --dc remains,
+ * because it is still the image placeholder.)
  * This rule is therefore evaluated over the HTML sources only.
  * ========================================================================== */
 head('1d. CSP: no inline style attribute in the five screen files');

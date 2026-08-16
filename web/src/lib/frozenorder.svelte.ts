@@ -210,14 +210,43 @@ export function createFrozenOrder<T>(options: FrozenOrderOptions<T>): FrozenOrde
 			rows = [];
 		},
 		region(node: HTMLElement) {
+			/**
+			 * ⚠️ EVERY AIM FLAG IS WRITTEN ONE MICROTASK LATE, AND THAT IS A FIX
+			 * FOUND IN A BROWSER RATHER THAN A STYLE CHOICE.
+			 *
+			 * These are raw DOM listeners, and the events that matter here fire
+			 * SYNCHRONOUSLY OUT OF A DOM MUTATION: when an arriving row or a
+			 * re-sort moves the element under a RESTING pointer, the browser
+			 * dispatches pointerleave and pointerenter from inside Svelte's own
+			 * flush. Assigning `$state` at that moment is `state_unsafe_mutation`
+			 * — Svelte throws, the throw surfaces as an uncaught page error, and
+			 * THE ASSIGNMENT IS LOST. Which is the worst possible place to lose
+			 * one: the flag being written is the freeze, the condition that fails
+			 * is a row moving under a pointer, and the affordance under that
+			 * pointer is an irreversible grab.
+			 *
+			 * A microtask runs after the flush and before the next task, so the
+			 * flag is set well before any click can be dispatched against it — a
+			 * click is a separate task. Nothing about the rule changes; only the
+			 * instant of the write does. Reproduced and re-verified in Chromium
+			 * against the real CSP, not reasoned about.
+			 */
+			const defer = (write: () => void) => queueMicrotask(write);
+
 			const enter = () => {
-				pointerWithin = true;
+				defer(() => {
+					pointerWithin = true;
+				});
 			};
 			const leave = () => {
-				pointerWithin = false;
+				defer(() => {
+					pointerWithin = false;
+				});
 			};
 			const focusin = () => {
-				focusWithin = true;
+				defer(() => {
+					focusWithin = true;
+				});
 			};
 			// `relatedTarget` is where focus went. Inside the region it is a move
 			// between rows, not a departure; null is focus leaving the document
@@ -225,7 +254,9 @@ export function createFrozenOrder<T>(options: FrozenOrderOptions<T>): FrozenOrde
 			const focusout = (event: FocusEvent) => {
 				const next = event.relatedTarget;
 				if (next instanceof Node && node.contains(next)) return;
-				focusWithin = false;
+				defer(() => {
+					focusWithin = false;
+				});
 			};
 
 			// pointerenter/leave rather than mouseenter/leave: they cover pen and
@@ -245,8 +276,10 @@ export function createFrozenOrder<T>(options: FrozenOrderOptions<T>): FrozenOrde
 					node.removeEventListener('pointercancel', leave);
 					node.removeEventListener('focusin', focusin);
 					node.removeEventListener('focusout', focusout);
-					pointerWithin = false;
-					focusWithin = false;
+					defer(() => {
+						pointerWithin = false;
+						focusWithin = false;
+					});
 				}
 			};
 		}

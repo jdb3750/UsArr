@@ -511,7 +511,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
   font-weight: 600;
   border-left-color: var(--fg);
 }
-.nav__link--sub { padding-left: var(--sp-8); font-size: var(--fs-sm); }
 .nav__count {
   margin-left: auto;
   font-size: var(--fs-xs);
@@ -880,18 +879,20 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 .chip--failed  { color: var(--st-err);  border-color: currentColor; }
 .chip--done    { color: var(--st-ok);   border-color: currentColor; }
 
-/* Protocol swatch: achromatic, per the withdrawal note in 1. The 1px
-   --border-hi boundary carries the shape at >= 3.2:1 and there is no fill,
-   because a torrent green sitting one column from a status green is the one
-   collision this ramp cannot afford. The .proto--torrent / .proto--usenet
-   modifiers stay on the markup: they are the filter hook, and they are where a
-   single rule would go if the ecosystem's colour cue is ever restored. */
-.proto { display: inline-flex; align-items: center; gap: var(--sp-3); white-space: nowrap; }
-.proto__dot {
-  width: 8px; height: 8px; flex: none;
-  border: 1px solid var(--border-hi);
-  border-radius: var(--r-control);
-}
+/* Protocol: THERE IS NO SWATCH. The word is the whole of it.
+   The withdrawal in 1 took the FILL out of the protocol dot because a torrent
+   green sitting one column from a status green is the one collision this ramp
+   cannot afford. What it left behind was an 8px --border-hi outline that is
+   IDENTICAL on torrent and on usenet -- a mark repeated down the column that
+   distinguishes nothing, which is DESIGN-DIRECTION 1.4's own test ("if a label
+   sits next to it and the label alone would be understood, delete the
+   decoration") failing on the leftover rather than on the fill. So the dot is
+   gone from the markup too, and .proto__dot with it.
+   The .proto--torrent / .proto--usenet modifiers stay: they are the filter
+   hook, and they are still where a single rule would go if the ecosystem's
+   colour cue is ever restored -- which now means restoring a dot as well as a
+   hue, and DESIGN-DIRECTION 3.3 says so rather than promising one line. */
+.proto { white-space: nowrap; }
 
 /* Availability rollup, per ARCHITECTURE.md 6.3:
    have == total && total > 0 -> tick;  have == 0 -> cross;  else the fraction. */
@@ -899,7 +900,6 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 .avail--full { color: var(--st-ok); }
 .avail--none { color: var(--st-err); }
 .avail--part { color: var(--fg-muted); }
-.avail__q { color: var(--fg-muted); font-size: var(--fs-xs); }
 
 /* --- 2.5 Banners, callouts, empty states --------------------------------- */
 
@@ -1175,7 +1175,6 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 }
 .tbl .cell-sub { color: var(--fg-muted); font-size: var(--fs-sm); line-height: var(--lh-sm); }
 .tbl .cell-actions { display: flex; gap: var(--sp-3); align-items: center; }
-.tbl tr.is-expand > td { background: var(--surface); }
 
 /* Verbatim upstream text is machine data: mono, wrapped, never truncated. */
 .verbatim {
@@ -1203,10 +1202,25 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
    string, so the two cannot drift. */
 .stacklabel { display: none; }
 
-.synclist { display: flex; flex-direction: column; gap: var(--sp-1); font-size: var(--fs-sm); line-height: var(--lh-sm); }
-.synclist__row { display: flex; gap: var(--sp-3); }
-.synclist__ch { color: var(--fg-muted); min-width: 62px; }
-.synclist__t { font-variant-numeric: tabular-nums; }
+/* SEVEN RULES WERE DELETED HERE AND ABOVE, and this note is what stops the
+   next sweep rediscovering them. They styled markup that no longer exists, so
+   they had no call site anywhere in the five screens or in usarr.js:
+     .synclist / __row / __ch / __t  -- the per-service full/delta/reconcile
+       timestamp stack, whose markup came out of services.html at db24c1c and
+       whose four rules were left behind
+     .avail__q                       -- an availability "?" affordance that was
+       never in any screen, in any commit
+     .nav__link--sub                 -- sub-nav indentation, out of the markup
+       since db24c1c
+     .tbl tr.is-expand > td          -- an expanded-row ground for an expansion
+       the tables do not have
+   WHAT WAS DELIBERATELY NOT DELETED, on one rule: a RUNG OF A DECLARED SCALE
+   is not dead just because nothing reads it today -- the scale is stated in
+   full because it is a contract, and half a ramp is worse than an unused one.
+   That keeps --r-0, --t-instant and --t-menu-in (radius and motion scales),
+   .textarea in the .input/.select/.textarea primitive set, and
+   .nav__count--warn, whose --err sibling IS in the markup. The distinction is
+   component versus scale, not used versus unused. */
 
 .detail { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--sp-5) var(--sp-7); padding: var(--sp-2) 0 var(--sp-4); }
 .detail h4 { font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: 600; margin-bottom: var(--sp-3); color: var(--fg-muted); }
@@ -1233,40 +1247,71 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 }
 .card:hover { text-decoration: none; }
 .card:hover .card__art { border-color: var(--border-hi); }
-/* dominant_color fill with the title and year set over it. No image files,
-   no grey shimmer box. aspect-ratio reserves the space so nothing shifts. */
-/* Aspect is chosen from the item's own art, not from its media type: 2:3 for
+/* The image placeholder: a dominant_color fill, no image files, no grey
+   shimmer box. aspect-ratio reserves the space so nothing shifts when the real
+   cover arrives.
+
+   Aspect is chosen from the item's own art, not from its media type: 2:3 for
    film, series, book and comic covers; 1:1 for an album or an artist. That is
    Jellyfin's cardBuilder branching on primaryImageAspectRatio, which is why
    one card component serves every type. */
 .card--sq .card__art { aspect-ratio: 1 / 1; }
 .card__art {
+  /* display:block is load-bearing, not tidiness. .card__art is a <span>, and
+     aspect-ratio does not apply to an inline box -- the tile collapsed to
+     2x19px the moment the old `display: flex` came off with the text it used
+     to lay out. Caught by the render comparison, which is the whole reason
+     this change was measured rather than eyeballed. */
+  display: block;
   aspect-ratio: 2 / 3;
   background: var(--dc, var(--surface));
-  color: var(--dc-fg, var(--fg));
   border: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding: var(--sp-4);
 }
-/* dominant_color is the only colour in this design that is *data*: it is
-   averaged from cover art at import time, so no token system constrains it and
-   a mid-luminance fill lands both black and white near 3.5:1. The rule, applied
-   in usarr.js and enforced there rather than hoped for here:
+/* THE TITLE AND YEAR SIT BELOW THE TILE, ON THE CHROME'S OWN GROUND, and this
+   is §9.7's rule rather than a preference -- the mockup was simply the last
+   thing still doing it the old way.
 
-     1. compute the fill's relative luminance;
-     2. pick whichever of the two theme text tokens scores higher against it;
-     3. if the winner is still below 4.5:1, move the *fill* -- darken or lighten
-        --dc until it clears. The fill is decoration; the title is content.
+   They used to be set inside .card__art, over the fill, which is why usarr.js
+   carried a runtime WCAG solver: pick the better of the two theme text tokens
+   against the computed fill, then move the FILL until the pair cleared 4.5:1.
+   That machinery is deleted, and not because it was broken. It could not have
+   been made safe by improving it: it constrained against a SINGLE AVERAGED
+   colour, and real cover art is not one colour -- a white title over the light
+   half of a Blue Note sleeve, or over a manga cover with a white top-left
+   corner, fails whatever the average says. Navidrome, the reference point,
+   solves it by not attempting it, and so does every *Arr poster view.
 
-   There is deliberately no opacity on the year. opacity composites, so the
-   resulting ratio is not computable from the two tokens -- the shipped
-   `opacity: .85` cost about 0.45 and took the worst pair to 3.12:1 against a
-   4.5:1 floor. The year is separated from the title by size and weight, which
-   cost nothing and are measurable. */
-.card__t { font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: 600; }
-.card__y { font-size: var(--fs-xs); line-height: var(--lh-xs); font-variant-numeric: tabular-nums; font-weight: 400; }
+   On a known ground these are ordinary tokens, and the ratio stops being a
+   runtime computation nobody can check: --fg and --fg-muted are asserted at 12
+   and 5.5 against all five grounds in both themes by check.mjs section 3. The
+   deliberate absence of opacity survives the move and is now cheap to keep --
+   opacity composites, so a ratio taken from the two tokens would not be the
+   ratio that renders. The year is separated by size and weight, which cost
+   nothing and are measurable.
+
+   display:block because these are spans in a block card; without it the title
+   and year would run together on one line. Titles wrap rather than being
+   clamped: a poster title is an identity field, §9.1 wants ellipsis-plus-title
+   on those rather than silent truncation, and a line clamp is silent. The cost
+   is that cards in a row can differ in height -- .grid already sets
+   align-items: start, so they hang from the row top, which is what Jellyfin
+   and Navidrome both do. */
+.card__t {
+  display: block;
+  padding-top: var(--sp-3);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+  font-weight: 600;
+  color: var(--fg);
+}
+.card__y {
+  display: block;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+  color: var(--fg-muted);
+}
 .card__meta {
   display: flex;
   align-items: center;

@@ -59,6 +59,26 @@ export interface ListColumn {
 	 * fields, and everything else goes behind the row.
 	 */
 	stackLine?: 1 | 2 | 'hidden';
+	/**
+	 * WHETHER THIS COLUMN'S HEADER IS A SORT CONTROL.
+	 *
+	 * Default false, and that default is what keeps the primitive's other
+	 * consumers byte-identical: a column that does not opt in renders exactly the
+	 * plain-text `<th>` it always did — no button, no glyph, and no `aria-sort`.
+	 * The Services screen declares none and is unchanged by this field existing.
+	 *
+	 * Opting in also requires the list to be given `sortKey`, `sortDir` and
+	 * `onsort`; without a handler there is nothing to activate, so the header
+	 * stays plain rather than rendering a dead button. `$lib/sortspec` owns the
+	 * comparator, the direction toggle and the URL half — the primitive decides
+	 * nothing about what a sort MEANS, which is what lets ADR-0038's freeze rule
+	 * stay on the screen where the irreversible action is.
+	 *
+	 * DESIGN-DIRECTION §9.1a names "a column header, the toolbar's sort, or the
+	 * control in the next rule" as the three explicit sort controls, so this is a
+	 * specified affordance rather than an added one.
+	 */
+	sortable?: boolean;
 }
 
 /**

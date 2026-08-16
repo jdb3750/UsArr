@@ -4,11 +4,12 @@ import {
 	normalizeStreamEvent,
 	problemsFrom,
 	toIndexerOutcome,
+	toRecentGrab,
 	toRelease,
 	toReport,
 	type StreamEvent
 } from './api';
-import { formatAge, formatSize, protocolClass } from './format';
+import { formatAge, formatSize } from './format';
 import recorded from './__fixtures__/sse-frames.json';
 
 /**
@@ -171,8 +172,30 @@ describe('toRelease', () => {
 			ageDays: 0.5,
 			infoUrl: 'https://example.invalid/1?apikey=REDACTED',
 			expiresAt: '2026-08-16T12:30:00Z',
-			supersedesCandidateId: 4
+			supersedesCandidateId: 4,
+			// Arrays the caller iterates rather than null-checks, so an absent
+			// field normalises to an empty one. `indexerFlags` deliberately does
+			// NOT: absent and empty are different facts there — a usenet result was
+			// never asked for flags, a torrent reporting none was.
+			categories: [],
+			tags: []
 		});
+	});
+
+	it('reads the categories and the derived tags the Category column renders', () => {
+		// The column reads `type:`/`format:` rather than mapping the raw ids,
+		// because mapping.MediaType runs two passes so that [3000, 3030] — an
+		// audiobook, which Prowlarr emits parent-first — is `book · audiobook`
+		// rather than `music`. The ids are the fallback for a category UsArr has
+		// no type for.
+		const release = toRelease({
+			candidate_id: 7,
+			title: 'Some.Book',
+			categories: [3000, 3030],
+			tags: ['type:book', 'format:audiobook', 'source:torrent']
+		});
+		expect(release?.categories).toEqual([3000, 3030]);
+		expect(release?.tags).toEqual(['type:book', 'format:audiobook', 'source:torrent']);
 	});
 
 	/**
@@ -314,10 +337,53 @@ describe('formatAge', () => {
 	});
 });
 
-describe('protocolClass', () => {
-	it('only maps the two known protocols', () => {
-		expect(protocolClass('torrent')).toBe('protocol-torrent');
-		expect(protocolClass('usenet')).toBe('protocol-usenet');
-		expect(protocolClass('carrier-pigeon')).toBe('');
+/**
+ * ⚠️ `RecentGrab.id` IS AN OPAQUE ROW KEY, AND THE TWO WIRE FORMS ARE BOTH
+ * PINNED HERE ON PURPOSE.
+ *
+ * The field used to be the numeric row id, and that leaked: the id is globally
+ * monotonic across users, so somebody seeing 104 and then 341 on two of their
+ * OWN grabs learns 236 rows were written by other people in between — a volume
+ * oracle that survives the scope filter. The server is replacing it with a
+ * keyed hash under the same field name, and is holding that change until a
+ * client that treats the id as opaque is shipping.
+ *
+ * So this client accepts either form and normalises to a string. Both are
+ * asserted rather than one, because dropping the number case the day the hash
+ * lands would silently break every client that had not updated yet — and
+ * because a test that only pins the NEW shape cannot catch a regression to
+ * numeric handling.
+ */
+describe('toRecentGrab', () => {
+	const base = { release_title: 'Some.Release.2024', outcome: 'sent' };
+
+	it('normalises today’s numeric id to a string', () => {
+		expect(toRecentGrab({ ...base, id: 104 })?.id).toBe('104');
+	});
+
+	it('carries an opaque non-numeric id through unchanged', () => {
+		// The keyed hash. Nothing may parse it, order it, or read a length off it
+		// — it is only ever compared for equality as a row key.
+		const opaque = 'g_7Yb3Qx-9vKmA0zN';
+		const grab = toRecentGrab({ ...base, id: opaque });
+		expect(grab?.id).toBe(opaque);
+		// It keys a row: the same value round-trips as the identity a keyed
+		// {#each} and the list primitive's `data-key` compare against.
+		expect(new Map([[grab!.id, grab]]).get(opaque)?.releaseTitle).toBe('Some.Release.2024');
+	});
+
+	it('still rejects a row with no usable id, and one with no title', () => {
+		// Without an id there is nothing to key a row on, and without a title
+		// there is nothing to recognise the grab by — which is the block's job.
+		expect(toRecentGrab({ ...base })).toBeUndefined();
+		expect(toRecentGrab({ ...base, id: '' })).toBeUndefined();
+		expect(toRecentGrab({ ...base, id: null })).toBeUndefined();
+		expect(toRecentGrab({ id: 'g_1' })).toBeUndefined();
+	});
+
+	it('does not promote a missing outcome to the confirmed wording', () => {
+		// $lib/requests renders an unrecognised value as "sent, state not
+		// recognised", which is true of every provenance row.
+		expect(toRecentGrab({ id: 'g_1', release_title: 'x' })?.outcome).toBe('');
 	});
 });

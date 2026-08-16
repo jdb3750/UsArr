@@ -280,6 +280,106 @@ Three guards keep the class closed, none of which the old suite had:
 be reported as a bad gateway: the service answered correctly, and 502 sends the user to debug the
 one component that is working. See `releases.ErrRequestRejected`.
 
+### 7.2 Freeleech is observable, never electable — there is no per-request token instruction
+
+**The constraint, stated as a bound on what can be built: UsArr can show that a release is
+freeleech. UsArr cannot spend a freeleech token on one.** The first is a field it already reads.
+The second has no path through this API at any layer — so **do not design a per-release "use a
+token" control**: not a search option, not a grab-body field, not a per-request override. There is
+nothing to bind it to, and the reason is structural rather than a missing parameter.
+
+Verified against a Prowlarr `develop` checkout at **`1f7db1e`** — the same commit
+`api/specs/SOURCES.md` pins the vendored `prowlarr.json` to, so this and the contract tests are
+evidence about one tree.
+
+**`UseFreeleechToken` is an indexer *setting*, not a request field.** Every occurrence in the
+Prowlarr tree is under `src/NzbDrone.Core/Indexers/Definitions/` — `Gazelle/GazelleSettings.cs:20`
+declares it, `Gazelle/GazelleParser.cs`, `Gazelle/GazelleBase.cs`, `Redacted.cs:471`,
+`Orpheus.cs:460`, `AlphaRatio.cs`, `GreatPosterWall.cs` and `SecretCinema.cs` read it. It is
+declared as
+
+```csharp
+[FieldDefinition(5, Type = FieldType.Select, Label = "Use Freeleech Tokens",
+                 SelectOptions = typeof(GazelleFreeleechTokenAction),
+                 HelpText = "When to use freeleech tokens")]
+public int UseFreeleechToken { get; set; }
+```
+
+— a three-valued **per-indexer policy**, `Never | Preferred | Required`, stored on the indexer and
+edited in Prowlarr's own indexer form. The API layer never mentions the concept at all:
+`grep -rni "freeleech\|usetoken" src/Prowlarr.Api.V1 src/Prowlarr.Http` returns **zero hits**.
+
+Neither request shape has anywhere to put one, on either surface:
+
+| Binding type | Endpoint | Fields |
+|---|---|---|
+| `SearchResource` (`Prowlarr.Api.V1/Search/SearchResource.cs`) | `GET /api/v1/search` | `Query, Type, IndexerIds, Categories, Limit, Offset` — six, that is all |
+| `ReleaseResource` (`Prowlarr.Api.V1/Search/ReleaseResource.cs`) | `POST /api/v1/search` (grab) | the 32 properties listed in §7. No token, no freeleech, no volume factor |
+| `NewznabRequest` (`NzbDrone.Core/IndexerSearch/NewznabRequest.cs`) | the Torznab passthrough | ~30 parameters, none of them a token or freeleech instruction |
+
+The vendored spec agrees independently: `freeleech`, `usefreeleechtoken` and `volumefactor` each
+occur **0 times in the whole of `api/specs/prowlarr.json`**.
+
+**A field would be inert even if one existed, and that is the stronger fact.**
+`SearchController.GrabRelease` (`Prowlarr.Api.V1/Search/SearchController.cs`) never reads the
+release data you post. It builds a cache key from `IndexerId` + `Guid`, looks up the `ReleaseInfo`
+Prowlarr cached during the search, and hands **that server-side object** to `SendReportToClient`.
+`ToModel()` — the resource→model converter that would carry posted data inward — has **zero call
+sites anywhere in `Prowlarr.Api.V1/Search/`**. Beyond the cache key, `DownloadClientId` is the only
+body field that changes what happens. **The grab is a replay of a cached search result, not a
+submission.** Per-release instruction has no channel, not merely no field, and no upstream addition
+of a property would open one without changing that design.
+
+**The token decision is already made, and baked into a URL, before UsArr ever sees the release.**
+`GazelleParser.GetDownloadUrl(torrentId, canUseToken)` (`Definitions/Gazelle/GazelleParser.cs:168`)
+appends `usetoken=1` to the download URL **at parse time**, if and only if the stored setting is
+`Preferred` or `Required` *and* the indexer reported that torrent token-eligible.
+`GazelleBase.Download` (`Definitions/Gazelle/GazelleBase.cs:86`) then implements `Preferred` by
+re-requesting without the parameter when the site answers with an HTML *"You do not have any
+freeleech tokens left."* page instead of a torrent. Both run inside Prowlarr, on stored config,
+upstream of everything UsArr can address — and by the time the release is in Prowlarr's grab cache,
+the URL is fixed.
+
+**So the only lever that exists is global.** The setting is writable through `/api/v1/indexer` as a
+provider `Field` (settings are exposed as `fields[]`, `Prowlarr.Api.V1/Indexers/IndexerResource.cs`),
+but flipping it changes policy for **every subsequent grab on that indexer**. *(Inference: that a
+PUT of that field takes effect as expected is reasoned from the standard Servarr provider-resource
+shape, not observed against a live instance.)* Surfacing a global toggle in a per-release position
+would be worse than shipping nothing — it would spend tokens on releases nobody chose.
+
+#### Volume factors: absent from the JSON surface, present on the Torznab one
+
+**"Volume factors do not reach the API" is too broad to write down. The true claim is narrower and
+surface-specific.**
+
+They do **not** reach `/api/v1/search`. `DownloadVolumeFactor` / `UploadVolumeFactor` live on
+`TorrentInfo` (`NzbDrone.Core/Parser/Model/TorrentInfo.cs:14-15`), and `ReleaseResourceMapper.ToResource`
+copies the flag *names* only, never the factors — `grep -rn VolumeFactor src/Prowlarr.Api.V1` is
+**0 hits**. What survives onto the JSON surface is the lossy derivation in
+`NzbDrone.Core/Indexers/IndexerBase.cs:137-149`, an **exact-equality** test on a nullable double:
+
+```
+DownloadVolumeFactor == 0.0 → freeleech        UploadVolumeFactor == 0.0 → neutralleech
+DownloadVolumeFactor == 0.5 → halfleech        UploadVolumeFactor == 2.0 → doubleupload
+```
+
+`Definitions/Torznab/TorznabRssParser.cs:258` does the same at the same thresholds for Torznab-type
+indexers, defaulting a missing attribute to `1`. So on the JSON surface a **25% or 75% promotion
+produces no flag at all** and is indistinguishable from full price, and an absent flag means
+*unknown*, never *not freeleech* — the point `tags.md`'s `flag:` block already makes.
+
+They **do** reach Prowlarr's Torznab/Newznab passthrough. `NzbDrone.Core/IndexerSearch/NewznabResults.cs:122-123`
+emits `downloadvolumefactor` and `uploadvolumefactor` as torznab attrs, on the XML served by
+`GET /api/v1/indexer/{id}/newznab` and `GET /{id}/api`
+(`Prowlarr.Api.V1/Indexers/NewznabController.cs:57-58`). That surface carries the **numeric factor**,
+so it would show the 0.25 promo the JSON surface silently drops.
+
+**This changes the observation ceiling, not the conclusion.** Richer freeleech *reading* is
+available on a surface UsArr does not currently use — per-indexer, XML, no cross-indexer
+aggregation, and it is output only. Election is impossible on both surfaces. If freeleech fidelity
+beyond the two flags is ever wanted, the Torznab feed is where it lives; a token toggle is not there
+either.
+
 ---
 
 ## 8. Newznab / Torznab categories

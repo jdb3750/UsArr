@@ -1717,6 +1717,68 @@ select[multiple] {
 	font-variant-numeric: var(--numeric-tabular);
 }
 
+/* ── The column-header sort control ─────────────────────────────────────────
+ *
+ * A button filling its <th> and inheriting the header's own type, so a sortable
+ * column and a plain one are the same height and sit on the same baseline — a
+ * header that grew when it became sortable would shift every column beside it.
+ *
+ * NO TRANSITION, deliberately. §6 puts sort at 0 ms on the critical path and
+ * §9.1a extends that to say a reorder is never animated anywhere; a hover fade
+ * on the control that CAUSES the reorder is the same instinct in the same
+ * place, and it is the one this primitive may not indulge. */
+.tbl th:has(.th__sort) {
+	padding: 0;
+}
+
+.th__sort {
+	display: flex;
+	align-items: center;
+	gap: var(--space-2);
+	width: 100%;
+	min-width: 0;
+	padding: var(--space-3) var(--row-pad-x);
+	background: none;
+	border: 0;
+	border-radius: 0;
+	color: inherit;
+	font: inherit;
+	letter-spacing: inherit;
+	text-align: inherit;
+	cursor: pointer;
+}
+
+.tbl th.is-num .th__sort {
+	justify-content: flex-end;
+}
+
+.th__sort:hover {
+	background: var(--bg-hover);
+	color: var(--fg);
+}
+
+/* The sorted column still reads as sorted with the glyph removed and with the
+ * colour removed, which is §9.5's test applied to a control rather than to a
+ * status. */
+.th__sort--on {
+	color: var(--fg);
+	font-weight: var(--weight-semibold);
+}
+
+.th__sortlabel {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+}
+
+/* A fixed box, so the header does not reflow by one glyph's width when the
+ * sorted column changes. */
+.th__arrow {
+	flex: none;
+	width: 1ch;
+	text-align: center;
+}
+
 .tbl td {
 	padding: var(--row-pad-y) var(--row-pad-x);
 	min-width: 0;
@@ -2151,6 +2213,51 @@ select[multiple] {
 		font-weight: var(--weight-semibold);
 	}
 
+	/* An actions cell on line 1 is a control, not a title, so it does not take
+	 * the line's heading weight. It renders after the second line because
+	 * columns are emitted in declared order and it is declared last. */
+	.tbl--2line td[data-col='actions'] {
+		margin-top: var(--space-2);
+		font-weight: var(--weight-regular);
+	}
+
+	/* ── The sort controls survive the phone fork ─────────────────────────────
+	 *
+	 * Both stacked forks hide the thead visually while keeping its columnheader
+	 * nodes for the accessibility tree. That is right for a header that is only
+	 * ever read, and WRONG the moment the header carries a button: a
+	 * clipped-but-present control is still a tab stop, so a keyboard user on a
+	 * phone tabs through invisible buttons and a sighted one loses the sort.
+	 *
+	 * So a two-line list that HAS sort controls un-hides its header and renders
+	 * the sortable columns only, as a wrapping row of controls. The columns that
+	 * are not sortable stay hidden — their headers are already repeated inside
+	 * each row by the stacked labels. A list with no sort controls is untouched,
+	 * which is what `:has(.th__sort)` is buying. */
+	.tbl--2line thead:has(.th__sort) {
+		position: static;
+		width: auto;
+		height: auto;
+		overflow: visible;
+		clip-path: none;
+	}
+
+	.tbl--2line thead:has(.th__sort) tr:not([hidden]) {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+		padding: var(--space-2) var(--row-pad-x);
+	}
+
+	.tbl--2line thead:has(.th__sort) th:not(:has(.th__sort)) {
+		display: none;
+	}
+
+	.tbl--2line thead:has(.th__sort) th {
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+	}
+
 	.tbl--2line td[data-line='2'] {
 		display: inline;
 		color: var(--fg-muted);
@@ -2213,13 +2320,17 @@ select[multiple] {
 }
 
 /* =============================================================================
- * TRANSITIONAL — the two scaffolding screens
+ * TRANSITIONAL — the scaffolding screens that are left
  *
- * /search and /services were built against the scaffolding stylesheet this file
- * replaces, and they are rewritten in a later slice. Their class vocabulary is
- * carried here, re-expressed in the tokens above, so they keep working in the
- * meantime rather than rendering unstyled. Everything in this block is deleted
- * by the slice that rewrites those two screens; nothing new may use it.
+ * The stylesheet this file replaces was still styling four screens when it
+ * landed. /services and /search have both been rebuilt against the vocabulary
+ * above since, and their half of this block has gone with them — the release
+ * list, the grab chips, the search form and `input[type='search']` are all
+ * deleted here, because nothing renders them any more.
+ *
+ * WHAT IS LEFT IS WHAT / AND /login STILL USE, and that set is exactly the one
+ * the root layout names in `TRANSITIONAL`. Everything below goes with the slice
+ * that rewrites those two; nothing new may use it.
  * ============================================================================= */
 
 /* The gutter every rebuilt screen gets from .section. These screens predate it
@@ -2293,101 +2404,10 @@ p.empty {
 	line-height: var(--leading-sm);
 }
 
-.results {
-	margin: 0;
-	padding: 0;
-	border-top: 1px solid var(--border);
-}
-
-.result {
-	display: flex;
-	align-items: flex-start;
-	gap: var(--space-5);
-	min-height: var(--row-h-two-line);
-	padding: var(--row-pad-y) var(--row-pad-x);
-	border-bottom: 1px solid var(--border);
-}
-
-.result:hover {
-	background: var(--bg-hover);
-}
-
-.result-main {
-	flex: 1 1 auto;
-	min-width: 0;
-}
-
-.result-title {
-	font-size: var(--text-base);
-	line-height: var(--leading-base);
-	font-weight: var(--weight-semibold);
-	overflow-wrap: anywhere;
-}
-
-.result-meta {
-	display: flex;
-	flex-wrap: wrap;
-	gap: var(--space-2) var(--space-5);
-	color: var(--fg-muted);
-	font-family: var(--font-mono);
-	font-size: var(--text-xs);
-	line-height: var(--leading-xs);
-	font-variant-numeric: var(--numeric-tabular);
-}
-
-/* Neutral, per DESIGN-DIRECTION §3.3: the chip carries no colour and the words
- * `torrent` and `usenet` carry the protocol. The two tokens these classes used
- * to read are withdrawn and are not defined anywhere in this file. */
-.protocol-torrent,
-.protocol-usenet {
-	color: var(--fg-muted);
-}
-
-.result-action {
-	flex: 0 0 auto;
-	display: flex;
-	align-items: center;
-	gap: var(--space-4);
-}
-
-.grab-state {
-	font-size: var(--text-sm);
-	line-height: var(--leading-sm);
-}
-
-.grab-state-ok {
-	color: var(--status-ok);
-}
-
-.grab-state-error {
-	color: var(--status-error);
-	font-family: var(--font-mono);
-	overflow-wrap: anywhere;
-}
-
-.search-form {
-	display: flex;
-	flex-wrap: wrap;
-	gap: var(--space-4);
-	margin-bottom: var(--space-6);
-}
-
-.search-form input {
-	flex: 1 1 320px;
-	min-height: var(--control-h);
-	padding: 0 var(--space-4);
-	background: var(--bg-inset);
-	color: var(--fg);
-	border: 1px solid var(--border-strong);
-	border-radius: var(--radius-sm);
-	font-size: var(--text-md);
-}
-
 /* The scaffolding screens use bare <input> and <button> elements. They get the
  * control treatment from the element selector rather than from a class, which
  * is what those screens were written against. */
 .transitional-scope input[type='text'],
-.transitional-scope input[type='search'],
 .transitional-scope input[type='password'] {
 	min-height: var(--control-h);
 	padding: 0 var(--space-4);
