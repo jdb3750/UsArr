@@ -1190,6 +1190,27 @@ select[multiple] {
 	white-space: nowrap;
 }
 
+/* Indexer flags are an OPEN vocabulary — `IndexerFlag` is a subclassable class
+ * in Prowlarr, not an enum — so a bare .chip is the default and every flag
+ * string that arrives renders in it, including ones no version of UsArr has
+ * heard of. Only two names get their own treatment, and NOT because they matter
+ * more: `freeleech` and `halfleech` are the two that are DERIVED rather than
+ * indexer-supplied (Prowlarr computes them from a download factor of exactly
+ * 0.0 and 0.5) and the two that change what the download costs the user's
+ * ratio. That is worth one step of emphasis in the scan.
+ *
+ * The emphasis is weight and fill, NEVER a hue. A colour here would have to
+ * clear the contrast sweep on all five grounds in both themes for a difference
+ * the design does not need, and the only semantically obvious hue is a green
+ * sitting beside --status-ok, which is the one collision this ramp cannot
+ * afford (DESIGN-DIRECTION §3.3, §9.5). */
+.chip--leech {
+	color: var(--fg);
+	font-weight: var(--weight-semibold);
+	background: var(--bg-inset);
+	border-color: var(--fg-muted);
+}
+
 .chip--pending {
 	color: var(--status-warn);
 	border-color: currentcolor;
