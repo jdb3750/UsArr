@@ -1838,6 +1838,14 @@ blocked real work. **What stays in CI:** `EXPLAIN QUERY PLAN` assertions and **r
 on hot queries — deterministic, hardware-independent, fast, and a better proxy for what is being
 protected than wall-clock time.
 
+> 📌 **The Pi 5 is a deliberate floor, and it is not the owner's machine.** Confirmed 2026-08-16
+> (ADR-0035): **the owner runs x86-64 under Proxmox.** Every figure in this section, and every
+> argument elsewhere that extrapolates to Pi-class hardware — DESIGN-DIRECTION §7.4's density-toggle
+> cost, ADR-0022's Argon2id memory argument, §7.2's streaming-import peak — is therefore a
+> **conservative floor** rather than a description of what the first real install will experience.
+> Nothing about the budgets changes; designing against the floor is the point. What changes is that
+> a Pi figure must not be quoted as *"what the owner will see"*.
+
 **Reference hardware: a Raspberry Pi 5. Reference library: six media types, not two.** The earlier
 figure — *"10k movies / 2k series (~400k episode rows)"* — described the product before ADR-0032,
 and every budget below was set against a corpus that no longer describes it. The six-type reference
