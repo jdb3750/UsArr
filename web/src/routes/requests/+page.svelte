@@ -30,7 +30,8 @@
 	 *   $lib/frozenorder.svelte   ADR-0038, the freeze-while-aimed rule
 	 *   $lib/rowstate.svelte      ADR-0038 clause 4, identity-keyed row state
 	 *   $lib/sortspec             ADR-0038 clause 6, sort key and dir in the URL
-	 *   $lib/indexerscope.svelte  the indexer picker's selection and catalogue
+	 *   $lib/indexerscope.svelte  the scope selection — indexers AND categories
+	 *   $lib/indexercatalog       what GET /api/v1/indexers is folded into
 	 *
 	 * Read `frozenorder.svelte`'s header before touching anything about ordering.
 	 * Those rules took four rounds across three threads to settle and every
@@ -83,17 +84,32 @@
 	import { compareBy, nextDir, readSort, writeSort, type SortColumn } from '$lib/sortspec';
 	import {
 		ApiError,
+		fetchIndexerCatalog,
 		fetchRecentGrabs,
 		grabRelease,
 		openEventStream,
 		problemsFrom,
 		startSearch,
+		type IndexerCatalog,
 		type IndexerOutcome,
 		type RecentGrab,
 		type Release,
 		type SearchReport,
 		type StreamHandles
 	} from '$lib/api';
+	import {
+		PRIORITY_NOTE,
+		catalogGuidance,
+		categoryLabelFor,
+		categoryNames,
+		categoryTree,
+		indexerFacts,
+		indexerNames,
+		isSearchable,
+		scopeSummary,
+		sortIndexers,
+		unavailableReason
+	} from '$lib/indexercatalog';
 	import { formatAge, formatSize } from '$lib/format';
 	import {
 		CODE_OUTCOME_UNKNOWN,
@@ -249,6 +265,33 @@
 	let streamGap = $state('');
 	let streamConnected = $state(false);
 	let pickerOpen = $state(false);
+	let categoryPickerOpen = $state(false);
+
+	/* ── the scope catalogue ──────────────────────────────────────────────── */
+
+	/**
+	 * `GET /api/v1/indexers`, which is what makes the picker usable BEFORE a
+	 * search has been run.
+	 *
+	 * ⚠️ NO LOADING STATE, NO SKELETON, AND THAT IS THE ARCHITECTURE RATHER THAN
+	 * a preference. The handler reads the `indexer_catalog` replica and makes no
+	 * upstream call at all (internal/httpapi/indexers.go), so this is a Tier 0
+	 * local read and principle 1 says a local read renders. Drawing a spinner
+	 * over it would teach the user that the picker is a thing you wait for, which
+	 * is exactly the impression the replica exists to prevent.
+	 *
+	 * `undefined` therefore means "not answered yet" and is not rendered as a
+	 * state — the picker simply draws whatever it has. What it must NOT do in
+	 * that window is assert the negative: "no indexers are configured" is a claim
+	 * about the install, and it is only made once `catalog` is a real answer.
+	 */
+	let catalog = $state<IndexerCatalog | undefined>(undefined);
+	/** A genuine transport or 5xx failure, which is a different thing from any of
+	 * the endpoint's four 200-borne states. */
+	let catalogError = $state('');
+	/** Which category parents are expanded. Ids, not indices — the tree is
+	 * rebuilt whenever the indexer selection narrows it. */
+	let expandedCategories = $state<number[]>([]);
 
 	/**
 	 * THE ARRIVAL BUFFER, not the rendered list. Results land here in whatever
@@ -411,6 +454,61 @@
 	const rowIntrinsic = $derived(RECENT_GRAB_ROW_INTRINSIC[prefs.density] ?? 44);
 	const releaseIntrinsic = $derived(RELEASE_ROW_INTRINSIC[prefs.density] ?? 45);
 
+	/* ── the scope picker's derived shape ─────────────────────────────────── */
+
+	/**
+	 * The indexers the picker offers.
+	 *
+	 * ⚠️ THE CATALOGUE WINS OUTRIGHT WHENEVER IT HAS ROWS, and the SSE-learned
+	 * union is the fallback rather than a supplement. Merging the two would keep
+	 * offering an indexer that has been deleted from Prowlarr — localStorage
+	 * remembers it, the catalogue does not — and a picker that offers a choice
+	 * the search planner refuses is worse than one that is briefly short.
+	 * `$lib/indexerscope`'s header owns the argument.
+	 */
+	const catalogIndexers = $derived(sortIndexers(catalog?.indexers ?? []));
+	const usingCatalogue = $derived(catalogIndexers.length > 0);
+
+	/** Names for the scope sentence. The catalogue first, the learned union
+	 * behind it, and the bare id last — a stored selection must still be
+	 * describable when neither source knows the indexer any more. */
+	const names = $derived(indexerNames(catalogIndexers, scope.known));
+
+	/**
+	 * The categories this search could be narrowed to, scoped to the indexers
+	 * already selected — which is what makes "one tracker, one category" two
+	 * decisions rather than a hunt through everything on the install.
+	 */
+	const tree = $derived(categoryTree(catalogIndexers, scope.selected));
+	const treeNames = $derived(categoryNames(tree));
+
+	/** THE VISIBLE STATEMENT OF SCOPE — §17.5, and the reason sticky is allowed
+	 * to be sticky. The words live in `$lib/indexercatalog` where a test reads
+	 * them. */
+	const scopeLine = $derived(
+		scopeSummary({
+			indexers: scope.selected.map((id) => ({
+				id,
+				name: names.get(id) ?? `indexer ${id}`
+			})),
+			categories: scope.categories.map((id) => ({
+				id,
+				// The BARE id when the tree cannot name it — a sticky selection
+				// outlives the catalogue that named it, and the sentence still has to
+				// describe what it is filtering so the user can clear it. Not
+				// `category ${id}`: the sentence supplies the noun itself, and the
+				// pair rendered "in the category 2000 category".
+				name: treeNames.get(id) ?? String(id)
+			})),
+			knownIndexers: usingCatalogue ? catalogIndexers.length : scope.known.length
+		})
+	);
+
+	/** Whether the endpoint's `status` names a fix that lives on UsArr's own
+	 * Services screen. Branching on `status`, never on the HTTP code: all four
+	 * states arrive on a 200. */
+	const catalogFixInServices = $derived(catalogGuidance(catalog?.status ?? '').fixInServices);
+
 	/* ── behaviour ────────────────────────────────────────────────────────── */
 
 	// Results stream as indexers answer, so the cross-indexer dedupe cannot be
@@ -454,10 +552,29 @@
 		}
 	}
 
+	/**
+	 * The scope picker's catalogue.
+	 *
+	 * Fired on mount and never awaited by anything that paints: it is a local
+	 * SQLite read, so it lands in milliseconds, and the picker is drawn from
+	 * whatever is in hand at the time. A failure here is recorded and the picker
+	 * falls back to the SSE-learned union rather than disappearing — the scope
+	 * filter is not worth taking the search screen down for.
+	 */
+	async function loadCatalog() {
+		try {
+			catalog = await fetchIndexerCatalog();
+			catalogError = '';
+		} catch (error) {
+			catalogError = error instanceof ApiError ? error.detail : String(error);
+		}
+	}
+
 	// One stream for the whole page, opened once. Results are appended as they
 	// arrive per indexer — that progressive render is the point of the SSE design.
 	onMount(() => {
 		void loadGrabs();
+		void loadCatalog();
 
 		const tick = setInterval(() => (now = new Date()), 60_000);
 		const windowTick = setInterval(() => (windowNow = new Date()), 15_000);
@@ -510,6 +627,11 @@
 		const linked = parseIds(params.getAll('indexer').join(','));
 		if (linked.length > 0) scope.adopt(linked);
 
+		// The same rule for the category half: a link that names categories meant
+		// that scope, and it wins over whatever was left sticky.
+		const linkedCategories = parseIds(params.getAll('category').join(','));
+		if (linkedCategories.length > 0) scope.adoptCategories(linkedCategories);
+
 		const linkedType = params.get('type') ?? '';
 		if (SEARCH_TYPES.some((t) => t.id === linkedType)) searchType = linkedType;
 
@@ -551,13 +673,19 @@
 		replaceState(href, page.state);
 	}
 
-	/** The query, the type, the sort and the scope — all of it linkable. */
+	/**
+	 * The query, the type, the sort and BOTH halves of the scope — all of it
+	 * linkable, and all of it in the same query string ADR-0038 clause 6 already
+	 * put `sort` and `dir` in. A scoped search that could not be sent to somebody
+	 * is a scope that only exists in one browser.
+	 */
 	function syncUrl(text: string) {
 		const params = new SvelteURLSearchParams();
 		if (text) params.set('q', text);
 		if (searchType !== DEFAULT_SEARCH_TYPE) params.set('type', searchType);
 		writeSort(params, sort);
 		for (const id of scope.selected) params.append('indexer', String(id));
+		for (const id of scope.categories) params.append('category', String(id));
 		writeUrl(params);
 	}
 
@@ -604,7 +732,11 @@
 			// planned, so an unselected indexer spends none of its rate limit.
 			const accepted = await startSearch(trimmed, {
 				type: searchTypeParam(searchType),
-				indexerIds: scope.selected
+				indexerIds: scope.selected,
+				// Narrowed server-side too: an indexer that carries none of these is
+				// skipped before its leg is planned rather than queried and then
+				// discarded (internal/releases/search.go, supportsAnyCategory).
+				categories: scope.categories
 			});
 			if (accepted.searchId) searchId = accepted.searchId;
 		} catch (error) {
@@ -619,8 +751,29 @@
 		syncUrl(submitted);
 	}
 
+	function toggleCategory(id: number) {
+		scope.toggleCategory(id);
+		syncUrl(submitted);
+	}
+
+	function toggleExpanded(id: number) {
+		expandedCategories = expandedCategories.includes(id)
+			? expandedCategories.filter((n) => n !== id)
+			: [...expandedCategories, id];
+	}
+
+	/**
+	 * Back to an unscoped search, both halves at once.
+	 *
+	 * It clears the categories as well as the indexers, and that is the point of
+	 * the control rather than a convenience: the sentence beside it states one
+	 * scope, so the button under that sentence has to undo the whole of what the
+	 * sentence describes. A control that left half the filter standing is how a
+	 * user presses "search all indexers", sees the same thin result set, and
+	 * concludes the button does nothing.
+	 */
 	function clearScope() {
-		scope.clear();
+		scope.clearAll();
 		syncUrl(submitted);
 	}
 
@@ -743,6 +896,15 @@
 		</select>
 
 		<button type="submit" class="btn btn--primary" disabled={query.trim() === ''}>Search</button>
+		<!--
+			TWO CONTROLS, NOT ONE, AND THE WORDS ARE PROWLARR'S OWN. Prowlarr's
+			search page filters by `Indexers` and by `Categories` as two separate
+			pickers, and DESIGN-DIRECTION §9.1 is explicit that this vocabulary is
+			taken rather than reinvented. Two short panels also keep the motivating
+			case short: one tracker and one category is two openings and two ticks,
+			where a single merged panel would bury the categories under the indexer
+			list every time.
+		-->
 		<button
 			type="button"
 			class="btn"
@@ -751,6 +913,15 @@
 			onclick={() => (pickerOpen = !pickerOpen)}
 		>
 			{scope.isAll ? 'Indexers' : `Indexers (${scope.selected.length})`}
+		</button>
+		<button
+			type="button"
+			class="btn"
+			aria-expanded={categoryPickerOpen}
+			aria-controls="category-picker"
+			onclick={() => (categoryPickerOpen = !categoryPickerOpen)}
+		>
+			{scope.isAllCategories ? 'Categories' : `Categories (${scope.categories.length})`}
 		</button>
 	</form>
 
@@ -771,11 +942,13 @@
 		persists silently across sessions is how a user concludes an indexer is
 		broken when they simply left it deselected weeks ago.
 	-->
-	{#if scope.summary}
+	{#if scopeLine}
 		<p class="scopeline" role="status">
-			<span>{scope.summary}</span>
+			<span>{scopeLine}</span>
 			<span class="muted">This selection is remembered between searches.</span>
-			<button type="button" class="linkish" onclick={clearScope}>Search all indexers</button>
+			<button type="button" class="linkish" onclick={clearScope}>
+				Search all indexers and categories
+			</button>
 		</p>
 	{/if}
 
@@ -783,12 +956,122 @@
 		<div class="picker" id="indexer-picker">
 			<fieldset class="picker__set">
 				<legend class="picker__legend">Indexers to search</legend>
-				{#if scope.known.length === 0}
-					<p class="picker__note">
-						No indexer has reported yet. Run one search and every indexer this Prowlarr asked will
-						be listed here.
+
+				{#if usingCatalogue}
+					<div class="picker__grid">
+						<!--
+							⚠️ KEYED ON THE INSTANCE AND THE INDEXER TOGETHER. The indexer id
+							is the SERVICE's own id, so two configured indexer services can
+							each carry an id 3 — and a key that used the indexer id alone
+							would have Svelte reconcile two different rows onto one.
+						-->
+						{#each catalogIndexers as indexer (`${indexer.instanceId}:${indexer.indexerId}`)}
+							{@const reason = unavailableReason(indexer)}
+							<label class="check pick" class:pick--off={reason !== ''}>
+								<!--
+									⚠️ A DISABLED INDEXER IS LISTED AND MARKED, NEVER HIDDEN. The
+									upstream endpoint returns enabled and disabled indexers with no
+									filter parameter, and dropping the disabled ones makes "why is
+									my indexer missing?" unanswerable from the one screen that
+									should answer it. The control is genuinely `disabled` rather
+									than merely styled: the search planner will not ask it, so a
+									tick that looked as though it worked would be a filter that
+									silently returns nothing. A stale selection holding one is
+									recoverable from the scope line above, which names it.
+								-->
+								<input
+									type="checkbox"
+									checked={scope.isSelected(indexer.indexerId)}
+									disabled={!isSearchable(indexer)}
+									onchange={() => toggleIndexer(indexer.indexerId)}
+								/>
+								<span class="pick__body">
+									<!-- The indexer's OWN name, verbatim. §17.5's copy rules govern
+									     UsArr's sentences, never upstream data. -->
+									<span class="pick__name">{indexer.name}</span>
+									{#if indexerFacts(indexer)}
+										<span class="pick__sub">{indexerFacts(indexer)}</span>
+									{/if}
+									{#if reason}
+										<span class="pick__sub pick__sub--off">{reason}</span>
+									{/if}
+								</span>
+							</label>
+						{/each}
+					</div>
+
+					<p class="picker__note muted">
+						This is your indexer service’s own list, replicated into UsArr, so it is here before you
+						run a search. Selecting none searches all of them.
+						<!-- ⚠️ THE PRIORITY RULE, ONCE. The clause is identical for every
+						     indexer, and §9.1 is explicit that a value identical across every
+						     row of a group is stated once and dropped from the rows —
+						     measured, it was three wrapped lines under every name. The
+						     number itself stays on each row, where it varies. -->
+						{PRIORITY_NOTE}
 					</p>
-				{:else}
+
+					<!--
+						WHERE THE LIST CAME FROM AND HOW OLD IT IS. The replica carries
+						`fetched_at` per instance precisely so the screen can show staleness
+						instead of paying for freshness in latency (§8.5), and §17.3 requires
+						both forms of a timestamp.
+					-->
+					{#each catalog?.instances ?? [] as instance (instance.instanceId)}
+						{@const read = formatWhen(instance.fetchedAt, now)}
+						<p class="picker__note muted">
+							<!-- Both forms of the timestamp, which is §17.3's rule: one
+							     identifies the moment, the other answers "how old is this?"
+							     without arithmetic. The separator is written as an entity
+							     because Svelte collapses the whitespace either side of a
+							     block, and `Prowlarr"— read at` is what that costs. -->
+							{instance.message}{#if read.absolute}&nbsp;— read at {read.absolute}, {read.relative}{/if}
+						</p>
+					{/each}
+				{:else if catalogError}
+					<!-- A genuine transport or 5xx failure, which is NOT one of the four
+					     states the endpoint reports on a 200. The picker says so and falls
+					     back to whatever searches have already named. -->
+					<p class="picker__note">
+						UsArr could not read its own indexer list, so this picker is showing only the indexers
+						that searches have named so far.
+					</p>
+					<p class="verbatim">{catalogError}</p>
+				{:else if catalog !== undefined}
+					<!--
+						⚠️ THE HONEST NEGATIVE, AND IT IS ONLY SAID ONCE THERE IS AN ANSWER.
+						All four of the endpoint's states arrive on a 200 and the branch is on
+						`status`, never on the code. The sentence and the one action that
+						changes it are the server's own — it knows which of "nothing is
+						configured", "never read", "answered none" and "you turned it off"
+						this install is in, and they need four different actions.
+					-->
+					<p class="picker__note">{catalog.message}</p>
+					{#if catalog.action}
+						{#if catalogFixInServices}
+							<p class="picker__note">
+								<a class="btn btn--sm" href={servicesPath}>{catalog.action}</a>
+							</p>
+						{:else}
+							<!-- §17.5: naming the non-action beats offering a fake one. This is
+							     the `empty` state, whose fix is inside the indexer service —
+							     UsArr has no surface for it and Services would correctly show
+							     the connection as healthy. -->
+							<p class="picker__note muted">
+								{catalog.action}. UsArr has no screen for that; it happens in the indexer service
+								itself.
+							</p>
+						{/if}
+					{/if}
+					{#if scope.known.length > 0}
+						<p class="picker__note muted">
+							The indexers below are the ones searches have named, kept so a remembered selection
+							can still be read and cleared.
+						</p>
+					{/if}
+				{/if}
+
+				{#if !usingCatalogue && scope.known.length > 0}
 					<div class="picker__grid">
 						{#each scope.known as indexer (indexer.id)}
 							<label class="check">
@@ -802,17 +1085,109 @@
 						{/each}
 					</div>
 				{/if}
-				<!--
-					⚠️ AN HONEST LABEL ON A FALLBACK. There is no endpoint that lists a
-					Prowlarr instance's indexers, so this catalogue is built from what
-					searches have already reported. Implying it is Prowlarr's configured
-					list would be an invented status.
-				-->
-				<p class="picker__note muted">
-					UsArr has no endpoint that reads Prowlarr's own indexer list, so this is built from the
-					indexers that searches have reported so far. An indexer that has never answered here will
-					not appear until it does. Selecting none searches all of them.
-				</p>
+			</fieldset>
+		</div>
+	{/if}
+
+	{#if categoryPickerOpen}
+		<div class="picker" id="category-picker">
+			<fieldset class="picker__set">
+				<legend class="picker__legend">Categories to search</legend>
+
+				{#if tree.length > 0}
+					<!--
+						⚠️ THE NEWZNAB TREE'S OWN TWO LEVELS, AND NEITHER OF THE TWO WAYS TO
+						GET THIS WRONG. Flattening it hands the user a couple of hundred raw
+						ids, which is not a control. Collapsing it into invented buckets
+						throws away the leaves that are the only reliable machine signal
+						there is — 3030 under Audio is what separates an audiobook from
+						music, 7030 likewise for comics (§8.5). So the parents are the short
+						path and each one opens on its own children, with every name taken
+						verbatim from the tree.
+
+						A parent id is worth offering on its own: the server matches a
+						requested category against an indexer's advertised tree in both
+						directions (releases/search.go, supportsAnyCategory), so `2000`
+						reaches an indexer that only advertises `2045`.
+					-->
+					<ul class="cats">
+						{#each tree as parent (parent.id)}
+							{@const open = expandedCategories.includes(parent.id)}
+							<li class="cats__row">
+								<div class="cats__head">
+									<label class="check">
+										<input
+											type="checkbox"
+											checked={scope.isCategorySelected(parent.id)}
+											onchange={() => toggleCategory(parent.id)}
+										/>
+										<span>{categoryLabelFor(parent)}</span>
+									</label>
+									{#if parent.children.length > 0}
+										<button
+											type="button"
+											class="linkish"
+											aria-expanded={open}
+											aria-controls="cat-{parent.id}"
+											onclick={() => toggleExpanded(parent.id)}
+										>
+											{open ? 'Hide' : 'Show'}
+											{parent.children.length} inside
+										</button>
+									{/if}
+								</div>
+								{#if open}
+									<div class="picker__grid cats__kids" id="cat-{parent.id}">
+										{#each parent.children as child (child.id)}
+											<label class="check">
+												<input
+													type="checkbox"
+													checked={scope.isCategorySelected(child.id)}
+													onchange={() => toggleCategory(child.id)}
+												/>
+												<span>{categoryLabelFor(child)}</span>
+											</label>
+										{/each}
+									</div>
+								{/if}
+							</li>
+						{/each}
+					</ul>
+
+					<p class="picker__note muted">
+						These are the categories your indexers advertise, in their own words. An indexer that
+						carries none of the ones you pick is skipped before it is asked. Selecting none searches
+						every category.
+						{#if !scope.isAll}
+							This list is narrowed to the indexers you selected.
+						{/if}
+					</p>
+				{:else if usingCatalogue}
+					<!-- The catalogue is here and still yields no tree, which is a real
+					     state rather than a gap: either the selected indexers advertise no
+					     categories, or nothing selected can be searched. -->
+					<p class="picker__note">
+						{scope.isAll
+							? 'None of your indexers advertises a category list, so there is nothing to narrow a search to. A search still runs; it simply cannot be scoped this way.'
+							: 'The indexers you selected advertise no category list, so there is nothing to narrow this search to.'}
+					</p>
+					{#if !scope.isAll}
+						<p class="picker__note">
+							<button type="button" class="linkish" onclick={clearScope}>
+								Search all indexers and categories
+							</button>
+						</p>
+					{/if}
+				{:else}
+					<!-- No catalogue means no tree: the categories come from the same
+					     replicated indexer list, and a search frame never carries one. The
+					     indexer panel above says which of the four states this install is
+					     in and what changes it. -->
+					<p class="picker__note">
+						Categories come from your indexer service’s own list, which UsArr has not read yet. Open
+						Indexers above for what is missing and how to fix it.
+					</p>
+				{/if}
 			</fieldset>
 		</div>
 	{/if}
@@ -965,8 +1340,12 @@
 		{#if diagnosis.action !== 'none'}
 			<div class="banner__actions">
 				{#if diagnosis.action === 'clear-scope'}
+					<!-- The label states what the control does, which now includes the
+					     category half: `clearScope` clears both, because the scope
+					     sentence above states both and a button that undid half of it
+					     would look as though it had not worked. -->
 					<button type="button" class="btn btn--primary" onclick={clearScope}>
-						Search all indexers
+						Search all indexers and categories
 					</button>
 				{:else}
 					<button type="button" class="btn" onclick={() => runSearch()}>Search again</button>
@@ -1556,6 +1935,75 @@
 		max-width: 78ch;
 		font-size: var(--text-sm);
 		line-height: var(--leading-sm);
+	}
+
+	/* One indexer in the picker: a name over as many facts as the catalogue has
+	 * for it. `.check` centres a single-line label, which is wrong the moment
+	 * there are two lines — the box would float against the middle of the block
+	 * rather than lining up with the name it belongs to. */
+	.pick {
+		align-items: start;
+	}
+
+	.pick input {
+		/* The 14px box inside a --text-base line, nudged onto the name's baseline
+		 * band rather than the top of it. */
+		margin-top: var(--space-1);
+	}
+
+	.pick__body {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+		min-width: 0;
+	}
+
+	.pick__name {
+		overflow-wrap: anywhere;
+	}
+
+	.pick__sub {
+		color: var(--fg-muted);
+		font-size: var(--text-sm);
+		line-height: var(--leading-sm);
+	}
+
+	/* An indexer a search cannot ask is dimmed and still legible — it is listed
+	 * precisely so somebody hunting for it finds it. No chroma: §9.5 reserves
+	 * that for what is wrong, and an indexer the user switched off is not wrong. */
+	.pick--off .pick__name {
+		color: var(--fg-muted);
+	}
+
+	.pick__sub--off {
+		color: var(--fg-muted);
+	}
+
+	/* The category tree's two levels. A list rather than a grid at the top level:
+	 * each parent owns a disclosure and, when open, a block of children, so the
+	 * rows are not the same height and column flow would interleave them. */
+	.cats {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+	}
+
+	.cats__head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: var(--space-2) var(--space-4);
+	}
+
+	/* Indented under its parent, and the rule is what carries the nesting when
+	 * the indent alone is ambiguous on a narrow screen. */
+	.cats__kids {
+		margin: var(--space-2) 0 var(--space-3) var(--space-5);
+		padding-left: var(--space-4);
+		border-left: 1px solid var(--border);
 	}
 
 	/* The chips of one cell wrap together rather than each finding its own line. */
