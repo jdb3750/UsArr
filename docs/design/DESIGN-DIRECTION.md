@@ -1807,6 +1807,17 @@ else. Rules:
   assertion has nothing to run over until one appears. Recording it that way is the point: a rule
   described as active over a surface that does not exist is the invented status `CLAUDE.md` bans,
   and it is also how a deleted subsystem grows back.
+- 🚩 **The title is one line, ellipsised, with the full string in `title`.** Moving it below the art
+  made card height a function of title length, so a row of cards ended ragged — measured, five of 42
+  card renderings took two lines and stood 16 px taller than their 2:3 neighbours. `overflow:
+  hidden; white-space: nowrap; text-overflow: ellipsis` restores level rows; `-webkit-line-clamp` is
+  refused because the ellipsis is what makes the cut visible, which is what §9.1 tier 1 demands of an
+  identity field. **The tooltip is the native `title` attribute, set unconditionally on both the
+  title and the art** — measuring each card to decide whether a tooltip is needed is a layout read
+  per card on the render path, which §2's first principle rules out; a redundant attribute on a short
+  title is far cheaper than a forced reflow per grid paint. Cards still differ in height where the
+  *aspect* differs, and that is this section's own rule about aspect coming from the item's art, not
+  raggedness.
 - Design to the **fixed width allowlist**: `92, 154, 200, 342, 500, 780, orig`. An arbitrary `?w=`
   is refused as a cache-poisoning DoS (§4.4).
 - Availability renders per §6.3's rollup rule: `have == total && total > 0` → ✓; `have == 0` → ✗;
