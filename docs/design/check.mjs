@@ -57,15 +57,93 @@
  *   9  webfont                          — IBM Plex actually resolves
  * ============================================================================= */
 
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { readFileSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join, relative } from 'node:path';
 
 const DESIGN = dirname(fileURLToPath(import.meta.url));
 const MOCKUPS = join(DESIGN, 'mockups');
 const ROOT = join(DESIGN, '..', '..');
 const URL = 'file://' + join(MOCKUPS, 'prototype.html');
+
+/* ---------------------------------------------------------------------------
+ * Playwright is resolved rather than hard-coded, and the failure is explained.
+ *
+ * This import used to be an ABSOLUTE path into one container's global npm root
+ * (/opt/node22/lib/node_modules/playwright/index.mjs). That resolved nowhere
+ * else, so `make design` died with a raw ERR_MODULE_NOT_FOUND on the owner's
+ * machine and in CI, past the Makefile guard whose whole job is to say
+ * something friendlier — and an out-of-tree import cannot be pinned, which the
+ * Makefile's "@latest is FORBIDDEN, pin everything" rule forbids on its own.
+ *
+ * The primary path is now the BARE specifier, which is what a pinned
+ * `playwright` devDependency gives you. Two fallbacks exist because this file
+ * lives in docs/design/ and the dependency belongs in web/package.json: ESM
+ * resolves a bare specifier by walking up from the IMPORTING file, which never
+ * reaches web/node_modules, so that location is probed explicitly. The npm
+ * global root is probed last, which is what this repo's agent container has.
+ *
+ * If every candidate fails the script says so in one sentence with the install
+ * command and exits 1. It never throws a module-not-found at the user.
+ * ------------------------------------------------------------------------- */
+async function loadChromium() {
+  const req = createRequire(import.meta.url);
+  const globalRoot = join(dirname(process.execPath), '..', 'lib', 'node_modules', 'playwright');
+  const attempts = [];
+
+  const candidates = [
+    // An explicit override, for a machine that keeps Playwright somewhere else.
+    process.env.PLAYWRIGHT_MODULE && { how: '$PLAYWRIGHT_MODULE', spec: process.env.PLAYWRIGHT_MODULE },
+    // The portable path: a pinned devDependency resolvable from this file.
+    { how: "bare specifier 'playwright'", spec: 'playwright' },
+    // web/package.json is where the pinned devDependency lives; ESM will not
+    // walk into it from docs/design/, so resolve it the way web/ itself would.
+    { how: 'web/node_modules', resolveFrom: join(ROOT, 'web', 'package.json') },
+    // The npm global root, which is what the agent container preinstalls.
+    { how: 'npm global root', spec: globalRoot },
+  ].filter(Boolean);
+
+  for (const c of candidates) {
+    try {
+      let spec = c.spec;
+      if (c.resolveFrom) spec = createRequire(c.resolveFrom).resolve('playwright');
+      // A filesystem path has to become a URL before import() will take it.
+      const url = /^[./]|^[A-Za-z]:\\/.test(spec) ? pathToFileURL(req.resolve(spec)).href : spec;
+      const mod = await import(url);
+      // A CJS entry point arrives as a default-wrapped namespace, so both
+      // shapes are accepted rather than only the ESM one.
+      const chromium = mod?.chromium || mod?.default?.chromium;
+      if (chromium) return chromium;
+      attempts.push(c.how + ': loaded but exports no chromium');
+    } catch (err) {
+      attempts.push(c.how + ': ' + (err?.code || err?.message || String(err)));
+    }
+  }
+
+  console.log('FAIL  playwright is not installed, so the design check cannot run.');
+  console.log('');
+  console.log('      docs/design/check.mjs drives a real Chromium; there is no static fallback.');
+  console.log('      Install it as a pinned devDependency and fetch the browser:');
+  console.log('');
+  console.log('          pnpm --dir web add -D --save-exact playwright@' + PLAYWRIGHT_VERSION);
+  console.log('          pnpm --dir web exec playwright install chromium');
+  console.log('');
+  console.log('      Then re-run `make design`. If Playwright lives somewhere else on this');
+  console.log('      machine, point PLAYWRIGHT_MODULE at it and PLAYWRIGHT_BROWSERS_PATH at');
+  console.log('      its browser cache.');
+  console.log('');
+  console.log('      Resolution attempts, in order:');
+  for (const a of attempts) console.log('        - ' + a);
+  process.exit(1);
+}
+
+/* Kept beside the message it is printed in, so the two cannot drift. This is
+   the version the check is known to pass against; it is what web/package.json
+   should pin, exactly, with no caret. */
+const PLAYWRIGHT_VERSION = '1.56.1';
+
+const chromium = await loadChromium();
 
 const SCREENS = ['home', 'services', 'libraries', 'search', 'requests'];
 const WIDTHS = [390, 1280, 1440, 1680, 1920];
@@ -113,7 +191,13 @@ const FILES = SOURCES.map((p) => {
 
 function lineOf(text, index) { return text.slice(0, index).split('\n').length; }
 
-/* Scan every stripped source for a regex. Returns [{file, line, text}]. */
+/* Scan every stripped source for a regex. Returns
+ * [{file, line, text, groups}].
+ *
+ * `text` is the readable snippet the failure list prints — truncated, because a
+ * 400-character match in an error message helps nobody. `groups` is the match's
+ * NAMED CAPTURE GROUPS, and it is what an exemption is allowed to look at.
+ * Nothing else is exposed on purpose; see rule(). */
 function scan(re, filter = () => true) {
   const hits = [];
   for (const f of FILES) {
@@ -121,22 +205,120 @@ function scan(re, filter = () => true) {
     const r = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g');
     let m;
     while ((m = r.exec(f.src)) !== null) {
-      hits.push({ file: rel(f.path), line: lineOf(f.src, m.index), text: m[0].trim().slice(0, 90) });
+      hits.push({
+        file: rel(f.path),
+        line: lineOf(f.src, m.index),
+        text: m[0].trim().slice(0, 90),
+        groups: m.groups || {},
+      });
       if (m.index === r.lastIndex) r.lastIndex++;
     }
   }
   return hits;
 }
 
-/* A named static rule: fails with every hit listed, passes with a count. */
-function rule(name, re, filter = () => true, allow = () => false) {
-  const hits = scan(re, filter).filter((h) => !allow(h));
+/* =============================================================================
+ * EXEMPTIONS ARE DATA, AND A CHECK THAT MATCHES NOTHING IS A FAILURE
+ *
+ * Two mechanisms live here, and both exist because of the same defect class:
+ * a check that silently does nothing reads exactly like a check that passed.
+ *
+ * 1. EXEMPTIONS ARE DATA MATCHED AGAINST A NAMED CAPTURE GROUP.
+ *
+ *    `rule()` used to take a free-form `allow(hit)` predicate. The
+ *    text-align:center rule used it to exempt dialogs — and it tested
+ *    `hit.text`, which held the matched DECLARATION (`"text-align: center"`)
+ *    and never the selector. The exemption could not fire under any input. It
+ *    was latent only because nothing centred existed to exempt; the first
+ *    legitimate centred dialog would have failed the rule, and the likeliest
+ *    repair is deleting the rule rather than fixing the harness.
+ *
+ *    So the shape changed rather than the one call site. An exemption is now
+ *    `{ group, match, why }`: the regex MUST declare a named capture group of
+ *    that name, and the exemption tests that group's text. If the group is not
+ *    in the pattern, `rule()` throws at startup — a predicate that cannot see
+ *    what it claims to test is no longer expressible, so the audit becomes a
+ *    property of the design instead of a sweep somebody has to remember to
+ *    repeat. Every rule also reports how many hits its exemption absorbed, so
+ *    an exemption that stops firing is visible rather than silent.
+ *
+ * 2. EVERY STATIC CHECK DECLARES A FLOOR AND FAILS BELOW IT.
+ *
+ *    A regex that matches nothing because a file moved, a glob went stale or a
+ *    selector was renamed prints the same `ok` as a genuine pass — so the
+ *    check's most reassuring output was its least trustworthy. Each static
+ *    check now states roughly how many things it expects to be LOOKING AT, and
+ *    finding far fewer is a failure. The count is printed against the floor so
+ *    the number is visible, not just the verdict.
+ *
+ *    The floor is on the corpus, never on the violations: a ban rule wants
+ *    zero hits and some minimum amount of material scanned.
+ * ========================================================================== */
+
+/* The whole stripped corpus is ~600k characters across 8 files. 200k is a
+ * deliberately slack floor: it is far below today's figure, so ordinary editing
+ * never trips it, and far above zero, so losing a file or breaking the glob
+ * does. A rule that narrows the corpus with `filter` states its own floor. */
+const CORPUS_FLOOR = 200000;
+
+/* Assert that a static check actually looked at something. `n` is what it
+ * examined, `floor` the least that is credible. */
+function floorOk(label, n, floor, unit) {
+  if (n < floor) {
+    fail(`${label} — scanned only ${n} ${unit}, below the floor of ${floor}. ` +
+      `A check that matches nothing is not a check that passed: something moved, ` +
+      `renamed or stopped being parsed.`);
+    return false;
+  }
+  return true;
+}
+
+/* A named static rule: fails with every hit listed, passes with a count.
+ *
+ * opts:
+ *   filter  (file) => boolean         which sources to scan
+ *   exempt  {group, match, why}       data, not a predicate; see above
+ *   floor   number                    least credible corpus size, in chars
+ *                                     scanned; defaults to the whole corpus
+ *                                     being non-trivial */
+function rule(name, re, opts = {}) {
+  const { filter = () => true, exempt = null, floor = CORPUS_FLOOR } = opts;
+
+  /* The corpus this rule actually looked at. A rule whose filter excludes
+   * everything is the silent-no-op case, and it is caught here. */
+  const scanned = FILES.filter(filter);
+  const chars = scanned.reduce((n, f) => n + f.src.length, 0);
+  if (!floorOk(name, chars, Math.max(floor, 1), 'characters of source')) return 1;
+
+  if (exempt) {
+    /* A named group that does not exist in the pattern would make the
+     * exemption unreachable, which is the bug this mechanism exists to
+     * prevent. Fail at startup, loudly, rather than at the first real hit. */
+    if (!new RegExp(re.source).source.includes(`(?<${exempt.group}>`)) {
+      throw new Error(
+        `check.mjs is mis-wired: rule "${name}" declares an exemption on the ` +
+        `named group "${exempt.group}", but its pattern has no (?<${exempt.group}>…) ` +
+        `group. The exemption could never fire.`);
+    }
+  }
+
+  const all = scan(re, filter);
+  const hits = [];
+  let exempted = 0;
+  for (const h of all) {
+    if (exempt && exempt.match.test(h.groups[exempt.group] ?? '')) { exempted++; continue; }
+    hits.push(h);
+  }
+
+  const tail = exempt
+    ? `  (${exempted} exempt: ${exempt.why})`
+    : '';
   if (hits.length) {
-    fail(`${name} — ${hits.length} hit(s)`);
+    fail(`${name} — ${hits.length} hit(s)${tail}`);
     for (const h of hits.slice(0, 8)) note(`${h.file}:${h.line}  ${h.text}`);
     if (hits.length > 8) note(`… and ${hits.length - 8} more`);
   } else {
-    ok(name);
+    ok(`${name}  [${scanned.length} file(s), ${chars} chars scanned]${tail}`);
   }
   return hits.length;
 }
@@ -173,8 +355,13 @@ function banFonts() {
       }
     }
   }
+  /* A parser that stops matching declarations reports "no banned family" —
+     which is the vacuous pass this floor exists to convert into a failure.
+     Two families x (tokens.css + usarr.css) plus the component stacks is
+     comfortably above 6. */
+  if (!floorOk('§13 type: font stacks', stacks, 6, 'font-family declaration(s)')) return;
   if (bad.length) { fail('§13 type: banned family in a font stack'); bad.forEach((b) => note(b)); }
-  else ok(`§13 type: no banned family in any font stack (${stacks} font-family declarations parsed, families matched whole)`);
+  else ok(`§13 type: no banned family in any font stack (${stacks} font-family declarations parsed, floor 6, families matched whole)`);
 }
 banFonts();
 
@@ -183,21 +370,40 @@ rule('§13 type: no --text-empty / --fs-empty token', /--(text|fs)-empty\b/);
 rule('§13 type: no font-size token above 20px', /--(?:text|fs)-[a-z0-9]+\s*:\s*(2[1-9]|[3-9]\d|\d{3,})px/);
 rule('§13 type: no uppercase transform on a label, no italic heading',
   /text-transform\s*:\s*uppercase|h[1-6][^{}]*\{[^}]*font-style\s*:\s*italic/i);
-/* §9.6: centred text is legal in a dialog and nowhere else. */
-rule('§13 type: no text-align:center outside dialog', /text-align\s*:\s*center/i,
-  () => true,
-  (h) => /dialog|modal|toast/i.test(h.text));
+/* §9.6: centred text is legal in a dialog and nowhere else.
+ *
+ * The `where` group is the mechanism, not decoration: the exemption is about
+ * WHERE the declaration sits, so the pattern has to capture the selector (CSS)
+ * or the element and its attributes (an inline style) and hand THAT to the
+ * exemption. The previous version matched the bare declaration and exempted on
+ * it, which could never fire — see the note above rule(). Two arms, because
+ * the two positions look nothing alike:
+ *   · `…selector… { …decls… text-align: center`  — a CSS rule
+ *   · `<div class="dialog__foot" style="…text-align:center`  — inline */
+const CENTER = /(?<where>[^{}]{0,200}\{[^{}]{0,400}?|<[a-z][^<>]{0,300}?)text-align\s*:\s*center/i;
+rule('§13 type: no text-align:center outside dialog', CENTER, {
+  exempt: { group: 'where', match: /dialog|modal|toast/i, why: '§9.6 allows centring inside a dialog' },
+});
 rule('§13 type: no bordered / filled empty state',
   /\.empty[a-z-]*[^{}]*\{[^}]*(border\s*:|border-style\s*:\s*dashed|background\s*:|box-shadow\s*:)/i);
 
 /* --- layout ------------------------------------------------------------- */
 rule('§13 layout: no backdrop-filter', /backdrop-(filter|blur)/i);
 rule('§13 layout: no arbitrary-value class syntax', /class="[^"]*\[[^\]]*(px|rem|#[0-9a-f]{3})[^\]]*\]/i);
+/* This check used to scan for `border-radius: Npx` ONLY, and the mockups use
+ * `border-radius: var(--radius-0)` everywhere — so it matched ZERO declarations
+ * and printed a pass on every run. The ceiling it claims to enforce lives in
+ * the --radius-* token definitions, which its pattern never looked at. Same
+ * defect family as the content-visibility guard and the dead dialog exemption:
+ * assert the effect, not the declaration. The pattern now covers both the
+ * literal property and the token definitions that feed it, and the floor makes
+ * a return to zero a failure rather than a pass. */
 (function radius() {
-  const hits = scan(/border-radius\s*:\s*([0-9.]+)px/gi);
+  const hits = scan(/(?:border-radius|--radius[a-z0-9-]*)\s*:\s*([0-9.]+)px/gi);
   const over = hits.filter((h) => parseFloat(h.text.match(/([0-9.]+)px/)[1]) > 6);
+  if (!floorOk('§13 layout: border-radius ceiling', hits.length, 3, 'radius value(s)')) return;
   if (over.length) { fail('§13 layout: border-radius above the 6px ceiling'); over.forEach((h) => note(`${h.file}:${h.line}  ${h.text}`)); }
-  else ok(`§13 layout: every literal border-radius ≤ 6px (${hits.length} literal radii, plus token references)`);
+  else ok(`§13 layout: every radius ≤ 6px (${hits.length} value(s) across literal border-radius and --radius-* token definitions, floor 3)`);
 })();
 
 /* --- iconography -------------------------------------------------------- */
@@ -225,25 +431,41 @@ function banIcons() {
     if (!ALLOWED_IDS.includes(id)) bad.push(`icon id "i-${id}" is not on the §13 allowlist — a new icon is a PR discussion`);
     if (BANNED.some((b) => b.toLowerCase() === id.replace(/-/g, ''))) bad.push(`icon id "i-${id}" is a banned icon`);
   }
+  /* The mockups have no icon imports at all, so `imports` is legitimately 0 and
+     the allowlist over <symbol id> is where this rule's teeth are. The floor is
+     therefore on the ids, not on the imports. When this check is later pointed
+     at web/src/** the import arm carries the rule instead and the vocabulary
+     becomes per-target; the floor moves with it. */
+  if (!floorOk('§13 icons: icon vocabulary', ids.size, 8, 'icon id(s)')) return;
   if (bad.length) { fail('§13 icons: banned or unlisted icon'); bad.forEach((b) => note(b)); }
-  else ok(`§13 icons: ${ids.size} icon ids all on the allowlist, ${imports} import specifier(s) clean ` +
+  else ok(`§13 icons: ${ids.size} icon ids all on the allowlist (floor 8), ${imports} import specifier(s) clean ` +
     `(bans evaluated on import specifiers and <symbol id> only, so a KeyboardEvent.key never enters)`);
 }
 banIcons();
 
-rule('§13 icons: no emoji codepoints in app source', /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u,
-  (f) => f.kind !== 'html' /* the mockup's own ⚠/✓ are SVG symbols; prose files are docs */);
+rule('§13 icons: no emoji codepoints in app source', /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u, {
+  /* the mockup's own ⚠/✓ are SVG symbols; prose files are docs */
+  filter: (f) => f.kind !== 'html',
+  /* Floor: the css and js sources together. If this ever drops the rule is
+     scanning nothing and would pass silently. */
+  floor: 20000,
+});
 
 /* --- motion ------------------------------------------------------------- */
+/* Same defect as radius(), and found the same way: every transition in the
+ * mockups is `var(--dur-…)`, so a pattern that only read literal
+ * transition/animation declarations matched ZERO and passed vacuously. The
+ * --dur-* token definitions are where the 200ms ceiling actually lives. */
 (function motion() {
-  const durs = scan(/(?:transition|animation)(?:-duration)?\s*:\s*[^;{}]*?([0-9.]+)m?s/gi);
+  const durs = scan(/(?:(?:transition|animation)(?:-duration)?|--dur[a-z0-9-]*)\s*:\s*[^;{}]*?([0-9.]+)m?s/gi);
   const over = durs.filter((h) => {
     const m = h.text.match(/([0-9.]+)(ms|s)\b/);
     if (!m) return false;
     return (m[2] === 's' ? parseFloat(m[1]) * 1000 : parseFloat(m[1])) > 200;
   });
+  if (!floorOk('§13 motion: duration ceiling', durs.length, 4, 'duration value(s)')) return;
   if (over.length) { fail('§13 motion: transition-duration above 200ms'); over.forEach((h) => note(`${h.file}:${h.line}  ${h.text}`)); }
-  else ok(`§13 motion: ${durs.length} literal duration(s), none above 200ms`);
+  else ok(`§13 motion: ${durs.length} duration(s) across transition/animation declarations and --dur-* token definitions, none above 200ms (floor 4)`);
 
   const bez = scan(/cubic-bezier\(([^)]*)\)/gi);
   const bad = bez.filter((h) => {
@@ -294,11 +516,16 @@ rule('§13 motion: no IntersectionObserver reveal', /IntersectionObserver/);
 })();
 
 rule('§13 controls: everything that navigates is an <a href>', /<div[^>]*\sonclick=/i);
+/* The sharpest vacuous-pass shape in the file: "every page has a skip link" is
+ * trivially true of zero pages, so if the html glob ever stops matching this
+ * prints a pass while checking nothing. There are five screen files and the
+ * floor says so. */
 (function skipLink() {
   const pages = FILES.filter((f) => f.kind === 'html');
+  if (!floorOk('§13 controls: skip link', pages.length, 5, 'screen file(s)')) return;
   const missing = pages.filter((f) => !/skip[^<]{0,20}to[^<]{0,20}content/i.test(f.raw));
   if (missing.length) { fail('§13 controls: no "Skip to content" link'); missing.forEach((f) => note(rel(f.path))); }
-  else ok(`§13 controls: every one of the ${pages.length} screen files carries a Skip to content link`);
+  else ok(`§13 controls: every one of the ${pages.length} screen files carries a Skip to content link (floor 5)`);
 })();
 
 /* =============================================================================
@@ -476,10 +703,33 @@ head('5. Row heights against the three density bands');
  * so the band moves with the setting rather than being three hand-written
  * tables that can disagree. */
 const CEILING_COMPACT = { services: 49, libraries: 49, home: 60, search: 80, requests: 80 };
+
+/* The ceilings above are stated AT COMPACT, so the shift for the other two
+ * densities is measured against compact's own --row-h. That baseline used to be
+ * the literal 28, which silently hardcoded a token: if --row-h at compact ever
+ * moved, every band would still be computed from 28 and would print numbers
+ * that look like measurements and are not. It is read from the token now, and
+ * asserted, because a wrong baseline is worse than an error. */
+const COMPACT_ROW_H_EXPECTED = 28;
+await page.evaluate(() => { document.documentElement.setAttribute('data-density', 'compact'); });
+const COMPACT_ROW_H = await page.evaluate(() =>
+  parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--row-h')));
+if (!Number.isFinite(COMPACT_ROW_H) || COMPACT_ROW_H <= 0) {
+  fail(`rows: --row-h did not resolve at compact (got ${COMPACT_ROW_H}), so every density band ` +
+    `below would be computed from nothing. The token or the density attribute has moved.`);
+} else if (COMPACT_ROW_H !== COMPACT_ROW_H_EXPECTED) {
+  fail(`rows: --row-h at compact is ${COMPACT_ROW_H}px, but CEILING_COMPACT is written against ` +
+    `${COMPACT_ROW_H_EXPECTED}px. The ceilings are stated at compact, so they must be restated ` +
+    `for the new value rather than shifted from a stale baseline.`);
+} else {
+  ok(`rows: --row-h at compact reads ${COMPACT_ROW_H}px from the token, matching the baseline ` +
+    `CEILING_COMPACT is written against`);
+}
+
 for (const density of DENSITIES) {
   await page.evaluate((d) => { document.documentElement.setAttribute('data-density', d); }, density);
   const rowH = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--row-h')));
-  const shift = rowH - 28;
+  const shift = rowH - COMPACT_ROW_H;
   for (const screen of SCREENS) {
     await page.evaluate((s) => { window.location.hash = '#' + s; }, screen);
     await page.waitForTimeout(50);
