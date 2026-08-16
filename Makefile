@@ -3,11 +3,15 @@
 # ─── HONESTY NOTICE ──────────────────────────────────────────────────────────
 # UsArr is PRE-ALPHA. The build is real now: ./cmd/usarr, ./internal/..., ./web/
 # and ./internal/db/migrations/ all exist, so build, test and check work. What is
-# still missing is ./deploy/Dockerfile, so `make docker` WILL fail — and
-# ./docs/design/check.mjs, so `make design` WILL fail until the design thread
-# lands it. Targets that reference a path that does not exist yet remain the
-# build contract the commits that create it are written against, not a
-# description of a working build.
+# still missing is ./deploy/Dockerfile, so `make docker` WILL fail. Targets that
+# reference a path that does not exist yet remain the build contract the commits
+# that create it are written against, not a description of a working build.
+#
+# ./docs/design/check.mjs used to be on that list. It is not any more: the design
+# thread landed it in e0d4b26, and `make design` ran green — observed on main at
+# 2026-08-16 16:41 UTC, after a `git fetch`. That is an observation with a
+# timestamp, not a standing guarantee; the target's own guards report the truth
+# on the machine you are sitting at.
 #
 # Four rules this file must keep obeying as code lands:
 #   1. `make check` is the pre-commit gate. It must pass with NO Docker daemon
@@ -90,6 +94,93 @@ GOLANGCI_VERSION      ?= v2.12.2
 GOOSE_VERSION         ?= v3.27.3
 GOVULNCHECK_VERSION   ?= v1.7.0
 GITLEAKS_VERSION      ?= v8.30.1
+
+# ─── Resolving the pinned tools ──────────────────────────────────────────────
+# PINNING A VERSION IS NOT THE SAME AS RUNNING IT. `make tools` installs into
+# $GOBIN, which is very often NOT on $PATH — it is not on $PATH in this repo's
+# own agent container. Every recipe below used to invoke the BARE tool name, so
+# the gate ran whatever $PATH happened to resolve first and the pins above
+# decorated a file that never consulted them. On the container that found this,
+# $PATH resolved a system-wide golangci-lint v2.5.0 while this file pinned
+# v2.12.2, and the other four pinned tools were not on $PATH at all. A gate that
+# silently degrades to a weaker gate is worse than no gate: it produces a green
+# result nobody re-examines. docs/reference/security.md §7.
+#
+# So: every pinned tool is invoked by ABSOLUTE PATH under $(GOBIN_DIR), never by
+# name, and — where the tool can report its own version — that version is
+# asserted against the pin before it runs. Both, not one:
+#   * path alone silently runs a STALE binary left by an older pin, which is the
+#     same class of bug as the one this block exists to close;
+#   * assertion alone has already resolved and executed the wrong binary in
+#     order to ask it what it is.
+# The assertion is not universal, and cannot be. gitleaks installed by
+# `go install` answers "version is set by build process" — upstream stamps the
+# real version with -ldflags at release time and `go install` does not — so it
+# gets the existence guard alone. That asymmetry is exactly why the absolute
+# path, not the assertion, is the primary mechanism.
+#
+# Override the directory if your layout differs: make check GOBIN_DIR=/some/bin
+ifeq ($(origin GOBIN_DIR),undefined)
+GOBIN_DIR := $(shell $(GO) env GOBIN)
+ifeq ($(strip $(GOBIN_DIR)),)
+GOBIN_DIR := $(shell $(GO) env GOPATH)/bin
+endif
+endif
+
+GOFUMPT       := $(GOBIN_DIR)/gofumpt
+GOLANGCI_LINT := $(GOBIN_DIR)/golangci-lint
+GOOSE         := $(GOBIN_DIR)/goose
+GOVULNCHECK   := $(GOBIN_DIR)/govulncheck
+GITLEAKS      := $(GOBIN_DIR)/gitleaks
+
+# golangci-lint prints "golangci-lint has version 2.12.2 ..." with no leading
+# `v`, so the pin is stripped of it for the match. The others print theirs with
+# the `v`. govulncheck puts it on the SECOND line ("Scanner: govulncheck@v1.7.0"),
+# which is why the check flattens the whole output instead of taking head -1.
+GOFUMPT_WANT     := $(GOFUMPT_VERSION)
+GOLANGCI_WANT    := $(GOLANGCI_VERSION:v%=%)
+GOOSE_WANT       := $(GOOSE_VERSION)
+GOVULNCHECK_WANT := $(GOVULNCHECK_VERSION)
+
+# ─── Report what was measured, not just the verdict ──────────────────────────
+# A CHECK THAT REPORTS ONLY PASS/FAIL CANNOT DISTINGUISH "PASSED" FROM "DID NOT
+# RUN." For this project's whole life so far it was the second one: `check: OK`
+# printed while a stale linter resolved off $PATH scanned the tree with an older
+# ruleset. Any number at all in the output would have exposed that the first
+# time somebody glanced at it.
+#
+# So each pinned step prints ONE line naming the binary it resolved, the version
+# it asserted, and whatever count the tool gives cheaply. And where a floor is
+# cheap to assert it IS asserted — a step that scans zero files or zero packages
+# now fails instead of passing, because "nothing to check" and "everything
+# checks out" are the two states a bare exit code cannot tell apart.
+#
+# One line per step, deliberately. This is a gate, not a build log; output
+# nobody reads is how the gate got here.
+
+# usage: $(call require_tool,<absolute path>,<expected version substring or empty>)
+# Fails loudly and tells you to run `make tools` — the guard style `secrets`
+# already used for gitleaks, now applied to every pinned tool.
+define require_tool
+	@test -x $(1) || { \
+		echo "missing pinned tool: $(1)"; \
+		echo "run: make tools"; \
+		exit 1; }
+	@if [ -n "$(2)" ]; then \
+		got=$$($(1) --version 2>&1 | tr '\n' ' '); \
+		case "$$got" in \
+			*$(2)*) : ;; \
+			*) echo "wrong version of pinned tool: $(1)"; \
+			   echo "  want: $(2)"; \
+			   echo "  got:  $$got"; \
+			   echo "run: make tools"; \
+			   exit 1 ;; \
+		esac; \
+		echo "tool: $(1) — version $(2), asserted against the pin"; \
+	else \
+		echo "tool: $(1) — version not assertable (go install leaves it unstamped)"; \
+	fi
+endef
 
 # ─── Container base image ────────────────────────────────────────────────────
 # Digest-pinned, always. A floating tag means the image you ship is not the
@@ -249,7 +340,12 @@ lint: lint-go lint-web ## Run all linters
 
 .PHONY: lint-go
 lint-go: ## golangci-lint (v2 config format: .golangci.yml must declare version: "2")
-	golangci-lint run
+	$(call require_tool,$(GOLANGCI_LINT),$(GOLANGCI_WANT))
+	@n=$$($(GO) list ./... | wc -l); \
+	test "$$n" -gt 0 || { \
+		echo "lint-go: 0 packages — the linter would scan nothing and exit 0."; exit 1; }; \
+	echo "lint-go: linting $$n Go packages"
+	$(GOLANGCI_LINT) run
 
 .PHONY: lint-web
 lint-web: web-deps ## eslint + svelte-check
@@ -258,12 +354,19 @@ lint-web: web-deps ## eslint + svelte-check
 
 .PHONY: fmt
 fmt: ## Format everything IN PLACE (gofumpt + prettier)
-	gofumpt -l -w .
+	$(call require_tool,$(GOFUMPT),$(GOFUMPT_WANT))
+	$(GOFUMPT) -l -w .
 	$(call pnpm_if_web,format)
 
 .PHONY: fmt-check
 fmt-check: ## Verify formatting without modifying files (used by `make check`)
-	@out=$$(gofumpt -l .); \
+	$(call require_tool,$(GOFUMPT),$(GOFUMPT_WANT))
+	@n=$$(find . -path ./.git -prune -o -path ./$(WEB_DIR)/node_modules -prune -o \
+		-name '*.go' -print | wc -l); \
+	test "$$n" -gt 0 || { \
+		echo "fmt-check: 0 .go files — gofumpt would scan nothing and exit 0."; exit 1; }; \
+	echo "fmt-check: checking $$n .go files with gofumpt"; \
+	out=$$($(GOFUMPT) -l .); \
 	if [ -n "$$out" ]; then echo "not gofumpt-formatted:"; echo "$$out"; exit 1; fi
 	$(call pnpm_if_web,format:check)
 
@@ -310,15 +413,32 @@ design: ## Run the design check (DESIGN-DIRECTION §13). Needs Chromium. NOT par
 		echo "no Playwright browser cache at $(PW_BROWSERS_PATH)."; \
 		echo "point at yours with: make design PW_BROWSERS_PATH=~/.cache/ms-playwright"; \
 		exit 1; }
+	@# Fourth guard. The three above check node, the script and the BROWSER cache —
+	@# none of them checks that the Playwright MODULE resolves, so a machine with
+	@# all three still fell through to a bare ERR_MODULE_NOT_FOUND stack trace.
+	@# The specifier is read out of check.mjs rather than duplicated here: it is an
+	@# absolute path outside the repo (see note above), and a guard that checks a
+	@# path the run does not use is the same bug as a pin the gate never runs.
+	@spec=$$(grep -oE "from '[^']*playwright[^']*'" $(DESIGN_CHECK) | head -1 | sed "s/^from '//; s/'$$//"); \
+	if [ -z "$$spec" ]; then \
+		echo "cannot find the Playwright import in $(DESIGN_CHECK) — this guard needs updating."; \
+		exit 1; fi; \
+	$(NODE) --input-type=module -e "await import(process.argv[1])" "$$spec" >/dev/null 2>&1 || { \
+		echo "the Playwright module does not resolve: $$spec"; \
+		echo "$(DESIGN_CHECK) imports it by absolute path from outside the repo, so it is"; \
+		echo "not installed by 'pnpm -C web install'. Install it (npm i -g playwright) or"; \
+		echo "edit that import to point at your own copy."; \
+		exit 1; }
 	PLAYWRIGHT_BROWSERS_PATH=$(PW_BROWSERS_PATH) $(NODE) $(DESIGN_CHECK)
 
 # ─── Supply chain ────────────────────────────────────────────────────────────
 
 .PHONY: secrets
 secrets: ## Scan the working tree for committed credentials. GATING, part of `check`.
-	@command -v gitleaks >/dev/null 2>&1 || { \
-		echo "gitleaks not installed — run: make tools"; exit 1; }
-	gitleaks dir . --redact=100 --no-banner --exit-code 1
+	$(call require_tool,$(GITLEAKS),)
+	@# No count is added here: gitleaks already ends with "scanned ~N bytes in Ns",
+	@# which is exactly the number this step needs to prove it looked at something.
+	$(GITLEAKS) dir . --redact=100 --no-banner --exit-code 1
 
 # A gitignore is a request; this is enforcement. UsArr's repo carries *Arr admin
 # keys in every developer's .env and fixture keys in testdata — the one thing
@@ -341,7 +461,12 @@ modverify: ## Verify module contents against go.sum, and that go.mod/go.sum are 
 
 .PHONY: vuln
 vuln: ## govulncheck + pnpm audit. GATING, part of `check`. THE ONE NETWORK STEP.
-	govulncheck ./...
+	$(call require_tool,$(GOVULNCHECK),$(GOVULNCHECK_WANT))
+	@n=$$($(GO) list ./... | wc -l); \
+	test "$$n" -gt 0 || { \
+		echo "vuln: 0 packages — govulncheck would scan nothing and exit 0."; exit 1; }; \
+	echo "vuln: scanning $$n Go packages against vuln.go.dev"
+	$(GOVULNCHECK) ./...
 	$(call pnpm_if_web,audit)
 
 # `|| true` used to live on the line above. It meant a known-vulnerable
@@ -358,22 +483,26 @@ vuln: ## govulncheck + pnpm audit. GATING, part of `check`. THE ONE NETWORK STEP
 
 .PHONY: migrate
 migrate: ## Apply pending migrations to the dev database
+	$(call require_tool,$(GOOSE),$(GOOSE_WANT))
 	@mkdir -p $(DEV_CONFIG_DIR)
-	goose -dir $(MIGRATIONS) sqlite3 $(DEV_DB) up
+	$(GOOSE) -dir $(MIGRATIONS) sqlite3 $(DEV_DB) up
 
 .PHONY: migrate-down
 migrate-down: ## Roll back ONE migration on the dev database (local testing only)
-	goose -dir $(MIGRATIONS) sqlite3 $(DEV_DB) down
+	$(call require_tool,$(GOOSE),$(GOOSE_WANT))
+	$(GOOSE) -dir $(MIGRATIONS) sqlite3 $(DEV_DB) down
 
 .PHONY: migrate-status
 migrate-status: ## Show migration status of the dev database
-	goose -dir $(MIGRATIONS) sqlite3 $(DEV_DB) status
+	$(call require_tool,$(GOOSE),$(GOOSE_WANT))
+	$(GOOSE) -dir $(MIGRATIONS) sqlite3 $(DEV_DB) status
 
 .PHONY: migrate-new
 migrate-new: ## Scaffold a migration: make migrate-new name=add_tag_rules
+	$(call require_tool,$(GOOSE),$(GOOSE_WANT))
 	@test -n "$(name)" || { echo "usage: make migrate-new name=add_tag_rules"; exit 1; }
 	@mkdir -p $(MIGRATIONS)
-	goose -dir $(MIGRATIONS) create $(name) sql
+	$(GOOSE) -dir $(MIGRATIONS) create $(name) sql
 
 # ─── Docker ──────────────────────────────────────────────────────────────────
 
@@ -407,12 +536,16 @@ docker: ## Build the container image. THE ONLY TARGET THAT NEEDS A DOCKER DAEMON
 # ─── Housekeeping ────────────────────────────────────────────────────────────
 
 .PHONY: tools
-tools: ## Install the pinned dev tools into $GOBIN
+tools: ## Install the pinned dev tools into $(GOBIN_DIR)
+	@echo "installing the pinned tools into $(GOBIN_DIR)"
 	$(GO) install mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
 	$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
 	$(GO) install github.com/pressly/goose/v3/cmd/goose@$(GOOSE_VERSION)
 	$(GO) install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
 	$(GO) install github.com/zricethezav/gitleaks/v8@$(GITLEAKS_VERSION)
+	@echo ""
+	@echo "the recipes invoke these by absolute path under $(GOBIN_DIR), so you do"
+	@echo "NOT need them on \$$PATH — and a stray copy on \$$PATH can no longer shadow them."
 
 .PHONY: clean
 clean: ## Remove build artifacts and the dev database
