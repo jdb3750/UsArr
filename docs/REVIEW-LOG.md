@@ -3441,7 +3441,7 @@ user, so the oracle has nobody to inform.
 
 **Deferred rather than applied, because the field is load-bearing on a screen another thread just
 shipped:** `web/src/routes/requests/+page.svelte:535` keys list rows on it
-(`key={(g) => String(g.id)}`) and `web/src/lib/api.ts:1237` **rejects any row without it** — a change
+(`key={(g) => String(g.id)}`) and `web/src/lib/api.ts`'s `toRecentGrab` **rejects any row without it** (line 1329 as of `1d7fa01`; that file is churning, so the symbol is the citation) — a change
 here blanks the block rather than degrading it.
 
 **Recommended fix, for whoever coordinates it:** an opaque per-row identifier, or a per-user
