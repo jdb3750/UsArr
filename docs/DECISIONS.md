@@ -65,7 +65,8 @@ The one genuinely CPU-shaped task is JSON: a 10k-movie `/api/v3/movie` response 
 
 ### Decision
 **Go.** `CGO_ENABLED=0`, static binary, cross-compiled by `GOOS`/`GOARCH` with no toolchain.
-SQLite via `ncruces/go-sqlite3`. WASM plugin host via `wazero`.
+SQLite via `ncruces/go-sqlite3`. ~~WASM plugin host via `wazero`.~~ — struck in revision 2: the
+WASM tier is deferred (ADR-0008) and the driver no longer depends on wazero (correction 1 below).
 
 ### Consequences
 - `docker buildx` multi-arch images become trivially reproducible; target < 40 MB compressed.
@@ -362,7 +363,9 @@ hardware-acceleration backends, no patched FFmpeg fork.
   DoS. **A greenfield hub with a small team will do worse. This alone ends the debate.**
 
 **The line UsArr draws:** *UsArr may move bytes; UsArr may not build FFmpeg command lines from
-user input.* Per ADR-0018 UsArr does not even move media bytes by default.
+user input.* Per ADR-0018 byte delivery is not a product goal either: the only media bytes UsArr
+moves are the untranscoded audio/ebook proxy on its own northbound surfaces (ADR-0017), and video
+links out.
 
 **Conditions that would reopen this** (both required, both **measured**, not assumed):
 (1) Jellyfin's API becomes unusable or hostile — a licensing change like Emby's 2018 move, or
@@ -597,8 +600,9 @@ Implement **OpenSubsonic** and **OPDS 2.0 (with 1.2 fallback)** as server surfac
 - ⚠️ Client spec coverage is uneven — one source indicates **Feishin** still targets Navidrome's
   internal API and Jellyfin's API rather than full OpenSubsonic. **Test against Symfonium as the
   reference client.**
-- A **Jellyfin-compatible surface is deferred to v2 and unproven** — the API is large, under
-  active change, and its playback-negotiation surface is precisely what UsArr does not want.
+- A **Jellyfin-compatible surface is deferred and unproven** — on no milestone, with its seam
+  recorded in [`FUTURE.md`](./FUTURE.md) §6. The API is large, under active change, and its
+  playback-negotiation surface is precisely what UsArr does not want.
 
 ### Alternatives rejected
 - **Implementing salt/token for compatibility** — would force recoverable password storage, i.e.
@@ -867,8 +871,13 @@ The *Arr web UIs cannot show you a unified view of this; you check two dashboard
 each with its own `remote_id`, `monitored` state, quality profile and root folder.
 
 ### Consequences
-- **One poster with a "1080p ✓ / 4K ✗" badge.** This is the flagship differentiating feature and
-  it should be on the landing page.
+- **One poster with a "1080p ✓ / 4K ✗" badge** — **a free consequence of the M:N link and a strong
+  signal to power users.** *Revision 2 demotes the framing:* it was previously called "the flagship
+  differentiating feature" that "should be on the landing page", but it requires the user to run
+  **two Radarr instances**, which is a power-user topology and may not even be the owner's. Calling
+  it the flagship aims the headline at a narrow audience and displaces what was actually asked for.
+  The landing-page claim is: *one place to search everything you have and ask for what you don't.*
+  The capability stays — it costs nothing extra.
 - The `availability` summary is denormalised onto `work` so the grid renders the badge without
   a join.
 - Conflict rule when instances disagree on shared metadata: **highest `priority` among
@@ -1088,10 +1097,9 @@ narrowed the scope: *"we don't need the capability to stream or do anything else
 unified source that plugs into your favorite players."*
 
 ### Decision
-**UsArr has no in-app media player, and serving media bytes is not a core capability.** The
-northbound protocol surfaces (ADR-0010) **remain and go up in priority** — they are how
-"your favourite players" plug in — but **their job is catalogue, search, routing and redirect,
-not byte delivery.**
+**UsArr has no in-app media player, and byte delivery is not a product goal.** The northbound
+protocol surfaces (ADR-0010) **remain and go up in priority** — they are how "your favourite
+players" plug in — but **their job is catalogue, search and routing.**
 
 ### Consequences
 - The product is a **gateway**, and the framing sharpens: northbound protocol surfaces +
@@ -1099,11 +1107,20 @@ not byte delivery.**
 - ADR-0006 becomes even more clearly correct — there is now no in-house playback surface at all
   to tempt anyone toward "just a little transcoding".
 - The web SPA is for browsing, searching, managing and requesting. "Play" hands off.
-- Roadmap effect: the player is removed entirely (not deferred); OpenSubsonic and OPDS move up
-  to v0.2.
+- Roadmap effect: the player is removed entirely (not deferred).
 - **Where the replica model stops must be stated explicitly** so this does not read as a
   contradiction: UsArr replicates anything a screen renders (metadata, browse, search,
   availability, links, tags) and **never replicates a byte stream**.
+
+**Revision 2 corrects one clause.** This ADR previously said the northbound surfaces' job is
+*"catalogue, search, routing and **redirect**, not byte delivery"*. The redirect is gone (ADR-0017),
+and for audio and ebooks **UsArr does carry the bytes** — because OpenSubsonic and OPDS have exactly
+one acquisition verb and no way to hand a client off safely. That is not a reversal of *this* ADR's
+intent: byte delivery is still not a product goal, there is still no player, and there is still no
+transcoding of any kind. Video, which is where the byte cost is ruinous and where a first-class
+alternative exists, **links out to the backend's own client**. ADR-0023 states the general rule:
+link out where a better neighbour exists; carry bytes only where the protocol leaves no
+alternative.
 
 ### Alternatives rejected
 - **Shipping the minimal web player anyway** — it is genuinely cheap (an `<video>` over a
@@ -1127,9 +1144,20 @@ free.
 **v0.1 ships single-user** (one implicit owner, user-management UI hidden). **But every table
 that should be user-scoped carries a `user_id` from migration 0001.**
 
-Scoped from the start: `request`, `tag_assignment` (user-namespace tags), `playback_state`,
-`play_history`, `playlist`, `saved_filter`, `client_credential`, `session`, `audit_log`, and the
-review-inbox verdicts on `work_relation`.
+Scoped from the start — **this list is authoritative; the architecture's §1.3 previously carried a
+shorter one, and both claimed to be the hard rule**: `request`, `tag_assignment` (user-namespace
+tags), `playback_state`, `play_history`, `playlist`, `saved_filter`, `client_credential`, `session`,
+`audit_log`, `write_queue`. The review-inbox verdicts on `work_relation` are **removed** from the
+list, because revision 2 removed the review inbox (ADR-0007); manually-created links are
+instance-global in v0.1 and **must become user-scoped when multi-user lands**, which is recorded as
+a v1.0 obligation in `reference/schema.md` §11 rather than left to be discovered.
+
+**A second rule joins it in revision 2, and it is the one that is expensive to retrofit:** every read
+path that aggregates across instances takes an **access-scope parameter** in its query signature —
+the library grid, search, the client prefix index, the availability rollup and every northbound
+surface. A denormalised rollup or a shipped-to-client index computed across instances a user cannot
+see is an existence oracle, and bolting a filter on afterwards is exactly the cost this ADR refuses
+to accept for `user_id` columns.
 
 ### Consequences
 - Every query is written user-scoped from day one, so multi-user is a UI unlock plus a role
@@ -1179,6 +1207,15 @@ routes** to whichever backend can service it.
 - SeerrNG's two friction points are addressed **at the schema level rather than the adapter
   level**: an audiobook is an `edition` of a `book` work, routed to a different instance than the
   ebook, and provider matching is the identity cascade.
+  **Revision 2 makes that real rather than asserted.** The schema previously said both things at
+  once — `'audiobook'` was a member of `work.kind` *and* was described as an edition — which is
+  unimplementable in either direction: as a kind it could never be matched to its own ebook (the
+  cascade forbids cross-kind matching), and as an edition the kind enum and the `type:` tag
+  vocabulary were wrong. **The edition reading wins** (it matches Open Library, which ADR-0009
+  already cites as authority) and it propagates: `'audiobook'` leaves `work.kind`;
+  `edition.format` gains it; `request` carries `(work_kind, edition_format)`; the tag vocabulary
+  gains a `format:` namespace and loses `type:audiobook`; and `Caps.MediaKinds` becomes a list of
+  `(kind, format)` pairs.
 - Approval, quotas and auto-approve compose with ADR-0011's permissions and ADR-0019's
   single-user mode.
 - **"Request in under 3 seconds from a search box" is the design target.** Keep the request API
@@ -1205,28 +1242,58 @@ Navidrome-A's album `3f2a…` and Navidrome-B's `3f2a…` are different albums. 
 cache these IDs indefinitely**, in playlists, favourites and offline downloads. An ID that
 changes on re-sync silently corrupts user data, and the user blames UsArr.
 
-### Decision
-The northbound ID is `base32(varint(instance_id) || 0x00 || native_id_bytes)` — an opaque
-encoding of `(service_instance, backend's own identifier verbatim)`. **It addresses a
-`service_item_link`, not a `work`.**
+### Decision (amended, revision 2)
+```
+usarr_id := crockford_base32( varint(instance_id) || kind_byte || enc_byte || native_id_bytes )
+```
+**It addresses a `service_item_link`, not a `work`.**
 
 ### Consequences
 - Globally unique (instance prefix, and `service_instance.id` is **never reused**, even after
   deletion — deleted instances leave a tombstone).
-- **Stable across restart, re-sync and reconcile**, because it is a pure function of two values
-  UsArr does not compute.
-- **Resolvable without a database lookup** for the routing decision — the hot path decodes
-  locally and touches one indexed row only to get the base URL and credential.
 - **The key insight: addressing a `work` would be unstable for reasons entirely internal to
   UsArr.** A canonical work can be *merged* by the identity cascade or *split* by an un-merge,
-  changing its id — and **merges must not be able to corrupt a client's playlist.** Addressing a
-  link decouples client-visible identity from UsArr's internal identity resolution entirely.
-- A unified item present in two backends must pick one link to address. **Rule: always address
-  the highest-`priority` link regardless of health, and let ADR-0017's redirect fail over at
-  stream time. Stability beats availability here.**
+  changing its id — and **merges must not be able to corrupt a client's playlist.**
 - ⚠️ **Open question:** whether every target client tolerates non-UUID, non-numeric IDs in all
   fields (`id`, `parent`, `coverArt`, `albumId`, `artistId`), and whether any imposes a length
-  limit. Symfonium is the reference; **test the full matrix before the surface ships.**
+  limit. Symfonium is the reference; **test before the surface ships** — the scheme is unchangeable
+  once clients cache ids.
+
+### Revision 2 — four corrections
+
+1. **`kind_byte` added, `0x00` separator removed.** The old encoding carried `(instance_id,
+   native_id)` only, but the sole unique index on `service_item_link` is
+   `(service_instance_id, remote_kind, remote_id)`. Without the kind at lookup time SQLite can use
+   only the leftmost column, so `WHERE service_instance_id=? AND remote_id=?` yields
+   `SEARCH … USING INDEX ux_sil (service_instance_id=?)` — a range scan over every link on that
+   instance (~400k rows for a 2k-series Sonarr) on **every** stream resolve, `getCoverArt` and
+   metadata call. Adding a `(instance, remote_id)` unique index instead is not available: it asserts
+   an invariant that is false for the \*Arrs, where series 42 and episode 42 both exist. The `0x00`
+   separator is dropped as decodable dead weight — `varint` is self-delimiting.
+2. **"Nothing UsArr computes is in it" was false, twice.** `instance_id` is assigned by UsArr, and
+   *which* link is addressed for a unified item was driven by an admin-editable `priority` — so
+   reordering two Navidromes would have changed every affected album's ID, which is the exact
+   corruption this ADR exists to prevent, caused by a settings change with no warning. **The fix is a
+   pin:** once a link has been addressed northbound it is `is_northbound_canonical` and priority
+   changes do not move it; deleting a pinned instance mints an alias row so old IDs still resolve,
+   and never silently rebinds. The true invariant is narrower: **the ID is stable for a fixed
+   `(instance, kind, native id)`.**
+3. **"Opaque to the client" is struck.** Base32 is an encoding, not a confidentiality mechanism: any
+   client decodes a UsArr ID in one line, and \*Arr native ids are small sequential integers, so the
+   space is enumerable in a few thousand round trips. **Authorization must never depend on ID
+   secrecy** — every resolution performs a `user_library_access` + permission check *before* any
+   backend call and returns the protocol-native not-found (Subsonic 70) on failure, never a 403,
+   which would confirm existence.
+4. **The length requirement is honest now.** Crockford base32 expands 8/5, so a verbatim 32-character
+   identifier is 56 characters, over the ~48 target. `enc_byte` lets a hex or UUID identifier be
+   decoded to 16 raw bytes and re-hexed on the way out (31 characters), and where an id cannot be
+   compacted the document **states the resulting length** rather than pretending the bound holds.
+   🔍 The per-backend id formats this depends on are inference and must be checked against live
+   instances before the codec is frozen.
+
+**"Resolvable without a database lookup" is also narrowed:** routing decodes locally, but the
+gateway must still reach `work` for metadata, so the link lookup is unavoidable — which is precisely
+why `kind_byte` matters.
 
 ### Alternatives rejected
 - **`work.id` directly** — unstable across merges, which is the one thing an eternally-cached ID
@@ -1235,3 +1302,103 @@ encoding of `(service_instance, backend's own identifier verbatim)`. **It addres
   table that must itself never lose a row.
 - **The backend's native ID unprefixed** — collides the moment a second instance of the same kind
   is added, which is the exact topology the gateway exists to serve.
+
+---
+
+<a id="adr-0022"></a>
+## ADR-0022 — v1 authentication is a local account and API keys; external identity is deferred
+
+**Status:** Accepted (revision 2)
+
+### Context
+The design carried a full enterprise-adjacent authentication programme: OIDC with PKCE against three
+named providers (with opaque-token introspection handling for Authelia), forward-auth with trusted
+header plumbing and CIDR allowlists, WebAuthn passkeys issuing discoverable credentials, TOTP, and a
+visible "security posture panel". None of it serves the stated deployment — a tailnet, a household,
+one owner — and every item is a subsystem rather than a setting.
+
+Note carefully what is **not** in scope of this ADR: credential encryption at rest and the SSRF
+egress policy are correctly identified as applying on a tailnet exactly as on the internet, and they
+are **v0.1 deliverables in full**. The problem is only the exposure apparatus stacked on top.
+
+### Decision
+> **v1 authentication is: a local account with Argon2id, an opaque server-side session cookie, a
+> CSRF token on state-changing requests, and per-app API keys for the northbound surfaces. Nothing
+> else.**
+
+Three specifics that are decisions rather than defaults:
+
+1. **Argon2id is for user passwords only.** Northbound `client_credential` keys are server-generated
+   ≥128-bit random tokens verified with **HMAC-SHA256 and a constant-time compare**, looked up by
+   `key_prefix`. Running a memory-hard KDF on a high-entropy bearer token buys nothing and costs
+   everything: Subsonic clients authenticate *per request*, one poster grid is ~60 `getCoverArt`
+   calls, and at m = 19 MiB that is 1.1 GB of transient allocation on a Pi — plus an unauthenticated
+   OOM primitive, since verification runs before the key is known to be valid. **The reasoning is
+   recorded so a future contributor does not "fix" it back.**
+2. **There is no password pepper.** It appeared twice in prose and was specified nowhere — no env
+   var, no storage location, no rotation procedure — and a pepper silently absent on one deploy and
+   present on another locks users out. Per-hash salts are the design.
+3. **Sudo mode exists in v1**: a 5-minute re-authentication window before touching the vault (adding
+   or changing a service credential, changing a `base_url`, downloading a backup, issuing a
+   credential, rotating the key). Without it a single stolen cookie is a month-long window.
+
+### The seam
+**Credential verification is isolated behind one `Authenticator` interface from v0.1**, and v0.1
+already ships three implementations — password, HMAC'd API key, and the tailnet `WhoIs` path — so a
+fourth identity source is an implementation rather than a rewrite. The interface carries a
+`Surfaces()` method (`web | rest | opds`), which is the load-bearing half: it makes the rule that
+**ambient and trusted-header auth never reach the OpenSubsonic or OPDS surfaces** structural rather
+than something to remember. `user.auth_source` already takes another value without a migration.
+
+**Revisit trigger:** a user who actually runs an SSO stack asks for it — and, for passkeys
+specifically, a decision about what TV and native clients do instead, since WebAuthn is web-only.
+
+### Consequences
+- The v1 config surface loses `USARR_FORWARD_AUTH_*` and the worked forward-auth example.
+- The audit log ships as a **plain paginated list**; the filtered audit UI and the security-posture
+  panel are deferred ([`FUTURE.md`](./FUTURE.md) §10). Rate limiting and the audit log itself stay —
+  they are cheap and *"who deleted this"* is a real need on a shared server.
+- **In v0.1 there is exactly one account**, so a tailnet identity path that matches the allowlist
+  authenticates **as the owner** and any other login is refused. UsArr **never auto-creates** in
+  single-user mode, and an enabled identity path with an **empty allowlist is a startup error** —
+  fail closed, not open.
+
+---
+
+<a id="adr-0023"></a>
+## ADR-0023 — UsArr coexists with the ecosystem rather than replacing it
+
+**Status:** Accepted (revision 2) · **This is a framing decision, and it settles a class of future
+arguments.**
+
+### Context
+Every aggregation layer faces the same drift: it starts as a view over other people's services, then
+absorbs one of them "because it would be simpler if it were all one binary". The design already
+resists this in specific places — no transcoder, no player, no reimplementation of the \*Arr import
+engines — but the *general* principle was never stated, so each instance had to be re-argued from
+first principles.
+
+### Decision
+> **UsArr is the layer that makes your existing services one catalogue. Sonarr keeps doing
+> acquisition, Jellyfin keeps doing playback, Navidrome keeps being an excellent music server.**
+
+Two rules follow, and they are the useful part:
+
+1. **A feature that moves UsArr toward *replacing* a neighbour is a non-goal**, not a deferral, and
+   belongs in the "explicitly never" list rather than in [`FUTURE.md`](./FUTURE.md). Transcoding and
+   an in-app player are the worked examples.
+2. **A feature that makes the neighbours easier to live with is on-thesis** — the unified catalogue,
+   cross-media links, one credential, one search box, aggregated release calendars, unified
+   statistics. These belong in the roadmap or in `FUTURE.md` with a seam.
+
+### Consequences
+- The `FUTURE.md` / "explicitly never" split has a test, so an idea can be sorted without a debate
+  about whether it is "cool".
+- It explains a decision that otherwise looks inconsistent: UsArr **proxies audio bytes** for its own
+  OpenSubsonic surface (there is no neighbour to hand a Subsonic client off to) but **links out for
+  video** (there is — the backend's own client, which is better at it).
+- It is the honest answer to "why not just fork Jellyfin": UsArr is not trying to be a better
+  Jellyfin, it is trying to make five services feel like one library.
+- **Users must run a second service**, and that remains the real objection to the whole approach.
+  The mitigation is a good wizard, a first-class compose bundle and honest documentation — not a
+  rebuttal, and not absorbing the neighbour.

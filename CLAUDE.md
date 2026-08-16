@@ -52,12 +52,13 @@ Utilitarian over stylish. Tried and true beats novel: standard, familiar pattern
 and snappy above all. No visual flair that costs render time — if an effect buys nothing but
 looks, it does not ship. **Navidrome is the reference point for the bar to hit.**
 
-Four screens are essential in v0.1:
+Four screens are essential; the first three ship in v0.1:
 - **Home**, sectioned by media type.
 - **Service setup and health**, which must show what in the pipeline is broken and how to fix it.
 - **Search** across your media.
 - **Requests**, covering both the *Arr-backed path and the Prowlarr free-text indexer
-  search-and-grab path.
+  search-and-grab path. The Prowlarr path is in v0.1 (Search-and-Grab mode); the *Arr-backed
+  request flow is v0.2.
 
 ## Working practice
 
@@ -134,8 +135,9 @@ See `docs/ARCHITECTURE.md` §14 for the full threat model.
 
 **Quality gate**
 - `gofumpt`, `golangci-lint`, `eslint`, `prettier`, `svelte-check`.
-- **`make check` (fmt + lint + vuln + test + secret scan) is the pre-commit gate and must pass
-  before any commit.** It runs offline, with no Docker daemon.
+- **`make check` (`fmt-check` + `lint` + `modverify` + `secrets` + `test`, then `vuln`) is the
+  pre-commit gate and must pass before any commit.** It needs no Docker daemon and makes exactly
+  one network call — govulncheck's query to `vuln.go.dev`. `make check-offline` drops that step.
 
 **Tests**
 - Recorded HTTP fixtures (`go-vcr`) plus contract tests against the shipped Servarr OpenAPI
@@ -174,8 +176,8 @@ Detail lives in `docs/ARCHITECTURE.md` §16, which wins over this summary.
 - **v0.1** — unified library + search. Prove the replica thesis on real data.
 - **v0.2** — requests.
 - **v0.3** — cross-media linking.
-- **v0.4** — gateway surfaces (OpenSubsonic, OPDS).
-- **v1.0** — breadth: more providers, multi-user, the full tag system.
+- **v0.4** — the gateway, narrowed: an OpenSubsonic read-only subset over one Navidrome.
+- **v1.0** — breadth: more providers, multi-user, the OPDS surface, the full tag system.
 
 ## Non-goals, and deferred work
 
@@ -192,5 +194,6 @@ design should leave room for them. Do not build them now; do not treat them as r
 - the cross-media fuzzy-match tier and its review inbox
 - spellfix1 typo tolerance
 - a Jellyfin-compatible northbound surface
+- video byte-proxying (audio and ebooks are proxied today; video links out)
 - aggregated release calendars across subscriptions
 - per-user watch / listen / read statistics

@@ -685,6 +685,10 @@ Pi-targeting audience.
 original C SQLite source, guaranteeing 100% bug-for-bug compatibility with upstream"*,
 supports FTS5 and extensions), and `glebarez/go-sqlite`.
 ([ncruces/go-sqlite3](https://github.com/ncruces/go-sqlite3))
+⚠️ **Superseded since this pass:** `ncruces/go-sqlite3` moved off wazero to the maintainer's own
+`wasm2go` translator (discussion #361, 2026-03-05), and its README now lists Go and `x/sys` as its
+only direct dependencies — so neither "run under wazero" nor the bit-for-bit compatibility claim
+describes what UsArr will run. See ADR-0001 revision 2 and `DEVELOPMENT.md` §1.
 **[F]** The cgo-free penalty is real but modest — one benchmark set puts modernc at ~75% of
 `mattn/go-sqlite3`, with a 1.17×–5.84× CGO advantage depending on operation.
 ([sqlite-cgo-no-cgo](https://github.com/multiprocessio/sqlite-cgo-no-cgo))

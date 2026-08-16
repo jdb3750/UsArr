@@ -349,7 +349,9 @@ scope and ETagged by `(user_id, access_scope_version)` (§1.3).
 
 Endpoint-level detail: [`reference/gateway.md`](./reference/gateway.md).
 
-Four problems: ID collision (clients cache IDs *indefinitely*, in playlists and offline downloads) →
+### 5.1 The four problems
+
+ID collision (clients cache IDs *indefinitely*, in playlists and offline downloads) →
 §5.3; credential translation (the client has one UsArr credential, UsArr has N backend credentials,
 and they must never meet) → §5.2; byte delivery → §5.4; capability skew → §5.5.
 
@@ -1000,6 +1002,8 @@ equality.
 
 Interface and manifest grammar: [`reference/providers.md`](./reference/providers.md).
 
+### 11.1 Two tiers, and the registry seam
+
 **Tier 0** compiled-in Go providers; **Tier 1** declarative YAML manifests in
 `$USARR_CONFIG_DIR/providers/`. The insight that makes Tier 1 work: **90% of "add a new service" is
 not code, it is HTTP plumbing.**
@@ -1010,6 +1014,8 @@ type every tier produces. **A WASM host, or any future tier, is one more factory
 code in the sync engine.** That is deliberate and costs one interface today (FUTURE.md §1). gRPC
 (extra supervised processes) and Go `plugin` (.so must match the build exactly) were rejected on
 their own merits and stay rejected.
+
+### 11.2 What a manifest is, and what it is not
 
 > **A manifest is not a sandbox.** It is a **server-side HTTP request generator that runs with the
 > instance's stored credential.** "Fully sandboxed (no code runs)" was the most dangerous sentence in
@@ -1039,8 +1045,10 @@ optional `RateLimit`. There is **no `Stream` capability** — the stream path no
 backend minting anything (§5.4). `Searcher.Search` takes a `SearchQuery` carrying free text **and
 optionally** a work reference; the free-text form is what makes Search-and-Grab possible.
 
-**Connection wizard rules** are in the providers reference. The two that are architecture, not
-detail: **changing `base_url`'s scheme/host/port invalidates the stored credential** (otherwise the
+### 11.3 Connection wizard rules
+
+The full list is in [`reference/providers.md`](./reference/providers.md) §4. The two that are
+architecture, not detail: **changing `base_url`'s scheme/host/port invalidates the stored credential** (otherwise the
 masked-secret display is cosmetic — point `base_url` at a listener you control, click Test, read the
 `X-Api-Key` off your own log); and **TLS is TOFU SPKI pinning per instance, not a `verify_tls=0`
 flag**, because `verify_tls=0` means no server authentication at all and UsArr then sends a

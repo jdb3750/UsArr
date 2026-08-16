@@ -31,12 +31,14 @@ inside a credential vault is worse than the solved problem sitting next to it.
 An embedded Tailscale node (`tsnet`) is a **later milestone**. It is designed in §9 so the shape is
 settled, but nothing in v0.1 depends on it and the setup checklist does not ask you for a tailnet.
 
-**v0.1 is single-user** — one owner account. Roles, quotas, per-user library visibility, signup,
-OIDC, passkeys, TOTP and forward-auth are not deferred, they are **cut from the project**
-(`ARCHITECTURE.md` §16). Nothing here configures them.
+**v0.1 is single-user** — one owner account. Roles, quotas, per-user library visibility and signup
+land with multi-user in **v1.0** (`ARCHITECTURE.md` §16); OIDC, passkeys, TOTP and forward-auth are
+**deferred, not rejected** (`FUTURE.md` §4). Neither has a configuration surface today, so nothing
+here configures them.
 
-**UsArr does not stream or transcode media.** No FFmpeg, no transcode configuration, no media-path
-tuning — there is none in the product.
+**UsArr does not transcode media.** No FFmpeg, no transcode configuration, no media-path tuning —
+there is none in the product. The audio/ebook byte proxy on UsArr's own surfaces
+(`ARCHITECTURE.md` §5.4) is a plain copy and has no settings.
 
 ---
 
@@ -74,8 +76,9 @@ filters, metadata-provider keys and per-instance TLS settings live in SQLite and
 and deleted **only through the UI**, behind a wizard that runs a live connection test before saving.
 
 **There is no environment channel for service configuration, and no provisioning file.** No
-`USARR_SONARR_URL`, no `USARR_SONARR_2_API_KEY`, no `services.yaml`, no `managed_by`, no
-"managed by environment" badge, no prune semantics. This removes the precedence contradiction rather
+`USARR_SONARR_URL`, no `USARR_SONARR_2_API_KEY`, no `services.yaml`, no
+"managed by environment" badge, no prune semantics. (`service_instance.managed_by` exists in the
+schema and can express `ui | env | file`, but with one writer every row is `ui`.) This removes the precedence contradiction rather
 than arbitrating it: with one writer there is nothing to arbitrate. The cost is one manual step on a
 fresh headless install. The benefit is that "where did this setting come from?" has exactly one
 answer, forever.
@@ -197,15 +200,17 @@ gone, and none returns without an ADR:
 * **`*_FILE` for anything but `USARR_SECRET_KEY`** — nothing else is a secret in the environment.
 * **`USARR_ALLOW_INSECURE_TLS_HOSTS`** — two mechanisms for one property. Per-instance wins (§7.1).
 * **`USARR_TLS_CERT_FILE` / `_KEY_FILE`** — use a reverse proxy (§0).
-* **`USARR_FORWARD_AUTH_*`, `USARR_ENABLE_SIGNUP`, `USARR_SESSION_*`** — multi-user and external
-  identity are cut from the project.
-* **`USARR_MEILISEARCH_*`** — Meilisearch is cut; SQLite FTS5 is the engine, not a fallback.
+* **`USARR_FORWARD_AUTH_*`, `USARR_ENABLE_SIGNUP`, `USARR_SESSION_*`** — multi-user is v1.0 and
+  external identity is deferred (`FUTURE.md` §4); session lifetimes are fixed (§1). None of them has
+  a configuration surface today.
+* **`USARR_MEILISEARCH_*`** — an external search engine is deferred (`FUTURE.md` §2); SQLite FTS5 is
+  the engine, not a fallback, and no milestone ships a second daemon.
 * **`USARR_TMDB_*`, `USARR_TVDB_*`, `USARR_COMICVINE_*`, `USARR_FANART_*`, `USARR_JELLYFIN_*`,
   `USARR_NAVIDROME_*` and every other backend variable** — credentials live in the database.
 * **`USARR_TSNET_*`** — later milestone (§9); documented, not shipped, not in `.env.example`.
 * **`PUID`, `PGID`, `UMASK`** — incompatible with the distroless base (§2.4).
-* **`USARR_LOG_MAX_SIZE_MB` / `_MAX_FILES`, `USARR_STREAM_MODE`** — fixed default; and UsArr never
-  carries media bytes.
+* **`USARR_LOG_MAX_SIZE_MB` / `_MAX_FILES`, `USARR_STREAM_MODE`** — fixed default; and the stream
+  path has exactly one mode (the byte proxy, `ARCHITECTURE.md` §5.4), so there is nothing to select.
 
 ---
 
@@ -429,8 +434,8 @@ Three properties this layout exists to give you, each a defect in the previous v
 
 1. **"Safe to delete" is literally true for `$USARR_DATA_DIR`.** Nothing user-supplied lives there.
    `providers/` moved to `CONFIG_DIR` because a hand-written manifest is not regenerable, and there
-   are no plugin binaries anywhere — **WASM plugins are cut from the project**, so the directory that
-   used to destroy them on a cache clear does not exist.
+   are no plugin binaries anywhere — **a WASM plugin tier is deferred** (`FUTURE.md` §1) and no
+   milestone ships one, so the directory that used to destroy them on a cache clear does not exist.
 2. **The key is one directory you can exclude with one flag.** `keys/` is the only thing that must
    stay out of an archive of `/config`, and §6 makes that the documented procedure rather than a
    warning you are expected to remember.

@@ -185,8 +185,9 @@ LINK(work W):
 ── Below 0.85: DISCARD. Store nothing. ────────────────────────────────────
 ```
 
-**Tier 3 fuzzy inference and the review inbox are cut**, and this is a deliberate scope decision
-rather than an omission. What was cut: seven weighted signals over trigram-blocked cross-kind
+**Tier 3 fuzzy inference and the review inbox are deferred, not rejected**
+([`../FUTURE.md`](../FUTURE.md) §5) — a deliberate scope decision rather than an omission. What is
+out of v1: seven weighted signals over trigram-blocked cross-kind
 candidates, a calibration step, and a review inbox with a sorted queue, side-by-side cards,
 plain-English evidence rendering, three verdict actions, permanent-rejection semantics, per-user
 verdict scoping, an inline "review in context" affordance *and* a dedicated surface. That is a small

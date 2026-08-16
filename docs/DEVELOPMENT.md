@@ -33,8 +33,10 @@ Installed by `make tools` **(not yet)**, all **version-pinned in the Makefile**:
 logic on a machine that may hold a master key and *Arr admin credentials in `.env`; a floating
 version there is a supply-chain hole, not merely a flaky gate.
 
-**There is no FFmpeg dependency, and there never will be.** UsArr does not stream, transcode, remux
-or serve media bytes — it routes clients to the backend that owns them. Do not add a media-processing
+**There is no FFmpeg dependency, and there never will be.** UsArr does not transcode, remux or
+otherwise process media — video routes to the backend that owns it, and the audio/ebook bytes UsArr
+does carry on its own OpenSubsonic/OPDS surfaces are a plain `io.Copy` with `Range` handling
+(`docs/ARCHITECTURE.md` §5.4). Do not add a media-processing
 dependency, an `ffmpeg`/`ffprobe` shell-out, or a codec library. FFmpeg is also absent from the CI
 container, so such a dependency breaks the build immediately — but the reason it is banned is
 architectural, not environmental.
@@ -53,8 +55,8 @@ shipped artifact is pure Go with no Wasm runtime in the graph. Verified against
 Three consequences, because earlier drafts of several documents got this wrong:
 
 * Any claim that UsArr gets wazero "for free, already a dependency" is **false**. Adopting wazero for
-  anything would be a new dependency with its own cost. (This is moot for plugins — WASM plugins are
-  cut from the project entirely — but it also removes the argument, so nobody should re-derive it.)
+  anything would be a new dependency with its own cost. (This is moot for plugins — a WASM tier is
+  deferred, `docs/FUTURE.md` §1 — but it also removes the argument, so nobody should re-derive it.)
 * "Bit-for-bit upstream SQLite behaviour" needs its own evidence under a compile-then-translate
   pipeline. Do not assert it; assert "the upstream C source, not a Go reimplementation", which is
   what is actually true and is the property that mattered.
@@ -85,7 +87,8 @@ UsArr/
 │   ├── crossmedia/             # v0.3 — Wikidata edge resolution
 │   ├── metadata/               # v0.2+ — tmdb, tvmaze, musicbrainz, openlibrary, wikidata
 │   ├── jellyfin/ navidrome/ audiobookshelf/ komga/ kavita/    # v1.0 southbound adapters
-│   ├── lazylibrarian/          # v1.0 — separate: cmd= RPC, HTTP 200 + {"Success":false} errors
+│   ├── lazylibrarian/          # v0.3 as a Tier 1 YAML manifest (ARCHITECTURE §16); Go code only
+│   │                           #   if the manifest ceiling is hit — cmd= RPC, HTTP 200 + Success:false
 │   ├── tagging/                # namespaced derived tags
 │   ├── ssrf/                   # outbound HTTP policy: DNS pinning, hop revalidation, caps
 │   └── web/                    # embed.FS wrapper over web/build
@@ -110,9 +113,10 @@ UsArr/
 └── .gitignore
 ```
 
-There is **no `internal/plugin/`**. WASM plugins are cut from the project — a sandbox executing
+There is **no `internal/plugin/`**. A WASM plugin tier is **deferred, not rejected**
+(`docs/FUTURE.md` §1) and is on no milestone — a sandbox executing
 third-party code inside the process that holds every one of the user's admin-grade API keys is a
-security-critical subsystem this project cannot staff a review capacity for. Service breadth comes
+security-critical subsystem this project cannot staff a review capacity for today. Service breadth comes
 from compiled-in Go providers plus declarative YAML manifests, and the manifests are **not** "fully
 sandboxed": a manifest is a server-side HTTP request generator that runs with the instance's stored
 credential. Treat it accordingly.
@@ -120,9 +124,10 @@ credential. Treat it accordingly.
 Two rationales worth stating once, because they are decisions and not conventions.
 
 **UsArr is northbound-thin and southbound-wide.** The media-server packages are read + handoff
-adapters: they populate the unified library and produce a deep link. **None of them proxy media
-bytes, ever** — if a backend cannot issue a scoped credential for a stream, UsArr catalogues and
-links it rather than carrying the bytes. `internal/requests` is the write path.
+adapters: they populate the unified library and produce a deep link. **None of them carry video
+bytes, ever** — video links out to the backend's own client. Audio, ebook and comic bytes requested
+through UsArr's *own* OpenSubsonic and OPDS surfaces go through the gateway's `io.Copy` proxy
+(`docs/ARCHITECTURE.md` §5.4), never through an adapter. `internal/requests` is the write path.
 
 **`internal/servarr` is one client, not six.** Sonarr, Radarr, Lidarr, Readarr, Prowlarr and Whisparr
 are forks of one codebase; auth, paging, tags, commands, `/ping` and `system/status` are identical
@@ -579,8 +584,10 @@ rewrites your files mid-commit produces commits you did not read.
   stripped URL so rotating a provider key does not invalidate the whole image cache. TMDB v3,
   Fanart.tv and Comic Vine all authenticate by query parameter, and those columns are not encrypted.
 * **UsArr never invokes a media processing tool.** No `exec.Command("ffmpeg", …)`, ever.
-* **UsArr never carries media bytes.** No proxy mode, no `Range` handling, no `206`. A backend that
-  cannot issue a scoped credential is catalogued and deep-linked.
+* **UsArr never carries video bytes, and never transcodes anything.** Video is catalogued and
+  deep-linked. Audio, ebooks and comics on UsArr's own northbound surfaces are proxied with a plain
+  `io.Copy` and correct `Range`/`206` handling, because those protocols have no link-out affordance
+  (`ARCHITECTURE.md` §5.4, ADR-0017). There is no redirect mode and no `USARR_STREAM_MODE`.
 * **Never join on an *Arr's local `id`.** Those integers are per-instance and unrelated across
   instances — the same is true of *Arr tag IDs, where instance A's tag `3` has nothing to do with
   instance B's tag `3`. Join on external IDs (tvdb/tmdb/imdb/MBID/OLID/ISBN) or on

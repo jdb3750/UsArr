@@ -28,7 +28,7 @@ Nothing can be written until these are fixed. They cost a choice, not money.
 | # | Decision | Why it blocks | Notes |
 |---|---|---|---|
 | 1.1 | **Go module path** — e.g. `github.com/joe/UsArr` | `go mod init` needs it and every import bakes it in. Changing it later is a repo-wide rewrite. | Must match the eventual GitHub owner/repo exactly. Decide the owner and repo name now, even if the repo stays private for a while. This also settles the public project name. |
-| 1.2 | **License** | Contributions into a repo with no LICENSE have undefined terms, and retro-licensing means chasing every contributor. The README currently says "decided before the first release"; that is wrong and this row is right. | AGPL-3.0 is the self-hosted-media norm (Jellyfin) and blocks a hosted-SaaS fork; MIT/Apache-2.0 is friendlier to embedding. Either is fine. Deferring is not. **Put the file in the first commit.** |
+| 1.2 | **License** | Contributions into a repo with no LICENSE have undefined terms, and retro-licensing means chasing every contributor. The README agrees: confirmation is needed **before the first PR is accepted**, not before the first release. | AGPL-3.0 is the self-hosted-media norm (Jellyfin) and blocks a hosted-SaaS fork; MIT/Apache-2.0 is friendlier to embedding. Either is fine. Deferring is not. **Put the file in the first commit.** |
 | 1.3 | **Default HTTP port** — proposed `8484` | Goes in the docs, the compose file, the Dockerfile `EXPOSE` and every example. Cheap now, annoying later. | Chosen to avoid every ecosystem default (8989/7878/8686/8787/9696/6969/5299/8096/32400/8080/6789/9091/8112/6767/5055). Confirm or replace. |
 
 That is the whole blocking list. Note what is **not** on it: no API keys, no accounts, no tailnet, no
@@ -145,32 +145,36 @@ Supply these when the milestone that uses them is being built, not before.
 | **Metadata contact string** | v0.3 | free | The value of `USARR_METADATA_USER_AGENT`, e.g. `UsArr/0.1 (+https://github.com/joe/UsArr)`. MusicBrainz **requires** an identifying UA (1 req/s, 503 above); Open Library raises you 1 → 3 req/s for one. A project URL is fine; it does not have to be your email, and ⚠️ whatever you put is transmitted to those providers. |
 | **Metron account** (comics) | v1.0 | free | Preferred over Comic Vine — friendlier limits, `If-Modified-Since` and incremental sync. |
 | **Fanart.tv / Trakt / OMDb / Google Books / Hardcover / AniList keys** | v1.0 | free tiers | Enrichment only. Skip until something visibly lacks artwork or ratings. |
-| **A tailnet + auth key** | v0.4 at the earliest | free tier | `tsnet` is a later milestone, deliberately (`docs/CONFIGURATION.md` §9). **v0.1 binds a port**: publish it on your LAN, or put a reverse proxy in front. Do not create a tailnet auth key for this project yet — an unused secret is a liability, not preparation. |
+| **A tailnet + auth key** | v1.0 | free tier | `tsnet` is a later milestone, deliberately (`docs/CONFIGURATION.md` §9). **v0.1 binds a port**: publish it on your LAN, or put a reverse proxy in front. Do not create a tailnet auth key for this project yet — an unused secret is a liability, not preparation. |
 | **GHCR / package publishing** | first release | free for public | Not needed until there is something to release. |
 
 ---
 
-## 5. Explicitly NOT needed — cut from the project, not deferred
+## 5. Explicitly NOT needed — nothing here is anything for you to obtain
 
-So nobody chases them, and so nobody re-adds them:
+So nobody chases them. Some are permanent non-goals; the ones marked **deferred** are wanted later
+but are on no milestone and need nothing from you now (`docs/FUTURE.md`).
 
 * **TheTVDB v4 key.** There is no free path: either a negotiated commercial contract or a
   "user-supported" key requiring *every end user* to hold a paid subscription and supply a PIN
   ([FAQ 81](https://support.thetvdb.com/kb/faq.php?id=81)). The default TV path is TMDB + TVmaze, both
   free.
-* **Meilisearch.** Cut. SQLite FTS5 is the search engine, not a fallback — the library is ~50k short
-  strings, not 50M documents.
-* **WASM plugins.** Cut. No `/plugins` directory, no sandbox, nothing to install.
-* **OIDC, passkeys/WebAuthn, TOTP, forward-auth.** Cut. v0.1 authentication is one local account with
-  Argon2id and a server-side session cookie.
+* **Meilisearch.** **Deferred** (`docs/FUTURE.md` §2), on no milestone. SQLite FTS5 is the search
+  engine, not a fallback — the library is ~50k short strings, not 50M documents. Nothing to install.
+* **WASM plugins.** **Deferred** (`docs/FUTURE.md` §1), on no milestone. No `/plugins` directory, no
+  sandbox, nothing to install.
+* **OIDC, passkeys/WebAuthn, TOTP, forward-auth.** **Deferred** (`docs/FUTURE.md` §4). v0.1
+  authentication is one local account with Argon2id and a server-side session cookie.
 * **Goodreads API** — dead. Stopped issuing keys 2020-12-08 and revoked existing ones; this is why
   Readarr was archived (2025-06-27).
 * **IMDb API** — does not exist publicly. `tt…` IDs come free via TMDB `external_ids` or Wikidata
   `P345`.
 * **Wikidata credentials** — none. CC0, no key, no attribution, no cache limit.
 * **TVmaze, Cover Art Archive, Open Library keys** — none required.
-* **FFmpeg, transcoding hardware, `/dev/dri` passthrough, a GPU** — UsArr never touches media bytes.
-  If a conversation heads toward hardware acceleration, something has gone wrong architecturally.
+* **FFmpeg, transcoding hardware, `/dev/dri` passthrough, a GPU** — UsArr never transcodes anything,
+  and never runs FFmpeg. (It does copy audio and ebook bytes on its own OpenSubsonic/OPDS surfaces,
+  which needs no codec and no hardware.) If a conversation heads toward hardware acceleration,
+  something has gone wrong architecturally.
 * **PUID/PGID.** The container is distroless and runs as a fixed non-root `65532:65532`. Pre-chown
   your volumes, or set `user:` in compose. `docs/CONFIGURATION.md` §2.4.
 * **User management.** v0.1 is single-user; there is no signup, and multi-user is v1.0.
@@ -191,5 +195,5 @@ So nobody chases them, and so nobody re-adds them:
 
 That is it. No TMDB account, no Jellyfin, no tailnet, no master key.
 
-Everything in §4 arrives per-milestone as those integrations get built. Everything in §5, ignore
-permanently.
+Everything in §4 arrives per-milestone as those integrations get built. Everything in §5 needs
+nothing from you — permanently for the non-goals, and for now for the deferred items.
