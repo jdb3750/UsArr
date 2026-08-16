@@ -108,6 +108,50 @@ func TestQueryPlans(t *testing.T) {
 			args:  []any{"torrent"},
 		},
 		{
+			// Migration 0002's index. The Recent-grabs block on Home orders by
+			// grab time, and 0001's three provenance indexes are all equality
+			// lookups, so this read sorted the whole table.
+			//
+			// The SELECT list is the one the block renders, which is why the
+			// plan is SEARCH and not COVERING — schema.md §1's warning: pinning
+			// COVERING makes the test fail the moment a caller selects one more
+			// column, which is a change to the query, not an index regression.
+			name:  "recent grabs for one user",
+			index: "ix_prov_user_grabbed",
+			query: `SELECT id, release_title, indexer_name, size_bytes, grabbed_at
+			          FROM provenance
+			         WHERE user_id = ?
+			         ORDER BY grabbed_at DESC, id DESC
+			         LIMIT 50`,
+			args: []any{1},
+		},
+		{
+			// Keyset paging over the same index. id breaks ties because
+			// grabbed_at has one-second resolution, and two grabs in the same
+			// second would otherwise make a page repeat a row.
+			name:  "recent grabs, next page",
+			index: "ix_prov_user_grabbed",
+			query: `SELECT id, release_title, grabbed_at
+			          FROM provenance
+			         WHERE user_id = ? AND (grabbed_at, id) < (?, ?)
+			         ORDER BY grabbed_at DESC, id DESC
+			         LIMIT 50`,
+			args: []any{1, "2026-08-16 00:00:00", 9999},
+		},
+		{
+			// Migration 0002's other index: "this user's failed grabs", the
+			// attention block. Filtering one actor's rows by action used to scan
+			// a table that grows forever by design.
+			name:  "one user's grab failures",
+			index: "ix_audit_actor_action",
+			query: `SELECT id, ts, target_id, result, metadata_json
+			          FROM audit_log
+			         WHERE actor_user_id = ? AND action = ?
+			         ORDER BY ts DESC
+			         LIMIT 50`,
+			args: []any{1, "grab"},
+		},
+		{
 			// Idempotency is (user_id, key), never a bare unique on the key: a
 			// globally unique client-supplied key means a replay can return
 			// another user's payload.
@@ -160,6 +204,46 @@ func TestQueryPlans(t *testing.T) {
 				t.Errorf("plan needs a temp b-tree:\n  %s", joined)
 			}
 		})
+	}
+}
+
+// TestScopedProvenanceOrderNeedsASort records what the CANONICAL scope
+// predicate costs, so the gap between the query the index was designed for and
+// the query internal/store actually issues is written down rather than
+// discovered.
+//
+// store.Scope.userPredicate renders `user_id IN (0, :uid)` — 0 being the
+// shared/system sentinel that migration 0002 backfills provenance to, so the
+// owner keeps seeing their own pre-0002 history. SQLite cannot supply ORDER BY
+// from an index whose LEADING column is constrained by IN: it plans a SEARCH on
+// ix_prov_user_grabbed and then a temp b-tree. The equality form above does come
+// out ordered.
+//
+// So the index is doing half its job on that read: it still turns a full-table
+// scan into a scan of just the readable rows, and the sort is over that bounded
+// set with a LIMIT on it. This is pinned rather than fixed because the fix is a
+// data change — attributing the backfilled rows to a real user in a later
+// migration — not an index change, and it is not worth doing while v0.1 has one
+// user and the two row sets are the same rows.
+//
+// t.Errorf, not t.Logf: if SQLite (or a rewritten predicate) ever makes this
+// ordered, that is good news and this comment is then wrong, so it must fail and
+// force the edit.
+func TestScopedProvenanceOrderNeedsASort(t *testing.T) {
+	plan, err := QueryPlan(t.Context(), openTestDB(t).Read(),
+		`SELECT id, release_title, grabbed_at FROM provenance
+		  WHERE user_id IN (?, ?) ORDER BY grabbed_at DESC, id DESC LIMIT 50`, 0, 1)
+	if err != nil {
+		t.Fatalf("QueryPlan: %v", err)
+	}
+	joined := strings.Join(plan, " | ")
+	if !strings.Contains(joined, "ix_prov_user_grabbed") {
+		t.Errorf("the scoped read no longer uses ix_prov_user_grabbed at all: %s", joined)
+	}
+	if !strings.Contains(joined, "TEMP B-TREE") {
+		t.Errorf("the scoped read is now ordered by the index: %s\n"+
+			"That is an improvement, and it makes the note on store.Scope.userPredicate and on this "+
+			"test wrong. Update both in the same change.", joined)
 	}
 }
 

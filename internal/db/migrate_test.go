@@ -54,9 +54,19 @@ func TestMigrationRoundTrip(t *testing.T) {
 	}
 }
 
+// latestSchemaVersion is the highest migration number in migrations/. It is
+// asserted rather than derived so that adding a migration is a deliberate edit
+// here too — a version the tests do not know about is a migration nobody
+// round-tripped.
+const latestSchemaVersion int64 = 2
+
 // Down is not a supported user path, but it must work, because it is the
 // cheapest way to test a migration locally. A Down that leaves objects behind
 // makes the next Up fail in a way that only shows up on a developer's machine.
+//
+// MigrateDown rolls back exactly ONE migration, so this walks the whole stack
+// down rather than calling it once: with two migrations, one Down leaves 0001's
+// tables standing and would have asserted nothing about 0002's rollback.
 func TestMigrationDownLeavesNothingBehind(t *testing.T) {
 	ctx := t.Context()
 	d := openTestDB(t)
@@ -65,12 +75,22 @@ func TestMigrationDownLeavesNothingBehind(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Version: %v", err)
 	}
-	if v != 1 {
-		t.Fatalf("schema version = %d, want 1", v)
+	if v != latestSchemaVersion {
+		t.Fatalf("schema version = %d, want %d", v, latestSchemaVersion)
 	}
 
-	if err := d.MigrateDown(ctx); err != nil {
-		t.Fatalf("MigrateDown: %v", err)
+	for v > 0 {
+		if err := d.MigrateDown(ctx); err != nil {
+			t.Fatalf("MigrateDown from %d: %v", v, err)
+		}
+		next, err := d.Version(ctx)
+		if err != nil {
+			t.Fatalf("Version: %v", err)
+		}
+		if next >= v {
+			t.Fatalf("MigrateDown left the version at %d", next)
+		}
+		v = next
 	}
 
 	names, err := userObjects(ctx, d.Read())
@@ -85,8 +105,160 @@ func TestMigrationDownLeavesNothingBehind(t *testing.T) {
 	if err := d.Migrate(ctx); err != nil {
 		t.Fatalf("Migrate after Down: %v", err)
 	}
-	if v, err = d.Version(ctx); err != nil || v != 1 {
-		t.Fatalf("version after re-Up = %d (err %v), want 1", v, err)
+	if v, err = d.Version(ctx); err != nil || v != latestSchemaVersion {
+		t.Fatalf("version after re-Up = %d (err %v), want %d", v, err, latestSchemaVersion)
+	}
+}
+
+// TestMigration0002NeedsNoRebuild pins the observations 0002's header rests on,
+// so that "no table rebuild is needed" stays a checked claim.
+//
+// It matters because the alternative — the 12-step rebuild SQLite requires for
+// anything ADD COLUMN cannot express — would have to copy every provenance row,
+// and provenance is the one table whose contents are permanent.
+func TestMigration0002NeedsNoRebuild(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	// 1. Foreign keys really are on. Everything below is only interesting under
+	//    that pragma; with it off, the FK column is decoration.
+	var fk int
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `PRAGMA foreign_keys`).Scan(&fk)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if fk != 1 {
+		t.Fatalf("foreign_keys = %d on the writer; migration 0002's FK reasoning assumes 1", fk)
+	}
+
+	// 2. Both tables are still STRICT after ADD COLUMN, and both new columns are
+	//    NOT NULL with the sentinel default. TestAllTablesAreStrict covers the
+	//    first for every table; this asserts the column shape.
+	for _, table := range []string{"provenance", "release_candidate"} {
+		var notNull int
+		var dflt sql.NullString
+		err := d.Read().QueryRowContext(ctx,
+			`SELECT "notnull", dflt_value FROM pragma_table_info(?) WHERE name = 'user_id'`,
+			table).Scan(&notNull, &dflt)
+		if err != nil {
+			t.Fatalf("%s has no user_id column: %v", table, err)
+		}
+		if notNull != 1 {
+			t.Errorf("%s.user_id is nullable; the invariant is that every user-scoped row carries one", table)
+		}
+		if dflt.String != "0" {
+			t.Errorf("%s.user_id defaults to %q, want the system sentinel 0", table, dflt.String)
+		}
+	}
+
+	// 3. release_candidate.user_id's foreign key is enforced, and provenance's
+	//    deliberately is not. This is the asymmetry the header argues for, and
+	//    it is the kind of claim that rots silently.
+	err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO service_instance (id, kind, name, base_url, api_key_enc)
+			VALUES (1, 'prowlarr', 'p', 'http://p.lan', x'00')`)
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	insertCandidate := func(userID int64) error {
+		return d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, `
+				INSERT INTO release_candidate (
+				  service_instance_id, guid, title, raw_release_json, fetched_at, expires_at, user_id
+				) VALUES (1, 'g', 't', '{}', '2026-08-16 00:00:00', '2026-08-16 00:25:00', ?)`, userID)
+			return err
+		})
+	}
+	if err := insertCandidate(0); err != nil {
+		t.Errorf("release_candidate rejected the sentinel user 0: %v", err)
+	}
+	if err := insertCandidate(9999); err == nil {
+		t.Error("release_candidate accepted a dangling user_id; its REFERENCES clause is not enforced")
+	}
+
+	// provenance takes a historical id that no longer resolves, exactly like
+	// audit_log.actor_user_id. If this starts failing, someone added a foreign
+	// key and made deleting a user who ever grabbed anything impossible.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO provenance (protocol, release_title, source_system, user_id)
+			VALUES ('torrent', 'Some.Release', 'prowlarr', 9999)`)
+		return err
+	}); err != nil {
+		t.Errorf("provenance refused a historical user id: %v\n"+
+			"provenance.user_id must carry NO foreign key — it records who acquired the file, and "+
+			"that must survive the user's deletion. See migration 0002's header.", err)
+	}
+}
+
+// Deleting a user must stay possible. audit_log's comment in 0001 records that
+// a foreign key on the actor made it impossible; 0002 adds two more user_id
+// columns and this is the test that they did not reintroduce the problem.
+func TestDeletingAUserStillWorks(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO user (id, username, auth_source) VALUES (7, 'joe', 'local')`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO service_instance (id, kind, name, base_url, api_key_enc)
+			VALUES (1, 'prowlarr', 'p', 'http://p.lan', x'00')`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO release_candidate (
+			  service_instance_id, guid, title, raw_release_json, fetched_at, expires_at, user_id
+			) VALUES (1, 'g', 't', '{}', '2026-08-16 00:00:00', '2026-08-16 00:25:00', 7)`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO provenance (protocol, release_title, source_system, user_id)
+			VALUES ('torrent', 'Some.Release', 'prowlarr', 7)`); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO audit_log (actor_user_id, action, result) VALUES (7, 'grab', 'ok')`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `DELETE FROM user WHERE id = 7`)
+		return err
+	}); err != nil {
+		t.Fatalf("deleting a user who had grabbed something failed: %v\n"+
+			"this is the failure mode audit_log's comment in migration 0001 documents; "+
+			"check the foreign keys added by 0002", err)
+	}
+
+	// The candidate cascaded away; the provenance row and the audit row stayed,
+	// still naming the user who did it.
+	var candidates, provenances, audits int
+	row := d.Read().QueryRowContext(ctx, `
+		SELECT (SELECT count(*) FROM release_candidate WHERE user_id = 7),
+		       (SELECT count(*) FROM provenance        WHERE user_id = 7),
+		       (SELECT count(*) FROM audit_log         WHERE actor_user_id = 7)`)
+	if err := row.Scan(&candidates, &provenances, &audits); err != nil {
+		t.Fatal(err)
+	}
+	if candidates != 0 {
+		t.Error("release_candidate rows survived the user's deletion; ON DELETE CASCADE is not doing its job")
+	}
+	if provenances != 1 {
+		t.Error("the provenance row was destroyed with the user. Acquisition history is the one thing " +
+			"that table exists to keep — see migration 0002's header.")
+	}
+	if audits != 1 {
+		t.Error("the audit row lost its actor")
 	}
 }
 

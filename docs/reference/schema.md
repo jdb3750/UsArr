@@ -629,6 +629,7 @@ comparing paths it did not receive — the one thing §6.5 rule 3 forbids.
 ```sql
 CREATE TABLE provenance (
   id                 INTEGER PRIMARY KEY,
+  user_id            INTEGER NOT NULL DEFAULT 0,   -- who acquired it. NO foreign key: see below
   protocol           TEXT NOT NULL CHECK (protocol IN (
                        'usenet','torrent','irc','direct','manual','unknown')),
   indexer_name       TEXT, indexer_id INTEGER,
@@ -647,6 +648,7 @@ CREATE TABLE provenance (
   edition_label      TEXT,
   languages          TEXT,
   proper_repack      INTEGER,
+  size_bytes       INTEGER,            -- as the indexer reported it; NULL = not reported
   published_at TEXT, grabbed_at TEXT, imported_at TEXT,
   source_system    TEXT NOT NULL,      -- sonarr|radarr|prowlarr|manual|filesystem
   source_record_id TEXT,
@@ -655,9 +657,11 @@ CREATE TABLE provenance (
 CREATE INDEX ix_prov_protocol ON provenance(protocol);
 CREATE INDEX ix_prov_indexer  ON provenance(indexer_name);
 CREATE INDEX ix_prov_dlid     ON provenance(download_id);
+CREATE INDEX ix_prov_user_grabbed ON provenance(user_id, grabbed_at DESC, id DESC);
 
 CREATE TABLE release_candidate (
   id                  INTEGER PRIMARY KEY,
+  user_id             INTEGER NOT NULL DEFAULT 0 REFERENCES user(id) ON DELETE CASCADE,
   work_id             INTEGER REFERENCES work(id) ON DELETE CASCADE,   -- NULL in Search-and-Grab
   service_instance_id INTEGER NOT NULL REFERENCES service_instance(id) ON DELETE CASCADE,
   guid TEXT NOT NULL, title TEXT NOT NULL,
@@ -678,6 +682,39 @@ Three principles: **store `release_title` verbatim, forever** (every parsed fiel
 the raw name is not); **never overwrite provenance on upgrade** — insert a new row and link the new
 `media_file`, which gives upgrade history for free; and **manual/filesystem imports get
 `protocol='manual'`** — do not launder `unknown` into `torrent`.
+
+> ⚠️ **`user_id` on these two tables arrived in migration 0002, not 0001, and the two are treated
+> differently on purpose.** Both are `NOT NULL DEFAULT 0` — 0 being the shared/system sentinel — and
+> both were backfilled to it, which is honest because v0.1 is single-user and every existing row was
+> the owner's. The canonical read predicate is `user_id IN (0, :uid)`, the same one `tag_assignment`
+> uses, so those backfilled rows stay visible to the owner who made them.
+>
+> **`release_candidate.user_id` carries `REFERENCES user(id) ON DELETE CASCADE`**, matching
+> `write_queue` and `tag_assignment`. It is ephemeral operational state with a 25-minute TTL, and a
+> deleted user's pending search results should go with them.
+>
+> **`provenance.user_id` carries NO foreign key**, for exactly the reason `audit_log.actor_user_id`
+> carries none (§9). It is a *historical* id: the user may since have been deleted and the row must
+> still say who acquired the file. `CASCADE` would destroy acquisition history — the one thing this
+> table exists to keep; `SET NULL` cannot be spelled on a `NOT NULL` column and would erase the same
+> thing; `NO ACTION`/`RESTRICT` makes `DELETE FROM user` fail for anyone who has ever grabbed
+> anything. Dropping the reference is the only option that permits the delete and keeps the actor.
+>
+> **No table rebuild was needed** and that was checked, not assumed: nothing here alters a `CHECK`,
+> `ADD COLUMN` with a non-NULL default rewrites the stored DDL without touching the rows, and
+> `ADD COLUMN … NOT NULL DEFAULT 0 REFERENCES user(id)` was executed against this project's driver
+> under `foreign_keys=ON` and both accepted and enforced. `TestMigration0002NeedsNoRebuild` pins it.
+
+**`ix_prov_user_grabbed` serves the Recent-grabs read, and only for a single-user predicate.**
+`EXPLAIN QUERY PLAN` on `WHERE user_id = ? ORDER BY grabbed_at DESC, id DESC LIMIT 50` yields
+`SEARCH provenance USING INDEX ix_prov_user_grabbed (user_id=?)` with no temp b-tree — a search, not
+a covering index, because the SELECT list carries `release_title`, `indexer_name` and `size_bytes`;
+per §1 the CI assertion must pin `SEARCH … USING INDEX`, never `COVERING INDEX`. `id DESC` trails
+`grabbed_at` because `grabbed_at` has one-second resolution and keyset paging would otherwise repeat
+a row. **With the canonical `user_id IN (0, :uid)` predicate SQLite adds `USE TEMP B-TREE FOR ORDER
+BY`**: it cannot supply order from an index whose *leading* column is constrained by `IN`. The index
+still restricts the scan to the readable rows and the sort is bounded by the `LIMIT`;
+`TestScopedProvenanceOrderNeedsASort` pins that so the gap is recorded rather than rediscovered.
 
 **`release_candidate` has no uniqueness on `(service_instance_id, guid)`, and that is a decision, not
 an omission.** Two searches for the same term inside the TTL window insert two full copies of every
@@ -900,6 +937,7 @@ CREATE TABLE audit_log (
                                               -- tampering EVIDENT, not impossible
 ) STRICT;
 CREATE INDEX ix_audit_ts ON audit_log(ts DESC);
+CREATE INDEX ix_audit_actor_action ON audit_log(actor_user_id, action, ts DESC);
 
 CREATE TRIGGER trg_audit_no_update BEFORE UPDATE ON audit_log
   BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
@@ -923,6 +961,14 @@ rather than firing the trigger, so the delete still fails — only the error tex
 `audit_log is append-only` to `FOREIGN KEY constraint failed`. Dropping the reference is the only
 option that both permits the delete and preserves the actor. `SET NULL` would in any case have
 destroyed exactly the record the log exists for (security.md §6, "who deleted this").
+
+**`ix_audit_actor_action` (migration 0002) serves "this user's grab failures"**, the Home screen's
+attention block. `ix_audit_ts` orders the whole log and cannot filter it, so that read scanned a
+table that grows forever by design. The two equality columns lead and `ts DESC` trails them, so
+newest-first comes out of the index rather than a temp b-tree. `EXPLAIN QUERY PLAN` reports it as a
+*covering* index for a narrow SELECT list, and per §1 the CI assertion still pins only
+`SEARCH … USING INDEX`: covering-ness depends on the SELECT list, so pinning it would fail the moment
+a caller selects one more column, which is a change to the query and not an index regression.
 
 ---
 

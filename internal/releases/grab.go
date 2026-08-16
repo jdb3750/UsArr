@@ -89,7 +89,7 @@ func (s *Service) Grab(ctx context.Context, scope Scope, candidateID int64) (Gra
 		return zero, err
 	}
 
-	prov, err := s.recordProvenance(ctx, cand, rel, grabbed, s.now())
+	prov, err := s.recordProvenance(ctx, scope, cand, rel, grabbed, s.now())
 	if err != nil {
 		// The grab HAS happened upstream. Failing the whole call here would tell
 		// the user nothing was downloaded, which is false, so report the grab as
@@ -259,6 +259,7 @@ func (s *Service) grabError(err error) error {
 // the new media_file linked, which gives upgrade history for free (schema.md §6).
 func (s *Service) recordProvenance(
 	ctx context.Context,
+	scope Scope,
 	cand Candidate,
 	rel servarr.ReleaseResource,
 	grabbed servarr.ReleaseResource,
@@ -272,6 +273,14 @@ func (s *Service) recordProvenance(
 	}
 
 	p := Provenance{
+		// Who grabbed it, recorded from the acting scope. The column carries no
+		// foreign key on purpose: this row must still name the user after that
+		// user is deleted, exactly like audit_log.actor_user_id.
+		UserID: scope.UserID,
+		// The size the indexer reported. release_candidate has always carried
+		// it and provenance did not, so before migration 0002 the size of an
+		// acquisition vanished when the candidate expired 25 minutes later.
+		SizeBytes:         firstNonZero(rel.Size, grabbed.Size, cand.SizeBytes),
 		Protocol:          mapping.SourceValue(rel.Protocol),
 		IndexerName:       firstNonEmpty(rel.Indexer, cand.Indexer),
 		IndexerID:         rel.IndexerID,

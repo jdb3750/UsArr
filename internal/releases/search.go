@@ -207,7 +207,7 @@ func (s *Service) Search(ctx context.Context, scope Scope, q Query) (<-chan Even
 	}
 
 	out := make(chan Event, 16)
-	go s.runFanOut(ctx, queryString, plan, out)
+	go s.runFanOut(ctx, scope, queryString, plan, out)
 	return out, nil
 }
 
@@ -395,7 +395,7 @@ type legResult struct {
 // runFanOut executes the plan. Workers run concurrently; a single collector
 // goroutine owns the dedupe map, the persistence calls and the output channel, so
 // none of them need locking and the SQLite writes stay serialised.
-func (s *Service) runFanOut(ctx context.Context, queryString string, plan fanOutPlan, out chan<- Event) {
+func (s *Service) runFanOut(ctx context.Context, scope Scope, queryString string, plan fanOutPlan, out chan<- Event) {
 	defer close(out)
 
 	started := s.now()
@@ -493,7 +493,7 @@ func (s *Service) runFanOut(ctx context.Context, queryString string, plan fanOut
 				}
 			}
 
-			res, err := s.persist(ctx, lr.indexer, kept)
+			res, err := s.persist(ctx, scope, lr.indexer, kept)
 			if err != nil {
 				// Persistence failure means the release cannot be grabbed later,
 				// so it is not a result — say so rather than showing a Grab button
@@ -614,7 +614,7 @@ func (s *Service) runLeg(ctx context.Context, l leg) legResult {
 // redacted rather than dropped: the host and the release path are the provenance
 // this column exists for, and nothing on the grab path reads it at all
 // (GrabBody is guid + indexerId + downloadClientId).
-func (s *Service) persist(ctx context.Context, ix servarr.IndexerResource, rels []servarr.ReleaseResource) ([]Result, error) {
+func (s *Service) persist(ctx context.Context, scope Scope, ix servarr.IndexerResource, rels []servarr.ReleaseResource) ([]Result, error) {
 	if len(rels) == 0 {
 		return nil, nil
 	}
@@ -634,6 +634,10 @@ func (s *Service) persist(ctx context.Context, ix servarr.IndexerResource, rels 
 			infoHash = *rel.InfoHash
 		}
 		cands = append(cands, Candidate{
+			// The searcher owns the candidate. Written from the scope, not
+			// defaulted to the sentinel: a row that cannot say whose search
+			// produced it cannot be read back under an access scope either.
+			UserID:            scope.UserID,
 			ServiceInstanceID: s.cfg.InstanceID,
 			GUID:              rel.GUID,
 			Title:             rel.Title,
@@ -684,4 +688,17 @@ func firstNonEmpty(vals ...string) string {
 		}
 	}
 	return ""
+}
+
+// firstNonZero picks the first reported value. Zero means "not reported" for
+// every field it is used on — a release with a genuine size of zero bytes is not
+// a thing an indexer offers — so the fallthrough is to the next source rather
+// than to a claim that the release is empty.
+func firstNonZero(vals ...int64) int64 {
+	for _, v := range vals {
+		if v != 0 {
+			return v
+		}
+	}
+	return 0
 }

@@ -95,6 +95,28 @@ func (s Scope) instancePredicate(column string) (string, []any) {
 	return column + " IN (" + placeholders(len(args)) + ")", args
 }
 
+// userPredicate renders the scope's user filter plus its arguments. column is
+// the qualified user_id column to constrain.
+//
+// The predicate is `user_id IN (0, :uid)` — the canonical one, the same shape
+// tag_assignment uses. 0 is the shared/system sentinel: for provenance it is
+// what rows written before per-user attribution existed carry (migration 0002
+// backfills to it), and for a row written by a path with no acting user it is
+// what that row means. Reading it as "not mine" would hide the owner's own
+// history from them.
+//
+// A NOTE ON ORDER. SQLite cannot supply ORDER BY from an index whose LEADING
+// column is constrained by IN — it produces `SEARCH … USING INDEX (user_id=?)`
+// plus `USE TEMP B-TREE FOR ORDER BY`, verified in internal/db's query-plan
+// test, which pins both forms. Equality on a single user does come out ordered.
+// So a newest-first read over provenance sorts a bounded, already-index-filtered
+// set rather than the table; if that ever stops being cheap, the fix is to
+// attribute the backfilled rows to a real user in a later migration, not to drop
+// the sentinel from the predicate.
+func (s Scope) userPredicate(column string) (string, []any) {
+	return column + " IN (?, ?)", []any{SystemUserID, s.UserID}
+}
+
 func placeholders(n int) string {
 	if n <= 0 {
 		return ""

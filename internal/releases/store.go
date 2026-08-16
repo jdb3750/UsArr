@@ -49,7 +49,14 @@ func (s Scope) Allows(instanceID int64) bool {
 // Candidate mirrors the release_candidate row (schema.md §6). It is ephemeral and
 // TTL-evicted.
 type Candidate struct {
-	ID                int64
+	ID int64
+
+	// UserID is the user whose search produced this candidate. It is written
+	// from the acting scope, and Candidate() matches on it, so one user cannot
+	// read back another's search results — a search is a record of what someone
+	// was looking for.
+	UserID int64
+
 	WorkID            *int64 // NULL in Search-and-Grab mode: there is no library
 	ServiceInstanceID int64
 
@@ -105,7 +112,12 @@ type Candidate struct {
 // per acquisition event, and is never overwritten on upgrade — a new row is
 // inserted instead, which gives upgrade history for free.
 type Provenance struct {
-	ID       int64
+	ID int64
+
+	// UserID is who grabbed it. The column carries no foreign key, because it
+	// is a historical id that must outlive the user — see migration 0002.
+	UserID int64
+
 	Protocol string // usenet|torrent|irc|direct|manual|unknown
 
 	IndexerName       string
@@ -127,6 +139,11 @@ type Provenance struct {
 	// ReleaseTitle is the raw scene/P2P name, stored VERBATIM, FOREVER. Every
 	// parsed field is re-derivable from it; it is not re-derivable from them.
 	ReleaseTitle string
+
+	// SizeBytes is the size the indexer reported, 0 when it reported none. The
+	// column is nullable, so 0 is written as NULL rather than as a claim that
+	// the release is empty.
+	SizeBytes int64
 
 	PublishedAt *time.Time
 	GrabbedAt   time.Time

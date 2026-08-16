@@ -1,3 +1,6 @@
+-- index ix_audit_actor_action
+CREATE INDEX ix_audit_actor_action ON audit_log(actor_user_id, action, ts DESC);
+
 -- index ix_audit_ts
 CREATE INDEX ix_audit_ts ON audit_log(ts DESC);
 
@@ -12,6 +15,9 @@ CREATE INDEX ix_prov_indexer  ON provenance(indexer_name);
 
 -- index ix_prov_protocol
 CREATE INDEX ix_prov_protocol ON provenance(protocol);
+
+-- index ix_prov_user_grabbed
+CREATE INDEX ix_prov_user_grabbed ON provenance(user_id, grabbed_at DESC, id DESC);
 
 -- index ix_rel_expiry
 CREATE INDEX ix_rel_expiry ON release_candidate(expires_at);
@@ -131,7 +137,7 @@ CREATE TABLE provenance (
   source_system    TEXT NOT NULL,      -- sonarr|radarr|prowlarr|manual|filesystem
   source_record_id TEXT,
   confidence       REAL NOT NULL DEFAULT 1.0
-) STRICT;
+, user_id INTEGER NOT NULL DEFAULT 0, size_bytes INTEGER) STRICT;
 
 -- table release_candidate
 CREATE TABLE release_candidate (
@@ -149,7 +155,8 @@ CREATE TABLE release_candidate (
   rejected INTEGER NOT NULL DEFAULT 0, rejection_reasons TEXT,
   fetched_at TEXT NOT NULL,
   expires_at TEXT NOT NULL             -- <= 25 min for Prowlarr; see ARCHITECTURE §8.4
-) STRICT;
+, user_id INTEGER NOT NULL DEFAULT 0
+    REFERENCES user(id) ON DELETE CASCADE) STRICT;
 
 -- table service_instance
 CREATE TABLE service_instance (

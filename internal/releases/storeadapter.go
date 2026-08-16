@@ -54,6 +54,7 @@ func (a *StoreAdapter) InsertCandidates(ctx context.Context, cands []Candidate) 
 			reasons = string(b)
 		}
 		rows = append(rows, store.ReleaseCandidate{
+			UserID:            c.UserID,
 			WorkID:            nullInt64Ptr(c.WorkID),
 			ServiceInstanceID: c.ServiceInstanceID,
 			GUID:              c.GUID,
@@ -111,6 +112,7 @@ func (a *StoreAdapter) Candidate(ctx context.Context, scope Scope, id int64) (Ca
 
 	return Candidate{
 		ID:                rc.ID,
+		UserID:            rc.UserID,
 		WorkID:            int64Ptr(rc.WorkID),
 		ServiceInstanceID: rc.ServiceInstanceID,
 		GUID:              rc.GUID,
@@ -149,6 +151,8 @@ func (a *StoreAdapter) InsertProvenance(ctx context.Context, p Provenance) (int6
 	}
 
 	row := store.Provenance{
+		UserID:            p.UserID,
+		SizeBytes:         nullInt64(p.SizeBytes, p.SizeBytes > 0),
 		Protocol:          p.Protocol,
 		IndexerName:       p.IndexerName,
 		IndexerID:         nullInt64(int64(p.IndexerID), p.IndexerID != 0),
