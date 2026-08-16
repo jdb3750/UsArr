@@ -612,10 +612,20 @@ textarea {
 
 /* Visually hidden, still in the accessibility tree. Used for live regions and
  * for the word that keeps a status glyph from computing to an empty name. */
+/* The negative margin is not decoration and it is not the clip pattern being
+ * copied from memory. An absolutely positioned box with `top: auto` is laid out
+ * at its STATIC position, and it still contributes to the document's scrollable
+ * overflow — so the shell's live region, which is the last child of <body>
+ * directly under a `min-height: 100vh` grid, put its 1px at y=900 in a 900px
+ * viewport and gave every screen a scrollbar it had no content for (measured:
+ * documentElement.scrollHeight 901 against clientHeight 900). Pulling the box
+ * back by its own 1px cancels it exactly, without hiding real overflow the way
+ * `overflow: hidden` on the page would. */
 .sr {
 	position: absolute;
 	width: 1px;
 	height: 1px;
+	margin: -1px;
 	overflow: hidden;
 	clip-path: inset(50%);
 	white-space: nowrap;
@@ -731,7 +741,13 @@ textarea {
 	position: sticky;
 	top: var(--toolbar-h);
 	align-self: start;
-	max-height: calc(100vh - var(--toolbar-h));
+	/* `height`, not `max-height`. A sticky grid item has to keep `align-self:
+	 * start` — stretching it to the row makes it as tall as the content and it
+	 * stops sticking — and with only a max-height it collapses to the nav items
+	 * inside it, so the panel's tint stopped 258px down a 900px column and the
+	 * column read as unfinished below it. Filling the viewport under the toolbar
+	 * is the same measurement the drawer already uses at 900px and below. */
+	height: calc(100vh - var(--toolbar-h));
 }
 
 .nav__group + .nav__group {

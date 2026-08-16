@@ -33,6 +33,17 @@
 		!busy && username.trim() !== '' && password !== '' && mode !== 'asking'
 	);
 
+	/**
+	 * What this screen is called, computed from the same session state the shell
+	 * computes its title from, so the tab and the toolbar say one thing. While
+	 * the bootstrap is still asking, the shell has already resolved the session
+	 * — the layout renders no child until it has — so this is right from the
+	 * first paint rather than settling a beat later.
+	 */
+	const screenName = $derived(
+		session.current.setupRequired ? 'Create the owner account' : 'Sign in'
+	);
+
 	onMount(async () => {
 		try {
 			const state = await fetchSession();
@@ -61,7 +72,11 @@
 		} catch (error) {
 			if (error instanceof ApiError && error.status === 409 && mode === 'setup') {
 				// Someone completed setup between the bootstrap call and this submit.
+				// The shared session state carries the screen's name (the shell reads
+				// setupRequired for the toolbar title, the h1 and the tab), so it is
+				// corrected here too rather than left one refresh behind.
 				mode = 'login';
+				session.set({ ...session.current, setupRequired: false });
 				notice = 'An owner account already exists on this install. Sign in instead.';
 			} else {
 				problem = error instanceof ApiError ? error.message : String(error);
@@ -73,21 +88,26 @@
 	}
 </script>
 
-<svelte:head><title>Sign in — UsArr</title></svelte:head>
+<!--
+	The tab reads what the screen is, not what the route is called. On a fresh
+	install this is owner creation, and `setup_required` from the server is the
+	one thing that decides it — the same value the shell reads for the toolbar
+	title and the h1, so the three cannot drift apart. The visible heading is
+	the toolbar's, which is where this shell puts every page title
+	(DESIGN-DIRECTION §8.3); repeating it as an h2 here printed the page name
+	twice and put two identical headings in one document.
+-->
+<svelte:head><title>{screenName} — UsArr</title></svelte:head>
 
 {#if unreachable}
-	<h2>Sign in</h2>
 	<div class="banner banner-error" role="alert">
 		The backend did not answer <code>/api/v1/auth/session</code>, so there is nothing to sign in to
 		yet. Nothing is wrong with your account; the server is not reachable.
 		<p class="banner-detail">{unreachable}</p>
 	</div>
 {:else if mode === 'asking'}
-	<h2>Sign in</h2>
 	<p class="empty">Checking whether this install has an owner account.</p>
 {:else}
-	<h2>{mode === 'setup' ? 'Create the owner account' : 'Sign in'}</h2>
-
 	{#if mode === 'setup'}
 		<p>
 			This install has no owner yet. The account you create here is the one administrator, and this

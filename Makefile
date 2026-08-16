@@ -385,11 +385,22 @@ fmt-check: ## Verify formatting without modifying files (used by `make check`)
 #   1. It needs a Playwright Chromium. The gate's whole contract is that it runs
 #      on a machine carrying Go and pnpm and nothing else; a ~150 MB browser
 #      download is a large new prerequisite for every developer and every runner.
-#   2. There is nothing to pin, and this file forbids `@latest` for a reason.
-#      check.mjs imports Playwright from an absolute path OUTSIDE the repo
-#      (/opt/node22/lib/node_modules/playwright), which is not a dependency of
-#      web/package.json and does not resolve anywhere else. A gate step that
-#      only works in one environment is not a gate.
+#   2. The pin, which this reason used to describe wrongly and which is now
+#      HALF discharged. The old wording said check.mjs imports Playwright from
+#      an absolute path outside the repo; it has not done that since it grew a
+#      resolution ladder, so that sentence was stale. And web/package.json now
+#      carries the pin it said did not exist: `playwright-core` at 1.56.1,
+#      exact, no caret — the version whose browsers.json declares chromium
+#      revision 1194, which is the build in this container's cache and the one
+#      `make design` was observed driving. It declares no install script and
+#      downloads no browser, so it adds nothing to a fresh install.
+#      What is NOT discharged: check.mjs's ladder asks for the specifier
+#      `playwright`, not `playwright-core`, so the pin does not satisfy it and
+#      a fresh machine still lands on the ladder's fallbacks. Closing that is a
+#      change to docs/design/check.mjs, not to this file.
+#      Reason (1) is untouched by any of it: the ~150 MB of browser binaries is
+#      still a prerequisite the gate's contract does not carry, and on its own
+#      it is still enough to keep `design` out of `check`.
 #   3. It guards docs/design/ — prose, tokens and mockups, none of which is a
 #      shipping artifact. Token drift in a mockup cannot break the binary.
 #
