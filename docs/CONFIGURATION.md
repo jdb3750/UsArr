@@ -123,7 +123,12 @@ Fourteen variables, of which two are development-only. `TZ` is unprefixed by con
 | `USARR_LOG_LEVEL` | `trace`, `debug`, `info`, `warn`, `error`. | `info` | No |
 | `USARR_LOG_FORMAT` | `auto`, `text`, `json`. `auto` = text on a TTY, JSON otherwise. | `auto` | No |
 
-Log rotation is fixed at 10 MB × 5 files in `$USARR_DATA_DIR/logs/`.
+⚠️ **Logging goes to stdout, and only to stdout.** `USARR_LOG_LEVEL` and `USARR_LOG_FORMAT` are both
+live and do what the table says; **file logging is not implemented.** `$USARR_DATA_DIR/logs/` is
+created at startup and stays empty — nothing writes into it. Collect logs from the container runtime
+(`docker logs`, journald, your compose driver). Rotating files fixed at 10 MB × 5 in that directory
+remain the intended end state, and are why `USARR_LOG_MAX_SIZE_MB` / `_MAX_FILES` are not
+configuration variables (§2.6), but no milestone has shipped them yet.
 
 🚩 **`trace` is not an exemption from redaction.** A fixed deny-list of query parameters (`apiKey`,
 `api_key`, `apikey`, `token`, `access_token`, `sig`, `p`, `t`, `s`) plus the `Authorization` and
@@ -157,6 +162,13 @@ LAN bypasses the proxy — publish only to the proxy network, or bind `127.0.0.1
 identification: [MusicBrainz](https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting) (mandatory)
 and [Open Library](https://openlibrary.org/developers/api) (1 → 3 req/s). Every other provider gets a
 generic `UsArr/<version>` with no contact string. A project URL works as well as an email address.
+
+⚠️ **Nothing transmits it yet.** The variable is parsed, defaulted and validated like every other
+level-1 setting, and `Config.MetadataUserAgent` is read by exactly one thing today — the redacted
+config dump in the startup log. No metadata-provider client exists (§4: v0.1 requires none), and the
+one outbound client that does exist, `internal/servarr`, builds its own `User-Agent` from UsArr's
+version and never consults this value. Set it now if you like; it starts being sent when the first
+provider client lands.
 
 Provider **API keys are not environment variables** — TMDB, Fanart.tv, Comic Vine and the rest are
 configured in the UI and stored encrypted like every other credential. No metadata provider is
@@ -281,9 +293,12 @@ openssl rand -base64 32          # or: usarr keygen   (proposed CLI, v0.1)
 
 ### 3.4 Rotating — atomic and resumable
 
-```bash
-usarr key rotate                 # (proposed CLI, v0.1)
-```
+⚠️ **Not implemented. This section is the design, not a procedure you can follow.** There is no
+`usarr key rotate`, no `usarr keygen`, and no CLI subcommand of any kind — the binary takes flags
+only and **exits 1 on any positional argument**. `keys/secret.key.new` is never written: the path is
+defined in `internal/config` and has no caller anywhere in the tree. If your key needs replacing
+today, the only route is the §3.5 repair — move the key and the salt aside, let first run generate a
+new pair, and re-enter each credential in the UI.
 
 Scheduled for **v0.1**, alongside `usarr keygen` and the "re-enter your credentials" recovery flow.
 A recovery path on no milestone is a recovery path that does not exist when the first user needs it.
@@ -414,6 +429,10 @@ bundle, and in the cache index — in a column that is not encrypted and was nev
 This tree is the single source of truth for on-disk layout. `ARCHITECTURE.md` conforms to it. Every
 mode is explicit and is set by UsArr itself, independent of any process umask.
 
+**It is the target layout, not an inventory of a running install.** Entries marked `[planned]` belong
+to subsystems that have not shipped — the binary never creates them today, and a fresh install that
+lacks them is correct, not broken. Everything unmarked is created or written by the code on `main`.
+
 ```
 $USARR_CONFIG_DIR/                  # /config — IRREPLACEABLE. Back this up. Mode 0700.
 │
@@ -421,7 +440,11 @@ $USARR_CONFIG_DIR/                  # /config — IRREPLACEABLE. Back this up. M
 │   │                               #   SECRETS ONLY. Nothing goes in here that a backup
 │   │                               #   needs; that is what made kek.salt a trap. See below.
 │   ├── secret.key                  # 0600 — the master key, when not supplied by env/secret
-│   └── secret.key.new              # 0600 — present only mid-rotation (§3.4)
+│   ├── secret.key.new              # 0600 [planned] — mid-rotation only; rotation (§3.4)
+│   │                               #   is unimplemented, so nothing writes this today
+│   └── kek.salt                    # 0600 — ONLY on installs created before the salt
+│                                   #   moved. COPIED to ../kek.salt at startup and then
+│                                   #   LEFT HERE FOREVER; see below and §3.2.
 │
 ├── kek.salt                        # 0600 — per-install HKDF salt, an input to key
 │                                   #   derivation. NOT a secret — its value does not depend
@@ -445,20 +468,21 @@ $USARR_CONFIG_DIR/                  # /config — IRREPLACEABLE. Back this up. M
 ├── backups/                        # 0700 — `VACUUM INTO` output. Contains ciphertext, no key.
 │   └── usarr-2026-08-16T03-00-00Z.db   # 0600
 │
-└── tsnet/                          # 0700 — embedded-node identity. Only exists from the
+└── tsnet/                          # 0700 [planned] — embedded-node identity. Only from the
                                     #   milestone that ships tsnet (§9); persist it or every
                                     #   restart registers a new device.
 
 $USARR_DATA_DIR/                    # /data — REGENERABLE. Safe to delete; UsArr rebuilds it. 0700.
 │
-├── cache.db                        # 0600 — HTTP/metadata response cache, disposable.
-├── cache.db-wal                    # 0600 ┐ never ATTACHed inside a usarr.db write transaction
-├── cache.db-shm                    # 0600 ┘
+├── cache.db                        # 0600 [planned] — HTTP/metadata response cache, disposable.
+├── cache.db-wal                    # 0600 [planned] ┐ never ATTACHed inside a usarr.db write txn
+├── cache.db-shm                    # 0600 [planned] ┘
 ├── cache/
-│   └── images/                     # proxied *Arr MediaCover + provider artwork, content-keyed
-├── logs/
-│   └── usarr.log                   # 0600, + rotated usarr.log.1 … (10 MB × 5)
-└── tmp/                            # in-progress work; cleared at startup
+│   └── images/                     # [planned] proxied *Arr MediaCover + provider artwork,
+│                                   #   content-keyed
+├── logs/                           # 0700 — created at startup. EMPTY: logging is stdout-only
+│   └── usarr.log                   # [planned] 0600, + rotated usarr.log.1 … (10 MB × 5). §2.1
+└── tmp/                            # [planned] in-progress work; cleared at startup
 
 Shipped inside the container image, on no volume:
 /usr/share/usarr/wikidata-edges.db  # read-only cross-media edge artifact (v0.3).
@@ -468,6 +492,13 @@ Shipped inside the container image, on no volume:
                                     #   not by a weekly dump pipeline. Nothing degrades if it is
                                     #   months stale.
 ```
+
+**What a pre-alpha install actually contains**, so the gap is countable rather than implied. Under
+`$USARR_CONFIG_DIR`: `keys/` (holding `secret.key` unless the key comes from the environment),
+`kek.salt`, `usarr.db` with its `-wal`/`-shm` sidecars, an empty `providers/`, an empty `backups/`,
+and — on an install that predates the salt copy-forward — `keys/kek.salt`. Under `$USARR_DATA_DIR`:
+an empty `logs/`. Nothing else is created. `backups/` fills on the first backup; `providers/` is
+yours to fill.
 
 Three properties this layout exists to give you, each a defect in the previous version:
 
@@ -483,7 +514,9 @@ Three properties this layout exists to give you, each a defect in the previous v
    produced archives that could not be restored. It now sits beside `usarr.db`, where the backup
    you were already told to take picks it up.
 3. **Every file both this document and `ARCHITECTURE.md` name is here** — `cache.db`, `providers/`
-   and the Wikidata edge artifact were previously named in one and absent from the other.
+   and the Wikidata edge artifact were previously named in one and absent from the other. The
+   `[planned]` markers keep that completeness from reading as a claim about the current binary: this
+   listing is exhaustive over the *design*, and says which parts of it exist.
 
 **Single-volume installs** leave `USARR_DATA_DIR` unset, so everything lands under `/config`. `keys/`
 is still excluded from backups; the exclusion is by path, not by volume.

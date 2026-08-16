@@ -172,9 +172,29 @@ func TestParseShippedEnvExample(t *testing.T) {
 	if _, ok := env["USARR_SECRET_KEY"]; ok {
 		t.Error(".env.example has an uncommented USARR_SECRET_KEY line; it must never ship one")
 	}
-	for _, want := range []string{"USARR_CONFIG_DIR", "USARR_PORT", "USARR_LOG_LEVEL", "TZ"} {
+	for _, want := range []string{"USARR_PORT", "USARR_LOG_LEVEL", "TZ"} {
 		if _, ok := env[want]; !ok {
 			t.Errorf(".env.example does not set %s", want)
+		}
+	}
+
+	// The two directory variables must ship COMMENTED OUT, and this assertion is
+	// the inverse of one that used to require USARR_CONFIG_DIR to be set.
+	//
+	// Uncommented, they pinned /config and /data — correct inside the container
+	// and wrong everywhere else. `make dev` passes --env-file .env, so a
+	// developer who copies this file to .env gets a hard failure at startup on
+	// the first mkdir, as a normal user cannot write /config. Worse, an
+	// uncommented USARR_DATA_DIR=/data contradicted the comment two lines above
+	// it, which describes the single-volume default that only applies when the
+	// variable is UNSET.
+	//
+	// Commented, both document the default by showing it. That is what an
+	// example file is for. docs/CONFIGURATION.md §2.1, §5.
+	for _, unset := range []string{"USARR_CONFIG_DIR", "USARR_DATA_DIR"} {
+		if got, ok := env[unset]; ok {
+			t.Errorf(".env.example sets %s=%q uncommented; it must ship commented out "+
+				"so the documented default applies and a non-root `make dev` works", unset, got)
 		}
 	}
 }

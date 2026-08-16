@@ -142,20 +142,37 @@ services:
       - 8484:8484
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "/usarr", "healthcheck"]
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8484/api/health/live || exit 1"]
+      interval: 30s
+      timeout: 5s
       start_period: 60s
 ```
+
+⚠️ **On the healthcheck, precisely.** Liveness is an HTTP `GET` on **`/api/health/live`** — that and
+`/api/health/ready` are the endpoints that exist. There is **no `usarr healthcheck` subcommand**:
+the binary takes flags only and exits 1 on any positional argument, so a `["CMD", "/usarr",
+"healthcheck"]` probe would fail every time and report the container permanently unhealthy. The
+`CMD-SHELL` form above needs a shell and `wget`, which a distroless *static* base does not carry —
+whichever way that is settled when the image is actually built (a `busybox` layer, a second static
+probe binary, or a subcommand added to `usarr`), the check itself is the HTTP GET.
 
 The container runs **non-root as UID 65532** on a distroless base, so `chown 65532:65532 ./config`
 before the first start. Then open `http://localhost:8484`, complete the setup wizard, and add your
 first service (base URL + API key, with a mandatory connection test).
 
-**Intended deployment** is a Tailscale tailnet — on which UsArr can run as its own tailnet device via
-embedded `tsnet`, with no published port at all. Internet exposure is supported but is the hardened
-secondary mode, not the default.
+**Intended deployment** is a Tailscale tailnet. ⚠️ **Nothing Tailscale-specific is implemented** —
+there is no embedded `tsnet` node, no `Tailscale-User-*` header handling and no `WhoIs` lookup; the
+only trace of it in the code today is `tailscale` being an accepted value for a user's
+`auth_source`. Until the `tsnet` listener lands (planned v1.0, see the table above and
+[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) §9), UsArr is an ordinary HTTP server: put it on the
+tailnet by binding it to a host that is already on one, or front it with a reverse proxy. Running it
+as its own tailnet device with no published port at all is the destination, not the current state.
+Internet exposure is supported but is the hardened secondary mode, not the default.
 
-**Everything in `/config` is yours.** `usarr.db` is the data; `cache.db` and the image cache are
-disposable — deleting them costs a re-sync, not data. Restore is: stop, replace the file, start —
+**Everything in `/config` is yours.** `usarr.db` is the data, and `kek.salt` beside it is a
+non-secret the database cannot be opened without — back up both, and keep `keys/` out of that same
+archive. The caches (`cache.db`, the image cache) are disposable and land under `/data`; neither is
+created yet, and deleting them will cost a re-sync, not data. Restore is: stop, replace the file, start —
 and the key file is a **separate** step, because a key stored in the same archive as the ciphertext
 defeats the encryption. See [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) §5 for the authoritative
 layout.
