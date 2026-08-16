@@ -28,7 +28,13 @@
  *                                    UIs habitually breach)
  *     subtle/placeholder  >= 4.5:1
  *     borders, focus ring >= 3.2:1  (floor 3:1, SC 1.4.11, unrounded)
- *     status + protocol   >= 4.5:1  (they are always rendered as text+icon)
+ *     status TEXT         >= 4.5:1  (always rendered as text+icon, never
+ *                                    colour alone)
+ *     status GLYPH        >= 3.2:1  (a non-text graphic under SC 1.4.11, so it
+ *                                    MAY take a separate, more saturated value
+ *                                    than the word beside it — see
+ *                                    DESIGN-DIRECTION §3.2 on the light warn)
+ *     (protocol chips no longer carry colour at all — see §1 below)
  *   Every foreground is measured against all three legitimate grounds it can
  *   land on: --n-0 (page), --n-1 (row hover), --n-2 (row selected). --n-3 is a
  *   divider colour and is never a text ground; that is why there is no
@@ -91,11 +97,21 @@
   --n-8: #1c1a17; /* primary ink and the focus ring. Never #000.               */
                   /*  16.50:1 · 15.25:1 · 13.58:1 (target >= 12)               */
 
-  /* Status. The ONLY saturated colour in the app besides cover art and the
-   * protocol chips. Always rendered as icon + text + colour together, never
-   * colour alone — which is why UsArr needs no colour-impaired mode, unlike
-   * Sonarr, which had to ship one (EnableColorImpairedMode, ConfigService.cs).
-   * Ratios below are vs --n-0 · --n-1 · --n-2. */
+  /* Status. The ONLY saturated colour in the app besides cover art — the
+   * protocol chips gave theirs up, see below. Always rendered as icon + text +
+   * colour together, never colour alone; and an icon-only status must still
+   * carry a WORD in its accessible name (DESIGN-DIRECTION §11), which is the
+   * half that was missing. That redundancy is why UsArr needs no
+   * colour-impaired mode, unlike Sonarr, which had to ship one
+   * (EnableColorImpairedMode, ConfigService.cs).
+   * Ratios below are vs --n-0 · --n-1 · --n-2.
+   *
+   * OPEN (DESIGN-DIRECTION §3.2): --status-warn light is #8a5300, a value
+   * forced dark by the 4.5:1 TEXT requirement, which took the amber out of it.
+   * A separate glyph token at ~#a9700a (computed 3.98 · 3.68 vs --n-0 · --n-2,
+   * clearing the 3.2 non-text target) is the candidate; #c98a00 (2.80) and
+   * #b8860b (3.09) do NOT clear it. Not landed: run the repo contrast script
+   * and look at it at thumbnail scale first. */
   --status-ok:      #1c6b3a; /* healthy, synced, present.  6.21 · 5.74 · 5.11 */
   --status-warn:    #8a5300; /* degraded, stale, partial.  6.02 · 5.56 · 4.95 */
   --status-error:   #b3251c; /* down, failed, rejected.    6.24 · 5.77 · 5.14 */
@@ -107,12 +123,20 @@
    * self-hoster reads them without a legend:
    *   torrentColor #00853d, usenetColor #17b1d9
    *   https://github.com/Sonarr/Sonarr/blob/develop/frontend/src/Styles/Themes/dark.js
-   * Those two literals are tuned for a dark ground and fail 4.5:1 on a light
-   * one (#00853d = 3.72:1 on --n-2; #17b1d9 = 1.97:1). The hue is kept and the
-   * lightness is retuned per theme — the recognition survives, the contrast
-   * floor is met. Used for protocol and NOTHING else. */
-  --protocol-torrent: #0a6b34; /*                           6.30 · 5.83 · 5.19 */
-  --protocol-usenet:  #0f6479; /*                           6.40 · 5.92 · 5.27 */
+   *
+   * WITHDRAWN (DESIGN-DIRECTION §3.3). --protocol-torrent was #0a6b34 light /
+   * #4fb377 dark and --protocol-usenet #0f6479 / #4ec3e0. The torrent value is
+   * the SAME GREEN as --status-ok: computed dE76 4.59 in light and 3.09 in
+   * dark, i.e. indistinguishable at a 6px dot and worse in the better theme.
+   * §3's whole case for having no brand accent is that reserving chroma makes
+   * STATUS legible, so a green protocol dot reads as "this row is healthy".
+   * Retuning lightness cannot fix a hue collision, and §1.1 bans the obvious
+   * escape (indigo/violet/purple). So the protocol chip is NEUTRAL and the
+   * words `torrent` / `usenet` carry the distinction, which they already did in
+   * the same cell — §1.4's delete-the-decoration rule applied to a fill.
+   * Protocol remains a first-class filterable field; only the ink is gone.
+   * Reversible: restore both tokens with a torrent hue outside the status band.
+   */
 }
 
 /* -----------------------------------------------------------------------------
@@ -142,8 +166,7 @@
   --status-error: #f0837a; /*                     7.09 · 6.61 · 5.77           */
   --status-unset: #b0a89b; /*                     7.68 · 7.16 · 6.25           */
 
-  --protocol-torrent: #4fb377; /*                 6.93 · 6.46 · 5.64           */
-  --protocol-usenet:  #4ec3e0; /*                 8.79 · 8.19 · 7.15           */
+  /* --protocol-* withdrawn in both themes — see the light-theme note above. */
 }
 
 /* -----------------------------------------------------------------------------
@@ -166,9 +189,6 @@
     --status-warn:  #e0a33a;
     --status-error: #f0837a;
     --status-unset: #b0a89b;
-
-    --protocol-torrent: #4fb377;
-    --protocol-usenet:  #4ec3e0;
   }
 }
 
@@ -449,8 +469,6 @@
   --color-status-warn:   var(--status-warn);
   --color-status-error:  var(--status-error);
   --color-status-unset:  var(--status-unset);
-  --color-protocol-torrent: var(--protocol-torrent);
-  --color-protocol-usenet:  var(--protocol-usenet);
 
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);

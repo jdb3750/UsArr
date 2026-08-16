@@ -286,6 +286,33 @@ non-broken condition in a pluggable app, and painting it a colour would make the
 
 > **Every status is encoded as icon + text + colour together. Never colour alone.**
 
+🚩 **The status *word* and the status *glyph* are bound by different success criteria, and the light
+warning is where that matters.** `--status-warn: #8a5300` was chosen to clear 4.5:1 as **text** on
+the light ground, and forcing an amber dark enough to be readable body text is what took the amber
+out of it — the ⚠ glyph then does the signalling and the colour does much less than §3's argument
+promises. **But the glyph is a non-text graphic, bound by SC 1.4.11 at 3:1, not by 1.4.3 at 4.5:1**,
+so it can carry materially more chroma than the word beside it. **The rule: the word keeps the
+readable value; the glyph may take a separate, more saturated token, provided it clears this
+document's own 3.2:1 non-text target against both the page ground and the surface fill.** A warning
+row may additionally take a low-alpha tint of the same hue.
+
+⚠️ **The candidate value is computed, not verified, and it must go through the repo's contrast
+script before it lands.** `#a9700a` measures **3.98:1** on `#faf9f7` and **3.68:1** on `#f2f0ec`,
+clearing both the 3:1 floor and the 3.2:1 target, at ΔE76 ≈ 13.7 from the text value — a real gain
+in chroma. Two values the finding suggested do **not** work and are recorded so they are not tried
+again: `#c98a00` is **2.80:1** and `#b8860b` is **3.09:1**, so both fail this document's target and
+the second only scrapes the WCAG floor.
+
+📌 **And one part of the finding that raised this is rebutted on measurement.** It described
+`#8a5300` as sitting *inside* the warm neutral ramp, reading as "slightly redder body text", with
+"the colour doing none" of the work. Computed, ΔE76 from `--fg-muted #5a534a` is **46.3** in light
+against **54.2** for the dark pair (`#e0a33a` from `#b0a89b`) — a gap ~15% narrower, not a collapse.
+The *direction* is right and is why the rule above exists; the *magnitude* is not supported.
+🔍 Both instruments are crude in opposite ways: ΔE76 is a poor model of perceived difference at small
+sizes, and the finding's own instrument was a judgement on rendered pixels at thumbnail scale, which
+is a legitimate test this arithmetic does not replace. Neither settles it alone, which is the reason
+the value is escalated rather than simply changed.
+
 That is why UsArr needs no colour-impaired mode. Sonarr had to ship one —
 `EnableColorImpairedMode`, help text *"Altered style to allow color-impaired users to better
 distinguish color coded information"*, default `false`
@@ -293,19 +320,39 @@ distinguish color coded information"*, default `false`
 — precisely because those apps encode a lot of meaning in colour alone. Building the redundancy in
 from day one removes the need for a setting later.
 
-### 3.3 Protocol chips
+### 3.3 Protocol chips — **the chip is neutral; the word carries the protocol**
 
 Torrent and usenet are colour-coded consistently across Sonarr, Radarr and Prowlarr:
 `torrentColor: '#00853d'` and `usenetColor: '#17b1d9'`
-([Sonarr Styles/Themes/dark.js](https://github.com/Sonarr/Sonarr/blob/develop/frontend/src/Styles/Themes/dark.js)).
-A self-hoster reads that green/cyan split without a legend, so UsArr reuses it — **for protocol and
-nothing else**.
+([Sonarr Styles/Themes/dark.js](https://github.com/Sonarr/Sonarr/blob/develop/frontend/src/Styles/Themes/dark.js)),
+a self-hoster reads that green/cyan split without a legend, and **UsArr reused it and should not
+have.**
 
-Honest caveat: those two literals are tuned for a dark ground and fail 4.5:1 on a light one
-(`#00853d` measures 3.72:1 against the light selected-row fill; `#17b1d9` measures 1.97:1 against
-the light page ground). The **hue is kept and the lightness is retuned per theme** —
-`#0a6b34` / `#0f6479` in light, `#4fb377` / `#4ec3e0` in dark. Recognition survives; the contrast
-floor is met. Also note the vocabulary decision: the column is labelled **"Protocol"**, matching
+🚩 **Reversed on measurement: `--status-ok` and the torrent hue are the same green, so protocol
+reads as status.** Computed ΔE76 between `--status-ok #1c6b3a` and `--protocol-torrent #0a6b34` is
+**4.59** in light and **3.09** in dark — indistinguishable at a 6 px dot, and *worse* in the theme
+that otherwise works better. §3 stakes the entire no-brand-accent decision on the claim that
+reserving chroma makes **status** legible; a column of green dots on the Requests screen, seen by a
+user who has just come from a Home screen where green means "nothing missing", says *torrents are
+fine and usenet is something else*. Importing the ecosystem's literals was a good instinct that
+collided with the one ramp this design cannot afford to blur.
+
+**Three ways out, and the third is taken.** Retuning the torrent lightness does not help — the
+collision is hue, not luminance. Moving the hue away from green is foreclosed by §1.1, which bans
+indigo, violet, purple and fuchsia outright, and every other direction lands on the usenet teal or
+on the error red. **So the protocol chip loses its colour: it is neutral, and the words `torrent`
+and `usenet` carry the distinction — which they already do, in the same cell.** That is §1.4's own
+rule applied to a fill instead of an icon (*if a label sits next to it and the label alone would be
+understood, delete the decoration*), it is "cut before you add" removing two tokens rather than
+adding a fourth hue, and it restores §3's argument by leaving chroma to status alone. `Protocol` is
+still a first-class filterable field (§16's `source:` tag); it is the *ink* that goes.
+
+📌 **Reversible in one line, and flagged for Joe as a change of visible character** rather than a
+defect fix — the tokens `--protocol-torrent` / `--protocol-usenet` are deleted from `tokens.css`,
+and restoring them plus a torrent hue outside the status band is the alternative if he wants the
+ecosystem's colour cue kept.
+
+Also note the vocabulary decision: the column is labelled **"Protocol"**, matching
 Prowlarr, not **"Source"**, which is what Sonarr's Interactive Search calls the same field
 ([Prowlarr releaseActions.js](https://github.com/Prowlarr/Prowlarr/blob/develop/frontend/src/Store/Actions/releaseActions.js);
 [Sonarr InteractiveSearch.tsx](https://github.com/Sonarr/Sonarr/blob/develop/frontend/src/InteractiveSearch/InteractiveSearch.tsx)).
@@ -422,6 +469,16 @@ sizes, hashes, `usarr_id` values, log lines, version strings, and **verbatim ups
 monospace face at 12 px reads noticeably smaller than a sans at 12 px, so mono runs one step up
 where it sits inline with sans text.
 
+**Two things that look like machine data and are not, because the conversion of this tell into a
+feature is only complete if the boundary is drawn where the meaning is.** A **taxonomy word** —
+`movie`, `album`, `issue`, `episode`, `ebook` in a `Type` column — is an enum rendered as English,
+and the `Library` column one cell away holds the same kind of value in sans, so mono there is
+inconsistent within a single row. A **user-chosen label** — `Radarr`, `Komga`, `Sonarr Anime`, the
+`name` field of §9.3's wizard — is a string the user typed into a settings form and is exactly as
+human as `Movies`. Both go to sans at `--text-sm` / `--fg-muted`. And **a single value never carries
+two faces**: `ER S12E14 Quintessence of Dust` rendering the episode code in mono grey between two
+runs of bold sans puts three typographic treatments in one cell and reads as a rendering fault.
+
 ### 4.3 The scale — six steps, hard stop
 
 | Token | Size / line-height | Weight | Use |
@@ -458,6 +515,21 @@ counts, durations, timestamps, IDs — and **never on prose**, where proportiona
 (<https://developer.mozilla.org/en-US/docs/Web/CSS/font-variant-numeric>; baseline since January
 2020). *INFERENCE: no source names tabular figures as an anti-slop rule — it is a density rule. But
 generated UI essentially never does it, so it doubles as a positive craft signal.*
+
+⚠️ **The `lg` step is the one that does not carry, and the fix is not a seventh size.** Measured:
+`h1` 20/600/`--fg`, `h2` 16/600/`--fg`, bold row title 13/600/`--fg` — so a section heading differs
+from a row title by **3 px and nothing else**, at the same weight, in the same ink, with
+`letter-spacing: normal` at every size. On Search that puts `Ebooks` at 16/600 directly above
+`Dune Messiah` at 13/600 in identical colour and the heading barely registers as a level. The
+argument above — that below `lg` hierarchy is weight and ramp rather than size — is right and is
+also where it stops applying: `lg` *is* the boundary, and the boundary is the weak step. **Do not
+add a size step.** Add a third signal at `lg` and `xl` only: a 1 px rule the full width of the
+section under the `h2` (the pattern already exists on Search and reads well there), and/or
+`letter-spacing: -0.006em`, which costs zero pixels and which most grotesques want above 15 px.
+Note the related honest correction to §1.2's rebuttal of the "all sizes within 15%" tell: **three of
+the six steps — 13 / 12 / 11 — are within 18% of each other** (ratios 1.08 and 1.09) and read as one
+size, so "six sizes, hard stop" is a thinner answer to that tell than it sounds. The six steps are
+kept; the claim is not oversold.
 
 **Sentence case everywhere.** No Title Case, no all-caps labels, no letter-spaced eyebrows. Buttons
 are verbs: "Add", "Retry", "Test connection", "Search indexers".
@@ -1190,6 +1262,96 @@ treatment by media type.** Same slots, same positions, different values.
   inherently O(all rows) and that no containment can help — and with six groups it computes six
   different layouts for one content column. Measured, declaring widths cut the density-switch cost
   from 1,199 ms to 547 ms at 5,000 rows and from 6,508 ms to 2,956 ms at 25,000.
+- 🚩 **Truncation is a named policy with three tiers, and a row has a stated maximum height.** The
+  prototype contained **exactly one** `text-overflow: ellipsis` in 323 KB, no `-webkit-line-clamp`,
+  and three `overflow-wrap` declarations of which two were `anywhere` — so the layout's answer to
+  every long string was "wrap it", and row height became a function of the worst string present.
+  Measured consequence: Home rows 28–46 px and Search rows 28–78 px against Services at **103–119**
+  and Libraries at **80–160 px** — 5.7× the design's own compact unit, with a median around 96.
+  Two screens in one product looking like two products is not eight separate bugs; it is one missing
+  decision. The decision:
+  1. **Identity fields** — titles, names, series — truncate at the cell with an ellipsis and carry
+     the full string in `title`.
+  2. **Machine strings do not wrap.** A release name, a path, a JSON body or a log line scrolls
+     inside its own cell (`white-space: nowrap; overflow-x: auto`) or truncates with the full value
+     behind the row expander. **`overflow-wrap: anywhere` is banned on mono content**: it breaks at
+     any character, so `x264` renders as `x26` / `4` and a JSON key splits mid-token — destroying
+     the one thing the reader is scanning for, on exactly the content §4.2 identifies as machine
+     data. `overflow-wrap: break-word` with `word-break: normal` is the fallback if wrapping must
+     stay; it breaks at `.` and `-` and leaves tokens intact.
+  3. **Explanations never appear in a cell at all.** One clause in the row, the rest behind the
+     expander that these rows already have. See the next rule.
+- 🚩 **No table cell contains prose, and no cell contains design rationale.** Measured: a Services
+  `Problem` cell carried a **six-line essay** explaining a rendering decision on a *different
+  screen*; a Libraries `State` cell carried a four-line paragraph with a scare-quoted rebuttal of a
+  reviewer; a `Request destination` cell carried sixty-two words of competitive analysis in a column
+  whose other rows hold the word `None`. Three different kinds of object in one column means the
+  column has no defined role, and the tallest one sets the row height for everything beside it —
+  which is why the left-hand cells of those rows sit top-aligned against 130 px of dead space.
+  Nothing in this ecosystem does it: Sonarr's health page gives one line and a wiki link. **The test
+  is §1.6's, tightened: delete this clause — does the user lose a fact they can act on?** A clause
+  that argues with a reviewer, congratulates the design or explains another screen fails it.
+- **A declared-column list needs an overflow policy, and "clip" is not one.** §9.1 requires declared
+  widths (below), and a fixed track plus `overflow-x: clip` on the wrapper does not degrade — it
+  **amputates**, with no scrollbar and no way to reach what was cut. Measured on the Services table
+  at 1280 / 1440 / 1680 / 1920: the two longest action buttons — *"Run full sync now"* and
+  *"Update API key"*, i.e. the ones attached to the degraded and the down rows — overhang their
+  132 px track by 10–12 px and are sheared off flush with the page edge at **every desktop width**,
+  while `document.scrollWidth` equals the viewport so nothing scrolls. The screen shows what is
+  broken and clips the fix. **So: the action track is `minmax(max-content, auto)` and the
+  explanation column absorbs the remainder; a genuine overflow degrades to a scroll, never to a
+  clip.** ⚠️ This interacts with the sticky-header rule above — `overflow-x: auto` on the wrapper is
+  what breaks sticky headers between 761 and 1,099 px — so the scroller goes **inside the row**,
+  which satisfies both. **CI asserts it**, and it is cheap: no element's
+  `getBoundingClientRect().right` may exceed `innerWidth` on any screen × state × width triple.
+- **A figure and its unit are two slots, not one string.** `tabular-nums` on 222 cells buys nothing
+  when what is right-aligned is the *word after the number*: `1,204 films` / `275 series` /
+  `612 artists` right-aligned as one string starts the digits at six different x-positions. The
+  figure is a right-aligned numeric span, the unit is a fixed-width left-aligned span beside it, and
+  `tabular-nums` is applied at the cell rather than per-span so composite values
+  (`1,187 have · 17 wanted`, `13,204 / 14,061 episodes`) inherit it — eight such cells had it
+  missing, and they are precisely the composite ones.
+- **A composite numeric cell says what its parts are.** `41 / 9` in a `Peers` column announces as
+  *"Peers, 41 slash 9"* and nothing on the screen says which number is seeders — while prose four
+  hundred pixels below calls the same column "seeders". Keep the ecosystem-verbatim header (`Peers`
+  is Prowlarr's word) and make the **cell** self-describing, with the expansion in a visually-hidden
+  span and in `title`. The same applies to `250/331`, `43 / 60` and `4 of 9`.
+- **Three words for "there is nothing here", and no others.** Nine renderings shipped — `None`,
+  `No action needed`, `Never`, `not applicable`, `none`, `n/a` twice, `no file` — with Search's
+  Movies group rendering *the same fact* as `no file` in one column and `n/a` in the next. Three
+  concepts are in play and the vocabulary must separate them: **`—`** for *the value is genuinely
+  empty and that is unremarkable*; **`Not configured`** for *this exists as a concept and you have
+  not set it up* (which is already a first-class status with its own token, `--status-unset`, and
+  was then not used for it); **`Not applicable`** for *this concept does not exist for this row*.
+  `Never` stays — it is a real answer to "last successful sync".
+- **Two duration formats, chosen by magnitude, and two never becomes four.** `M:SS` for a single
+  playable item under an hour (a track); `H h MM m` for everything else. Four shipped — `8 h 56 m`,
+  `0:57`, `66 min`, `5,912 h` — two of them in adjacent blocks on Home. A library-level total is
+  prose rather than a column, so it reads `5,912 hours`.
+- **Every user-facing timestamp carries the relative form, and past 24 hours it carries a date.**
+  `14:02, 6 minutes ago`; `11:47 on 15 Aug, 1 day ago`. §17.3 already required absolute **and**
+  relative and the Services screen honours it; 87 bare `HH:MM` values shipped elsewhere, including
+  in a degraded banner whose whole job is the number — *"showing cached data from 11:47"* is
+  identical whether the instance has been down for six minutes or twenty-two hours. Where the column
+  is too narrow, the relative form wins and the absolute goes in `title`. **One date format**:
+  `8 Aug 2026`, no leading zero, always with the year.
+- **A results list and a detail table get different rules below 760 px.** The stacked
+  label/value treatment is right for Services and Libraries, where each row *is* a record you read
+  one at a time — and it is wrong for a search result list, which is scanned: five labelled lines
+  per result puts three results in an 844 px viewport and turns fourteen ebooks into ~70 lines.
+  **A results row stacks to two lines** — title in `--weight-semibold`, then the two most
+  identifying secondary fields joined by `·` — with the rest behind the row.
+- **The stacked label is a real element marked `aria-hidden`, never generated content.** The
+  `td[data-label]::before` pattern puts the column name *inside the cell's accessible name*, so a
+  screen reader in table-navigation mode announces the column header and then the cell and the user
+  hears *"Service. Service, Sonarr…"*, *"Items. Items 214"*, on every cell of every row. It is also
+  a localisation trap: `data-label` duplicates the header string into an attribute most translation
+  pipelines will not pick up, so the two drift on the first translation. Ship
+  `<span class="stacklabel" aria-hidden="true">Items</span>` and keep the visually-hidden header row
+  (which is the right call and is why the `columnheader` nodes survive at all).
+- **A cell that renders one chip per related object caps at three plus `+N more`.** The Services
+  screen's `Libraries` column is the live case: one Audiobookshelf feeding fifteen libraries makes
+  that cell the tallest thing on the screen.
 - **A column picker labelled "Options", next to a control labelled "Filter".** Ship many columns,
   show few by default. This is verbatim the Prowlarr vocabulary — *"you can add or remove columns
   using the **Options** button, and you can sort and filter your results by either clicking on the
@@ -1206,8 +1368,19 @@ treatment by media type.** Same slots, same positions, different values.
 A card is justified when the item's primary content is an image, which is true here and nowhere
 else. Rules:
 
-- Reserve the box with `aspect-ratio` so nothing shifts. The empty card is **title and year over a
-  `dominant_color` fill** — never a grey box, and never a shimmer (§4.4.1).
+- Reserve the box with `aspect-ratio` so nothing shifts. The *empty* card is a `dominant_color`
+  fill — never a grey box, and never a shimmer (§4.4.1).
+- 🚩 **The title and year sit BELOW the tile, on the chrome's own ground, never over the art.**
+  They were set in white bold at the tile's bottom-left directly on the cover, with no scrim, no
+  gradient and no plate. The runtime `dominant_color` contrast machinery (§11) does real work and
+  still cannot make that safe, because it constrains against a **single averaged colour** and real
+  cover art is not one colour: a white title over the light half of a Blue Note sleeve, or over a
+  manga cover with a white top-left corner, fails whatever the average says. The reference app
+  solves it by not attempting it — Navidrome sets the album and artist names below the cover, in
+  the chrome — and so does every \*Arr poster view. **This deletes a subsystem from this surface
+  rather than adding a scrim to it**, which is `CLAUDE.md`'s "cut before you add" working in the
+  right direction. §11's `dominant_color` rule is **narrowed, not withdrawn**: it still governs any
+  text set on a computed fill, which is the row-level dominant tint, where the ground is known.
 - Design to the **fixed width allowlist**: `92, 154, 200, 342, 500, 780, orig`. An arbitrary `?w=`
   is refused as a cache-poisoning DoS (§4.4).
 - Availability renders per §6.3's rollup rule: `have == total && total > 0` → ✓; `have == 0` → ✗;
@@ -1229,10 +1402,31 @@ copying it is free familiarity:
    <https://wiki.servarr.com/sonarr/settings>).
 3. Per-field help text.
 
-UsArr's wizard is **three fields — kind, base URL, API key — plus a live connection test that must
-pass before Save is enabled** (§17.7, §11.3). Credentials render as `••••••1a2b` and are never
-returned by the API. Changing `base_url`'s scheme/host/port **invalidates the stored credential**,
-so the masked display is not theatre.
+UsArr's wizard is **four fields — kind, name, base URL, API key — plus a live connection test whose
+four result states are specified in ARCHITECTURE §17.3 and which must pass before Save is enabled**
+(§17.7, §11.3). The **name** was missing from the add flow while the whole Services screen is keyed
+on it, so a second Radarr arrived indistinguishable from the first and the "1080p ✓ / 4K ✗" badge —
+v0.1's named power-user signal — had nothing to tell the two apart. It is defaulted from the probe
+and editable, so the single-instance case still types three things.
+
+Credentials render as `••••••1a2b` and are never returned by the API. Changing `base_url`'s
+scheme/host/port **invalidates the stored credential**, and that has to be visible rather than
+implicit: **the key field clears, Save disables, and the form says why** (§17.3). Fixing a typo in a
+hostname is the most common edit on that screen and it was silently repointing a full-admin
+credential at a host the user had just typed.
+
+Three smaller rules the same forms need:
+
+- **A blocked commit must be reachable by keyboard.** A `disabled` Save is skipped by Tab, so a
+  keyboard user never encounters it and gets no signal that a commit exists and is blocked. Use
+  `aria-disabled="true"` on a focusable control and swallow the activation.
+- **A read-only field must not look editable.** A `readonly` input styled with the same border and
+  the same inset fill as the editable one two rows above is a lie told in CSS.
+- **Below ~700 px a form is a stacked column** — label above control, every control full width,
+  multi-selects at full width with a `size` that fits. The responsive work was done properly for the
+  hard case (the tables) and skipped for the form, which at 390 px put labels to the *right* of
+  their boxes at unrelated vertical offsets and dropped the submit button into the middle of the
+  column.
 
 Error handling follows GOV.UK, which is the best-documented accessible form-error pattern in
 public (<https://design-system.service.gov.uk/components/error-message/>):
@@ -1257,14 +1451,55 @@ element on close. No dialog traps the user in a mode they must exit before doing
 (Apple's *Modelessness*; *Macintosh Human Interface Guidelines*, 1992,
 <https://dev.os9.ca/techpubs/mac/HIGuidelines/HIGuidelines-15.html>).
 
+**A destructive confirmation always offers the safe option as a control, not as an escape.** A
+prompt whose only buttons are `Open Libraries` and `Remove anyway` has no `Cancel`; navigating away
+is technically an exit and is a known pattern failure. And **`Escape` on a dialog holding unsaved
+credential input confirms before discarding** — reflexively hitting `Esc` to dismiss a password
+manager's popup should not silently throw away a pasted 32-character API key.
+
 Toasts carry the **verbatim upstream error** with **Retry** and **Dismiss** (§7.6, ADR-0012a), and
 they are never the *only* place an outcome appears — the affected row shows it too, because a toast
-can be missed and a row cannot.
+can be missed and a row cannot. Four structural rules, because the markup shape decides whether the
+recovery action is reachable:
+
+- **`role="alert"` is not nested inside an `aria-live` container.** `role="alert"` carries an
+  implicit `aria-live="assertive"`; inside a `polite` region the behaviour is
+  implementation-defined and at best redundant. One region, one politeness.
+- **No interactive control inside the alert.** The ARIA APG is explicit that an alert should not
+  contain focusable elements, because assistive technology may present the region as a flat
+  announcement — which makes `Retry` an announcement rather than a button. The actions go in a
+  sibling `role="group"` with its own accessible name.
+- **Focus moves to the recovery action when the error is the direct result of a user action**, which
+  a failed grab is. Otherwise the toast sits at the end of the document behind everything the user
+  has already tabbed past.
+- **Success is announced too.** The live region was wired to the failure path only, so a
+  screen-reader user pressing Grab heard nothing at all, and a sighted user whose row had scrolled
+  away got nothing either — for the one confirmation sentence three documents quote verbatim. Route
+  it through the same polite region and keep the row chip.
+- **A toast names the object it is about.** Bulk-grab five rows, get two identical failure toasts,
+  and nothing says which two.
 
 ### 9.5 Status, chips and banners
 
 - A status is **icon + text + colour**, in that order of importance. Removing the colour must leave
-  it fully legible.
+  it fully legible — **and removing it for a screen-reader user must not leave nothing**, which is
+  §11's empty-accessible-name rule and is the case this rule was already meant to cover.
+- **A status indicator never sits inline in a run of prose.** Its position must be a fixed slot, not
+  a function of where the sentence happened to wrap. Measured on four consecutive Libraries rows, an
+  identical `✓ healthy` badge landed in four different places — line 2 flush left, line 3 flush
+  left, line 3 after an orphaned word, line 2 after a figure separated from its unit — while the
+  *same* badge two columns to the right sat perfectly aligned on all four. A status whose
+  x-position is a function of string length is not a status indicator. **And if the aligned column
+  already carries it, the inline copy is redundancy, not reinforcement: delete it.**
+- **Chroma marks what is wrong, not what is fine.** On Home's `Have` column the three complete rows
+  rendered in saturated green across the whole value while the three rows with 17 missing films,
+  857 missing episodes and 34 comics with gaps rendered in neutral grey — so on the screen whose job
+  is "what needs my attention", the eye is pulled to the good news. §1.1's own rule is already the
+  answer — *"Grey is a status. A healthy row is neutral"* — and it inverts here: **a complete row is
+  a muted `✓` and grey text; an incomplete row carries its gap figure in the warn role.** The
+  grammar is normalised with it, because six rows carried six grammars for one fact
+  (`X have · Y wanted`, `X / Y episodes`, `X albums · Y tracks`, `X have · Y h`, `X have`,
+  `X issues · Y with gaps`) and no two of them can be compared.
 - System tags render as chips you can filter by but not delete (`is_system`, ADR-0015). Tag chips
   are neutral; `tag.color` is the only colour field in the data model and is user-controlled, not
   chrome.
@@ -1301,8 +1536,11 @@ the one a reader will point at. **The exemption is withdrawn, the token is delet
 `tokens.css`, and the rule is now four constraints that a linter can check rather than a sentence a
 reviewer has to remember:**
 
-1. **The heading is `--text-lg` (16/600).** No token above `--text-xl` exists; the empty-state
-   heading is not the page title and must not out-size it.
+1. **The heading is `--text-lg` (16/600) and it is an `<h2>`.** No token above `--text-xl` exists;
+   the empty-state heading is not the page title and must not out-size it. It was bold text rather
+   than a heading in all eight empty states, so a screen-reader user navigating by heading on the
+   **first-run screen** found one heading — "Home" — and had to read linearly to discover that
+   nothing was configured. The heading hierarchy is otherwise clean and this was the one gap.
 2. **Everything is left-aligned at the same content edge as the table or grid it replaces.** No
    `text-align: center` on an empty state, on its heading, on its sentence or on its buttons. The
    `[grep]` rule in §13 previously exempted empty states from the centring ban; that exemption goes
@@ -1331,6 +1569,14 @@ drift apart again, and the earlier absolute wording forbade the artefact that ma
 document reviewable.
 
 ### 9.7 The minimum component set, and where per-type divergence is allowed
+
+> **One amendment before the argument: "shape from the image, not the type" holds inside a
+> single-type grid and costs legibility in the one container where all six types meet.** Home's
+> Block C posters view is a unified grid across every type, so 2:3 film posters and 1:1 album covers
+> land on the same visual row and their per-card meta lines (`album ✓`, `movie ✓`) sit at four
+> different heights. **In the unified grid the card *box* is one shape and the image is fitted
+> inside it**; per-type grids keep the image-derived shape unchanged. The rule below is right; it
+> just needed the case where the premise (one type per grid) is false.
 
 **Five components cover all six media types.** The evidence that this stretches further than intuition
 suggests is Jellyfin's, and it is decisive: it serves movies, shows, music, books, audiobooks, photos,
@@ -1448,6 +1694,7 @@ Density is never a reason to breach these.
 | [SC 1.4.12 Text Spacing](https://www.w3.org/WAI/WCAG22/Understanding/text-spacing.html) | AA | survive line-height 1.5×, paragraph 2×, letter 0.12×, word 0.16× | `min-height` everywhere; never clip overflow on a text container |
 | [SC 2.5.8 Target Size (Minimum)](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html) | AA | 24×24 CSS px, with the spacing exception | 28 px compact rows carry no inline targets; ≥32 px for repeated actions |
 | SC 2.1.1 / 2.1.2 Keyboard, No Keyboard Trap | A | all functionality keyboard-operable | plus a real keyboard model (below) |
+| [SC 2.4.1 Bypass Blocks](https://www.w3.org/WAI/WCAG22/Understanding/bypass-blocks.html) | **A** | a mechanism to skip repeated blocks | **a `Skip to content` link as the first tab stop.** Landmarks are an accepted technique and screen-reader users have `main`, so this was not a strict failure — but **21 tab stops** (top bar + 15 nav rows) precede content on every screen, identically, and a keyboard-only sighted user has no landmark navigation at all. The criterion was missing from this table while 2.1.1, 2.1.2 and 2.1.4 were named |
 | [SC 2.1.4 Character Key Shortcuts](https://www.w3.org/WAI/WCAG22/Understanding/character-key-shortcuts.html) | **A** | a single-character shortcut must be **turn-off-able**, **remappable**, **or active only on focus** | **a Settings toggle satisfies "turn off" for all five at once** — see below |
 | SC 2.4.7 Focus Visible | AA | a visible indicator | never removed to buy density; `:focus-visible`, so mouse users do not see rings |
 | [SC 2.4.11 Focus Not Obscured](https://www.w3.org/WAI/WCAG22/quickref/) | AA | focused component not entirely hidden | sticky headers are the usual violator — test it |
@@ -1566,6 +1813,32 @@ review items**, because a hand-built grid supplies nothing a native `<table>` su
   `Home`/`End` unless the target is the row itself. **This is a required test**, because it is
   invisible to `svelte-check`: *for every roving grid, arrowing and `Home`/`End` inside a contained
   `input`/`select` must not move focus.*
+- 🚩 **Focus follows navigation.** Activating a nav link replaces the whole main region and leaves
+  `document.activeElement` on the nav link, with nothing announced — so the user must tab past every
+  remaining nav row to reach the screen they just opened. **On route change, move focus to the new
+  `<main>`'s `<h1>` (`tabindex="-1"`) and announce the page name in a polite live region.** §11's
+  keyboard model was detailed about *lists* and silent about *route changes*.
+- 🚩 **Never disable the control that was just activated.** `btn.disabled = true` inside a click
+  handler drops focus to `<body>`, because a disabled element cannot hold it — measured on both the
+  success and the failure path of a grab, which throws a keyboard user to the top of the document
+  mid-task, and on the failure path sends them away from the very toast carrying the recovery
+  action. Set `aria-disabled="true"`, change the label, keep it focusable, and swallow subsequent
+  activations. If it genuinely must be disabled, move focus deliberately *first*.
+- 🚩 **`Escape` is handled before the form-control bail-out, not after it.** The bail-out below is
+  correct for `ArrowUp`/`ArrowDown`/`Home`/`End` and it also swallows `Escape`, which removes the
+  documented escape route exactly where it is needed: on the Requests table the first control in
+  every row is a checkbox, so arrowing into it leaves no arrow key and no `Escape` that gets back
+  out — only Tab. Handle `Escape` first, return focus to the row, then bail out for the rest.
+- ⚠️ **§11's own prescribed single-key guard is wrong in both directions, corrected here rather than
+  left standing.** `el.closest('input, select, textarea, [contenteditable]')` — the exact form this
+  section prescribed in the previous round — is **too broad**, because focus on a row-select
+  *checkbox* suppresses `/`, so pressing `/` to reach search silently does nothing; and **too
+  narrow**, because focus on a `<button>` does not suppress `l`, so the scope popover opens while
+  focus stays elsewhere — **which is the precise bug this section names as its own motivating
+  example** (*"so `l` fires with focus on 'Add library'"*). The corrected guard: suppress when
+  `el.isContentEditable` or `el.matches('textarea, select, input:not([type=checkbox]):not([type=radio]):not([type=button])')`,
+  and additionally suppress letter shortcuts that navigate when
+  `el.matches('button, [role=button], a[href]')`. Measured, not reasoned.
 - **`preloadData()` on `focusin`**, so keyboard users get the hover path's head start (§7.3).
 - *INFERENCE:* a visible keyboard model is one of the clearest positive craft signals available,
   because generated UI essentially never ships one.
@@ -1702,6 +1975,52 @@ AI-generated" an actual gate rather than a vibe.
 - `[review]` **For every roving-tabindex grid: arrowing, `Home` and `End` inside a contained
   `input`, `select` or `textarea` must not move focus.** SC 2.1.1 is Level A and `svelte-check`
   cannot see this.
+- `[grep]` **A `Skip to content` link is the first tab stop on every page** (SC 2.4.1, §11).
+- `[review]` **Focus moves to the new page's `<h1>` on every route change**, and no handler disables
+  the control that invoked it (§11). Both are invisible to `svelte-check` and both strand focus on
+  `<body>`.
+- `[grep]` **Every list with `role="table"` and focusable descendants has exactly one row at
+  `tabindex="0"`.** One `querySelectorAll` over the rendered DOM. The roving model was applied to
+  seventeen lists and not to the three on the screen with the only stateful outbound action, where
+  it left 28 tab stops inside 10 rows and no row reachable by Tab at all.
+- `[review]` **An irreversible action is never an icon with no visible label, and never adjacent to
+  a visually similar benign one.** The Grab control was an unlabelled download-arrow with no
+  `title`, 8 px from an external-link anchor, firing a multi-gigabyte grab on `Enter` with no
+  confirmation — and the glyph means "download this file to my computer" in every other application.
+- `[review]` **A live region is atomic and carries the whole sentence**, and is never nested inside
+  another live region, and is never *inside* the control whose accessible name it is. Measured
+  failures: a `<span aria-live>` around `9 of 9` announcing a bare number without "indexers
+  responded", inside a `role="status"` that is itself a region; and the scope chip's label, which
+  makes toggling a checkbox both rename the focused control and fire an announcement.
+- `[review]` **An accessible name describes the pattern, not the component's internal name.**
+  `<nav aria-label="Level">` puts a Svelte component name into a screen reader's landmark list;
+  it is a breadcrumb, so it is `aria-label="Breadcrumb"`.
+- `[review]` **`aria-current="page"` marks a destination, never a filter**, and never two elements
+  at once. Filter chips are `aria-pressed` buttons or `aria-current="true"` links.
+- `[review]` **A group of related controls carries a role and an accessible name.** A bare `<div>`
+  of seven filter links, immediately above six headings carrying the same seven strings, tells a
+  screen-reader user nothing about what they are or what activating one does.
+- `[review]` **No skipped heading levels and no two headings with the same text in one document.**
+  Measured: H2 → H4 on the Libraries detail screen, with `Identity` appearing as both.
+- `[review]` **No raw schema identifier in running copy**, outside an explicitly-labelled
+  Diagnostics panel where identifiers are the content: `managed_by user` → "user-managed",
+  `sort_title` → "sort title", `no work identity` → "matched by title", `breaker open` → "paused —
+  7 failed attempts, retrying 14:19".
+- `[review]` **One label per action across the whole product.** Shipped: four labels for "test",
+  three for "retry", two for "add a service", four for a destructive action, and `Run full sync now`
+  beside `Run full sync`. A verb that reads as a task description (`Confirm your password`) is a
+  label for the *field*, not for the button.
+- `[review]` **A control labelled as an operation performs it.** `Test Radarr` and `Run full sync`
+  as `<a href="#services">` are imperative verbs that navigate to the top of another screen with
+  nothing indicating which row you came for; either perform it inline (the handler already exists on
+  that screen) or label it as navigation — `Radarr health →` — and deep-link with the row anchored.
+- `[review]` **A derived summary line renders from the same source as the body it sits above, or it
+  is not rendered.** Measured in one viewport: a Home sub-caption reading *"Last delta sync 14:02, 6
+  minutes ago"* above the body *"No services configured"*; *"8 rows"* over an empty table;
+  *"31 results in 6 of 6 media types"* over *"No results for duen"*. The sub-caption ships, it
+  precedes the state block in both the reading order and the accessibility tree, and a number that
+  is reassuring and wrong is worse than no number — `CLAUDE.md`'s "no invented status", arriving
+  through page furniture.
 - `[review]` **Every ARIA grid carries the roles a native `<table>` would have supplied** —
   `role="table"`/`"row"`/`"columnheader"`/`"cell"`, header association, and column names that
   survive the ≤760 px stacked view. This is the cost of §7.4's grid-row primitive and it is paid per
@@ -1717,6 +2036,16 @@ AI-generated" an actual gate rather than a vibe.
   eight words. §17 wins over this checklist, so the rule carries the exception rather than the
   banner carrying a rewrite.
 - `[grep]` No `!` in UI strings.
+- `[grep]` **The UI locale is en-GB** — `catalogue`, `behaviour`, `colour`, `organisation` —
+  **with one exception: a string quoted verbatim from an \*Arr keeps the \*Arr's spelling**
+  (`Enable Color-Impaired Mode`, `Organize`, `color impaired options`). Recorded as a decision
+  rather than left as drift, because it interacts with every borrowed string and because
+  `catalogue source` — one of the product's two coined terms — is the visible edge of it.
+  📌 Joe's call to confirm; en-GB is the current answer and the whole corpus already follows it.
+- `[grep]` **No parenthesised plural (`release(s)`) where the count is known.** The bulk button is
+  disabled at zero selections, so it always knows: `Grab 3 releases` / `Grab 1 release`. Keeping
+  Prowlarr's verb `Grab` is what buys the familiarity; the `(s)` buys nothing and does not
+  translate.
 - `[grep]` Buttons and labels are sentence case (proper nouns like Sonarr, Prowlarr, Navidrome
   excepted).
 - `[review]` No first-person plural.
