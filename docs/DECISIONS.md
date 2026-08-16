@@ -57,6 +57,7 @@ distinctions now matter and are used consistently below:
 | [0031](#adr-0031) | Track position is edition-scoped; attribution is many-to-many | **Accepted** — refines ADR-0009 |
 | [0032](#adr-0032) | Read-only catalogue sources move early; command sinks defer | **Accepted** — **amends** §16 |
 | [0033](#adr-0033) | `work.kind` gains `person`; a credit is not a music artist | **Accepted** — owner-decided 2026-08-16; refines ADR-0009, ADR-0031 |
+| [0034](#adr-0034) | The project keeps the name UsArr | **Accepted** — owner-decided 2026-08-16; naming only, nothing in the codebase moves |
 
 ---
 
@@ -2741,3 +2742,101 @@ speculative:
   carry an `external_id`, cannot be deduplicated across two sources, and cannot be the target of the
   reverse index that makes "everything this person is credited on" a seek. Upgrading strings to rows
   later is a backfill over `work_credit` *plus* the migration this ADR exists to avoid.
+
+---
+
+<a id="adr-0034"></a>
+
+## ADR-0034 — The project keeps the name UsArr
+
+**Status:** Accepted · **owner-decided 2026-08-16.** In the owner's words: *"Let's Keep Usarr. Its
+the easiest and the thing my brain first went to."* This is a naming decision only. **No schema, wire
+format, identifier, configuration key or credential derivation changes as a result of it** — that is
+the point of it.
+
+### Context
+
+A rename to **Usharr** was considered, on the usher metaphor: the service ushers a request to
+whichever part of the stack can satisfy it. It reads well, and it describes what UsArr does better
+than a contraction of "us" and "\*Arr" does. So the name was collision-checked before anything else
+was touched. Every check below was run on **2026-08-16** against GitHub's API and HTML, Docker Hub's
+v2 registry API, npm, PyPI and pkg.go.dev.
+
+**`Usharr` is already taken twice, inside this exact ecosystem.**
+
+- <https://github.com/jaysoffian/usharr> — created 2026-05-07, last pushed 2026-06-04, **not
+  archived**, 0 stars, Python/FastAPI, MIT. Its README opens: *"Usharr is a web application and API
+  that complements Plex Media Server, Sonarr, Radarr, Bazarr and Tautulli."* Actively developed, and
+  in adjacent conceptual territory with the same audience. **This is the material collision** — not a
+  name clash in a distant field, a name clash in the neighbourhood UsArr ships into.
+- <https://github.com/nicholasodonnell/usharr> — a Radarr/Tautulli movie-library pruner, TypeScript,
+  GPL-3.0, 11 stars, last pushed 2026-05-09, **archived 2026-06-30**. Archived, but its image
+  <https://hub.docker.com/r/nicholasodonnell/usharr> is live at **2,883 pulls** and currently owns
+  the "usharr" result a self-hoster gets when they search. A repository stops being maintained when
+  it is archived; it does not stop being the first hit.
+
+`github.com/Usharr` is held by an unrelated personal account, so the organisation handle is
+unavailable too. The Docker Hub namespaces `usharr` and `usarr` are both free.
+
+⚠️ **The trademark registers could not be reached from the research environment** — Justia returned
+403 and the USPTO TESS endpoint 404. That check is **unverified, not clean**, and it is unverified
+for *every* name here, UsArr included. It is recorded as an open gap rather than quietly counted as a
+pass.
+
+**`UsArr` itself has zero software collisions.** A GitHub search for `usarr` returns only noise from
+R's built-in `USArrests` dataset — no repository, package, image or handle contends for it.
+
+**The cost side was measured, not estimated.** A rename touches **1,581 occurrences across 144
+files**, in exactly three casings — `UsArr`, `USARR`, `usarr` — while three threads were concurrently
+pushing to `main`.
+
+### Decision
+
+> **The project is called UsArr.** The name is not changing.
+>
+> The usher framing survives as prose, not as an identifier: *"UsArr ushers your requests to the
+> right service"* is available as a README or docs tagline whenever it is wanted, at zero cost,
+> because a tagline is not a module path.
+
+### Consequences
+
+- **The rename buys nothing.** A rename is worth paying for when the incumbent name collides, and
+  UsArr does not collide. `Usherr`'s only advantage over `UsArr` was the metaphor — and the metaphor
+  is separable from the name, so it can be had without paying for the rename.
+- **Nothing in the codebase moves.** The module path, the image name, the `USARR_*` environment
+  prefix, the `usarr_session` / `usarr_csrf` cookies, the HKDF info labels and the wire-visible
+  `usarr_id` all stay exactly as they are. This ADR changes no behaviour and no bytes.
+- **The trademark question stays open**, for UsArr as for every candidate screened. If it ever needs
+  answering it must be answered against a register that actually responded, and nothing in this ADR
+  may be cited as evidence that it was.
+
+### Alternatives rejected
+
+| Candidate | Finding on 2026-08-16 |
+|---|---|
+| `Usherr` | **The cleanest alternative.** Its only collision is a dormant, out-of-domain 2-star Next.js project last pushed 2022 (<https://github.com/iPanchalShubham/Usherr>); npm, PyPI, pkg.go.dev and the Docker Hub `usherr` namespace are all free. The `github.com/usherr` organisation handle is held by a dormant zero-repo account. Rejected on cost, not on availability |
+| `Usherarr` | Clean everywhere, organisation handle included — and clumsy to type and clumsy to say |
+| `Ushrr` | Clean on every registry, and unspellable. It reads as a typo of the taken `Usharr`, which is the worst of both |
+| `Ushr` | **Blocked.** The Docker Hub `ushr` namespace is an active organisation registered to the US House of Representatives, and the GitHub username is taken |
+| `Routarr`, `Portarr`, `Guidarr`, `Conductorr`, `Dispatcharr` | Already taken inside the \*Arr ecosystem. <https://github.com/Dispatcharr/Dispatcharr> is at 3,839 stars and active |
+
+### If this is reopened
+
+A future rename is not a find-and-replace, and these are the things it must not break. They are
+recorded here so the next attempt does not rediscover them the expensive way.
+
+- ⚠️ **The HKDF info labels `usarr/kek/v1`, `usarr/stream-token/v1` and `usarr/client-credential/v1`
+  in `internal/crypto/derive.go` are cryptographic domain-separation inputs**, bound into stored
+  ciphertext. Renaming them silently makes **every stored encrypted \*Arr API key undecryptable**, and
+  **no test catches it** — `derive_test.go` carries no golden vectors. A rename either leaves these
+  labels alone or ships a re-encryption migration.
+- **The cookie names `usarr_session` and `usarr_csrf`** span `internal/httpapi/auth.go` and
+  `web/src/lib/api.ts`. They must change in lockstep or every write 403s.
+- **The Go module path only resolves if the GitHub repository is renamed in the same move.**
+- **The scene-release fixture tag `Test.Release.2026.1080p.WEB-DL.x264-USARR` is a fabricated
+  release-group name, not the product name.** It must not be swept up.
+- **The wire-visible `usarr_id` and the OpenSubsonic response envelope's `type` field are protocol
+  decisions** (ADR-0021, ADR-0010), not cosmetic strings. Changing them is a compatibility break,
+  decided on its own merits.
+- **A single case-insensitive find-and-replace is wrong**: it destroys the `USARR_*` environment
+  variable casing. The three casings are distinct and each has its own call sites.
