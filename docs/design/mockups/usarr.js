@@ -2,8 +2,8 @@
    Vanilla JS, no dependencies, no animation library.
    Scope, deliberately narrow: theme toggle, density control, sidebar toggle,
    the library scope chip, section/tab switching, the dialog, the states
-   switcher, roving tabindex, and the acknowledged-write demonstration on the
-   requests screen.
+   switcher, roving tabindex, the dominant_color contrast rule, and the
+   acknowledged-write demonstration on the requests screen.
    Nothing here animates anything on a render path. */
 (function () {
   'use strict';
@@ -80,11 +80,48 @@
     });
   }
 
+  /* ---- single-character shortcuts, and the switch that turns them off ---
+     WCAG 2.2 SC 2.1.4 (Level A) requires that a shortcut made only of letter,
+     punctuation, number or symbol characters can be turned off, remapped, or
+     be active only on focus. "It also has a visible mouse equivalent" is not
+     one of the three: the criterion exists for speech-input users, whose
+     dictation is typed into the page, and for anyone with a tremor. So there
+     is a switch, it is honoured here, and it is discoverable from the shortcut
+     sheet the "?" key opens. */
+  var shortcutsOn = readStored('usarr.shortcuts') !== 'off';
+  var shortcutToggle = document.querySelector('[data-act="shortcuts"]');
+  if (shortcutToggle) {
+    shortcutToggle.checked = shortcutsOn;
+    shortcutToggle.addEventListener('change', function () {
+      shortcutsOn = shortcutToggle.checked;
+      store('usarr.shortcuts', shortcutsOn ? 'on' : 'off');
+    });
+  }
+
+  /* A single-character shortcut must never fire while the user is typing, and
+     "the active element is an INPUT" is not the same test: a caret inside a
+     contenteditable, or inside a wrapper element within one, is also typing. */
+  function typing() {
+    var el = document.activeElement;
+    if (!el) return false;
+    if (el.isContentEditable) return true;
+    return !!(el.closest && el.closest('input, select, textarea, [contenteditable]'));
+  }
+  function shortcutBlocked(ev) {
+    return !shortcutsOn || ev.metaKey || ev.ctrlKey || ev.altKey || typing();
+  }
+
   /* ---- library scope chip ---------------------------------------------
      Navidrome's LibrarySelector: a multi-select filter, not a mode. The chip
      always states the current scope in words, so a control that hides content
-     can never be silent about what it hid. The checkboxes are native, which
-     is why Space, arrows and Escape all work without a keyboard handler. */
+     can never be silent about what it hid -- and the label is a live region,
+     because otherwise it states it only to people who can see it.
+
+     The checkboxes are native, so Space toggles and Tab traverses for free.
+     Arrow-key roving and Escape-to-close are NOT free: native checkboxes are
+     Tab-traversed, not arrow-navigable (only radios in a group are), and Esc
+     is popover behaviour rather than checkbox behaviour. Those two are the
+     behaviours this handler adds. */
   var scopeBtn = document.querySelector('[data-act="scope"]');
   if (scopeBtn) {
     var scopePop = document.getElementById(scopeBtn.getAttribute('aria-controls'));
@@ -96,18 +133,22 @@
     function paintScope() {
       var total = libBoxes.length;
       var on = 0;
-      var names = [];
+      var slugs = [];
       for (var i = 0; i < libBoxes.length; i++) {
         if (!libBoxes[i].checked) continue;
         on++;
-        names.push(libBoxes[i].parentNode.textContent.trim().toLowerCase().replace(/\s+/g, '-'));
+        /* The slug is stored on the library, never derived from the rendered
+           label: the name is user-editable and the URL is durable state, so
+           slugifying the label would change a permalink when a library is
+           renamed. */
+        slugs.push(libBoxes[i].getAttribute('data-slug'));
       }
       allBox.checked = on === total;
       allBox.indeterminate = on > 0 && on < total;
       if (on === 0) scopeLabel.textContent = 'None (0 of ' + total + ')';
       else if (on === total) scopeLabel.textContent = 'All libraries (' + total + ')';
       else scopeLabel.textContent = on + ' of ' + total + ' libraries';
-      scopeUrl.textContent = on === total ? '?lib=all' : '?lib=' + (names.join(',') || 'none');
+      scopeUrl.textContent = on === total ? '?lib=all' : '?lib=' + (slugs.join(',') || 'none');
     }
 
     function openScope(open) {
@@ -124,14 +165,27 @@
       }
       paintScope();
     });
+    /* Tabbing past the last checkbox used to leave the popover open with focus
+       on a nav link behind it. */
+    document.querySelector('.scope').addEventListener('focusout', function (ev) {
+      if (scopePop.hidden) return;
+      if (ev.relatedTarget && ev.relatedTarget.closest('.scope')) return;
+      openScope(false);
+    });
     document.addEventListener('keydown', function (ev) {
       if (ev.key === 'Escape' && !scopePop.hidden) { openScope(false); scopeBtn.focus(); }
-      /* "l" opens the scope, matching "/" for search. Both have a visible,
-         mouse-reachable equivalent; neither is the only path to anything. */
-      if (ev.key !== 'l' || ev.metaKey || ev.ctrlKey || ev.altKey) return;
-      var tag = document.activeElement && document.activeElement.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      ev.preventDefault();
+      /* "l" opens the scope, matching "/" for search. */
+      if (ev.key !== 'l' || shortcutBlocked(ev)) return;
+      /* Below 900px the sidebar is display:none, so focusing into the popover
+         would silently do nothing and the key would read as broken rather than
+         absent. Open the drawer first. */
+      if (!scopeBtn.offsetParent) {
+        if (!app || !sideBtn) return;
+        ev.preventDefault();
+        sideBtn.click();
+      } else {
+        ev.preventDefault();
+      }
       openScope(true);
       allBox.focus();
     });
@@ -257,42 +311,140 @@
     }
   });
 
-  /* ---- roving tabindex: a table is one tab stop, arrows move within --- */
+  /* ---- roving tabindex: a list is one tab stop, arrows move within -----
+
+     data-roving is on lists of *data*. It is deliberately not on the three
+     grids whose rows contain form controls -- the library proposals, the
+     catalogue sources, the release results with their select checkboxes.
+     A form laid out in a grid is a form, and its natural tab order is the
+     correct one; imposing a roving model on it is how the Kind select on the
+     Libraries screen became keyboard-inoperable.
+
+     Three defects fixed here, all in the same block:
+
+     1. The handler used to fire for anything focused inside a row, so
+        ArrowUp/ArrowDown/Home/End were swallowed inside every text input and
+        every select. WCAG 2.1.1, Level A. It now bails before the key switch
+        when the event starts in a form control, and Home/End are only handled
+        when the row itself is the target.
+
+     2. items() was a full querySelectorAll plus an ancestor walk per row, per
+        keypress: measured 9.7ms at 5,000 rows and 55ms at 25,000, i.e. 2.25
+        seconds of main thread for one second of held ArrowDown. An arrow key
+        needs the adjacent row, not the whole list, so it walks siblings and is
+        O(1) amortised. The full scan survives only for Home/End, which do not
+        repeat.
+
+     3. The roving row was an *extra* tab stop on top of the links and buttons
+        already inside every row -- eight stops on the Libraries table, not
+        one -- and the assignment ran once at init, so any row appended by a
+        "Load more" either arrived as a ninth tab stop or with no tabindex at
+        all. Row-internal controls are now -1 and reachable with Left/Right,
+        which is the standard grid model, and the assignment is idempotent and
+        re-applied to anything appended. */
+  var FOCUSABLE = 'a[href], button, input, select, textarea, [tabindex]';
+  function isFormTarget(el) {
+    return !!(el && el.closest && el.closest('input, select, textarea, [contenteditable]'));
+  }
+  function visible(el) {
+    return !el.hidden && el.closest('[hidden]') === null;
+  }
+
   var grids = document.querySelectorAll('[data-roving]');
   for (var g = 0; g < grids.length; g++) {
     (function (grid) {
       var sel = grid.getAttribute('data-roving');
-      /* Reading offsetParent forces a synchronous layout, and this runs once
-         per candidate on every arrow key: at 10,000 rows that is 10,000 forced
-         reflows per keypress. closest() answers the same question from the DOM
-         tree without touching layout. */
-      function items() {
-        return Array.prototype.filter.call(grid.querySelectorAll(sel), function (el) {
-          return !el.hidden && el.closest('[hidden]') === null;
-        });
+      var horizontal = grid.getAttribute('data-roving-axis') === 'horizontal';
+      var nextKey = horizontal ? 'ArrowRight' : 'ArrowDown';
+      var prevKey = horizontal ? 'ArrowLeft' : 'ArrowUp';
+
+      /* Idempotent, and it keeps the roved position rather than snapping back
+         to row one every time something is appended. */
+      function refresh() {
+        var all = grid.querySelectorAll(sel);
+        var chosen = null;
+        var i;
+        for (i = 0; i < all.length; i++) {
+          if (all[i].tabIndex === 0 && visible(all[i])) { chosen = all[i]; break; }
+        }
+        if (!chosen) {
+          for (i = 0; i < all.length; i++) {
+            if (visible(all[i])) { chosen = all[i]; break; }
+          }
+        }
+        for (i = 0; i < all.length; i++) {
+          all[i].tabIndex = all[i] === chosen ? 0 : -1;
+          var inner = all[i].querySelectorAll(FOCUSABLE);
+          for (var k = 0; k < inner.length; k++) inner[k].tabIndex = -1;
+        }
       }
-      var initial = Array.prototype.slice.call(grid.querySelectorAll(sel));
-      for (var i = 0; i < initial.length; i++) initial[i].tabIndex = i === 0 ? 0 : -1;
+      refresh();
+
+      /* "Load more" appends rows, and ADR-0029 makes that the primary
+         interaction, so the invariant has to survive an append rather than
+         being established once at init. */
+      if (window.MutationObserver) {
+        new window.MutationObserver(function (records) {
+          for (var r = 0; r < records.length; r++) {
+            if (records[r].addedNodes.length) { refresh(); return; }
+          }
+        }).observe(grid, { childList: true, subtree: true });
+      }
+
+      function step(from, dir) {
+        var el = from;
+        do {
+          el = el[dir === 1 ? 'nextElementSibling' : 'previousElementSibling'];
+          if (el && el.matches(sel) && visible(el)) return el;
+        } while (el);
+        return null;
+      }
+      function move(from, to) {
+        if (!to) return;
+        from.tabIndex = -1;
+        to.tabIndex = 0;
+        to.focus();
+      }
 
       grid.addEventListener('keydown', function (ev) {
-        var horizontal = grid.getAttribute('data-roving-axis') === 'horizontal';
-        var nextKey = horizontal ? 'ArrowRight' : 'ArrowDown';
-        var prevKey = horizontal ? 'ArrowLeft' : 'ArrowUp';
-        if (['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].indexOf(ev.key) === -1) return;
-        var list = items();
+        if (['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Escape'].indexOf(ev.key) === -1) return;
+        /* A caret in a text field owns its own arrow keys, Home and End. */
+        if (isFormTarget(ev.target)) return;
         var current = ev.target.closest(sel);
-        var idx = list.indexOf(current);
-        if (idx === -1) return;
-        var next = idx;
-        if (ev.key === nextKey) next = Math.min(idx + 1, list.length - 1);
-        else if (ev.key === prevKey) next = Math.max(idx - 1, 0);
-        else if (ev.key === 'Home') next = 0;
-        else if (ev.key === 'End') next = list.length - 1;
-        else return;
+        if (!current) return;
+
+        /* Left/Right inside a vertical list walks the row's own controls, so
+           the row is one tab stop and its actions are still reachable. */
+        if (!horizontal && (ev.key === 'ArrowRight' || ev.key === 'ArrowLeft')) {
+          var controls = Array.prototype.filter.call(current.querySelectorAll(FOCUSABLE), visible);
+          if (!controls.length) return;
+          var at = controls.indexOf(ev.target);
+          var to = ev.key === 'ArrowRight' ? at + 1 : at - 1;
+          ev.preventDefault();
+          if (to < 0) { current.focus(); return; }
+          if (to >= controls.length) return;
+          controls[to].focus();
+          return;
+        }
+        if (!horizontal && ev.key === 'Escape' && ev.target !== current) {
+          ev.preventDefault();
+          current.focus();
+          return;
+        }
+        if (ev.key === 'Escape') return;
+
+        if (ev.key === 'Home' || ev.key === 'End') {
+          /* Only from the row itself: Home in a caret means column zero. */
+          if (ev.target !== current) return;
+          var all = Array.prototype.filter.call(grid.querySelectorAll(sel), visible);
+          if (!all.length) return;
+          ev.preventDefault();
+          move(current, ev.key === 'Home' ? all[0] : all[all.length - 1]);
+          return;
+        }
+        if (ev.key !== nextKey && ev.key !== prevKey) return;
         ev.preventDefault();
-        list[idx].tabIndex = -1;
-        list[next].tabIndex = 0;
-        list[next].focus();
+        move(current, step(current, ev.key === nextKey ? 1 : -1));
       });
     })(grids[g]);
   }
@@ -326,13 +478,23 @@
     host.appendChild(el);
   }
 
-  function setChip(row, kind, text) {
+  /* ARCHITECTURE 8.5 fixes the grab confirmation literally: "Sent to <download
+     client>. UsArr does not import downloads.", naming the watched folder when
+     a library-bearing service is configured. It is a sentence, not a chip, so
+     it renders as the row's sub-line beside the chip. */
+  function setChip(row, kind, text, note) {
     var cell = row.querySelector('[data-slot="grabstate"]');
     if (!cell) return;
     var chip = document.createElement('span');
     chip.className = 'chip chip--' + kind;
     chip.textContent = text;
     cell.replaceChildren(chip);
+    if (note) {
+      var sub = document.createElement('div');
+      sub.className = 'cell-sub';
+      sub.textContent = note;
+      cell.appendChild(sub);
+    }
   }
 
   document.addEventListener('click', function (ev) {
@@ -343,7 +505,15 @@
     btn.disabled = true;
 
     /* This row is scripted to fail, so the failure path is demonstrable. */
-    if (row.getAttribute('data-demo') !== 'fail') return;
+    if (row.getAttribute('data-demo') !== 'fail') {
+      var table = row.closest('table');
+      var watched = (table && table.getAttribute('data-watched-default')) || '';
+      window.setTimeout(function () {
+        setChip(row, 'done', 'grabbed · sent to qBittorrent',
+          ('UsArr does not import downloads. ' + watched).trim());
+      }, 700);
+      return;
+    }
     window.setTimeout(function () {
       setChip(row, 'failed', 'failed: rejected');
       toast(
@@ -357,7 +527,18 @@
     }, 700);
   });
 
-  /* ---- bulk grab ------------------------------------------------------- */
+  /* ---- bulk grab -------------------------------------------------------
+     The selected count is a counter, not a query. It used to be
+     `document.querySelectorAll('[data-act="rowselect"]:checked').length` on
+     every single change event, unscoped: 5.25ms at 5,000 rows and 32ms at
+     25,000, which makes selecting a hundred-row range O(n^2) and costs 3.2
+     seconds of blocked main thread on a desktop. One integer instead. */
+  var selectedRows = 0;
+  function paintBulk() {
+    var b = document.querySelector('[data-act="grab-bulk"]');
+    if (b) b.disabled = selectedRows === 0;
+  }
+
   var bulk = document.querySelector('[data-act="grab-bulk"]');
   if (bulk) {
     bulk.addEventListener('click', function () {
@@ -368,6 +549,8 @@
         boxes[i].checked = false;
         row.setAttribute('aria-selected', 'false');
       }
+      selectedRows = 0;
+      paintBulk();
       bulk.disabled = true;
     });
   }
@@ -376,22 +559,88 @@
     var box = ev.target.closest('[data-act="rowselect"]');
     if (!box) return;
     box.closest('tr').setAttribute('aria-selected', box.checked ? 'true' : 'false');
-    var any = document.querySelectorAll('[data-act="rowselect"]:checked').length;
-    var b = document.querySelector('[data-act="grab-bulk"]');
-    if (b) b.disabled = any === 0;
+    selectedRows += box.checked ? 1 : -1;
+    if (selectedRows < 0) selectedRows = 0;
+    paintBulk();
   });
 
   /* ---- "/" focuses the search box, as the top bar hint says ------------ */
   document.addEventListener('keydown', function (ev) {
-    if (ev.key !== '/' || ev.metaKey || ev.ctrlKey || ev.altKey) return;
-    var tag = document.activeElement && document.activeElement.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if (ev.key !== '/' || shortcutBlocked(ev)) return;
     var box = document.getElementById('topsearch');
     if (!box) return;
     ev.preventDefault();
     box.focus();
     box.select();
   });
+
+  /* ---- dominant_color: the one colour in this design that is data ------
+     ARCHITECTURE 4.4.1 computes dominant_color as one average over the 92px
+     art fetch, so it is whatever the cover happens to be. Nothing constrains
+     it, and a mid-luminance fill puts both black and white near 3.5:1 -- the
+     shipped #7d6a4f swatch measured 3.57:1 for a 12px semibold title, which is
+     normal text under WCAG (large is >= 18.66px bold or >= 24px), so 4.5:1
+     applies. This is the rule, run where the pipeline would run it:
+
+       pick the foreground with the better ratio, then, if it still misses the
+       floor, move the *fill* until it clears. The fill is decoration and the
+       title is content, so the fill is what gives way.
+
+     Nothing here is a render-path cost in production: it is computed once per
+     cover at import and stored beside dominant_color. It runs in the browser
+     here only because the mockup has no import step. */
+  function srgbToLin(c) {
+    c = c / 255;
+    return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  }
+  function lum(rgb) {
+    return 0.2126 * srgbToLin(rgb[0]) + 0.7152 * srgbToLin(rgb[1]) + 0.0722 * srgbToLin(rgb[2]);
+  }
+  function ratio(a, b) {
+    var la = lum(a), lb = lum(b);
+    return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+  }
+  function hexToRgb(h) {
+    h = h.trim().replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+  function rgbToHex(c) {
+    return '#' + c.map(function (v) {
+      var s = Math.max(0, Math.min(255, Math.round(v))).toString(16);
+      return s.length === 1 ? '0' + s : s;
+    }).join('');
+  }
+  function mix(c, towards, t) {
+    return [c[0] + (towards[0] - c[0]) * t, c[1] + (towards[1] - c[1]) * t, c[2] + (towards[2] - c[2]) * t];
+  }
+
+  var DC_FLOOR = 4.5;
+  function constrainDominant(hex) {
+    var fill = hexToRgb(hex);
+    /* The two theme text tokens, not the pure poles: the ramp is warm and
+       near-dark / near-light by rule, and the ratio has to be computable from
+       the tokens that actually ship. */
+    var dark = hexToRgb('#16130e');
+    var light = hexToRgb('#f7f5f1');
+    var useDark = ratio(fill, dark) >= ratio(fill, light);
+    var fg = useDark ? dark : light;
+    /* Push the fill away from the text until the floor clears. 24 steps of 4%
+       always terminates: at t = 1 the fill is the text colour's opposite pole. */
+    var pole = useDark ? light : dark;
+    for (var i = 0; i < 24 && ratio(fill, fg) < DC_FLOOR; i++) {
+      fill = mix(fill, pole, 0.04);
+    }
+    return { dc: rgbToHex(fill), fg: rgbToHex(fg), ratio: ratio(fill, fg) };
+  }
+
+  var arts = document.querySelectorAll('[data-dc]');
+  for (var a = 0; a < arts.length; a++) {
+    var picked = constrainDominant(arts[a].getAttribute('data-dc'));
+    arts[a].style.setProperty('--dc', picked.dc);
+    arts[a].style.setProperty('--dc-fg', picked.fg);
+    arts[a].setAttribute('data-dc-ratio', picked.ratio.toFixed(2));
+  }
 
   /* ---- prototype.html only: hash routing between the five screens ------ */
   var pages = document.querySelectorAll('[data-page]');

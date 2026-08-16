@@ -114,7 +114,22 @@
 
 /* Density control. Compact is the default, per ARCHITECTURE.md 17.1
    ("The grid is compact by default, with a size control for people who
-   want otherwise"). */
+   want otherwise").
+
+   --row-h is a real constraint again. It used to be declared as
+   `.tbl tbody tr { min-height: var(--row-h) }` on a `display: table-row`
+   box, where min-height does not apply: forcing --row-h to 100px left the
+   row at 28.0px. Rows are grid containers now (2.6), so min-height acts.
+
+   The placeholder height content-visibility uses before a row has ever been
+   laid out is built from --row-py and --row-lines, not from --row-h, for two
+   reasons. contain-intrinsic-size sizes the *content* box, so the padding has
+   to be in the expression rather than assumed away; and a constant is wrong by
+   50% on this design, where a services row is six lines tall and a search row
+   is one. --row-lines is therefore declared per list, measured from that
+   list's own rendered rows, and the padding term tracks the density variable,
+   so all three densities are right from one expression. `auto` then replaces
+   the estimate with the remembered real size once a row has rendered. */
 :root,
 :root[data-density="compact"]  { --row-h: 28px; --row-py: var(--sp-2); }
 :root[data-density="standard"] { --row-h: 32px; --row-py: var(--sp-3); }
@@ -215,8 +230,15 @@ a:hover { color: var(--fg); }
 
 button, input, select, textarea { font: inherit; color: inherit; }
 
-/* One focus treatment, everywhere, and it never animates. */
-:focus { outline: none; }
+/* One focus treatment, everywhere, and it never animates.
+
+   Nothing in this stylesheet ever removes a focus outline, and no exception to
+   DESIGN-DIRECTION 13's absolute rule is needed to achieve that. Every engine
+   that ships :focus-visible already restricts its own default ring to
+   :focus-visible, so suppressing the ring on plain :focus buys nothing except
+   the risk of losing it if that ever changes. This rule only adds. (The banned
+   string is not quoted anywhere in this file either, because the rule is
+   enforced as a literal grep and a comment quoting it would trip the gate.) */
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 1px;
@@ -269,6 +291,27 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .topbar__brand:hover { text-decoration: underline; }
 .topbar__spacer { flex: 1 1 auto; }
+
+/* The permanent "this is not running software" notice. It lives in the top
+   bar rather than in a strip of its own, because a strip costs 24px of the
+   fold on every screen and the >= 25 items rule is measured there. It is not
+   dismissible, it is not a badge pill, and it uses the same mono tag the
+   states switcher already uses, so it reads as the same kind of object.
+   Two lengths, because at 390px the long one would push the search box out. */
+.mocknote {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-width: 0;
+  font-size: var(--fs-xs);
+  line-height: var(--lh-xs);
+  color: var(--fg-muted);
+}
+.mocknote__short { display: none; }
+@media (max-width: 1180px) {
+  .mocknote__long { display: none; }
+  .mocknote__short { display: inline; }
+}
 .topbar__right { display: flex; align-items: center; gap: var(--sp-3); }
 
 .searchbox {
@@ -428,7 +471,16 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .section { padding: 0 var(--sp-6) var(--sp-7); }
 /* Result groups inside one result set sit closer than page regions do.
    Padding differs by role: intra-row, inter-row, inter-group, inter-region. */
-.section--group { padding-bottom: var(--sp-5); }
+/* Six result groups on one page all pin their column headers to the same
+   offset. Without a stacking context per group the later group's header paints
+   over the earlier one during the overlap, so the wrong column names sit above
+   the rows still being read. Each group carries a descending z-index inline;
+   this is what makes those values mean anything. */
+.section--group { padding-bottom: var(--sp-4); position: relative; }
+/* Six groups pay for their own heading and their own column-header row six
+   times over. Every pixel of that chrome comes straight off the fold, so the
+   group head is as short as a 16px line allows. */
+.section--group .section__head { min-height: 24px; margin-bottom: var(--sp-3); }
 .section__head {
   display: flex;
   align-items: center;
@@ -552,6 +604,10 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 }
 .toolbar__label { font-size: var(--fs-sm); color: var(--fg-muted); }
 .toolbar__spacer { flex: 1 1 auto; }
+/* A constraint that belongs to the whole form, not to one control: it takes
+   its own line at the end of the toolbar rather than sitting between a label
+   and its select and breaking the wrap. */
+.toolbar__note { flex: 1 0 100%; order: 99; }
 
 .segment { display: inline-flex; border: 1px solid var(--border-hi); border-radius: var(--r-control); overflow: hidden; }
 .segment button {
@@ -702,19 +758,62 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 .errsummary ul { display: flex; flex-direction: column; gap: var(--sp-2); }
 .errsummary a { color: var(--st-err); font-weight: 600; }
 
-/* --- 2.6 Tables ---------------------------------------------------------- */
+/* --- 2.6 Lists: grid rows with explicit ARIA ------------------------------ */
 
-/* Below 1100px the wrapper scrolls sideways; above it the wrapper is not a
-   scroll container, so the sticky header actually sticks to the viewport. */
-.tablewrap { overflow-x: auto; }
-@media (min-width: 1100px) { .tablewrap { overflow-x: visible; } }
+/* The list primitive is a CSS grid, not a table layout, and that is a
+   correctness fix rather than a preference.
+
+   CSS Containment Level 2 (drafts.csswg.org/css-contain-2/): size containment
+   "has no effect ... if its principal box is an internal table box", and
+   layout and paint containment have no effect on "an internal table box other
+   than table-cell". `content-visibility: auto` is defined entirely in terms of
+   those three containments, so it is inert on a <tr> and on a <tbody>.
+   Measured in Chromium at 5,000 rows: identical document height with and
+   without it on <tr>, and the placeholder honoured on a grid/block row. There
+   is no element inside a table layout that content-visibility can usefully sit
+   on -- <td> can take it, and collapses the cell.
+
+   The elements stay <table>/<thead>/<tr>/<th>/<td> so the markup still reads
+   as a table and the phone label fork below keeps working, but the computed
+   display is block/grid, which drops the implicit table semantics. An ARIA
+   grid has to earn back everything the native table gave for free, so every
+   one of those elements carries an explicit role -- table / rowgroup / row /
+   columnheader / cell -- plus aria-colcount on the table and aria-colindex on
+   every header and cell, which is what keeps a header associated with its
+   column when the layout no longer implies it.
+
+   Columns are declared once per list in --cols instead of being derived. Auto
+   table layout has to measure every cell in every row to size a column, which
+   is the one layout mode no containment can help; it is also what made six
+   search groups derive six different widths for the same column. */
+
+/* Not a scroll container: `overflow-x: auto` computes to `auto` on both axes,
+   which turns this box into a scroll container that never scrolls vertically,
+   and the sticky column headers then stick to *it* instead of the viewport --
+   measured: 0 headers pinned at 1000px, 1 at 1440px. `clip` gives the same
+   protection against a runaway cell without creating a scroll container, and
+   the grid columns below are all minmax(0, ...) so nothing overflows anyway. */
+.tablewrap { overflow-x: clip; }
 
 .tbl {
+  display: block;
   width: 100%;
-  border-collapse: collapse;
   font-size: var(--fs-base);
 }
-.tbl caption { text-align: left; padding: var(--sp-3) 0; color: var(--fg-muted); font-size: var(--fs-sm); }
+.tbl caption { display: block; text-align: left; padding: var(--sp-3) 0; color: var(--fg-muted); font-size: var(--fs-sm); }
+.tbl thead, .tbl tbody { display: block; }
+/* :not([hidden]) rather than a bare `.tbl tr`, and it is load-bearing. The
+   states switcher and the row expanders both work by setting [hidden], and
+   `[hidden] { display: none }` is specificity 0-1-0 while `.tbl tr` is 0-1-1 --
+   so a display declaration here would out-rank it and every expander detail
+   row would render open. Excluding hidden rows from the selector leaves the
+   [hidden] rule unopposed instead of fighting it with !important. */
+.tbl tr:not([hidden]) {
+  display: grid;
+  grid-template-columns: var(--cols, minmax(0, 1fr));
+  align-items: start;
+  min-width: 0;
+}
 .tbl th {
   text-align: left;
   font-size: var(--fs-xs);
@@ -723,19 +822,42 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
   color: var(--fg-muted);
   background: var(--surface);
   padding: var(--sp-3) var(--sp-5);
-  border-bottom: 1px solid var(--border-hi);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+/* The sticky box is the thead, not the header row. A sticky element can only
+   travel inside its own containing block, and with `thead { display: block }`
+   the row's containing block is the thead -- which is exactly one row tall, so
+   the header could not move at all. The thead's containing block is the table,
+   which is the full list, so this is the box that can actually travel. */
+.tbl thead {
   position: sticky;
   top: var(--toolbar-h);
   z-index: 10;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-hi);
 }
 .tbl th.is-num, .tbl td.is-num { text-align: right; font-variant-numeric: tabular-nums; }
 .tbl td {
   padding: var(--row-py) var(--sp-5);
-  border-bottom: 1px solid var(--border);
-  vertical-align: top;
+  min-width: 0;
 }
-.tbl tbody tr { min-height: var(--row-h); }
+/* colspan is meaningless to a grid, so a spanning cell says so in grid terms.
+   aria-colspan carries the same fact to the accessibility tree. */
+.tbl td[colspan] { grid-column: 1 / -1; }
+
+.tbl tbody tr {
+  min-height: var(--row-h);
+  border-bottom: 1px solid var(--border);
+  /* This is the whole point of the primitive change: it is inert on a <tr>
+     and it works here. contain-intrinsic-size tracks the density variable
+     rather than being a constant, and it sizes the content box, which is why
+     it is --row-cis and not --row-h. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto calc(2 * var(--row-py) + var(--row-lines, 1.1) * var(--lh-base));
+}
 .tbl tbody tr:hover { background: var(--hover); }
 .tbl tbody tr[aria-selected="true"] { background: var(--selected); }
 .tbl tbody tr:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
@@ -748,7 +870,6 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
    it is given room instead. */
 .tbl td .mono { overflow-wrap: anywhere; }
 .tbl .cell-sub.mono { overflow-wrap: break-word; word-break: normal; }
-.tbl--services td:first-child { min-width: 240px; }
 .tbl--services .verbatim { max-width: 38ch; }
 .tbl .cell-sub { color: var(--fg-muted); font-size: var(--fs-sm); line-height: var(--lh-sm); }
 .tbl .cell-actions { display: flex; gap: var(--sp-3); align-items: center; }
@@ -816,8 +937,23 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
   justify-content: flex-end;
   padding: var(--sp-4);
 }
+/* dominant_color is the only colour in this design that is *data*: it is
+   averaged from cover art at import time, so no token system constrains it and
+   a mid-luminance fill lands both black and white near 3.5:1. The rule, applied
+   in usarr.js and enforced there rather than hoped for here:
+
+     1. compute the fill's relative luminance;
+     2. pick whichever of the two theme text tokens scores higher against it;
+     3. if the winner is still below 4.5:1, move the *fill* -- darken or lighten
+        --dc until it clears. The fill is decoration; the title is content.
+
+   There is deliberately no opacity on the year. opacity composites, so the
+   resulting ratio is not computable from the two tokens -- the shipped
+   `opacity: .85` cost about 0.45 and took the worst pair to 3.12:1 against a
+   4.5:1 floor. The year is separated from the title by size and weight, which
+   cost nothing and are measurable. */
 .card__t { font-size: var(--fs-sm); line-height: var(--lh-sm); font-weight: 600; }
-.card__y { font-size: var(--fs-xs); line-height: var(--lh-xs); font-variant-numeric: tabular-nums; opacity: 0.85; }
+.card__y { font-size: var(--fs-xs); line-height: var(--lh-xs); font-variant-numeric: tabular-nums; font-weight: 400; }
 .card__meta {
   display: flex;
   align-items: center;
@@ -950,18 +1086,49 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
   .subnav { flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--border); padding: 0 0 var(--sp-3); }
 }
 
+/* Below 1100px home is one column, and "Needs attention" goes above "Your
+   library". Block B is absent when empty, so it costs nothing when there is
+   nothing wrong; Block A is six rows of counts that push the two errors below
+   the fold on a phone if it goes first. */
+@media (max-width: 1099px) {
+  #attention { order: -1; }
+}
+
+@media (max-width: 560px) {
+  :root { --toolbar-h: 68px; }
+  .topbar { flex-wrap: wrap; align-items: center; row-gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); }
+  /* The spacer is flex: 1 1 auto, so with wrapping on it eats the rest of the
+     first row and pushes the density and theme controls onto their own line.
+     Two rows is the budget: controls, then the notice. */
+  .topbar__spacer { display: none; }
+  .mocknote { flex: 1 0 100%; order: -1; }
+  .mocknote__short { display: inline; }
+  .searchbox { flex: 1 1 80px; min-width: 80px; }
+  .select { max-width: 96px; }
+}
+
 @media (max-width: 760px) {
   .kbd { display: none; }
   .searchbox input { padding-right: var(--sp-3); }
 
-  /* The wide table becomes a list. Same markup, same data, no mobile fork. */
-  .tbl--stack thead { display: none; }
-  .tbl--stack, .tbl--stack tbody, .tbl--stack tr, .tbl--stack td { display: block; width: 100%; }
-  .tbl--stack tr {
+  /* The wide list becomes a stack. Same markup, same data, no mobile fork.
+     thead is visually hidden rather than display:none: display:none takes the
+     columnheader nodes out of the accessibility tree entirely, and a screen
+     reader on a phone then has a table of 49 cells and no headers. Clipping it
+     keeps the header association that the explicit roles above declare, at the
+     same zero pixels of layout cost. */
+  .tbl--stack thead {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip-path: inset(50%); white-space: nowrap;
+  }
+  .tbl--stack thead tr { position: static; }
+  .tbl--stack thead tr:not([hidden]) { grid-template-columns: minmax(0, 1fr); }
+  .tbl--stack tbody tr:not([hidden]) {
+    grid-template-columns: minmax(0, 1fr);
     border-bottom: 1px solid var(--border-hi);
     padding: var(--sp-4) var(--sp-5);
   }
-  .tbl--stack td { border: 0; padding: var(--sp-1) 0; text-align: left; }
+  .tbl--stack td { padding: var(--sp-1) 0; text-align: left; }
   .tbl--stack td.is-num { text-align: left; }
   .tbl--stack td[data-label]::before {
     content: attr(data-label) " ";
@@ -972,6 +1139,16 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
     min-width: 84px;
   }
   .tbl--stack td[data-label="Title"]::before { display: block; }
+
+  /* A four-line stack costs ~105px per media type, which puts the block that
+     reports a rejected API key 914px down an 844px viewport. Two columns makes
+     the type summary two lines: identity and count, then availability and sync
+     time. The Type label is dropped because the value *is* the row's identity. */
+  .tbl--2up tbody tr:not([hidden]) { grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--sp-4); }
+  .tbl--2up td[data-label="Type"]::before,
+  .tbl--2up td[data-label="Items"]::before,
+  .tbl--2up td[data-label="Have"]::before { display: none; }
+
   .verbatim { max-width: none; }
   .banner { flex-wrap: wrap; }
   .banner__actions { width: 100%; }

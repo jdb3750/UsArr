@@ -38,6 +38,13 @@ index = (SRC / 'index.html').read_text()
 
 sprite = block(index, 'SPRITE')
 topbar = rewrite_links(block(index, 'TOPBAR'))
+
+# This file is the one built for publishing, so the statement that it is a
+# mockup over invented data has to survive a regenerate. It lives in the shared
+# top bar rather than on any one page, and this assertion is what stops a
+# future edit to index.html quietly dropping it from every screen at once.
+if 'class="mocknote"' not in topbar:
+    raise SystemExit('the permanent mockup notice is missing from the top bar')
 sidebar = rewrite_links(block(index, 'SIDEBAR')).replace(' aria-current="page"', '')
 
 body = '\n'.join(rewrite_links(block((SRC / f).read_text(), 'PAGE:' + r).strip())
@@ -48,7 +55,7 @@ out = f'''<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>UsArr v0.1 screen prototype</title>
+<title>UsArr v0.1 screen mockup — static, invented data, nothing implemented</title>
 <style>
 {css}
 </style>

@@ -34,6 +34,17 @@
       <svg class="i" aria-hidden="true"><use href="#i-menu"/></svg>
     </button>
     <a class="topbar__brand" href="index.html" data-route="home">UsArr</a>
+    <!-- Permanent, non-dismissible, and in the chrome rather than on one page:
+         this file is built for publishing as a single web page, so the only
+         place a statement of what it is can survive is the frame every screen
+         shares. DESIGN-DIRECTION.md 13 forbids fabricated data in a shipped
+         surface and makes a labelled mockup the one exception; this is the
+         label. -->
+    <p class="mocknote">
+      <span class="statebar__tag">mockup</span>
+      <span class="mocknote__long">Static design mockup of UsArr, which is pre-alpha software: nothing here is implemented and every value on these screens is invented.</span>
+      <span class="mocknote__short">Pre-alpha mockup, invented data</span>
+    </p>
     <div class="searchbox">
       <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
       <label class="sr" for="topsearch">Search your library</label>
@@ -67,23 +78,32 @@
     <!-- Navidrome's LibrarySelector model, including the part that matters:
          the component renders nothing at all when the user has 0 or 1 library,
          so no control appears for a distinction they do not have. This install
-         has seven, so it appears. -->
+         has eight, so it appears. -->
     <div class="scope">
       <button type="button" class="scope__btn" data-act="scope" aria-expanded="false" aria-controls="scope-pop">
-        <span data-slot="scope-label">All libraries (7)</span>
+        <!-- A live region, because the chip's whole job is to state in words
+             what the control hid. Without it a sighted user reads "6 of 8
+             libraries" and a screen-reader user toggles a checkbox and hears
+             nothing about the resulting scope. It is a two-word string, so it
+             is not chatty. -->
+        <span data-slot="scope-label" aria-live="polite">All libraries (8)</span>
         <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-down"/></svg>
       </button>
+      <!-- data-slug is the stored library.slug, not the rendered label. The
+           name is user-editable and the scope lives in the URL, so deriving
+           the slug from the label would change a permalink on a rename. -->
       <div class="scope__pop" id="scope-pop" hidden>
         <fieldset>
           <legend>Select libraries</legend>
           <label class="check"><input type="checkbox" data-act="scope-all" checked> Everything</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" checked> Movies</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" checked> TV</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" checked> Music</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" checked> Audiobooks</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" checked> Ebooks</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" checked> Comics</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" checked> Ongoing comics</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="movies" checked> Movies</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="tv" checked> TV</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="music" checked> Music</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="audiobooks" checked> Audiobooks</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="ebooks" checked> Ebooks</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="comics" checked> Comics</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="manga" checked> Manga</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="comics-ongoing" checked> Ongoing comics</label>
         </fieldset>
         <p class="scope__url">The scope is in the URL, so back, reload and share all work: <span class="mono" data-slot="scope-url">?lib=all</span></p>
       </div>
@@ -94,14 +114,18 @@
     </ul>
 
     <!-- Media types: a closed enum, hard maximum six, and a type with no items
-         is not rendered at all. Counts respect the scope chip above. -->
+         is not rendered at all. Counts respect the scope chip above.
+         The unit is not the same word for every type -- music counts artists
+         and comics counts series -- so each number carries its unit, silently
+         for a sighted reader who has the type name beside it and explicitly
+         for a screen reader, which reads the number on its own. -->
     <ul class="nav__group">
-      <li><a class="nav__link" href="search.html?type=movie" data-route="search">Movies <span class="nav__num">1,204</span></a></li>
-      <li><a class="nav__link" href="search.html?type=series" data-route="search">TV <span class="nav__num">275</span></a></li>
-      <li><a class="nav__link" href="search.html?type=music" data-route="search">Music <span class="nav__num">612</span></a></li>
-      <li><a class="nav__link" href="search.html?type=audiobook" data-route="search">Audiobooks <span class="nav__num">418</span></a></li>
-      <li><a class="nav__link" href="search.html?type=ebook" data-route="search">Ebooks <span class="nav__num">2,051</span></a></li>
-      <li><a class="nav__link" href="search.html?type=comic" data-route="search">Comics <span class="nav__num">733</span></a></li>
+      <li><a class="nav__link" href="search.html?type=movie" data-route="search">Movies <span class="nav__num">1,204<span class="sr"> films</span></span></a></li>
+      <li><a class="nav__link" href="search.html?type=series" data-route="search">TV <span class="nav__num">275<span class="sr"> series</span></span></a></li>
+      <li><a class="nav__link" href="search.html?type=music" data-route="search">Music <span class="nav__num">612<span class="sr"> artists</span></span></a></li>
+      <li><a class="nav__link" href="search.html?type=audiobook" data-route="search">Audiobooks <span class="nav__num">418<span class="sr"> books</span></span></a></li>
+      <li><a class="nav__link" href="search.html?type=ebook" data-route="search">Ebooks <span class="nav__num">1,842<span class="sr"> books</span></span></a></li>
+      <li><a class="nav__link" href="search.html?type=comic" data-route="search">Comics <span class="nav__num">553<span class="sr"> series</span></span></a></li>
     </ul>
 
     <ul class="nav__group">
@@ -111,7 +135,7 @@
 
     <ul class="nav__group">
       <li><a class="nav__link" href="services.html" data-route="services" data-primary>Services
-        <span class="nav__count nav__count--err" title="2 errors">2</span></a></li>
+        <span class="nav__count nav__count--err" title="1 error">1</span></a></li>
       <li><a class="nav__link" href="libraries.html" data-route="libraries" data-primary>Libraries</a></li>
       <li><a class="nav__link" href="services.html#settings" data-route="services">Settings</a></li>
     </ul>
@@ -143,15 +167,21 @@
       <option value="empty">Empty library, services healthy</option>
       <option value="unconfigured">No services configured</option>
     </select>
-    <span class="statebar__note">This control is not part of the product. It switches the screen between the states this design has to cover.</span>
+    <span class="statebar__note">This control is not part of the product. It switches the screen between the states this design has to cover, all of them over invented data.</span>
   </div>
 
   <!-- Non-modal, per ARCHITECTURE.md 17.7. The catalogue below stays live:
-       it does not grey out and there is no spinner over it. -->
+       it does not grey out and there is no spinner over it.
+       The timestamp is this instance's own last successful sync (Services
+       gives Radarr delta 11:47), never the global delta time. 17.7's example
+       string carries 14:02 because it is written about a different instance;
+       copying the literal across gave a banner that overstated freshness by
+       2h 15m, which is the exact failure the replica principle's honesty
+       rules exist to prevent. -->
   <div class="banner banner--warn" data-when="stale" role="status" hidden>
     <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
     <div class="banner__body">
-      <div class="banner__title">Radarr is unreachable — showing cached data from 14:02</div>
+      <div class="banner__title">Radarr is unreachable — showing cached data from 11:47</div>
       <div class="banner__text">Browse, search, sort and filter keep working from the replica. Writes to Radarr are queued until it answers.</div>
     </div>
     <div class="banner__actions"><a href="services.html">Open Services</a></div>
@@ -161,7 +191,7 @@
     <svg class="i" aria-hidden="true"><use href="#i-refresh"/></svg>
     <div class="banner__body">
       <div class="banner__title">First import running</div>
-      <div class="banner__text"><span class="num">1,240</span> of <span class="num">10,412</span> movies, <span class="num">86</span> of <span class="num">214</span> series, <span class="num">204</span> of <span class="num">1,908</span> comic series. Rows appear as each batch commits.</div>
+      <div class="banner__text"><span class="num">820</span> of <span class="num">1,204</span> films, <span class="num">141</span> of <span class="num">275</span> series, <span class="num">96</span> of <span class="num">553</span> comic series. Rows appear as each batch commits.</div>
     </div>
     <div class="banner__actions"><a href="services.html">Open Services</a></div>
   </div>
@@ -169,7 +199,11 @@
   <div class="section" data-when="unconfigured" hidden>
     <div class="empty">
       <div class="empty__title">No services configured</div>
-      <p class="empty__text">UsArr reads your library from the services you already run — Sonarr, Radarr, Lidarr, Navidrome, Audiobookshelf, Komga, Kavita — and searches indexers through Prowlarr. Nothing has been connected yet, so there is nothing to show. Adding a service takes a base URL and an API key, and the connection is tested before it is saved.</p>
+      <!-- Every service named here has to be one that v0.1 can actually read a
+           library from. Lidarr is a request sink and a v1.0 item, so adding it
+           would give you a library in no milestone; Kavita is v0.2. An empty
+           state that names them is not a promise this product keeps. -->
+      <p class="empty__text">UsArr reads your library from the services you already run — Sonarr, Radarr, Navidrome, Audiobookshelf, Komga — and searches indexers through Prowlarr. Nothing has been connected yet, so there is nothing to show. Adding a service takes a base URL and an API key, and the connection is tested before it is saved.</p>
       <div class="empty__actions">
         <a class="btn btn--primary" href="services.html">Add a service</a>
         <a class="btn" href="requests.html">Search indexers instead</a>
@@ -204,57 +238,61 @@
         <h2>Your library</h2>
         <span class="section__count">6 media types</span>
       </div>
+      <!-- The unit is in the cell. "Movies 1,204" and "Music 612" are not
+           comparable numbers: one counts films and the other counts artists,
+           over 4,118 albums and 51,204 tracks. A bare column headed "Items"
+           reads as though they are, which is the same failure ADR-0031 names
+           for artist-level numbers. -->
       <div class="tablewrap">
-        <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Library by media type">
-          <thead>
-            <tr>
-              <th scope="col">Type</th>
-              <th scope="col" class="is-num">Items</th>
-              <th scope="col">Have</th>
-              <th scope="col">Synced</th>
+        <table class="tbl tbl--stack tbl--2up" data-roving="tbody tr" aria-label="Library by media type" style="--cols: minmax(0,0.95fr) minmax(0,1.15fr) minmax(0,2.7fr) 68px; --row-lines: 1.11" aria-colcount="4" role="table">
+          <thead role="rowgroup">
+            <tr role="row">
+              <th scope="col" role="columnheader" aria-colindex="1">Type</th>
+              <th scope="col" class="is-num" role="columnheader" aria-colindex="2">Items</th>
+              <th scope="col" role="columnheader" aria-colindex="3">Have</th>
+              <th scope="col" role="columnheader" aria-colindex="4">Synced</th>
             </tr>
           </thead>
-          <tbody>
-            <tr>
-              <td data-label="Type" class="cell-title"><a href="search.html?type=movie">Movies</a></td>
-              <td data-label="Items" class="is-num">1,204</td>
-              <td data-label="Have"><span class="avail avail--part">1,187 have · 17 wanted</span></td>
-              <td data-label="Synced" class="num">14:02</td>
+          <tbody role="rowgroup">
+            <tr role="row">
+              <td data-label="Type" class="cell-title" role="cell" aria-colindex="1"><a href="search.html?type=movie">Movies</a></td>
+              <td data-label="Items" class="is-num" role="cell" aria-colindex="2">1,204 films</td>
+              <td data-label="Have" role="cell" aria-colindex="3"><span class="avail avail--part">1,187 have · 17 wanted</span></td>
+              <td data-label="Synced" class="num" role="cell" aria-colindex="4">11:47</td>
             </tr>
-            <tr>
-              <td data-label="Type" class="cell-title"><a href="search.html?type=series">TV</a></td>
-              <td data-label="Items" class="is-num">275</td>
-              <td data-label="Have"><span class="avail avail--part">13,204 / 14,061 episodes</span></td>
-              <td data-label="Synced" class="num">14:02</td>
+            <tr role="row">
+              <td data-label="Type" class="cell-title" role="cell" aria-colindex="1"><a href="search.html?type=series">TV</a></td>
+              <td data-label="Items" class="is-num" role="cell" aria-colindex="2">275 series</td>
+              <td data-label="Have" role="cell" aria-colindex="3"><span class="avail avail--part">13,204 / 14,061 episodes</span></td>
+              <td data-label="Synced" class="num" role="cell" aria-colindex="4">14:02</td>
             </tr>
-            <tr>
-              <td data-label="Type" class="cell-title"><a href="search.html?type=music">Music</a></td>
-              <td data-label="Items" class="is-num">612</td>
-              <td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>4,118 albums · 51,204 tracks</span></td>
-              <td data-label="Synced" class="num">13:40</td>
+            <tr role="row">
+              <td data-label="Type" class="cell-title" role="cell" aria-colindex="1"><a href="search.html?type=music">Music</a></td>
+              <td data-label="Items" class="is-num" role="cell" aria-colindex="2">612 artists</td>
+              <td data-label="Have" role="cell" aria-colindex="3"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>4,118 albums · 51,204 tracks</span></td>
+              <td data-label="Synced" class="num" role="cell" aria-colindex="4">13:40</td>
             </tr>
-            <tr>
-              <td data-label="Type" class="cell-title"><a href="search.html?type=audiobook">Audiobooks</a></td>
-              <td data-label="Items" class="is-num">418</td>
-              <td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>418 have · 5,912 h</span></td>
-              <td data-label="Synced" class="num">13:40</td>
+            <tr role="row">
+              <td data-label="Type" class="cell-title" role="cell" aria-colindex="1"><a href="search.html?type=audiobook">Audiobooks</a></td>
+              <td data-label="Items" class="is-num" role="cell" aria-colindex="2">418 books</td>
+              <td data-label="Have" role="cell" aria-colindex="3"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>418 have · 5,912 h</span></td>
+              <td data-label="Synced" class="num" role="cell" aria-colindex="4">13:40</td>
             </tr>
-            <tr>
-              <td data-label="Type" class="cell-title"><a href="search.html?type=ebook">Ebooks</a></td>
-              <td data-label="Items" class="is-num">2,051</td>
-              <td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>2,051 have</span>
-                <div class="cell-sub">1,842 from Audiobookshelf, 209 from Kavita</div></td>
-              <td data-label="Synced" class="num">13:40</td>
+            <tr role="row">
+              <td data-label="Type" class="cell-title" role="cell" aria-colindex="1"><a href="search.html?type=ebook">Ebooks</a></td>
+              <td data-label="Items" class="is-num" role="cell" aria-colindex="2">1,842 books</td>
+              <td data-label="Have" role="cell" aria-colindex="3"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>1,842 have</span></td>
+              <td data-label="Synced" class="num" role="cell" aria-colindex="4">13:40</td>
             </tr>
-            <!-- No "9,842 / 12,100" here on purpose. A comic issue total is a
+            <!-- No "7,891 / 9,400" here on purpose. A comic issue total is a
                  declaration, and the ComicInfo spec concedes it: "The Count
                  could be different on each book in a series." What is always
                  honest is contiguity, computed locally from issue numbers. -->
-            <tr>
-              <td data-label="Type" class="cell-title"><a href="search.html?type=comic">Comics</a></td>
-              <td data-label="Items" class="is-num">733</td>
-              <td data-label="Have"><span class="avail avail--part">9,842 issues · 41 series with gaps</span></td>
-              <td data-label="Synced" class="num">13:31</td>
+            <tr role="row">
+              <td data-label="Type" class="cell-title" role="cell" aria-colindex="1"><a href="search.html?type=comic">Comics</a></td>
+              <td data-label="Items" class="is-num" role="cell" aria-colindex="2">553 series</td>
+              <td data-label="Have" role="cell" aria-colindex="3"><span class="avail avail--part">7,891 issues · 34 with gaps</span></td>
+              <td data-label="Synced" class="num" role="cell" aria-colindex="4">13:31</td>
             </tr>
           </tbody>
         </table>
@@ -268,47 +306,41 @@
     <section class="section" id="attention" data-when="live stale partial">
       <div class="section__head">
         <h2>Needs attention</h2>
-        <span class="section__count num">5 items</span>
+        <span class="section__count num">4 items</span>
       </div>
       <div class="tablewrap">
-        <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Items needing attention">
-          <thead>
-            <tr>
-              <th scope="col">State</th>
-              <th scope="col">What is wrong</th>
-              <th scope="col">Action</th>
+        <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Items needing attention" style="--cols: 92px minmax(0,3.4fr) 118px; --row-lines: 2.01" aria-colcount="3" role="table">
+          <thead role="rowgroup">
+            <tr role="row">
+              <th scope="col" role="columnheader" aria-colindex="1">State</th>
+              <th scope="col" role="columnheader" aria-colindex="2">What is wrong</th>
+              <th scope="col" role="columnheader" aria-colindex="3">Action</th>
             </tr>
           </thead>
-          <tbody>
-            <tr>
-              <td data-label="State"><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>error</span></td>
-              <td data-label="What is wrong"><span class="cell-title">Prowlarr</span> rejected the stored API key
+          <tbody role="rowgroup">
+            <tr role="row">
+              <td data-label="State" role="cell" aria-colindex="1"><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>error</span></td>
+              <td data-label="What is wrong" role="cell" aria-colindex="2"><span class="cell-title">Prowlarr</span> rejected the stored API key
                 <div class="cell-sub">401 Unauthorized on <span class="mono">/api/v1/indexer</span>. Indexer search is unavailable.</div></td>
-              <td data-label="Action"><a href="services.html">Update API key</a></td>
+              <td data-label="Action" role="cell" aria-colindex="3"><a href="services.html">Update API key</a></td>
             </tr>
-            <tr>
-              <td data-label="State"><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>error</span></td>
-              <td data-label="What is wrong"><span class="cell-title">Kavita</span> has been unreachable since 09:12
-                <div class="cell-sub">Ebooks and Comics render what Audiobookshelf and Komga have.</div></td>
-              <td data-label="Action"><a href="services.html">Test connection</a></td>
+            <tr role="row">
+              <td data-label="State" role="cell" aria-colindex="1"><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>error</span></td>
+              <td data-label="What is wrong" role="cell" aria-colindex="2"><span class="cell-title">Radarr</span> has been unreachable since 11:47
+                <div class="cell-sub">Movies is served entirely from the replica while this lasts.</div></td>
+              <td data-label="Action" role="cell" aria-colindex="3"><a href="services.html">Test connection</a></td>
             </tr>
-            <tr>
-              <td data-label="State"><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span></td>
-              <td data-label="What is wrong"><span class="cell-title">Lidarr</span> reports Supersilent as removed from MusicBrainz
-                <div class="cell-sub">A metadata-server 404, not a deletion. Nothing was tombstoned.</div></td>
-              <td data-label="Action"><a href="libraries.html">Review</a></td>
+            <tr role="row">
+              <td data-label="State" role="cell" aria-colindex="1"><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span></td>
+              <td data-label="What is wrong" role="cell" aria-colindex="2"><span class="cell-title">Komga</span> reports no external identifier for any series
+                <div class="cell-sub">Its API exposes none, so 512 series are matched by title alone.</div></td>
+              <td data-label="Action" role="cell" aria-colindex="3"><a href="libraries.html">Open Libraries</a></td>
             </tr>
-            <tr>
-              <td data-label="State"><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span></td>
-              <td data-label="What is wrong"><span class="cell-title">Kavita</span> reports no external identifier for any series
-                <div class="cell-sub">A paid Kavita feature, so all 389 id fields are null.</div></td>
-              <td data-label="Action"><a href="libraries.html">Open Libraries</a></td>
-            </tr>
-            <tr>
-              <td data-label="State"><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span></td>
-              <td data-label="What is wrong"><span class="cell-title">Sonarr Anime</span> clock is 212 seconds ahead of this host
+            <tr role="row">
+              <td data-label="State" role="cell" aria-colindex="1"><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span></td>
+              <td data-label="What is wrong" role="cell" aria-colindex="2"><span class="cell-title">Sonarr Anime</span> clock is 212 seconds ahead of this host
                 <div class="cell-sub">Delta polling can miss changes inside the skew window.</div></td>
-              <td data-label="Action"><a href="services.html">Run full sync now</a></td>
+              <td data-label="Action" role="cell" aria-colindex="3"><a href="services.html">Run full sync now</a></td>
             </tr>
           </tbody>
         </table>
@@ -336,49 +368,49 @@
 
     <div data-panel-for="homeview" data-panel-name="table">
     <div class="tablewrap">
-      <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Recently added across all media types">
-        <thead>
-          <tr>
-            <th scope="col">Type</th>
-            <th scope="col">Title</th>
-            <th scope="col">Added</th>
-            <th scope="col">Detail</th>
-            <th scope="col">Have</th>
-            <th scope="col">Library</th>
-            <th scope="col">Instance</th>
+      <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Recently added across all media types" style="--cols: 78px minmax(0,3fr) 64px minmax(0,2fr) 64px minmax(0,1fr) minmax(0,1.2fr); --row-lines: 1.06" aria-colcount="7" role="table">
+        <thead role="rowgroup">
+          <tr role="row">
+            <th scope="col" role="columnheader" aria-colindex="1">Type</th>
+            <th scope="col" role="columnheader" aria-colindex="2">Title</th>
+            <th scope="col" role="columnheader" aria-colindex="3">Added</th>
+            <th scope="col" role="columnheader" aria-colindex="4">Detail</th>
+            <th scope="col" role="columnheader" aria-colindex="5">Have</th>
+            <th scope="col" role="columnheader" aria-colindex="6">Library</th>
+            <th scope="col" role="columnheader" aria-colindex="7">Instance</th>
           </tr>
         </thead>
-        <tbody>
-          <tr><td data-label="Type" class="mono">movie</td><td data-label="Title" class="cell-title">Dune: Part Two</td><td data-label="Added" class="num">14:02</td><td data-label="Detail"><span class="mono">Bluray-1080p</span> · 14.2 GB</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Movies</td><td data-label="Instance" class="mono">Radarr</td></tr>
-          <tr><td data-label="Type" class="mono">album</td><td data-label="Title" class="cell-title">Geogaddi <span class="muted">· Boards of Canada</span></td><td data-label="Added" class="num">13:58</td><td data-label="Detail"><span class="mono">FLAC</span> · 23 tracks · 66 min</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Music</td><td data-label="Instance" class="mono">Navidrome</td></tr>
-          <tr><td data-label="Type" class="mono">issue</td><td data-label="Title" class="cell-title">Saga #61</td><td data-label="Added" class="num">13:55</td><td data-label="Detail"><span class="mono">CBZ</span> · 24 p · 41.8 MB</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Comics</td><td data-label="Instance" class="mono">Komga</td></tr>
-          <tr><td data-label="Type" class="mono">episode</td><td data-label="Title" class="cell-title">ER <span class="mono">S12E14</span> Quintessence of Dust</td><td data-label="Added" class="num">13:22</td><td data-label="Detail"><span class="mono">HDTV-1080p</span> · 1.9 GB</td><td data-label="Have"><span class="avail avail--part">250/331</span></td><td data-label="Library">TV</td><td data-label="Instance" class="mono">Sonarr</td></tr>
-          <tr><td data-label="Type" class="mono">ebook</td><td data-label="Title" class="cell-title">The Overstory <span class="muted">· Richard Powers</span></td><td data-label="Added" class="num">12:40</td><td data-label="Detail"><span class="mono">EPUB</span> · 2.1 MB</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Ebooks</td><td data-label="Instance" class="mono">Audiobookshelf</td></tr>
-          <tr><td data-label="Type" class="mono">audiobook</td><td data-label="Title" class="cell-title">Piranesi <span class="muted">· Susanna Clarke, read by Chiwetel Ejiofor</span></td><td data-label="Added" class="num">12:04</td><td data-label="Detail"><span class="mono">M4B</span> · 6 h 58 m · 402 MB</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Audiobooks</td><td data-label="Instance" class="mono">Audiobookshelf</td></tr>
-          <tr><td data-label="Type" class="mono">album</td><td data-label="Title" class="cell-title">Untrue <span class="muted">· Burial</span></td><td data-label="Added" class="num">11:58</td><td data-label="Detail"><span class="mono">FLAC</span> · 13 tracks · 50 min</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Music</td><td data-label="Instance" class="mono">Navidrome</td></tr>
-          <tr><td data-label="Type" class="mono">issue</td><td data-label="Title" class="cell-title">Chainsaw Man vol. 12</td><td data-label="Added" class="num">11:40</td><td data-label="Detail"><span class="mono">CBZ</span> · 192 p · 96.4 MB</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Comics</td><td data-label="Instance" class="mono">Kavita</td></tr>
-          <tr><td data-label="Type" class="mono">movie</td><td data-label="Title" class="cell-title">The Zone of Interest</td><td data-label="Added" class="num">11:22</td><td data-label="Detail"><span class="mono">Bluray-1080p</span> · 9.1 GB</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Movies</td><td data-label="Instance" class="mono">Radarr</td></tr>
-          <tr><td data-label="Type" class="mono">episode</td><td data-label="Title" class="cell-title">Shogun <span class="mono">S01E10</span> A Dream of a Dream</td><td data-label="Added" class="num">11:04</td><td data-label="Detail"><span class="mono">WEBDL-1080p</span> · 4.0 GB</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>10/10</span></td><td data-label="Library">TV</td><td data-label="Instance" class="mono">Sonarr</td></tr>
-          <tr><td data-label="Type" class="mono">audiobook</td><td data-label="Title" class="cell-title">The Wager <span class="muted">· David Grann, read by Dion Graham</span></td><td data-label="Added" class="num">10:47</td><td data-label="Detail"><span class="mono">M4B</span> · 8 h 43 m · 682 MB</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Audiobooks</td><td data-label="Instance" class="mono">Audiobookshelf</td></tr>
+        <tbody role="rowgroup">
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">movie</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Dune: Part Two</td><td data-label="Added" class="num" role="cell" aria-colindex="3">14:02</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">Bluray-1080p</span> · 14.2 GB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Movies</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Radarr</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">album</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Geogaddi <span class="muted">· Boards of Canada</span></td><td data-label="Added" class="num" role="cell" aria-colindex="3">13:58</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">FLAC</span> · 23 tracks · 66 min</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Music</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Navidrome</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">issue</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Saga #61</td><td data-label="Added" class="num" role="cell" aria-colindex="3">13:55</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">CBZ</span> · 24 p · 41.8 MB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Comics</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Komga</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">episode</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">ER <span class="mono">S12E14</span> Quintessence of Dust</td><td data-label="Added" class="num" role="cell" aria-colindex="3">13:22</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">HDTV-1080p</span> · 1.9 GB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--part">250/331</span></td><td data-label="Library" role="cell" aria-colindex="6">TV</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Sonarr</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">ebook</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">The Overstory <span class="muted">· Richard Powers</span></td><td data-label="Added" class="num" role="cell" aria-colindex="3">12:40</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">EPUB</span> · 2.1 MB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Ebooks</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Audiobookshelf</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">audiobook</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Piranesi <span class="muted">· Susanna Clarke, read by Chiwetel Ejiofor</span></td><td data-label="Added" class="num" role="cell" aria-colindex="3">12:04</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">M4B</span> · 6 h 58 m · 402 MB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Audiobooks</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Audiobookshelf</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">album</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Untrue <span class="muted">· Burial</span></td><td data-label="Added" class="num" role="cell" aria-colindex="3">11:58</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">FLAC</span> · 13 tracks · 50 min</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Music</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Navidrome</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">issue</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Chainsaw Man vol. 12</td><td data-label="Added" class="num" role="cell" aria-colindex="3">11:40</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">CBZ</span> · 192 p · 96.4 MB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Comics</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Komga</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">movie</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">The Zone of Interest</td><td data-label="Added" class="num" role="cell" aria-colindex="3">11:22</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">Bluray-1080p</span> · 9.1 GB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Movies</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Radarr</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">episode</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Shogun <span class="mono">S01E10</span> A Dream of a Dream</td><td data-label="Added" class="num" role="cell" aria-colindex="3">11:04</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">WEBDL-1080p</span> · 4.0 GB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>10/10</span></td><td data-label="Library" role="cell" aria-colindex="6">TV</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Sonarr</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">audiobook</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">The Wager <span class="muted">· David Grann, read by Dion Graham</span></td><td data-label="Added" class="num" role="cell" aria-colindex="3">10:47</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">M4B</span> · 8 h 43 m · 682 MB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Audiobooks</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Audiobookshelf</td></tr>
           <!-- One Audiobookshelf library, two UsArr libraries. Piranesi's M4B
                is in Audiobooks and its EPUB is in Ebooks: same work, two
                editions, split by format. Audiobookshelf's own mediaType is only
                book or podcast, so it cannot express this split itself. -->
-          <tr><td data-label="Type" class="mono">ebook</td><td data-label="Title" class="cell-title">Piranesi <span class="muted">· Susanna Clarke</span></td><td data-label="Added" class="num">10:31</td><td data-label="Detail"><span class="mono">EPUB</span> · 1.4 MB</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Ebooks</td><td data-label="Instance" class="mono">Audiobookshelf</td></tr>
-          <tr><td data-label="Type" class="mono">album</td><td data-label="Title" class="cell-title">Since I Left You <span class="muted">· The Avalanches</span></td><td data-label="Added" class="num">10:12</td><td data-label="Detail"><span class="mono">FLAC</span> · 18 tracks · 60 min</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Music</td><td data-label="Instance" class="mono">Navidrome</td></tr>
-          <tr><td data-label="Type" class="mono">issue</td><td data-label="Title" class="cell-title">Monstress #50</td><td data-label="Added" class="num">09:58</td><td data-label="Detail"><span class="mono">CBZ</span> · 30 p · 52.1 MB</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Comics</td><td data-label="Instance" class="mono">Komga</td></tr>
-          <tr><td data-label="Type" class="mono">movie</td><td data-label="Title" class="cell-title">Anatomy of a Fall</td><td data-label="Added" class="num">09:41</td><td data-label="Detail"><span class="mono">Bluray-1080p</span> · 11.8 GB</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Movies</td><td data-label="Instance" class="mono">Radarr</td></tr>
-          <tr><td data-label="Type" class="mono">episode</td><td data-label="Title" class="cell-title">Severance <span class="mono">S02E10</span> Cold Harbor</td><td data-label="Added" class="num">09:20</td><td data-label="Detail"><span class="mono">WEBDL-1080p</span> · 3.1 GB</td><td data-label="Have"><span class="avail avail--part">17/19</span></td><td data-label="Library">TV</td><td data-label="Instance" class="mono">Sonarr</td></tr>
-          <tr><td data-label="Type" class="mono">album</td><td data-label="Title" class="cell-title">In Rainbows <span class="muted">· Radiohead</span></td><td data-label="Added" class="num">09:02</td><td data-label="Detail"><span class="mono">FLAC</span> · 10 tracks · 42 min</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Music</td><td data-label="Instance" class="mono">Navidrome</td></tr>
-          <tr><td data-label="Type" class="mono">ebook</td><td data-label="Title" class="cell-title">Blindsight <span class="muted">· Peter Watts</span></td><td data-label="Added" class="num">08:44</td><td data-label="Detail"><span class="mono">EPUB</span> · 0.9 MB</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Ebooks</td><td data-label="Instance" class="mono">Kavita</td></tr>
-          <tr><td data-label="Type" class="mono">issue</td><td data-label="Title" class="cell-title">Berserk vol. 41</td><td data-label="Added" class="num">08:26</td><td data-label="Detail"><span class="mono">CBZ</span> · 226 p · 118.7 MB</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Comics</td><td data-label="Instance" class="mono">Kavita</td></tr>
-          <tr><td data-label="Type" class="mono">audiobook</td><td data-label="Title" class="cell-title">Project Hail Mary <span class="muted">· Andy Weir, read by Ray Porter</span></td><td data-label="Added" class="num">08:05</td><td data-label="Detail"><span class="mono">M4B</span> · 16 h 10 m · 748 MB</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Audiobooks</td><td data-label="Instance" class="mono">Audiobookshelf</td></tr>
-          <tr><td data-label="Type" class="mono">movie</td><td data-label="Title" class="cell-title">Past Lives</td><td data-label="Added" class="num">07:48</td><td data-label="Detail"><span class="mono">WEBDL-1080p</span> · 6.4 GB</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Movies</td><td data-label="Instance" class="mono">Radarr</td></tr>
-          <tr><td data-label="Type" class="mono">album</td><td data-label="Title" class="cell-title">Ys <span class="muted">· Joanna Newsom</span></td><td data-label="Added" class="num">07:30</td><td data-label="Detail"><span class="mono">FLAC</span> · 5 tracks · 56 min</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Music</td><td data-label="Instance" class="mono">Navidrome</td></tr>
-          <tr><td data-label="Type" class="mono">episode</td><td data-label="Title" class="cell-title">Slow Horses <span class="mono">S04E06</span> Hello Goodbye</td><td data-label="Added" class="num">07:12</td><td data-label="Detail"><span class="mono">WEBDL-1080p</span> · 2.8 GB</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>24/24</span></td><td data-label="Library">TV</td><td data-label="Instance" class="mono">Sonarr</td></tr>
-          <tr><td data-label="Type" class="mono">issue</td><td data-label="Title" class="cell-title">Saga #60</td><td data-label="Added" class="num">06:55</td><td data-label="Detail"><span class="mono">CBZ</span> · 22 p · 38.2 MB</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Comics</td><td data-label="Instance" class="mono">Komga</td></tr>
-          <tr><td data-label="Type" class="mono">ebook</td><td data-label="Title" class="cell-title">The Dispossessed <span class="muted">· Ursula K. Le Guin</span></td><td data-label="Added" class="num">06:31</td><td data-label="Detail"><span class="mono">EPUB</span> · 1.1 MB</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Ebooks</td><td data-label="Instance" class="mono">Audiobookshelf</td></tr>
-          <tr><td data-label="Type" class="mono">album</td><td data-label="Title" class="cell-title">Spirit of Eden <span class="muted">· Talk Talk</span></td><td data-label="Added" class="num">06:04</td><td data-label="Detail"><span class="mono">FLAC</span> · 6 tracks · 41 min</td><td data-label="Have"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library">Music</td><td data-label="Instance" class="mono">Navidrome</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">ebook</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Piranesi <span class="muted">· Susanna Clarke</span></td><td data-label="Added" class="num" role="cell" aria-colindex="3">10:31</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">EPUB</span> · 1.4 MB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Ebooks</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Audiobookshelf</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">album</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Since I Left You <span class="muted">· The Avalanches</span></td><td data-label="Added" class="num" role="cell" aria-colindex="3">10:12</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">FLAC</span> · 18 tracks · 60 min</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Music</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Navidrome</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">issue</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Monstress #50</td><td data-label="Added" class="num" role="cell" aria-colindex="3">09:58</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">CBZ</span> · 30 p · 52.1 MB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Comics</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Komga</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">movie</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Anatomy of a Fall</td><td data-label="Added" class="num" role="cell" aria-colindex="3">09:41</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">Bluray-1080p</span> · 11.8 GB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Movies</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Radarr</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">episode</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Severance <span class="mono">S02E10</span> Cold Harbor</td><td data-label="Added" class="num" role="cell" aria-colindex="3">09:20</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">WEBDL-1080p</span> · 3.1 GB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--part">17/19</span></td><td data-label="Library" role="cell" aria-colindex="6">TV</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Sonarr</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">album</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">In Rainbows <span class="muted">· Radiohead</span></td><td data-label="Added" class="num" role="cell" aria-colindex="3">09:02</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">FLAC</span> · 10 tracks · 42 min</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Music</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Navidrome</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">ebook</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Blindsight <span class="muted">· Peter Watts</span></td><td data-label="Added" class="num" role="cell" aria-colindex="3">08:44</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">EPUB</span> · 0.9 MB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Ebooks</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Audiobookshelf</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">issue</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Berserk vol. 41</td><td data-label="Added" class="num" role="cell" aria-colindex="3">08:26</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">CBZ</span> · 226 p · 118.7 MB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Comics</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Komga</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">audiobook</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Project Hail Mary <span class="muted">· Andy Weir, read by Ray Porter</span></td><td data-label="Added" class="num" role="cell" aria-colindex="3">08:05</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">M4B</span> · 16 h 10 m · 748 MB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Audiobooks</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Audiobookshelf</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">movie</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Past Lives</td><td data-label="Added" class="num" role="cell" aria-colindex="3">07:48</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">WEBDL-1080p</span> · 6.4 GB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Movies</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Radarr</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">album</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Ys <span class="muted">· Joanna Newsom</span></td><td data-label="Added" class="num" role="cell" aria-colindex="3">07:30</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">FLAC</span> · 5 tracks · 56 min</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Music</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Navidrome</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">episode</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Slow Horses <span class="mono">S04E06</span> Hello Goodbye</td><td data-label="Added" class="num" role="cell" aria-colindex="3">07:12</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">WEBDL-1080p</span> · 2.8 GB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>24/24</span></td><td data-label="Library" role="cell" aria-colindex="6">TV</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Sonarr</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">issue</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Saga #60</td><td data-label="Added" class="num" role="cell" aria-colindex="3">06:55</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">CBZ</span> · 22 p · 38.2 MB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Comics</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Komga</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">ebook</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">The Dispossessed <span class="muted">· Ursula K. Le Guin</span></td><td data-label="Added" class="num" role="cell" aria-colindex="3">06:31</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">EPUB</span> · 1.1 MB</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Ebooks</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Audiobookshelf</td></tr>
+          <tr role="row"><td data-label="Type" class="mono" role="cell" aria-colindex="1">album</td><td data-label="Title" class="cell-title" role="cell" aria-colindex="2">Spirit of Eden <span class="muted">· Talk Talk</span></td><td data-label="Added" class="num" role="cell" aria-colindex="3">06:04</td><td data-label="Detail" role="cell" aria-colindex="4"><span class="mono">FLAC</span> · 6 tracks · 41 min</td><td data-label="Have" role="cell" aria-colindex="5"><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></td><td data-label="Library" role="cell" aria-colindex="6">Music</td><td data-label="Instance" class="mono" role="cell" aria-colindex="7">Navidrome</td></tr>
         </tbody>
       </table>
     </div>
@@ -389,30 +421,30 @@
          comic cover, 1:1 for an album. Nothing here scrolls sideways. -->
     <div data-panel-for="homeview" data-panel-name="posters" hidden>
       <div class="grid" data-roving=".card" data-roving-axis="horizontal" aria-label="Recently added across all media types">
-        <a class="card" href="#recent" style="--dc:#7d6a4f;--dc-fg:#16130e"><span class="card__art"><span class="card__t">Dune: Part Two</span><span class="card__y">2024</span></span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
-        <a class="card card--sq" href="#recent" style="--dc:#4a5a44;--dc-fg:#f0f4ee"><span class="card__art"><span class="card__t">Geogaddi</span><span class="card__y">2002</span></span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
-        <a class="card" href="#recent" style="--dc:#5c3f42;--dc-fg:#f7eeef"><span class="card__art"><span class="card__t">Saga #61</span><span class="card__y">2025</span></span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
-        <a class="card" href="#recent" style="--dc:#443345;--dc-fg:#f4eff5"><span class="card__art"><span class="card__t">ER</span><span class="card__y">1994</span></span><span class="card__meta">episode <span class="avail avail--part">250/331</span></span></a>
-        <a class="card" href="#recent" style="--dc:#3f4a3c;--dc-fg:#f0f3ef"><span class="card__art"><span class="card__t">The Overstory</span><span class="card__y">2018</span></span><span class="card__meta">ebook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
-        <a class="card" href="#recent" style="--dc:#2f3a44;--dc-fg:#eef2f5"><span class="card__art"><span class="card__t">Piranesi</span><span class="card__y">2020</span></span><span class="card__meta">audiobook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
-        <a class="card card--sq" href="#recent" style="--dc:#2c3330;--dc-fg:#eef1ef"><span class="card__art"><span class="card__t">Untrue</span><span class="card__y">2007</span></span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
-        <a class="card" href="#recent" style="--dc:#6b4a33;--dc-fg:#f8f1ea"><span class="card__art"><span class="card__t">Chainsaw Man vol. 12</span><span class="card__y">2023</span></span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
-        <a class="card" href="#recent" style="--dc:#55483a;--dc-fg:#f6f2ec"><span class="card__art"><span class="card__t">The Zone of Interest</span><span class="card__y">2023</span></span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
-        <a class="card" href="#recent" style="--dc:#4a3b30;--dc-fg:#f6f1eb"><span class="card__art"><span class="card__t">Shogun</span><span class="card__y">2024</span></span><span class="card__meta">episode <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>10/10</span></span></a>
-        <a class="card" href="#recent" style="--dc:#3b3a35;--dc-fg:#f1efea"><span class="card__art"><span class="card__t">The Wager</span><span class="card__y">2023</span></span><span class="card__meta">audiobook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
-        <a class="card" href="#recent" style="--dc:#2a3b3f;--dc-fg:#eef3f4"><span class="card__art"><span class="card__t">Piranesi</span><span class="card__y">2020</span></span><span class="card__meta">ebook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
-        <a class="card card--sq" href="#recent" style="--dc:#6b5744;--dc-fg:#f7f2ec"><span class="card__art"><span class="card__t">Since I Left You</span><span class="card__y">2000</span></span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
-        <a class="card" href="#recent" style="--dc:#34443c;--dc-fg:#eff3f1"><span class="card__art"><span class="card__t">Monstress #50</span><span class="card__y">2024</span></span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
-        <a class="card" href="#recent" style="--dc:#2f3a3d;--dc-fg:#eff2f3"><span class="card__art"><span class="card__t">Anatomy of a Fall</span><span class="card__y">2023</span></span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
-        <a class="card" href="#recent" style="--dc:#26333f;--dc-fg:#eef2f6"><span class="card__art"><span class="card__t">Severance</span><span class="card__y">2022</span></span><span class="card__meta">episode <span class="avail avail--part">17/19</span></span></a>
-        <a class="card card--sq" href="#recent" style="--dc:#4c3a44;--dc-fg:#f5eff2"><span class="card__art"><span class="card__t">In Rainbows</span><span class="card__y">2007</span></span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
-        <a class="card" href="#recent" style="--dc:#38434a;--dc-fg:#eff3f5"><span class="card__art"><span class="card__t">Blindsight</span><span class="card__y">2006</span></span><span class="card__meta">ebook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
-        <a class="card" href="#recent" style="--dc:#3d2f2b;--dc-fg:#f3eeec"><span class="card__art"><span class="card__t">Berserk vol. 41</span><span class="card__y">2019</span></span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
-        <a class="card" href="#recent" style="--dc:#463c2f;--dc-fg:#f4f1ec"><span class="card__art"><span class="card__t">Project Hail Mary</span><span class="card__y">2021</span></span><span class="card__meta">audiobook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
-        <a class="card" href="#recent" style="--dc:#4a5a63;--dc-fg:#f0f4f6"><span class="card__art"><span class="card__t">Past Lives</span><span class="card__y">2023</span></span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
-        <a class="card card--sq" href="#recent" style="--dc:#5a4038;--dc-fg:#f7f0ed"><span class="card__art"><span class="card__t">Ys</span><span class="card__y">2006</span></span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
-        <a class="card" href="#recent" style="--dc:#3e4438;--dc-fg:#f0f2ee"><span class="card__art"><span class="card__t">Slow Horses</span><span class="card__y">2022</span></span><span class="card__meta">episode <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>24/24</span></span></a>
-        <a class="card card--sq" href="#recent" style="--dc:#33393b;--dc-fg:#eff1f2"><span class="card__art"><span class="card__t">Spirit of Eden</span><span class="card__y">1988</span></span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" href="#recent" data-dc="#7d6a4f"><span class="card__art"><span class="card__t">Dune: Part Two</span><span class="card__y">2024</span></span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card card--sq" href="#recent" data-dc="#8a9184"><span class="card__art"><span class="card__t">Geogaddi</span><span class="card__y">2002</span></span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" href="#recent" data-dc="#5c3f42"><span class="card__art"><span class="card__t">Saga #61</span><span class="card__y">2025</span></span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" href="#recent" data-dc="#443345"><span class="card__art"><span class="card__t">ER</span><span class="card__y">1994</span></span><span class="card__meta">episode <span class="avail avail--part">250/331</span></span></a>
+        <a class="card" href="#recent" data-dc="#3f4a3c"><span class="card__art"><span class="card__t">The Overstory</span><span class="card__y">2018</span></span><span class="card__meta">ebook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" href="#recent" data-dc="#2f3a44"><span class="card__art"><span class="card__t">Piranesi</span><span class="card__y">2020</span></span><span class="card__meta">audiobook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card card--sq" href="#recent" data-dc="#2c3330"><span class="card__art"><span class="card__t">Untrue</span><span class="card__y">2007</span></span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" href="#recent" data-dc="#9c8a6e"><span class="card__art"><span class="card__t">Chainsaw Man vol. 12</span><span class="card__y">2023</span></span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" href="#recent" data-dc="#55483a"><span class="card__art"><span class="card__t">The Zone of Interest</span><span class="card__y">2023</span></span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" href="#recent" data-dc="#4a3b30"><span class="card__art"><span class="card__t">Shogun</span><span class="card__y">2024</span></span><span class="card__meta">episode <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>10/10</span></span></a>
+        <a class="card" href="#recent" data-dc="#7f8a90"><span class="card__art"><span class="card__t">The Wager</span><span class="card__y">2023</span></span><span class="card__meta">audiobook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" href="#recent" data-dc="#2a3b3f"><span class="card__art"><span class="card__t">Piranesi</span><span class="card__y">2020</span></span><span class="card__meta">ebook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card card--sq" href="#recent" data-dc="#6b5744"><span class="card__art"><span class="card__t">Since I Left You</span><span class="card__y">2000</span></span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" href="#recent" data-dc="#34443c"><span class="card__art"><span class="card__t">Monstress #50</span><span class="card__y">2024</span></span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" href="#recent" data-dc="#2f3a3d"><span class="card__art"><span class="card__t">Anatomy of a Fall</span><span class="card__y">2023</span></span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" href="#recent" data-dc="#26333f"><span class="card__art"><span class="card__t">Severance</span><span class="card__y">2022</span></span><span class="card__meta">episode <span class="avail avail--part">17/19</span></span></a>
+        <a class="card card--sq" href="#recent" data-dc="#78736c"><span class="card__art"><span class="card__t">In Rainbows</span><span class="card__y">2007</span></span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" href="#recent" data-dc="#7d8a93"><span class="card__art"><span class="card__t">Blindsight</span><span class="card__y">2006</span></span><span class="card__meta">ebook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" href="#recent" data-dc="#3d2f2b"><span class="card__art"><span class="card__t">Berserk vol. 41</span><span class="card__y">2019</span></span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" href="#recent" data-dc="#463c2f"><span class="card__art"><span class="card__t">Project Hail Mary</span><span class="card__y">2021</span></span><span class="card__meta">audiobook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" href="#recent" data-dc="#4a5a63"><span class="card__art"><span class="card__t">Past Lives</span><span class="card__y">2023</span></span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card card--sq" href="#recent" data-dc="#5a4038"><span class="card__art"><span class="card__t">Ys</span><span class="card__y">2006</span></span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
+        <a class="card" href="#recent" data-dc="#3e4438"><span class="card__art"><span class="card__t">Slow Horses</span><span class="card__y">2022</span></span><span class="card__meta">episode <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>24/24</span></span></a>
+        <a class="card card--sq" href="#recent" data-dc="#33393b"><span class="card__art"><span class="card__t">Spirit of Eden</span><span class="card__y">1988</span></span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg></span></span></a>
       </div>
     </div>
   </section>

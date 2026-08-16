@@ -3,7 +3,15 @@
 A static, clickable HTML prototype of the five screens this design has to carry in v0.1:
 **home, services, libraries, search, requests**.
 
-**This is a mockup, not the application.** UsArr is pre-alpha: the docs exist, the code does not.
+**This is a mockup, not the application.** Every page now says so itself, permanently, in the top
+bar: `mockup — Static design mockup of UsArr, which is pre-alpha software: nothing here is
+implemented and every value on these screens is invented.` That notice is not dismissible, it is in
+the shared chrome rather than on one page, and it therefore survives into `prototype.html`, which is
+the file built for publishing and the one most likely to reach a reader who never sees this README.
+`DESIGN-DIRECTION.md` §13 forbids fabricated data in a shipped surface and makes a labelled mockup
+the one exception; the in-page notice is that label.
+
+UsArr is pre-alpha: the docs exist, the code does not.
 Nothing here is wired to a database, an *Arr, a media server, or an HTTP API. Every title, size,
 narrator, issue number, seeder count, timestamp and error string on these pages is fabricated
 sample data chosen to look like the real thing so the layout can be judged, and none of it should
@@ -15,7 +23,7 @@ deliberately: this prototype cannot make a claim about speed.
 | File | What it is |
 | --- | --- |
 | `usarr.css` | The stylesheet. Layer 1 tokens, layer 2 components. Hand-written, no framework, no build step. |
-| `usarr.js` | The behaviour. Vanilla, no dependencies, ~410 lines. Theme, density, sidebar, the library scope chip, tabs, dialog, roving tabindex, the states switcher, and the acknowledged-write demonstration. |
+| `usarr.js` | The behaviour. Vanilla, no dependencies. Theme, density, sidebar, the library scope chip, tabs, dialog, roving tabindex, the single-key-shortcut switch, the `dominant_color` contrast rule, the states switcher, and the acknowledged-write demonstration. |
 | `index.html` | Home: three fixed blocks over six media types. |
 | `services.html` | Service setup and health, plus the settings anatomy and the system health list. |
 | `libraries.html` | Library settings: the list, the auto-proposal flow, and one library edited in full. |
@@ -56,7 +64,7 @@ This is the structural decision the six-type version turns on, so it is stated f
   ebooks, comics — bounded at six by construction, and a type with no content is not rendered at
   all. Six sidebar entries, and they cannot grow.
 - **A library is scope, not a place.** It is a multi-select chip above the nav, labelled in words
-  (`All libraries (7)`, `5 of 7 libraries`, `None (0 of 7)`), reflected in the URL as `?lib=…`,
+  (`All libraries (8)`, `6 of 8 libraries`, `None (0 of 8)`), reflected in the URL as `?lib=…`,
   and **absent entirely when the user has fewer than two libraries**. This is Navidrome's
   `LibrarySelector`, including its `return null` at 0 or 1 library.
 
@@ -67,8 +75,24 @@ rather than managing it, and it keeps cross-library search and browsing working 
 single-select switcher gives up, as Audiobookshelf's own documentation records.
 
 The scope chip is a real control here: open it (click, or press `l`), untick libraries, and the
-label and the `?lib=` string both change. It uses native checkboxes, so Space, arrows and Escape
-work without a single line of key handling.
+label and the `?lib=` string both change. Its checkboxes are native, so **Space toggles and Tab
+traverses** for free — but that is the whole of what native buys. Native checkboxes are *not*
+arrow-navigable (only radios within a group are), and `Escape`-to-close is popover behaviour rather
+than checkbox behaviour, so arrow roving and `Esc` are the two things this popover has to add. An
+earlier draft of this file claimed all four came free; it was wrong, and an implementer following
+it would have shipped a list where the arrow keys do nothing.
+
+The chip's label is an `aria-live="polite"` region. Its stated job is that a control which hides
+content can never be silent about what it hid, and without the live region it was silent to exactly
+the users who cannot see the label change. The popover also closes on `focusout`, so tabbing past
+the last checkbox no longer leaves a floating layer open over the nav. And `?lib=` is built from the
+stored `library.slug` on each checkbox, never from the rendered label: the name is user-editable and
+the URL is durable state, so slugifying the label would silently change a permalink on a rename.
+
+`l` and `/` are single-character shortcuts, which WCAG 2.2 SC 2.1.4 (Level A) allows only if they
+can be turned off, remapped, or are active only on focus. "It also has a visible mouse equivalent"
+is not one of the three. **Settings → UI carries the off switch**, it persists, and the handlers
+honour it.
 
 **Sidebar row budget.** Scope chip 1, Home 1, six types 6, Search and Requests 2, Services,
 Libraries and Settings 3, System with Status and Backup 3 — sixteen rows, which fits a 900px
@@ -91,7 +115,18 @@ fold on the screen whose whole job is "what do I have?". Home's height would be 
 of media types. So:
 
 - **Block A — Your library.** One dense row per present media type, at most six. Answers "what do I
-  have?" completely and *gains* from more types.
+  have?" completely and *gains* from more types. **The unit is in the cell**, because it is not the
+  same word for every type: `1,204 films`, `612 artists`, `553 series`. A bare column headed `Items`
+  reads as though `Movies 1,204` and `Music 612` are comparable numbers when one counts films and
+  the other counts artists over 4,118 albums and 51,204 tracks, which is the failure ADR-0031 names
+  for artist-level numbers. The sidebar counts carry the same unit for a screen reader, which reads
+  the number without the type name beside it.
+- **On a phone, Block B goes first.** Below 1100px the two blocks stack, and Block A costs about
+  105px per media type in the stacked view, which put "Prowlarr rejected the API key" **914px down
+  an 844px viewport**. Block B is absent when empty, so it costs nothing when nothing is wrong.
+  Measured after: Block B starts at **217px** and Block A at 812px, and Block A's stacked rows are
+  two lines rather than four, because the `Type` label was redundant — its value *is* the row's
+  identity.
 - **Block B — Needs attention.** Wanted-but-absent, failed grabs, a degraded instance, a work
   needing re-identification. **It does not render at all when empty** — the `Populated, nothing
   needs attention` state in the switcher shows exactly that, with no green "all good" panel where
@@ -112,21 +147,37 @@ strip is gone entirely.
 
 Chromium, 1440×900, default compact density, light and dark identical:
 
-| Screen | Scannable items above the fold |
-| --- | --- |
-| **Home** | **25** — 6 type rows, 5 attention rows, 14 recently-added rows |
-| Home, posters mode | 20 cards |
-| Search | 13 rows across 2 of its 6 groups |
-| Requests | 10 release rows |
-| Libraries | 7 library rows |
-| Services | 7 service rows |
+| Screen | Any part visible | At least half visible | Fully visible |
+| --- | --- | --- | --- |
+| **Home** | **25** — 6 type rows, 4 attention rows, 15 recently-added rows | 25 | 24 |
+| Home, posters mode | **34** — 24 cards **plus** Block A's 6 rows and Block B's 4, which stay tables | 30 | — |
+| Search | **17** rows across 3 of its 6 groups | 17 | 17 |
+| Requests | 8 release rows | 8 | 7 |
+| Services | 7 service rows | 6 | 6 |
+| Libraries | 6 library rows | 5 | 5 |
 
-Home clears the ≥25 rule. **Search does not, and this is worse than the 20 rows the two-type
-version managed.** The cause is structural rather than sloppy: six groups cost six section headers
-and six column sets, because the columns genuinely differ per type — a narrator and a duration for
-an audiobook, a publisher and an issue gap list for a comic. The alternative is interleaving, which
-§17.4 rejects on stability grounds and which the aggregated-search literature says manufactures a
-ranking bias across incomparable signals. Recorded, not rounded up.
+Home clears the ≥25 rule. Posters mode clears it comfortably, and an earlier version of this table
+undercounted it as "20 cards" by forgetting that Blocks A and B stay tables in that mode. Its
+half-visible figure is 30 rather than 34, because the fold falls through the last row of cards; an
+earlier version of this table copied 34 into both columns without re-measuring the second one.
+
+**Search reaches 17 and does not clear 25.** It was 13 before this revision, and the recovery is
+real rather than cosmetic: a column whose value is identical in every row of its group has been
+hoisted into the group header (`Ebooks 14 · all in Ebooks · all from Audiobookshelf`), which is the
+same finding as D-05 in a new place, and it took every row in the two groups above the fold from
+multi-line to single-line. Column widths are now declared per list instead of derived by auto table
+layout, which was re-deriving six different widths for the same column across six groups.
+
+**Why 25 is not reachable on this screen, with the arithmetic.** §17.4 caps each group at a 40-row
+budget divided by the number of groups with hits, so on six groups this query renders **22 rows in
+total** — 7 ebook, 7 audiobook, 3 movie, 2 comic, 2 music, 1 TV, counting the two `Show all …`
+rows. Twenty-five is above the ceiling before a single pixel of layout is considered. On top of
+that, six groups cost six headings and six column-header rows: 6 × (24px heading + 6px + 25px
+header row + 8px group padding) = **378px of the 734px available below the page chrome**, which is
+thirteen compact rows' worth of space that carries no rows. Reaching 25 would mean raising §17.4's
+per-group cap and dropping either the per-group headings or the per-group column headers — a change
+to §17.4, not a change a mockup may make on its own. Recorded, not rounded up, and not fixed by
+compressing type below the legibility floor.
 
 ## Search across six types
 
@@ -144,13 +195,20 @@ Four rules the two-type version did not need:
    with per-medium availability beside it. `Dune` is one row, not four. Cross-media linking itself
    is v0.3; the rendering rule is drawn so the six-type screen can be reviewed against it.
 
-Every row carries `in <library>`, which is Kavita's `in {{libraryName}}` and is what makes a
-heterogeneous list coherent for almost nothing. A row of type filter chips shows only the types
-with hits, each with its count, each a real `<a href>` that sets `&type=`.
+5. **A column that is constant within its group is stated once in the group header, not repeated
+   down the column.** §17.4's rule was "the library name renders only when the user has ≥2
+   libraries"; the missing half is "*and* only when the group contains more than one distinct
+   value". Measured on this result set, `Library` was constant in five of six groups and `Instance`
+   in five of six. The comics group keeps both columns, because it genuinely spans two libraries and
+   two provenances — the rule is per group, not per screen.
+
+A row of type filter chips shows only the types with hits, each with its count, each a real
+`<a href>` that sets `&type=`.
 
 The `Narrowed by the library scope` state shows the scope actually narrowing: 31 results in six
-groups become 2 results in one, the toolbar says `2 of 7 libraries` and names them, and the URL
-carries `?lib=comics,ongoing-comics`.
+groups become 2 results in one, the toolbar says `2 of 8 libraries` and names them, and the URL
+carries `?lib=comics,comics-ongoing` — which is what the mockup actually emits, from the stored
+slugs.
 
 ## Type-appropriate content without per-type screens
 
@@ -178,23 +236,41 @@ that owns it.
 
 Drawn in three states:
 
-- **The list.** Seven libraries. Two of them, **Audiobooks and Ebooks, are one Audiobookshelf
-  library split by edition format** — something Audiobookshelf cannot express itself, because its
-  `mediaType` is only `book` or `podcast` and the ebook/audiobook difference is a per-item field.
-  That is the clearest case of UsArr's organisation being better than the service's own, and it is
-  why the concept earns its place.
-- **The auto-proposal.** Connecting Audiobookshelf, Komga and Kavita proposes five libraries behind
-  one Accept, all pre-selected and editable in place. A second comics service proposes to **join**
-  the existing Comics library rather than create a second one — getting that default wrong splits a
-  series into two entries and destroys the per-instance availability badge. Three things are
-  **declined with a reason** rather than dropped: an Audiobookshelf `mediaType=podcast` library, a
-  Kavita `LibraryType 3 (Image)` library, and a mixed Jellyfin `CollectionType=unknown` folder.
+- **The list.** Eight libraries, and **four of the six media types have no request destination at
+  all**, because §16 gives v0.1 *no command sinks*. That is not a gap in the drawing; it is what
+  v0.1 is, and free-text indexer search through Prowlarr is the only request path it ships. Two
+  libraries, **Audiobooks and Ebooks, are one Audiobookshelf library split by edition format** —
+  something Audiobookshelf cannot express itself, because its `mediaType` is only `book` or
+  `podcast` and the ebook/audiobook difference is a per-item field. That is the clearest case of
+  UsArr's organisation being better than the service's own, and it is why the concept earns its
+  place.
+- **The auto-proposal.** Connecting Audiobookshelf and Komga proposes four libraries behind one
+  Accept, all pre-selected and editable in place. Komga's second upstream library answers with **0
+  series** and is proposed anyway, because "the source reports nothing" is not the same fact as
+  "we have not read the source yet" and conflating them is how a user concludes the import is
+  broken. Renaming it to `Comics` is what makes it **join** the existing library as a second source
+  rather than become a parallel one — getting that default wrong splits a series into two entries
+  and destroys the per-instance availability badge. One thing is **declined with a reason** rather
+  than dropped: an Audiobookshelf `mediaType=podcast` library.
 - **One library edited.** Name (with the upstream's own name shown, greyed and not editable), kind
-  as a **single-choice select that is editable** — Plex cannot do this because a scanner parses
-  paths, and UsArr has no scanner — format filter, display order, visibility, default sort, the
-  catalogue-source table with per-source health and a metadata-authority radio, the request
-  destination as a separate single-valued thing, diagnostics, and a danger zone that says in words
-  that deleting the library deletes nothing from Audiobookshelf, Kavita or your disks.
+  as a **single-choice select that is editable**, format filter, display order, visibility, default
+  sort, the catalogue-source table with per-source health and a metadata-authority radio, the
+  request destination as a separate single-valued thing (`None`, with the reason), diagnostics, and
+  a danger zone. ⚠️ Plex is *reported* not to allow the kind to change, but the only source for that
+  is a community feature request and it has not been verified against Plex's own documentation, so
+  it is no longer used as the argument anywhere — in this file or in the mockup. The argument stands
+  on its own mechanism: nothing here was inferred from a path or a filename, so nothing breaks when
+  the kind changes.
+
+**The danger zone says what a delete actually does.** It removes the library from UsArr and deletes
+nothing from Audiobookshelf or from your disks — *and it discards the corrections made in that
+library*, because `library_override` is keyed to `library_id`. An earlier draft reassured the user
+that nothing was being deleted, which was the opposite of the truth about the one thing on that
+screen the user owns.
+
+**The Corrections panel carries a `v0.3` chip.** §16.0 caps the correction UI at v0.3 and it is the
+one thing §16.0 claims as payment for the six-type amendment; drawing it as though it ships would
+remove the only visible evidence that anything was capped.
 
 **The correction surface is four verbs and five fields, and the bound is the design**: `exclude`,
 `include`, `relink`, `field`, where `field` may override only title, sort title, year, cover and
@@ -215,12 +291,14 @@ reachable from a states switcher:
 
 | State | Where | Why it is drawn |
 | --- | --- | --- |
-| A comics series with a **gap list**, not a fraction | Search, comics group | Issue totals are declarations, and the ComicInfo spec concedes "the `Count` could be different on each book in a series". `11 issues · #7 missing` is computed from numbers UsArr already holds and is always true. Home's type summary says `9,842 issues · 41 series with gaps` for the same reason. |
-| A book with **no work-level identity** | Search, comics group | Komga's API exposes no external identifier of any kind, so a Komga-only series is matched by title and says so. |
-| **Identifier fields null** because of a paywall | Search, home, services, libraries | Kavita's identifier matching is a paid subscription feature; on a free install every id field is null. |
-| An artist Lidarr reports as `deleted` | Search, type-scoped state; home; services | Lidarr writes `status: deleted` when its metadata server 404s, which an MBID merge also produces. It is never rendered as a tombstone, and the row says so. |
-| **Catalogue source down, destination fine** | Libraries, Ebooks row | Kavita missing since 09:12 while LazyLibrarian is healthy. |
-| **Destination down, catalogue fine** | Libraries, Music row | Lidarr unreachable while Navidrome answers. Browsing is untouched; requests queue. |
+| A comics series with a **gap list**, not a fraction | Search, comics group | Issue totals are declarations, and the ComicInfo spec concedes "the `Count` could be different on each book in a series". `11 · #7 missing` is computed from numbers UsArr already holds and is always true. Home's type summary says `7,891 issues · 34 with gaps` for the same reason. |
+| A work with **no work-level identity** | Search, ebooks and comics groups | Komga's API exposes no external identifier of any kind, so a Komga series is matched by title and says so; an ebook added from a file with no ISBN is in the same position. |
+| **All sources down, fully browsable** | Libraries, Movies row | Radarr is Movies' only source and its breaker is open. Every one of the 1,204 rows still renders, sorts and searches, because nothing on a render path talks to Radarr. §17.8 calls this the replica principle's demonstration; it had never been drawn. |
+| **Sources healthy, zero items** | Libraries, Manga row | Komga answers and reports 0 series. §17.8 contrasts this explicitly with "not synced yet", and the copy says which one it is: the last page walk finished at 13:31 and returned nothing. |
+| **One source degraded** | Libraries, TV row | Two Sonarrs feed one library and the anime instance's clock is 212 seconds ahead, so delta polling can miss changes inside the skew window. One row, both instances. |
+| **No request destination at all** | Libraries, four rows | v0.1 has no command sinks. Music, Audiobooks, Ebooks and Comics each say `none` with the reason, and the Comics reason is scoped and true rather than an overclaimed impossibility: Mylar3 and Kapowarr exist and can accept a comic request, but neither imports a Prowlarr grab. |
+| **Classical is not solvable** | Search, type-scoped state | Neither Navidrome nor any *Arr models a composition, so nine recordings of the Goldberg Variations are nine unrelated albums and a composer renders as an artist. UsArr will not invent a work tier by matching titles, and it says so on the screen rather than looking quietly wrong to the person who owns that library. |
+| **An orphaned item's provenance** | Search, comics group | A row in Ongoing comics, whose only source was removed, names `Komga "garage" (removed)` rather than asserting a live link to a service that is not there. |
 | **A grab with nothing to import it** | Requests, audiobook state | Readarr was archived on 2025-06-27 and nothing on this install accepts an audiobook, so the row reads `grabbed 14:07 · sent to qBittorrent` and **stops**. No progress bar, no percentage, no "importing" step, because UsArr would have nothing to measure. |
 | **Every indexer failed** | Requests | Prowlarr answers a search where every indexer failed with HTTP 200 and an empty array — byte-identical to a genuine no-results response. UsArr correlates against `/api/v1/indexerstatus`, so this is a **different screen** from "nothing matched", and both are in the switcher. |
 | **The grab window closed** | Requests | Prowlarr serves a grab from a 30-minute in-process cache that a restart wipes, so a results page left open outlives it. The rows say so and the control becomes `Search again` rather than a button that throws when pressed. |
@@ -243,6 +321,64 @@ the ones integrations get wrong:
 
 Prowlarr's search types are Basic, Movie, TV, Music and Book. There is no comic type, which is why
 comics go through Basic on the Books tree, and the screen says so rather than inventing one.
+
+## The list primitive is a grid, not a table layout
+
+This is the one structural change in the components, and it is a correctness fix rather than a
+preference.
+
+[ADR-0029](../../DECISIONS.md#adr-0029) makes `content-visibility: auto` the default list renderer.
+**It has no effect on a `<tr>`.** CSS Containment Level 2 says size containment "has no effect … if
+its principal box is an internal table box", and layout and paint containment have no effect on
+"an internal table box other than table-cell"; `content-visibility` is defined entirely in terms of
+those three. `<tbody>` is an internal table box too, so chunking does not rescue it, and `<td>` can
+take containment but collapses the cell. Measured in Chromium at 5,000 rows, a `<tr>` list had
+**identical document height with and without it**.
+
+So the rows are `display: grid` and every element carries the ARIA a native table gave for free:
+`role="table"` / `rowgroup` / `row` / `columnheader` / `cell`, plus `aria-colcount` on each list and
+`aria-colindex` on every header and cell. The `.tbl--stack` fork at ≤760px already did half of this,
+so it was built on rather than replaced. What that buys, all measured:
+
+| | before | after |
+| --- | --- | --- |
+| `content-visibility` applied at 5,000 rows | inert — document height identical with the property on and off (`<tr>` control, re-measured: 140,018px both ways) | **applied** — 500,940px contained against 480,549px with `content-visibility: visible` forced on the same markup |
+| scrollbar drift after a full scroll (P-04's own <2% bar) | not measurable, nothing was contained | **0.08%** on the Libraries row mix and **−0.27%** on the Recently-added mix, both at 5,000 rows; the document settles on the real height once every row has been rendered once |
+| `contain-intrinsic-size` | `auto var(--row-h)`, and `--row-h` was inert on a table row | `calc(2 * var(--row-py) + var(--row-lines) * var(--lh-base))` — the padding term tracks density (27.08 / 31.08 / 35.08px on the Recently-added list across compact, standard and relaxed), and `--row-lines` is measured **per list**: all 21 lists in these five screens now sit within **±0.31%** of their real row height. It sizes the content box, so the row's 1px bottom border is the difference between the placeholder and the border-box height, and the measurement has to subtract it |
+| `min-height: var(--row-h)` | inert: forcing `--row-h: 100px` left the row at 28.0px | acts, because a grid container takes `min-height` |
+| column widths | `table-layout: auto`, re-measuring every cell in every row | declared once per list in `--cols` |
+| sticky column headers at 761–1099px | never pinned: `overflow-x: auto` made the wrapper a scroll container | pinned at **every** width from 761 to 1440 |
+| accessibility tree at 390px | `{table:1, row:7, cell:49}` — **no columnheaders at all** | `{table:1, rowgroup:2, row:9, columnheader:7, cell:56}` — read from Chromium's full AX tree over CDP, not from Playwright's filtered snapshot, which returns nothing for these nodes. The table, rowgroup, row and columnheader counts are the same at 1440px and at 390px; the cell count is 35 at rest and 56 after a full scroll, because `content-visibility: auto` skips the contents of an off-screen row until it is rendered, scrolled to, or focused. Rows and columns stay identifiable throughout — it is only the cell *text* that materialises on demand |
+
+The sticky box is the `thead`, not the header row: with `thead { display: block }` a sticky row's
+containing block is the thead, which is one row tall, so it could not travel. The wrapper is
+`overflow-x: clip`, which bounds a runaway cell without creating a scroll container — `auto` on one
+axis computes to `auto` on both, which is what was stealing the sticky context.
+
+**Two grids deliberately do not use the roving model**: the library proposals and the catalogue
+sources. A form laid out in a grid is a form, and its natural tab order is the right one. Imposing
+a roving model on it is what made the Kind `<select>` keyboard-inoperable.
+
+## The keyboard model, and what was wrong with it
+
+| | before | after |
+| --- | --- | --- |
+| `ArrowDown` in the Kind `<select>` | value unchanged, **focus jumped to another row** (WCAG 2.1.1, Level A) | the select changes value and keeps focus |
+| `Home` with a caret in a text input | **focus lost** to a `<tr>` | caret to column 0 |
+| tab stops inside the Libraries list | **8** — the row plus six Edit links plus a Delete button | **1**, the row; `←`/`→` reach the row's own actions and `Esc` returns to the row |
+| cost of one arrow key at 25,000 rows | 55.1ms — a full `querySelectorAll` plus an ancestor walk per row | **0.31ms** — one sibling step |
+| holding `ArrowDown` for a second at 25,000 rows | 2,255ms of main thread | **9.3ms** |
+| one checkbox toggle at 25,000 rows | 32.2ms, a full-document `:checked` query, O(n²) over a range | **0.017ms** — an integer counter |
+| selecting a 100-row range at 25,000 rows | ~3.2 seconds | **1.7ms** |
+| a row appended by "Load more" | either a ninth tab stop or no tabindex at all, so the arrow key looked dead | idempotent re-adoption via a `MutationObserver` |
+| `l` / `/` shortcuts | no off switch — SC 2.1.4, Level A | off switch in Settings → UI, persisted, honoured |
+
+The density and theme controls are still O(all loaded rows) — that is inherent to setting an
+attribute on `<html>` that every row reads a custom property from — but declared columns cut them
+substantially: the density switch is **45ms at 1,000 rows** (was 153ms, so it is now inside Tier 0's
+100ms hard fail at that size), 161ms at 5,000 (was 1,199ms) and 1,209ms at 25,000 (was 6,508ms).
+Scrolling costs 0.0–0.1ms at every size. **The ceiling on rows in the DOM is set by the density
+control, not by scrolling**, and that is the number ADR-0029's benchmark should be scoped to.
 
 ## The design system, briefly
 
@@ -329,16 +465,31 @@ toolbar actions, and status glyphs. The two media-type icons the two-type versio
 at six types an icon per type is six new glyphs earning nothing that the word does not, and the
 type is data rather than chrome.
 
-**Keyboard.** `:focus-visible` rings everywhere, never removed. Each table and poster grid is one
-tab stop with a roving `tabindex`; arrow keys, Home and End move within it. `/` focuses the top-bar
-search box, as the visible hint says, and `l` opens the library scope chip. Both have a visible,
-mouse-reachable equivalent, so neither is the only path to anything.
+**Keyboard.** `:focus-visible` rings everywhere, and **nothing in the stylesheet ever removes an
+outline**. §13 now carries a narrow exception for the `:focus { outline: none }` + `:focus-visible`
+replacement pattern; this mockup does not use it and does not need it, because every engine that
+ships `:focus-visible` already restricts its own default ring to `:focus-visible`, so suppressing
+the ring on plain `:focus` buys nothing except the risk of losing it. The banned string does not
+appear anywhere in `usarr.css`, `usarr.js` or the five pages — comments included, because the rule
+is enforced as a literal grep. The only occurrence anywhere in this directory is the quotation of
+the §13 rule two sentences above, in this prose file, which is not a surface the grep is aimed at.
+Measured on a focused control: `outline: 2px solid`, offset `1px`, in `#1c1a17` on light and
+`#efece5` on dark — 13.58:1 and 12.47:1 against the worst ground either can land on.
+
+Each data list and poster grid is one tab stop with a roving `tabindex`; up and down move rows, `←`/`→`
+reach the row's own actions, `Esc` returns to the row, and Home/End are only intercepted when the
+row itself has focus. `/` focuses the top-bar search box and `l` opens the scope chip; both have a
+visible, mouse-reachable equivalent **and** an off switch in Settings → UI, because a visible
+equivalent is not one of the three things SC 2.1.4 accepts.
 
 **Responsive.** One layout, degraded. Below 900px the sidebar **overlays** the content behind the
 toggle rather than taking a column from it, and it starts collapsed. Measured at 390×844: sidebar
 hidden, content column the full 390px, no horizontal document scroll on any of the five screens, in
-both themes. Below 760px the wide tables become stacked lists with their column names as inline
-labels, using the same markup and the same data. There is no separate mobile design.
+both themes. Below 760px the wide lists become stacked lists with their column names as inline
+labels, using the same markup and the same data — and the header row is *visually hidden* rather
+than `display: none`, so the `columnheader` nodes stay in the accessibility tree. Below 560px the
+top bar takes a second line so the permanent mockup notice is never clipped, and every sticky offset
+follows automatically because they all read `--toolbar-h`. There is no separate mobile design.
 
 ## Constraints inherited from ARCHITECTURE.md §17
 
@@ -352,10 +503,33 @@ this mockup differed, §17 won:
   the requests screen, the format filter on Libraries and the density control. The scope popover is
   native checkboxes. There is no bespoke dropdown.
 - **Real links** (§17.1). Navigation is `<a href>`, middle-clickable, not a click handler on a div.
+- **The UI says what Prowlarr search actually is** (§8.5). `SearchResource` carries `query`, `type`,
+  `indexerIds`, `categories`, `limit` and `offset` — there is **no `author` field and no `title`
+  field**, even against an indexer that advertises `book-search: [q, title, author]`. So the Search
+  type select does not buy structured search, and a line under the form says so where the type is
+  chosen rather than only in an empty state a user reaches after failing.
+- **The grab confirmation is the literal string §8.5 fixes.** `Sent to <download client>. UsArr does
+  not import downloads.`, naming the watched folder where one is known. Grabbing a row on the
+  requests screen produces it.
 - **No animation on any list, grid or navigation transition** (§17.1).
 - **Compact is the default density**, not the middle option (§17.1). The control offers compact,
   standard and relaxed, and starts on compact.
 - **No skeleton shimmer** (§17.1); the placeholder is a `dominant_color` block with the title in it.
+  `dominant_color` is the only colour in this design that is **data** — §4.4.1 averages it from the
+  cover art — so no token system constrains it, and a mid-luminance fill puts both near-black and
+  near-white around 3.5:1. The measured worst shipped pair was **3.57:1** for the 12px semibold
+  title and **3.12:1** for the year, against SC 1.4.3's 4.5:1 (12px semibold is not large text:
+  large is ≥18.66px bold or ≥24px). The rule now runs in `usarr.js` where the image pipeline would
+  run it: pick the foreground with the better ratio against the computed fill, and if it still
+  misses the floor, **move the fill** until it clears, because the fill is decoration and the title
+  is content. The `opacity: .85` on the year is gone — opacity composites, so the resulting ratio is
+  not computable from the two tokens; both the title and the year now render at `opacity: 1`.
+  Measured across all 30 shipped swatch elements (24 distinct fills) in both themes, six of which
+  sit in the 0.15–0.35 relative-luminance band where neither pole is comfortable: **worst is 4.57:1
+  for both the title and the year, and `#78736c` is the one case where neither foreground clears the
+  floor on the raw fill and the fill itself is moved** — to `rgb(116, 111, 104)`. The other five
+  mid-luminance fills land at 4.77, 5.23, 5.24, 5.53 and 5.70:1 unmoved. The result is identical in
+  both themes, which is the point: the rule reads the fill, not the theme.
 - **A degraded backend gets a small non-modal banner and the catalogue never greys out** (§17.7).
   The stale states on home and search keep every row live and interactive behind the banner.
 - **Every screen works in a phone browser through responsive layout, not a separate mobile
@@ -371,8 +545,16 @@ this mockup differed, §17 won:
 Every screen carries a small control marked `mockup` that switches it between the states the design
 has to cover. **That control is not part of the product.** It exists because the non-happy paths are
 the thing worth reviewing, and a mockup that only draws the happy path is not showing you the hard
-part. There are **28 distinct states across the five screens**: home 6, services 5, libraries 4,
-search 7, requests 9.
+part. There are **32 distinct states across the five screens**: home 6, services 6, libraries 4,
+search 7, requests 9. (An earlier version of this line said 28 while its own breakdown added to 31,
+which is the wrong error to have in a document whose value rests on precise counting.)
+
+The sixth Services state is an **annex**, labelled as one: Lidarr, LazyLibrarian and Kavita are a
+later milestone than v0.1, so they are not drawn as configured services on the v0.1 screens. The
+behaviours they demonstrate are worth keeping — Lidarr's `status: deleted` on an MBID 404,
+LazyLibrarian's probed capabilities and untagged `master` version, Kavita's paywalled identifier
+matching and its `LibraryType 3 (Image)` decline — so they live in the annex with their milestone on
+every row.
 
 On the requests screen the grab button is live. Grabbing any row writes a `pending` chip. Grabbing
 the 26-day-old HDBits release is wired to fail, so the failure path — a status change on the same
@@ -409,6 +591,9 @@ anything.
 | OPDS, multi-user, roles, per-user library access, the full tag system, saved filters | v1.0 |
 | Pinned libraries in the sidebar (opt-in, default none, capped) and the `More…` overflow | seam kept, feature not drawn |
 | `g`-prefixed go-to-screen keybindings | proposed in research, not implemented here |
+| A `permission-denied` state on a search, library or item surface | specified from day one (`DESIGN-DIRECTION.md` §10) and **not drawn**: v0.1 has one account, and the §14 rule-6 behaviour is that a library the user cannot see renders as *absent*, which is indistinguishable from an empty scope in a static mockup. The Services `denied` state is a sudo re-auth state, which is a different thing and is not a substitute. |
+| An `importing` and a `needs re-identification` per-library state (§17.8) | v0.1, not drawn here — the four §17.8 states that are drawn are *all sources down*, *sources healthy zero items*, *one source degraded* and *orphaned* |
+| Lidarr, LazyLibrarian and Kavita as configured services | v1.0, v1.0 and v0.2 — drawn in the Services **annex** state, labelled with their milestone, and nowhere in the v0.1 screens |
 
 Also absent, and permanently: any in-app player, any transcoding path, any FFmpeg dependency.
 
