@@ -274,3 +274,33 @@ endpoints:
 `age`, `downloadUrl`, `infoUrl`, `infoHash`, `magnetUrl` and **`downloadClientId`** — which is what
 lets a grab name one of Prowlarr's own configured download clients, so UsArr needs no
 download-client integration to complete the flow.
+
+> 🚩 **A grab can partially succeed, and the single-release endpoint cannot tell you so.** Prowlarr
+> adds the release to the download client *first* and applies configuration *second*, with no
+> rollback: `Deluge.AddFromMagnetLink` calls `_proxy.AddTorrentFromMagnet`, then
+> `SetTorrentSeedingConfiguration`, then `SetTorrentLabel`. A throw in that tail — Deluge's Label
+> plugin rejects a label that does not exist — leaves the torrent **running in the client** and
+> raises `DownloadClientException`. `DownloadService.SendReportToClient` catches only
+> `ReleaseUnavailableException`, `DownloadClientRejectedReleaseException` and
+> `ReleaseDownloadException`, so that one propagates uncaught and `SearchController.GrabRelease`
+> returns a bare **500**. **A 200 is the only success signal Prowlarr offers; a 500 does not mean
+> nothing was added.**
+>
+> **The same failure behaves differently on the bulk endpoint.** `GrabReleases` wraps each release
+> in its own `try`/`catch`, catches `DownloadClientException` as well, logs it and `continue`s —
+> Prowlarr's own bulk path treats "added, then configuration failed" as non-fatal. The single-release
+> endpoint UsArr uses turns the identical condition into a 500.
+>
+> **Do not try to discriminate by parsing the error body.** The only signal is a frame in the .NET
+> stack trace in `description`: that is another project's private internals, it is client-specific
+> (qBittorrent, Transmission and rTorrent each fail differently), and it is partly gettext-translated
+> so it breaks against a non-English daemon. The API does not carry the information.
+>
+> **Ordering that UsArr does rely on, verified in `SearchController.GrabRelease`:** the
+> `_remoteReleaseCache.Find` lookup and its 404 come *before* `SendReportToClient`, and the
+> `DownloadClientUnavailableException` for an unconfigured client is that method's *first* statement.
+> So a 404 and a "download client isn't configured yet" 500 both provably mean **nothing was
+> dispatched** — which is what makes the transparent re-search on a cache miss safe from
+> double-sending (`internal/releases/grab.go`, `grabWithReSearch`). 409 is
+> `ReleaseDownloadException`, raised fetching the release from the *indexer*, so it too means nothing
+> reached the client.
