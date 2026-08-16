@@ -652,10 +652,10 @@ This is not a style preference. The gate spent the project's whole life so far r
 `golangci-lint` off `$PATH`, where it found a system-wide **v2.5.0** while the `Makefile` pinned
 **v2.12.2** — and reported `check: OK` the entire time, because the older gosec had no G123 or G124
 to fire. See `docs/reference/security.md` §7 and the block above `require_tool` in the `Makefile`.
-`gitleaks` is the one tool with no version assertion: installed by `go install` it reports
+`gitleaks` is the one tool asserted a different way: installed by `go install` it reports
 "version is set by build process", because upstream stamps the real version with `-ldflags` at
-release time. It gets the existence guard alone, which is exactly why the absolute path rather than
-the assertion is the primary mechanism.
+release time. Its identity comes from the Go build info the toolchain records in the binary
+(`go version -m`) instead — see §11, "Ask the binary the question it can actually answer".
 
 `.golangci.yml` — v2 format, `linters.default` replaces v1's `enable-all`/`disable-all`. This is a
 summary; the file itself is the source of truth:
@@ -846,6 +846,41 @@ rumour. Two of them here:
 So: name the binary, the version, the commit, the flags and the count. **A gate result without a
 commit sha attached is not a result** — several threads push to `main` within the same hour here, so
 a green measured five minutes ago may already describe a tree that no longer exists.
+
+**Ask the binary the question it can actually answer.** `require_tool` asserts three of the four
+pinned tools on their `--version` output. gitleaks cannot answer that way — a `go install`ed gitleaks
+prints, verbatim:
+
+```
+$ gitleaks --version
+gitleaks version version is set by build process
+```
+
+That is gitleaks' own default (`version/version.go` sets `var Version = "version is set by build
+process"`); upstream overwrites it with `-ldflags -X` when it cuts a release, and `go install` passes
+no ldflags. So for most of this project's life the *secrets scanner* — the gate binary you would
+least want to be an unknown build — was the only one running with its identity unasserted, on a gate
+whose stated standard is that a green naming neither its tool nor its tree is a rumour.
+
+It is asserted now, on the Go build info the **toolchain** stamps into every `go install`ed binary:
+`go version -m <bin>` reports the module path, the module version and the go.sum hash of what was
+actually fetched and built. `make secrets` now prints
+
+```
+tool: /root/go/bin/gitleaks — build-info module github.com/zricethezav/gitleaks/v8@v8.30.1, asserted against the pin (--version is unstamped)
+```
+
+and fails when the module path or version does not match `GITLEAKS_MODULE@GITLEAKS_VERSION`. Two
+alternatives were tried and rejected, both recorded above the macro in the `Makefile`: re-stamping
+the version ourselves at install time reduces the assertion to the Makefile asking the binary to echo
+a string the Makefile just handed it, *and* rejects a correct gitleaks installed by any other route;
+and a content-hash pin is not reproducible across toolchain patch releases or platforms, so it would
+be re-recorded reflexively and mean nothing. Build info is the one claim about the binary that the
+binary's author did not get to write.
+
+`require_tool` now takes an identity pin in one form or the other and **fails when given neither** —
+existence alone is no longer an accepted answer for a pinned tool. `go version -m` reads the file on
+disk and makes no network call, so `check-offline` keeps its contract.
 
 **3. Exercise the failure path.** A guard's failure branch is code, and untested code does not work.
 It is also the branch that by definition only runs when something is already wrong, which is exactly
