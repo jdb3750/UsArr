@@ -70,12 +70,20 @@ sidebar = rewrite_links(block(index, 'SIDEBAR')).replace(' aria-current="page"',
 body = '\n'.join(rewrite_links(block((SRC / f).read_text(), 'PAGE:' + r).strip())
                  for r, f in PAGES)
 
+# The <title> is user-visible copy -- it is the browser tab, the bookmark and
+# the history entry -- so §13's rules bind it like any other string, and
+# check.mjs now reads document.title for exactly that reason. It used to say
+# "UsArr v0.1 screen mockup — static, invented data, nothing implemented",
+# which broke both: an em dash in a nine-word string, and a v0.1 claim over a
+# page whose default view is the full stack, which §16 sequences AFTER v0.1.
+# The milestone belongs to the install switcher, which can state it truthfully
+# for whichever install is selected; a fixed title cannot.
 out = f'''<!doctype html>
 <html lang="en" data-density="compact">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>UsArr v0.1 screen mockup — static, invented data, nothing implemented</title>
+<title>UsArr screen mockups: static, invented data, nothing implemented</title>
 <style>
 {css}
 </style>

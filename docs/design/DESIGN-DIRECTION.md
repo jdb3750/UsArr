@@ -1312,7 +1312,7 @@ Carried across so none of it has to be rediscovered:
 | 10 | Let a linked work appear once per medium | §8.5 rule 4 |
 | 11 | Build per-type screens | Jellyfin serves eight content types from one card builder branching on **aspect ratio, not media type**; §9.1 already forbids varying row treatment by type |
 | 12 | Hide a media type behind "More" | Types are a closed enum capped at six and all fit the row budget. Overflow is for pinned libraries only |
-| 13 | Show a type, section, group or control with no content | §17.2; Komga's `v-if="collectionsCount > 0"`; Navidrome's `LibrarySelector` returning `null` at ≤1 library; Sonarr's status badge returning `null` at zero. ⚠️ **The bound is *no content*, not *no items*.** Home Block A's four sourceless rows in v0.1 (§17.2) are **not** an exception to this rule: a row reading *"Comics — no catalogue source connected · Kavita, after v0.1 · Connect"* carries a state, a cause and an action, which is content. What the rule bans is a region that says nothing. Dropping those four rows instead would leave a Home screen from which the only inference is that UsArr does not do books, music or comics |
+| 13 | Show a type, section, group or control with no content | §17.2; Komga's `v-if="collectionsCount > 0"`; Navidrome's `LibrarySelector` returning `null` at ≤1 library; Sonarr's status badge returning `null` at zero. ⚠️ **The bound is *no content*, not *no items*.** Home Block A's four sourceless rows in v0.1 (§17.2) are **not** an exception to this rule: a row reading *"Comics — no catalogue source · Kavita · after v0.1 · Add"* (the mockup's verbatim string) carries a state, a cause and an action, which is content. What the rule bans is a region that says nothing. Dropping those four rows instead would leave a Home screen from which the only inference is that UsArr does not do books, music or comics |
 
 ---
 
@@ -1676,6 +1676,24 @@ because the single-file published build is detached from it and is the artefact 
 reach an outside reader. §13 carries the same exception in its greppable form; the two must not
 drift apart again, and the earlier absolute wording forbade the artefact that makes the rest of this
 document reviewable.
+
+⚠️ **The label has to name the milestone as well as the fabrication, and this is where the exception
+nearly swallowed the rule.** The mockups draw two installs behind a switcher: a **full stack** with
+every catalogue source connected, six media types populated, which is the default because six
+populated types is what the layout must survive; and the **v0.1 install** — Sonarr, Radarr and
+Prowlarr — beside it. A reader who meets the default and is told only *"this data is invented"* has
+been told the numbers are made up and left to assume the **stack** is real for the milestone being
+discussed, which is `CLAUDE.md`'s "no invented status" failure reached by omission rather than by
+assertion. So: **the switcher's own option labels place each stack against a milestone**, not merely
+name it (`Full stack: a later milestone`, `v0.1: Sonarr, Radarr, Prowlarr` — colon-separated because
+both are short strings and §13 bans U+2014 in a string under fifteen words, a rule that had never
+reached `<option>` text until `check.mjs` §1b's corpus was widened to the strings that never lay out
+as a block); **the permanent notice
+states which install is drawn and changes with the selection**; and the switcher lives **inside the
+notice**, because it is not a product control and drawing it in the product chrome would fabricate a
+setting. "A later milestone" rather than a number is deliberate — ARCHITECTURE §16 sequences the
+catalogue sources one at a time after v0.1 and has not fixed which release each lands in, so a
+number here would invent exactly the status the rule forbids. `check.mjs` §8b enforces all four.
 
 ### 9.7 The minimum component set, and where per-type divergence is allowed
 
