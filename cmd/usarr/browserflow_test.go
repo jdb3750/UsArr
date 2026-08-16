@@ -309,7 +309,8 @@ func TestBrowserFlowSetupLoginSearchAndGrab(t *testing.T) {
 	//
 	// This is the request that used to 401 in the browser. EventSource cannot
 	// set a header and cannot report a status, so a 401 here is invisible from
-	// the client: the stream retries forever and the search screen stays empty.
+	// the client: the stream retries forever and the Requests screen — where
+	// the release search lives (§17.5) — stays empty.
 	stream := b.openStream(t)
 	defer stream.close()
 
@@ -447,8 +448,8 @@ func TestBrowserFirstRunConfiguresAServiceAndSearches(t *testing.T) {
 
 	// ── 3. the dead end this test exists for ────────────────────────────────
 	//
-	// The 409 must NAME the fix, because the search screen turns `error` into
-	// the link to /services. A 409 whose code the client cannot match on is a
+	// The 409 must NAME the fix, because the Requests screen (§17.5) turns
+	// `error` into the link to /services. A 409 whose code the client cannot match on is a
 	// banner with nothing to click, which is where a new install used to stop.
 	deadEnd := b.get("/api/v1/search?query=Test+Release")
 	if deadEnd.status != http.StatusConflict {

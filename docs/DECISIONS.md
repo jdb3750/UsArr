@@ -2500,6 +2500,15 @@ away, and the ~200 figure had no measurement behind it.
   **border box** 45 / 49 / 53 px, **content box** 44 / 48 / 52 px, on both trees. See the amendment
   for all four numbers of all six configurations.
 
+  ⚠️ **The rich-row pair is a MODE, not a single height, and the distinction is load-bearing.** The
+  rich row is bimodal — rows with more chips wrap — splitting at compact into content box 44 px ×
+  1,308 rows and 48 px × 692 over the frontend thread's 2,000-row measurement, so the **mean** content
+  box is 45.4 / 49.4 / 53.4. `45 / 49 / 53` is therefore the modal *border* box **and** the mean
+  *content* box, and `RELEASE_ROW_INTRINSIC`'s `45 / 49 / 53` is the latter — correct as it stands.
+  Applying the one-line correction pattern to it (border box, subtract one, 44 / 48 / 52) swaps a
+  correct mean for a mode and is a regression. Name the statistic wherever the population is not
+  uniform.
+
   Drift over a full scroll at the one-line values is **0.76 / 0.70 / 0.65%** against the 2% budget.
   These are rendered **border-box** heights; the declaration sizes the **content** box, so what ships
   is the derived expression the mockups already use —

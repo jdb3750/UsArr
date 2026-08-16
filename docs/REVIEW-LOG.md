@@ -3720,6 +3720,14 @@ fallback's 221.806 px), `content-visibility: visible` forced so no off-screen ro
 Rich rows are unmoved by the fix and measured rather than assumed to be: **border box 45 / 49 / 53,
 content box 44 / 48 / 52**, floor slack, byte-identical on both trees.
 
+⚠️ **AMENDED: those rich-row figures are the MODE, and this entry originally gave them as though the
+rich row had one height.** It does not — it is **bimodal**, because rows carrying more chips wrap.
+Measured by the frontend thread at compact over 2,000 rows, the content boxes split **44 px × 1,308
+and 48 px × 692**, so the mode is content box 44 / 48 / 52 and the **mean** is 45.4 / 49.4 / 53.4.
+🚩 **`45 / 49 / 53` is therefore the mean content box AND the modal border box at the same time**,
+which is precisely why it has never looked ambiguous — it is the same failure mode this entry is
+about, one level up: a figure that keeps its digits while the quantity underneath it changes.
+
 ✅ **THE `labels`-FORK DISAGREEMENT IS RESOLVED, AND NO PARTY TO IT WAS WRONG.** Three figures were
 standing — §7.4's **26 / 30 / 34**, the frontend thread's **28 / 32 / 36**, and a separate
 measurement's **27 / 31 / 35** — and they were not competing readings of one quantity. They are three
@@ -3771,6 +3779,19 @@ history, since the fix is only legible against them. Every figure in both names 
 box alone cannot disambiguate name the floor condition too. ADR-0029's later bullet — *"A
 `stack: 'labels'` list has one-line rows at 26 / 30 / 34 px"* — keeps its digits and gains its box.
 
+🚩 **THE LESSON HAS A THIRD CLAUSE, AND THE RICH ROW IS WHERE IT WAS EARNED.** Name the box; name the
+floor condition where a box alone cannot disambiguate; **and say whether the figure is a MODE or a
+MEAN, whenever the rows are not uniform.** A single number describing a bimodal population is the
+same defect as an unlabelled box, and it is worse in one way: an unlabelled box reads as a fact about
+every row and is a fact about one of two boxes, while an unlabelled mean reads as a fact about every
+row and is a fact about **none of them** — no rich row is 45.4 px tall. The rich row's
+`45 / 49 / 53` slipped past every review this project has run because the two statistics collide on
+one set of digits, and the failure it sets up is a *correction*: apply the `ROW_INTRINSIC` pattern —
+border box, therefore subtract one, therefore 44 / 48 / 52 — to `RELEASE_ROW_INTRINSIC` and you have
+replaced a correct mean with a mode, reintroducing this entry's own bug in the opposite direction.
+Applied to `docs/design/DESIGN-DIRECTION.md` §7.4 (both citation sites), `docs/DECISIONS.md`
+ADR-0029 and `docs/ARCHITECTURE.md` §4.5; `web/src/lib/list.ts` already carries it at the call site.
+
 **Not fixed, reported, because `web/` belongs to another thread.** `ROW_INTRINSIC` in
 `web/src/lib/list.ts` holds `28 / 32 / 36` and `List.svelte` writes it to `--row-ci`, which is
 `contain-intrinsic-size` and takes a **content-box** height. The measured post-fix content box is
@@ -3781,11 +3802,38 @@ the equality it was derived from — *"a one-line row's content box comes out at
 no gate fires, **which is exactly why it would sit there**. `list.test.ts` pins the constant with
 `expect(ROW_INTRINSIC).toEqual({ compact: 28, standard: 32, relaxed: 36 })`, so a correction moves the
 test with it. `RECENT_GRAB_ROW_INTRINSIC` in `web/src/lib/requests.ts` is `44 / 48 / 52` and needs no
-change — that matches the measured rich-row content box.
+change — that matches the measured rich-row **modal** content box, and a recent-grab row is the
+two-line shape rather than the release row's chip-carrying one. ⚠️ **Do not read that sentence as a
+licence to move `RELEASE_ROW_INTRINSIC` to the same digits.** It holds `45 / 49 / 53`, which is the
+release row's **mean** content box over a bimodal population, and the mean is the right statistic for
+a whole-list placeholder. See the third clause of the lesson above.
 
 **Gate**: `node docs/design/check.mjs` passes on the merged tree at `eb78308` (all checks, both
 installs). Measurements were taken in throwaway worktrees off `origin/main` and `3ae0d44^`, not in
 the shared checkout.
+
+---
+
+# The poster grids — a migration that claimed completeness, and the gate that could not have known
+
+**Date:** 2026-08-16. **Branch:** `claude/hearth-thread-vn9w7u`, merged to `main` as `cfc45c3`.
+**Prefix `PG-` has not been used before.** Three findings and one operational note; `PG-02` is the
+one that explains the other two.
+
+| # | Finding | Resolution |
+|---|---|---|
+| **PG-01** | **`b417a53` said it had migrated the last poster title out of the art box, and it had not.** Its message claimed §9.7's *"the title and year sit BELOW the tile"* was satisfied and that the mockup *"was the last thing still doing it the old way"*. `docs/design/mockups/search.html` still nested both spans **inside** `.card__art` on all ten of its poster cards — `<span class="card__art" title="Dune"><span class="card__t" …>Dune</span><span class="card__y">1965</span></span>` — which is text over the `dominant_color` fill, the exact construction §9.2 and §9.7 ban and the exact one the deleted runtime contrast solver existed to survive. `b417a53` touched `index.html` and never opened `search.html` | **Fixed in `c469bca`.** Both spans now sit after the art, byte-for-byte Home's shape. ✅ **Measured over both Search poster panels rather than asserted**, at 1440×900 with `document.fonts.ready` awaited and scroll normalised, in both installs — 6 ebook cards on the full stack, 4 movie cards on v0.1, **all ten moved**: title top against the art's bottom edge **−168.19px → 0.00px**, title inside `.card__art` **true → false**, title width **110.80 → 112.80px** (the art's padded box → the full card), card height **191.19 → 229.19px**, panel height **286.22 → 324.22** and **270.19 → 308.19px**. ⚠️ **The height is the figure that needed care, and it is a trap this screen sets.** Search's cards read 191.19px uniformly both before and after `a5c9399`'s clamp because `aspect-ratio` pins them — so on this screen *an unchanged height is what a clamp looks like and also what doing nothing looks like*. The load-bearing measurement is the title's position against the art box, not its height. The +38px the cards gain is title 22 + year 16 leaving the art box, the same +38 `b417a53` measured on Home. 🚩 **The lesson is one this repo has now paid for twice: a rename or a migration that compiles, renders and passes its gate is not evidence that it was complete. Count the sites before and after.** A `<span class="card__art">` with any child now returns **0 across 42 cards**, where it returned **10** |
+| **PG-02** | 🚩 **THE REAL FINDING. `docs/design/check.mjs` had never clicked a panel switcher, so neither poster grid had ever been rendered while the gate ran.** Three screens hide content behind a `[data-group][data-panel]` control — `homeview` = table\|**posters**, `viewmode` = table\|**posters**, `settings` = services\|**general**\|**tags**\|**ui** — and whatever loaded hidden stayed hidden for the whole run. **Five blocks, outside every rendered sweep for this file's entire existence**: the overflow sweep, the row-height sweep, the availability sweep, the roving-tabindex sweep and the §13 copy-and-attribute corpus. The poster grids are the only card surface in the product and the only surface that ever set text on a computed fill; Search's are `data-inst`-scoped on top of being panel-scoped. This is why PG-01 passed the gate | **Fixed in `1b6f598`, and the evidence was re-run rather than taken on report.** `a5c9399` added **84** `title=` attributes to poster cards (123 → 207 across the five screen files, counted directly). The §13 corpus counts `title` strings. Running **each tree's own unmodified `check.mjs` against its own mockups** gives **74 on `9281a1a` (`a5c9399^`) and 74 on `a5c9399`** — a corpus that cannot see 84 new instances of exactly the attribute it counts is not measuring the page. ⚠️ **And the old comment on that floor explained the small number away as the `<td>` data exclusion working as designed.** It was not. It was two whole panels nothing had ever opened, and a plausible explanation attached to a wrong number is how it survived. `panelsOf` / `setPanels` / `resetPanels` land, and **all five rendered sweeps go through them** — a gate that covered the panels for some sweeps and not others would be worse than the honest gap, because nobody afterwards could tell which was which. New **check 8c** asserts the traversal's one assumption instead of commenting it (on a freshly loaded page the first control in DOM order must be the one marked current), and prints the inventory. **Check 7 also stopped being tables-only**: its corpus was `table[role="table"]`, so the four `.grid[data-roving=".card"]` poster grids were outside the one-tab-stop check twice over — not a table, and inside a panel nothing opened |
+| **PG-02a** | **The floors were all set against a page with two panels missing, so re-deriving them is part of the fix rather than a consequence of it** | **Every floor restated from what the traversal finds.** overflow combinations/width **74 → 110** (floor 70 → 104) · rows home **205 → 274** (180 → 240) · rows services **65 → 221** (55 → 190) · libraries, search, requests unmoved · `.avail` elements **195 → 375** (165 → 320) · roving list renderings **90 → 140** (78 → 120), of which **non-table 0 → 12** on a new separate floor of 10 · §13 copy strings **4203 → 6685** (2000 → 5800) · corpus `aria-label` **286 → 468**, **`title` 74 → 406**, `placeholder` **156 → 288**, `option` **1298 → 1602**. ⚠️ **Two of those are qualified rather than quoted.** The row counts are *row renderings*, and most of Home's and Services' rise is the same table measured once per panel pass rather than new markup — the poster panels hold no `<tr>` at all. That misreports nothing, since the check asserts a min, a median and a max against a band and a duplicate moves none of them; the floors move anyway, because a floor of 180 over a population of 274 is a floor that cannot fail. And **8c's three floors are set AT today's figures rather than below them**, which is the one place in this file where that is right: they are an inventory, not a population, and every sweep is scoped by what the inventory finds |
+| **PG-02b** | 🚩 **The guard was fired deliberately, four times, one per newly-covered sweep — and the first firing found a real gap, which is the entire reason for firing it** | **Overflow**: a 4000px span inside Search's poster grid → exit 1, *"390px full/search/live viewmode=posters: document scrolls sideways (4016)"*, at all five widths. **Copy**: a banned word in a poster card's `title=` and in the panel's note → exit 1, *'full/search/live viewmode=posters [title]: banned word "seamlessly" in "Dune, seamlessly!"'*. **Availability**: the `.sr` word emptied on one poster card → exit 1, *"2 of 375 .avail elements have an empty accessible name"*. **Roving**: `refreshRoving()` removed from `usarr.js`'s panel-switch handler — which is precisely the bug panel traversal exists to catch, a grid whose cards were assigned tabindex while the panel was hidden having no visible item to give the tab stop to → exit 1, *'roving: full/home/live homeview=posters "Recently added across all media types" (div.grid, 24 items) has 0 items at tabindex 0'*. **Every message names the panel**, which is what proves the traversal found them and not something else. All four reverted; tree green at exit 0. ℹ️ The contrast sweep is deliberately absent from this list: check 3 is token arithmetic over `tokens.css`, not a rendered walk, so panels never affected it and adding traversal there would be theatre |
+| **PG-03** | ⚠️ **Found by the copy guard failing to fire, and reported rather than quietly retried.** The first attempt put a banned word in the poster panel's `<h2>Ebooks …</h2>` and `check.mjs` stayed green. `.section__head` is `display: flex`, so its `.section__count` child blockifies to `block`, and check 1b's rule — *the innermost element that lays out as a block with no blockish children* — therefore **skips every group heading in the mockups** and reads only the count span. **Every `.section__head h2` on every screen is outside the §13 copy sweep**, and has been since 1b was written | **NOT FIXED — reported for a follow-up pass.** It has nothing to do with panels: the same heading in the *table* panel is equally invisible, so this is a second, independent hole in the same check that the panel work merely walked into. It is left alone deliberately — `1b6f598` is already large, and folding an unrelated corpus fix into it would make both harder to review and would hide the fact that the guard's first firing was a null. 🚩 **The durable half is that a guard which fails to fire is data.** The obvious move was to pick a different string and move on; the finding was in the string that did not work |
+| **PG-04** | ⚠️ **`golangci-lint cache clean` can silently clean the wrong cache.** Two binaries are on this box: `/usr/local/bin/golangci-lint` at **2.5.0** (dated 2025-09-21) and the gate's own `/root/go/bin/golangci-lint` at **2.12.2**, which is what `Makefile`'s `GOLANGCI_LINT := $(GOBIN_DIR)/golangci-lint` resolves to. A bare `golangci-lint` goes through `$PATH` to the **2.5.0** one and does nothing to the cache the gate reads — the frontend thread's first clean was a no-op, and only an absolute-path clean with the gate's binary produced a trustworthy run | **Confirmed here rather than relayed**: `which golangci-lint` → `/usr/local/bin/golangci-lint`, `--version` → 2.5.0; `/root/go/bin/golangci-lint --version` → 2.12.2. Cleaned and run by absolute path with the gate's binary; `make check: OK`. 🚩 **Recorded alongside PG-02 because it is the same defect one layer down, and today produced three of them: a mitigation that reports success while doing nothing.** A sweep that never opened a panel, a corpus that could not see 84 new attributes, and a cache clean that cleaned a cache nobody reads — each returned a green that named neither its tool nor its tree. `CLAUDE.md`'s *"report what you measured, not just the verdict — the binary, its version and the commit"* is the rule all three violate, and **naming the binary is not pedantry when two are installed** |
+
+**Gate**: `node docs/design/check.mjs` passes on the merged tree at `cfc45c3` (exit 0, all checks,
+both installs, every panel), and `make check: OK` — Go linting via `/root/go/bin/golangci-lint`
+**2.12.2** after an absolute-path `cache clean`, per PG-04. The design check was also run on
+`9281a1a` and `a5c9399` in throwaway trees extracted with `git archive`, not in the shared checkout,
+to produce PG-02's 74/74.
 
 ---
 

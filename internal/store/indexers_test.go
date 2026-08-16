@@ -196,8 +196,9 @@ func TestIndexerReadFailsClosedOutsideScope(t *testing.T) {
 	}
 }
 
-// The catalogue read is on a render path — it populates the search screen's
-// filters before anything is searched — so it must not scan and must not sort.
+// The catalogue read is on a render path — it is what the Requests screen's
+// indexer and category picker will read (§17.5, not Search), and that picker
+// paints before anything is searched — so it must not scan and must not sort.
 //
 // It EXPLAINs the statement indexerListSQL actually issues rather than a copy
 // pasted into the test, which is how a query-plan assertion silently stops

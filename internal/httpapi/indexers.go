@@ -12,8 +12,23 @@ import (
 )
 
 // GET /api/v1/indexers lists the indexers each configured indexer service has,
-// so the Search screen's indexer and category filters are populated on FIRST
+// so the REQUESTS screen's indexer and category filters are populated on FIRST
 // RENDER.
+//
+// REQUESTS, NOT SEARCH. This comment used to name Search, and that stopped
+// being true when the release-results table, the indexer picker and Grab moved
+// onto /requests — the free-text indexer path is §17.5's. /search is now the
+// deliberate not-built gap screen for §17.4's search over your own library,
+// which has no indexer picker to populate. A reader deciding where the picker
+// belongs should land on Requests.
+//
+// ⚠️ AND NO CLIENT CALLS IT YET, as of this commit. The picker composed by
+// web/src/routes/requests/+page.svelte builds its catalogue in
+// $lib/indexerscope.svelte from the indexers that search SSE frames have
+// already named — a union that only grows, and is therefore empty before the
+// first search. This endpoint exists to replace that fallback with the
+// configured list; until the client is wired to it, the contract below is
+// served and unconsumed. It is not a claim that the picker reads it today.
 //
 // IT MAKES NO UPSTREAM CALL, AND THAT IS THE ONLY REASON IT CAN EXIST. The
 // picker renders before the search does, so this is a render path, and a render
@@ -22,8 +37,9 @@ import (
 // would put a remote call under a browser's paint, which is precisely what the
 // architecture is built to prevent. So the list is REPLICATED into
 // indexer_catalog by the background prober (migration 0004,
-// cmd/usarr/services.go) and this handler reads the replica, which is principle
-// 1 applied literally: every user-facing read renders from local SQLite.
+// registry.RunProber → replicateIndexers in cmd/usarr/services.go) and this
+// handler reads the replica, which is principle 1 applied literally: every
+// user-facing read renders from local SQLite.
 //
 // fetched_at travels with every row and every instance so the UI can show
 // staleness rather than pay for freshness in latency.

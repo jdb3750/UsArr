@@ -16,6 +16,7 @@
  *   DELETE /api/v1/services/{id}       remove one                    — CSRF + session + sudo
  *   POST /api/v1/services/{id}/test    re-test a saved one           — CSRF + session + sudo
  *   GET  /api/v1/search?query=...      starts a search               — session
+ *   GET  /api/v1/indexers              the scope picker's catalogue  — session
  *   GET  /api/events                   the one SSE stream            — session
  *   POST /api/v1/releases/{id}/grab    grab a release candidate      — CSRF + session
  *   GET  /api/v1/grabs/recent          the Recent-grabs block        — session
@@ -67,6 +68,24 @@
  * side and internal/httpapi/events_test.go pins it from the other, so renaming
  * an event on either side fails a test instead of silently emptying the screen.
  */
+
+// The catalogue's shapes live in `$lib/indexercatalog`, beside the logic that
+// folds them into a picker: that module is plain TypeScript and is asserted by
+// `indexercatalog.test.ts`, which a `.svelte.ts` module could not be. This file
+// owns only the wire parsing, which is the half that has to match Go's json
+// tags.
+import type {
+	CatalogCategory,
+	CatalogIndexer,
+	CatalogInstance,
+	IndexerCatalog
+} from './indexercatalog';
+export type {
+	CatalogCategory,
+	CatalogIndexer,
+	CatalogInstance,
+	IndexerCatalog
+} from './indexercatalog';
 
 /** Every SSE event name this client understands, exactly as the server emits it. */
 export const STREAM_EVENT_NAMES = [
@@ -1488,6 +1507,114 @@ export async function fetchRecentGrabs(limit = 10): Promise<RecentGrabs> {
 	return {
 		grabs: raw.map(toRecentGrab).filter((g): g is RecentGrab => g !== undefined),
 		limit: num(payload.limit) ?? limit
+	};
+}
+
+/* ── the indexer catalogue ────────────────────────────────────────────────── */
+
+export const INDEXERS_URL = '/api/v1/indexers';
+
+/**
+ * One category off the wire, recursively.
+ *
+ * ⚠️ THE RAW NEWZNAB TREE, NEVER COLLAPSED. `sub_categories` is the whole reason
+ * category scoping is possible at all: 3030 sits under Audio (3000) and is the
+ * only machine-readable signal separating an audiobook from music, and 7030
+ * likewise for comics (ARCHITECTURE.md §8.5). Anything that folded a child into
+ * its parent here would throw that away before the picker ever saw it.
+ *
+ * Depth is bounded by recursion on a well-formed tree; a malformed one simply
+ * yields fewer levels rather than throwing, because a bad category must not be
+ * able to take a whole picker down.
+ */
+function toCatalogCategory(value: unknown): CatalogCategory | undefined {
+	if (!isRecord(value)) return undefined;
+	const id = num(value.id);
+	if (id === undefined) return undefined;
+	const raw = Array.isArray(value.sub_categories) ? value.sub_categories : [];
+	return {
+		id,
+		name: str(value.name) ?? '',
+		children: raw.map(toCatalogCategory).filter((c): c is CatalogCategory => c !== undefined)
+	};
+}
+
+/** One indexer off the wire. `indexer_id` is the value `?indexer=` sends back to
+ * the search endpoint, so a row without one cannot be picked and is dropped. */
+export function toCatalogIndexer(value: unknown): CatalogIndexer | undefined {
+	if (!isRecord(value)) return undefined;
+	const indexerId = num(value.indexer_id);
+	if (indexerId === undefined) return undefined;
+	const cats = Array.isArray(value.categories) ? value.categories : [];
+	return {
+		instanceId: num(value.instance_id) ?? 0,
+		instanceName: str(value.instance_name) ?? '',
+		indexerId,
+		name: str(value.name) ?? `indexer ${indexerId}`,
+		protocol: str(value.protocol) ?? '',
+		privacy: str(value.privacy) ?? '',
+		// ⚠️ NOT `?? true`. The upstream endpoint returns enabled AND disabled
+		// indexers with no filter parameter, so `false` is an ordinary value here
+		// and defaulting a missing one to true would offer a choice the search
+		// planner then silently refuses.
+		enabled: bool(value.enabled),
+		priority: num(value.priority) ?? 0,
+		supportsSearch: bool(value.supports_search),
+		searchTypes: strArray(value.search_types) ?? [],
+		categories: cats.map(toCatalogCategory).filter((c): c is CatalogCategory => c !== undefined),
+		fetchedAt: str(value.fetched_at) ?? ''
+	};
+}
+
+function toCatalogInstance(value: unknown): CatalogInstance | undefined {
+	if (!isRecord(value)) return undefined;
+	const instanceId = num(value.instance_id);
+	if (instanceId === undefined) return undefined;
+	return {
+		instanceId,
+		name: str(value.name) ?? '',
+		kind: str(value.kind) ?? '',
+		enabled: bool(value.enabled),
+		status: str(value.status) ?? '',
+		message: str(value.message) ?? '',
+		action: str(value.action) ?? '',
+		// Null per instance, and the null is load-bearing: it is what separates
+		// "UsArr has never managed to read this list" from "it answered none".
+		fetchedAt: str(value.fetched_at),
+		indexerCount: num(value.indexer_count) ?? 0
+	};
+}
+
+/**
+ * The configured indexers, for the Requests screen's scope picker.
+ *
+ * ⚠️ A TIER 0 LOCAL READ. `internal/httpapi/indexers.go` reads the
+ * `indexer_catalog` replica the background prober writes and makes NO upstream
+ * call — that is the only reason it may sit under a render path at all
+ * (ARCHITECTURE.md §2.3 rule 1). Callers must not draw a spinner or a skeleton
+ * over it, and must not block a paint on it.
+ *
+ * ⚠️ ALL FOUR STATES ARRIVE ON A 200. `not_configured`, `never_fetched`, `empty`
+ * and `service_disabled` are states of an install, not failures, so the branch
+ * is on `status` and never on the HTTP code — and `indexers` is `[]` rather than
+ * null in every one of them. Only a malformed request fails, which this one
+ * cannot be: it sends no parameters.
+ */
+export async function fetchIndexerCatalog(): Promise<IndexerCatalog> {
+	const payload = await requestJson(INDEXERS_URL);
+	if (!isRecord(payload)) {
+		return { status: '', message: '', action: '', instances: [], indexers: [] };
+	}
+	const instances = Array.isArray(payload.instances) ? payload.instances : [];
+	const indexers = Array.isArray(payload.indexers) ? payload.indexers : [];
+	return {
+		status: str(payload.status) ?? '',
+		message: str(payload.message) ?? '',
+		action: str(payload.action) ?? '',
+		instances: instances
+			.map(toCatalogInstance)
+			.filter((i): i is CatalogInstance => i !== undefined),
+		indexers: indexers.map(toCatalogIndexer).filter((i): i is CatalogIndexer => i !== undefined)
 	};
 }
 
