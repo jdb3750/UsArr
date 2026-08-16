@@ -97,7 +97,7 @@
 	(DESIGN-DIRECTION §8.3); repeating it as an h2 here printed the page name
 	twice and put two identical headings in one document.
 -->
-<svelte:head><title>{screenName} — UsArr</title></svelte:head>
+<svelte:head><title>{screenName} · UsArr</title></svelte:head>
 
 {#if unreachable}
 	<div class="banner banner-error" role="alert">
