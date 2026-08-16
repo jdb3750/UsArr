@@ -3692,3 +3692,97 @@ one commit did, not what the tree now holds after other merges landed beside it:
 decorative — the two vocabularies genuinely disagree (`sent_unknown` there, `sent_outcome_unknown`
 here) and **must** stay apart: one is an internal record with its own history, the other is a
 published shape a client pins.
+
+## RH-01 — §7.4 and ADR-0029 carried pre-fix row heights against a post-fix tree. **Applied by `08599d8`, merged as `eb78308`.**
+
+**The finding is not "the numbers were wrong".** Both documents *labelled* their figures as pre-fix,
+so nothing in them was lying. The finding is that **`28 / 32 / 36` is true on both sides of
+`440e92d`** — the shipped one-line row's **content** box before the `.stacksep` margin fix and its
+**border** box after — so the staleness was undetectable by the one check a reader would run. A digit
+that keeps its value while its meaning moves underneath does not look stale, and a fresh measurement
+confirms it either way.
+
+**Measured on both forks at all three densities, which §7.4's own standing rule for this row
+requires**, on `origin/main` at `70a61c9` (with `440e92d` confirmed an ancestor) against the pre-fix
+control `3ae0d44^`. Same script both trees; one-line rows at 1440×900; the three traps
+`docs/design/check.mjs`'s header records all handled — `await document.fonts.ready` with the face
+served out of `web/static` and confirmed drawing by canvas advance probe (IBM Plex 218 px against the
+fallback's 221.806 px), `content-visibility: visible` forced so no off-screen row reports its
+`contain-intrinsic-size` placeholder, and heights only.
+
+| Fork, tree | border box, as rendered | content box, as rendered | border box, natural | content box, natural | floor |
+|---|---|---|---|---|---|
+| `two-line`, post-fix | 28 / 32 / 36 | 27 / 31 / 35 | 27 / 31 / 35 | 26 / 30 / 34 | binds |
+| `labels`, post-fix | 28 / 32 / 36 | 27 / 31 / 35 | 27 / 31 / 35 | 26 / 30 / 34 | binds |
+| `two-line`, pre-fix | 29 / 33 / 37 | 28 / 32 / 36 | 29 / 33 / 37 | 28 / 32 / 36 | **inert** |
+| `labels`, pre-fix | 28 / 32 / 36 | 27 / 31 / 35 | 27 / 31 / 35 | 26 / 30 / 34 | binds |
+
+Rich rows are unmoved by the fix and measured rather than assumed to be: **border box 45 / 49 / 53,
+content box 44 / 48 / 52**, floor slack, byte-identical on both trees.
+
+✅ **THE `labels`-FORK DISAGREEMENT IS RESOLVED, AND NO PARTY TO IT WAS WRONG.** Three figures were
+standing — §7.4's **26 / 30 / 34**, the frontend thread's **28 / 32 / 36**, and a separate
+measurement's **27 / 31 / 35** — and they were not competing readings of one quantity. They are three
+different quantities, all three correct and simultaneous:
+
+- **26 / 30 / 34** is the **natural content box**, `min-height` forced to `0`. That is what §7.4
+  carried with no box named, and it is why the clause attached to it — *"below the floor, where
+  `min-height` would bind"* — was right. It is `2 × --row-pad-y + --leading-base` exactly: 4/6/8 px
+  doubled plus a fixed 18 px leading.
+- **27 / 31 / 35** is the **content box as rendered**, floor live.
+- **28 / 32 / 36** is the **border box as rendered** — the same row as the line above, plus its 1 px
+  bottom border.
+
+The reason they read as a 2 px contradiction is that 26 / 30 / 34 sits **two boxes** below
+28 / 32 / 36, one `min-height` and one border, and only one of the three ever said which box it was.
+🚩 **The residual trap is the middle figure: `27 / 31 / 35` is the rendered content box AND the
+natural border box.** Naming the box does not disambiguate that one; whether the floor is live has to
+be named too, which both documents now do.
+
+🚩 **The guard was fired, and its first firing was itself a false null — which is the finding this
+round nearly missed.** Forcing `--row-h: 100px` **on the list** moves every one-line row to border
+box 100 px / content box 99 px, both forks, all three densities. Forcing it on `<html>` moves
+**nothing** and the table still computes `--row-h: 28px`. That reads as a clean null and proves
+nothing: `List.svelte` stamps `data-density` on the list container and `app.css`'s density blocks
+match a bare `[data-density]` as well as `:root`, so the container **re-declares the token one level
+below the override**. 🔗 That shadowing is ADR-0029's mitigation 2 working as designed — list-scoping
+the density attribute is what takes a 5,000-row density toggle from 107 ms to 80 ms. A probe that has
+not noticed it is overriding a token the list re-declares is measuring the wrong cascade.
+
+⚠️ **Two claims in this change's own first draft were measured and found false**, recorded because
+both were plausible and neither would have fired a gate:
+
+1. *"The rich row's tallest cell is the actions cell's 32 px `<select>`, which is why the fix passes
+   it by."* **False.** At compact the rich row's tallest cells are the numeric second-line cells at
+   `<td>` border box **44 px** — the very cells the stray margin was landing on — and the actions cell
+   is 32 px. The real mechanism: in a rich row the `.stacksep` is followed by a bare **text node**, so
+   `.tbl td > * + *` never matched there on either tree. In the one-line row the same cell renders
+   `span.stacksep` + `span.trunc`, and that `.trunc` measures `margin-top: 2px` pre-fix and `0px`
+   post-fix — the only cell of seven that differed, taking its `<td>` to 28 px against 26 px for the
+   rest. **The margin never reached the rich row; the rich row did not absorb it.**
+2. *"The same three digits, 28 / 32 / 36, **are** true of the shipped component's one-line row as its
+   content box."* True when written, false after `440e92d`, and left standing in the draft's own
+   present tense — the exact defect the entry is about, surviving one revision of the paragraph that
+   diagnoses it.
+
+**Applied**: `docs/design/DESIGN-DIRECTION.md` §7.4 and `docs/DECISIONS.md` ADR-0029 now carry the
+post-fix measurement with the pre-fix figures kept beside it as a labelled control rather than as
+history, since the fix is only legible against them. Every figure in both names its box; the ones a
+box alone cannot disambiguate name the floor condition too. ADR-0029's later bullet — *"A
+`stack: 'labels'` list has one-line rows at 26 / 30 / 34 px"* — keeps its digits and gains its box.
+
+**Not fixed, reported, because `web/` belongs to another thread.** `ROW_INTRINSIC` in
+`web/src/lib/list.ts` holds `28 / 32 / 36` and `List.svelte` writes it to `--row-ci`, which is
+`contain-intrinsic-size` and takes a **content-box** height. The measured post-fix content box is
+`27 / 31 / 35`, so the placeholder is **1 px over per row** at every density. Its own comment states
+the equality it was derived from — *"a one-line row's content box comes out at EXACTLY `--row-h` —
+28 / 32 / 36"* — which was true of the `two-line` fork before the fix and is true of neither fork now.
+`auto` replaces the estimate with the row's real size after first paint, so nothing visibly breaks and
+no gate fires, **which is exactly why it would sit there**. `list.test.ts` pins the constant with
+`expect(ROW_INTRINSIC).toEqual({ compact: 28, standard: 32, relaxed: 36 })`, so a correction moves the
+test with it. `RECENT_GRAB_ROW_INTRINSIC` in `web/src/lib/requests.ts` is `44 / 48 / 52` and needs no
+change — that matches the measured rich-row content box.
+
+**Gate**: `node docs/design/check.mjs` passes on the merged tree at `eb78308` (all checks, both
+installs). Measurements were taken in throwaway worktrees off `origin/main` and `3ae0d44^`, not in
+the shared checkout.
