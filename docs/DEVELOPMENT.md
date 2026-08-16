@@ -911,11 +911,20 @@ two.** That is not bad luck. A fix is written under the assumption that the fail
 understood, and that is precisely the moment people stop checking for it. Treat a guard you just
 repaired as the least trustworthy thing in the file, not the most.
 
-**Two mechanical notes when gathering lint evidence:**
+**A rule, and a mechanical note, when gathering lint evidence:**
 
-* **`golangci-lint cache clean` first.** Cached diagnostics have been observed replaying results
-  against paths from a *different clone* of this repo, which produces findings that cannot be
-  reproduced and, worse, silences ones that can.
+* **Run `golangci-lint cache clean` before trusting any gate result from a tree where worktrees have
+  come and gone, and say in the report that you did.** Cached diagnostics replay against paths from
+  other trees — a different clone of this repo, or a worktree that no longer exists. Two threads hit
+  it independently on 2026-08-16 with two different linters: four gosec findings against the deleted
+  sibling worktree `../wt-flake/`, and errcheck at `../merge-wt/internal/db/sqlite.go` where the real
+  tree's copy already carries `//nolint:errcheck`. Both cleared on `cache clean`, and both real runs
+  then reported 0 issues — two linters, so the cache keys on paths rather than on anything
+  linter-specific. Both were false *reds*, and that is the whole of the observed evidence. **A stale
+  red is annoying, but a stale green is invisible** — nothing in the output distinguishes a replayed
+  result from a fresh one, so the failure you would never notice is the one that matters. That
+  second half is inference from the same mechanism, not a case anyone has caught here, and it is why
+  this is a rule rather than a note.
 * **A bare `golangci-lint` resolves to whatever is on `PATH`, which is a stale version.** Only
   `make check` (or `make lint`) is authoritative, because only those go through `require_tool` and
   assert the pin. Quote the tool line it prints alongside any claim of green.
