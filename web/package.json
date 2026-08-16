@@ -6,7 +6,7 @@
 	"packageManager": "pnpm@10.33.0",
 	"scripts": {
 		"dev": "vite dev",
-		"build": "vite build && node scripts/sync-embed.mjs",
+		"build": "vite build && node scripts/externalise-inline-bootstrap.mjs && node scripts/sync-embed.mjs",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",

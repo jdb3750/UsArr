@@ -1851,14 +1851,6 @@ blocked real work. **What stays in CI:** `EXPLAIN QUERY PLAN` assertions and **r
 on hot queries — deterministic, hardware-independent, fast, and a better proxy for what is being
 protected than wall-clock time.
 
-> 📌 **The Pi 5 is a deliberate floor, and it is not the owner's machine.** Confirmed 2026-08-16
-> (ADR-0035): **the owner runs x86-64 under Proxmox.** Every figure in this section, and every
-> argument elsewhere that extrapolates to Pi-class hardware — DESIGN-DIRECTION §7.4's density-toggle
-> cost, ADR-0022's Argon2id memory argument, §7.2's streaming-import peak — is therefore a
-> **conservative floor** rather than a description of what the first real install will experience.
-> Nothing about the budgets changes; designing against the floor is the point. What changes is that
-> a Pi figure must not be quoted as *"what the owner will see"*.
-
 **Reference hardware: a Raspberry Pi 5. Reference library: six media types, not two.** The earlier
 figure — *"10k movies / 2k series (~400k episode rows)"* — described the product before ADR-0032,
 and every budget below was set against a corpus that no longer describes it. The six-type reference
@@ -1875,6 +1867,13 @@ library is:
 | `person` | ~6,000 | authors, translators, editors, illustrators, writers, pencillers, inkers, colorists, letterers, cover artists (ADR-0033). **Not top-level: excluded from the prefix index, the FTS corpus and the navigation enum** |
 | **Top-level works** | **27,500** | the corpus for FTS (§8.2) and the Tier 1 prefix index (§4.5) |
 | **All `work` rows** | **~880,000** | |
+
+> 📌 **Three arguments outside this section extrapolate to Pi-class hardware, and they are the ones
+> the floor actually binds:** DESIGN-DIRECTION §7.4's density-toggle cost, ADR-0022's Argon2id
+> parameters, and §7.2's streaming-import peak. **A figure derived from the Pi is a design floor and
+> must never be quoted as a measured number** — the owner's deployment target is x86-64
+> (`REVIEW-LOG.md` §287), so a Pi-derived figure describes neither the machine the measurements were
+> taken on nor the machine the first real install runs on.
 
 🔍 *The non-video counts are chosen, not measured: they are a plausible six-type self-hoster, floored
 by the mockups' own install (1,204 movies, 275 series, 612 artists, 4,118 albums, 2,469 books, 733
@@ -2491,6 +2490,22 @@ Block B   Attention             hidden entirely when empty
 Block C   Recently added        ONE unified table across all types, with a Type column
 ```
 
+⚠️ **In v0.1, four of Block A's six rows have no catalogue source, and they are rendered rather than
+omitted.** v0.1 connects **Sonarr, Radarr and Prowlarr and nothing else** — the catalogue sources
+sequence after it, one at a time (§16 is authoritative) — so **Movies and TV have a source and music,
+audiobooks, ebooks and comics do not**. Each of those four renders in the per-type **`unconfigured`**
+state (§17.7): the type, `no catalogue source connected`, **the service that will populate it and the
+milestone it arrives in**, and a link to Add. **This is not the "never render a section with no
+content" rule being broken** — that rule (§17.1, and `design/DESIGN-DIRECTION.md` rule 13) bans a
+region that says *nothing*, and these rows carry a state, a cause and an action, which is the most
+useful thing the screen can say. **The alternative is worse and was rejected explicitly:** dropping
+the four rows leaves a Home screen showing only films and TV, from which the only available
+inference is that UsArr does not do books, music or comics — precisely the misreading principle 3
+exists to prevent. **Block C is unified across the types that have rows**, which in v0.1 is two;
+it gains rows rather than regions as each source lands. Requests still covers **all six types** in
+v0.1 over the Prowlarr free-text path, so the four sourceless types are navigable, searchable
+upstream and grabbable — they are simply not catalogued yet, and the copy says so.
+
 - **Block A** answers "what do I have?" completely in six lines — name, count, availability rollup,
   last import, "see all" — and *gains* from more types instead of degrading. A media-type summary's
   primary content is a **count**, so per §17.1 it is a table, not tiles. **Each count names its
@@ -2601,7 +2616,20 @@ second line and behind the expander, which already carries it precisely
 **`paused — 7 failed attempts, retrying 14:19`** rather than `degraded / breaker open`; **`this may
 be a different Sonarr`** rather than `needs re-identification`; **`matched by title`** rather than
 `no work identity` (§6.4), which reads to a normal person as "something is broken with my copy of
-this book" when it means "Komga gave us no ISBN".
+this book" when it means "the source gave us no ISBN".
+
+⚠️ **`matched by title` is not reachable in v0.1, and the rule is written now because it cannot be
+retrofitted.** v0.1's only sources are Radarr and Sonarr, which carry TMDB and TVDB ids, so every
+v0.1 work resolves at the identifier tier. The state arrives with the first catalogue source — and
+per [ADR-0035](./DECISIONS.md#adr-0035) §1 it arrives as the **ordinary** rendering rather than an
+edge case, because **Kavita's `aniListId`, `malId`, `comicVineId` and the rest are null without a
+paid Kavita+ subscription**, so on a free instance *every* series in those libraries sits at the
+title-and-metadata tier. From that milestone the badge and the gap list are what those screens *look
+like*, and §17 and the mockups must draw them that way. ⚠️ The honest comparison, kept because it
+stops this reading as a regression: **Komga supplies no external identifiers at all**, so comics has
+no strong-identity path under either choice; only paid Kavita beats both. The copy says what is
+missing and why — the identifier fields are a paid Kavita feature and this instance has not supplied
+them — and then stops. It must never read as a defect in UsArr, and never as nagware.
 
 **The `Libraries` column names both relationships in full**, because this is where a user meets the
 two terms: *"TV — catalogue source, request destination"* and *"Music — catalogue source; no request
@@ -2849,7 +2877,8 @@ carries eleven groups in a `SearchResultGroup`.
    group contains more than one distinct value; otherwise state it once in the group header.** The
    same applies to any per-group column with one distinct value.
    **When the collapsed value is stated in the header beside the media-type name, the noun
-   `library` is mandatory** — *"all in the **Ebooks** library · all from Audiobookshelf"*, never
+   `library` is mandatory** — *"all in the **Movies** library · all from Radarr 4K"* (⚠️ the
+   equivalent over an Ebooks library and Audiobookshelf is the post-v0.1 form of the same rule), never
    *"all in Ebooks"*. The `<h2>` is a media type (a closed enum of six) and the collapsed value is a
    library (unbounded, user-named); on the common install they are the same string, so without the
    noun the line reads as a tautology and teaches that the two axes ADR-0027 exists to separate are
@@ -2928,13 +2957,17 @@ has an account on — is the one the state offers. This is the same qualificatio
 Search-and-Grab mode, surfaced at the point of use.
 
 > ⚠️ **What this is *not* saying.** It is not that music is a lesser media type in UsArr. **A
-> library's catalogue source and its request destination are separate bindings** (§8.3), and music
-> has both halves available on the ordinary install: **Navidrome catalogues it in v0.1 exactly as
-> Radarr catalogues films**, and the free-text path requests it. **Lidarr is deferred because no
-> write-capable service ships in v0.1 at all** — not because music is second-class. LazyLibrarian
-> and Mylar3 are deferred on precisely the same ground, and Radarr and Sonarr are present as
-> *destinations* in v0.2 only because they are already there as *sources*. The thin-indexer fact
-> above is narrow, true, and about the indexer ecosystem rather than about UsArr's design.
+> library's catalogue source and its request destination are separate bindings** (§8.3), and the
+> free-text path requests music in v0.1 exactly as it requests films. **Neither half is deferred
+> because music is second-class:** no write-capable service ships in v0.1 at all, so Lidarr,
+> LazyLibrarian and Mylar3 are deferred on identical ground, and Radarr and Sonarr are present as
+> *destinations* in v0.2 only because they are already there as *sources*. ⚠️ **And the catalogue
+> half is deferred for every non-\*Arr type alike** — music, audiobooks, ebooks and comics have **no
+> catalogue source in v0.1**, because the catalogue sources are sequenced after it, one at a time,
+> so the \*Arr sync proves the replica thesis on real data first. Music is not singled out; it is in
+> the same position as the other three, and §16 is authoritative for when each arrives. The
+> thin-indexer fact above is narrower still, true, and about the indexer ecosystem rather than about
+> UsArr's design.
 
 **A grab leaves a record, and that is v0.1.** The second block on this screen is **Recent grabs** —
 the ten most recent, newest first: time (absolute and relative, §17.3's rule), release name, indexer,
@@ -3033,8 +3066,10 @@ Each is a named screen, not an accident.
   two hours overstates freshness by exactly the interval that matters. A banner whose number is
   reassuring and wrong is worse than no banner, and it is the precise failure the replica
   principle's honesty rules exist to prevent. Where an instance has **no delta channel at all**
-  (§7.1a), the number is its last full compare and the sentence says so: *"Komga is unreachable —
-  showing cached data from the last full compare at 09:12"*.
+  (§7.1a), the number is its last full compare and the sentence says so: *"Kavita is unreachable —
+  showing cached data from the last full compare at 09:12"*. ⚠️ **No v0.1 source is in this position**
+  — Sonarr and Radarr both have a delta channel — so this branch of the rule first renders at the
+  milestone the first catalogue source lands in.
 - **Instance needs re-identification** → a blocking banner on that instance's rows and on the Services
   screen, explaining that its identity changed and sync is paused, with a Re-link action. Loud on
   purpose: silently doing the wrong thing here destroys a library.
@@ -3067,6 +3102,17 @@ sub-page of it**, and the split is meaningful:
 > **Services answers "is the pipe up, and how do I fix it?". Libraries answers "what is in it, what
 > is it called, and where do requests go?".**
 
+⚠️ **What this screen holds in v0.1, before the examples below are read.** v0.1 connects **Sonarr,
+Radarr and Prowlarr and nothing else** — the catalogue sources sequence after it, one at a time, so
+the \*Arr sync proves the replica thesis on real data first (§16 is authoritative). **In v0.1 a
+library therefore binds to a Radarr or Sonarr container** — a whole instance, a root folder or an
+\*Arr tag — and **music, audiobooks, ebooks and comics have no catalogue source, so they have no
+library to show**. The media-server examples in the rest of this section (Audiobookshelf's
+ebook/audiobook split, Kavita's containers, the upstream-library binding) **specify the mechanism for
+the milestone each source lands in**, and are marked where they occur. They are kept rather than cut
+because the mechanism is the same one and the findings behind it were expensive; they are marked
+because a screen that draws a library v0.1 cannot have is the "invented status" failure.
+
 **The definition of a library is shipping copy under the page title, not a note.** One sentence —
 *"A library is a name you own over containers your services already computed: a whole instance, a
 root folder, an upstream library id, or an \*Arr tag."* — because this is the newest concept in the
@@ -3075,15 +3121,16 @@ live in a `mockup`-tagged aside: strip the not-shipping prose and the screen con
 of a library anywhere. Cost: one line.
 
 They cross-link both ways: a degraded source on a library row links to that instance's Services row,
-and a Services row lists the libraries it feeds and warns before removal — *"Audiobookshelf feeds 2
-libraries. Removing it will leave Ebooks and Audiobooks with no source."* **No credential field ever
+and a Services row lists the libraries it feeds and warns before removal — *"Radarr feeds 2
+libraries. Removing it will leave Movies and Kids films with no source."* (⚠️ the same warning over
+an Audiobookshelf feeding Ebooks and Audiobooks is the post-v0.1 form of the identical rule). **No credential field ever
 appears on this screen**; API keys live only behind Services plus sudo mode (§12.1).
 
 **Nothing about libraries is asked before a service exists.** The §17.7 wizard is unchanged; on a
 successful connect and capability probe UsArr **proposes** libraries as one pre-checked "Accept" step,
-each editable inline — one `movie` library per Radarr, one `series` per Sonarr, one per upstream
-library for Audiobookshelf / Komga / Navidrome (Kavita from v0.2, Jellyfin from v1.0), and **none for
-Prowlarr**, which has no library. Two proposals are decisions rather than defaults:
+each editable inline — **in v0.1, one `movie` library per Radarr and one `series` per Sonarr**, and
+**none for Prowlarr**, which has no library. ⚠️ From the milestone each lands in, one per upstream
+library for Audiobookshelf / Kavita / Navidrome (then Komga, then Jellyfin — ADR-0035, §16). Two proposals are decisions rather than defaults:
 
 - **Adding a second instance of the same kind proposes joining the existing library, not creating a
   new one.** Two Radarrs → *one* Movies library with two sources, which is what makes the
@@ -3095,21 +3142,25 @@ Prowlarr**, which has no library. Two proposals are decisions rather than defaul
   and a button still reading *"Accept 4 proposals"*: a rename silently changed the shape of the data
   model and left the count on the button wrong. **On collision the two rows merge visually into one
   with two `From` entries, the button becomes `Accept 3 proposals`, and the merged row carries an
-  inline note** — *"Joining Komga Manga into Comics as a second source."* **The merge key is stated
+  inline note** — *"Joining Kavita Manga into Comics as a second source."* **The merge key is stated
   rather than left to be discovered: case-insensitive, whitespace-trimmed, per user.**
   **And the one-way door is marked per row.** *"Editing any proposal marks that library
   user-managed, after which a later connect can only offer to add sources — never reshape it"* is a
   permanent decision delivered as helper text beside the Accept button, with no indicator of which
   rows have crossed it. Each edited row carries the mark, in the row.
-- **Audiobookshelf is offered as *two* libraries — Ebooks and Audiobooks — over its one
+- ⚠️ **From the milestone Audiobookshelf lands in, not v0.1: Audiobookshelf is offered as *two*
+  libraries — Ebooks and Audiobooks — over its one
   `mediaType=book` library**, which ABS itself cannot do: it distinguishes the two only at item
   level (`ebookFileFormat` present vs audio files present). That is a concrete, demonstrable
   improvement over the upstream's own organisation, and it costs one `formats` column **plus an
   edition-grained membership key** — `library_member` is `(library_id, sort_title, work_id,
   edition_id)`, because one `book` work holds both editions and a work-grained key would put an
-  audiobook-only work in Ebooks (§6.5, `reference/schema.md` §13.3). Podcasts and Kavita's `Image`
-  type are **declined with a reason**, not silently dropped, because UsArr has no `work.kind` for
-  either. **The column holding both outcomes is headed `Decision`, not `Accept`** — accepted rows
+  audiobook-only work in Ebooks (§6.5, `reference/schema.md` §13.3). **A container UsArr has no `work.kind` for is declined with a
+  reason**, not silently dropped — Audiobookshelf's `mediaType=podcast` is the worked example.
+  🔍 *Kavita's `LibraryType 3 (Image)` was the second example here and is withdrawn: re-checked
+  against Kavita `main` on 2026-08-16, `API/Entities/Enums/LibraryType.cs` declares exactly `Manga = 0`,
+  `Comic = 1`, `Book = 2` and no `Image` member at all, so the claim cannot be sourced. The rule does
+  not depend on it.* **The column holding both outcomes is headed `Decision`, not `Accept`** — accepted rows
   keep their checkbox, the declined row keeps its word, and an `Accept` header over a cell reading
   `declined` is a header contradicting its own cell.
 
@@ -3194,7 +3245,7 @@ client."* **In the cells:** `None`. **Kept as a per-row footnote:** the Ebooks r
 which is a real, dated, specific fact a user cannot infer.
 
 **Deleting a library says exactly what it does — including the part that is destructive:** *"This
-removes the library from UsArr. It does not delete anything from Radarr, Komga, or your disks. It
+removes the library from UsArr. It does not delete anything from Radarr, Sonarr, or your disks. It
 **will** discard the N items you excluded from this library."* The earlier copy stopped at the
 reassurance, which was true of the replicated data and false of the owned data: `exclude` and
 `include` are keyed to `library_id` and cascade with the row. §6.5 rule 5 refuses to *auto*-delete a
@@ -3206,13 +3257,14 @@ the copy does not claim otherwise. When N is zero the sentence is omitted rather
 **Named per-library states**, each mapping to an existing §17.7 pattern: *importing* (populated-so-far
 grid with real counts) · *one source degraded* (non-modal banner naming it; **the grid does not grey
 out**) · *all sources down* (fully browsable from the replica — this is the replica principle's demo)
-· *sources healthy, zero items* (*"Komga is connected and reports 0 series"*, which is a different
+· *sources healthy, zero items* (*"Radarr is connected and reports 0 films"*, which is a different
 sentence from "not synced yet") · *orphaned* (shown with its reason, Delete offered, never
 auto-deleted) · *no sink* (requests disabled with the reason) · *needs re-identification* (blocking
 banner, membership recompute paused, because membership derived from an untrustworthy id space is
-worse than stale membership) · **no change feed** (*"Komga has no changed-since endpoint. Last full
-compare 09:12."* — the steady state for a source on channel 3b's reconciliation-only fallback,
-§7.1a, and it must be a named state rather than an absent delta time, because "no number" and "a
+worse than stale membership) · **no change feed** (*"Kavita has no changed-since endpoint. Last full
+compare 09:12."* — ⚠️ **not reachable in v0.1**, whose only sources are \*Arrs on channel 3; it is the
+steady state for a catalogue source on channel 3b's reconciliation-only fallback from the milestone
+that source lands in, §7.1a, and it must be a named state rather than an absent delta time, because "no number" and "a
 number from four hours ago" read identically otherwise).
 
 **Overrides must be listable in one place** — what was excluded, re-linked or overridden, by whom,

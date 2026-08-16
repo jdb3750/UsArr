@@ -1,13 +1,36 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-GB">
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="color-scheme" content="light dark" />
 		<link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
+		<!--
+			The UI face, self-hosted and preloaded. `font-display: block` means text
+			set in Plex is invisible until the face arrives, so the fetch is started
+			with the document rather than after the stylesheet has been parsed.
+			`crossorigin` is required on a font preload even same-origin: without it
+			the preload is fetched in a different mode from the @font-face request
+			and the file is downloaded twice. Only the Sans face is preloaded — Mono
+			is machine data and appears on a fraction of the screens.
+		-->
+		<link
+			rel="preload"
+			href="%sveltekit.assets%/fonts/PlexSans-var-latin.woff2"
+			as="font"
+			type="font/woff2"
+			crossorigin
+		/>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="tap">
-		<div style="display: contents">%sveltekit.body%</div>
+		<!--
+			`display: contents` on this wrapper comes from app.css, not from a style
+			attribute. The server sends `style-src 'self'` with no 'unsafe-inline'
+			(internal/httpapi/middleware.go), and measured against that exact header
+			Chromium refuses a style attribute outright — the attribute stays in the
+			DOM and applies nothing, so the wrapper silently became a block box.
+		-->
+		<div id="usarr-root">%sveltekit.body%</div>
 	</body>
 </html>
