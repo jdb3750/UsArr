@@ -748,9 +748,12 @@ edge-case hardening — exactly UsArr's problems: stale-while-revalidate, optimi
 with automatic rollback, request deduplication, background refetch. If the team judges
 client-side cache coherency to be the risky part, buying that maturity is worth ~80 KB.
 **Rejected: SolidStart** (34× smaller ecosystem is disqualifying for a project needing drive-by
-contributors); **HTMX + Go templates** (a 10k-item virtualized grid with instant client-side
-filter/sort *is* a rich client-state problem, and every HTMX interaction is a network round
-trip — **rejected on requirements, not taste**).
+contributors); **HTMX + Go templates** (a 10k-item ~~virtualized~~ **large** grid with instant
+client-side filter/sort *is* a rich client-state problem, and every HTMX interaction is a network
+round trip — **rejected on requirements, not taste**).
+⚠️ **Supersession note, 2026-08-16:** UsArr no longer virtualizes by default (ADR-0029), so the word
+"virtualized" here is struck. The research record is preserved rather than rewritten; the rejection
+stands on the remaining argument, which the client-side prefix index independently proves.
 
 ### 3.4 SQLite
 
@@ -1057,8 +1060,10 @@ OpenSubsonic. **Use Symfonium as the reference client.**
 - **Komga**: HTTP Basic **or `X-API-Key` header**; `KOMGA-SESSION` cookie or `X-Auth-Token`;
   OpenAPI 3.1 at `/api/v1/`; **supports both OPDS 1.2 and OPDS 2.0.** ✅
 - **Kavita**: CBZ/CBR/EPUB/PDF, cross-device progress, OPDS feeds. Scales further than
-  Calibre-Web (tested 50,000+ files vs ~20,000). ⚠️ **REST API surface and auth scheme not
-  retrieved** — Komga's is verified, Kavita's is not.
+  Calibre-Web (tested 50,000+ files vs ~20,000). ~~⚠️ REST API surface and auth scheme not
+  retrieved~~ → **✅ superseded 2026-08-16 by Track 06: Kavita's full `openapi.json` was retrieved
+  and read. Auth is an `x-api-key` header (and an API key in a *path segment* on the OPDS routes).
+  Both Komga's and Kavita's API surfaces are now verified.**
 - **In-browser reading** is the one place native delivery makes sense, since no backend provides
   an embeddable reader. [epub.js](https://github.com/futurepress/epub.js) is the conservative
   choice; [foliate-js](https://github.com/johnfactotum/foliate-js) covers EPUB/MOBI/KF8/FB2/CBZ/
@@ -1179,7 +1184,7 @@ the OPDS reader ecosystem come free the moment UsArr speaks those protocols.**
 | Pocket ID's OIDC conformance and homelab share | **Did not verify.** Test empirically. |
 | Exact Jellyfin 10.11 header-behaviour change semantics | Inferred from the gist + seerr#2361. **Verify against a live 10.11 server.** |
 | Audiobookshelf's exact play-session request schema | HLS + direct-play modes confirmed; **field names not verified.** |
-| Kavita's REST API surface and auth scheme | OPDS confirmed; **API/Swagger details not retrieved.** |
+| ~~Kavita's REST API surface and auth scheme~~ | **Cleared 2026-08-16 (Track 06).** The full `openapi.json` was retrieved; auth is `x-api-key`, with the key in a path segment on OPDS routes. |
 | Whether Jellyfin permits CORS for direct browser access to stream URLs | **Unverified** — determines proxy-vs-direct for any web playback. |
 | Feishin's current OpenSubsonic coverage | One source says Navidrome-internal + Jellyfin API only; may have changed. |
 | Overseerr bitfield permission flag names | Confirmed as a bitfield; individual flags not enumerated. UsArr is not copying it anyway. |
@@ -1549,6 +1554,87 @@ namespaced UsArr tag into a flat-label system.
 - **`haswbstatement` CirrusSearch** worked via the web search UI ✅ but the JSON `api.php` form
   was rate-limited during testing. Verify under normal traffic, or just use SPARQL.
 - **Comic Vine ToU** for redistribution/caching in a self-hosted app — not read.
+
+---
+
+## Track 06 — The six media types: books, music, comics, libraries, multi-type IA
+
+**Added 2026-08-16.** The six-type expansion produced five deep research passes — user-defined
+libraries, multi-type information architecture, books/ebooks/audiobooks, music, comics/manga — and
+the facts below are now load-bearing for `ARCHITECTURE.md` §6.1, §6.5, §7.1a, §8.5, §16, §17 and for
+ADR-0026 through ADR-0032. **Until this track existed, those were assertions in an ADR rather than
+citations in the evidence base**, which is the inversion *"verify, don't assert"* exists to prevent.
+Every ✅ / ⚠️ / 🔍 marker below is carried from the research pass that produced it, not re-graded.
+
+### 6.1 Catalogue sources — what they can and cannot supply
+
+| Finding | Marker |
+|---|---|
+| **None of Navidrome, Audiobookshelf, Komga or Kavita has a "changed since" endpoint.** `komga-openapi.json` has **zero** parameters matching `since\|modified\|updated\|changed` on any path — 20 `lastModified` *fields* and a generic Spring `sort`. `kavita-openapi.json` exposes `sortByLastModified` on exactly two endpoints, `GET /api/Collection` and `POST /api/ReadingList/lists`, and on **none** of the Series, Volume or Chapter endpoints | ✅ read from the vendored specs |
+| **Whether Komga accepts `sort=lastModified,desc` on its series list.** Spring `Pageable` sort properties are not enumerated in the spec and the DTO field name may not be the entity property name | ⚠️ **could not be verified; the highest-value thing to probe against a live instance.** ARCHITECTURE §16 makes it a day-one spike |
+| **Kavita's identifier matching is a paid subscription feature**, so on a free instance every external id is null | ✅ |
+| **Komga exposes no external identifiers at all** — `SeriesMetadataDto` carries only `links`, i.e. whatever a user typed | ✅ read from the spec |
+| **Kavita's `LibraryType` members `Manga` / `Comic (Flexible)` / `Comic (ComicVine)` are filename-parsing modes over one identical entity tree** | ✅ |
+| **Audiobookshelf: "Most actions in the server apply to the currently selected library, including browsing and searching"**, and an author with series in two libraries shows as **two separate author entries** | ✅ upstream documentation |
+| **Navidrome's `LibrarySelector` returns `null` at `!length \|\| length === 1`** | ✅ read from source |
+| **Navidrome does not support OpenSubsonic `apiKeyAuthentication`** — not in any release, not in `master`; PRs #4022 and #5731 open | ✅ |
+| Auth: Navidrome `POST /auth/login` → JWT **plus** `(subsonicSalt, subsonicToken)`; Audiobookshelf Bearer JWT **or a scoped API key with an expiry**; Komga `X-API-Key` (Basic on OPDS); Kavita `x-api-key`, **with the key in a URL path segment on OPDS routes** | ✅ |
+
+### 6.2 Acquisition and indexers
+
+| Finding | Marker |
+|---|---|
+| **Newznab: `3030` is `Audio/Audiobook` under `Audio` (3000), not under `Books`**; `7020` `Books/EBook`; `7030` `Books/Comics`; `5070` `TV/Anime`; `7010` `Books/Mags` | ✅ `NewznabStandardCategory.cs` |
+| **There is no manga category in the Newznab standard at all.** `7030` is the only comics category, and Nyaa maps its `Literature` categories (`3_0`–`3_3`) to `Books` (7000), so a search filtered on `7030` returns **zero manga** | ✅ `nyaasi.yml` |
+| Of 543 definitions in `definitions/v11`, **88 declare `Books/Comics`**, 288 declare some `Books` category, and **only three are comic- or manga-specific**. **GetComics — the dominant western-comics DDL source, and the only source Kapowarr searches — is not a Prowlarr indexer at all** | ✅ |
+| **403 of 543 Prowlarr indexer definitions are `type: private`**, and the dedicated music trackers (Redacted, Orpheus, DICMusic, Libble) are **invite-only** — a real limitation on "runs over just Prowlarr" for music and books | ✅ |
+| **Prowlarr's `SearchResource` carries only `query`, `type`, `indexerIds`, `categories`, `limit`, `offset`** — no `author`, no `title` — and `SearchController` populates only `q`/`t`/`cat`/`limit`/`offset`. Free text is the whole of what Prowlarr offers, even against an indexer advertising `book-search: [q, title, author]` | ✅ read from source |
+| **Mylar3** has shipped no release since 2025-08-17; **Kapowarr's** API documentation reads *"Coming Soon"* | ✅ |
+| **Lidarr writes `artist.status = 'deleted'` into its own database when its metadata server 404s** (`ArtistStatusType.Deleted` on `ArtistNotFoundException`), and exposes no health signal for the subsystem that causes it | ✅ read from source |
+
+### 6.3 Modelling
+
+| Finding | Marker |
+|---|---|
+| **MusicBrainz: a recording is *"distinct audio"*; a track is *"the way a recording is represented on a particular release"***, so the same recording is track 4 on the CD and track 6 on the reissue with a different MBID each | ✅ |
+| **MusicBrainz defines no "remaster."** The *"never produced solely through copying or mastering"* phrase is from the **Recording** page; the Release Group page contains no such definition. The step to "therefore a new edition of the same work" is **UsArr's inference** | 🔍 **inference, and it is cited as a definition in ARCHITECTURE §6.1 with the marker now attached** |
+| **In practice a reissue with bonus material and a changed title gets its own release group** (*"OK Computer OKNOTOK 1997 2017"*) — a different work joined by a `work_relation` edge, not a new edition. **Both paths must exist** | ⚠️ carried caveat |
+| **Lidarr's `AlbumResource.artistId` is singular**, so a VA compilation lands under a synthetic "Various Artists"; **Navidrome superseded its single `ArtistID`/`AlbumArtistID` with a `Participants` model** | ✅ |
+| **Lidarr's `albumCount` counts albums that passed a *metadata profile*, a user setting.** Radiohead has 386 primary-type albums on MusicBrainz, so "12 of 579" is true and useless | ✅ |
+| **ComicInfo `Count` — the source of every "total issues" in the domain — is conceded by the Anansi specification itself to be unreliable:** *"The `Count` could be different on each book in a series"*; Mylar3's total comes from Comic Vine, whose own code comments that *"comicvine isn't as up-to-date with issue counts"* | ✅ |
+| **Komga models no manga/comic distinction** — only `ReadingDirection` — and ComicInfo carries `Manga` as a field on a book otherwise structurally identical to a western comic | ✅ |
+| **LazyLibrarian writes no row at all for a file its matcher cannot bind**; the failure lands in a local dict that produces a debug-log line and an *"N unmatched items"* banner. Match ratios documented at *"somewhere around 80% to 90%"*, with looser matching warned to *"get matches against the wrong books"* | ✅ read from `librarysync.py` |
+| **LazyLibrarian GitLab #2407 — books marked ignored come back after an author rescan** | ⚠️ **no maintainer resolution; the reporter says they may be reading the wrong code** |
+| **Plex cannot change a library's type after creation** | ⚠️ **a community feature request, not an official Plex statement.** Not verified against a current build, and it was carried into five documents as fact |
+| **Whether `library_scope` can fully replace `instance_scope` in `search_doc` without a second column** | 🔍 **inference. Argued rather than measured; check against the first real scoped search query written** |
+
+### 6.4 Classical music cannot be modelled, and UsArr must say so rather than fail quietly
+
+This is the one honest-impossibility finding from the six-type research that had **no treatment
+anywhere in the repository** — not in this file, not in the architecture, not in a mockup.
+
+> ✅ *"UsArr cannot fix classical, because neither of its southbound sources models compositions."*
+> — and the research's own recommendation: *"On the artist page for a composer, say what is
+> missing."*
+
+**Neither Navidrome nor Lidarr models a composition/work tier for music.** Both model
+artist → album → track, where a "track" is a *recording on a release*. A classical work — Beethoven's
+Op. 131, say — exists as dozens of recordings by different quartets across dozens of releases, and
+nothing in either backend groups them. The composer is not the "artist" of the recording; the
+performer is, or the ensemble is, or a synthetic "Various Artists" is.
+
+**The consequence, stated plainly:** a unified catalogue over these sources renders a classical
+library the way its sources do — grouped by release, with the composer appearing as one artist among
+performers — and **that is not something UsArr can fix by aggregating harder.** It is the case where
+a hub looks most obviously wrong to the user who owns it, and classical is not a niche.
+
+**What follows for the design.** `work_credit(role)` (ADR-0031) makes a composer *representable* as
+a credit — that is the **seam**, and ADR-0031 mentions it in exactly those terms. It is **not the
+disclosure**, and reading it as one inverts the finding. UsArr models **no composition tier**, a
+composer therefore renders as an artist, and recordings of one work are grouped by release rather
+than by work. **Where that is visible, UsArr says so** rather than presenting the grouping as
+correct — the same rule as the *"not identified"* badge (§6.4 of the architecture) and the comics
+gap list. Recorded in `ARCHITECTURE.md` §6.1.
 
 ---
 

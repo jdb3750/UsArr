@@ -892,6 +892,26 @@ video-only cascade could make:**
    omnibus, so **two works are never merged on ISBN agreement alone.** Work-strong book sources are
    `openlibrary_work`, `hardcover_book` and `goodreads_work`, and nothing else.
 
+**UsArr models no composition tier for music, and a composer therefore renders as an artist.** This
+is an honest impossibility rather than a gap to close later: **neither Navidrome nor Lidarr models a
+composition**, so recordings of one classical work are grouped by release, not by work, and no
+amount of aggregation fixes it — the sources do not carry the concept. `work_credit(role)`
+(ADR-0031) makes a composer *representable as a credit*, which is the **seam**, not the disclosure;
+reading it as the disclosure inverts the finding. **Where the consequence is visible, UsArr says
+so** — on a composer's page and on a box set — in the same register as the *"not identified"* badge
+below and the comics gap list (§6.1). Classical is not a niche; it is the case where a unified
+catalogue looks most obviously wrong to the person who owns it, and being quiet about it is worse
+than being unable to fix it. Evidence: [`RESEARCH.md`](./RESEARCH.md) Track 06 §6.4.
+
+**A work with no resolvable identity is kept, marked, and stays searchable — and that is a v0.1
+rule, not a later one.** Whatever the backend reports, UsArr writes the row: a title, a file, and a
+quiet *"not identified"* marker. It is v0.1 because v0.1 ships Komga, which supplies **no external
+identifiers at all**, so the state is reachable on day one rather than at the milestone that
+computes cross-media links. It costs one nullable column and one badge, and it is precisely what
+LazyLibrarian's absence of disqualifies it as a catalogue (§6.5): a file its matcher cannot bind gets
+no row at all. The badge is never a synonym for "broken" — an unidentified book is a book you own,
+and the honest statement is that UsArr could not find an identifier for it, not that it is missing.
+
 **The kind decision is UsArr's, made once at ingest.** A graphic novel with an ISBN sits in a Komga
 library and in a Calibre library; if one is ingested as `comic` and the other as `book` the cascade
 forbids them ever merging. The rule that resolves it is that `work.kind` is derived from a rule UsArr

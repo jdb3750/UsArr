@@ -67,11 +67,30 @@ A large manga library does to the corpus with chapter titles exactly what episod
 CI asserts `SELECT COUNT(*) FROM search_doc WHERE kind IN ('season','episode','track','comic_issue')`
 is 0.
 
-**Permission filtering happens in the join, not after it.** `search_doc.library_scope` (renamed from
-`instance_scope`, ADR-0026 — a library can be a *subset* of an instance, so instance-level scoping is
-too coarse and leaks existence) carries the libraries a row is visible through; the fusion query
-joins against the caller's access scope (ARCHITECTURE §1.3 rule 2). Post-filtering FTS hits silently breaks keyset page sizes and leaks
-existence through result counts and ranking positions.
+**Permission filtering happens in the join, not after it**, and **the mechanism is a junction table,
+`search_doc_library(library_id, doc_rowid)` `PRIMARY KEY (library_id, doc_rowid) WITHOUT ROWID`** —
+not a `library_scope` column on `search_doc`. It replaces `instance_scope` (ADR-0026: a library can
+be a *subset* of an instance, so instance-level scoping is too coarse and leaks existence), and the
+junction rather than a column is the load-bearing part: **a JSON array in a `TEXT` column cannot
+participate in an index join.** Filtering it needs `json_each()` or a `LIKE`, both of which are
+scans, so the column bought a full scan of the fused candidate set in service of the requirement
+this paragraph states. The scoped fusion query joins against the caller's access scope
+(ARCHITECTURE §1.3 rule 2):
+
+```sql
+… JOIN search_doc_library sdl ON sdl.doc_rowid = sd.rowid AND sdl.library_id IN (:scope…)
+```
+
+a covered index seek per scoped library. **CI asserts `SEARCH sdl USING PRIMARY KEY` and the absence
+of `SCAN search_doc_library`**, so it cannot silently regress. Post-filtering FTS hits silently
+breaks keyset page sizes and leaks existence through result counts and ranking positions.
+
+⚠️ **A row visible through no library matches no scope and disappears from search for every user
+including the owner** — a state the old `instance_scope` could not reach, because every replicated
+row came from some instance. Reserved `library.id = 0` (*Unfiled*) upholds the invariant that every
+`search_doc` row has at least one `search_doc_library` row, and CI asserts that too. 🔍 That the
+library scope can fully replace the instance scope with no second column is **inference**, argued in
+ADR-0026 rather than measured, and it should be checked against the first real scoped query written.
 
 ---
 

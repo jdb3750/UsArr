@@ -482,6 +482,15 @@ Toolbar and sticky table header: 40 px. Sidebar item: 32 px. All of these are **
 never `height`** — a fixed height breaks SC 1.4.12 the moment a user forces 1.5 line spacing, and
 truncates the second line of a long title.
 
+⚠️ **Those nine numbers are floors, not the heights that render, and §7.4's placeholder sizing
+depends on knowing the difference.** Measured on the shipped search screen at compact density there
+are **six distinct row heights — 28, 30, 45, 47, 59, 62 px, mean 42.0** — and **eighteen across the
+three densities**, because a row whose columns wrap is taller than its floor. Two corollaries. The
+`min-height` must sit on an element it applies to: on a `display: table-row` it is inert
+(**measured: forcing the token to 100 px left the row at 28.0 px**), which is one more reason §7.4's
+list primitive is a grid row. And any code that estimates total list height from these numbers is
+wrong by ~33% at 25,000 rows.
+
 One consequence worth stating because it is easy to violate: SC 2.5.8 requires 24 × 24 CSS px
 targets, with a spacing exception for undersized targets whose 24 px circles do not intersect
 (<https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html>). **A 28 px compact row
@@ -681,17 +690,68 @@ had no measurement behind it, and answering an unmeasured number with a differen
 concedes the argument while pretending to fix it. `make bench` gains the measurement (ARCHITECTURE
 §4.5, §13); the threshold is whatever it says.
 
-⚠️ **`contain-intrinsic-size` has no value anywhere in this document, and it is the whole risk.**
-The browser uses that number as the placeholder height for every skipped element; when it is wrong
-the scrollbar jumps as content scrolls into view, which reads as *slowness* — the precise failure
-this section exists to avoid. It cannot be one constant, because the density control (§5.3) moves
-the row height across 28 / 32 / 36 px and the two-line and thumbnail rows across three more values.
-Whatever ships must derive it from the same custom property the row height reads
-(`contain-intrinsic-size: auto var(--row-h)`, with `auto` letting the browser remember the last
-real measurement), and it must be tested with the density control while scrolling. **Until that is
-specified with a value and a test, §7.4 is a direction, not an implementable rule** — and settling
-OQ-1 did not close this, deliberately: ADR-0029 records it as the open half rather than shipping a
-rule nobody can follow.
+🚩 **The list primitive is a grid, not a table, and that is a constraint rather than a preference.**
+`content-visibility: auto` is defined entirely in terms of size, layout and paint containment, and
+**CSS Containment Module Level 2 excludes internal table boxes from all three**
+(<https://drafts.csswg.org/css-contain-2/>, fetched 2026-08-16): *"giving an element **size
+containment** has no effect if any of the following are true: … if its principal box is an
+**internal table box**"*, with the same exclusion for layout and paint containment *"other than
+table-cell"*. A `<tr>` is `display: table-row` — an internal table box, not a table-cell — so the
+declaration applies, reads back as `auto`, and does nothing. **Measured in Chromium at 5,000 rows:
+document height 120,000 px with the declaration and 120,000 px without, identical, against the
+140,000 px a working placeholder would give; the same test on `<div>` rows produces the expected
+185,000 px.** `<tbody>` is an internal table box too, so chunking does not rescue it, and `<td>`
+takes containment but collapses to 9 px cells.
+
+**So a UsArr list row is a `display: grid` element with `role="table"` on the container,
+`role="row"` on each row, `role="columnheader"` on the header cells and `role="cell"` on the rest.**
+The `.tbl--stack` fork below 760 px already builds half of this, so this is convergence, not a new
+component. **The obligation it creates is not optional and is a required component test:** an ARIA
+grid must carry by hand every association a native `<table>` gives for free — the roles above,
+header-to-cell association, `aria-rowcount` / `aria-colcount` where the rendered rows are a window
+onto a larger set, and column names that survive the stacked view where the header row is not
+rendered at all. And **`make bench` asserts the mechanism rather than assuming it**: set
+`content-visibility: auto` on a row and assert the container's `scrollHeight` **differs** from the
+uncontained case.
+
+⚠️ **`contain-intrinsic-size` still has no value, and the value this section previously prescribed
+is wrong three ways.** The browser uses that number as the placeholder height for every skipped
+element; when it is wrong the scrollbar drifts as content scrolls into view, which reads as
+*slowness* — the precise failure this section exists to avoid. `contain-intrinsic-size: auto
+var(--row-h)` fails because:
+
+1. **`--row-h` is inert on the element it describes.** `min-height` does not apply to
+   `display: table-row`; measured, forcing `--row-h: 100px` leaves the row at **28.0 px**, and the
+   density control works only through the padding token. So the ADR derived the placeholder from
+   the one property with no effect on the real height. The grid-row primitive above fixes this as a
+   side effect, since `min-height` does apply to a grid item — but the table below must then be
+   read as what it is.
+2. **Row heights are not the six values in §5.3's table.** Measured on the shipped search screen at
+   compact density there are **six distinct heights — 28, 30, 45, 47, 59, 62 px, mean 42.0** — and
+   **eighteen across the three densities**, because real rows wrap. Estimating 25,000 rows at 28 px
+   understates the scroll height by ~350,000 px (33%), resolving as the user scrolls: the drift
+   itself.
+3. **`contain-intrinsic-size` sizes the *content* box.** Padding and border are added on top; a
+   24 px row with `auto 28px` produced a **37 px** placeholder.
+
+**What ships: `contain-intrinsic-size: auto <measured content-box height>` per row shape**, with
+`auto` remembering the last real measurement, and the assertion is drift rather than frame time —
+`|scrollHeight after a full scroll − scrollHeight at load| / scrollHeight < 2%` at 1k / 5k / 25k
+rows, both themes, all three densities. **Until that measurement exists, §7.4 is a direction, not an
+implementable rule** — and settling OQ-1 did not close this, deliberately.
+
+⚠️ **And the expensive operation on a long list is not scrolling.** Measured: scrolling costs
+**0.1–0.3 ms** at every size, while the **density toggle** costs **153 ms at 1,000 rows, 1,199 ms at
+5,000 and 6,508 ms at 25,000**, and the **theme toggle** 1,356–4,514 ms at 25,000 — because each
+sets an attribute on `<html>` and invalidates every element reading a custom property. Both are
+top-bar controls on every screen, both are pure-local no-data interactions, and both are therefore
+**Tier 0 by §7.2's own definition, whose hard fail is 100 ms**. 🔍 Extrapolating the measured
+0.15–0.26 ms/row to a Pi 5 at a conservative 3–5× puts that hard fail at **100–300 rows in the DOM**,
+or 300–600 with `table-layout: fixed` and working containment — **so the real ceiling is set by the
+density control, in the hundreds, not by scrolling in the tens of thousands.** Three mitigations
+before any redesign: set `table-layout: fixed` (never set anywhere today, and it halves the cost);
+scope the density attribute to the list container rather than `:root`; and if it still exceeds
+100 ms, an explicit 150 ms "applying" state is honest where a silent multi-second freeze is not.
 
 The reasons are concrete. `content-visibility: auto` skips rendering of off-screen content but,
 unlike `display: none`, "the skipped contents must still be available as normal to user-agent
@@ -798,9 +858,15 @@ music-and-books install renders three. Nothing hard-codes a type.
 └────────────────────────────┘
 ```
 
-Expanded, with the scope popover open — **native checkboxes**, so Space toggles, arrows move and
-`Esc` closes with no custom key handling written at all, which is the payoff of §17.1's
-native-controls rule:
+Expanded, with the scope popover open — **native checkboxes, so Space toggles and Tab traverses for
+free, and the checked / indeterminate states are announced without any ARIA**. ⚠️ **Arrow-key roving
+and `Esc`-to-close are the two behaviours the popover must *add*** — native
+`<input type="checkbox">` elements are Tab-traversed, not arrow-navigable (only radios within a
+group rove), and `Esc` is popover behaviour rather than checkbox behaviour. "No custom key handling
+written at all" was wrong, and an implementer following it ships a list where the arrow keys do
+nothing. Three behaviours to write: arrow roving, `Esc` with focus returned to the chip, and close
+on `focusout` when focus leaves the popover. That is still the payoff of §17.1's native-controls
+rule, just a smaller one than claimed:
 
 ```
 │ ▣ 2 of 4 libraries       ▴ │
@@ -987,7 +1053,7 @@ Carried across so none of it has to be rediscovered:
 | 1 | Put user-defined libraries in the sidebar as nav items | Jellyfin's `libraryMenu.js` maps `items.map(...)` over every user view with **no cap, pin, overflow or reorder**; Calibre-Web reached **17** `SIDEBAR_*` bits on *one* library; Kavita had to retrofit "10 items + Home, rest under More" |
 | 2 | Use a **single-select** library switcher that scopes the app | Audiobookshelf's own docs: *"Most actions … apply to the currently selected library, **including browsing and searching**"*, and an author with series in two libraries shows as **two separate author entries** |
 | 3 | Rely on pin state as the only way to reach a library | Plex forum, 2026-07-09: *"10+ of my users have reported that their pinned libraries have vanished … The 'More' option … is gone entirely"*, with a four-year tail of the same class |
-| 4 | Ship six recently-added carousels on Home | ~1% CTR with **84%** of clicks on slide 1 (Runyon, 28,928 tracked clicks); NN/g *"5 or fewer frames"* and *"people often scroll past carousels"*; jellyfin/jellyfin#16615 asked for a wrapping grid and was **closed as not planned**; and six strips show ~16 items above the fold against §5.3's 25 floor |
+| 4 | Ship six recently-added carousels on Home | ~1% CTR with **84%** of clicks on slide 1 on ND.edu over 28,928 tracked feature clicks ([Runyon, Jan 2013](https://erikrunyon.com/2013/01/carousel-interaction-stats/); the [five-site follow-up](https://erikrunyon.com/2013/07/carousel-interaction-stats/) found position-1 shares of 54–89% and CTR of 1.1–9.4%, and publishes no aggregate); NN/g *"5 or fewer frames"* and *"people often scroll past carousels"*; jellyfin/jellyfin#16615 asked for a wrapping grid and was **closed as not planned**; and six strips show ~16 items above the fold against §5.3's 25 floor |
 | 5 | Auto-advance anything | NN/g: auto-forwarding carousels *"annoy users and reduce visibility"*. Independently banned by §6 |
 | 6 | Put per-type tabs in a top navbar | Twelve top-level items before Calendar and Stats, and the persistent search input loses its home |
 | 7 | Build a two-level sidebar or flyout submenus | NN/g: beyond two disclosure levels, *"users often get lost when moving between the levels"* |
@@ -1025,6 +1091,26 @@ treatment by media type.** Same slots, same positions, different values.
   background — never a translucent one, which costs a composite layer and looks dirty over dense
   rows — and a bottom rule so it reads as pinned. Note SC 2.4.11: a sticky header must not
   entirely obscure a focused row.
+  ⚠️ **A sticky header must be tested at every breakpoint, not just the widest one**, because an
+  ancestor that becomes a scroll container silently breaks it: `overflow-x: auto` with
+  `overflow-y: visible` **computes to `auto` on both axes**, so the wrapper becomes a scroll
+  container that never scrolls vertically, and the sticky header then sticks to *that* box and
+  scrolls away with the page. Measured on the shipped mockup: **one header pinned at 1440 px, zero
+  at 1000 px** — a broken band from **761 px to 1,099 px**, which is precisely the laptop/tablet
+  range, on the screen carrying six different column sets. Below 761 px the stacked view hides the
+  header by design, so that band is fine. The fix is either `overflow-x: clip` on the wrapper with
+  per-cell wrapping, or moving the horizontal scroller inside the row so the wrapper never becomes
+  a scroll container at all.
+- **A column whose value is identical for every row in its group is not data, and is not rendered.**
+  State the fact once — in the group header or a banner — and drop the column. Measured on the
+  six-group search screen, four of six groups carried one distinct `Library` value across every row,
+  costing ~120 px of a 1,232 px content column and wrapping 12 of the 13 rows above the fold. This
+  is §1.6's *delete this element; is information lost?* applied per group rather than per screen.
+- **Declare column widths per group rather than letting auto layout derive them.** `table-layout:
+  auto` must measure every cell in every row to compute column widths — the one layout mode that is
+  inherently O(all rows) and that no containment can help — and with six groups it computes six
+  different layouts for one content column. Measured, declaring widths cut the density-switch cost
+  from 1,199 ms to 547 ms at 5,000 rows and from 6,508 ms to 2,956 ms at 25,000.
 - **A column picker labelled "Options", next to a control labelled "Filter".** Ship many columns,
   show few by default. This is verbatim the Prowlarr vocabulary — *"you can add or remove columns
   using the **Options** button, and you can sort and filter your results by either clicking on the
@@ -1126,8 +1212,13 @@ strings are worth reading as a house style:
 which renders the message plus **Import Existing Series** and **Add New Series**, and swaps to the
 "hidden by filter" message when `totalItems > 0`.)
 
-No illustration. No centred marketing block. Never fabricated data — not in an empty state, not in
-a screenshot, not in documentation.
+No illustration. No centred marketing block. **Never fabricated data in a shipped product surface**
+— not in an empty state, not in a screenshot, not in documentation. **The one exception is a design
+mockup, which must say on every page that its data is fabricated** — not only in a sibling README,
+because the single-file published build is detached from it and is the artefact most likely to
+reach an outside reader. §13 carries the same exception in its greppable form; the two must not
+drift apart again, and the earlier absolute wording forbade the artefact that makes the rest of this
+document reviewable.
 
 ### 9.7 The minimum component set, and where per-type divergence is allowed
 
@@ -1218,7 +1309,7 @@ follow-up:
 | **stale** | the data is real but old, with the timestamp | `"stale": true` from §2.3. Not greyed out |
 | **error** | the **verbatim upstream text**, plus Retry / Dismiss | §17.3's "Problem" column is verbatim by requirement, rendered in mono |
 | **unconfigured** | the service does not exist; what adding it would give you; a link to Add | The Search-and-Grab first-run copy (§8.5) is the reference tone |
-| **permission-denied** | that it is denied, without leaking existence | v0.1 has one account, but the state exists from day one — and §14 rule 6: never construct a UI that hides items the API would still return |
+| **permission-denied** | that it is denied, without leaking existence | v0.1 has one account, so **what exists from day one is the *behaviour*, not a drawn screen**: §14 rule 6 plus §1.3's access-scope parameter mean an item the caller may not see is **absent from the response**, so the honest rendering is the ordinary `empty` or `filtered-empty` state and there is nothing distinct to draw. A visibly *denied* surface is a v1.0 screen and arrives with `user_library_access`. (Services' `denied` state is a sudo re-authentication prompt — a different thing, and it should not be read as this one.) |
 
 The Services screen is the sharpest test of this. **It must be *more* informative when things are
 broken than when they are fine** — a screen that is a wall of green dots when healthy and a wall of
@@ -1246,6 +1337,7 @@ Density is never a reason to breach these.
 | [SC 1.4.12 Text Spacing](https://www.w3.org/WAI/WCAG22/Understanding/text-spacing.html) | AA | survive line-height 1.5×, paragraph 2×, letter 0.12×, word 0.16× | `min-height` everywhere; never clip overflow on a text container |
 | [SC 2.5.8 Target Size (Minimum)](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html) | AA | 24×24 CSS px, with the spacing exception | 28 px compact rows carry no inline targets; ≥32 px for repeated actions |
 | SC 2.1.1 / 2.1.2 Keyboard, No Keyboard Trap | A | all functionality keyboard-operable | plus a real keyboard model (below) |
+| [SC 2.1.4 Character Key Shortcuts](https://www.w3.org/WAI/WCAG22/Understanding/character-key-shortcuts.html) | **A** | a single-character shortcut must be **turn-off-able**, **remappable**, **or active only on focus** | **a Settings toggle satisfies "turn off" for all five at once** — see below |
 | SC 2.4.7 Focus Visible | AA | a visible indicator | never removed to buy density; `:focus-visible`, so mouse users do not see rings |
 | [SC 2.4.11 Focus Not Obscured](https://www.w3.org/WAI/WCAG22/quickref/) | AA | focused component not entirely hidden | sticky headers are the usual violator — test it |
 | [SC 2.4.13 Focus Appearance](https://www.w3.org/WAI/WCAG22/Understanding/focus-appearance.html) | AAA | ≥2 px perimeter, 3:1 between focused and unfocused | met: 2 px ring at 16.50:1 / 15.33:1 |
@@ -1256,6 +1348,27 @@ targets 5.5:1 to leave slack for theme tuning. Row dividers, by contrast, are de
 and are genuinely unbound — but a border that is the *only* cue a control exists **is** bound by
 SC 1.4.11, which is why `tokens.css` separates `--border` from `--border-strong`.
 
+**The one colour in the system that is *data*, and the rule it needs.** Every token above is a fixed
+value that can be checked once. `dominant_color` is not: ARCHITECTURE §4.4.1 computes it at runtime
+as one average over the 92 px poster fetch, and the poster card renders the title (12 px / 600) and
+year on top of it. **Nothing constrained the pair, and the shipped sample data already fails** —
+`#16130e` on `#7d6a4f` is **3.57:1** for the title and **3.12:1** for the year, against 4.5:1 for
+both. One bad hand-picked swatch would be a nit; having no rule is the finding, because with an
+average taken over arbitrary cover art, mid-luminance fills are common and *both* black and white
+land near 3.5:1 on them.
+
+> **Pick whichever of the two theme text tokens scores higher against the computed
+> `dominant_color`. If the winner is still below 4.5:1, adjust `dominant_color`'s lightness — away
+> from the text colour, in 2% steps in OKLCh, preserving hue and chroma — until it clears. The fill
+> is decoration; the title is content, and content wins.**
+
+Two supporting rules, because otherwise the ratio is not computable from what ships. **Neither the
+title nor the year carries `opacity`** — compositing changes the effective ratio (by ~0.45 on the
+measured pair) through a mechanism no contrast check sees, so the year gets a real colour token.
+And **12 px semibold is normal text under WCAG, not large** (large is ≥18.66 px bold or ≥24 px), so
+4.5:1 applies to both lines. **Asserted in CI over any `--dc` / `--dc-fg` pair that ships in a
+fixture**, and in the image pipeline where the colour is produced (ARCHITECTURE §4.4.1).
+
 **Keyboard model, beyond the success criteria** (this is a power tool):
 
 - **A list or grid is one tab stop; arrow keys move within it** — roving tabindex, per the ARIA APG
@@ -1263,8 +1376,29 @@ SC 1.4.11, which is why `tokens.css` separates `--border` from `--border-strong`
   thousand tab stops is not a keyboard model. This is the Motif traversal model, which is the
   ancestor of the pattern (OSF/Motif Style Guide rev 1.2, 1993).
 - `/` focuses search; `Esc` clears or closes; `j`/`k` and arrows move; `Enter` opens; `?` opens a
-  shortcut sheet. Sonarr already ships a keyboard-shortcuts modal in the header actions menu, so
-  this is a convention, not an invention.
+  shortcut sheet; `l` opens the scope popover. Sonarr already ships a keyboard-shortcuts modal in
+  the header actions menu, so this is a convention, not an invention.
+- 🚩 **Those are five single-character shortcuts, and SC 2.1.4 is Level A.** The criterion is
+  explicit: *"If a keyboard shortcut is implemented … using only letter … characters, then at least
+  one of the following is true"* — **turn off**, **remap**, or **active only on focus**. "It also
+  has a visible mouse equivalent" is not one of the three; that addresses discoverability, while
+  2.1.4 exists for speech-input users whose dictation is typed into the page, and for anyone with a
+  tremor. **Three requirements, all v0.1:**
+  1. **A "Keyboard shortcuts" toggle in Settings, on by default.** One control satisfies "turn off"
+     for all five, and it is the cheapest of the three routes.
+  2. **The guard is `if (t.isContentEditable || t.closest('input, select, textarea,
+     [contenteditable]')) return;`** — excluding only `INPUT`/`TEXTAREA`/`SELECT` by tag name leaves
+     buttons, links, rows and `contenteditable` unguarded, so `l` fires with focus on "Add library"
+     and `/` steals focus from a button.
+  3. **`?` stays unconditionally**, because the sheet it opens is where the toggle is discovered.
+- **A roving-tabindex handler must not intercept keys inside a form control.** A grid-level
+  `keydown` listener that resolves `closest('[role=row]')` fires for anything focused *inside* a
+  row, so `ArrowUp`/`ArrowDown`/`Home`/`End` are stolen from every `<select>` and text input in it —
+  which makes a `<select>` keyboard-inoperable outright, an SC 2.1.1 Level A failure. **Bail out
+  before the key switch when the event originates in a form control**, and never intercept
+  `Home`/`End` unless the target is the row itself. **This is a required test**, because it is
+  invisible to `svelte-check`: *for every roving grid, arrowing and `Home`/`End` inside a contained
+  `input`/`select` must not move focus.*
 - **`preloadData()` on `focusin`**, so keyboard users get the hover path's head start (§7.3).
 - *INFERENCE:* a visible keyboard model is one of the clearest positive craft signals available,
   because generated UI essentially never ships one.
@@ -1371,10 +1505,32 @@ AI-generated" an actual gate rather than a vibe.
 - `[review]` Hover changes colour only, never geometry. Focus rings are instant.
 
 **Controls and links**
-- `[grep]` No `outline: none` anywhere.
+- `[grep]` **No `outline: none` (or `outline: 0`) except in the one pattern below, which is the
+  correct way to write the rule and which the absolute form would fail the build on.** The
+  exception, stated precisely enough to grep: a declaration removing the outline is permitted **only**
+  when the *immediately following* rule in the same file targets the same selector with
+  `:focus-visible` appended and sets an `outline` of at least `2px`. Greppable form — the rule fails
+  unless every match of
+  `/([^{}]+):focus\s*\{[^}]*outline:\s*(none|0)[^}]*\}/` is followed, with only whitespace and
+  comments between, by a match of `/\1:focus-visible\s*\{[^}]*outline:\s*(?!none|0)\d*\.?\d+(px|rem|em)/`
+  on the **same** captured selector. Anything else — an `outline: none` with no replacement, a
+  replacement on a different selector, a replacement further down the file — fails.
+  *Why the exception exists:* `:focus { outline: none }` followed immediately by
+  `:focus-visible { outline: 2px solid var(--focus) }` is the standard, correct way to keep the ring
+  for keyboard users and drop it for mouse users, which is exactly what §11's SC 2.4.7 row requires.
+  A flat ban makes the compliant pattern unwritable.
+- `[grep]` No single-character keyboard shortcut without the Settings toggle that turns all of them
+  off (SC 2.1.4, §11).
 - `[review]` Every dropdown of options is a native `<select>`; checkboxes and radios are native.
 - `[review]` Everything that navigates is an `<a href>` with a real URL. No `<div>` with a click
   handler, no `onclick` navigation.
+- `[review]` **For every roving-tabindex grid: arrowing, `Home` and `End` inside a contained
+  `input`, `select` or `textarea` must not move focus.** SC 2.1.1 is Level A and `svelte-check`
+  cannot see this.
+- `[review]` **Every ARIA grid carries the roles a native `<table>` would have supplied** —
+  `role="table"`/`"row"`/`"columnheader"`/`"cell"`, header association, and column names that
+  survive the ≤760 px stacked view. This is the cost of §7.4's grid-row primitive and it is paid per
+  component.
 
 **Copy**
 - `[grep]` Banned words across all UI strings: seamlessly, effortlessly, powerful, simply, unlock,
@@ -1408,6 +1564,11 @@ AI-generated" an actual gate rather than a vibe.
 - `[review]` Every screen depending on an optional service degrades with a named reason and a link
   to the fix.
 - `[review]` Contrast re-measured in both themes when any token changes.
+- `[grep]` **Every `dominant_color` / foreground pair in a fixture clears 4.5:1** (§11). This is the
+  one colour that is data rather than a token, so it cannot be checked once.
+- `[review]` No live region missing on a determinate progress readout or on a control that changes a
+  visible summary string — the scope chip's label and the indexer fan-out count are both Tier 3-ish
+  readouts that a sighted user watches change and a screen-reader user is told nothing about.
 
 **The two catch-alls** (§1.6), applied to every PR that touches a screen.
 

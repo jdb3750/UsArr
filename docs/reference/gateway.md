@@ -32,9 +32,13 @@ plays.*
 
 **Response envelope**, required on every response: `subsonic-response` with `status`, `version`
 (the OpenSubsonic version UsArr implements), `type` (`"usarr"`), `serverVersion`, and
-`openSubsonic: true`. Errors use the spec's own codes — **40** wrong credentials, **50** not
-authorized, **70** not found. **Never a 500**, and never a 403 where 70 is the honest answer
-(see §3).
+`openSubsonic: true`. Errors use the spec's own codes, and the list leads with the one an
+api-key-only server actually emits: **44** invalid API key · **43** conflicting authentication
+parameters (`apiKey` together with `u`) · **42** unsupported mechanism (plaintext `p`) · **41**
+token auth removed (`u`+`t`+`s`) · **50** not authorized · **70** not found. **40 "wrong username or
+password" is meaningless on a server with no usernames** and is listed last rather than first, which
+is where it used to be. **Never a 500**, and never a 403 where 70 is the honest answer (see §3).
+Every auth refusal carries `helpUrl`.
 
 **Not in the gateway milestone, each its own later milestone with its own criterion:** OPDS
 (§5), multi-instance aggregation (§2), write-back (§6), and the wider client matrix.
@@ -51,7 +55,10 @@ authorized, **70** not found. **Never a 500**, and never a 403 where 70 is the h
 |---|---|
 | Parameter name | **`apiKey`**, as a **query parameter**. ✅ verified against the extension spec. |
 | Both `apiKey` and `u` present | **Reject with error 43** (corrected 2026-08-16 — this said 40). The apiKeyAuth extension spec: *"When an API key is provided, the client **must not** provide a `u` parameter; passing in `u` must be treated as an **error 43**"*, and *"If multiple conflicting authentication parameters are passed in, the server must return an **error 43**, Multiple conflicting authentication mechanisms provided."* Ambiguous credentials are never resolved in the client's favour. |
-| `u`, `t`, `s`, `p` present without `apiKey` | **Reject with error 42** — *"Provided authentication mechanism not supported"* (corrected 2026-08-16 — this said 40). **Error 41** is the narrower case the spec reserves for a server that has *removed* token-based auth: *"If a server removes support for token-based authentication, it must return **error 41**… If a server removes support for any other particular authentication mechanism, it must return an **error 42**."* Never silently ignore — silent ignoring lets a client believe it authenticated and then behave as if it had. |
+| `u` + `t` + `s` present without `apiKey` (**token auth**) | **Reject with error 41** (corrected 2026-08-16 — this said 40, then 42). **UsArr *is* the narrower case the spec reserves for 41**, because it refuses token-based authentication as a matter of policy: *"If a server removes support for token-based authentication, it must return **error 41**…"*. The previous row cited that sentence and then applied 42, which inverts it. |
+| `p` present without `apiKey` (**plaintext password auth**) | **Reject with error 42** — *"Provided authentication mechanism not supported"*, which is the code the same spec sentence reserves for *"any other particular authentication mechanism"*. |
+| `apiKey` present but unknown, revoked or malformed | **Reject with error 44, "Invalid API key"** — introduced by the very extension UsArr implements, and **the single most common failure an api-key-only server will emit**. It appeared nowhere in this document. |
+| Any of the above | **Never silently ignore** — silent ignoring lets a client believe it authenticated and then behave as if it had. |
 | **`helpUrl` on every auth refusal** | **Populate it**, pointing at UsArr's own API-key page. The spec introduces the field precisely for this: *"it is recommended that the server provide a meaningful url… in the `helpUrl`"*. Omitting it is why a user sees "wrong password" instead of "this server needs an API key" — the exact confusion the hard-rejection policy exists to avoid. |
 | Spec force | The spec *recommends* that servers offering API-key auth no longer support salt/token. The refusal is **UsArr's own policy**, implemented as a hard rejection, not an omission. |
 | TLS | The spec does **not** require it, so the key rides in the request line of every call. Serve over TLS (tsnet certs or a proxy); warn in the UI otherwise. Redaction is mandatory (security.md §5). |

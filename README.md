@@ -11,10 +11,12 @@ that plugs into the players you already use.**
 
 ## What it is
 
-UsArr is a self-hosted **aggregation gateway** for the whole media-acquisition ecosystem. It sits
-over Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian and the post-Readarr book tools for
-acquisition, and over Jellyfin, Navidrome, Audiobookshelf and Komga/Kavita for libraries — and
-presents all of it as **one library, one search box, one tag vocabulary, one request flow, one
+UsArr is a self-hosted **aggregation gateway** for the whole media-acquisition ecosystem, and it
+arrives in stages rather than all at once. **v0.1 aggregates Sonarr, Radarr and Prowlarr for
+acquisition, and Navidrome, Audiobookshelf and Komga for libraries.** Kavita follows in v0.2, and
+Lidarr, LazyLibrarian, Mylar3, Kapowarr, Jellyfin and the post-Readarr book tools in later
+milestones — [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §16 is authoritative for which. All of
+it is presented as **one library, one search box, one tag vocabulary, one request flow, one
 credential.**
 
 **It coexists with your stack; it does not replace it.** Sonarr keeps doing acquisition, Jellyfin
@@ -52,14 +54,15 @@ Nothing below is built. Status reflects **planned milestone**, not progress.
 | Feature | Status |
 |---|---|
 | Unified library across **six media types** — movies, TV, music, ebooks, audiobooks, comics | 📋 Planned — v0.1 |
-| Read-only catalogue sources: **Navidrome, Audiobookshelf, Komga, Kavita** (plus Sonarr + Radarr) | 📋 Planned — v0.1 |
+| Read-only catalogue sources: **Navidrome, Audiobookshelf, Komga** (plus Sonarr + Radarr) — Kavita in v0.2 | 📋 Planned — v0.1 |
 | **User-defined libraries**, configured separately from services, with a correction layer | 📋 Planned — v0.1 (correction UI v0.3) |
+| **Six-type schema** — `work_credit` M:N attribution, edition-scoped `work_track`, the `comic_issue` kind, audiobook edition columns | 📋 Planned — v0.1 (migration 0001 or never — ADR-0030, ADR-0031) |
 | Local-first reads; no upstream call on any render path | 📋 Planned — v0.1 |
-| **Search-and-Grab mode** — free-text indexer search and grab via Prowlarr, **for all six types** | 📋 Planned — v0.1 |
+| **Search-and-Grab mode** — free-text indexer search and grab via Prowlarr, **for all six types**. ⚠️ For music and books, coverage depends heavily on private trackers: 403 of Prowlarr's 543 indexer definitions are `type: private`, and the dedicated music and book trackers are invite-only, so on public indexers alone this is materially thinner than for film | 📋 Planned — v0.1 |
 | Instant search: client prefix index → FTS5 hybrid (prefix + substring; **no typo tolerance**) | 📋 Planned — v0.1 |
 | Source tagging: **usenet / torrent**, first-class and filterable | 📋 Planned — v0.1 |
 | Minimal write path — monitor, unmonitor, delete, add — on a durable command queue | 📋 Planned — v0.1 |
-| Sync: full import + `/history/since` delta + **reconciliation with 7-day tombstones** | 📋 Planned — v0.1 |
+| Sync: full import + `/history/since` delta (Sonarr/Radarr) + **an ordered page-walk delta for the catalogue sources, none of which has a changed-since endpoint** + **reconciliation with 7-day tombstones** | 📋 Planned — v0.1 |
 | **Services health screen** — what is broken, why, and the button that fixes it | 📋 Planned — v0.1 |
 | Image pipeline: proxy, downscale, ThumbHash, **viewport-prioritised cold start** | 📋 Planned — v0.1 |
 | **"1080p ✓ / 4K ✗"** — one poster across two Radarr instances | 📋 Planned — v0.1 |
@@ -70,12 +73,13 @@ Nothing below is built. Status reflects **planned milestone**, not progress.
 | Feature | Status |
 |---|---|
 | Requests: one Add that routes, availability states, per-season TV, approval workflow | 📋 Planned — v0.2 |
+| **Kavita** as the fourth read-only catalogue source | 📋 Planned — v0.2 |
 | One search box spanning owned **and** unowned (out-of-band provider search, streamed) | 📋 Planned — v0.2 |
 | **Cross-media linking** via a prebuilt Wikidata CC0 edge artifact — *Train Dreams* end to end | 📋 Planned — v0.3 |
 | Declarative YAML service manifests (add a service without code) | 📋 Planned — v0.3 |
 | **OpenSubsonic server** — ~20-method read-only subset, `apiKeyAuthentication` only, one Navidrome | 📋 Planned — v0.4 |
 | Stable IDs so client playlists survive re-syncs | 📋 Planned — v0.4 |
-| **OPDS catalogue — 1.2 first**, 2.0 second (KOReader does not speak 2.0) | 📋 Planned — v1.0 |
+| **OPDS catalogue — 1.2 first**, 2.0 second (the long tail of readers is entirely 1.2; **KOReader 2026.07 shipped OPDS 2.0 basic support**, so 1.2-first is about the long tail and not about KOReader) | 📋 Planned — v1.0 |
 | Multi-instance aggregation; favourites / ratings / scrobbles written back | 📋 Planned — v1.0 |
 | **Request sinks**: Lidarr, LazyLibrarian, Mylar3, Kapowarr — plus Jellyfin and a Calibre `metadata.db` adapter | 📋 Planned — v1.0 |
 | Source tagging: **irc / direct** (LazyLibrarian) | 📋 Planned — v1.0 |
@@ -88,7 +92,8 @@ Nothing below is built. Status reflects **planned milestone**, not progress.
 WASM plugins · an optional external search engine · typo tolerance · OIDC / passkeys / TOTP /
 forward-auth · the cross-media fuzzy ladder and review inbox · a Jellyfin-compatible surface ·
 video byte-proxying · **release calendars across every subscription** · **per-user watch/listen/read
-statistics**. Each is in **[`docs/FUTURE.md`](docs/FUTURE.md)** with why it was deferred, what it
+statistics** · slskd as a music sink · Suwayomi · OPDS 2.0 · Chaptarr · MangaBaka · **the
+ebook↔audiobook identity pass** · per-library OPDS feeds. Each is in **[`docs/FUTURE.md`](docs/FUTURE.md)** with why it was deferred, what it
 would cost, and the specific seam in the v0.1 design that keeps it cheap to add — because the base
 is being built with intentional space for them.
 
@@ -183,8 +188,9 @@ layout.
 |---|---|
 | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | The authoritative design: principles, components, the gateway, the data model, sync, search and requests, cross-media, tags, providers, security, deployment, **the roadmap (§16 is authoritative for scope)** and **the screens**. |
 | **[docs/reference/](docs/reference/)** | The load-bearing detail the architecture links to: full DDL, sync mechanics, search query construction, the gateway endpoint map, cross-media, tags, providers, \*Arr API facts, and the security model. |
+| **[docs/design/](docs/design/)** | The visual system: `DESIGN-DIRECTION.md`, `tokens.css` (the canonical values) and the v0.1 screen mockups. `ARCHITECTURE.md` §17 stays authoritative over all three. |
 | **[docs/FUTURE.md](docs/FUTURE.md)** | Deferred features — what each is, why it waited, what it would cost, and **the seam in the current design that keeps it cheap**. |
-| **[docs/DECISIONS.md](docs/DECISIONS.md)** | 24 ADRs. Context, decision, consequences, and **what was rejected and why** — including reversals, which record what falsified the original rather than quietly rewriting it. |
+| **[docs/DECISIONS.md](docs/DECISIONS.md)** | The ADRs. Context, decision, consequences, and **what was rejected and why** — including reversals, which record what falsified the original rather than quietly rewriting it. |
 | **[docs/REVIEW-LOG.md](docs/REVIEW-LOG.md)** | Every finding from the adversarial review: applied, or rebutted with reasoning and evidence. |
 | **[docs/RESEARCH.md](docs/RESEARCH.md)** | The evidence base. Five research tracks with sources, and every ✅ verified / ⚠️ unverified distinction preserved. **Read this before trusting any factual claim.** |
 | **[docs/CONFIGURATION.md](docs/CONFIGURATION.md)** | Every environment variable, default and data-directory path. **Authoritative for configuration.** |

@@ -211,8 +211,19 @@ audiobook from music at acquisition time.** Capture the raw array; never collaps
 > 1. **`floor(cat/1000)*1000` is not sufficient, and the parent rule must not run first.**
 >    **Audiobooks are `3030`, under `Audio` (3000), not under `Books` (7000)** — so a `type:` tag
 >    derived from the *parent* category labels every audiobook release `type:audio`. The special
->    cases (`3030`, `5070`, `7020`, `7030`, `7010`) are consulted **before** the parent rule, not
->    after it. `ARCHITECTURE.md` §8.5 carried the parent-first wording and is corrected.
+>    cases are consulted **before** the parent rule, not after it, and **all five now have a stated
+>    rule rather than only being named** — `5070` and `7010` were listed as fixed and were not:
+>
+>    | Category | Verified name | Rule |
+>    |---|---|---|
+>    | `3030` | `Audio/Audiobook` (line 43) | → `(book, audiobook)`. Parent is `Audio`, so the parent rule tags it `type:audio`. |
+>    | `5070` | `TV/Anime` (line 65) | → `type:anime` **in addition to** `type:tv`. The parent `TV` is correct but discards the leaf, and anime routing needs it. |
+>    | `7010` | `Books/Mags` (line 82) | → `type:magazine`. The parent `Books` calls a magazine an ebook. |
+>    | `7020` | `Books/EBook` | → `(book, ebook)`; `7000`/`7040`/`7060` also accepted, since indexers file ebooks under the parent and under Technical/Foreign. |
+>    | `7030` | `Books/Comics` | **ranking signal only**; the comics-and-manga *filter* is the parent `7000` — see (2). |
+>
+>    `ARCHITECTURE.md` §8.5 carried the parent-first wording, is corrected, and now carries the same
+>    five rows.
 > 2. **`7030 → comic` returns zero manga, because there is no manga category in the Newznab
 >    standard.** `7030 Books/Comics` is the only comics category anywhere in the tree, and
 >    **Nyaa — the dominant public manga tracker — maps its `Literature` categories (`3_0`, `3_1`,

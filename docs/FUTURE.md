@@ -260,6 +260,14 @@ release dates from every Radarr, album release dates from Lidarr, book publicati
 book services — in one view, with per-media-type filtering, and exportable as an iCal feed a phone
 calendar can subscribe to.
 
+⚠️ **Which of those sources can actually supply a date, stated because the sentence above promises
+aggregation over services that cannot.** **Only the \*Arrs expose a `/calendar` endpoint.** Lidarr is
+v1.0, and v0.1's book, audiobook and comic sources — Audiobookshelf, Komga, and Kavita from v0.2 —
+expose **no calendar endpoint at all**. So a catalogue-only source contributes `work.release_date`
+where it happens to have one and nothing where it does not, and the calendar must be honest about
+which media types it can cover rather than rendering four empty lanes. The **seam**
+(`work.release_date`) is unaffected; the **promise** needed narrowing.
+
 **Why deferred.** It is genuinely valuable and genuinely additive, and it is not v0.1 only because
 v0.1 has one job: prove the replica thesis on a real library. It is also the kind of feature that is
 cheap *if* the data model already holds the dates and expensive if it does not — which is why the
@@ -305,7 +313,10 @@ own. Both are already specified (`reference/gateway.md` §6).
 **The seam.** Three decisions in the v0.1/v1.0 design that exist partly for this:
 
 1. **`play_history` is append-only, one row per play event**, with
-   `UNIQUE (user_id, work_id, started_at)` — **not** a counter. The stated rule is that *play counts
+   `UNIQUE (user_id, work_id, edition_id, started_at)` — **not** a counter. **The `edition_id` is a
+   correction ADR-0031 forced and this seam had not absorbed**: position is edition-scoped, and
+   ARCHITECTURE §6.1 makes an audiobook an `edition` of a `book` work, so two editions of one work
+   consumed on the same day collide under a work-keyed uniqueness constraint. The stated rule is that *play counts
    merge by union of events, never by taking a max*, because taking a max from a backend that reset
    would silently delete history. An append-only event log is exactly what statistics need, and a
    counter is exactly what they cannot be reconstructed from.
@@ -331,7 +342,7 @@ than no statistics, because people believe them.
 | **Download-client visibility** (SAB, NZBGet, qBittorrent, Deluge, Transmission) | Needs session-establishment and JSON-RPC transports that manifests cannot express (`reference/providers.md` §3.2) | Tier 0 providers via the same registry; Search-and-Grab already routes grabs through Prowlarr's own clients, so nothing is blocked meanwhile |
 | **Recyclarr/Configarr automation absorption** | Proven collapsible by arr-dashboard, but it would dilute the speed story | UsArr already reads custom formats and is required never to clobber them |
 | **Optimistic write apply with inverse-patch rollback** | Replaced by a durable command queue; it bought ~200 ms on a rare operation at the cost of the project's hardest correctness problem (ADR-0012a) | The queue's state machine already distinguishes `failed_rejected` from `verifying`, which is the hard half |
-| **Cross-media "continue" row** spanning video, audiobook and ebook position | Depends on §9's event stream | `playback_state` is keyed `(user_id, work_id)` across all kinds already |
+| **Cross-media "continue" row** spanning video, audiobook and ebook position | Depends on §9's event stream | `playback_state` is keyed **`(user_id, work_id, edition_id)`** across all kinds. ⚠️ **The work-keyed form previously recorded here was not a seam for this feature — it was its opposite.** The EPUB and the M4B of *Piranesi* are two editions of one `book` work (ARCHITECTURE §6.1), so `(user_id, work_id)` cannot represent "40% through the ebook, 12% through the audiobook", which is the entire content of this row. Corrected in `reference/schema.md`'s appendix |
 | **Emby / Plex** | Emby is a feature-flagged Jellyfin variant; Plex paywalled remote playback of personal media on 29 April 2025 | Both are Tier 0 providers behind the registry |
 
 ---
@@ -399,12 +410,21 @@ they have.
 
 **What.** `application/opds+json` feeds alongside the Atom ones.
 
-**Why deferred behind 1.2 rather than instead of it.** OPDS 2.0 is the better format — JSON over a
-metadata table, which is nearly free once the data exists — but **KOReader, the single most important
-client for a self-hoster with a Kobo or Kindle, does not speak it**: `koreader#14681` is an *open*
-feature request. The long tail (Aldiko, Moon+, MapleRead, FBReader, Marvin) is entirely 1.2, and
-Komga is the only server in the whole survey that serves both. **Shipping 2.0 first would mean the
-feature does not reach its main user.**
+**Why deferred behind 1.2 rather than instead of it — re-argued 2026-08-16, because the fact this
+rested on stopped being true.** The previous reason was that **KOReader, the single most important
+client for a self-hoster with a Kobo or Kindle, does not speak 2.0**, citing `koreader#14681` as an
+*open* feature request. ✅ **Verified against the issue and the release notes: #14681 is Closed,
+milestone 2026.07, and KOReader 2026.07 "Sailing Walrus" shipped `OPDS 2.0 basic support`
+(PR #15696), with 2026.07.1 following up on the OPDS 2.0 HTTP header and the author field.** So
+"KOReader does not speak 2.0" must not be repeated anywhere.
+
+**The ordering survives on the half that was always the stronger ground, and only that half: the
+long tail is entirely 1.2.** Aldiko, Moon+, MapleRead, FBReader and Marvin all speak 1.x and nothing
+else, and Komga is the only server in the whole survey that serves both. A 2.0-only surface excludes
+every one of them; a 1.2 surface excludes nobody, KOReader included, since it gained 2.0 in addition
+to 1.x rather than instead of it. **What has changed is that shipping 2.0 second is now a real gain
+for a real client rather than a hedge** — which raises this entry's priority without reversing its
+order. ⚠️ Re-verify before the milestone is scoped; this claim has already moved once.
 
 **What it would cost.** One route returning `application/opds+json`: a `title` in `metadata`, a
 `self` link, and at least one collection with role `navigation`, `publications` or `groups`. Search
@@ -510,12 +530,25 @@ edition side and an OLID to the work side without a schema change; and `work_rel
 `confidence` and `evidence`. **The rule that keeps the seam usable is in ADR-0031 and §6.4: never let
 an ISBN or an ASIN satisfy `ux_extid_work_strong`.** Break that and the pass has nothing to attach to.
 
-**A companion requirement, and it is the cheap half:** a visible **"not identified"** state. Whatever
-the backend reports, UsArr keeps the row — a book with a title and a file and a quiet marker, still
-searchable. That single behaviour is what LazyLibrarian's absence of disqualifies it as a catalogue,
-and it costs one nullable column and one badge.
+**A companion requirement, and it is *not* deferred with the rest of this entry — it moved out.** A
+visible **"not identified"** state: whatever the backend reports, UsArr keeps the row — a book with
+a title and a file and a quiet marker, still searchable. That single behaviour is what
+LazyLibrarian's absence of disqualifies it as a catalogue, and it costs one nullable column and one
+badge. **It is a v0.1 requirement**, not a v0.3-or-later one, because v0.1 ships Komga, which
+supplies **no external identifiers at all** — so the state is reachable on day one. It now lives in
+ARCHITECTURE §6.4 as a rule; it is recorded here only so the connection is not lost.
 
-**Trigger.** The milestone that ships any book catalogue source with real user data behind it.
+**Trigger.** ⚠️ **Rewritten, because the previous one — *"the milestone that ships any book
+catalogue source with real user data behind it"* — is satisfied by v0.1** under ADR-0032, which
+would make this a deferred entry whose reopening condition fires one milestone *before* the roadmap
+line that used to claim it. **The trigger is now: after v0.3, once the Wikidata edge pipeline has
+proved the confidence/evidence path on real data.** That is the machinery this pass writes into, and
+until it exists there is nowhere to put a computed link.
+
+**ARCHITECTURE §16's v0.3 line is corrected to match**, and now says that the ebook↔audiobook link is
+the case v0.3 does **not** solve rather than describing it as v0.3's flagship. One feature had three
+homes — a roadmap line, this entry, and a trigger that fired before both — and §16 is authoritative,
+so this entry says plainly that it is not on a milestone.
 
 ---
 
