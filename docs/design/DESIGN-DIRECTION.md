@@ -367,7 +367,7 @@ distinguish color coded information"*, default `false`
 — precisely because those apps encode a lot of meaning in colour alone. Building the redundancy in
 from day one removes the need for a setting later.
 
-### 3.3 Protocol chips — **the chip is neutral; the word carries the protocol**
+### 3.3 Protocol chips — **there is no chip; the word carries the protocol**
 
 Torrent and usenet are colour-coded consistently across Sonarr, Radarr and Prowlarr:
 `torrentColor: '#00853d'` and `usenetColor: '#17b1d9'`
@@ -387,17 +387,26 @@ collided with the one ramp this design cannot afford to blur.
 **Three ways out, and the third is taken.** Retuning the torrent lightness does not help — the
 collision is hue, not luminance. Moving the hue away from green is foreclosed by §1.1, which bans
 indigo, violet, purple and fuchsia outright, and every other direction lands on the usenet teal or
-on the error red. **So the protocol chip loses its colour: it is neutral, and the words `torrent`
-and `usenet` carry the distinction — which they already do, in the same cell.** That is §1.4's own
-rule applied to a fill instead of an icon (*if a label sits next to it and the label alone would be
-understood, delete the decoration*), it is "cut before you add" removing two tokens rather than
-adding a fourth hue, and it restores §3's argument by leaving chroma to status alone. `Protocol` is
-still a first-class filterable field (§16's `source:` tag); it is the *ink* that goes.
+on the error red. **So the protocol chip loses its colour: the words `torrent` and `usenet` carry
+the distinction — which they already do, in the same cell.** That is §1.4's own rule applied to a
+fill instead of an icon (*if a label sits next to it and the label alone would be understood, delete
+the decoration*), it is "cut before you add" removing two tokens rather than adding a fourth hue,
+and it restores §3's argument by leaving chroma to status alone. `Protocol` is still a first-class
+filterable field (§16's `source:` tag); it is the *ink* that goes.
 
-📌 **Reversible in one line, and flagged for Joe as a change of visible character** rather than a
-defect fix — the tokens `--protocol-torrent` / `--protocol-usenet` are deleted from `tokens.css`,
-and restoring them plus a torrent hue outside the status band is the alternative if he wants the
-ecosystem's colour cue kept.
+🚩 **And then the box went too, because the first pass stopped one element short of its own rule.**
+Removing the fill left an 8px `--border-hi` outline — *identical on torrent and on usenet*, repeated
+down every row of the column, next to a word that already says which one it is. Apply §1.4's test to
+the leftover and it fails exactly as the fill did: delete the swatch and no reader loses anything.
+So the swatch is deleted, not merely drained. `.proto__dot` and its spans are gone from the mockup;
+`.proto--torrent` / `.proto--usenet` stay on the markup as the filter hook.
+
+📌 **Flagged for Joe as a change of visible character** rather than a defect fix — the tokens
+`--protocol-torrent` / `--protocol-usenet` are deleted from `tokens.css`, and restoring them plus a
+torrent hue outside the status band is the alternative if he wants the ecosystem's colour cue kept.
+⚠️ **That reversal is no longer one line.** It was, while the drained swatch was still on the page;
+now it is a rule *and* eighteen spans of markup, because there is no box left to put a hue in. The
+cost is small and it is stated rather than left as a stale promise.
 
 Also note the vocabulary decision: the column is labelled **"Protocol"**, matching
 Prowlarr, not **"Source"**, which is what Sonarr's Interactive Search calls the same field

@@ -40,6 +40,23 @@ const (
 	//
 	// #nosec G101 -- an HKDF info label, not a credential. See infoStreamToken.
 	infoClientCredential = "usarr/client-credential/v1"
+
+	// infoGrabRowID derives the key that turns a provenance rowid into the
+	// opaque row identity GET /api/v1/grabs/recent ships. Review finding
+	// RG-01.3: provenance.id is INTEGER PRIMARY KEY, so it is monotonic ACROSS
+	// users, and a caller seeing 104 then 341 on two of their own grabs learns
+	// 236 rows were written by other people in between — a volume oracle that
+	// survives the scope filter, because the filter decides which rows come
+	// back, not what their ids say about the ones that did not.
+	//
+	// A NEW label for a new purpose. The three labels above are bound into
+	// stored ciphertext and issued API keys as domain-separation inputs;
+	// reusing one here would tie this key's fate to theirs, and editing one
+	// would make every stored credential undecryptable with nothing to catch
+	// it. New purposes get new labels.
+	//
+	// #nosec G101 -- an HKDF info label, not a credential. See infoStreamToken.
+	infoGrabRowID = "usarr/grab-row-id/v1"
 )
 
 // DerivedKeyLen is the length of every key derived here.
@@ -63,6 +80,17 @@ func DeriveStreamTokenKey(secret, salt []byte) ([]byte, error) {
 // keys. See infoClientCredential for the caveat on this label.
 func DeriveClientCredentialKey(secret, salt []byte) ([]byte, error) {
 	return derive(secret, salt, infoClientCredential)
+}
+
+// DeriveGrabRowIDKey derives the key that HMACs a provenance rowid into the
+// opaque identity the Recent-grabs read publishes. See infoGrabRowID.
+//
+// It is derived from the same secret and salt as everything else here, which is
+// what makes the published identity survive a restart: the id has to be stable
+// across requests or identity-keyed focus and hover in the client break on every
+// poll.
+func DeriveGrabRowIDKey(secret, salt []byte) ([]byte, error) {
+	return derive(secret, salt, infoGrabRowID)
 }
 
 func derive(secret, salt []byte, info string) ([]byte, error) {

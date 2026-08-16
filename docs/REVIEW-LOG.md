@@ -3358,8 +3358,8 @@ had moved by the time the findings were recorded — `dd15d95` landed `GET /api/
 `ec2a21d` rather than the review's diff.** None was overtaken; the closed item at the end was
 already closed at `85cae80` and is confirmed closed here for the second time, by a different method.
 
-Seven findings, one follow-up and one closure. **One is applied (RG-01.2), one routes to another
-thread (RG-01.1), one is deferred pending coordination (RG-01.3), and four are rebutted
+Seven findings, one follow-up and one closure. **Two are applied (RG-01.2, and RG-01.3 once the
+client went opaque at `23cac0f`), one routes to another thread (RG-01.1), and four are rebutted
 (RG-01.4 to RG-01.7)** — written down rather than dropped, because a rebuttal that is not on paper
 gets re-litigated by the next reviewer to notice the same shape.
 
@@ -3385,6 +3385,35 @@ only prose description of *this block*, and it describes something else.
 file-ownership convention, and a code thread editing another thread's section is how two threads
 produce one conflict. **Routed there** with the three specifics: the state vocabulary, the resolved
 media-type column, and the pagination shape.
+
+> ✅ **Applied by the design thread, 2026-08-16, and the sweep found the SAME defect pointing the
+> other way in the same section.** §17.5 now carries a shipped-against-target table covering all
+> four deviations — the six columns, the `provenance.acquisition_state` outcome vocabulary in place
+> of the write queue's five states, the clamped `LIMIT` in place of the keyset join, and the absent
+> *nothing-was-sent* state — with the reason for each moved out of the comment above the handler in
+> `internal/httpapi/grabs.go` and into the document a reader consulting the design will actually
+> open. §16's cost note is marked in place rather than rewritten, because **a cost estimate edited
+> after the fact stops being evidence about estimating**. 📌 **The specification is not narrowed to
+> what shipped**, which was the routing's one real risk: all four target properties are still
+> wanted, and the table doubles as the checklist for closing the distance, ordered by dependency —
+> `write_queue` needs a writer before anything else on it can move.
+>
+> 🚩 **The observation worth more than the fix: §17.5 was wrong in BOTH DIRECTIONS AT ONCE.** The
+> block above reads as a description of the present while specifying a future shape; four hundred
+> words later the same section said *"the code thread **is adding** `acquisition_state` to
+> `provenance` in migration 0003"* — a future tense over something that had already landed at
+> `f895ddc`, column, partial index `ix_prov_unconfirmed` and four readers included. Verified against
+> the tree before either edit was written, because a relayed "it shipped" is a hypothesis: `f895ddc`
+> is an ancestor of `main`, `internal/db/migrations/00003_provenance_acquisition_state.sql` is
+> merged, and `internal/store/releases.go`, `internal/releases/grab.go`, `internal/httpapi/grabs.go`
+> and `web/src/lib/api.ts` all read the column. Had it been in flight, the correct edit would have
+> been the opposite one and a sweep looking for one direction only would have written the drift
+> back in. **This is why the failure is not "we forget to update docs when we ship."** If that were
+> the cause, every drift would point the same way — doc behind tree. Drift in both directions inside
+> one section means **nothing checks tense against the tree at all**, and the two errors are one
+> error with two signs. Recorded here rather than fixed with a checker, because the checker is a
+> real proposal and not this pass's work: `docs/DEVELOPMENT.md` §11's "fire a guard deliberately"
+> rule is the shape it would take.
 
 ## RG-01.2 — the secret-leak guard was a denylist. **Applied.**
 
@@ -3430,7 +3459,7 @@ cannot produce the same green (DEVELOPMENT §11 rule 4).
 
 Both reverted; the suite is green.
 
-## RG-01.3 — `provenance.id` on the wire is a cross-user volume oracle. **Deferred pending coordination.**
+## RG-01.3 — `provenance.id` on the wire is a cross-user volume oracle. **Applied.**
 
 `internal/httpapi/grabs.go:46` ships `ID int64 \`json:"id"\``, which is `provenance.id` — `INTEGER
 PRIMARY KEY`, therefore **a globally monotonic rowid shared across every user**.
@@ -3453,6 +3482,77 @@ here blanks the block rather than degrading it.
 sequence, exposed instead of the rowid. ⚠️ **It is far cheaper now than later.** One published shape
 and one consumer pin it today; every additional client pins it harder, and this is the last cheap
 moment.
+
+### Applied — the coordination completed, and the deferral's own condition was met first
+
+**The client went opaque before the server did**, which is what closed the ordering window the
+deferral named. `23cac0f` retyped `RecentGrab.id` as a `string` and gave `toRecentGrab` a `rowKey`
+helper that accepts a non-empty string **or** a finite number it stringifies, so both wire forms
+render and the two changes could land in either order without a blank block in between. The
+deferral asked for coordination, not for the finding to lapse; this is the coordination.
+
+**What ships:** `recentGrabResponse.ID` is now a `string` carrying `grabRowID`'s keyed hash
+(`internal/httpapi/grabs.go`). **The wire key is unchanged — still `id`** — because the client's own
+note said the replacement would arrive under the same name, and renaming it would have reopened the
+ordering window the retype closed. An example value: `se_wB7GtQhzj_fdHcvNG8A`.
+
+**HMAC-SHA256, truncated to 128 bits, base64url without padding — 22 characters.** The key comes
+from a **new** `crypto.DeriveGrabRowIDKey`, under a **new** HKDF info label `usarr/grab-row-id/v1`.
+⚠️ **No existing label was touched, and that restraint is the point.** `usarr/kek/v1`,
+`usarr/stream-token/v1` and `usarr/client-credential/v1` are domain-separation inputs bound into
+stored ciphertext and issued API keys; editing one silently makes every stored credential
+undecryptable, and `derive_test.go` carries no golden vectors, so nothing would catch it. A new
+purpose gets a new label. `TestDerivedKeysAreDistinct` now covers all four pairwise.
+
+**A keyed hash rather than a per-user sequence, deliberately.** A sequence needs a column, therefore
+a migration, and *"a merged migration is never edited"* — the schema is where this project's
+expensive mistakes live. The hash needs nothing stored at all.
+
+**`user_id` is in the HMAC input alongside the rowid.** It costs one field and buys per-user domain
+separation: the shared/system sentinel-`0` rows migration 0002 backfilled, and any future view that
+widens the scope, would otherwise hand two users the same token for one row and let them correlate
+by comparing. Nothing joins on this value, so there is no cost to it differing per user, and
+`provenance.user_id` is historical and never rewritten, so stability holds. Both inputs are
+fixed-width big-endian, so `(user 1, row 23)` and `(user 12, row 3)` cannot render the same bytes.
+
+**Three tests, pinning the properties rather than the construction** — a truncated hash, a different
+hash, or a per-user sequence with a random base would all pass them; a rowid dressed in hex or
+base64, which is the tempting cheap fix, fails every one:
+
+- **`TestGrabRowIDIsStableAcrossServerInstances`** — the same row gives the same id across two calls,
+  and across a **second server built on the same derived key**, which stands in for a restart. This
+  is the arm that rejects a random per-response token; the client keys rows by identity for focus
+  and hover, so an id that moves rebuilds the block under the cursor.
+- **`TestGrabRowIDCarriesNoOrderOrVolume`** — sorting 64 ids must not reproduce rowid order;
+  adjacent rowids must differ in 32–96 of 128 bits and share no leading prefix; the distance to the
+  **neighbour** and to the **63rd row** must both sit near half, so the *gap* is not recoverable —
+  which is the oracle itself. Plus: two users' ids for one row differ, the fixed-width collision
+  case differs, and a different install key gives different ids.
+- **`TestRecentGrabsNeverShipsAURLOrACredential`, extended rather than duplicated.** The raw rowid
+  would **not** have tripped RG-01.2's allowlist: it leaks through `id`, a key that is *on* the list
+  and must stay there. Only a value-level assertion can catch it, so it sits beside the existing
+  value check — two shapes of the same guard is how one of them rots (RG-01.2's own argument).
+
+**Both guards were fired deliberately before being trusted** (DEVELOPMENT §11), both reverted:
+
+- **The leak assertion** — `ID` kept as a `string` but filled with `strconv.FormatInt(p.ID, 10)`,
+  i.e. the exact cheap "just make it a string" fix. It failed three ways:
+  `the response ships the raw provenance rowid 1 as a string; stringifying it changes the type and
+  keeps the leak` on the body `{"grabs":[{"id":"1",…}]}`, then `the wire id "1" parses as an
+  integer`, then `the wire id is not the keyed hash of (user_id, rowid)`.
+- **The order/volume assertion** — `grabRowID` replaced with big-endian rowid in 16 bytes. It failed
+  on `sorting the ids reproduces rowid order`, on `rowids 1 and 2 differ in 2 of 128 bits`, and on
+  the shared prefix `"AAAAAAAAAAAAAAAAAAAAAQ"` / `"AAAAAAAAAAAAAAAAAAAAAg"`.
+
+**`Config.GrabRowIDKey` is required and `httpapi.New` refuses a wrong length.** The fallback for a
+missing key would be shipping the rowid, which is the leak the key exists to close; it fails closed
+instead. `cmd/usarr` derives it beside the KEK, from the same master key and salt, which is what
+makes the id survive a restart.
+
+**Still on the wire elsewhere, and out of this change's scope:** `grabResponse.ProvenanceID` in
+`internal/httpapi/grab.go` returns the raw rowid to the caller who *just made* that grab. That is a
+much weaker oracle — one id, self-inflicted, no second sample to difference against — but it is the
+same column, and it is a follow-up rather than a thing this finding closed.
 
 ## RG-01.4 — the `ORDER BY` is not a DoS. **Rebutted on measurement.**
 
@@ -3515,7 +3615,7 @@ caller. The sentinel is deliberate: migration 0002 backfilled every pre-attribut
 reading it as *"not mine"* would hide the owner's own history from them. **The rebuttal stands** —
 authenticated route, user-scoped SQL, asserted on the bytes — **on the correct mechanism.**
 
-## RG-01.8 — JSON responses set `nosniff` but not `Cache-Control: no-store`. **Open, and NOT part of this batch.**
+## RG-01.8 — JSON responses set `nosniff` but not `Cache-Control: no-store`. **Applied by `2a2d9b1`.**
 
 `writeJSON` (`internal/httpapi/json.go:81-82`) sets `Content-Type` and `X-Content-Type-Options:
 nosniff`, and **no `Cache-Control`**. A body of release titles is exactly the thing that should not
@@ -3526,6 +3626,52 @@ into RG-01.
 **Deliberately not fixed in this commit.** A one-line change in `writeJSON` alters the headers of
 every API response at once; that is a change with its own blast radius and its own review, not a
 rider on a test conversion.
+
+✅ **Applied by `2a2d9b1`**, as its own change — which is what the deferral asked for, and the
+deferral was right: the review the change deserved is the three questions below, none of which a
+rider on a test conversion would have asked.
+
+**Scope: every `writeJSON` response, not an allowlist.** `writeJSON` is the single choke point every
+JSON body in the package crosses — every handler success, `writeError`'s error shape, and
+`recoverMiddleware`'s panic body — so one line there is what covers the endpoint someone adds next.
+A per-endpoint allowlist has the opposite failure mode: it keeps looking correct while the list falls
+behind the router. **Nothing in the tree depends on caching an API response**, and this was checked
+rather than assumed — `internal/httpapi` emits no `ETag` and no `Last-Modified` on any route, and
+`requestJson` (`web/src/lib/api.ts:511-520`) sets no `cache` option and sends no conditional request.
+The only `Cache-Control` the product wants is `internal/web`'s, on a different handler.
+
+**`no-store`, not `no-cache`.** `no-cache` permits a cache to **store** the response and merely
+requires revalidation before reuse (RFC 9111 §5.2.2.4); `no-store` forbids storing any part of it
+(§5.2.2.5). Storage is the thing objected to, so `no-cache` would buy the risk and none of the
+benefit — with no validator anywhere in the package, a cache holding a stored copy has nothing to
+revalidate against and goes to origin regardless. `private` is not added beside it: `no-store`
+already binds every cache, private ones included, and the pair only invites "which one wins".
+
+**The health endpoints are NOT exempt**, and the argument for them is operational rather than about
+privacy. They carry no user data, but a stale `ready` served out of an intermediary is precisely the
+failure that hides a process which is no longer ready, and `/api/v1/system/status` carries build and
+schema versions that `health.go:80-81` already names fingerprinting material. Exempting them would
+also be an allowlist wearing the other hat.
+
+**SSE does not collide.** `handleEvents` sets `Cache-Control: no-cache, no-transform`
+(`internal/httpapi/events.go:206-213`) and then calls `WriteHeader`; both of its error returns are
+**above** that block and every return below it is `nil`, so no `writeJSON` ever runs behind those
+headers. The stream keeps `no-cache, no-transform` unchanged — `no-transform` is the load-bearing
+half there, against a compressing proxy that would buffer the stream into uselessness, and a
+never-terminating `text/event-stream` is not a body a cache stores and replays.
+
+**Asserted, and the guard was watched failing.** `TestSecurityHeadersArePinnedOnEveryResponse`
+(`internal/httpapi/security_headers_test.go`) now compares `Cache-Control` **exactly** on both JSON
+rows, so a weakening to `no-cache` or `private` fails there. Deleting the `h.Set` fails it twice —
+`Cache-Control = "", want "no-store"` on `api_json` and on `api_error` — and restoring it passes all
+three subtests. The SPA row is deliberately blank: `internal/web` owns that policy (`immutable` for
+hashed assets, `no-cache` for the document) and `internal/web/web_test.go:111,179` pins it, so an
+assertion here would only pin the stub SPA the test installs.
+
+📝 **One thing rode along, and it is named rather than buried.** Folding `writeJSON`'s
+marshal-failure branch into the shared header block — instead of duplicating three `Set` calls —
+gives the encode-failure response the `X-Content-Type-Options: nosniff` it had been silently missing.
+The middleware set it anyway, so nothing was exposed; the divergence was the defect.
 
 ## RG-01.9 — the `outcomeSentUnknown` constant collision. **Closed by `0cb1a18`, re-verified here.**
 

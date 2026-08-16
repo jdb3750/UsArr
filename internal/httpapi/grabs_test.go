@@ -1,22 +1,52 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
+	"math/bits"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jdb3750/UsArr/internal/crypto"
 	"github.com/jdb3750/UsArr/internal/store"
 )
 
 var grabTestNow = time.Date(2026, 8, 16, 12, 0, 0, 0, time.UTC)
 
-func seedGrabRow(t *testing.T, s *Server, userID int64, title string, at time.Time, state string) {
+// testGrabRowIDKey is the Config.GrabRowIDKey every test server gets. It is
+// derived through the SHIPPING derivation from a FIXED secret and salt, not
+// generated randomly, and both halves of that matter:
+//
+//   - Fixed, because the published row id must be stable across restarts. Two
+//     newTestServer calls stand in for two runs of the process, and a random key
+//     would make them disagree — which is precisely the bug
+//     TestGrabRowIDIsStableAcrossServerInstances exists to catch.
+//   - Through crypto.DeriveGrabRowIDKey rather than 32 hand-written bytes, so
+//     the tests exercise the real key path and a change to the info label shows
+//     up here rather than only in production.
+func testGrabRowIDKey(t *testing.T) []byte {
 	t.Helper()
-	_, err := s.store.InsertProvenance(context.Background(), store.Provenance{
+	key, err := crypto.DeriveGrabRowIDKey(
+		bytes.Repeat([]byte{0x11}, 32), bytes.Repeat([]byte{0x22}, 32))
+	if err != nil {
+		t.Fatalf("derive grab row id key: %v", err)
+	}
+	return key
+}
+
+// seedGrabRow inserts one provenance row and returns its RAW rowid — the value
+// that must never reach the wire. Tests need it to assert its own absence.
+func seedGrabRow(t *testing.T, s *Server, userID int64, title string, at time.Time, state string) int64 {
+	t.Helper()
+	id, err := s.store.InsertProvenance(context.Background(), store.Provenance{
 		UserID:            userID,
 		Protocol:          "torrent",
 		IndexerName:       "an-indexer",
@@ -34,6 +64,7 @@ func seedGrabRow(t *testing.T, s *Server, userID int64, title string, at time.Ti
 	if err != nil {
 		t.Fatalf("seed provenance %q: %v", title, err)
 	}
+	return id
 }
 
 // callRecentGrabs runs the handler with a session already resolved, which is
@@ -180,7 +211,7 @@ var recentGrabsWireKeys = map[string]bool{
 // the same reason, and two shapes of the same guard is how one of them rots.
 func TestRecentGrabsNeverShipsAURLOrACredential(t *testing.T) {
 	s := newTestServer(t, nil)
-	seedGrabRow(t, s, 1, "Some.Release-GROUP", grabTestNow, store.AcquisitionConfirmed)
+	rowID := seedGrabRow(t, s, 1, "Some.Release-GROUP", grabTestNow, store.AcquisitionConfirmed)
 
 	_, body := callRecentGrabs(t, s, "")
 	// "Found nothing" and "looked at nothing" must not produce the same verdict
@@ -208,6 +239,178 @@ func TestRecentGrabsNeverShipsAURLOrACredential(t *testing.T) {
 			t.Errorf("the response carries %q in a value, which must never reach a browser:\n%s", forbidden, body)
 		}
 	}
+
+	// RG-01.3, ASSERTED HERE RATHER THAN IN A TEST OF ITS OWN. The raw rowid
+	// leaks through a key the allowlist ALLOWS — `id` is on the list and must
+	// stay there, since the client needs something to key rows on — so the
+	// allowlist above cannot catch this and a value-level assertion is the only
+	// one that can. It belongs beside the other value check rather than in a
+	// second "nothing leaks" test, which is how one of the two rots.
+	//
+	// provenance.id is a globally monotonic sequence shared across users, so
+	// shipping it hands a caller a volume oracle over other people's rows that
+	// the access scope filter cannot close.
+	raw := strconv.FormatInt(rowID, 10)
+	if strings.Contains(body, `"id":`+raw) {
+		t.Errorf("the response ships the raw provenance rowid %s as a number, which is the "+
+			"cross-user volume oracle RG-01.3 removed:\n%s", raw, body)
+	}
+	if strings.Contains(body, `"id":"`+raw+`"`) {
+		t.Errorf("the response ships the raw provenance rowid %s as a string; stringifying it "+
+			"changes the type and keeps the leak:\n%s", raw, body)
+	}
+
+	var got recentGrabsResponse
+	mustJSON(t, body, &got)
+	if len(got.Grabs) != 1 {
+		t.Fatalf("got %d grabs, want 1", len(got.Grabs))
+	}
+	if _, err := strconv.ParseInt(got.Grabs[0].ID, 10, 64); err == nil {
+		t.Errorf("the wire id %q parses as an integer; an opaque row key must not, "+
+			"or a client will read order into it", got.Grabs[0].ID)
+	}
+	if got.Grabs[0].ID != grabRowID(s.cfg.GrabRowIDKey, 1, rowID) {
+		t.Errorf("the wire id is not the keyed hash of (user_id, rowid): %q", got.Grabs[0].ID)
+	}
+}
+
+// STABILITY, the first of the two properties the opaque id must have. The client
+// keys rows by identity for focus and hover, so an id that changes between polls
+// — or across a restart — rebuilds the block under the user's cursor.
+//
+// The second server stands in for a restart: a fresh process, a fresh database,
+// the same derived key. It is the arm that catches the obvious wrong
+// implementation, which is a random token minted per response.
+func TestGrabRowIDIsStableAcrossServerInstances(t *testing.T) {
+	first := newTestServer(t, nil)
+	rowID := seedGrabRow(t, first, 1, "Same.Release-GROUP", grabTestNow, store.AcquisitionConfirmed)
+
+	idOf := func(s *Server) string {
+		t.Helper()
+		_, body := callRecentGrabs(t, s, "")
+		var got recentGrabsResponse
+		mustJSON(t, body, &got)
+		if len(got.Grabs) != 1 {
+			t.Fatalf("got %d grabs, want 1: %s", len(got.Grabs), body)
+		}
+		if got.Grabs[0].ID == "" {
+			t.Fatal("the row shipped an empty id, so this test proves nothing")
+		}
+		return got.Grabs[0].ID
+	}
+
+	a, b := idOf(first), idOf(first)
+	if a != b {
+		t.Errorf("two calls to the same server gave %q then %q; the id is not stable", a, b)
+	}
+
+	second := newTestServer(t, nil)
+	if got := seedGrabRow(t, second, 1, "Same.Release-GROUP", grabTestNow, store.AcquisitionConfirmed); got != rowID {
+		t.Fatalf("the second instance seeded rowid %d, not %d; the two are not the same row", got, rowID)
+	}
+	if c := idOf(second); c != a {
+		t.Errorf("a fresh server on the same derived key gave %q, want %q; the id does not "+
+			"survive a restart", c, a)
+	}
+}
+
+// NO ORDER AND NO VOLUME, the second property, and the one RG-01.3 is actually
+// about. An attacker holding two of their own ids must learn nothing about what
+// was written between them.
+//
+// These assertions are on the OUTPUT's statistical shape, not on HMAC-SHA256: a
+// truncated hash, a different hash, or a per-user sequence with a random base
+// would all pass, and a rowid dressed up in hex or base64 — the tempting cheap
+// "fix" — would fail every one of them.
+func TestGrabRowIDCarriesNoOrderOrVolume(t *testing.T) {
+	key := testGrabRowIDKey(t)
+
+	const rows = 64
+	ids := make([]string, 0, rows)
+	raw := make([][]byte, 0, rows)
+	seen := map[string]int64{}
+	for i := int64(1); i <= rows; i++ {
+		id := grabRowID(key, 1, i)
+		if prev, dup := seen[id]; dup {
+			t.Fatalf("rowids %d and %d produced the same id %q", prev, i, id)
+		}
+		seen[id] = i
+		decoded, err := base64.RawURLEncoding.DecodeString(id)
+		if err != nil {
+			t.Fatalf("id %q is not base64url: %v", id, err)
+		}
+		if len(decoded) != grabRowIDBytes {
+			t.Fatalf("id %q decodes to %d bytes, want %d", id, len(decoded), grabRowIDBytes)
+		}
+		ids = append(ids, id)
+		raw = append(raw, decoded)
+	}
+
+	// Sorting the ids must not recover the rowid order. A monotonic encoding —
+	// zero-padded decimal, big-endian hex, anything order-preserving — is
+	// exactly what this rejects, and it is the shape a well-meaning "just make
+	// it a string" change produces.
+	sorted := append([]string(nil), ids...)
+	sort.Strings(sorted)
+	if slices.Equal(sorted, ids) {
+		t.Error("sorting the ids reproduces rowid order, so the id still ranks rows")
+	}
+
+	// Adjacent rowids must give unrelated ids. Half the bits differ on average
+	// for any decent PRF; the band is wide enough that a correct implementation
+	// will not flake and narrow enough that a counter with a constant offset —
+	// which flips very few bits — cannot pass.
+	const bits = grabRowIDBytes * 8
+	for i := 1; i < len(raw); i++ {
+		d := hammingDistance(raw[i-1], raw[i])
+		if d < bits/4 || d > bits*3/4 {
+			t.Errorf("rowids %d and %d differ in %d of %d bits; adjacent rows are related",
+				i, i+1, d, bits)
+		}
+		if ids[i-1][:4] == ids[i][:4] {
+			t.Errorf("rowids %d and %d share a leading prefix: %q, %q", i, i+1, ids[i-1], ids[i])
+		}
+	}
+
+	// The GAP between two rowids must not be recoverable. A near neighbour and a
+	// distant one have to look equally unrelated, or the difference itself
+	// measures how many rows other users wrote in between — which is the oracle
+	// RG-01.3 names.
+	near := hammingDistance(raw[0], raw[1])
+	far := hammingDistance(raw[0], raw[rows-1])
+	if near < bits/4 || near > bits*3/4 || far < bits/4 || far > bits*3/4 {
+		t.Errorf("distance to the neighbour (%d) and to row %d (%d) are not both ~half of %d bits",
+			near, rows, far, bits)
+	}
+
+	// Per-user domain separation: the same row seen by two users hashes to two
+	// unrelated ids, so a row that is ever visible to both cannot correlate them.
+	if grabRowID(key, 1, 7) == grabRowID(key, 2, 7) {
+		t.Error("the same rowid gives the same id to two users; user_id is not in the input")
+	}
+	// The two inputs are fixed-width, so no (user, row) pair can collide with
+	// another by running the fields together.
+	if grabRowID(key, 1, 23) == grabRowID(key, 12, 3) {
+		t.Error("(user 1, row 23) and (user 12, row 3) collide; the inputs are not delimited")
+	}
+
+	// A different install key gives different ids for the same row: the id is
+	// per-install, so one leaked id says nothing about another deployment.
+	other, err := crypto.DeriveGrabRowIDKey(bytes.Repeat([]byte{0x33}, 32), bytes.Repeat([]byte{0x44}, 32))
+	if err != nil {
+		t.Fatalf("derive: %v", err)
+	}
+	if grabRowID(other, 1, 1) == ids[0] {
+		t.Error("the id does not depend on the derived key")
+	}
+}
+
+func hammingDistance(a, b []byte) int {
+	n := 0
+	for i := range a {
+		n += bits.OnesCount8(a[i] ^ b[i])
+	}
+	return n
 }
 
 // jsonKeysAtEveryDepth walks a decoded JSON document and returns every object

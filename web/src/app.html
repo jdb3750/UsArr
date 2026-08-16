@@ -27,9 +27,35 @@
 		<!--
 			`display: contents` on this wrapper comes from app.css, not from a style
 			attribute. The server sends `style-src 'self'` with no 'unsafe-inline'
-			(internal/httpapi/middleware.go), and measured against that exact header
-			Chromium refuses a style attribute outright — the attribute stays in the
-			DOM and applies nothing, so the wrapper silently became a block box.
+			(internal/httpapi/middleware.go), and a style attribute under that header
+			is refused: the attribute stays in the DOM, the wrapper silently became a
+			block box, and nothing in the rendered page said why.
+
+			⚠️ "REFUSED" IS NOT ONE BEHAVIOUR, AND THE EARLIER WORDING HERE — that a
+			refused attribute "applies nothing" — IS FALSE FOR ONE OF THE TWO PATHS.
+			Measured A/B under this exact header: `setAttribute` is reported AND
+			blocked; `template.innerHTML` + clone, which is Svelte 5's own path, is
+			reported AND APPLIED; `el.style.setProperty()` is not reported at all. So
+			a console violation does not establish that the declaration did nothing,
+			and the sibling note in app.css corrects the same premise where it had
+			produced a wrong conclusion about the route announcer.
+
+			THE GUIDANCE IS UNCHANGED AND IS NOW THE ONLY SAFE PATH: write custom
+			properties and dynamic values with `el.style.setProperty()`, which
+			neither reports a violation nor risks being blocked, and put everything
+			else in a class. `$lib/list.ts` says the same thing at the call site.
+
+			TWO METHOD NOTES, because they cost two attempts each. Identifying WHICH
+			declaration a violation record belongs to is harder than it looks:
+			`sourceFile` is populated, but it carries a content-hashed chunk path
+			with a line and column into minified output, so it names a file that
+			will not exist under that name after the next build; `lineNumber` and
+			`columnNumber` drift with unrelated changes; and `sample` was empty,
+			because the policy carried no `report-sample` at the time (it has one
+			now, truncating at 40 characters). Chromium's style HASH was the only
+			usable identifier. And a `setAttribute` hook or a `MutationObserver`
+			with `attributeFilter: ['style']` reads as ABSENCE on the clone path,
+			which is why an early probe returned a count and no element.
 		-->
 		<div id="usarr-root">%sveltekit.body%</div>
 	</body>

@@ -189,6 +189,16 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 		return nil, err
 	}
 
+	// Derived from the same master key and salt as the KEK, so the opaque grab
+	// row ids the API publishes are the same after a restart. They key rows in
+	// the client; a key that changed per process would rebuild every row on
+	// every poll.
+	grabRowIDKey, err := crypto.DeriveGrabRowIDKey(masterKey.Key, salt)
+	if err != nil {
+		_ = database.Close()
+		return nil, err
+	}
+
 	for _, warning := range cfg.TrustedProxyWarnings() {
 		log.Warn(warning)
 	}
@@ -212,6 +222,7 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 	server, err := httpapi.New(httpapi.Config{
 		Store:          st,
 		Keyring:        keyring,
+		GrabRowIDKey:   grabRowIDKey,
 		SchemaVersion:  schemaVersion,
 		URLBase:        cfg.URLBase,
 		TrustedProxies: cfg.TrustedProxies,
