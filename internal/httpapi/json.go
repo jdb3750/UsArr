@@ -70,16 +70,47 @@ var encodeFailureBody = []byte(
 
 // writeJSON renders v. It marshals into memory first so that a marshal failure
 // produces a 500 rather than a 200 with a truncated body.
+//
+// CACHE-CONTROL IS SET HERE, ON EVERY RESPONSE, DELIBERATELY. This is the one
+// choke point every JSON body in the package passes through — successes, the
+// error shape from writeError, and the panic body from recoverMiddleware — so
+// putting the directive here is what makes it cover the endpoint someone adds
+// next. A per-endpoint allowlist would not: the failure mode of an allowlist is
+// that it stays silently correct-looking while the list falls behind the router.
+//
+// `no-store`, not `no-cache`: they are different and the difference is the whole
+// point. `no-cache` permits a cache to STORE the response and merely requires
+// revalidation before reuse (RFC 9111 §5.2.2.4); `no-store` forbids storing any
+// part of it (§5.2.2.5). Release titles, indexer names and a user's grab history
+// are exactly what should not be written to a shared proxy's disk, and
+// revalidation would buy nothing anyway — nothing in this package emits an ETag
+// or a Last-Modified, so a cache holding a stored copy has no validator and goes
+// to origin regardless. `private` is not added beside it: `no-store` already
+// covers every cache, shared or not, and the pair only raises "which one wins".
+//
+// The health endpoints are NOT exempt, even though they carry no user data.
+// Sameness is the property being bought, and a stale `ready` served out of an
+// intermediary is the precise failure that hides a process which is no longer
+// ready — so for those the argument is operational rather than about privacy,
+// and it points the same way. /api/v1/system/status carries build and schema
+// versions, which health.go already calls fingerprinting material.
+//
+// It does NOT reach the SSE stream: handleEvents sets its own
+// `no-cache, no-transform` and every return past that point is nil, so no
+// writeJSON runs behind it. Nor the SPA, which is a different handler and owns
+// its own caching in internal/web (immutable for hashed assets).
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	buf, err := json.Marshal(v)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write(encodeFailureBody)
-		return
+		// The fixed body still travels under the same headers as every other
+		// response. A response whose headers differ from all the rest, for no
+		// reason a reader can find, is how a policy starts drifting.
+		status, buf = http.StatusInternalServerError, encodeFailureBody
 	}
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
+	h := w.Header()
+	h.Set("Content-Type", "application/json; charset=utf-8")
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_, _ = w.Write(buf)
 }

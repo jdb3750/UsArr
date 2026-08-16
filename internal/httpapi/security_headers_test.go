@@ -51,16 +51,26 @@ func TestSecurityHeadersArePinnedOnEveryResponse(t *testing.T) {
 	srv := httptest.NewServer(s.Handler())
 	defer srv.Close()
 
+	// cache is the expected Cache-Control, and it is per-route rather than part
+	// of the blanket map below because the three routes genuinely differ.
+	// writeJSON owns the JSON rows (RG-01.8); the SPA row is deliberately BLANK
+	// — the real SPA handler sets its own policy in internal/web, `immutable` for
+	// hashed assets and `no-cache` for the document, and that is pinned by
+	// internal/web/web_test.go. Asserting anything here would only pin the stub
+	// SPA this test installs, which is not the product.
 	routes := []struct {
-		name string
-		path string
-		want int
+		name  string
+		path  string
+		want  int
+		cache string
 	}{
-		{"spa document", "/", http.StatusOK},
-		{"api json", "/api/health/live", http.StatusOK},
+		{"spa document", "/", http.StatusOK, ""},
+		{"api json", "/api/health/live", http.StatusOK, "no-store"},
 		// buildHandler puts securityHeaders above the router precisely so an
 		// error response is not the hole. Assert that, rather than trusting it.
-		{"api error", "/api/v1/services", http.StatusUnauthorized},
+		// The error body is a user-facing message built from a request; it gets
+		// the same no-store as a success, and this row is what says so.
+		{"api error", "/api/v1/services", http.StatusUnauthorized, "no-store"},
 	}
 
 	policies := make(map[string]string, len(routes))
@@ -78,6 +88,16 @@ func TestSecurityHeadersArePinnedOnEveryResponse(t *testing.T) {
 			} {
 				if got := hdr.Get(header); got != want {
 					t.Errorf("%s = %q, want %q", header, got, want)
+				}
+			}
+
+			// no-store, not no-cache: no-cache permits a cache to STORE the
+			// body and only forces revalidation, which for a list of releases
+			// or a user's grabs is the part being refused. Compared exactly, so
+			// a weakening to `no-cache` or `private` fails here.
+			if rt.cache != "" {
+				if got := hdr.Get("Cache-Control"); got != rt.cache {
+					t.Errorf("Cache-Control = %q, want %q", got, rt.cache)
 				}
 			}
 
