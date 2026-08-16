@@ -15,14 +15,14 @@ This file records the instruction text only. The design detail lives in `CLAUDE.
 
 | Version | Date | State | Size |
 | --- | --- | --- | --- |
-| v1.2 | 2026-08-16 | **Proposed — supersedes v1.1, not yet applied** | 7585 bytes |
+| v1.2 | 2026-08-16 | **Applied to project settings** — 2026-08-16 07:57 UTC | 7585 bytes |
 | v1.1 | 2026-08-16 | Superseded by v1.2, never applied | 7022 bytes |
-| v1.0 | 2026-08-16 | Applied to project settings | 3849 bytes |
+| v1.0 | 2026-08-16 | Superseded by v1.2 — applied 2026-08-16, replaced the same day | 3849 bytes |
 
-## v1.2 — proposed
+## v1.2 — as applied
 
-This is the text to paste into the Project's settings, replacing v1.0. It supersedes v1.1,
-which was drafted but never applied.
+This is the text live in the Project's settings, applied verbatim at 07:57 UTC on 2026-08-16,
+replacing v1.0. It supersedes v1.1, which was drafted but never applied.
 
 ````
 You are working on UsArr: a fast, self-hosted, unified hub and gateway over the media-acquisition ecosystem, running on a single self-hoster's own server. It aggregates the *Arrs (Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian) and media backends (Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita) into one local library you can browse, search and request from, and it exposes protocol surfaces (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend individually. It is meant to coexist with the rest of the ecosystem, not replace it. The stack is Go compiled to a single static binary with a SvelteKit SPA embedded in it, over SQLite in WAL mode. Do not state a Go minimum from memory: the go directive in go.mod is authoritative, 1.25.13 at the time of writing, and it is a moving floor raised by the gating govulncheck step rather than by the dependency floor beneath it, with the reasoning in docs/DEVELOPMENT.md. Implementation has begun on feature branches while CLAUDE.md, the README and section 16 of ARCHITECTURE.md all still say nothing is implemented; that wording is stale wherever code exists, so check the working tree before describing project status, and name the branch you checked.
@@ -86,9 +86,10 @@ Some things are permanently refused rather than deferred. Section 1.4 of ARCHITE
 On interface design, read section 17 of ARCHITECTURE.md before touching a screen. It is the only place the screens are specified and nothing else links to it. The constraint is utilitarian over stylish: standard patterns in preference to novel ones, density and speed over animation, and no visual flair that costs render time. Navidrome is the reference point, and "sleek" and "modern" are explicitly not goals. Concretely: no animation on any list, grid or navigation transition; native controls and real middle-clickable links; compact by default; every screen usable in a phone browser; and no skeleton shimmer. Four screens matter, Home, Services health, Search and Requests, and the first three ship in v0.1. A degraded backend gets a non-modal banner; the catalogue never greys out.
 ````
 
-## v1.0 — as applied
+## v1.0 — superseded
 
-Preserved verbatim as the record of what is live right now. Verified byte-identical to the
+Applied to the Project's settings on 2026-08-16 and replaced by v1.2 the same day. Preserved
+verbatim as the record of what was live until then. Verified byte-identical to the
 version posted in the research thread at 02:31 UTC on 2026-08-16 — 3849 bytes, md5
 `bad4dec2c0766979efcd911a5e5cff75`.
 
@@ -112,7 +113,7 @@ On interface design: utilitarian over stylish. The bar is tried-and-true, easy t
 
 ## Changelog
 
-### v1.2 — 2026-08-16 (proposed)
+### v1.2 — 2026-08-16 (applied 07:57 UTC)
 
 Produced by a drift check triggered by the scaffold session's report that `CLAUDE.md`'s Go
 version was wrong. An adversarial review of the draft raised 1 blocker and 4 majors; all were
