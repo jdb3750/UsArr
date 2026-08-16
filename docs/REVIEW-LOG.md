@@ -3342,3 +3342,201 @@ deliberate skip. It now lives once, in `internal/servarr/mapping`, and the plann
   homelab has single-digit instances.
 - **No filtering of disabled indexers.** They are listed and marked. Hiding one makes *"why is my
   indexer missing?"* unanswerable from the screen that is supposed to answer it.
+
+---
+
+# RG-01 — the Recent-grabs batch, reviewed adversarially and re-checked against a moved `main`
+
+**Origin: an adversarial pass over the Requests thread's Recent-grabs work at `85cae80`.** `main`
+had moved by the time the findings were recorded — `dd15d95` landed `GET /api/v1/indexers` and
+`ec2a21d` merged it — so **every finding below was re-verified by reading the current tree at
+`ec2a21d` rather than the review's diff.** None was overtaken; the closed item at the end was
+already closed at `85cae80` and is confirmed closed here for the second time, by a different method.
+
+Seven findings, one follow-up and one closure. **One is applied (RG-01.2), one routes to another
+thread (RG-01.1), one is deferred pending coordination (RG-01.3), and four are rebutted
+(RG-01.4 to RG-01.7)** — written down rather than dropped, because a rebuttal that is not on paper
+gets re-litigated by the next reviewer to notice the same shape.
+
+## RG-01.1 — §17.5 still specifies a Recent-grabs block that did not ship. **Open; routes to the design thread.**
+
+`docs/ARCHITECTURE.md` §17.5 (the *"A grab leaves a record"* paragraph, line 3019, and §16's cost
+note at line 2286) specifies the block as **one keyset-paginated read joining `write_queue` to
+`provenance`**, rendering *"the library or media type the category resolved to"* and **last known
+state from the write queue's own vocabulary — `pending | inflight | verifying | done | failed`**.
+
+**What shipped is none of those.** Six columns (When · Release · Indexer · Protocol · Size ·
+Outcome); `provenance.acquisition_state` rendered through a two-value wire vocabulary; **no join**;
+**no keyset pagination** — a `LIMIT` with a server-clamped ceiling instead.
+
+**Every deviation is deliberate and each has a stated reason** — nothing writes `write_queue` yet,
+and the category resolver lives in `internal/servarr/mapping`, which `internal/httpapi` may not
+import (`doc.go`). **The defect is not the deviation, it is where the reason lives:** a 19-line
+comment at `internal/httpapi/grabs.go:17-35`, which is an honest record in the one place a reader
+consulting the design will never look. §16 is authoritative for *what ships*; §17.5 is still the
+only prose description of *this block*, and it describes something else.
+
+⚠️ **Not fixed here, deliberately. §17 belongs to the design thread** under this repo's
+file-ownership convention, and a code thread editing another thread's section is how two threads
+produce one conflict. **Routed there** with the three specifics: the state vocabulary, the resolved
+media-type column, and the pagination shape.
+
+## RG-01.2 — the secret-leak guard was a denylist. **Applied.**
+
+`internal/httpapi/grabs_test.go` asserted the response carries none of `download_url · downloadUrl ·
+magnet · apikey · api_key · apiKey · passkey · nzb_info_url · info_url · http:// · https://`.
+
+**A denylist passes everything it does not enumerate, and this one did not enumerate enough.**
+`provenance` carries four columns the list had no entry for — **`guid` / `release_guid` /
+`torrent_info_hash` / `download_url`** (`internal/store/releases.go:310`) — and **a Newznab `guid` is
+frequently the download URL itself**, therefore passkey-bearing on a private tracker. This is the
+same credential class that reached permanent storage once already (IX-01.2, `release_candidate.info_url`).
+
+**Not exploitable as it stood, and that is not a defence.** The SELECT list at
+`internal/store/releases.go:422-423` is explicit and omits all four, so nothing leaks today. The
+guard's job is to catch the *next* field, and a name-based ban list fails at exactly that: the field
+nobody thought to ban is the field that ships.
+
+**Converted to an allowlist over the marshalled JSON keys** (`internal/httpapi/grabs_test.go:145-234`):
+the response is unmarshalled, **every object key at every depth** is walked — nesting matters,
+because a leak inside `grabs[]` is still a leak — and any key not in `recentGrabsWireKeys` fails.
+Adding a member to `recentGrabResponse` now fails a test until its name is added to the constant
+deliberately, which is the review step expressed as code.
+
+**This is IX-01.2's idiom, reused rather than reinvented.** `mapping.TestCatalogProjectionCannotCarryAnIndexerCredential`
+settled on an allowlist over the marshalled bytes for the same reason; two shapes of the same guard
+is how one of them rots.
+
+**The value half was kept, not dropped.** The allowlist governs *keys*; a URL smuggled into an
+allowed key's *value* would pass it. So `passkey · magnet: · http:// · https://` still run as a
+substring assertion over the body, and the seeded row's `nzb_info_url` is a passkey-bearing tracker
+URL precisely so that half has something real to catch. The floor assertion is unchanged: the
+response must contain the seeded release title first, so *"found nothing"* and *"looked at nothing"*
+cannot produce the same green (DEVELOPMENT §11 rule 4).
+
+**The guard was fired deliberately before it was trusted**, in two probes, both reverted:
+
+- **A key probe** — `ReleaseGUID string \`json:"release_guid,omitempty"\`` added to
+  `recentGrabResponse` with the entirely **benign** value `"a-benign-looking-guid"`. The test failed
+  on the *key*, nested inside `grabs[]`. **The old denylist would have passed this response
+  untouched** — which is the finding, reproduced.
+- **A value probe** — `SourceSystem` (an allowed key) set to
+  `http://tracker.example/rss?passkey=deadbeef`. The test failed twice, on `passkey` and on `http://`.
+
+Both reverted; the suite is green.
+
+## RG-01.3 — `provenance.id` on the wire is a cross-user volume oracle. **Deferred pending coordination.**
+
+`internal/httpapi/grabs.go:46` ships `ID int64 \`json:"id"\``, which is `provenance.id` — `INTEGER
+PRIMARY KEY`, therefore **a globally monotonic rowid shared across every user**.
+
+Under multi-user — **which principle 4 says the schema is already built for**, and migration 0002
+gave `provenance` its `user_id` — a caller who sees `id:104` on one of their own grabs and `id:341`
+on the next **learns that 236 rows were written by other users in between**. The scope filter is
+correct and the rows themselves never cross; **the count leaks through the identifier**, which is
+why the filter does not stop it.
+
+**This is not an authorization break** and is not being reported as one. Today there is exactly one
+user, so the oracle has nobody to inform.
+
+**Deferred rather than applied, because the field is load-bearing on a screen another thread just
+shipped:** `web/src/routes/requests/+page.svelte:535` keys list rows on it
+(`key={(g) => String(g.id)}`) and `web/src/lib/api.ts:1237` **rejects any row without it** — a change
+here blanks the block rather than degrading it.
+
+**Recommended fix, for whoever coordinates it:** an opaque per-row identifier, or a per-user
+sequence, exposed instead of the rowid. ⚠️ **It is far cheaper now than later.** One published shape
+and one consumer pin it today; every additional client pins it harder, and this is the last cheap
+moment.
+
+## RG-01.4 — the `ORDER BY` is not a DoS. **Rebutted on measurement.**
+
+The suspicion: `ORDER BY grabbed_at DESC, id DESC` over a user-scoped `IN (…)` predicate forces a
+full sort of the user's history on every call, so a large `provenance` makes a cheap endpoint
+expensive.
+
+**Measured, it does not.** Each `IN` branch arrives **pre-ordered from `ix_prov_user_grabbed`**
+(`user_id, grabbed_at DESC, id DESC`, migration 0002 line 94), so SQLite merges two ordered streams
+into a bounded sorter and **early-terminates at the limit**. The scoped read is **flat from 1k to
+100k rows — 238µs → 120µs** (the fall is noise, not a speed-up). The control, a genuinely unindexed
+sort over the same tables, **grows 90× across the same range: 587µs → 53.7ms**. A control that grows
+is what makes the flat line evidence rather than an absent measurement.
+
+**And the ceiling is enforced twice, independently:** `handleRecentGrabs`
+(`internal/httpapi/grabs.go`) clamps to `store.RecentProvenanceMaxLimit`, and
+`recentProvenanceSQL` (`internal/store/releases.go:415-419`) clamps again inside the store — so a
+future caller that reaches the store without the handler cannot lift the cap.
+`RecentProvenanceMaxLimit = 200`, `RecentProvenanceDefaultLimit = 10`. The query plan is already
+pinned by `internal/store/provenance_recent_test.go:217`, which asserts
+`SEARCH … USING INDEX ix_prov_user_grabbed`.
+
+## RG-01.5 — no upstream error string reaches the client. **Rebutted.**
+
+No path on this endpoint returns an upstream body, header or error text. Every failure goes through
+`(*Server).writeError` (`internal/httpapi/json.go:130-158`), which emits **only** `errorBody{Error,
+Message, Action}` — `Message` and `Action` each passed through `redactText`, and the underlying cause
+sent to the log (also redacted) rather than to the body. §17.5's *"a `failed` row carries the
+verbatim upstream error"* is a **write-queue** row, which this endpoint does not render at all
+(see RG-01.1), so the verbatim-error path is not merely redacted here — it is absent.
+
+## RG-01.6 — no rollup existence oracle. **Rebutted.**
+
+The concern: a total row count would tell a caller how much exists beyond what they may read.
+**The response carries no server-side total.** `recentGrabsResponse` is `{grabs, limit}`, and `limit`
+is the *applied* limit, echoed because the server clamps — not a count of anything.
+
+The header count on the screen is **derived client-side and only when it is unambiguous**:
+`web/src/routes/requests/+page.svelte:160` reads
+`grabs.length < grabsLimit ? grabs.length : undefined`, so a short page shows an exact number it
+already holds and **a full page shows none** — the block degrades to *"the ten most recent"*. Nothing
+is inferred about rows the caller cannot see, because nothing counts them.
+
+## RG-01.7 — the route is authenticated and its scope is in the SQL. **Rebutted.**
+
+`handleRecentGrabs` takes its session from `sessionFrom(r)` and returns **401 with no body content**
+if there is none; `TestRecentGrabsRequiresASessionCookie`
+(`internal/httpapi/grabs_test.go:270-282`) drives it through the **real handler stack** and asserts
+both the 401 **and that the body contains no `release_title`** — refusing is not enough if the
+refusal leaks the thing it refused. `TestRecentGrabsShowsOnlyTheCallersGrabs` covers the positive
+case on the bytes.
+
+📝 **One correction to the finding as originally worded**, recorded because precision here is the
+whole point. The rebuttal cited `storeScope` failing closed as `1=0`. **That clause is the
+*instance* predicate, and it is not what filters this read.** `storeScope`
+(`internal/httpapi/auth.go:77-85`) returns `store.Scope{UserID: …}` with `AllInstances` false for a
+non-owner, and the recent-provenance query filters through `Scope.userPredicate`
+(`internal/store/store.go:116-118`) → **`user_id IN (?, ?)`** — the system sentinel `0` plus the
+caller. The sentinel is deliberate: migration 0002 backfilled every pre-attribution row to it, and
+reading it as *"not mine"* would hide the owner's own history from them. **The rebuttal stands** —
+authenticated route, user-scoped SQL, asserted on the bytes — **on the correct mechanism.**
+
+## RG-01.8 — JSON responses set `nosniff` but not `Cache-Control: no-store`. **Open, and NOT part of this batch.**
+
+`writeJSON` (`internal/httpapi/json.go:81-82`) sets `Content-Type` and `X-Content-Type-Options:
+nosniff`, and **no `Cache-Control`**. A body of release titles is exactly the thing that should not
+sit in a shared or intermediary cache, and Recent grabs is not special here — **this is every JSON
+endpoint in `internal/httpapi`**, which is why it is recorded as its own item rather than folded
+into RG-01.
+
+**Deliberately not fixed in this commit.** A one-line change in `writeJSON` alters the headers of
+every API response at once; that is a change with its own blast radius and its own review, not a
+rider on a test conversion.
+
+## RG-01.9 — the `outcomeSentUnknown` constant collision. **Closed by `0cb1a18`, re-verified here.**
+
+Verified **against the current tree at `ec2a21d`, not against the fixing diff** — a diff shows what
+one commit did, not what the tree now holds after other merges landed beside it:
+
+- **Six distinct declarations, no duplicate identifier.** `internal/httpapi/grabs.go:112-114`
+  (`wireOutcomeSent` · `wireOutcomeSentUnknown` · `wireOutcomeStateUnknown`) and
+  `internal/httpapi/grab.go:169-171` (`outcomeNotSent` · `outcomeSentUnknown` · `outcomeSentConfirmed`).
+- **All seven non-test call sites resolve to the intended vocabulary.** `grabs.go:147,149,151` take
+  the `wire` set; `grab.go:107,109,128,276` take the `audit_log.metadata_json` set. No site reaches
+  across.
+- **The wire values match what the client pins by string.** `sent` · `sent_outcome_unknown` ·
+  `unknown` against `web/src/lib/requests.ts:205-207`.
+
+**Nothing left to rename**, and the `wire` prefix is documented in place as lore-bearing rather than
+decorative — the two vocabularies genuinely disagree (`sent_unknown` there, `sent_outcome_unknown`
+here) and **must** stay apart: one is an internal record with its own history, the other is a
+published shape a client pins.

@@ -142,10 +142,42 @@ func TestRecentGrabsShowsOnlyTheCallersGrabs(t *testing.T) {
 	}
 }
 
+// recentGrabsWireKeys is every JSON key GET /api/v1/grabs/recent is allowed to
+// emit, at any depth. It is an ALLOWLIST, and that is the whole point of it: a
+// denylist passes everything it does not enumerate, and provenance carries four
+// columns — download_url, nzb_info_url, release_guid, torrent_info_hash — that a
+// name-based ban list had no entry for. A Newznab `guid` is frequently the
+// download URL itself and therefore passkey-bearing, so "we did not think to ban
+// it" is exactly how one ships.
+//
+// Adding a field to recentGrabResponse must fail this test until the name is
+// added here deliberately. That is the review step, expressed as a constant.
+var recentGrabsWireKeys = map[string]bool{
+	// envelope
+	"grabs": true,
+	"limit": true,
+	// one grab
+	"id":                true,
+	"release_title":     true,
+	"protocol":          true,
+	"indexer_name":      true,
+	"categories":        true,
+	"size_bytes":        true,
+	"grabbed_at":        true,
+	"download_id":       true,
+	"source_system":     true,
+	"acquisition_state": true,
+	"outcome":           true,
+}
+
 // The one hard rule: nothing on this path may hand a client a download URL or a
 // credential. provenance.download_url is never written and this shape has
-// nowhere to put one, but the assertion is on the BYTES rather than on the
-// struct, so adding a field later cannot quietly pass.
+// nowhere to put one, but the assertion is on the MARSHALLED JSON rather than on
+// the struct, so adding a field later cannot quietly pass.
+//
+// Same idiom as mapping.TestCatalogProjectionCannotCarryAnIndexerCredential,
+// deliberately rather than a second one: that path settled on an allowlist for
+// the same reason, and two shapes of the same guard is how one of them rots.
 func TestRecentGrabsNeverShipsAURLOrACredential(t *testing.T) {
 	s := newTestServer(t, nil)
 	seedGrabRow(t, s, 1, "Some.Release-GROUP", grabTestNow, store.AcquisitionConfirmed)
@@ -157,13 +189,47 @@ func TestRecentGrabsNeverShipsAURLOrACredential(t *testing.T) {
 	if !strings.Contains(body, "Some.Release-GROUP") {
 		t.Fatalf("the response holds no grab, so it proves nothing about leaks: %s", body)
 	}
-	for _, forbidden := range []string{
-		"download_url", "downloadUrl", "magnet", "apikey", "api_key", "apiKey",
-		"passkey", "nzb_info_url", "info_url", "http://", "https://",
-	} {
-		if strings.Contains(body, forbidden) {
-			t.Errorf("the response carries %q, which must never reach a browser:\n%s", forbidden, body)
+
+	var decoded any
+	mustJSON(t, body, &decoded)
+	for _, key := range jsonKeysAtEveryDepth(decoded) {
+		if !recentGrabsWireKeys[key] {
+			t.Errorf("the response carries the key %q, which is not on the allowlist "+
+				"— add it to recentGrabsWireKeys only after checking it cannot carry a "+
+				"credential:\n%s", key, body)
 		}
+	}
+
+	// The allowlist governs KEYS; a URL smuggled into an allowed key's VALUE
+	// would still slip past it. The seeded row's nzb_info_url is a passkey-
+	// bearing tracker URL precisely so this half has something real to catch.
+	for _, forbidden := range []string{"passkey", "magnet:", "http://", "https://"} {
+		if strings.Contains(strings.ToLower(body), forbidden) {
+			t.Errorf("the response carries %q in a value, which must never reach a browser:\n%s", forbidden, body)
+		}
+	}
+}
+
+// jsonKeysAtEveryDepth walks a decoded JSON document and returns every object
+// key it finds, however deeply nested. Nesting is the reason it recurses rather
+// than reading the top level: a leak inside `grabs[]` is still a leak.
+func jsonKeysAtEveryDepth(v any) []string {
+	switch node := v.(type) {
+	case map[string]any:
+		keys := make([]string, 0, len(node))
+		for key, child := range node {
+			keys = append(keys, key)
+			keys = append(keys, jsonKeysAtEveryDepth(child)...)
+		}
+		return keys
+	case []any:
+		var keys []string
+		for _, child := range node {
+			keys = append(keys, jsonKeysAtEveryDepth(child)...)
+		}
+		return keys
+	default:
+		return nil
 	}
 }
 
