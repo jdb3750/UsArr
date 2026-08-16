@@ -253,7 +253,8 @@ p {
 /* --- Controls ------------------------------------------------------------- */
 
 input[type='search'],
-input[type='text'] {
+input[type='text'],
+input[type='password'] {
 	height: var(--control-h);
 	padding: 0 var(--space-4);
 	background: var(--bg);

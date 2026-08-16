@@ -20,7 +20,6 @@ func TestEventNamesAreTheWireContract(t *testing.T) {
 		{EventSearchResults, "search.results"},
 		{EventSearchDone, "search.done"},
 		{EventSearchFailed, "search.failed"},
-		{EventServiceHealth, "service.health"},
 		{EventStreamMissedEvents, "stream.missed"},
 	} {
 		if tc.got != tc.want {
@@ -29,14 +28,16 @@ func TestEventNamesAreTheWireContract(t *testing.T) {
 	}
 
 	// The full set, so an ADDED name is caught too: a new event nothing listens
-	// for is a feature that silently does nothing.
+	// for is a feature that silently does nothing. `service.health` was exactly
+	// that and has been removed; the count is the guard against it coming back
+	// without a producer.
 	names := map[string]bool{
 		EventSearchStarted: true, EventSearchIndexer: true, EventSearchResults: true,
 		EventSearchDone: true, EventSearchFailed: true,
-		EventServiceHealth: true, EventStreamMissedEvents: true,
+		EventStreamMissedEvents: true,
 	}
-	if len(names) != 7 {
-		t.Fatalf("the event-name set has %d distinct names, want 7", len(names))
+	if len(names) != 6 {
+		t.Fatalf("the event-name set has %d distinct names, want 6", len(names))
 	}
 }
 

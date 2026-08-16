@@ -1,17 +1,35 @@
 /**
  * The UsArr HTTP surface, as this shell codes against it.
  *
- *   GET  /api/health/live              process up
- *   GET  /api/health/ready             migrations applied, listener accepting
- *   GET  /api/v1/search?query=...      starts a search; results arrive over SSE
- *   GET  /api/events                   one SSE stream, reconnects with Last-Event-ID
- *   POST /api/v1/releases/{id}/grab    grab a release candidate
+ *   GET  /api/health/live              process up                    — open
+ *   GET  /api/health/ready             migrations applied, listening — open
+ *   GET  /api/v1/auth/session          bootstrap: CSRF token + who   — open
+ *   POST /api/v1/auth/setup            create the one owner          — CSRF
+ *   POST /api/v1/auth/login            start a session               — CSRF
+ *   POST /api/v1/auth/logout           end it                        — CSRF + session
+ *   GET  /api/v1/search?query=...      starts a search               — session
+ *   GET  /api/events                   the one SSE stream            — session
+ *   POST /api/v1/releases/{id}/grab    grab a release candidate      — CSRF + session
  *
- * All five are implemented by internal/httpapi. The repo is still pre-alpha and
- * the rest of the surface is not, so everything below is written to degrade
+ * All of them are implemented by internal/httpapi. The repo is still pre-alpha
+ * and the rest of the surface is not, so everything below is written to degrade
  * honestly: a missing endpoint surfaces the actual status and the actual
  * upstream text, never a blank screen and never "an error occurred".
  * ARCHITECTURE.md §17.3 and §17.7 make that a product rule.
+ *
+ * THE MIDDLEWARE IS PART OF THE CONTRACT. internal/httpapi/server.go puts every
+ * read behind `authenticated` and every write behind `csrfProtected` as well,
+ * and `csrfProtected` (internal/httpapi/auth.go) enforces BOTH halves of the
+ * double-submit design:
+ *
+ *   1. `Content-Type: application/json`, or 415. A cross-origin <form> cannot
+ *      send that header without a preflight the browser will refuse.
+ *   2. `X-CSRF-Token` equal to the non-HttpOnly `usarr_csrf` cookie, or 403.
+ *
+ * and every state-changing handler then calls decodeJSON, which rejects an
+ * EMPTY body with 400. So a state-changing request from this client is always
+ * built by postJson() below — header, token and a real JSON body together.
+ * Sending any two of the three fails, which is exactly how grab used to fail.
  *
  * THE SERVER IS THE CONTRACT. Every event name and every payload field below is
  * the one internal/httpapi actually puts on the wire: the names are the
@@ -287,16 +305,102 @@ async function readError(response: Response, url: string): Promise<ApiError> {
 	return new ApiError(message, response.status, url);
 }
 
+/**
+ * What the shell does when the server says "no session".
+ *
+ * Registered once by the root layout, which sends the browser to /login. It is
+ * a hook rather than a direct `goto` so this module stays free of SvelteKit
+ * imports and stays unit-testable in a plain node environment.
+ */
+type UnauthorizedHandler = () => void;
+
+let unauthorizedHandler: UnauthorizedHandler | undefined;
+
+export function onUnauthorized(handler: UnauthorizedHandler | undefined): void {
+	unauthorizedHandler = handler;
+}
+
+function reportUnauthorized(): void {
+	unauthorizedHandler?.();
+}
+
+/**
+ * The CSRF token, last seen.
+ *
+ * The cookie is the source of truth — the server refreshes it on every
+ * /api/v1/auth/session call and mints a new one on login, and it is deliberately
+ * NOT HttpOnly so this client can read it (internal/httpapi/auth.go). The cached
+ * copy from the last JSON response is the fallback for the one environment where
+ * `document` does not exist, which is the unit tests.
+ */
+let cachedCsrfToken = '';
+
+export const CSRF_COOKIE = 'usarr_csrf';
+export const CSRF_HEADER = 'X-CSRF-Token';
+
+export function csrfTokenFromCookie(): string {
+	if (typeof document === 'undefined' || typeof document.cookie !== 'string') return '';
+	for (const part of document.cookie.split(';')) {
+		const raw = part.trim();
+		const eq = raw.indexOf('=');
+		if (eq < 0) continue;
+		if (raw.slice(0, eq) !== CSRF_COOKIE) continue;
+		return decodeURIComponent(raw.slice(eq + 1));
+	}
+	return '';
+}
+
+/** The token this client would echo right now, cookie first. */
+export function currentCsrfToken(): string {
+	return csrfTokenFromCookie() || cachedCsrfToken;
+}
+
+/** Exposed for tests and for a sign-out, which must not leave a stale token behind. */
+export function forgetCsrfToken(): void {
+	cachedCsrfToken = '';
+}
+
+/**
+ * The token, fetching one if this client has never seen it. GET
+ * /api/v1/auth/session is unauthenticated on purpose: it is the bootstrap call
+ * that hands out the cookie before anyone can possibly be signed in.
+ */
+async function ensureCsrfToken(): Promise<string> {
+	const existing = currentCsrfToken();
+	if (existing) return existing;
+	await fetchSession();
+	const token = currentCsrfToken();
+	if (!token) {
+		throw new ApiError(
+			'the backend did not issue a CSRF token, so nothing can be submitted',
+			0,
+			SESSION_URL
+		);
+	}
+	return token;
+}
+
 async function requestJson(url: string, init?: RequestInit): Promise<unknown> {
 	let response: Response;
 	try {
-		response = await fetch(url, { headers: { accept: 'application/json' }, ...init });
+		response = await fetch(url, {
+			credentials: 'same-origin',
+			...init,
+			// Merged, not replaced: an init that carries Content-Type must not
+			// silently drop Accept, and vice versa.
+			headers: { accept: 'application/json', ...(init?.headers ?? {}) }
+		});
 	} catch (cause) {
 		throw new ApiError(
 			`the UsArr backend could not be reached (${cause instanceof Error ? cause.message : String(cause)})`,
 			0,
 			url
 		);
+	}
+	if (response.status === 401) {
+		// Never render a screen built from a 401. The layout sends the browser to
+		// the sign-in page, which says what happened.
+		reportUnauthorized();
 	}
 	if (!response.ok) throw await readError(response, url);
 	if (response.status === 204) return undefined;
@@ -309,9 +413,118 @@ async function requestJson(url: string, init?: RequestInit): Promise<unknown> {
 	}
 }
 
+/**
+ * Every state-changing request goes through here, so the three things
+ * csrfProtected + decodeJSON demand cannot be forgotten one at a time.
+ *
+ * The single retry covers the one benign 403: a token that has rotated under a
+ * long-lived tab — logging in mints a new one, and a page left open across a
+ * restart holds the old one. Re-bootstrapping and retrying once turns that into
+ * a working click rather than an error the user cannot act on. A second 403 is
+ * real and is surfaced.
+ */
+async function postJson(url: string, body: unknown = {}): Promise<unknown> {
+	const send = async (token: string) =>
+		requestJson(url, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json', [CSRF_HEADER]: token },
+			// decodeJSON rejects an empty body with 400, so there is always one.
+			body: JSON.stringify(body ?? {})
+		});
+
+	try {
+		return await send(await ensureCsrfToken());
+	} catch (error) {
+		if (!(error instanceof ApiError) || error.status !== 403) throw error;
+		// Re-bootstrap unconditionally: the server reissues the cookie on this
+		// call, so this is the only thing that can actually change the outcome.
+		forgetCsrfToken();
+		await fetchSession();
+		const token = currentCsrfToken();
+		if (!token) throw error;
+		return send(token);
+	}
+}
+
 /** True when /api/health/ready answers 200. Any other outcome throws. */
 export async function checkReady(): Promise<void> {
 	await requestJson('/api/health/ready');
+}
+
+// ── auth ────────────────────────────────────────────────────────────────────
+
+export const SESSION_URL = '/api/v1/auth/session';
+
+/**
+ * GET /api/v1/auth/session, as internal/httpapi's sessionResponse spells it.
+ *
+ * setupRequired and authenticated are independent: a fresh install is neither,
+ * and the sign-in screen has to tell those two cases apart because
+ * POST /api/v1/auth/setup closes permanently — 409 already_setup — the moment
+ * an owner exists.
+ */
+export interface SessionState {
+	authenticated: boolean;
+	setupRequired: boolean;
+	csrfToken: string;
+	userId?: number;
+	username?: string;
+	isOwner: boolean;
+	sudoUntil?: string;
+}
+
+export const SIGNED_OUT: SessionState = {
+	authenticated: false,
+	setupRequired: false,
+	csrfToken: '',
+	isOwner: false
+};
+
+function toSessionState(payload: unknown): SessionState {
+	if (!isRecord(payload)) return SIGNED_OUT;
+	const state: SessionState = {
+		authenticated: bool(payload.authenticated),
+		setupRequired: bool(payload.setup_required),
+		csrfToken: str(payload.csrf_token) ?? '',
+		userId: num(payload.user_id),
+		username: str(payload.username),
+		isOwner: bool(payload.is_owner),
+		sudoUntil: str(payload.sudo_until)
+	};
+	// Cache it for the one environment with no document.cookie. In a browser the
+	// cookie the same response set is what actually gets echoed.
+	if (state.csrfToken) cachedCsrfToken = state.csrfToken;
+	return state;
+}
+
+/**
+ * The bootstrap call. Unauthenticated by design, so it is also the one request
+ * that must not trigger the 401 redirect — it never 401s.
+ */
+export async function fetchSession(): Promise<SessionState> {
+	return toSessionState(await requestJson(SESSION_URL));
+}
+
+/**
+ * Create the single owner account. Succeeds exactly once per install; after
+ * that the server answers 409 already_setup and the caller must sign in.
+ */
+export async function setupOwner(username: string, password: string): Promise<SessionState> {
+	return toSessionState(await postJson('/api/v1/auth/setup', { username, password }));
+}
+
+export async function login(username: string, password: string): Promise<SessionState> {
+	return toSessionState(await postJson('/api/v1/auth/login', { username, password }));
+}
+
+export async function logout(): Promise<void> {
+	try {
+		await postJson('/api/v1/auth/logout', {});
+	} finally {
+		// The server cleared the session cookie; drop the token this client was
+		// holding so the next sign-in bootstraps a fresh one.
+		forgetCsrfToken();
+	}
 }
 
 /**
@@ -335,10 +548,41 @@ export async function startSearch(query: string): Promise<SearchAccepted> {
 	};
 }
 
-export async function grabRelease(candidateId: number): Promise<void> {
-	await requestJson(`/api/v1/releases/${encodeURIComponent(String(candidateId))}/grab`, {
-		method: 'POST'
-	});
+/** What POST /api/v1/releases/{id}/grab answers with (internal/httpapi/grab.go). */
+export interface GrabResult {
+	candidateId: number;
+	releaseTitle: string;
+	protocol?: string;
+	indexerName?: string;
+	reSearched: boolean;
+	message: string;
+}
+
+/**
+ * Grab a release candidate.
+ *
+ * The body is `{}` and NOT nothing: handleGrab calls decodeJSON, which answers
+ * 400 on an empty body. grabRequest's only field is the optional `instance_id`,
+ * and DisallowUnknownFields means anything else here would be a 400 too — the
+ * candidate id travels in the path, and the release resource itself never
+ * leaves the server (it embeds Prowlarr's admin key).
+ */
+export async function grabRelease(candidateId: number): Promise<GrabResult> {
+	const payload = await postJson(
+		`/api/v1/releases/${encodeURIComponent(String(candidateId))}/grab`,
+		{}
+	);
+	if (!isRecord(payload)) {
+		return { candidateId, releaseTitle: '', reSearched: false, message: '' };
+	}
+	return {
+		candidateId: num(payload.candidate_id) ?? candidateId,
+		releaseTitle: str(payload.release_title) ?? '',
+		protocol: str(payload.protocol),
+		indexerName: str(payload.indexer_name),
+		reSearched: bool(payload.re_searched),
+		message: str(payload.message) ?? ''
+	};
 }
 
 export interface StreamHandles {
@@ -348,20 +592,48 @@ export interface StreamHandles {
 /**
  * Subscribe to /api/events. EventSource handles reconnection and replays
  * Last-Event-ID on its own, so there is no retry logic here on purpose.
+ *
+ * What it does NOT do is tell us why a connection failed: the spec gives the
+ * error event no status, so a 401 from `authenticated` is indistinguishable
+ * from a dropped socket and the browser retries it forever. That is a silent
+ * infinite loop behind a "not connected" banner — so an error triggers one
+ * cheap probe of /api/v1/auth/session, and a stream that failed because the
+ * session is gone stops retrying and sends the user to sign in.
  */
 export function openEventStream(
 	onEvent: (event: StreamEvent) => void,
 	onConnectionChange: (connected: boolean) => void
 ): StreamHandles {
 	const source = new EventSource('/api/events');
+	let closed = false;
+	let probing = false;
 
 	const handle = (event: MessageEvent) => onEvent(normalizeStreamEvent(event.type, event.data));
 	for (const name of STREAM_EVENT_NAMES) source.addEventListener(name, handle as EventListener);
 	source.addEventListener('open', () => onConnectionChange(true));
-	source.addEventListener('error', () => onConnectionChange(false));
+	source.addEventListener('error', () => {
+		onConnectionChange(false);
+		if (closed || probing) return;
+		probing = true;
+		fetchSession()
+			.then((state) => {
+				if (closed || state.authenticated) return;
+				closed = true;
+				source.close();
+				reportUnauthorized();
+			})
+			.catch(() => {
+				// The backend is unreachable, which is a different problem and is
+				// already visible as the disconnected banner. Let EventSource retry.
+			})
+			.finally(() => {
+				probing = false;
+			});
+	});
 
 	return {
 		close() {
+			closed = true;
 			source.close();
 			onConnectionChange(false);
 		}

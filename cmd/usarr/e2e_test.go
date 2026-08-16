@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -517,42 +516,11 @@ func (e *testEnv) openStream(t *testing.T) *sseStream {
 		t.Fatalf("SSE Content-Type = %q", ct)
 	}
 
+	// readSSE (browserflow_test.go) is the one framing parser both harnesses use,
+	// so a change to the wire format cannot be fixed in one of them and missed in
+	// the other.
 	stream := &sseStream{events: make(chan sseEvent, 64), cancel: cancel}
-	go func() {
-		defer func() { _ = resp.Body.Close() }()
-		scanner := bufio.NewScanner(resp.Body)
-		scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-
-		var cur sseEvent
-		var data []string
-		for scanner.Scan() {
-			line := scanner.Text()
-			stream.mu.Lock()
-			stream.raw.WriteString(line + "\n")
-			stream.mu.Unlock()
-
-			switch {
-			case line == "":
-				if cur.name != "" {
-					cur.data = strings.Join(data, "\n")
-					select {
-					case stream.events <- cur:
-					case <-ctx.Done():
-						return
-					}
-				}
-				cur, data = sseEvent{}, nil
-			case strings.HasPrefix(line, ":"):
-				// comment / heartbeat
-			case strings.HasPrefix(line, "id: "):
-				cur.id = strings.TrimPrefix(line, "id: ")
-			case strings.HasPrefix(line, "event: "):
-				cur.name = strings.TrimPrefix(line, "event: ")
-			case strings.HasPrefix(line, "data: "):
-				data = append(data, strings.TrimPrefix(line, "data: "))
-			}
-		}
-	}()
+	go readSSE(ctx, resp, stream)
 	return stream
 }
 

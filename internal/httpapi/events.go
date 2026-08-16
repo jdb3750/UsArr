@@ -35,13 +35,19 @@ const (
 
 // Event names. They are namespaced so a client can subscribe by prefix and so a
 // new producer cannot collide with search by accident.
+//
+// EVERY NAME HERE HAS A PRODUCER. `service.health` used to sit in this block
+// with no Publish call anywhere: a name the SPA would have had to register a
+// listener for, that could never fire. CLAUDE.md's rule is that the seam ships
+// and the feature does not — the seam for pushed health is Hub.Publish itself,
+// which needs no reserved name. When the Services screen learns to push, the
+// constant comes back in the same commit as the call that publishes it.
 const (
 	EventSearchStarted      = "search.started"
 	EventSearchIndexer      = "search.indexer"
 	EventSearchResults      = "search.results"
 	EventSearchDone         = "search.done"
 	EventSearchFailed       = "search.failed"
-	EventServiceHealth      = "service.health"
 	EventStreamMissedEvents = "stream.missed"
 )
 
