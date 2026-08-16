@@ -210,47 +210,295 @@ func writeSecretFile(path, content string) (err error) {
 
 // BackupNotice is the one-line notice logged after a key is generated. It is a
 // method rather than a constant so the path is always the real one.
+//
+// "Back up the key file" is correct advice again now that the KEK salt sits
+// beside the database rather than in keys/, where the documented
+// `--exclude='keys'` was silently dropping it. The salt is carried by an
+// ordinary database backup, so the operator has exactly one thing to do here.
 func (m *MasterKey) BackupNotice() string {
 	return fmt.Sprintf(
 		"a new master key was generated at %s — BACK IT UP NOW, separately from the database. "+
-			"Lose it and every stored service credential must be re-entered by hand. "+
+			"Lose it and every stored service credential must be re-entered by hand "+
+			"(the library, users and history are unaffected). "+
 			"See docs/CONFIGURATION.md §3.5",
 		m.Path)
 }
 
-// ResolveKEKSalt reads the per-install HKDF salt, creating it on first run.
+// ErrKEKSaltAbsent means no KEK salt file exists at either the current path or
+// the legacy keys/ one.
 //
-// docs/reference/security.md §1.3 requires a stored per-install salt for KEK
-// derivation but does not say where it lives. It goes beside the key: the two
-// share a fate, and the schema has no settings table to hold it.
+// Like ErrKeyAbsent, this is NOT yet an error: it is the genuine-first-run
+// candidate. The caller must open the database, ask whether it already holds
+// encrypted rows, and then either call GenerateKEKSalt (empty database) or fail
+// with ErrMissingSaltForExistingData (rows present).
+//
+// The salt is not secret, but it is exactly as unrecoverable as the master key:
+// the KEK is HKDF-SHA256(master key, salt=<this file>, info="usarr/kek/v1"), so
+// a different salt is a different KEK and every stored envelope becomes noise.
+// Generating a fresh one over existing ciphertext turns a recoverable mistake —
+// "restore the file from the backup you already have" — into a permanent one,
+// which is the wrong
+// default under ARCHITECTURE.md §14's threat model.
+var ErrKEKSaltAbsent = errors.New("config: no KEK salt file present")
+
+// errSaltAlreadyExists reports that a salt appeared at the destination while we
+// were writing one. It is internal and never reaches an operator: it means
+// another process won a race, and the correct response is always to adopt the
+// salt on disk rather than to replace it or to fail.
+var errSaltAlreadyExists = errors.New("config: a KEK salt already exists at the destination")
+
+// ResolveKEKSalt reads the per-install HKDF salt, COPYING a pre-existing one
+// forward from the legacy keys/ location. It never creates one, and it never
+// deletes one.
+//
+// The salt lives beside the database (see KEKSaltPath for why it is not in
+// keys/). Installs predating that keep it at LegacyKEKSaltPath, and this
+// function carries them forward: reading only the new path would report the salt
+// missing on every existing install and destroy exactly the credentials the
+// change exists to protect.
+//
+// # Why this is a copy and not a move — do not "tidy" it into a rename
+//
+// Nothing stops two UsArr processes starting against the same config directory:
+// there is no lock file, and both will happily reach this code at the same
+// instant. A MOVE has a window in which neither path holds the salt. Lose the
+// process there — a crash, an OOM kill, a container restart mid-upgrade — and
+// the key-derivation input is gone for good, which is strictly worse than the
+// bug this whole change fixes: unopenable-until-restored becomes unopenable
+// forever. A copy has no such window. The legacy file is not a secret, a
+// duplicate costs one 45-byte file, and leaving it means anyone whose backup
+// captures keys/ still holds a working salt — the old advice degrades to
+// redundant instead of wrong.
+//
+// Concurrency: reads are of complete files only, because every write here lands
+// via writeSaltFile's temp-plus-rename. Two processes racing produce identical
+// bytes (both copy the same legacy file), and whichever rename lands second is
+// a no-op replacement of identical content. The function is idempotent.
+//
+// It refuses rather than regenerating when there is genuinely no salt anywhere;
+// see ErrKEKSaltAbsent.
 func (c *Config) ResolveKEKSalt() ([]byte, error) {
 	path := c.KEKSaltPath()
-	// #nosec G304 -- path is derived from USARR_CONFIG_DIR; see writeSecretFile.
-	switch raw, err := os.ReadFile(path); {
+	salt, err := c.readKEKSalt(path)
+	switch {
 	case err == nil:
-		salt, decErr := base64.StdEncoding.DecodeString(strings.TrimSpace(string(raw)))
-		if decErr != nil {
-			return nil, fmt.Errorf("%s: not valid base64: %w", path, decErr)
-		}
-		if len(salt) != KEKSaltLen {
-			return nil, fmt.Errorf("%s: expected %d bytes, got %d", path, KEKSaltLen, len(salt))
-		}
 		return salt, nil
 	case !errors.Is(err, os.ErrNotExist):
-		return nil, fmt.Errorf("read %s: %w", path, err)
+		return nil, err
 	}
 
-	if err := os.MkdirAll(c.KeysDir(), SecretDirMode); err != nil {
-		return nil, fmt.Errorf("create %s: %w", c.KeysDir(), err)
+	legacy, err := c.readKEKSalt(c.LegacyKEKSaltPath())
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		return nil, ErrKEKSaltAbsent
+	case err != nil:
+		return nil, err
 	}
+
+	// Copy it forward. The legacy file stays exactly where it is, forever.
+	switch err := c.writeSaltFile(path, legacy); {
+	case err == nil:
+		return legacy, nil
+	case errors.Is(err, errSaltAlreadyExists):
+		// Another process copied it first. Adopt what is on disk rather than
+		// assuming it matches: identical here in practice, but "read the file"
+		// is the only answer that stays correct if it ever is not.
+		return c.readKEKSalt(path)
+	default:
+		return nil, fmt.Errorf("copying the KEK salt from %s to %s: %w. "+
+			"The salt at %s is untouched and still authoritative — nothing has been lost, "+
+			"and UsArr will keep reading it until the copy succeeds",
+			c.LegacyKEKSaltPath(), path, err, c.LegacyKEKSaltPath())
+	}
+}
+
+// writeSaltFile writes a salt atomically: a temp file in the DESTINATION
+// directory, fsynced, then rename(2) within that same directory.
+//
+// Atomicity is not decoration here. A reader that catches a salt half-written in
+// place sees a short or truncated value; validation would reject it and startup
+// would refuse — a false alarm telling an operator their credentials are at risk
+// when they are not. rename(2) is atomic, so a concurrent reader sees either the
+// old file or the complete new one and never a partial. The temp file must be in
+// the same directory as the destination, because USARR_CONFIG_DIR and
+// USARR_DATA_DIR may be different filesystems and a cross-device rename fails
+// with EXDEV.
+//
+// It returns errSaltAlreadyExists — never an overwrite — when the destination
+// appeared underneath it. Callers treat that as "another process won the race"
+// and adopt whatever is on disk.
+func (c *Config) writeSaltFile(path string, salt []byte) (err error) {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, DirMode); err != nil {
+		return fmt.Errorf("create %s: %w", dir, err)
+	}
+
+	tmp, err := os.CreateTemp(dir, ".kek.salt.tmp-*")
+	if err != nil {
+		return fmt.Errorf("create a temp file in %s: %w", dir, err)
+	}
+	tmpName := tmp.Name()
+	defer func() {
+		// The temp file must never be left behind, on success or failure. On
+		// success the link has already given the content its real name and this
+		// only drops the extra directory entry.
+		if err != nil {
+			_ = tmp.Close()
+			_ = os.Remove(tmpName)
+		}
+	}()
+
+	if err = tmp.Chmod(SecretMode); err != nil {
+		return fmt.Errorf("chmod %s: %w", tmpName, err)
+	}
+	if _, err = tmp.WriteString(base64.StdEncoding.EncodeToString(salt) + "\n"); err != nil {
+		return fmt.Errorf("write %s: %w", tmpName, err)
+	}
+	if err = tmp.Sync(); err != nil {
+		return fmt.Errorf("fsync %s: %w", tmpName, err)
+	}
+	if err = tmp.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", tmpName, err)
+	}
+
+	// Link, NOT rename. rename(2) replaces the destination unconditionally, and
+	// a salt that replaces a different salt is unrecoverable data loss — two
+	// processes reaching a genuine first run together would each generate one,
+	// each overwrite the other, and each go on to seal credentials under a KEK
+	// the file on disk can no longer derive. link(2) is equally atomic for a
+	// reader and refuses when the destination exists, which turns that race into
+	// "one writer wins, the other adopts the winner's salt".
+	//
+	// This function therefore NEVER replaces an existing salt. Both callers are
+	// built on that: the copy-forward has already established the destination
+	// was absent, and the generator re-reads on EEXIST.
+	if err = os.Link(tmpName, path); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return errSaltAlreadyExists
+		}
+		// Hard links are unavailable on a few exotic filesystems. Fall back to
+		// an O_EXCL create, which keeps the property that actually matters —
+		// never clobber — at the cost of a window in which a concurrent reader
+		// could see a partial file. That reader fails validation and startup
+		// refuses loudly; it never silently derives the wrong KEK.
+		if ferr := writeSecretFile(path, base64.StdEncoding.EncodeToString(salt)+"\n"); ferr != nil {
+			if errors.Is(ferr, os.ErrExist) {
+				err = errSaltAlreadyExists
+				return err
+			}
+			err = fmt.Errorf("link %s to %s: %w; and the O_EXCL fallback failed: %w",
+				tmpName, path, err, ferr)
+			return err
+		}
+		err = nil
+	}
+	_ = os.Remove(tmpName)
+	// fsync the directory so the rename itself survives a power cut. Best
+	// effort: some filesystems refuse to open a directory for sync, and the
+	// rename is already durable on every mainstream one.
+	//
+	// #nosec G304 -- dir is filepath.Dir of a path this package built from
+	// USARR_CONFIG_DIR, and it is opened read-only purely to fsync the
+	// directory entry. No caller-supplied or network-supplied string reaches it,
+	// and nothing is read from the handle.
+	if d, derr := os.Open(dir); derr == nil {
+		_ = d.Sync()
+		_ = d.Close()
+	}
+	return nil
+}
+
+// readKEKSalt reads and validates one salt file. A missing file is reported as
+// os.ErrNotExist for the caller to interpret; every other failure is fatal and
+// names the path, because a salt that is present but unreadable must never be
+// mistaken for a first run.
+func (c *Config) readKEKSalt(path string) ([]byte, error) {
+	// #nosec G304 -- path is derived from USARR_CONFIG_DIR; see writeSecretFile.
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("read %s: %w", path, err)
+	}
+	salt, err := base64.StdEncoding.DecodeString(strings.TrimSpace(string(raw)))
+	if err != nil {
+		return nil, fmt.Errorf("%s: not valid base64: %w", path, err)
+	}
+	if len(salt) != KEKSaltLen {
+		return nil, fmt.Errorf("%s: expected %d bytes, got %d", path, KEKSaltLen, len(salt))
+	}
+	return salt, nil
+}
+
+// ErrMissingSaltForExistingData is the fatal error for the salt branch that
+// cannot be decided until the database is open: keys/kek.salt is missing but
+// the database already holds encrypted rows.
+//
+// It names kek.salt specifically, because the operator who hits this has almost
+// always just restored a backup and IS holding the master key — telling them to
+// restore the master key would send them to look for the one artifact they
+// already have.
+//
+// It also names the legacy path, because an install created before the salt
+// moved beside the database keeps it in keys/, and an operator restoring such a
+// backup needs to know both places to look.
+func (c *Config) ErrMissingSaltForExistingData(encryptedRows int64) error {
+	return fmt.Errorf(
+		"the database holds %d encrypted credential(s) but the KEK salt file %s is missing: "+
+			"the master key alone cannot open them, because the key that wraps every credential is "+
+			"derived from the master key AND this per-install salt. Refusing to start: generating a "+
+			"fresh salt here would silently and permanently destroy every stored credential. "+
+			"Restore %s from a backup of the config volume — it sits beside usarr.db and an ordinary "+
+			"backup contains it. On installs created before the salt moved, it is at %s instead; "+
+			"put it back at either path and UsArr will pick it up. "+
+			"If the salt is genuinely lost, see docs/CONFIGURATION.md §3.5: the database, library, "+
+			"users and audit log are unaffected, but every service API key must be re-entered",
+		encryptedRows, c.KEKSaltPath(), c.KEKSaltPath(), c.LegacyKEKSaltPath())
+}
+
+// GenerateKEKSalt creates the per-install HKDF salt on a genuine first run.
+//
+// The caller must have established that the database holds no encrypted rows.
+// writeSecretFile is O_EXCL, so this can never clobber an existing salt even if
+// a caller reaches it by mistake — overwriting one destroys every stored
+// credential just as surely as overwriting the master key does.
+func (c *Config) GenerateKEKSalt() ([]byte, error) {
+	if err := os.MkdirAll(c.ConfigDir, DirMode); err != nil {
+		return nil, fmt.Errorf("create %s: %w", c.ConfigDir, err)
+	}
+
+	// A salt that appeared since the caller last looked wins. Two processes can
+	// start against one config directory — there is no lock — and both can reach
+	// a genuine first run at the same instant. Whoever writes first is
+	// authoritative; the loser must adopt that salt rather than overwrite it,
+	// because a salt swapped out from under a credential sealed microseconds
+	// earlier is unopenable forever.
+	switch existing, err := c.ResolveKEKSalt(); {
+	case err == nil:
+		return existing, nil
+	case !errors.Is(err, ErrKEKSaltAbsent):
+		return nil, err
+	}
+
 	salt := make([]byte, KEKSaltLen)
 	if _, err := rand.Read(salt); err != nil {
 		return nil, fmt.Errorf("generate KEK salt: %w", err)
 	}
-	if err := writeSecretFile(path, base64.StdEncoding.EncodeToString(salt)+"\n"); err != nil {
+	if err := c.writeSaltFile(c.KEKSaltPath(), salt); err != nil && !errors.Is(err, errSaltAlreadyExists) {
 		return nil, err
 	}
-	return salt, nil
+
+	// Always read back; never trust the salt we just generated. writeSaltFile
+	// refuses to replace an existing file, so if another process won the race
+	// the file holds ITS salt — and that is the one every credential from here
+	// on must be sealed under. This read is what makes two racing first runs
+	// converge instead of each sealing under a KEK the other cannot derive.
+	final, err := c.readKEKSalt(c.KEKSaltPath())
+	if err != nil {
+		return nil, fmt.Errorf("re-reading the KEK salt at %s: %w", c.KEKSaltPath(), err)
+	}
+	return final, nil
 }
 
 // ValidateMasterKey decodes and validates a supplied master key. origin names

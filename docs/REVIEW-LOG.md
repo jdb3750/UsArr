@@ -1683,3 +1683,58 @@ same program.
 
 **Result:** `make check` passes with the **pinned** v2.12.2 and an uncapped, cache-cleaned run —
 `0 issues`. One item, GATE-01's `Makefile` change, is documented and deliberately left open.
+
+---
+
+# Data-loss audit — a restore without `kek.salt` silently destroyed every credential
+
+**Date:** 2026-08-16. **Branch:** `main`. **Baseline:** `8c4a33c`. Raised by the adversarial-review
+thread and confirmed by two further independent reproductions. Reproduced again here, end to end,
+through the real startup path and the real HTTP API before anything was changed. Prefix `SALT-` has
+not been used before, so nothing collides.
+
+**The reproduction, verbatim, on `8c4a33c`.** A fresh install, one Prowlarr credential sealed through
+`POST /api/v1/services` (mandatory connection test and all), then `keys/kek.salt` deleted with
+`keys/secret.key` left in place — the exact state §6.1's backup procedure produced on restore:
+
+```
+run 1: keys/kek.salt = Iy5Pwto7zupA5xbWiPRuRCWSkOWM6pNUDSXMzF06mos=
+restore simulated: keys/secret.key present, keys/kek.salt MISSING
+REPRO: run 2 STARTED SUCCESSFULLY — no refusal
+run 2: keys/kek.salt = qHGds0xBy+ulFNMkv+x0gLEQwtOfV8AjMCAuEATZypY=
+REPRO: a DIFFERENT salt was silently generated
+POST /api/v1/services/1/test -> 200
+  {"ok":false,...,"message":"the stored API key for \"Prowlarr\" cannot be opened for
+   http://127.0.0.1:36545: re-enter it, or restore the master key that sealed it",
+   "action":"Re-enter the API key"}
+```
+
+**Scope, stated precisely.** Not total data loss, and not fully silent. The database, library, users,
+password hashes, sessions and the audit log all survive; only `service_instance.api_key_enc` becomes
+unopenable. The Services screen does show the service down. That is exactly the severity §3.5 already
+documents as "re-enter your API keys" — the defect is that it was **triggered by following the
+documented backup procedure**, reached through an error message that named the wrong artifact, over a
+file §3.5 never mentioned. Severity comes from being unrecoverable and self-inflicted, not from
+breadth.
+
+| # | Finding | Disposition |
+|---|---|---|
+| **SALT-01** | **Startup silently regenerated a missing KEK salt over existing ciphertext.** `KEK = HKDF-SHA256(secret.key, salt=kek.salt, info="usarr/kek/v1")`, so a fresh salt is a fresh KEK and every sealed envelope becomes noise. `config.ResolveKEKSalt` created the file on `os.ErrNotExist` with no check for sealed data, and `buildApp` called it unconditionally | **Applied — fail closed, following the rule the master key already follows.** `internal/config`'s ladder refuses to start when no key is supplied and the database holds encrypted rows, naming the expected path (`ErrKeyAbsent` → `ErrMissingKeyForExistingData`). The salt is the same class of input with the same consequence, so it now behaves the same way: `ResolveKEKSalt` **never writes** and returns the new `ErrKEKSaltAbsent`; creation moves to an explicit `GenerateKEKSalt`; `buildApp` resolves the sentinel exactly as it resolves `ErrKeyAbsent` — count sealed rows first, generate only on a genuine first run, otherwise fail with `ErrMissingSaltForExistingData`. Both branches share one lazy row count. **Only one site in the tree creates or loads a salt**, so there is no second entry point to bypass |
+| **SALT-02** | **The error the operator actually saw named the wrong artifact.** `openCredential` said *"re-enter it, or restore the master key that sealed it"* — surfaced on the connection test and on search. For the overwhelmingly likely cause it was actively misleading: it sent someone who had just restored a backup, and who **had** the master key, off to look for the one file they were already holding. Nothing anywhere named `kek.salt` | **Applied.** The message now names both real causes and the real recoverable unit: *"…Either the base URL was edited (the credential is bound to its scheme, host and port), or the keys/ directory does not match the one that sealed it — restore ALL of keys/ (secret.key AND kek.salt), not just the master key. Otherwise re-enter the API key."* In `cmd/usarr/services.go`; `internal/httpapi/auth.go` was held by another thread and is untouched. The startup refusal separately names `kek.salt` by full path, names the legacy path too, and states that the library, users and audit log are unaffected |
+| **SALT-03** | **`kek.salt` was in the one directory the documented backup deliberately excludes.** §6.1's `tar --exclude='keys' /config` plus `cat /config/keys/secret.key` archived the ciphertext, excluded the key directory, and preserved exactly one of the two inputs needed to open it. §5's authoritative tree omitted `kek.salt` entirely while declaring itself exhaustive, so nothing on the page told a careful reader the second file existed | **Applied — the file moved, on the owner's call, rather than the advice being patched.** The salt is **not secret**: its value does not depend on confidentiality, only on being per-install and stable. `keys/` should mean "actual secrets, store them elsewhere", and a non-secret in there is what turned correct advice into a trap. `KEKSaltPath()` is now `$USARR_CONFIG_DIR/kek.salt`, beside `usarr.db`, so an ordinary backup captures it and `--exclude='keys'` is correct exactly as written — the catastrophic restore becomes **unreachable** rather than merely documented. The fail-closed guard from SALT-01 stays: belt and braces for anyone who loses it another way. **Placement note:** the instruction said "the data directory", but `usarr.db` lives in `CONFIG_DIR` and §5 documents `DATA_DIR` as "REGENERABLE. Safe to delete" — putting an unrecoverable input there would have recreated the same bug with a different label, and it would fall outside the `--exclude='keys' /config` archive. "Beside `usarr.db`" is the requirement that carries the reasoning, so `CONFIG_DIR` it is |
+| **SALT-04** | **The upgrade path is where a fix like this kills data.** Installs created before the move — the owner's, created the same day — keep the salt at `keys/kek.salt`. Reading only the new path would report it missing on every one of them | **Applied as a COPY that never deletes, not a move.** Nothing stops two UsArr processes starting against one config directory: there is no lock, both bind, both write. A move has an instant in which neither path holds the salt, and a crash there loses key-derivation material **permanently** — strictly worse than the bug being fixed, which leaves the data unopenable-until-restored. So: prefer the new path; fall back to the legacy one; if only the legacy exists, copy it forward and **leave the original in place forever**. The duplicate is one 45-byte non-secret, and it means a backup that captured `keys/` still holds a working salt — the old advice degrades to redundant rather than wrong. The "why it is a copy" argument is in the code comment so nobody tidies it into a rename |
+| **SALT-05** | **The guard must not false-positive on a partial write, and `writeSecretFile` writes in place.** A reader catching a half-written salt sees a short value, validation rejects it, and startup refuses — telling an operator their credentials are at risk when they are not | **Applied.** Every salt write now goes through `writeSaltFile`: temp file in the **destination** directory, `chmod 0600`, `fsync`, `rename(2)`, then a best-effort directory `fsync`. `rename` is atomic, so a concurrent reader sees either the old file or the complete new one, never a partial. The temp file must share the destination's directory because `CONFIG_DIR` and `DATA_DIR` may be different filesystems and a cross-device rename fails with `EXDEV`. `GenerateKEKSalt` additionally re-resolves before generating and **re-reads after writing**, so two genuine first runs racing converge on one salt instead of diverging — a credential sealed under a salt another process then replaced would be unopenable forever. `TestResolveKEKSaltIsConcurrencySafe` (16 goroutines) and `TestGenerateKEKSaltConvergesUnderRace` (8) cover both, under `-race`. **Left open:** `writeSecretFile` still writes `secret.key` in place under `O_EXCL`. Pre-existing, and a torn read there fails validation loudly rather than silently, but it deserves the same treatment |
+| **SALT-06** | **A doc fix is not the protection.** The archived procedure was wrong for as long as it existed; the next wrong procedure will be someone's blog post | **Applied.** `TestRestoreWithoutKEKSaltRefusesToStart` (`cmd/usarr/keyladder_test.go`) seals a credential through the real API, deletes the salt, restarts through `buildApp`, and fails if startup succeeds. Confirmed to **fail without the fix**: *"startup SUCCEEDED with sealed credentials present and keys/kek.salt missing."* It also asserts the refusal names the salt path, that **no** salt was written despite the refusal, and that restoring it afterwards opens the original credential byte-for-byte — proving the refusal preserved recoverable data rather than merely failing. `TestLegacyKEKSaltIsRelocatedNotLost` drives the full upgrade path and asserts the legacy file survives; `TestFirstRunGeneratesTheKEKSalt`, `TestRestartKeepsTheSameKEKSalt`, `TestBothSaltCopiesPresentPrefersTheNewPath` and `TestKEKSaltLivesOutsideKeysDir` pin the rest, the last of which fails if anyone ever moves the salt back under `keys/` |
+| **SALT-07** | **Is any other file under `keys/` exposed to the same hazard?** Audited the directory rather than fixing the reported file alone | **Two others, both dispositioned. `secret.key` — correctly placed and already guarded:** it IS a secret, so `keys/` is right for it, and `GenerateMasterKey` is reached only after the row count says nothing is sealed. **`secret.key.new` — not reachable, left open deliberately:** §3.4 specifies that its presence at startup means an interrupted rotation that must resume, but `Config.NewSecretKeyPath` has **no caller** — rotation is unimplemented, so there is no code to be wrong yet. Flagged for whoever implements §3.4: a rotation that half-completes has this bug's exact shape, and its resume path must fail closed the same way |
+
+**Docs changed together:** `CONFIGURATION.md` §3.2 (three ladder rows, incl. the copy-forward),
+§3.5 (retitled "If you lose the key — or the salt"), §5 (the tree, and the "keys/ holds secrets
+only" corollary), §6.1 (table, command, upgrade warning), §6.3, §6.4; `SETUP-CHECKLIST.md` §2.5;
+`.env.example`. `internal/config/config.go`'s comment claimed the salt belonged beside the key
+because they share a fate — true about the fate, wrong about the location — and now explains both.
+
+**Left to another thread:** `docs/reference/security.md` was held throughout and is **not** touched.
+Nothing in it is false — §1.3's `salt=<per-install random, stored>` is correct and it defers on-disk
+layout to `CONFIGURATION.md` §5 — but it never says where the salt lives or that it is required for
+recovery, and §1.3 should now name `$USARR_CONFIG_DIR/kek.salt` and state that it is a non-secret
+which the database backup must contain. That is the only item outstanding.

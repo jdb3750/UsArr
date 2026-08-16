@@ -92,7 +92,9 @@ Earlier drafts told you to run `openssl rand -base64 32` and put it in `.env`. D
 a real key on first run into `$USARR_CONFIG_DIR/keys/secret.key` at mode `0600` and logs a line
 telling you to back it up. That path has more entropy than anything you would paste, and it cannot
 accidentally be the placeholder from a public file. Copy the generated key into your password manager
-**once**, and keep it out of the same archive as the database (`docs/CONFIGURATION.md` §6).
+**once**, and keep it out of the same archive as the database (`docs/CONFIGURATION.md` §6.1). The
+other input to key derivation, `kek.salt`, is **not** a secret and sits beside `usarr.db`, so your
+ordinary backup already contains it — nothing extra to do.
 
 ---
 
