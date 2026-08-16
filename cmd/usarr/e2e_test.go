@@ -212,7 +212,7 @@ func TestEndToEndSearchAndGrab(t *testing.T) {
 	if grab.CandidateID != candidate.CandidateID {
 		t.Fatalf("grab returned candidate %d, wanted %d", grab.CandidateID, candidate.CandidateID)
 	}
-	t.Logf("grab: title=%q protocol=%s indexer=%s provenance_id=%d re_searched=%v — %s",
+	t.Logf("grab: title=%q protocol=%s indexer=%s provenance_id=%s re_searched=%v — %s",
 		grab.ReleaseTitle, grab.Protocol, grab.IndexerName, grab.ProvenanceID, grab.ReSearched, grab.Message)
 
 	grabs := prowlarr.grabs()
@@ -708,8 +708,10 @@ type reportBody struct {
 }
 
 type grabBody struct {
-	CandidateID  int64  `json:"candidate_id"`
-	ProvenanceID int64  `json:"provenance_id"`
+	CandidateID int64 `json:"candidate_id"`
+	// An opaque token, not a rowid: RG-01.3. Decoding it as an integer is
+	// what this field must never allow again.
+	ProvenanceID string `json:"provenance_id"`
 	ReleaseTitle string `json:"release_title"`
 	Protocol     string `json:"protocol"`
 	IndexerName  string `json:"indexer_name"`

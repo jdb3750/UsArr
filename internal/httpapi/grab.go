@@ -25,8 +25,30 @@ type grabRequest struct {
 }
 
 type grabResponse struct {
-	CandidateID  int64  `json:"candidate_id"`
-	ProvenanceID int64  `json:"provenance_id,omitempty"`
+	CandidateID int64 `json:"candidate_id"`
+
+	// ProvenanceID is the OPAQUE row id, the same token GET /api/v1/grabs/recent
+	// publishes for this acquisition — grabRowID over (user_id, rowid), not the
+	// rowid.
+	//
+	// REVIEW FINDING RG-01.3, THE SECOND HALF. This field shipped the raw
+	// provenance rowid, which is the same cross-user volume oracle the
+	// Recent-grabs read was fixed for: provenance.id is an INTEGER PRIMARY KEY
+	// and therefore one monotonic sequence shared by every user, so two of a
+	// caller's own ids bracket a count of everybody else's rows, and no access
+	// scope can close that — the scope decides which rows come back, not what
+	// their ids say about the ones that did not.
+	//
+	// AND IT IS THE EASIER HALF TO HARVEST, not the lesser one. The list read
+	// hands over ten ids at a time; this hands one over per grab, on demand,
+	// with the caller choosing when — which is a cleaner sampling instrument
+	// than the list ever was.
+	//
+	// Deriving it with the SAME function and the SAME inputs is what keeps the
+	// feature: the caller can match the grab they just made to its row in Recent
+	// grabs by string equality, and learns nothing else from it.
+	ProvenanceID string `json:"provenance_id,omitempty"`
+
 	ReleaseTitle string `json:"release_title"`
 	Protocol     string `json:"protocol"`
 	IndexerName  string `json:"indexer_name,omitempty"`
@@ -104,9 +126,9 @@ func (s *Server) handleGrab(w http.ResponseWriter, r *http.Request) error {
 		// sent-unknown path internal/releases writes an unconfirmed provenance
 		// row to keep the infohash join key, and returns its id alongside the
 		// error. It is 0 on every other failure.
-		auditResult, outcome := "fail", outcomeNotSent
+		auditResult, outcome := store.AuditResultFail, outcomeNotSent
 		if apiErr.Code == CodeGrabOutcomeUnknown {
-			auditResult, outcome = "warn", outcomeSentUnknown
+			auditResult, outcome = store.AuditResultWarn, outcomeSentUnknown
 		}
 		s.audit(r, auditGrabAction, "release_candidate", candidateID, auditResult,
 			grabAuditJSON(grabAuditMeta{
@@ -122,7 +144,7 @@ func (s *Server) handleGrab(w http.ResponseWriter, r *http.Request) error {
 		return apiErr
 	}
 
-	s.audit(r, auditGrabAction, "release_candidate", candidateID, "ok",
+	s.audit(r, auditGrabAction, "release_candidate", candidateID, store.AuditResultOK,
 		grabAuditJSON(grabAuditMeta{
 			InstanceID:   cand.ServiceInstanceID,
 			Outcome:      outcomeSentConfirmed,
@@ -144,8 +166,13 @@ func (s *Server) handleGrab(w http.ResponseWriter, r *http.Request) error {
 			"the details it sent back"
 	}
 	writeJSON(w, http.StatusOK, grabResponse{
-		CandidateID:  result.CandidateID,
-		ProvenanceID: result.ProvenanceID,
+		CandidateID: result.CandidateID,
+		// a.User.ID is the user_id internal/releases wrote onto the provenance
+		// row (releasesScope carries it through), so this token is byte-identical
+		// to the one Recent grabs publishes for the same row. If those two ever
+		// disagree the correlation silently breaks, which is why the id is built
+		// from the session rather than re-read from anywhere.
+		ProvenanceID: s.provenanceRowID(a, result.ProvenanceID),
 		ReleaseTitle: result.ReleaseTitle,
 		Protocol:     result.Protocol,
 		IndexerName:  result.IndexerName,
@@ -156,11 +183,28 @@ func (s *Server) handleGrab(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
+// provenanceRowID renders the opaque id for a provenance row this caller just
+// wrote, or "" when there is no row.
+//
+// The empty case is not an error: rowid 0 means internal/releases wrote no
+// provenance row, which is every not-sent failure. Hashing 0 would mint a
+// perfectly stable token for a row that does not exist, and `omitempty` then
+// could not drop it — so the absence has to be preserved here rather than
+// recovered downstream.
+func (s *Server) provenanceRowID(a authSession, rowID int64) string {
+	if rowID == 0 {
+		return ""
+	}
+	return grabRowID(s.cfg.GrabRowIDKey, a.User.ID, rowID)
+}
+
 // The grab audit vocabulary, spelled once. `action` is what the Recent-grabs
 // read filters on, and a typo in a string literal here is a row that silently
-// never appears in the list it was written for.
+// never appears in the list it was written for — which is why the action and
+// the three results are now taken from internal/store, the side that does the
+// reading, instead of being spelled again here.
 const (
-	auditGrabAction = "release.grab"
+	auditGrabAction = store.AuditActionGrab
 
 	// outcome names WHERE the release got to, which is the axis Recent grabs
 	// sorts on. It is not a synonym for audit_log.result: sent-unknown is
@@ -270,7 +314,7 @@ func (s *Server) auditNotSent(r *http.Request, candidateID int64, cand store.Rel
 	} else if err != nil {
 		message = redactText(err.Error())
 	}
-	s.audit(r, auditGrabAction, "release_candidate", candidateID, "fail",
+	s.audit(r, auditGrabAction, "release_candidate", candidateID, store.AuditResultFail,
 		grabAuditJSON(grabAuditMeta{
 			InstanceID:   cand.ServiceInstanceID,
 			Outcome:      outcomeNotSent,

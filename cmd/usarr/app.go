@@ -198,6 +198,14 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 		_ = database.Close()
 		return nil, err
 	}
+	// The definite-failure arm of the same block publishes audit_log rowids,
+	// which are a second monotonic sequence and therefore the same oracle. Its
+	// own HKDF label keeps the two id domains from colliding.
+	auditRowIDKey, err := crypto.DeriveAuditRowIDKey(masterKey.Key, salt)
+	if err != nil {
+		_ = database.Close()
+		return nil, err
+	}
 
 	for _, warning := range cfg.TrustedProxyWarnings() {
 		log.Warn(warning)
@@ -223,6 +231,7 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 		Store:          st,
 		Keyring:        keyring,
 		GrabRowIDKey:   grabRowIDKey,
+		AuditRowIDKey:  auditRowIDKey,
 		SchemaVersion:  schemaVersion,
 		URLBase:        cfg.URLBase,
 		TrustedProxies: cfg.TrustedProxies,

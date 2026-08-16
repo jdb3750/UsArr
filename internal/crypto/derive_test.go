@@ -32,8 +32,18 @@ func TestDerivedKeysAreDistinct(t *testing.T) {
 		t.Fatalf("DeriveGrabRowIDKey: %v", err)
 	}
 
+	// The fifth key, and the one this test is most likely to be needed for: it
+	// is a copy of the grab-row-id derivation one character apart, so a
+	// copy-pasted info label would compile, run, and quietly make the two arms
+	// of the Recent-grabs union share a keyspace.
+	auditRow, err := DeriveAuditRowIDKey(secret, salt)
+	if err != nil {
+		t.Fatalf("DeriveAuditRowIDKey: %v", err)
+	}
+
 	named := map[string][]byte{
-		"kek": kek, "stream": stream, "client": client, "grab-row-id": grabRow,
+		"kek": kek, "stream": stream, "client": client,
+		"grab-row-id": grabRow, "audit-row-id": auditRow,
 	}
 	for name, k := range named {
 		if len(k) != DerivedKeyLen {

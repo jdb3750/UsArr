@@ -116,6 +116,35 @@ func actorString(v sql.NullInt64) string {
 	return strconv.FormatInt(v.Int64, 10)
 }
 
+// The grab audit vocabulary, spelled ONCE for both sides of it.
+//
+// internal/httpapi writes these values and this package reads them back, and
+// until now each side spelled them itself. That is a silent failure by
+// construction: a row written with a different action string is not a wrong row
+// in the Recent-grabs list, it is a row that never appears in it at all, and
+// nothing fails. Exporting them from the side that does the reading makes the
+// writer import the reader's spelling.
+//
+// The three results are audit_log.result's values. There is no CHECK constraint
+// behind them, deliberately, so these are the vocabulary and not the schema.
+const (
+	AuditActionGrab = "release.grab"
+
+	// AuditResultOK is a grab the upstream confirmed.
+	AuditResultOK = "ok"
+
+	// AuditResultWarn is a grab that WAS handed over and whose outcome UsArr
+	// does not know. It is not a lesser failure: a warn row has a provenance row
+	// behind it, which is why the Recent-grabs union reads warn rows from
+	// provenance and must NOT also read them from here.
+	AuditResultWarn = "warn"
+
+	// AuditResultFail is a grab that provably never left the process. These rows
+	// have no provenance row anywhere, so this table is the only record they
+	// have, and they are the entire audit arm of the union.
+	AuditResultFail = "fail"
+)
+
 // AuditQuery narrows a scoped audit read.
 //
 // Both filters are OR-within, AND-between: an empty slice means "any". They
@@ -227,6 +256,53 @@ func (s *Store) ListAuditLog(ctx context.Context, scope Scope, q AuditQuery) ([]
 		return nil, fmt.Errorf("list audit_log: %w", err)
 	}
 	return out, nil
+}
+
+// NotSentGrabsQuery is the definite-failure arm of ARCHITECTURE.md §17.5's
+// Recent-grabs block, expressed once.
+//
+// WHY `fail` AND NOT `warn`. The two arms of that union are not
+// success-versus-failure, they are HANDED-OVER versus NEVER-HANDED-OVER. A warn
+// row is a grab that reached Prowlarr and whose fate is unknown, and internal/
+// releases writes a provenance row for it precisely so the download id survives
+// — so a warn row is ALREADY in the provenance arm. Reading warn rows here as
+// well would render that grab twice, once as "sent, outcome unknown" and once as
+// a failure, which is the double-grab invitation the three-state model exists to
+// prevent, printed on the same screen.
+//
+// The limit is clamped HERE, sharing RecentProvenance's bounds, for two reasons:
+// the two arms of one union must be bounded identically or the merge is skewed
+// toward whichever arm was allowed more rows, and — as with
+// recentProvenanceSQL — a bound that lives in the caller can be left behind by
+// the next caller.
+func NotSentGrabsQuery(limit int) AuditQuery {
+	switch {
+	case limit <= 0:
+		limit = RecentProvenanceDefaultLimit
+	case limit > RecentProvenanceMaxLimit:
+		limit = RecentProvenanceMaxLimit
+	}
+	return AuditQuery{
+		Actions: []string{AuditActionGrab},
+		Results: []string{AuditResultFail},
+		Limit:   limit,
+	}
+}
+
+// ListNotSentGrabs reads the grabs that provably never left this process, newest
+// first, for the rows this scope may see.
+//
+// SCOPE IS IN THE SIGNATURE AND IN THE SQL, via ListAuditLog: these rows carry a
+// user's release titles, their indexers and their failures, and a scope a query
+// accepts but never filters on is indistinguishable from no scope at all.
+//
+// A ROW WITH NO ACTOR IS NOT RETURNED, which is the scoped predicate's doing
+// rather than this function's: `NULL IN (0, :uid)` is unknown, not true. That is
+// load-bearing downstream — internal/httpapi derives a per-user opaque id from
+// actor_user_id, and a NULL actor would silently hash in the wrong domain — so
+// the reader asserts it rather than trusting this sentence.
+func (s *Store) ListNotSentGrabs(ctx context.Context, scope Scope, limit int) ([]AuditEntry, error) {
+	return s.ListAuditLog(ctx, scope, NotSentGrabsQuery(limit))
 }
 
 // VerifyAuditChain recomputes the chain from the oldest row forward and
