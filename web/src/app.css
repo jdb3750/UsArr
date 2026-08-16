@@ -1226,23 +1226,23 @@ select[multiple] {
 	border-color: currentcolor;
 }
 
-/* Protocol swatch: achromatic. The 1px --border-strong boundary carries the
- * shape at >= 3.2:1 and there is no fill, because a torrent green one column
- * from a status green is the one collision this ramp cannot afford. The words
- * `torrent` and `usenet` carry the distinction in the same cell. */
+/* The protocol cell. The words `torrent` and `usenet` carry the distinction and
+ * nothing else needs to.
+ *
+ * 🚩 `.proto__dot` IS DELETED RATHER THAN RESTYLED, and the reason is that it
+ * had no job left. §3.3 withdrew the protocol colours because the torrent green
+ * and `--status-ok` are the same green at a 6px dot (ΔE76 4.59 light, 3.09
+ * dark), so protocol read as status. What survived the withdrawal was an
+ * achromatic 8px square that draws IDENTICALLY for both protocols — it
+ * distinguishes nothing, which is §1.4's test (if a label sits next to it and
+ * the label alone would be understood, delete the decoration) failing outright.
+ * Measured at 1280px it also reads as an unchecked checkbox, which on a list
+ * whose rows carry a real select checkbox is worse than decorative. */
 .proto {
 	display: inline-flex;
 	align-items: center;
 	gap: var(--space-3);
 	white-space: nowrap;
-}
-
-.proto__dot {
-	width: 8px;
-	height: 8px;
-	flex: none;
-	border: 1px solid var(--border-strong);
-	border-radius: var(--radius-sm);
 }
 
 /* Availability rollup, per ARCHITECTURE §6.3: have == total && total > 0 is a

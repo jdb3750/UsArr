@@ -147,6 +147,45 @@ const page = await context.newPage();
 await page.goto(URL_BASE);
 await page.waitForSelector('table.tbl tbody tr');
 
+/* ⚠️ TWO MEASUREMENT TRAPS THAT LOOK EXACTLY LIKE LAYOUT REGRESSIONS AND ARE
+ * NEITHER. Written down here because both were raised against numbers this file
+ * already published, and the answer differs between them.
+ *
+ *   1. CONTAINED ROWS REPORT THEIR PLACEHOLDER, NOT THEIR HEIGHT. With
+ *      `content-visibility: auto` live, which rows get skipped depends on
+ *      render history rather than on anything stable, so a sweep over 2,000
+ *      rows can silently read `contain-intrinsic-size` back out of itself.
+ *      ✅ GUARDED, deliberately and from the start: intrinsicAt() adopts a
+ *      stylesheet forcing `content-visibility: visible !important` on every
+ *      row, forces a layout, measures, then removes it. The guard is also
+ *      self-evidencing — the harness prints the full distribution per density,
+ *      so a placeholder mixed into the sample would appear as a second cluster
+ *      rather than have to be reasoned about.
+ *
+ *   2. A FIXED SETTLE TIME CAN MEASURE PRE-WEBFONT METRICS. `document.fonts
+ *      .ready` is the fix, and it is awaited below.
+ *      ⚠️ BUT THE REAL SITUATION HERE IS NOT A RACE, IT IS A CONSTANT, AND
+ *      THAT IS WORSE IN ONE DIRECTION AND BETTER IN ANOTHER. The harness is
+ *      its own Vite root with NO `publicDir`, so app.css's `@font-face`
+ *      `src: url('/fonts/PlexSans-var-latin.woff2')` resolves under the
+ *      harness's own output directory, where it does not exist, and 404s. IBM
+ *      Plex therefore never loads here at all: every number this file has ever
+ *      printed is on the fallback face, reproducibly rather than racily, which
+ *      is why the distributions have zero spread.
+ *      The one-line figures are unaffected either way, because `.tbl tbody tr`
+ *      carries `min-height: var(--row-h)` and a one-line row's content is
+ *      shorter than it — which is exactly why they came out at 28/32/36, the
+ *      density tokens themselves. The RICH row is content-driven and is the
+ *      one that could move if the face ever loads.
+ *      🔍 The await and the report below change no measurement today (a 404
+ *      makes fonts.ready resolve immediately); they exist so the next reader
+ *      sees the font state in the output instead of assuming it was handled. */
+await page.evaluate(() => document.fonts.ready);
+const fontState = await page.evaluate(() => {
+	const faces = [...document.fonts].map((f) => `${f.family} ${f.weight} ${f.status}`);
+	return { count: document.fonts.size, status: document.fonts.status, faces };
+});
+
 /** Rebuild the corpus at `n` rows and let Svelte flush before measuring. */
 async function setRows(n) {
 	await page.evaluate((count) => {
@@ -1318,6 +1357,12 @@ await page.setViewportSize({ width: 1440, height: 900 });
 
 head('Summary');
 if (!ASSERT_ONLY) {
+	note(
+		`webfont state while measuring: document.fonts.status=${fontState.status}, ` +
+			`${fontState.count} face(s)${fontState.faces.length ? ': ' + fontState.faces.join(' | ') : ''} ` +
+			`— the harness has no publicDir, so /fonts/*.woff2 404s and these are FALLBACK metrics. ` +
+			`One-line rows are pinned by min-height:--row-h and so are unaffected; the rich row is not.`
+	);
 	note('contain-intrinsic-size, per density (mean rendered content box):');
 	for (const d of ['compact', 'standard', 'relaxed']) {
 		note(

@@ -659,7 +659,7 @@
 		{#snippet cell(release: Release, column: ListColumn)}
 			{#if column.id === 'protocol'}
 				{#if release.protocol}
-					<span class="proto"><span class="proto__dot"></span>{release.protocol}</span>
+					<span class="proto">{release.protocol}</span>
 				{:else}
 					<span class="muted">{NOTHING.empty}</span>
 				{/if}
