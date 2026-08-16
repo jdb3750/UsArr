@@ -18,6 +18,7 @@ import (
 
 	"github.com/jdb3750/UsArr/internal/config"
 	"github.com/jdb3750/UsArr/internal/httpapi"
+	"github.com/jdb3750/UsArr/internal/web"
 )
 
 // TestEndToEndSearchAndGrab drives the ENTIRE Search-and-Grab path through
@@ -332,11 +333,41 @@ func TestUnauthenticatedAndURLBase(t *testing.T) {
 	if code, _ := env.raw(t, "GET", "/api/health/live", nil, withoutSession); code == http.StatusOK {
 		t.Error("with USARR_URL_BASE set, /api/health/live must not answer off the base")
 	}
-	// The SPA still resolves deep routes under the base.
-	if code, _ := env.raw(t, "GET", "/usarr/search", nil, withoutSession); code != http.StatusOK {
-		t.Errorf("/usarr/search = %d, want the SPA document", code)
-	}
+	// The SPA still resolves deep routes under the base. This is the one
+	// assertion here that needs an embedded frontend, so it is a subtest: in a
+	// fresh clone it skips and the routing assertions above still run.
+	t.Run("SPADeepRoute", func(t *testing.T) {
+		requireSPABuilt(t)
+		if code, _ := env.raw(t, "GET", "/usarr/search", nil, withoutSession); code != http.StatusOK {
+			t.Errorf("/usarr/search = %d, want the SPA document", code)
+		}
+	})
 	t.Log("every route honours USARR_URL_BASE=/usarr")
+}
+
+// requireSPABuilt guards an assertion that can only hold once the frontend build
+// is embedded in internal/web/spa. A fresh clone has nothing there — spa/ is
+// tracked with only a .gitkeep — so a bare `go test ./...` used to fail on a
+// missing build rather than on anything the newcomer wrote. Skipping says so
+// instead.
+//
+// USARR_REQUIRE_WEB_BUILD=1 turns the skip back into a failure, and `make
+// test-go` sets it because it depends on `web-build` and has therefore just
+// produced the build. Without that the skip would be free to become permanent:
+// the gate would go green on a tree where the SPA never mounted at all. This
+// mirrors internal/web's requireBuilt for the same reason.
+func requireSPABuilt(t *testing.T) {
+	t.Helper()
+	if err := web.AssertBuilt(); err != nil {
+		if os.Getenv("USARR_REQUIRE_WEB_BUILD") == "1" {
+			t.Fatalf("USARR_REQUIRE_WEB_BUILD=1 but %v: web/scripts/sync-embed.mjs did not "+
+				"populate internal/web/spa. This assertion must not be allowed to skip "+
+				"inside the gate — it is what proves the SPA is served under USARR_URL_BASE.", err)
+		}
+		t.Skipf("%v: internal/web/spa is empty, so no route can return the SPA document. "+
+			"Run `make build` (or `make test`, which builds it too) and re-run; "+
+			"see docs/DEVELOPMENT.md §3.", err)
+	}
 }
 
 // ── harness ─────────────────────────────────────────────────────────────────

@@ -3011,3 +3011,64 @@ indistinguishable from a broken repository:
 
 **The order matters more than the list.** `make tools`, then `make check` — and `make check` needs no
 `make web-deps` in front of it any more, which was the whole point of the finding.
+
+---
+
+# Round 6 — fourth addendum: FI-12 closed as coded, and the skip given teeth
+
+**FI-12 was closed once as documented, and §7.1 said in writing that the other fix shape was the
+better one** — *"give `cmd/usarr`'s e2e route assertions that same skip, and the misleading red stops
+existing rather than being explained"*. That is what this section is. Observed on `main` at `e5f07fa`,
+2026-08-16.
+
+## 9.1 The reproduction, and the exact scope of the red
+
+`git clone` of the repo into a scratch directory outside the working tree, **no `make` target run
+first**, so `internal/web/spa` holds nothing but `.gitkeep`:
+
+```
+$ CGO_ENABLED=1 go test -race ./...
+--- FAIL: TestUnauthenticatedAndURLBase (0.11s)
+    e2e_test.go:337: /usarr/search = 404, want the SPA document
+    e2e_test.go:339: every route honours USARR_URL_BASE=/usarr
+FAIL	github.com/jdb3750/UsArr/cmd/usarr	3.453s
+… every other package ok, internal/web included
+```
+
+**Exactly one test, exactly one assertion** — which settles a discrepancy in how the finding had been
+reported. The two names in circulation, *"`TestUnauthenticatedAndURLBase` in `cmd/usarr`"* and
+*"`e2e_test.go`'s SPA assertion"*, are the **same** failure, not two: `TestUnauthenticatedAndURLBase`
+lives in `cmd/usarr/e2e_test.go` and its last assertion is the SPA one. `grep -rn 'raw(t, "GET",
+"/[^a]' cmd/usarr/*_test.go | grep -v /api` returns that one line and nothing else, so no second
+assertion was hiding.
+
+## 9.2 The fix, and why it is a subtest rather than a whole-test skip
+
+`requireSPABuilt` in `cmd/usarr/e2e_test.go` is `internal/web`'s `requireBuilt` transcribed:
+`web.AssertBuilt()` → skip with the fix command, escalating to `t.Fatalf` under
+`USARR_REQUIRE_WEB_BUILD=1`. The SPA assertion moved into a `t.Run("SPADeepRoute", …)` subtest so the
+skip is **narrow**: `TestUnauthenticatedAndURLBase` proves two properties, authentication on every
+`/api/v1` route and `USARR_URL_BASE` applying to all of them, and **neither needs an SPA**. Skipping
+the whole test to dodge one assertion would have traded a misleading red for a real coverage hole in
+every fresh clone — which is the same failure shape the finding was raised about, pointed the other
+way.
+
+## 9.3 Proof the skip cannot become permanent
+
+The risk this fix introduces is the one that matters: a skip nobody notices has disarmed. Three runs,
+same never-built clone:
+
+| Command | Result |
+|---|---|
+| `CGO_ENABLED=1 go test -race ./...` | all packages `ok`; `--- SKIP: TestUnauthenticatedAndURLBase/SPADeepRoute` |
+| `USARR_REQUIRE_WEB_BUILD=1 CGO_ENABLED=1 go test -race -run TestUnauthenticatedAndURLBase ./cmd/usarr/` | `--- FAIL: TestUnauthenticatedAndURLBase/SPADeepRoute` |
+| `make check` (SPA present via `test-go`'s `web-build`) | the subtest **runs and passes**; it does not skip |
+
+The second row is the assertion asked for, and it is deliberately **not** a separate meta-test: the
+guard already fails closed under the one environment variable `make test-go` sets, so a test whose
+only job is to assert that another test ran would restate the guard's own condition. `make check`'s
+`web-build` prerequisite plus `USARR_REQUIRE_WEB_BUILD=1` is the mechanism; a third copy of it would
+be one more thing to keep in step, not one more check.
+
+**FI-12: closed as coded.** `DEVELOPMENT.md` §3 is rewritten from *"this fails and here is why"* to
+*"this skips and here is the command"*.

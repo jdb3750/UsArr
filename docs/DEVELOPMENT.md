@@ -190,31 +190,40 @@ In this mode `internal/web` serves nothing. The SPA is baked in only by `make bu
 `web-build` first and embeds `web/build`. **Consequence: `go build ./cmd/usarr` by hand produces a
 binary that 404s on `/`.** The Makefile wires the dependency; running `go build` directly bypasses it.
 
-### ⚠️ Run `make test`, not a bare `go test ./...`
+### `go test ./...` in a fresh clone skips the SPA assertions — it no longer fails
 
-On a fresh clone **`go test -race ./...` fails**, and the failure means nothing. `internal/web/spa`
-is the `//go:embed` mirror of the built SPA, and `git ls-files internal/web/spa` tracks exactly one
-file — `.gitkeep`. It is populated by `make test-go`'s `web-build` prerequisite and by nothing else,
-so in a clone that has never built the frontend, `cmd/usarr`'s end-to-end route test has no document
-to find and reports a red that is a missing build step, not a broken repository.
+`internal/web/spa` is the `//go:embed` mirror of the built SPA, and `git ls-files internal/web/spa`
+tracks exactly one file — `.gitkeep`. It is populated by `web-build` (a prerequisite of both `build`
+and `test-go`) and by nothing else, so a clone that has never built the frontend has no document for
+a route test to find.
+
+Every assertion that needs one is guarded by `web.Built()` and **skips**, naming the fix:
 
 ```bash
 make test        # correct: builds the SPA first, then runs the Go and web suites
-go test ./...    # red on a fresh clone until `make web-build` has run once
+go test ./...    # green in a fresh clone; the SPA assertions skip and say why
 ```
 
-**Re-checked by execution on a fresh clone, 2026-08-16**, because a documented failure nobody has
-reproduced lately is a claim, not a fact: `CGO_ENABLED=1 go test -race ./...` fails in exactly one
-package with exactly one assertion — `cmd/usarr`, `e2e_test.go:337: /usarr/search = 404, want the SPA
-document`. Every other package, `internal/web` among them, reports `ok`. The paragraph above is still
-accurate, and so is the shape of the red: one package, missing build step.
+```
+--- SKIP: TestUnauthenticatedAndURLBase/SPADeepRoute
+    internal/web: no frontend build is embedded: internal/web/spa is empty, so no route
+    can return the SPA document. Run `make build` (or `make test`, which builds it too)
+    and re-run; see docs/DEVELOPMENT.md §3.
+```
 
-`internal/web`'s own tests skip honestly here (*"no frontend build embedded — run `make
-web-build`"*), escalating to a hard failure under `USARR_REQUIRE_WEB_BUILD=1` so the embed
-regression test can never silently skip inside `make check`. `cmd/usarr`'s e2e assertions have no
-such skip yet — that gap is `FI-12` in `docs/REVIEW-LOG.md`, and it is a documentation item until
-someone gives them the same `Built()` guard. **Not a regression**, and not a defect in the gate,
-which is green: it is only that the most obvious command a newcomer types is the wrong one.
+**The skip is not allowed to become permanent.** `USARR_REQUIRE_WEB_BUILD=1` turns it into a hard
+failure, and `make test-go` sets it precisely because it has just run `web-build`. So inside `make
+check` these assertions **execute**; only outside it may they skip. Two guards carry this, written
+the same way: `requireBuilt` in `internal/web/web_test.go` — which protects
+`TestEmbeddedFSCarriesAppDir`, the only thing that catches a lost `//go:embed all:` prefix — and
+`requireSPABuilt` in `cmd/usarr/e2e_test.go`.
+
+**Verified by execution on a fresh clone, 2026-08-16.** Before the guard, `CGO_ENABLED=1 go test
+-race ./...` failed in exactly one package with exactly one assertion — `cmd/usarr`,
+`e2e_test.go:337: /usarr/search = 404, want the SPA document`; every other package, `internal/web`
+among them, was `ok`. After it, all packages are `ok` with that one subtest skipped, and the same
+tree under `USARR_REQUIRE_WEB_BUILD=1` fails — which is the guard proving it still has teeth. This
+closes `FI-12` in `docs/REVIEW-LOG.md` as coded rather than as documented.
 
 ---
 
