@@ -358,6 +358,27 @@ Prowlarr, not **"Source"**, which is what Sonarr's Interactive Search calls the 
 [Sonarr InteractiveSearch.tsx](https://github.com/Sonarr/Sonarr/blob/develop/frontend/src/InteractiveSearch/InteractiveSearch.tsx)).
 Prowlarr is the surface v0.1 mirrors.
 
+### 3.3a Selection and the primary action — the one accent worth adding is a weight, not a hue
+
+**Keep the no-brand-accent rule; it is correct and load-bearing.** But it is currently being asked
+to justify three separate things that are not one decision, and two of them are underpowered.
+Measured on the light theme: `--selected #e7e3dd` against `--hover #eceae5` against `--surface
+#f2f0ec` — **three fills within six units of each other**, so selection is a whisper; and
+`.btn--primary` is `--selected` fill plus 600 weight, which is that same six-unit difference and one
+weight step, for the one button on the screen.
+
+**The answer is achromatic and costs nothing: give `--selected` and `.btn--primary` a 1 px
+`--border-strong` border rather than relying on fill alone.** It fixes selection and the primary
+action together, it adds no hue, and it does not reopen §3's decision. That is the *only* accent
+this document adopts.
+
+**And an anchor styled as a button carries no underline.** `.btn` never reset `text-decoration`, so
+the global `a { text-decoration: underline }` won on nine anchor-buttons — which meant that on every
+empty state the primary action was a bold **underlined** label in a box beside a plain label in a
+box, so the primary/secondary distinction was being carried by **underline**, which is the link
+affordance used everywhere else in the product. Same ink, two meanings, on one screen.
+`.btn { text-decoration: none }`.
+
 ### 3.4 Theme setting
 
 Light / Dark / Auto, defaulting to Auto, which is Sonarr's shape
@@ -1459,6 +1480,12 @@ default-focused **safe** option on any destructive confirmation, and focus retur
 element on close. No dialog traps the user in a mode they must exit before doing anything else
 (Apple's *Modelessness*; *Macintosh Human Interface Guidelines*, 1992,
 <https://dev.os9.ca/techpubs/mac/HIGuidelines/HIGuidelines-15.html>).
+
+**An overlay that covers the content is modal, or it is not an overlay.** The sidebar below 900 px
+is `position: fixed` at `z-index: 40` over the page, with `aria-expanded` on its toggle and **no
+`aria-modal`, no focus trap and no `Escape` handler** — so tabbing past the last nav item lands on
+content the user cannot see. Either trap focus and mark it `role="dialog" aria-modal="true"` while
+open, or apply `inert` to `main` for the duration. The same rule governs any future drawer.
 
 **A destructive confirmation always offers the safe option as a control, not as an escape.** A
 prompt whose only buttons are `Open Libraries` and `Remove anyway` has no `Cancel`; navigating away
