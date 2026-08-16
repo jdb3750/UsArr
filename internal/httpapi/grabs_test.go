@@ -82,15 +82,15 @@ func TestRecentGrabsIsNewestFirstAndCarriesTheOutcome(t *testing.T) {
 	if first.AcquisitionState != store.AcquisitionUnconfirmed {
 		t.Errorf("acquisition_state = %q, want it verbatim from the column", first.AcquisitionState)
 	}
-	if first.Outcome != outcomeSentUnknown {
-		t.Errorf("outcome = %q, want %q", first.Outcome, outcomeSentUnknown)
+	if first.Outcome != wireOutcomeSentUnknown {
+		t.Errorf("outcome = %q, want %q", first.Outcome, wireOutcomeSentUnknown)
 	}
 	if !strings.HasPrefix(first.Outcome, "sent") {
 		t.Errorf("outcome %q does not read as sent; §17.5 puts the ambiguous state beside the "+
 			"confirmed one, not beside a failure", first.Outcome)
 	}
-	if got.Grabs[1].Outcome != outcomeSent {
-		t.Errorf("confirmed outcome = %q, want %q", got.Grabs[1].Outcome, outcomeSent)
+	if got.Grabs[1].Outcome != wireOutcomeSent {
+		t.Errorf("confirmed outcome = %q, want %q", got.Grabs[1].Outcome, wireOutcomeSent)
 	}
 
 	// Everything §17.5 renders that this row can actually supply.
@@ -118,11 +118,11 @@ func TestRecentGrabsIsNewestFirstAndCarriesTheOutcome(t *testing.T) {
 // — so this is a reachable case, and guessing here would put an unknown state
 // beside "sent".
 func TestRecentGrabsDoesNotInventAnOutcomeForAnUnknownState(t *testing.T) {
-	if got := outcomeFor("pending"); got != outcomeStateUnknown {
-		t.Errorf("outcomeFor(%q) = %q, want %q", "pending", got, outcomeStateUnknown)
+	if got := outcomeFor("pending"); got != wireOutcomeStateUnknown {
+		t.Errorf("outcomeFor(%q) = %q, want %q", "pending", got, wireOutcomeStateUnknown)
 	}
-	if got := outcomeFor(""); got != outcomeStateUnknown {
-		t.Errorf("outcomeFor(%q) = %q, want %q", "", got, outcomeStateUnknown)
+	if got := outcomeFor(""); got != wireOutcomeStateUnknown {
+		t.Errorf("outcomeFor(%q) = %q, want %q", "", got, wireOutcomeStateUnknown)
 	}
 }
 

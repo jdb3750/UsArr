@@ -93,14 +93,25 @@ type recentGrabResponse struct {
 	Outcome string `json:"outcome"`
 }
 
-// Outcome values. Deliberately not derived by trimming or prefixing the column:
-// the store's vocabulary is open by design (migration 0003 ships no CHECK, and
-// v0.2's request path may want a "pending"), so an unrecognised state must land
-// somewhere honest rather than be renamed into one of these two.
+// Outcome values ON THE WIRE. Deliberately not derived by trimming or prefixing
+// the column: the store's vocabulary is open by design (migration 0003 ships no
+// CHECK, and v0.2's request path may want a "pending"), so an unrecognised state
+// must land somewhere honest rather than be renamed into one of these two.
+//
+// THE `wire` PREFIX IS LORE-BEARING, not decoration. grab.go carries a SECOND
+// outcome vocabulary — outcomeNotSent / outcomeSentUnknown / outcomeSentConfirmed
+// — which is audit_log.metadata_json's, and the two disagree on both spelling and
+// membership: "sent_unknown" there is "sent_outcome_unknown" here, and this
+// surface has no "not_sent" at all because those grabs write no provenance row.
+// They collided on one identifier when the two threads merged. Renaming the
+// values to agree would be the wrong repair — audit metadata is an internal
+// record with its own history, this one is a published shape web/src/lib/
+// requests.ts pins by string — so the NAMES are separated and the strings are
+// left exactly as each side ships them.
 const (
-	outcomeSent         = "sent"
-	outcomeSentUnknown  = "sent_outcome_unknown"
-	outcomeStateUnknown = "unknown"
+	wireOutcomeSent         = "sent"
+	wireOutcomeSentUnknown  = "sent_outcome_unknown"
+	wireOutcomeStateUnknown = "unknown"
 )
 
 func toRecentGrabResponse(p store.Provenance) recentGrabResponse {
@@ -133,11 +144,11 @@ func toRecentGrabResponse(p store.Provenance) recentGrabResponse {
 func outcomeFor(state string) string {
 	switch state {
 	case store.AcquisitionConfirmed:
-		return outcomeSent
+		return wireOutcomeSent
 	case store.AcquisitionUnconfirmed:
-		return outcomeSentUnknown
+		return wireOutcomeSentUnknown
 	default:
-		return outcomeStateUnknown
+		return wireOutcomeStateUnknown
 	}
 }
 
