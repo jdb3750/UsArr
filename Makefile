@@ -430,29 +430,33 @@ fmt-check: web-deps ## Verify formatting without modifying files (used by `make 
 #   1. It needs a Playwright Chromium. The gate's whole contract is that it runs
 #      on a machine carrying Go and pnpm and nothing else; a ~150 MB browser
 #      download is a large new prerequisite for every developer and every runner.
-#   2. The pin, and it is now HALF discharged. This reason has been wrong twice
-#      in two directions, so both are recorded. It first said check.mjs imports
+#   2. The pin, and it is now DISCHARGED. This reason was wrong twice in two
+#      directions, so both are recorded. It first said check.mjs imports
 #      Playwright from an absolute path outside the repo, which stopped being
 #      true when the file grew a resolution ladder — bare specifier first, then
 #      web/node_modules, then the npm global root. It then said nothing declared
-#      WHICH version, and that is the half now closed: web/package.json pins
-#      `playwright-core` at 1.56.1, exact, no caret — the version whose
-#      browsers.json declares chromium revision 1194, which is the build in this
-#      container's cache and the one `make design` was observed driving. It
-#      declares no install script and downloads no browser, so a fresh install
-#      pays nothing for it.
-#      What is NOT closed: the ladder asks for the specifier `playwright`, and
-#      the pinned package is `playwright-core`, so the pin does not satisfy it
-#      and a fresh machine still falls through to the fallbacks. Finishing this
-#      is a change to docs/design/check.mjs, not to this file.
+#      WHICH version, and that is closed: web/package.json pins `playwright-core`
+#      at 1.56.1, exact, no caret — the version whose browsers.json declares
+#      chromium revision 1194, which is the build in this container's cache and
+#      the one `make design` was observed driving. It declares no install script
+#      and downloads no browser, so a fresh install pays nothing for it.
+#      The last gap was that the ladder asked only for the specifier
+#      `playwright` while the pinned package is `playwright-core`, so the pin
+#      resolved nowhere and was decorative. docs/design/check.mjs now probes both
+#      specifiers at every rung, so the pin is what answers: before web/
+#      node_modules was populated the checker printed `playwright resolved via
+#      npm global root 'playwright'`, and after, `playwright resolved via
+#      web/node_modules 'playwright-core'`. The pin is load-bearing, and this
+#      reason no longer argues for anything.
 #      Reason (1) is untouched by any of it: the ~150 MB of browser binaries is
-#      still a prerequisite the gate's contract does not carry, and on its own
-#      it is still enough to keep `design` out of `check`.
+#      still a prerequisite the gate's contract does not carry — this repo does
+#      not vendor them and should not — and on its own it is still enough to
+#      keep `design` out of `check`.
 #   3. It guards docs/design/ — prose, tokens and mockups, none of which is a
 #      shipping artifact. Token drift in a mockup cannot break the binary.
 #
-# So it is a target a person runs, like `make bench`. If (2) is ever fixed by a
-# pinned devDependency in web/package.json, (1) is worth revisiting on its own.
+# So it is a target a person runs, like `make bench`. With (2) discharged, (1)
+# and (3) are the whole of the case, and (1) carries it on its own.
 
 # Overridable. The default is the browser cache this repo's agent container
 # preinstalls; a workstation's is usually ~/.cache/ms-playwright.

@@ -32,7 +32,7 @@
 	}
 </script>
 
-<svelte:head><title>Settings — UsArr</title></svelte:head>
+<svelte:head><title>Settings · UsArr</title></svelte:head>
 
 <div class="section">
 	<div class="section__head"><h2>Appearance</h2></div>

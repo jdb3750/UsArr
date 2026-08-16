@@ -305,10 +305,16 @@
 	}
 </script>
 
-<svelte:head><title>Services — UsArr</title></svelte:head>
+<svelte:head><title>Services · UsArr</title></svelte:head>
 
-<h2>Services</h2>
-
+<!--
+	NO <h2>Services</h2> HERE, DELIBERATELY. The toolbar already renders the page
+	name and the layout already renders it as the h1 inside <main>. A third copy
+	is chrome repeating itself: it costs a density row, and it makes the heading
+	structure claim a section boundary that does not exist — a screen-reader user
+	navigating by heading lands on "Services" twice and learns nothing the second
+	time. Standing rule: a heading that only restates the toolbar title is removed.
+-->
 <p>
 	UsArr searches through Prowlarr and reads its results from the local replica. Until an indexer
 	service is configured there is nothing to search, which is why a fresh install answers

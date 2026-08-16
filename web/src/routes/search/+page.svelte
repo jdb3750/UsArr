@@ -156,7 +156,7 @@
 	}
 </script>
 
-<svelte:head><title>Search — UsArr</title></svelte:head>
+<svelte:head><title>Search · UsArr</title></svelte:head>
 
 <h2>Search indexers</h2>
 
