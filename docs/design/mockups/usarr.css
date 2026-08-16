@@ -50,37 +50,57 @@
   --st-err:      #b3251c;  /*                    6.24 5.77 5.46 5.14 6.41    */
   --st-none:     #5a534a;  /*                    7.20 6.66 6.30 5.93 7.40    */
 
-  /* --- Protocol chips. The hues come from the *Arrs' own theme file, so a
-     self-hoster reads them without a legend:
-       torrentColor #00853d, usenetColor #17b1d9
-       https://github.com/Sonarr/Sonarr/blob/develop/frontend/src/Styles/Themes/dark.js
-     Those two upstream literals are tuned for a dark ground and fail 4.5:1 on
-     a light one (#00853d = 3.50:1 on --selected; #17b1d9 = 2.40:1 on --bg).
-     The hue is kept and the lightness is retuned per theme, so the
-     recognition survives and the contrast floor is met. These values match
-     docs/design/tokens.css, which owns them. Nothing else in this stylesheet
-     uses them; they are rendered as a small swatch beside the word
-     "torrent" / "usenet", so the colour is redundant to the label. --- */
-  --proto-torrent: #0a6b34;
-  --proto-usenet:  #0f6479;
+  /* --- Protocol chips carry NO colour, and there are no --proto-* tokens.
+     The ecosystem reference they came from is real and stays documented:
+     Sonarr, Radarr and Prowlarr all use torrentColor #00853d and
+     usenetColor #17b1d9
+     (https://github.com/Sonarr/Sonarr/blob/develop/frontend/src/Styles/Themes/dark.js),
+     and a self-hoster reads that green/cyan split without a legend. This
+     mockup reused it, retuned for contrast, as --proto-torrent #0a6b34 light
+     / #4fb377 dark and --proto-usenet #0f6479 / #4ec3e0.
+
+     Withdrawn on measurement (DESIGN-DIRECTION.md 3.3, REVIEW-LOG V-10): the
+     torrent value is the SAME GREEN as --st-ok -- computed dE76 4.59 light and
+     3.09 dark, indistinguishable at an 8px swatch and worse in the theme that
+     otherwise works better. A column of green dots on Requests, read by
+     someone who has just come from a Home screen where green means "nothing
+     missing", says torrents are healthy and usenet is something else.
+     Retuning lightness cannot fix a hue collision, and 1.1 bans the obvious
+     escape (indigo/violet/purple). So the swatch is achromatic -- a 1px
+     --border-hi boundary and nothing inside it -- and the words "torrent" and
+     "usenet" carry the distinction, which they already did in the same cell.
+     Chroma is now spent on status alone.
+
+     Reversible: restore the two tokens with a torrent hue outside the status
+     band, and the two .proto--* rules in 2.4. --- */
 
   /* --- Type. IBM Plex Sans for UI, IBM Plex Mono for machine data.
-     No webfont is loaded: if Plex is not installed locally the system
-     stack below is the correct and expected result. --- */
+     Both are loaded, self-hosted, from fonts.css: the Latin subsets, as
+     base64 woff2, with font-display: swap. The system stack stays in the
+     same declaration, so a blocked or failed font load degrades to the stack
+     the design was reviewed against rather than to a browser default. --- */
   --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto,
              "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
                Consolas, "Liberation Mono", monospace;
 
-  /* Six steps. Nothing larger in chrome; 24/32 is permitted in an empty
-     state only. Below --fs-lg, hierarchy is weight and neutral step. */
+  /* Six steps, and 20px is the largest of them anywhere in the product.
+     There used to be a seventh, --fs-empty at 24px, used by empty states
+     only -- which made the biggest type in UsArr the heading on the screen
+     with the least information, larger than the page's own H1, centred, over
+     a centred paragraph and a centred button pair. That is the hero
+     composition DESIGN-DIRECTION.md 9.6 forbids in the same breath as it
+     grants the exemption, and it was the one region of this artefact built
+     by applying a template. The token is deleted rather than retuned: an
+     empty state is now a section heading at --fs-lg over one sentence at
+     --fs-base, left-aligned at the table's own content edge.
+     Below --fs-lg, hierarchy is weight and neutral step. */
   --fs-xs: 11px;   --lh-xs: 16px;   /* w500: counts, sub-labels */
   --fs-sm: 12px;   --lh-sm: 16px;   /* w400: secondary metadata */
   --fs-base: 13px; --lh-base: 18px; /* w400: rows, cells, default UI text */
   --fs-md: 14px;   --lh-md: 20px;   /* w400: inputs, dialog body */
   --fs-lg: 16px;   --lh-lg: 24px;   /* w600: section headings */
   --fs-xl: 20px;   --lh-xl: 28px;   /* w600: page title */
-  --fs-empty: 24px; --lh-empty: 32px; /* empty states only */
 
   /* --- Space. 4px base unit. --- */
   --sp-1: 2px;  --sp-2: 4px;  --sp-3: 6px;  --sp-4: 8px;
@@ -92,8 +112,12 @@
   --r-control: 2px;
   --r-float: 4px;
 
-  --row-2line: 48px;
-  --row-thumb: 56px;
+  /* There is no --row-2line / --row-thumb here. Two such tokens existed at
+     48px and 56px, which are tokens.css's STANDARD-density figures declared
+     once and applied at every density -- and nothing in this stylesheet ever
+     read either of them. tokens.css owns that scale per density
+     (compact 28/44/52, standard 32/48/56, relaxed 36/52/60); two unused
+     copies of one row of it could only ever be wrong. */
   --toolbar-h: 40px;
   --sidebar-w: 208px;
 
@@ -104,9 +128,21 @@
   --t-menu-in: 120ms;  --t-menu-out: 90ms;
   --t-dialog-in: 150ms; --t-dialog-out: 110ms;
   --t-toast: 150ms;
-  --ease: ease-out;
+  /* tokens.css --ease-out. The CSS keyword `ease-out` is NOT this curve --
+     it is cubic-bezier(0, 0, 0.58, 1), which decelerates later and reads
+     slower at 80ms. This file used the keyword and so was not running the
+     easing the design was specified with. No control point leaves 0..1 on Y:
+     there is no overshoot anywhere in the system. */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
 
-  /* Elevation exists only on genuinely floating layers, and it is neutral. */
+  /* Elevation exists only on genuinely floating layers, and it is neutral.
+     tokens.css --shadow-overlay is this drop plus `0 0 0 1px --border-strong`;
+     here that second layer is a real `border: 1px solid var(--border-hi)` on
+     each floating box, which renders identically and keeps the boundary in the
+     box model where the layout can see it. The dark-theme override below has
+     no counterpart in tokens.css: a shadow tuned for a light ground is
+     invisible on a near-black one, and it is recorded here as mockup-local
+     for the same reason --inset and --hover are. */
   --shadow-float: 0 2px 8px rgba(28, 26, 23, 0.18);
 
   color-scheme: light dark;
@@ -155,9 +191,6 @@
     --st-warn:   #e0a33a;   /* 8.15 7.60 6.99 6.63 8.63 */
     --st-err:    #f0837a;   /* 7.09 6.61 6.08 5.77 7.51 */
     --st-none:   #b0a89b;
-    /* Protocol hues retuned for the dark ground; see the note in §1. */
-    --proto-torrent: #4fb377;
-    --proto-usenet:  #4ec3e0;
     --shadow-float: 0 2px 10px rgba(8, 7, 6, 0.62);
   }
 }
@@ -178,9 +211,6 @@
   --st-warn:   #e0a33a;   /* 8.15 7.60 6.99 6.63 8.63 */
   --st-err:    #f0837a;   /* 7.09 6.61 6.08 5.77 7.51 */
   --st-none:   #b0a89b;
-  /* Protocol hues retuned for the dark ground; see the note in §1. */
-  --proto-torrent: #4fb377;
-  --proto-usenet:  #4ec3e0;
   --shadow-float: 0 2px 10px rgba(8, 7, 6, 0.62);
 }
 
@@ -252,6 +282,27 @@ button, input, select, textarea { font: inherit; color: inherit; }
   clip-path: inset(50%); white-space: nowrap;
 }
 
+/* Skip to content: the first tab stop on every screen, and the only thing in
+   this file that is invisible until it is focused. There are 21 tab stops of
+   top bar and sidebar before the first row of any table, identically on all
+   five screens, and landmarks only help the people who have a screen reader.
+   SC 2.4.1 Bypass Blocks is Level A. */
+.skip {
+  position: absolute;
+  left: var(--sp-4);
+  top: -100px;
+  z-index: 70;
+  padding: var(--sp-3) var(--sp-5);
+  background: var(--bg);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-control);
+  text-decoration: none;
+  font-weight: 600;
+  transition: none;
+}
+.skip:focus-visible { top: var(--sp-4); }
+.main:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
 .i { width: 16px; height: 16px; flex: none; display: block; }
 .i--sm { width: 14px; height: 14px; }
 #sprite { display: none; }
@@ -313,6 +364,50 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .mocknote__short { display: inline; }
 }
 .topbar__right { display: flex; align-items: center; gap: var(--sp-3); }
+
+/* Below 900px the sidebar is display:none until the drawer is opened, and the
+   scope chip lives in the sidebar -- so on a phone the one piece of state that
+   cannot be inferred from the content was stated to nobody. A user who set a
+   scope on a laptop and opened the same URL on a phone saw a fraction of their
+   library with no on-screen reason at all. This is the same string, hoisted
+   into the top bar, and only when the scope is not "everything": a default
+   scope stays silent, because a control that is not doing anything does not
+   earn a permanent line of chrome. */
+.topscope {
+  display: none;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 24px;
+  padding: 0 var(--sp-3);
+  background: var(--selected);
+  border: 1px solid var(--fg-muted);
+  border-radius: var(--r-control);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+@media (max-width: 900px) {
+  .topscope[data-scoped="true"] { display: inline-flex; }
+}
+
+/* "N of 8 libraries in scope · Clear the scope", on every scoped surface
+   rather than on Search alone. Search already stated what its scope hid and
+   was the only screen that did, which made its absence on Home, the type
+   grids and Requests worse rather than better: the design's own rule is that
+   a switcher that hides content is only dangerous when it is silent. */
+.scopeline {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-6);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+}
+.scopeline strong { color: var(--fg); }
 
 .searchbox {
   position: relative;
@@ -422,6 +517,17 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .scope__btn:hover { background: var(--hover); }
 .scope__btn .i:last-child { margin-left: auto; }
+/* A filter that is doing something has to look different from a filter that is
+   not. The chip was pixel-identical to the density <select> in the top bar --
+   same border, same radius, same chevron, same fill -- so the only difference
+   between "everything is shown" and "six of eight libraries are hidden" was
+   13px of grey text in a corner. The treatment is achromatic: the selected
+   fill and full-ink boundary the rest of the product uses for "not default". */
+.scope__btn[data-scoped="true"] {
+  background: var(--selected);
+  border-color: var(--fg-muted);
+  font-weight: 600;
+}
 .scope__pop {
   position: absolute;
   z-index: 50;
@@ -434,10 +540,18 @@ button, input, select, textarea { font: inherit; color: inherit; }
   border: 1px solid var(--border-hi);
   border-radius: var(--r-float);
   box-shadow: var(--shadow-float);
+  /* Libraries are unbounded -- that is the whole reason this control exists
+     instead of a nav list -- so the control cannot itself break at twenty of
+     them. Measured before this rule: 9 libraries 310px, 16 libraries 551px,
+     reaching the bottom of a 900px viewport at about 24 and of a 768px laptop
+     at about 19, with no scroll and no clipping. */
+  max-height: min(60vh, 420px);
+  overflow-y: auto;
 }
 .scope__pop fieldset { border: 0; margin: 0; padding: 0; }
 .scope__pop legend { padding: 0 0 var(--sp-3); font-size: var(--fs-sm); font-weight: 600; }
 .scope__pop .check { padding: var(--sp-2) 0; font-size: var(--fs-sm); }
+.scope__acts { display: flex; gap: var(--sp-3); padding-top: var(--sp-3); }
 .scope__url {
   margin-top: var(--sp-3);
   padding-top: var(--sp-3);
@@ -507,7 +621,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
    own whenever block B is absent. */
 .homegrid { display: grid; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 1100px) {
-  .homegrid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); }
+  .homegrid { grid-template-columns: minmax(0, 1.12fr) minmax(0, 1.3fr); }
 }
 
 /* LevelBar: the one genuine per-type divergence is hierarchy depth (a film is
@@ -556,12 +670,28 @@ button, input, select, textarea { font: inherit; color: inherit; }
   font-size: var(--fs-base);
   cursor: pointer;
   white-space: nowrap;
+  /* An anchor styled as a button is still an anchor, and the global
+     `a { text-decoration: underline }` was winning on all nine of them -- so
+     every primary action on every empty state rendered as an underlined label
+     in a box while its secondary rendered as a plain label in a box. Underline
+     is this product's link affordance; it cannot also be the primary/secondary
+     distinction. */
+  text-decoration: none;
   transition: background-color var(--t-hover) var(--ease);
 }
-.btn:hover { background: var(--hover); }
+.btn:hover { background: var(--hover); text-decoration: none; }
 .btn:disabled { color: var(--fg-faint); border-color: var(--border); cursor: not-allowed; }
 .btn:disabled:hover { background: var(--surface); }
-.btn--primary { background: var(--selected); font-weight: 600; }
+/* aria-disabled rather than disabled, wherever the control has to stay
+   focusable: a disabled element cannot hold focus, and dropping focus to
+   <body> in the middle of a list is how a keyboard user loses their place. */
+.btn[aria-disabled="true"] { color: var(--fg-faint); border-color: var(--border); cursor: not-allowed; }
+.btn[aria-disabled="true"]:hover { background: var(--surface); }
+/* Primary is a fill step, a weight step and the control boundary at full ink.
+   Fill alone is a six-unit difference on the light ramp, which is close to
+   nothing for the one button on the screen; the border is achromatic, so it
+   costs the no-accent rule nothing. */
+.btn--primary { background: var(--selected); font-weight: 600; border-color: var(--fg-muted); }
 .btn--primary:hover { background: var(--hover); }
 .btn--icon { padding: 0 var(--sp-3); min-width: 28px; justify-content: center; }
 .btn--sm { min-height: 24px; font-size: var(--fs-sm); padding: 0 var(--sp-3); }
@@ -587,6 +717,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .input::placeholder { color: var(--fg-faint); }
 .input[aria-invalid="true"], .select[aria-invalid="true"] { border-color: var(--st-err); border-width: 2px; }
+/* A field you cannot type in must not look like a field you can. Two rows
+   apart on the library detail form, Name is editable and "Watched folder" is
+   not, and they were rendering identically. */
+.input[readonly] {
+  background: var(--surface);
+  border-style: dashed;
+  color: var(--fg-muted);
+}
 select[multiple] { min-height: 88px; padding: var(--sp-2); }
 .check { display: flex; align-items: center; gap: var(--sp-3); font-size: var(--fs-base); }
 .check input { width: 14px; height: 14px; accent-color: var(--fg); }
@@ -682,16 +820,18 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 .chip--failed  { color: var(--st-err);  border-color: currentColor; }
 .chip--done    { color: var(--st-ok);   border-color: currentColor; }
 
-/* Protocol swatch: the colour is redundant to the word beside it, so it is
-   decorative; the 1px boundary is what carries the shape at >= 3.2:1. */
+/* Protocol swatch: achromatic, per the withdrawal note in 1. The 1px
+   --border-hi boundary carries the shape at >= 3.2:1 and there is no fill,
+   because a torrent green sitting one column from a status green is the one
+   collision this ramp cannot afford. The .proto--torrent / .proto--usenet
+   modifiers stay on the markup: they are the filter hook, and they are where a
+   single rule would go if the ecosystem's colour cue is ever restored. */
 .proto { display: inline-flex; align-items: center; gap: var(--sp-3); white-space: nowrap; }
 .proto__dot {
   width: 8px; height: 8px; flex: none;
   border: 1px solid var(--border-hi);
   border-radius: var(--r-control);
 }
-.proto--torrent .proto__dot { background: var(--proto-torrent); }
-.proto--usenet  .proto__dot { background: var(--proto-usenet); }
 
 /* Availability rollup, per ARCHITECTURE.md 6.3:
    have == total && total > 0 -> tick;  have == 0 -> cross;  else the fraction. */
@@ -724,26 +864,40 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 .banner__text { color: var(--fg-muted); margin-top: var(--sp-1); }
 .banner__actions { display: flex; gap: var(--sp-4); align-items: center; flex: none; }
 
+/* An empty state is the top of a table that has no rows, and it is drawn as
+   one: a rule the width of where the table would be, a heading at the same
+   content edge as the first column's text, one sentence under it, then the
+   buttons that fix it. No centring, no dashed container, no 24px heading.
+
+   What was here before was the one composition in this artefact that a reader
+   could point at and call machine-made: a 24px centred heading -- larger than
+   the page's own H1 -- over a centred three-line measure over a centred button
+   pair, inside a dashed box, byte-identical across seven states on five
+   screens, in a product where everything else is left-aligned and dense.
+   DESIGN-DIRECTION.md 9.6 asks for "one sentence naming why, plus the one or
+   two buttons that fix it. No illustration. No centred marketing block", and
+   cites Sonarr's NoSeries.tsx, which renders one sentence and two buttons in
+   the content flow, left-aligned, in body type, with no container. This is
+   that. The 12px left offset is --sp-5, the same cell padding every table
+   uses, so the heading lands on the column edge rather than the table edge. */
 .empty {
-  text-align: center;
-  padding: var(--sp-9) var(--sp-6);
-  border: 1px dashed var(--border-hi);
-  border-radius: var(--r-control);
+  padding: var(--sp-5) 0 var(--sp-6) var(--sp-5);
+  border-top: 1px solid var(--border-hi);
 }
 .empty__title {
-  font-size: var(--fs-empty);
-  line-height: var(--lh-empty);
+  font-size: var(--fs-lg);
+  line-height: var(--lh-lg);
   font-weight: 600;
-  margin-bottom: var(--sp-4);
+  margin-bottom: var(--sp-2);
 }
 .empty__text {
   color: var(--fg-muted);
-  max-width: 60ch;
-  margin: 0 auto var(--sp-5);
-  font-size: var(--fs-md);
-  line-height: var(--lh-md);
+  max-width: 78ch;
+  margin: 0 0 var(--sp-5);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
 }
-.empty__actions { display: flex; gap: var(--sp-4); justify-content: center; flex-wrap: wrap; }
+.empty__actions { display: flex; gap: var(--sp-4); flex-wrap: wrap; }
 
 /* GOV.UK-style error summary: one list at the top, focused on submit,
    each entry also repeated inline at its own field. */
@@ -787,12 +941,38 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
    is the one layout mode no containment can help; it is also what made six
    search groups derive six different widths for the same column. */
 
-/* Not a scroll container: `overflow-x: auto` computes to `auto` on both axes,
-   which turns this box into a scroll container that never scrolls vertically,
-   and the sticky column headers then stick to *it* instead of the viewport --
-   measured: 0 headers pinned at 1000px, 1 at 1440px. `clip` gives the same
-   protection against a runaway cell without creating a scroll container, and
-   the grid columns below are all minmax(0, ...) so nothing overflows anyway. */
+/* `clip`, not `auto`, and the reasoning went round twice -- so both halves are
+   written down.
+
+   The defect that started it: the two fix-it buttons on the degraded and down
+   rows on Services -- "Run full sync" and "Update API key", the only controls
+   on that screen that repair a broken service -- had their right border
+   sheared off flush with the page edge at 1280 / 1440 / 1680 / 1920, with
+   document.scrollWidth equal to the viewport at every width, so there was not
+   even a scrollbar to reach them with. A screen that shows what is broken and
+   then clips the fix is not working.
+
+   What actually fixed it is the action track: minmax(max-content, auto)
+   instead of a constant, so the column is as wide as its widest button and the
+   overflow never happens. That change stands and is doing the work.
+
+   `overflow-x: auto` was added alongside it as a degrade-don't-amputate
+   fallback, and it has been reverted, because it was not free. `auto` computes
+   to `auto` on BOTH axes, which makes this box a scroll container; the sticky
+   thead below then pins to the wrapper's scrollport instead of the viewport,
+   and the wrapper never scrolls vertically -- so the header did not pin at
+   all. Measured at 1440x900 on Requests: with `auto`, the thead's top tracked
+   the table's top to the pixel at every scroll offset (0, 100, 300, 600),
+   i.e. `position: sticky` was completely inert on every table on every screen.
+   With `clip` the same probe holds the header at y=40, the toolbar edge.
+
+   So the trade was a fallback for a feature, and measurement says the fallback
+   is never reached: scrollWidth - clientWidth is 0 on all 19 tables at 1440,
+   and selftest.mjs asserts nothing exceeds innerWidth at 390/1280/1440/1680/
+   1920 on every screen in every state. That assertion is the guard the
+   fallback was standing in for, and it is a better one -- it fails the build
+   instead of quietly growing a scrollbar. `clip` also keeps overflow-y
+   `visible`, which is what lets the sticky reach the viewport at all. */
 .tablewrap { overflow-x: clip; }
 
 .tbl {
@@ -831,7 +1011,18 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
    travel inside its own containing block, and with `thead { display: block }`
    the row's containing block is the thead -- which is exactly one row tall, so
    the header could not move at all. The thead's containing block is the table,
-   which is the full list, so this is the box that can actually travel. */
+   which is the full list, so this is the box that can actually travel.
+
+   The offset is the toolbar height, and it is paired with `overflow-x: clip`
+   on .tablewrap above -- the two have to move together. With `clip` the
+   wrapper is not a scroll container, so this pins to the viewport, and the
+   viewport's top forty pixels are already occupied by the sticky .topbar; a
+   header pinned at 0 would slide under it. While .tablewrap was briefly
+   `overflow-x: auto` the wrapper WAS the scrollport, this had to be 0, and a
+   `top: 40px` sticky whose static position is the top of its own scrollport is
+   pushed forty pixels DOWN -- it painted over the first row of every table.
+   Both symptoms are the same fact: `top` is measured against whatever
+   scrollport the nearest scroll container provides. */
 .tbl thead {
   position: sticky;
   top: var(--toolbar-h);
@@ -862,7 +1053,16 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 .tbl tbody tr[aria-selected="true"] { background: var(--selected); }
 .tbl tbody tr:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .tbl td > * + * { margin-top: var(--sp-1); }
+/* The phone label is display:none above 760px but it is still the first child,
+   so without this every cell's real first element would inherit the inter-line
+   margin meant for a second one. */
+.tbl td > .stacklabel + * { margin-top: 0; }
 .tbl .cell-title { font-weight: 600; }
+/* A row disclosure is a glyph on the title's own line, not a 24px control that
+   sets the line box for the whole row. .btn--sm's 24px minimum was adding 6px
+   to every service and library row for nothing. */
+.tbl .cell-title > .btn--icon { min-height: 18px; min-width: 18px; padding: 0; border-color: transparent; }
+.tbl .cell-title > .btn--icon:hover { border-color: var(--border-hi); }
 /* Release names have no spaces, so without this a single cell sets the
    table's min-content width and the page scrolls sideways. A base URL is not
    a release name: breaking "http://10.0.0.4:8989" across ":898 / 9" reads as
@@ -871,6 +1071,46 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 .tbl td .mono { overflow-wrap: anywhere; }
 .tbl .cell-sub.mono { overflow-wrap: break-word; word-break: normal; }
 .tbl--services .verbatim { max-width: 38ch; }
+
+/* THE TRUNCATION POLICY, stated rather than implied. There was none, and the
+   layout's answer to every long string was therefore "wrap it", which makes
+   row height a function of the worst string present. Three tiers:
+
+   (a) an identity or machine string in a cell -- a release name, a title --
+       truncates at the cell edge with the full value on the element's title
+       attribute. `overflow-wrap: anywhere` was breaking release names
+       mid-token (`x26` / `4`, `descript` / `ion`), which destroys the exact
+       thing the reader is scanning for;
+   (b) verbatim upstream text never truncates. It wraps, in .verbatim, and
+       lives behind a row expander rather than in a cell;
+   (c) an explanation is not a cell value at all. It goes in the expander. */
+.trunc {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  min-width: 0;
+}
+.tbl td .mono.trunc { overflow-wrap: normal; }
+
+/* A one-line problem summary plus the disclosure that opens the whole thing.
+   The Problem column used to hold three different kinds of object -- the word
+   "None", a four-line mono error box, and on one row a six-line essay -- so
+   the column had no defined role and the tallest cell set the row. */
+.cell-problem { display: flex; align-items: baseline; gap: var(--sp-3); min-width: 0; }
+.cell-problem .prob { min-width: 0; }
+.linkish {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
 .tbl .cell-sub { color: var(--fg-muted); font-size: var(--fs-sm); line-height: var(--lh-sm); }
 .tbl .cell-actions { display: flex; gap: var(--sp-3); align-items: center; }
 .tbl tr.is-expand > td { background: var(--surface); }
@@ -889,6 +1129,17 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
   padding: var(--sp-3);
   max-width: 46ch;
 }
+
+/* The phone label is for sighted phone users only. It used to be generated
+   content -- `td[data-label]::before { content: attr(data-label) " " }` --
+   which put the column name inside the cell's accessible name, so NVDA and
+   JAWS in table-navigation mode announced the columnheader and then the cell
+   including the same word again: "Items. Items 214", on every cell of every
+   row. It is a real element now, marked aria-hidden, and the column name is no
+   longer duplicated into an attribute that a translation pipeline would not
+   pick up. The CSS hook is data-col, which is a slug rather than the visible
+   string, so the two cannot drift. */
+.stacklabel { display: none; }
 
 .synclist { display: flex; flex-direction: column; gap: var(--sp-1); font-size: var(--fs-sm); line-height: var(--lh-sm); }
 .synclist__row { display: flex; gap: var(--sp-3); }
@@ -983,6 +1234,48 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 .form { display: flex; flex-direction: column; gap: var(--sp-6); max-width: 560px; }
 .form__row { display: flex; gap: var(--sp-4); align-items: center; flex-wrap: wrap; }
 .form__foot { display: flex; gap: var(--sp-4); align-items: center; padding-top: var(--sp-2); border-top: 1px solid var(--border); }
+
+/* The save model, declared. The library detail view had fourteen controls, no
+   Save, no Cancel, no dirty indicator and no "changes saved" -- while the
+   add-service form 400px away on Services had an explicit Test plus a disabled
+   Save reading "No changes". Two forms in one product cannot have opposite and
+   undeclared commit models, particularly when one of the controls re-derives
+   membership for 1,842 items. */
+.savebar {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+  flex-wrap: wrap;
+  padding: var(--sp-4) var(--sp-6);
+  background: var(--surface);
+  border-top: 1px solid var(--border-hi);
+  font-size: var(--fs-sm);
+}
+.savebar__count { font-weight: 600; color: var(--fg); font-variant-numeric: tabular-nums; }
+
+/* The result of the mandatory connection test. Four states were specified
+   nowhere -- not idle, not testing, and above all not failure, which is the
+   most likely outcome of the first thing every user does. A service that fails
+   its test is never saved, so it never gets a row, so the verbatim-error
+   contract that covers configured services had nowhere to put the answer. */
+.testresult {
+  padding: var(--sp-4) var(--sp-5);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--r-control);
+  background: var(--surface);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-sm);
+}
+.testresult--fail { border-color: var(--st-err); }
+.testresult__title { font-weight: 600; display: flex; align-items: center; gap: var(--sp-3); }
+.testresult--ok .testresult__title { color: var(--st-ok); }
+.testresult--fail .testresult__title { color: var(--st-err); }
+.testresult ul { margin-top: var(--sp-3); display: flex; flex-direction: column; gap: var(--sp-2); }
+.testresult li { display: list-item; list-style: disc; margin-left: var(--sp-6); color: var(--fg-muted); }
+.testresult .verbatim { margin-top: var(--sp-3); max-width: none; }
 .advanced { display: none; }
 .settings[data-advanced="on"] .advanced { display: flex; }
 .adv-tag {
@@ -1107,6 +1400,37 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
   .select { max-width: 96px; }
 }
 
+/* The Requests search form is the primary input on the one screen that takes
+   an action, and below about 700px its inline flow scattered: the two
+   <select multiple> boxes clipped their own options to "TorrentLee…" and
+   "2000 Movi…", their labels landed to the right of them at unrelated vertical
+   offsets, and Search landed mid-column beside a listbox rather than at the
+   end of the form. The responsive work was done properly for the hard case --
+   the tables -- and skipped for the form. Stacked column, label above control,
+   every control full width. */
+/* The search form's three sized controls. These used to carry inline
+   `flex: 1 1 200px` and `flex: 0 1 190px`, which is a *height* the moment the
+   toolbar becomes a column below 700px: the query box rendered 200px tall and
+   the two listboxes 190px, which is how a stacked form ends up taller than the
+   phone it is on. An inline style also outranks any media query, so the rule
+   had to move into the stylesheet before the responsive rule could exist. */
+.f-query { flex: 1 1 200px; }
+.f-list { flex: 0 1 190px; }
+.f-list--wide { flex: 0 1 210px; }
+
+@media (max-width: 700px) {
+  form.toolbar { flex-direction: column; align-items: stretch; }
+  form.toolbar > .f-query,
+  form.toolbar > .f-list,
+  form.toolbar > .f-list--wide { flex: 0 0 auto; }
+  form.toolbar > .toolbar__label { margin-bottom: calc(-1 * var(--sp-2)); }
+  form.toolbar > .input,
+  form.toolbar > .select,
+  form.toolbar > .btn { flex: 0 0 auto; width: 100%; max-width: none; }
+  form.toolbar > select[multiple] { min-height: 96px; height: auto; }
+  form.toolbar > .toolbar__spacer { display: none; }
+}
+
 @media (max-width: 760px) {
   .kbd { display: none; }
   .searchbox input { padding-right: var(--sp-3); }
@@ -1130,28 +1454,33 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
   }
   .tbl--stack td { padding: var(--sp-1) 0; text-align: left; }
   .tbl--stack td.is-num { text-align: left; }
-  .tbl--stack td[data-label]::before {
-    content: attr(data-label) " ";
+  .tbl--stack td > .stacklabel {
+    display: inline-block;
+    min-width: 84px;
     color: var(--fg-muted);
     font-size: var(--fs-xs);
     line-height: var(--lh-xs);
-    display: inline-block;
-    min-width: 84px;
   }
-  .tbl--stack td[data-label="Title"]::before { display: block; }
+  .tbl--stack td[data-col="title"] > .stacklabel,
+  .tbl--stack td[data-col="series"] > .stacklabel,
+  .tbl--stack td[data-col="album"] > .stacklabel { display: block; }
 
   /* A four-line stack costs ~105px per media type, which puts the block that
      reports a rejected API key 914px down an 844px viewport. Two columns makes
      the type summary two lines: identity and count, then availability and sync
      time. The Type label is dropped because the value *is* the row's identity. */
   .tbl--2up tbody tr:not([hidden]) { grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--sp-4); }
-  .tbl--2up td[data-label="Type"]::before,
-  .tbl--2up td[data-label="Items"]::before,
-  .tbl--2up td[data-label="Have"]::before { display: none; }
+  .tbl--2up td[data-col="type"] > .stacklabel,
+  .tbl--2up td[data-col="items"] > .stacklabel,
+  .tbl--2up td[data-col="have"] > .stacklabel { display: none; }
 
   .verbatim { max-width: none; }
   .banner { flex-wrap: wrap; }
-  .banner__actions { width: 100%; }
+  .banner__actions { width: 100%; flex-wrap: wrap; }
+  /* A two-clause button label is wider than a 390px phone, and .btn is
+     nowrap by design, so a banner action wraps its text instead of pushing
+     the document sideways. */
+  .banner__actions .btn { white-space: normal; text-align: left; }
 }
 
 /* --- 2.12 Mockup state visibility ---------------------------------------

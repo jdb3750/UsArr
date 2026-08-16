@@ -89,26 +89,77 @@
      is a switch, it is honoured here, and it is discoverable from the shortcut
      sheet the "?" key opens. */
   var shortcutsOn = readStored('usarr.shortcuts') !== 'off';
-  var shortcutToggle = document.querySelector('[data-act="shortcuts"]');
-  if (shortcutToggle) {
-    shortcutToggle.checked = shortcutsOn;
-    shortcutToggle.addEventListener('change', function () {
-      shortcutsOn = shortcutToggle.checked;
+  /* The switch appears twice: in Settings, where it is configured, and in the
+     shortcut sheet, where it is discovered. They are one setting, so they are
+     painted together. */
+  var shortcutToggles = document.querySelectorAll('[data-act="shortcuts"]');
+  for (var st = 0; st < shortcutToggles.length; st++) {
+    shortcutToggles[st].checked = shortcutsOn;
+    shortcutToggles[st].addEventListener('change', function (ev) {
+      shortcutsOn = ev.target.checked;
       store('usarr.shortcuts', shortcutsOn ? 'on' : 'off');
+      for (var i = 0; i < shortcutToggles.length; i++) shortcutToggles[i].checked = shortcutsOn;
     });
   }
 
   /* A single-character shortcut must never fire while the user is typing, and
      "the active element is an INPUT" is not the same test: a caret inside a
-     contenteditable, or inside a wrapper element within one, is also typing. */
+     contenteditable, or inside a wrapper element within one, is also typing.
+
+     The guard used to be `input, select, textarea, [contenteditable]` flat,
+     which was simultaneously too broad and too narrow. Too broad: a row-select
+     checkbox is an <input> that consumes no text, so focusing one silently
+     killed "/" -- the key the top bar advertises. Too narrow: a <button> is
+     none of those, so "l" fired with focus on "Add library" and opened the
+     scope popover from the other side of the screen, which is the precise bug
+     the accessibility floor names as its motivating example. Checkboxes,
+     radios and push buttons are excluded from the typing test and handled by
+     the navigation test instead. */
+  var TYPING_SEL = 'select, textarea, [contenteditable], ' +
+    'input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit])';
   function typing() {
     var el = document.activeElement;
     if (!el) return false;
     if (el.isContentEditable) return true;
-    return !!(el.closest && el.closest('input, select, textarea, [contenteditable]'));
+    return !!(el.closest && el.closest(TYPING_SEL));
+  }
+  /* A letter shortcut that navigates or opens a layer must not fire while the
+     focus is on something the same letter could be operating. */
+  function onControl() {
+    var el = document.activeElement;
+    return !!(el && el.matches && el.matches('button, [role=button], a[href]'));
   }
   function shortcutBlocked(ev) {
     return !shortcutsOn || ev.metaKey || ev.ctrlKey || ev.altKey || typing();
+  }
+
+  /* The states switcher is a mockup affordance, but two real behaviours below
+     need to drive it: emptying the library scope has to land on the scope-empty
+     state, and restoring the scope has to come back. */
+  function setPageState(name) {
+    var sels = document.querySelectorAll('[data-act="state"]');
+    for (var i = 0; i < sels.length; i++) {
+      var sel = sels[i];
+      var page = document.getElementById(sel.getAttribute('data-scope'));
+      if (!page || page.hidden) continue;
+      var has = false;
+      for (var o = 0; o < sel.options.length; o++) {
+        if (sel.options[o].value === name) has = true;
+      }
+      if (!has || sel.value === name) continue;
+      if (name !== 'scope-empty') sel.setAttribute('data-prev', sel.value);
+      sel.value = name;
+      sel.dispatchEvent(new Event('change'));
+    }
+  }
+  function restorePageState() {
+    var sels = document.querySelectorAll('[data-act="state"]');
+    for (var i = 0; i < sels.length; i++) {
+      var sel = sels[i];
+      if (sel.value !== 'scope-empty') continue;
+      sel.value = sel.getAttribute('data-prev') || sel.options[0].value;
+      sel.dispatchEvent(new Event('change'));
+    }
   }
 
   /* ---- library scope chip ---------------------------------------------
@@ -130,10 +181,14 @@
     var libBoxes = scopePop.querySelectorAll('[data-act="scope-lib"]');
     var allBox = scopePop.querySelector('[data-act="scope-all"]');
 
+    var topScope = document.querySelector('[data-slot="topscope"]');
+    var scopeLive = document.querySelector('[data-slot="scope-live"]');
+
     function paintScope() {
       var total = libBoxes.length;
       var on = 0;
       var slugs = [];
+      var names = [];
       for (var i = 0; i < libBoxes.length; i++) {
         if (!libBoxes[i].checked) continue;
         on++;
@@ -142,13 +197,47 @@
            slugifying the label would change a permalink when a library is
            renamed. */
         slugs.push(libBoxes[i].getAttribute('data-slug'));
+        names.push(libBoxes[i].parentNode.textContent.trim());
       }
       allBox.checked = on === total;
       allBox.indeterminate = on > 0 && on < total;
-      if (on === 0) scopeLabel.textContent = 'None (0 of ' + total + ')';
-      else if (on === total) scopeLabel.textContent = 'All libraries (' + total + ')';
-      else scopeLabel.textContent = on + ' of ' + total + ' libraries';
+      /* One grammar, three cases. There used to be three shapes for one
+         control -- "All libraries (8)", "7 of 8 libraries", "None (0 of 8)" --
+         with the parenthesis meaning something different in the first and the
+         third, which is jarring read aloud in sequence. */
+      var label;
+      if (on === 0) label = 'No libraries selected';
+      else if (on === total) label = 'All libraries (' + total + ')';
+      else label = on + ' of ' + total + ' libraries';
+      scopeLabel.textContent = label;
       scopeUrl.textContent = on === total ? '?lib=all' : '?lib=' + (slugs.join(',') || 'none');
+
+      var scoped = on !== total;
+      scopeBtn.setAttribute('data-scoped', scoped ? 'true' : 'false');
+      if (topScope) {
+        topScope.setAttribute('data-scoped', scoped ? 'true' : 'false');
+        topScope.querySelector('[data-slot="topscope-label"]').textContent = label;
+      }
+      /* The live region is a sibling of the button rather than its own
+         accessible name. Inside the button, toggling a checkbox changed the
+         focused control's name *and* fired an announcement, so most assistive
+         technology said it twice. */
+      if (scopeLive) scopeLive.textContent = label + ' in scope.';
+
+      var lines = document.querySelectorAll('[data-slot="scopeline"]');
+      for (var l = 0; l < lines.length; l++) {
+        lines[l].hidden = !scoped || on === 0;
+        var count = lines[l].querySelector('[data-slot="scopeline-count"]');
+        var rest = lines[l].querySelector('[data-slot="scopeline-rest"]');
+        if (count) count.textContent = on + ' of ' + total + ' libraries';
+        if (rest) {
+          rest.textContent = ' in scope: ' + names.join(', ') +
+            '. Everything in the other ' + (total - on) + ' is hidden.';
+        }
+      }
+
+      if (on === 0) setPageState('scope-empty');
+      else restorePageState();
     }
 
     function openScope(open) {
@@ -165,6 +254,27 @@
       }
       paintScope();
     });
+    /* Delegated at the document, because "Clear the scope" also appears in the
+       scope line on every scoped surface, not only inside the popover. */
+    document.addEventListener('click', function (ev) {
+      var act = ev.target.closest('[data-scope-act]');
+      if (!act) return;
+      var want = act.getAttribute('data-scope-act') === 'all';
+      for (var i = 0; i < libBoxes.length; i++) libBoxes[i].checked = want;
+      paintScope();
+    });
+    /* Below 900px the sidebar is display:none, so the chip in it is not a
+       control the user can reach. The hoisted copy in the top bar opens the
+       drawer and then the popover, which is the same journey the "l" shortcut
+       already takes. */
+    if (topScope) {
+      topScope.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        if (!scopeBtn.offsetParent && sideBtn) sideBtn.click();
+        openScope(true);
+        allBox.focus();
+      });
+    }
     /* Tabbing past the last checkbox used to leave the popover open with focus
        on a nav link behind it. */
     document.querySelector('.scope').addEventListener('focusout', function (ev) {
@@ -175,7 +285,7 @@
     document.addEventListener('keydown', function (ev) {
       if (ev.key === 'Escape' && !scopePop.hidden) { openScope(false); scopeBtn.focus(); }
       /* "l" opens the scope, matching "/" for search. */
-      if (ev.key !== 'l' || shortcutBlocked(ev)) return;
+      if (ev.key !== 'l' || shortcutBlocked(ev) || onControl()) return;
       /* Below 900px the sidebar is display:none, so focusing into the popover
          would silently do nothing and the key would read as broken rather than
          absent. Open the drawer first. */
@@ -195,6 +305,9 @@
       openScope(false);
     });
     paintScope();
+    /* prototype.html swaps <main> on a hash change, so the state switcher of
+       the newly shown screen has to be brought into line with the scope. */
+    window.addEventListener('hashchange', function () { window.setTimeout(paintScope, 0); });
   }
 
   /* ---- states switcher (a mockup affordance, labelled as one) ---------- */
@@ -205,6 +318,8 @@
       var wants = blocks[i].getAttribute('data-when').split(/\s+/);
       blocks[i].hidden = wants.indexOf(state) === -1;
     }
+    /* A list this just revealed needs its tab stop assigned. */
+    if (typeof refreshRoving === 'function') refreshRoving();
   }
 
   var stateSelects = document.querySelectorAll('[data-act="state"]');
@@ -234,19 +349,33 @@
       for (var p = 0; p < panels.length; p++) {
         panels[p].hidden = panels[p].getAttribute('data-panel-name') !== panelName;
       }
+      refreshRoving();
     }
   });
 
-  /* ---- expandable table rows ------------------------------------------ */
+  /* ---- expandable table rows ------------------------------------------
+     A row now has two triggers for one detail row: the chevron in the first
+     cell, and "Show detail" in the Problem cell, which is where the reader
+     actually is when they want it. Both are updated together, because two
+     disclosures pointing at one target with independent aria-expanded is a
+     state that goes wrong the first time either is used. */
   document.addEventListener('click', function (ev) {
     var trigger = ev.target.closest('[data-act="expand"]');
     if (!trigger) return;
-    var target = document.getElementById(trigger.getAttribute('aria-controls'));
+    var id = trigger.getAttribute('aria-controls');
+    var target = document.getElementById(id);
     if (!target) return;
     var open = trigger.getAttribute('aria-expanded') === 'true';
-    trigger.setAttribute('aria-expanded', open ? 'false' : 'true');
     target.hidden = open;
-    trigger.querySelector('use').setAttribute('href', open ? '#i-chevron-right' : '#i-chevron-down');
+    var peers = document.querySelectorAll('[data-act="expand"][aria-controls="' + id + '"]');
+    for (var i = 0; i < peers.length; i++) {
+      peers[i].setAttribute('aria-expanded', open ? 'false' : 'true');
+      var glyph = peers[i].querySelector('use');
+      if (glyph) glyph.setAttribute('href', open ? '#i-chevron-right' : '#i-chevron-down');
+      if (peers[i].hasAttribute('data-expand-label')) {
+        peers[i].textContent = open ? 'Show detail' : 'Hide detail';
+      }
+    }
   });
 
   /* ---- show advanced --------------------------------------------------- */
@@ -297,11 +426,12 @@
   }
 
   /* ---- dialog ---------------------------------------------------------- */
+  var dialogInvoker = null;
   document.addEventListener('click', function (ev) {
     var open = ev.target.closest('[data-act="dialog-open"]');
     if (open) {
       var dlg = document.getElementById(open.getAttribute('aria-controls'));
-      if (dlg && dlg.showModal) dlg.showModal();
+      if (dlg && dlg.showModal) { dialogInvoker = open; dlg.showModal(); }
       return;
     }
     var close = ev.target.closest('[data-act="dialog-close"]');
@@ -310,15 +440,42 @@
       if (owner) owner.close();
     }
   });
+  var dialogs = document.querySelectorAll('dialog');
+  for (var d = 0; d < dialogs.length; d++) {
+    /* Focus goes back to the control that opened it. Without this, Escape on
+       the add-service dialog left document.activeElement on <body> and the
+       button that opened it never got focus back. */
+    dialogs[d].addEventListener('close', function () {
+      if (dialogInvoker && dialogInvoker.isConnected) dialogInvoker.focus();
+      dialogInvoker = null;
+    });
+    /* Escape on a dialog holding a pasted 32-character API key throws it away
+       with no confirmation, and Escape is reflexive -- it is also how you
+       dismiss a password-manager popup. One press asks; a second closes. */
+    dialogs[d].addEventListener('cancel', function (ev) {
+      var dlg = ev.target;
+      var key = dlg.querySelector('input[type="password"]');
+      var warn = dlg.querySelector('[data-slot="discard-warn"]');
+      if (!key || !key.value || !warn || !warn.hidden) return;
+      ev.preventDefault();
+      warn.hidden = false;
+    });
+  }
 
   /* ---- roving tabindex: a list is one tab stop, arrows move within -----
 
-     data-roving is on lists of *data*. It is deliberately not on the three
-     grids whose rows contain form controls -- the library proposals, the
-     catalogue sources, the release results with their select checkboxes.
-     A form laid out in a grid is a form, and its natural tab order is the
-     correct one; imposing a roving model on it is how the Kind select on the
-     Libraries screen became keyboard-inoperable.
+     data-roving is on lists of *data*, and the release tables are now among
+     them. They were excluded on the argument that a grid whose rows contain
+     form controls is a form and its natural tab order is the correct one --
+     which is true of the library proposals and the catalogue sources, where
+     every cell is an input, and was false of the release tables, where the
+     controls are one checkbox and two actions per row of otherwise pure data.
+     The measured cost of the exclusion: 28 individual tab stops inside 10
+     rows, no row reachable by Tab at all, so the arrow keys learned on every
+     other list did nothing on the one v0.1 screen with a stateful outbound
+     action. The original hazard -- arrowing inside a <select> changing its
+     value -- is handled by the form-target bail-out below rather than by
+     withholding the model.
 
      Three defects fixed here, all in the same block:
 
@@ -343,14 +500,39 @@
         which is the standard grid model, and the assignment is idempotent and
         re-applied to anything appended. */
   var FOCUSABLE = 'a[href], button, input, select, textarea, [tabindex]';
+  /* Which controls own their own arrow keys. A text input owns Left/Right and
+     Home/End for its caret, a <select> owns Up/Down for its value, and a radio
+     owns Up/Down for its group -- so the roving handler must not touch any of
+     them, which is what SC 2.1.1 requires and what this bail-out is for.
+
+     A checkbox owns none of them, in any browser. Including it made the
+     bail-out too broad in exactly the place it hurt most: on the release
+     table every row's first control is a row-select checkbox, so arrowing into
+     one left no way to arrow onward to Grab and no Escape to get back out --
+     only Tab. Push buttons are excluded for the same reason. */
   function isFormTarget(el) {
-    return !!(el && el.closest && el.closest('input, select, textarea, [contenteditable]'));
+    return !!(el && el.closest && el.closest(
+      'select, textarea, [contenteditable], ' +
+      'input:not([type=checkbox]):not([type=button]):not([type=submit])'));
   }
   function visible(el) {
     return !el.hidden && el.closest('[hidden]') === null;
   }
 
   var grids = document.querySelectorAll('[data-roving]');
+  /* A list that is hidden when the page loads had no visible row to give the
+     tab stop to, and nothing re-ran the assignment when the state switcher or
+     a route change revealed it -- so six lists across three screens ended up
+     with zero tab stops and were unreachable by keyboard entirely. Every
+     list's refresh is registered here and re-run whenever visibility can have
+     changed. */
+  var rovingRefreshers = [];
+  function refreshRoving() {
+    /* applyState runs at init before this block has been reached, so the
+       hoisted var is still undefined on the first pass. */
+    if (!rovingRefreshers) return;
+    for (var i = 0; i < rovingRefreshers.length; i++) rovingRefreshers[i]();
+  }
   for (var g = 0; g < grids.length; g++) {
     (function (grid) {
       var sel = grid.getAttribute('data-roving');
@@ -379,6 +561,7 @@
         }
       }
       refresh();
+      rovingRefreshers.push(refresh);
 
       /* "Load more" appends rows, and ADR-0029 makes that the primary
          interaction, so the invariant has to survive an append rather than
@@ -408,6 +591,18 @@
 
       grid.addEventListener('keydown', function (ev) {
         if (['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Escape'].indexOf(ev.key) === -1) return;
+        /* Escape is handled before the form-control bail-out, and that order
+           is the whole point. The bail-out is correct for arrows, Home and End
+           -- a caret owns those -- but it was swallowing Escape too, which
+           removed the documented way out of a row's controls exactly where it
+           is needed: on the release table every row's first control is a
+           checkbox, so arrowing into one left no arrow key and no Escape that
+           got you back out, only Tab. */
+        if (ev.key === 'Escape') {
+          var owner = ev.target.closest(sel);
+          if (owner && ev.target !== owner) { ev.preventDefault(); owner.focus(); }
+          return;
+        }
         /* A caret in a text field owns its own arrow keys, Home and End. */
         if (isFormTarget(ev.target)) return;
         var current = ev.target.closest(sel);
@@ -426,13 +621,6 @@
           controls[to].focus();
           return;
         }
-        if (!horizontal && ev.key === 'Escape' && ev.target !== current) {
-          ev.preventDefault();
-          current.focus();
-          return;
-        }
-        if (ev.key === 'Escape') return;
-
         if (ev.key === 'Home' || ev.key === 'End') {
           /* Only from the row itself: Home in a caret means column zero. */
           if (ev.target !== current) return;
@@ -454,21 +642,39 @@
      durable queue and the chip says pending. A failure is a status change on
      that same visible row plus a toast carrying the upstream text verbatim.
      Nothing ever silently reverts. */
-  function toast(title, verbatim, onRetry) {
+  /* One polite region for anything that succeeded. The failure path had a live
+     region and the success path had none, so a screen-reader user pressed Grab
+     and heard nothing at all -- the one confirmation the architecture fixes
+     literally, delivered by the least perceivable mechanism on the page. */
+  function announce(text) {
+    var region = document.querySelector('[data-slot="announce"]');
+    if (region) region.textContent = text;
+  }
+
+  /* The alert carries the title and the verbatim text and nothing focusable:
+     ARIA's own guidance is that an alert should not contain controls, because
+     assistive technology may present the region as a flat announcement and the
+     controls then never arrive. Retry and Dismiss sit in a sibling group, and
+     focus is moved to the first of them -- which is safe here because the
+     error is the direct result of something the user just pressed. */
+  function toast(title, verbatim, retryLabel, onRetry) {
     var host = document.querySelector('.toasts');
     if (!host) return;
     var el = document.createElement('div');
     el.className = 'toast';
-    el.setAttribute('role', 'alert');
     el.innerHTML =
+      '<div role="alert">' +
       '<div class="toast__title"><svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg><span data-slot="title"></span></div>' +
       '<div class="toast__body"><div class="verbatim" data-slot="verbatim"></div></div>' +
-      '<div class="toast__foot"><button type="button" class="btn btn--sm" data-toast="retry">Retry</button>' +
+      '</div>' +
+      '<div class="toast__foot" role="group" aria-label="Actions for this error">' +
+      '<button type="button" class="btn btn--sm btn--primary" data-toast="retry"></button>' +
       '<button type="button" class="btn btn--sm" data-toast="dismiss">Dismiss</button></div>';
     /* Upstream error text is a remote string. It is set as text, never parsed
        as HTML: "render the upstream error verbatim" must not mean innerHTML. */
     el.querySelector('[data-slot="title"]').textContent = title;
     el.querySelector('[data-slot="verbatim"]').textContent = verbatim;
+    el.querySelector('[data-toast="retry"]').textContent = retryLabel;
     el.addEventListener('click', function (ev) {
       var act = ev.target.closest('[data-toast]');
       if (!act) return;
@@ -476,6 +682,7 @@
       el.remove();
     });
     host.appendChild(el);
+    el.querySelector('[data-toast="retry"]').focus();
   }
 
   /* ARCHITECTURE 8.5 fixes the grab confirmation literally: "Sent to <download
@@ -497,31 +704,77 @@
     }
   }
 
+  /* The post-grab sentence, per media type, and complete for all six.
+
+     The four sink-less types used to get an honest whole sentence and the two
+     that have an *Arr got "UsArr does not import downloads." and nothing else
+     -- which a Radarr owner reads as "UsArr doesn't, but obviously Radarr
+     does." It will not: the grab went from UsArr to Prowlarr to the download
+     client, Radarr never requested that release and has no record of it. The
+     failure is silent and cumulative, so the sentence names what will pick the
+     file up and what will not, for every type, and the type is a property of
+     the table the row is in. */
+  var SINK_NOTE = {
+    movie: 'UsArr does not import downloads. Radarr did not request this release, so Radarr will not import it either — the file stays in your download client until you move it into /media/movies yourself.',
+    series: 'UsArr does not import downloads. Sonarr did not request this release, so Sonarr will not import it either — the file stays in your download client until you move it into /media/tv yourself.',
+    music: 'UsArr does not import downloads, and no connected service accepts a music request. Navidrome shows what is already inside the folder it scans, so the file stays in your download client until you move it there.',
+    audiobook: 'UsArr does not import downloads. Audiobookshelf watches /media/books and will show it once the file is there.',
+    ebook: 'UsArr does not import downloads, and Readarr — the *Arr that used to own books — was archived on 27 June 2025. Audiobookshelf watches /media/books and will show it once the file is there.',
+    comic: 'UsArr does not import downloads, and no connected service accepts a comic request. Komga shows what is already inside the folder it scans, so the file stays in your download client until you move it there.'
+  };
+
+  function grabbedNote(row) {
+    var table = row.closest('table');
+    var type = (row.getAttribute('data-media') ||
+      (table && table.getAttribute('data-media')) || '').trim();
+    return SINK_NOTE[type] || SINK_NOTE.movie;
+  }
+
+  /* Every message about a grab names the release. Two identical toasts after a
+     five-row bulk grab tell you two failed and nothing about which two. */
+  function releaseName(row) {
+    var el = row.querySelector('td[data-col="title"] .mono');
+    return el ? el.textContent.trim() : 'this release';
+  }
+
   document.addEventListener('click', function (ev) {
     var btn = ev.target.closest('[data-act="grab"]');
-    if (!btn) return;
+    if (!btn || btn.getAttribute('aria-disabled') === 'true') return;
     var row = btn.closest('tr');
     setChip(row, 'pending', 'pending');
-    btn.disabled = true;
+    /* The button is not disabled. A disabled element cannot hold focus, so
+       disabling it inside the click handler dropped focus to <body> and threw
+       a keyboard user who had just grabbed the third release back to the top
+       of the page, 30-odd tab stops from the fourth. aria-disabled keeps it
+       focusable and the handler swallows the second press. */
+    btn.setAttribute('aria-disabled', 'true');
+    btn.classList.add('is-disabled');
+
+    var name = releaseName(row);
 
     /* This row is scripted to fail, so the failure path is demonstrable. */
     if (row.getAttribute('data-demo') !== 'fail') {
-      var table = row.closest('table');
-      var watched = (table && table.getAttribute('data-watched-default')) || '';
+      var note = grabbedNote(row);
       window.setTimeout(function () {
-        setChip(row, 'done', 'grabbed · sent to qBittorrent',
-          ('UsArr does not import downloads. ' + watched).trim());
+        setChip(row, 'done', 'grabbed · sent to qBittorrent', note);
+        announce('Grabbed ' + name + ', sent to qBittorrent. ' + note);
       }, 700);
       return;
     }
     window.setTimeout(function () {
-      setChip(row, 'failed', 'failed: rejected');
+      /* Prowlarr serves a grab from an in-process cache keyed to the search
+         that produced it. Once that entry is gone the same opaque release id
+         returns the same 400 for ever, so the recovery is not Retry -- it is
+         the action the expired state already models. Offering Retry here
+         contradicts the screen's own answer to the identical condition. */
+      setChip(row, 'failed', 'expired — search again');
       toast(
-        'Grab rejected by Prowlarr',
+        'Grab rejected by Prowlarr: ' + name,
         'POST /api/v1/search 400: {"message":"Release not found in cache. The 30 minute grab window has expired.","description":"IndexerId 7, guid a41c9f2e"}',
+        'Search again',
         function () {
-          setChip(row, 'pending', 'pending');
-          btn.disabled = true;
+          setChip(row, 'pending', 'searching again');
+          announce('Running the search again for ' + name + '.');
         }
       );
     }, 700);
@@ -535,25 +788,36 @@
      seconds of blocked main thread on a desktop. One integer instead. */
   var selectedRows = 0;
   function paintBulk() {
-    var b = document.querySelector('[data-act="grab-bulk"]');
-    if (b) b.disabled = selectedRows === 0;
+    var bs = document.querySelectorAll('[data-act="grab-bulk"]');
+    for (var i = 0; i < bs.length; i++) {
+      bs[i].disabled = selectedRows === 0;
+      /* Prowlarr's own string is "Grab release(s)", and keeping its word
+         "Grab" is what buys the familiarity. The parenthesised plural buys
+         nothing: the button is disabled at zero selections, so the count is
+         always known when it is live, and "(s)" does not translate. */
+      bs[i].textContent = selectedRows === 0 ? 'Grab releases'
+        : (selectedRows === 1 ? 'Grab 1 release' : 'Grab ' + selectedRows + ' releases');
+    }
   }
 
-  var bulk = document.querySelector('[data-act="grab-bulk"]');
-  if (bulk) {
-    bulk.addEventListener('click', function () {
+  var bulks = document.querySelectorAll('[data-act="grab-bulk"]');
+  for (var bi = 0; bi < bulks.length; bi++) {
+    bulks[bi].addEventListener('click', function () {
       var boxes = document.querySelectorAll('[data-act="rowselect"]:checked');
+      var names = [];
       for (var i = 0; i < boxes.length; i++) {
         var row = boxes[i].closest('tr');
         setChip(row, 'pending', 'pending');
+        names.push(releaseName(row));
         boxes[i].checked = false;
         row.setAttribute('aria-selected', 'false');
       }
+      announce(names.length + ' releases queued: ' + names.join('; ') + '.');
       selectedRows = 0;
       paintBulk();
-      bulk.disabled = true;
     });
   }
+  paintBulk();
 
   document.addEventListener('change', function (ev) {
     var box = ev.target.closest('[data-act="rowselect"]');
@@ -645,23 +909,185 @@
   /* ---- prototype.html only: hash routing between the five screens ------ */
   var pages = document.querySelectorAll('[data-page]');
   if (pages.length > 1) {
+    var firstRoute = true;
     var route = function () {
-      var name = (window.location.hash || '#home').slice(1);
-      var found = false;
+      /* The hash carries the query as well as the route -- #requests?q=dune
+         part two&type=movie is what the Search screen's per-row action links
+         to -- so the route is the part before the "?". */
+      var name = (window.location.hash || '#home').slice(1).split('?')[0];
+      /* The skip link and the in-page anchors target element ids, not routes.
+         Leave the page alone for those. */
+      if (name.indexOf('pg-') === 0 || name === 'settings' || name === 'system') return;
+      var found = null;
       for (var i = 0; i < pages.length; i++) {
         var on = pages[i].getAttribute('data-page') === name;
         pages[i].hidden = !on;
-        if (on) found = true;
+        if (on) found = pages[i];
       }
-      if (!found) { pages[0].hidden = false; name = pages[0].getAttribute('data-page'); }
+      if (!found) { found = pages[0]; found.hidden = false; name = found.getAttribute('data-page'); }
       var links = document.querySelectorAll('.nav__link[data-primary]');
       for (var l = 0; l < links.length; l++) {
         if (links[l].getAttribute('data-route') === name) links[l].setAttribute('aria-current', 'page');
         else links[l].removeAttribute('aria-current');
       }
       window.scrollTo(0, 0);
+      refreshRoving();
+      /* Focus used to stay on the nav link after the whole main region had
+         been replaced, so a keyboard user who opened Services then had to tab
+         past five more nav rows to reach the screen they had just opened, and
+         nothing was announced. */
+      if (!firstRoute) {
+        found.focus();
+        announce(found.querySelector('h1').textContent + '. Page loaded.');
+      }
+      firstRoute = false;
     };
     window.addEventListener('hashchange', route);
     route();
+  }
+
+  /* ---- the skip link points at whichever main is showing ----------------
+     prototype.html holds five <main> elements and shows one, so a literal
+     id="main" would be five duplicate ids. The link carries the visible one. */
+  function paintSkip() {
+    var skip = document.querySelector('.skip');
+    if (!skip) return;
+    var mains = document.querySelectorAll('.main');
+    for (var i = 0; i < mains.length; i++) {
+      if (mains[i].hidden) continue;
+      skip.setAttribute('href', '#' + mains[i].id);
+      return;
+    }
+  }
+  paintSkip();
+  window.addEventListener('hashchange', function () { window.setTimeout(paintSkip, 0); });
+
+  /* ---- the shortcut sheet, and why "?" is unconditional -----------------
+     The single-key off switch satisfies SC 2.1.4 only if it can be found, and
+     it lives five clicks deep in Settings. The sheet is where it is
+     discovered, which is why "?" is exempt from the switch it documents. */
+  var sheet = document.getElementById('shortcut-sheet');
+  if (sheet) {
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key !== '?' || ev.metaKey || ev.ctrlKey || ev.altKey || typing()) return;
+      ev.preventDefault();
+      if (sheet.open) sheet.close();
+      else { dialogInvoker = document.activeElement; sheet.showModal(); }
+    });
+  }
+
+  /* ---- the phone drawer is modal, so it behaves like one ----------------
+     It is position: fixed over the content at 40, and content the user cannot
+     see was still in the tab order behind it. */
+  if (app && sideBtn) {
+    var mainEls = document.querySelectorAll('.main');
+    var syncDrawer = function () {
+      var overlay = window.matchMedia('(max-width: 900px)').matches &&
+        app.getAttribute('data-sidebar') === 'open';
+      var side = document.querySelector('.sidebar');
+      if (side) {
+        if (overlay) { side.setAttribute('role', 'dialog'); side.setAttribute('aria-modal', 'true'); }
+        else { side.setAttribute('role', 'navigation'); side.removeAttribute('aria-modal'); }
+      }
+      for (var i = 0; i < mainEls.length; i++) {
+        if (overlay) mainEls[i].setAttribute('inert', '');
+        else mainEls[i].removeAttribute('inert');
+      }
+    };
+    sideBtn.addEventListener('click', function () { window.setTimeout(syncDrawer, 0); });
+    window.addEventListener('resize', syncDrawer);
+    document.addEventListener('keydown', function (ev) {
+      if (ev.key !== 'Escape') return;
+      if (!window.matchMedia('(max-width: 900px)').matches) return;
+      if (app.getAttribute('data-sidebar') !== 'open') return;
+      sideBtn.click();
+      sideBtn.focus();
+    });
+    syncDrawer();
+  }
+
+  /* ---- the library detail form declares its save model ------------------ */
+  var editForms = document.querySelectorAll('[data-act="editform"]');
+  if (editForms.length) {
+    var dirty = {};
+    var bar = document.querySelector('[data-slot="savebar"]');
+    var paintSave = function () {
+      var n = Object.keys(dirty).length;
+      if (!bar) return;
+      bar.querySelector('[data-slot="dirty"]').textContent =
+        n === 0 ? 'No unsaved changes' : (n === 1 ? '1 unsaved change' : n + ' unsaved changes');
+      bar.querySelector('[data-act="save-lib"]').disabled = n === 0;
+      bar.querySelector('[data-act="discard-lib"]').disabled = n === 0;
+    };
+    var mark = function (ev) {
+      var t = ev.target;
+      if (!t.id) return;
+      dirty[t.id] = true;
+      paintSave();
+      /* Changing the kind re-derives membership for every work in the library
+         from what the services report. A bare <select> changes value on one
+         arrow keypress with no menu open, so the consequence is stated the
+         moment it is chosen rather than after Save. */
+      if (t.getAttribute('data-act') === 'kind') {
+        var warn = document.querySelector('[data-slot="kind-warn"]');
+        if (warn) warn.hidden = false;
+      }
+    };
+    for (var e = 0; e < editForms.length; e++) {
+      editForms[e].addEventListener('input', mark);
+      editForms[e].addEventListener('change', mark);
+    }
+    if (bar) {
+      bar.addEventListener('click', function (ev) {
+        if (!ev.target.closest('[data-act="discard-lib"]')) return;
+        dirty = {};
+        paintSave();
+        var warn = document.querySelector('[data-slot="kind-warn"]');
+        if (warn) warn.hidden = true;
+        announce('Changes discarded.');
+      });
+    }
+    paintSave();
+  }
+
+  /* ---- proposal names that collide become one library, visibly ----------
+     Renaming a proposal to match another makes it join rather than create,
+     which is the auto-proposal's most consequential hidden mechanic. It used
+     to produce two identically named rows, both ticked, with the banner and
+     both buttons still counting four. Match is case- and whitespace-
+     insensitive, and that is stated on the row. */
+  var propTable = document.querySelector('[data-act="proposals"]');
+  if (propTable) {
+    var names = propTable.querySelectorAll('[data-act="propname"]');
+    var repaintProposals = function () {
+      var seen = {}, merged = 0, kept = 0;
+      for (var i = 0; i < names.length; i++) {
+        var row = names[i].closest('tr');
+        var box = row.querySelector('input[type="checkbox"]');
+        var key = names[i].value.trim().toLowerCase();
+        var note = row.querySelector('[data-slot="mergenote"]');
+        var into = seen[key];
+        if (into && box && box.checked) {
+          merged++;
+          if (note) { note.hidden = false; note.textContent = 'Joins ' + into + ' as a second source rather than creating a second library.'; }
+        } else {
+          if (box && box.checked) { seen[key] = names[i].value.trim(); kept++; }
+          if (note) note.hidden = true;
+        }
+      }
+      var label = kept === 1 ? 'Accept 1 proposal' : 'Accept ' + kept + ' proposals';
+      var btns = document.querySelectorAll('[data-act="accept-props"]');
+      for (var b = 0; b < btns.length; b++) btns[b].textContent = label;
+      var count = document.querySelector('[data-slot="propcount"]');
+      if (count) {
+        count.textContent = merged
+          ? 'UsArr proposes ' + kept + ' libraries, joins ' + merged + ' container' +
+            (merged === 1 ? '' : 's') + ' into one of them, and declines 1 thing it cannot model.'
+          : 'UsArr proposes ' + kept + ' libraries and declines 1 thing it cannot model.';
+      }
+    };
+    propTable.addEventListener('input', repaintProposals);
+    propTable.addEventListener('change', repaintProposals);
+    repaintProposals();
   }
 })();

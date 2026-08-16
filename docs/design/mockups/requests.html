@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>UsArr mockup: requests</title>
+<link rel="stylesheet" href="fonts.css">
 <link rel="stylesheet" href="usarr.css">
 </head>
 <body>
@@ -29,6 +30,11 @@
 <div class="app" data-sidebar="open">
 
   <!-- TOPBAR START -->
+  <!-- The first tab stop on every screen. There are 21 stops of top bar and
+       sidebar before the first row of any table, identically on all five
+       screens; landmarks are an accepted SC 2.4.1 technique and they help
+       nobody who is sighted and using a keyboard. -->
+  <a class="skip" href="#main">Skip to content</a>
   <header class="topbar">
     <button type="button" class="btn btn--icon" data-act="sidebar" aria-expanded="true" aria-label="Hide the sidebar">
       <svg class="i" aria-hidden="true"><use href="#i-menu"/></svg>
@@ -53,6 +59,13 @@
     </div>
     <div class="topbar__spacer"></div>
     <div class="topbar__right">
+      <!-- Below 900px the sidebar is display:none until the drawer is opened,
+           and the scope chip lives in it. This is the same string, hoisted,
+           and only when the scope is not "everything": the one piece of state
+           that cannot be inferred from the content is never invisible. -->
+      <a class="topscope" href="#" data-slot="topscope" data-scoped="false">
+        <span data-slot="topscope-label">All libraries (8)</span>
+      </a>
       <label class="sr" for="density">Row density</label>
       <select id="density" class="select" data-act="density">
         <option value="compact">Compact</option>
@@ -64,6 +77,42 @@
       </button>
     </div>
   </header>
+
+  <!-- One polite region for everything that succeeded. The failure path had a
+       live region and the success path had none. -->
+  <div class="sr" role="status" aria-live="polite" data-slot="announce"></div>
+
+  <!-- The sheet the "?" key opens. It is where the single-key off switch is
+       discovered, which is the whole reason "?" itself is exempt from it. -->
+  <dialog class="dialog" id="shortcut-sheet" aria-labelledby="shortcut-sheet-title">
+    <h2 class="dialog__head" id="shortcut-sheet-title">Keyboard shortcuts</h2>
+    <div class="dialog__body">
+      <table class="tbl" aria-label="Keyboard shortcuts" style="--cols: 92px minmax(0,1fr)" aria-colcount="2" role="table" aria-rowcount="8">
+        <thead role="rowgroup">
+          <tr role="row" aria-rowindex="1">
+            <th scope="col" role="columnheader" aria-colindex="1">Key</th>
+            <th scope="col" role="columnheader" aria-colindex="2">What it does</th>
+          </tr>
+        </thead>
+        <tbody role="rowgroup">
+          <tr role="row" aria-rowindex="2"><td role="cell" aria-colindex="1"><span class="mono">/</span></td><td role="cell" aria-colindex="2">Focus the search box in the top bar.</td></tr>
+          <tr role="row" aria-rowindex="3"><td role="cell" aria-colindex="1"><span class="mono">l</span></td><td role="cell" aria-colindex="2">Open the library scope.</td></tr>
+          <tr role="row" aria-rowindex="4"><td role="cell" aria-colindex="1"><span class="mono">↑</span> <span class="mono">↓</span></td><td role="cell" aria-colindex="2">Move between rows. A list is one tab stop.</td></tr>
+          <tr role="row" aria-rowindex="5"><td role="cell" aria-colindex="1"><span class="mono">←</span> <span class="mono">→</span></td><td role="cell" aria-colindex="2">Reach the row's own actions.</td></tr>
+          <tr role="row" aria-rowindex="6"><td role="cell" aria-colindex="1"><span class="mono">Esc</span></td><td role="cell" aria-colindex="2">Return from a row's actions to the row; close a popover or dialog.</td></tr>
+          <tr role="row" aria-rowindex="7"><td role="cell" aria-colindex="1"><span class="mono">Home</span> <span class="mono">End</span></td><td role="cell" aria-colindex="2">First and last row of the list.</td></tr>
+          <tr role="row" aria-rowindex="8"><td role="cell" aria-colindex="1"><span class="mono">?</span></td><td role="cell" aria-colindex="2">Open and close this sheet. It works whether or not the switch below is on.</td></tr>
+        </tbody>
+      </table>
+      <div class="field" style="margin-top:16px">
+        <label class="check" for="f-shortcuts-sheet"><input type="checkbox" id="f-shortcuts-sheet" data-act="shortcuts" checked> Single-key shortcuts</label>
+        <span class="field__help">Turning this off disables <span class="mono">/</span>, <span class="mono">l</span>, <span class="mono">j</span> and <span class="mono">k</span>. Arrow keys, Escape and shortcuts that need a modifier are unaffected, and <span class="mono">?</span> keeps working so this sheet stays reachable.</span>
+      </div>
+    </div>
+    <div class="dialog__foot">
+      <button type="button" class="btn btn--primary" data-act="dialog-close">Close</button>
+    </div>
+  </dialog>
   <!-- TOPBAR END -->
 
   <!-- SIDEBAR START -->
@@ -80,15 +129,16 @@
          so no control appears for a distinction they do not have. This install
          has eight, so it appears. -->
     <div class="scope">
-      <button type="button" class="scope__btn" data-act="scope" aria-expanded="false" aria-controls="scope-pop">
-        <!-- A live region, because the chip's whole job is to state in words
-             what the control hid. Without it a sighted user reads "6 of 8
-             libraries" and a screen-reader user toggles a checkbox and hears
-             nothing about the resulting scope. It is a two-word string, so it
-             is not chatty. -->
-        <span data-slot="scope-label" aria-live="polite">All libraries (8)</span>
+      <button type="button" class="scope__btn" data-act="scope" aria-expanded="false" aria-haspopup="dialog" aria-controls="scope-pop" data-scoped="false">
+        <span data-slot="scope-label">All libraries (8)</span>
         <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-down"/></svg>
       </button>
+      <!-- The chip's whole job is to state in words what the control hid, and
+           it has to state it to people who cannot see it too. The live region
+           is a sibling rather than the button's own label: inside the button,
+           ticking a checkbox changed the focused control's accessible name and
+           fired an announcement, so most assistive technology said it twice. -->
+      <span class="sr" role="status" aria-live="polite" data-slot="scope-live"></span>
       <!-- data-slug is the stored library.slug, not the rendered label. The
            name is user-editable and the scope lives in the URL, so deriving
            the slug from the label would change a permalink on a rename. -->
@@ -105,12 +155,20 @@
           <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="manga" checked> Manga</label>
           <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="comics-ongoing" checked> Ongoing comics</label>
         </fieldset>
+        <!-- Libraries are unbounded, which is why they are a scope chip and
+             not a nav list, so ticking twenty of them one at a time is a real
+             journey. The popover also scrolls above ~12 rows rather than
+             running off the bottom of the viewport. -->
+        <div class="scope__acts">
+          <button type="button" class="btn btn--sm" data-scope-act="all">Select all</button>
+          <button type="button" class="btn btn--sm" data-scope-act="none">Select none</button>
+        </div>
         <p class="scope__url">The scope is in the URL, so back, reload and share all work: <span class="mono" data-slot="scope-url">?lib=all</span></p>
       </div>
     </div>
 
     <ul class="nav__group">
-      <li><a class="nav__link" href="index.html" data-route="home" data-primary>Home</a></li>
+      <li><a class="nav__link" href="index.html" data-route="home" data-primary aria-current="page">Home</a></li>
     </ul>
 
     <!-- Media types: a closed enum, hard maximum six, and a type with no items
@@ -138,22 +196,30 @@
         <span class="nav__count nav__count--err" title="1 error">1</span></a></li>
       <li><a class="nav__link" href="libraries.html" data-route="libraries" data-primary>Libraries</a></li>
       <li><a class="nav__link" href="services.html#settings" data-route="services">Settings</a></li>
-    </ul>
-
-    <ul class="nav__group">
+      <!-- Seven fixed entries, against a stated budget of eight. Status and
+           Backup used to sit here as System sub-rows while the Settings
+           sub-tree was cut to stay inside that budget, which is not one rule
+           applied twice. They are reachable from System, which is what a
+           sub-page is. -->
       <li><a class="nav__link" href="services.html#system" data-route="services">System</a></li>
-      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Status</a></li>
-      <li><a class="nav__link nav__link--sub" href="services.html#system" data-route="services">Backup</a></li>
     </ul>
   </nav>
   <!-- SIDEBAR END -->
 
 <!-- PAGE:requests START -->
-<main class="main" id="pg-requests" data-page="requests" data-state="live">
+<main class="main" id="pg-requests" data-page="requests" tabindex="-1" data-state="live">
 
   <div class="pagehead">
     <h1>Requests</h1>
-    <span class="pagehead__meta">Free-text indexer search through Prowlarr, and a grab sent to Prowlarr's own download client.</span>
+    <span class="pagehead__meta" data-when="live">Free-text indexer search through Prowlarr. 9 of 9 indexers answered, 10 releases shown.</span>
+    <span class="pagehead__meta" data-when="partial" hidden>Free-text indexer search through Prowlarr. 4 of 9 indexers have answered so far.</span>
+    <span class="pagehead__meta" data-when="expired" hidden>This search is 34 minutes old, so nothing in it can still be grabbed.</span>
+    <span class="pagehead__meta" data-when="nosink" hidden>Free-text indexer search through Prowlarr. Nothing on this install imports a book.</span>
+    <span class="pagehead__meta" data-when="empty" hidden>All 9 indexers answered and none had a match.</span>
+    <span class="pagehead__meta" data-when="allfail" hidden>All 9 indexers are in a failure state, so the search did not run.</span>
+    <span class="pagehead__meta" data-when="denied" hidden>8 of 9 indexers answered. PassThePopcorn refused the account.</span>
+    <span class="pagehead__meta" data-when="error" hidden>Prowlarr rejected the stored API key, so nothing was searched.</span>
+    <span class="pagehead__meta" data-when="unconfigured" hidden>No Prowlarr connected, so there is no indexer to search.</span>
   </div>
 
   <div class="statebar">
@@ -180,8 +246,8 @@
 
   <div class="section" data-when="unconfigured" hidden>
     <div class="empty">
-      <div class="empty__title">No indexer service configured</div>
-      <p class="empty__text">This screen searches your indexers through Prowlarr and sends the grab to the download client Prowlarr already has. Without a Prowlarr there is nothing to query, and UsArr does not talk to indexers directly.</p>
+      <h2 class="empty__title">No indexer service configured</h2>
+      <p class="empty__text">This screen searches your indexers through Prowlarr, and UsArr never talks to an indexer directly, so without a Prowlarr there is nothing to query.</p>
       <div class="empty__actions">
         <a class="btn btn--primary" href="services.html">Add Prowlarr</a>
       </div>
@@ -194,7 +260,7 @@
        and manga go through Basic on the Books tree. -->
   <form class="toolbar" data-when="live partial expired empty allfail denied error" onsubmit="return false">
     <label class="toolbar__label" for="q">Query</label>
-    <input class="input" id="q" type="search" value="dune part two" style="flex:1 1 200px">
+    <input class="input f-query" id="q" type="search" value="dune part two">
 
     <label class="toolbar__label" for="stype">Search type</label>
     <select class="select" id="stype" aria-describedby="stype-help">
@@ -206,7 +272,7 @@
     </select>
 
     <label class="toolbar__label" for="indexers">Indexers</label>
-    <select class="select" id="indexers" multiple size="3" style="flex:0 1 190px">
+    <select class="select f-list" id="indexers" multiple size="3">
       <optgroup label="Torrents">
         <option selected>TorrentLeech</option>
         <option selected>IPTorrents</option>
@@ -227,8 +293,8 @@
       </optgroup>
     </select>
 
-    <label class="toolbar__label" for="cats">Category</label>
-    <select class="select" id="cats" multiple size="3" style="flex:0 1 210px">
+    <label class="toolbar__label" for="cats">Categories</label>
+    <select class="select f-list f-list--wide" id="cats" multiple size="3">
       <optgroup label="Movies">
         <option selected>2000 Movies</option>
         <option>2030 Movies/SD</option>
@@ -294,8 +360,8 @@
        which of the two happened. -->
   <div class="section" data-when="empty" hidden>
     <div class="empty">
-      <div class="empty__title">No releases matched</div>
-      <p class="empty__text">All 9 indexers answered and none of them has a release matching <span class="mono">dune part twoo</span> in Movies. Indexer search matches the release name as the indexer stores it, so a typo in the query returns nothing rather than a near miss.</p>
+      <h2 class="empty__title">No releases matched</h2>
+      <p class="empty__text">All 9 indexers answered, and none has a release whose name contains <span class="mono">dune part twoo</span> in Movies — indexer search matches the release name as the indexer stores it, so a typo returns nothing rather than a near miss.</p>
       <div class="empty__actions">
         <button type="button" class="btn btn--primary">Search all categories</button>
         <button type="button" class="btn">Edit the query</button>
@@ -305,17 +371,17 @@
 
   <div class="section" data-when="allfail" hidden>
     <div class="empty">
-      <div class="empty__title">Every indexer failed, so this is not a result</div>
+      <h2 class="empty__title">Every indexer failed, so this is not a result</h2>
       <p class="empty__text">Prowlarr answered with an empty list, which is exactly what it answers when nothing matched. It is not the same thing, and UsArr checked <span class="mono">/api/v1/indexerstatus</span> before drawing this screen. 0 of 9 indexers returned a result and all 9 are in a failure state, so the honest answer is that the search did not run, not that your query found nothing.</p>
+      <p class="empty__text"><strong>This is a DNS problem inside Prowlarr's own host, not something UsArr can fix.</strong> Services will show Prowlarr as reachable, because it is — the resolver failure is between Prowlarr and the indexers. Check that container's DNS settings, then search again.</p>
       <div class="empty__actions">
-        <a class="btn btn--primary" href="services.html">Open Services</a>
-        <button type="button" class="btn">Retry the search</button>
+        <button type="button" class="btn btn--primary">Search again</button>
       </div>
     </div>
     <div class="tablewrap">
-      <table class="tbl tbl--stack" aria-label="Indexer failures" style="--cols: minmax(0,1fr) 108px minmax(0,4fr) 68px; --row-lines: 2.61" aria-colcount="4" role="table">
+      <table aria-rowcount="6" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Indexer failures" style="--cols: minmax(0,1fr) 108px minmax(0,4fr) 68px; --row-lines: 2.61" aria-colcount="4" role="table">
         <thead role="rowgroup">
-          <tr role="row">
+          <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Indexer</th>
             <th scope="col" role="columnheader" aria-colindex="2">State</th>
             <th scope="col" role="columnheader" aria-colindex="3">What Prowlarr reports</th>
@@ -323,11 +389,11 @@
           </tr>
         </thead>
         <tbody role="rowgroup">
-          <tr role="row"><td data-label="Indexer" class="mono" role="cell" aria-colindex="1">TorrentLeech</td><td data-label="State" role="cell" aria-colindex="2"><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>disabled</span></td><td data-label="What Prowlarr reports" role="cell" aria-colindex="3"><div class="verbatim">Request to TorrentLeech failed: The remote name could not be resolved: 'www.torrentleech.org'</div></td><td data-label="Retry" class="num" role="cell" aria-colindex="4">14:23</td></tr>
-          <tr role="row"><td data-label="Indexer" class="mono" role="cell" aria-colindex="1">IPTorrents</td><td data-label="State" role="cell" aria-colindex="2"><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>disabled</span></td><td data-label="What Prowlarr reports" role="cell" aria-colindex="3"><div class="verbatim">Request to IPTorrents failed: No connection could be made because the target machine actively refused it</div></td><td data-label="Retry" class="num" role="cell" aria-colindex="4">14:23</td></tr>
-          <tr role="row"><td data-label="Indexer" class="mono" role="cell" aria-colindex="1">HDBits</td><td data-label="State" role="cell" aria-colindex="2"><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>disabled</span></td><td data-label="What Prowlarr reports" role="cell" aria-colindex="3"><div class="verbatim">Request to HDBits failed: The remote name could not be resolved: 'hdbits.org'</div></td><td data-label="Retry" class="num" role="cell" aria-colindex="4">14:31</td></tr>
-          <tr role="row"><td data-label="Indexer" class="mono" role="cell" aria-colindex="1">NZBgeek</td><td data-label="State" role="cell" aria-colindex="2"><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>disabled</span></td><td data-label="What Prowlarr reports" role="cell" aria-colindex="3"><div class="verbatim">Request to NZBgeek failed: The remote name could not be resolved: 'api.nzbgeek.info'</div></td><td data-label="Retry" class="num" role="cell" aria-colindex="4">14:31</td></tr>
-          <tr role="row"><td data-label="Indexer" colspan="4" class="muted" role="cell" aria-colindex="1" aria-colspan="4">5 more indexers in the same state. Every one of the nine failed to resolve or connect, which is what a broken DNS resolver on this host looks like from here.</td></tr>
+          <tr role="row" aria-rowindex="2"><td data-col="indexer" class="mono" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Indexer</span>TorrentLeech</td><td data-col="state" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>disabled</span></td><td data-col="what-prowlarr-reports" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What Prowlarr reports</span><div class="verbatim">Request to TorrentLeech failed: The remote name could not be resolved: 'www.torrentleech.org'</div></td><td data-col="retry" class="num" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Retry</span>14:23</td></tr>
+          <tr role="row" aria-rowindex="3"><td data-col="indexer" class="mono" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Indexer</span>IPTorrents</td><td data-col="state" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>disabled</span></td><td data-col="what-prowlarr-reports" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What Prowlarr reports</span><div class="verbatim">Request to IPTorrents failed: No connection could be made because the target machine actively refused it</div></td><td data-col="retry" class="num" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Retry</span>14:23</td></tr>
+          <tr role="row" aria-rowindex="4"><td data-col="indexer" class="mono" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Indexer</span>HDBits</td><td data-col="state" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>disabled</span></td><td data-col="what-prowlarr-reports" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What Prowlarr reports</span><div class="verbatim">Request to HDBits failed: The remote name could not be resolved: 'hdbits.org'</div></td><td data-col="retry" class="num" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Retry</span>14:31</td></tr>
+          <tr role="row" aria-rowindex="5"><td data-col="indexer" class="mono" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Indexer</span>NZBgeek</td><td data-col="state" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>disabled</span></td><td data-col="what-prowlarr-reports" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What Prowlarr reports</span><div class="verbatim">Request to NZBgeek failed: The remote name could not be resolved: 'api.nzbgeek.info'</div></td><td data-col="retry" class="num" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Retry</span>14:31</td></tr>
+          <tr role="row" aria-rowindex="6"><td data-col="indexer" colspan="4" class="muted" role="cell" aria-colindex="1" aria-colspan="4"><span class="stacklabel" aria-hidden="true">Indexer</span>5 more indexers in the same state. Every one of the nine failed to resolve or connect, which is what a broken DNS resolver on this host looks like from here.</td></tr>
         </tbody>
       </table>
     </div>
@@ -335,8 +401,8 @@
 
   <!-- Tier 3 fan-out: real counts, never a fake progress bar. The releases
        below are already grabbable; the remaining indexers only add rows. -->
-  <div class="fanout" data-when="partial" role="status" hidden>
-    <span class="fanout__count" aria-live="polite">4 of 9</span> indexers responded
+  <div class="fanout" data-when="partial" role="status" aria-atomic="true" hidden>
+    <span class="fanout__count">4 of 9</span> indexers responded
     <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:44%"></span></span>
     <span>47 releases so far, 5 shown after de-duplication, all of them grabbable now</span>
     <span class="fanout__failed">TorrentDay timed out after 30 s</span>
@@ -344,20 +410,20 @@
     <button type="button" class="btn btn--sm">Stop waiting</button>
   </div>
 
-  <div class="fanout" data-when="live" role="status">
-    <span class="fanout__count" aria-live="polite">9 of 9</span> indexers responded
+  <div class="fanout" data-when="live" role="status" aria-atomic="true">
+    <span class="fanout__count">9 of 9</span> indexers responded
     <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:100%"></span></span>
     <span>112 releases, 10 shown after de-duplication</span>
   </div>
 
-  <div class="fanout" data-when="expired" role="status" hidden>
-    <span class="fanout__count" aria-live="polite">9 of 9</span> indexers responded
+  <div class="fanout" data-when="expired" role="status" aria-atomic="true" hidden>
+    <span class="fanout__count">9 of 9</span> indexers responded
     <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:100%"></span></span>
     <span>14 releases, 2 shown after de-duplication</span>
   </div>
 
-  <div class="fanout" data-when="denied" role="status" hidden>
-    <span class="fanout__count" aria-live="polite">8 of 9</span> indexers responded
+  <div class="fanout" data-when="denied" role="status" aria-atomic="true" hidden>
+    <span class="fanout__count">8 of 9</span> indexers responded
     <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:89%"></span></span>
     <span>96 releases, 9 shown after de-duplication</span>
     <span class="fanout__failed">PassThePopcorn refused the account</span>
@@ -383,7 +449,7 @@
     <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
     <div class="banner__body">
       <div class="banner__title">This search is 34 minutes old, so its releases can no longer be grabbed</div>
-      <div class="banner__text">Prowlarr holds a grabbable release for 30 minutes in memory, keyed to the search that returned it, and a Prowlarr restart clears that cache early. The rows below are still worth reading — sizes, seeders, flags and indexers are all real — but grabbing any of them needs the search running again. Nothing here fails silently and nothing is offered as grabbable when it is not.</div>
+      <div class="banner__text">Prowlarr holds a grabbable release for 30 minutes in memory, keyed to the search that returned it, and a Prowlarr restart clears that cache early. The rows below are still worth reading — sizes, peers, flags and indexers are all real — but grabbing any of them needs the search running again. Nothing here fails silently and nothing is offered as grabbable when it is not.</div>
     </div>
     <div class="banner__actions"><button type="button" class="btn btn--primary">Search again</button></div>
   </div>
@@ -396,14 +462,23 @@
       <button type="button" class="btn">Filter</button>
       <button type="button" class="btn">Options</button>
       <div class="toolbar__spacer"></div>
-      <span class="toolbar__label" data-when="live partial denied">Sorted by Age ascending. The grab window closes in <span class="num">18</span> minutes; an expired release is never offered as grabbable.</span>
-      <span class="toolbar__label" data-when="expired" hidden>Sorted by Age ascending. The grab window closed <span class="num">4</span> minutes ago.</span>
+      <span class="toolbar__label" role="status" data-when="live partial denied">Sorted by age, newest first. The grab window closes in <span class="num">18</span> minutes; an expired release is never offered as grabbable.</span>
+      <span class="toolbar__label" data-when="expired" hidden>Sorted by age, newest first. The grab window closed <span class="num">4</span> minutes ago.</span>
     </div>
 
     <div class="tablewrap">
-      <table class="tbl tbl--stack" aria-label="Release results" style="--cols: 60px 88px 80px minmax(0,3fr) minmax(0,1fr) 80px 68px 84px minmax(0,0.9fr) minmax(0,1fr) 80px; --row-lines: 2.34" aria-colcount="11" role="table">
+      <!-- The only list in the product that abandoned the roving model, on the
+           only v0.1 screen with a stateful outbound action: 28 individual tab
+           stops inside 10 rows, no row reachable by Tab at all, so the arrow
+           keys learned on Services and Home did nothing here. And the grab
+           control was an icon button whose accessible name came only from
+           aria-label -- no visible text, no title, so a mouse user got no
+           tooltip either -- sitting 8px from a visually similar icon that
+           opens a browser tab. Tab Tab Enter fired a 68 GB grab, and you could
+           not tell which of the two you were on. -->
+      <table aria-rowcount="-1" class="tbl tbl--stack" data-roving="tbody tr" data-media="movie" aria-label="Release results" style="--cols: 60px 88px 80px minmax(0,3fr) minmax(0,1fr) 80px 68px 84px minmax(0,0.9fr) minmax(0,1fr) minmax(max-content,auto); --row-lines: 2.17" aria-colcount="11" role="table">
         <thead role="rowgroup">
-          <tr role="row">
+          <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Select</th>
             <th scope="col" role="columnheader" aria-colindex="2">Protocol</th>
             <th scope="col" class="is-num" role="columnheader" aria-colindex="3">Age</th>
@@ -419,213 +494,213 @@
         </thead>
         <tbody role="rowgroup">
 
-          <tr data-when="live partial denied" role="row">
-            <td data-label="Select" role="cell" aria-colindex="1"><label class="sr" for="r1">Select this release</label><input type="checkbox" id="r1" data-act="rowselect"></td>
-            <td data-label="Protocol" role="cell" aria-colindex="2"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
-            <td data-label="Age" class="is-num" role="cell" aria-colindex="3">2 days</td>
-            <td data-label="Title" role="cell" aria-colindex="4"><span class="mono">Dune.Part.Two.2024.2160p.UHD.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-FraMeSToR</span><div data-slot="grabstate"></div></td>
-            <td data-label="Indexer" class="mono" role="cell" aria-colindex="5">TorrentLeech</td>
-            <td data-label="Size" class="is-num" role="cell" aria-colindex="6">68.4 GB</td>
-            <td data-label="Grabs" class="is-num" role="cell" aria-colindex="7">214</td>
-            <td data-label="Peers" class="is-num" role="cell" aria-colindex="8">41 / 9</td>
-            <td data-label="Category" role="cell" aria-colindex="9">Movies/UHD</td>
-            <td data-label="Indexer flags" role="cell" aria-colindex="10"><span class="chip">internal</span> <span class="chip">freeleech</span></td>
-            <td data-label="Actions" role="cell" aria-colindex="11"><div class="cell-actions">
-              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open the TorrentLeech page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+          <tr data-when="live partial denied" role="row" aria-rowindex="2">
+            <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r1">Select this release</label><input type="checkbox" id="r1" data-act="rowselect"></td>
+            <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>2 days</td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.2160p.UHD.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-FraMeSToR">Dune.Part.Two.2024.2160p.UHD.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-FraMeSToR</span><div data-slot="grabstate"></div></td>
+            <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>TorrentLeech</td>
+            <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>68.4 GB</td>
+            <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>214</td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>41 / 9<span class="sr"> — 41 seeders, 9 leechers</span></td>
+            <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/UHD</td>
+            <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip">internal</span> <span class="chip">freeleech</span></td>
+            <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
+              <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
+              <a class="btn btn--icon btn--sm" href="#" title="Open the TorrentLeech page for this release, in a new tab" aria-label="Open the TorrentLeech page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
           <!-- Same release, past the grab window. The control is not a
                disabled download button: it is the action that actually works. -->
-          <tr data-when="expired" hidden role="row">
-            <td data-label="Select" class="muted" role="cell" aria-colindex="1">n/a</td>
-            <td data-label="Protocol" role="cell" aria-colindex="2"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
-            <td data-label="Age" class="is-num" role="cell" aria-colindex="3">2 days</td>
-            <td data-label="Title" role="cell" aria-colindex="4"><span class="mono">Dune.Part.Two.2024.2160p.UHD.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-FraMeSToR</span><div data-slot="grabstate"><span class="chip">grab window closed 4 minutes ago</span></div></td>
-            <td data-label="Indexer" class="mono" role="cell" aria-colindex="5">TorrentLeech</td>
-            <td data-label="Size" class="is-num" role="cell" aria-colindex="6">68.4 GB</td>
-            <td data-label="Grabs" class="is-num" role="cell" aria-colindex="7">214</td>
-            <td data-label="Peers" class="is-num" role="cell" aria-colindex="8">41 / 9</td>
-            <td data-label="Category" role="cell" aria-colindex="9">Movies/UHD</td>
-            <td data-label="Indexer flags" role="cell" aria-colindex="10"><span class="chip">internal</span> <span class="chip">freeleech</span></td>
-            <td data-label="Actions" role="cell" aria-colindex="11"><div class="cell-actions">
+          <tr data-when="expired" hidden role="row" aria-rowindex="3">
+            <td data-col="select" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span>n/a</td>
+            <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>2 days</td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.2160p.UHD.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-FraMeSToR">Dune.Part.Two.2024.2160p.UHD.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-FraMeSToR</span><div data-slot="grabstate"><span class="chip">grab window closed 4 minutes ago</span></div></td>
+            <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>TorrentLeech</td>
+            <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>68.4 GB</td>
+            <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>214</td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>41 / 9<span class="sr"> — 41 seeders, 9 leechers</span></td>
+            <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/UHD</td>
+            <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip">internal</span> <span class="chip">freeleech</span></td>
+            <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
               <button type="button" class="btn btn--sm">Search again</button>
-              <a href="#" aria-label="Open the TorrentLeech page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+              <a class="btn btn--icon btn--sm" href="#" title="Open the TorrentLeech page for this release, in a new tab" aria-label="Open the TorrentLeech page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
-          <tr data-when="live partial denied" role="row">
-            <td data-label="Select" role="cell" aria-colindex="1"><label class="sr" for="r2">Select this release</label><input type="checkbox" id="r2" data-act="rowselect"></td>
-            <td data-label="Protocol" role="cell" aria-colindex="2"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
-            <td data-label="Age" class="is-num" role="cell" aria-colindex="3">3 days</td>
-            <td data-label="Title" role="cell" aria-colindex="4"><span class="mono">Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-FLUX</span><div data-slot="grabstate"></div></td>
-            <td data-label="Indexer" class="mono" role="cell" aria-colindex="5">NZBgeek</td>
-            <td data-label="Size" class="is-num" role="cell" aria-colindex="6">21.7 GB</td>
-            <td data-label="Grabs" class="is-num" role="cell" aria-colindex="7">1,208</td>
-            <td data-label="Peers" class="is-num muted" role="cell" aria-colindex="8">n/a</td>
-            <td data-label="Category" role="cell" aria-colindex="9">Movies/UHD</td>
-            <td data-label="Indexer flags" class="muted" role="cell" aria-colindex="10">None</td>
-            <td data-label="Actions" role="cell" aria-colindex="11"><div class="cell-actions">
-              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open the NZBgeek page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+          <tr data-when="live partial denied" role="row" aria-rowindex="4">
+            <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r2">Select this release</label><input type="checkbox" id="r2" data-act="rowselect"></td>
+            <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>3 days</td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-FLUX">Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-FLUX</span><div data-slot="grabstate"></div></td>
+            <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>NZBgeek</td>
+            <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>21.7 GB</td>
+            <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>1,208</td>
+            <td data-col="peers" class="is-num muted" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>n/a</td>
+            <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/UHD</td>
+            <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span>None</td>
+            <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
+              <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
+              <a class="btn btn--icon btn--sm" href="#" title="Open the NZBgeek page for this release, in a new tab" aria-label="Open the NZBgeek page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
-          <tr data-when="expired" hidden role="row">
-            <td data-label="Select" class="muted" role="cell" aria-colindex="1">n/a</td>
-            <td data-label="Protocol" role="cell" aria-colindex="2"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
-            <td data-label="Age" class="is-num" role="cell" aria-colindex="3">3 days</td>
-            <td data-label="Title" role="cell" aria-colindex="4"><span class="mono">Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-FLUX</span><div data-slot="grabstate"><span class="chip">grab window closed 4 minutes ago</span></div></td>
-            <td data-label="Indexer" class="mono" role="cell" aria-colindex="5">NZBgeek</td>
-            <td data-label="Size" class="is-num" role="cell" aria-colindex="6">21.7 GB</td>
-            <td data-label="Grabs" class="is-num" role="cell" aria-colindex="7">1,208</td>
-            <td data-label="Peers" class="is-num muted" role="cell" aria-colindex="8">n/a</td>
-            <td data-label="Category" role="cell" aria-colindex="9">Movies/UHD</td>
-            <td data-label="Indexer flags" class="muted" role="cell" aria-colindex="10">None</td>
-            <td data-label="Actions" role="cell" aria-colindex="11"><div class="cell-actions">
+          <tr data-when="expired" hidden role="row" aria-rowindex="5">
+            <td data-col="select" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span>n/a</td>
+            <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>3 days</td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-FLUX">Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-FLUX</span><div data-slot="grabstate"><span class="chip">grab window closed 4 minutes ago</span></div></td>
+            <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>NZBgeek</td>
+            <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>21.7 GB</td>
+            <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>1,208</td>
+            <td data-col="peers" class="is-num muted" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>n/a</td>
+            <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/UHD</td>
+            <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span>None</td>
+            <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
               <button type="button" class="btn btn--sm">Search again</button>
-              <a href="#" aria-label="Open the NZBgeek page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+              <a class="btn btn--icon btn--sm" href="#" title="Open the NZBgeek page for this release, in a new tab" aria-label="Open the NZBgeek page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
-          <tr data-when="live denied" role="row">
-            <td data-label="Select" role="cell" aria-colindex="1"><label class="sr" for="r3">Select this release</label><input type="checkbox" id="r3" data-act="rowselect"></td>
-            <td data-label="Protocol" role="cell" aria-colindex="2"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
-            <td data-label="Age" class="is-num" role="cell" aria-colindex="3">4 days</td>
-            <td data-label="Title" role="cell" aria-colindex="4"><span class="mono">Dune.Part.Two.2024.1080p.BluRay.x264-SbR</span><div data-slot="grabstate"></div></td>
-            <td data-label="Indexer" class="mono" role="cell" aria-colindex="5">TorrentDay</td>
-            <td data-label="Size" class="is-num" role="cell" aria-colindex="6">12.1 GB</td>
-            <td data-label="Grabs" class="is-num" role="cell" aria-colindex="7">512</td>
-            <td data-label="Peers" class="is-num" role="cell" aria-colindex="8">122 / 18</td>
-            <td data-label="Category" role="cell" aria-colindex="9">Movies/HD</td>
-            <td data-label="Indexer flags" class="muted" role="cell" aria-colindex="10">None</td>
-            <td data-label="Actions" role="cell" aria-colindex="11"><div class="cell-actions">
-              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open the TorrentDay page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+          <tr data-when="live denied" role="row" aria-rowindex="6">
+            <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r3">Select this release</label><input type="checkbox" id="r3" data-act="rowselect"></td>
+            <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>4 days</td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.1080p.BluRay.x264-SbR">Dune.Part.Two.2024.1080p.BluRay.x264-SbR</span><div data-slot="grabstate"></div></td>
+            <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>TorrentDay</td>
+            <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>12.1 GB</td>
+            <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>512</td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>122 / 18<span class="sr"> — 122 seeders, 18 leechers</span></td>
+            <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/HD</td>
+            <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span>None</td>
+            <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
+              <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
+              <a class="btn btn--icon btn--sm" href="#" title="Open the TorrentDay page for this release, in a new tab" aria-label="Open the TorrentDay page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
-          <tr data-when="live partial denied" role="row">
-            <td data-label="Select" role="cell" aria-colindex="1"><label class="sr" for="r4">Select this release</label><input type="checkbox" id="r4" data-act="rowselect"></td>
-            <td data-label="Protocol" role="cell" aria-colindex="2"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
-            <td data-label="Age" class="is-num" role="cell" aria-colindex="3">6 days</td>
-            <td data-label="Title" role="cell" aria-colindex="4"><span class="mono">Dune.Part.Two.2024.1080p.BluRay.DDP5.1.x264-NTb</span><div data-slot="grabstate"></div></td>
-            <td data-label="Indexer" class="mono" role="cell" aria-colindex="5">DrunkenSlug</td>
-            <td data-label="Size" class="is-num" role="cell" aria-colindex="6">14.9 GB</td>
-            <td data-label="Grabs" class="is-num" role="cell" aria-colindex="7">306</td>
-            <td data-label="Peers" class="is-num muted" role="cell" aria-colindex="8">n/a</td>
-            <td data-label="Category" role="cell" aria-colindex="9">Movies/HD</td>
-            <td data-label="Indexer flags" class="muted" role="cell" aria-colindex="10">None</td>
-            <td data-label="Actions" role="cell" aria-colindex="11"><div class="cell-actions">
-              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open the DrunkenSlug page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+          <tr data-when="live partial denied" role="row" aria-rowindex="7">
+            <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r4">Select this release</label><input type="checkbox" id="r4" data-act="rowselect"></td>
+            <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>6 days</td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.1080p.BluRay.DDP5.1.x264-NTb">Dune.Part.Two.2024.1080p.BluRay.DDP5.1.x264-NTb</span><div data-slot="grabstate"></div></td>
+            <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>DrunkenSlug</td>
+            <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>14.9 GB</td>
+            <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>306</td>
+            <td data-col="peers" class="is-num muted" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>n/a</td>
+            <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/HD</td>
+            <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span>None</td>
+            <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
+              <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
+              <a class="btn btn--icon btn--sm" href="#" title="Open the DrunkenSlug page for this release, in a new tab" aria-label="Open the DrunkenSlug page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
           <!-- Already acknowledged: the write queue holds it, and the chip
                says so rather than claiming the grab has landed. -->
-          <tr data-when="live partial denied" role="row">
-            <td data-label="Select" role="cell" aria-colindex="1"><label class="sr" for="r5">Select this release</label><input type="checkbox" id="r5" data-act="rowselect"></td>
-            <td data-label="Protocol" role="cell" aria-colindex="2"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
-            <td data-label="Age" class="is-num" role="cell" aria-colindex="3">8 days</td>
-            <td data-label="Title" role="cell" aria-colindex="4"><span class="mono">Dune.Part.Two.2024.REPACK.1080p.WEB-DL.DDP5.1.Atmos.H.264-FLUX</span><div data-slot="grabstate"><span class="chip chip--pending">pending</span></div></td>
-            <td data-label="Indexer" class="mono" role="cell" aria-colindex="5">IPTorrents</td>
-            <td data-label="Size" class="is-num" role="cell" aria-colindex="6">8.6 GB</td>
-            <td data-label="Grabs" class="is-num" role="cell" aria-colindex="7">98</td>
-            <td data-label="Peers" class="is-num" role="cell" aria-colindex="8">64 / 5</td>
-            <td data-label="Category" role="cell" aria-colindex="9">Movies/HD</td>
-            <td data-label="Indexer flags" role="cell" aria-colindex="10"><span class="chip">repack</span></td>
-            <td data-label="Actions" role="cell" aria-colindex="11"><div class="cell-actions">
-              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release" disabled><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open the IPTorrents page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+          <tr data-when="live partial denied" role="row" aria-rowindex="8">
+            <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r5">Select this release</label><input type="checkbox" id="r5" data-act="rowselect"></td>
+            <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>8 days</td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.REPACK.1080p.WEB-DL.DDP5.1.Atmos.H.264-FLUX">Dune.Part.Two.2024.REPACK.1080p.WEB-DL.DDP5.1.Atmos.H.264-FLUX</span><div data-slot="grabstate"><span class="chip chip--pending">pending</span></div></td>
+            <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>IPTorrents</td>
+            <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>8.6 GB</td>
+            <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>98</td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>64 / 5<span class="sr"> — 64 seeders, 5 leechers</span></td>
+            <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/HD</td>
+            <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip">repack</span></td>
+            <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
+              <button type="button" class="btn btn--sm" data-act="grab" aria-disabled="true"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
+              <a class="btn btn--icon btn--sm" href="#" title="Open the IPTorrents page for this release, in a new tab" aria-label="Open the IPTorrents page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
           <!-- verifying: it might have landed. Distinct from failed. -->
-          <tr data-when="live" role="row">
-            <td data-label="Select" role="cell" aria-colindex="1"><label class="sr" for="r6">Select this release</label><input type="checkbox" id="r6" data-act="rowselect"></td>
-            <td data-label="Protocol" role="cell" aria-colindex="2"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
-            <td data-label="Age" class="is-num" role="cell" aria-colindex="3">11 days</td>
-            <td data-label="Title" role="cell" aria-colindex="4"><span class="mono">Dune.Part.Two.2024.2160p.WEB-DL.DV.HDR.DDP5.1.Atmos.H.265-NTb</span><div data-slot="grabstate"><span class="chip chip--pending">verifying, might have landed</span></div></td>
-            <td data-label="Indexer" class="mono" role="cell" aria-colindex="5">PassThePopcorn</td>
-            <td data-label="Size" class="is-num" role="cell" aria-colindex="6">24.3 GB</td>
-            <td data-label="Grabs" class="is-num" role="cell" aria-colindex="7">77</td>
-            <td data-label="Peers" class="is-num" role="cell" aria-colindex="8">19 / 2</td>
-            <td data-label="Category" role="cell" aria-colindex="9">Movies/UHD</td>
-            <td data-label="Indexer flags" role="cell" aria-colindex="10"><span class="chip">internal</span></td>
-            <td data-label="Actions" role="cell" aria-colindex="11"><div class="cell-actions">
-              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release" disabled><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open the PassThePopcorn page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+          <tr data-when="live" role="row" aria-rowindex="9">
+            <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r6">Select this release</label><input type="checkbox" id="r6" data-act="rowselect"></td>
+            <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>11 days</td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.2160p.WEB-DL.DV.HDR.DDP5.1.Atmos.H.265-NTb">Dune.Part.Two.2024.2160p.WEB-DL.DV.HDR.DDP5.1.Atmos.H.265-NTb</span><div data-slot="grabstate"><span class="chip chip--pending">verifying, might have landed</span></div></td>
+            <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>PassThePopcorn</td>
+            <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>24.3 GB</td>
+            <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>77</td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>19 / 2<span class="sr"> — 19 seeders, 2 leechers</span></td>
+            <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/UHD</td>
+            <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip">internal</span></td>
+            <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
+              <button type="button" class="btn btn--sm" data-act="grab" aria-disabled="true"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
+              <a class="btn btn--icon btn--sm" href="#" title="Open the PassThePopcorn page for this release, in a new tab" aria-label="Open the PassThePopcorn page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
-          <tr data-when="live denied" role="row">
-            <td data-label="Select" role="cell" aria-colindex="1"><label class="sr" for="r7">Select this release</label><input type="checkbox" id="r7" data-act="rowselect"></td>
-            <td data-label="Protocol" role="cell" aria-colindex="2"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
-            <td data-label="Age" class="is-num" role="cell" aria-colindex="3">14 days</td>
-            <td data-label="Title" role="cell" aria-colindex="4"><span class="mono">Dune.Part.Two.2024.720p.WEBRip.x264-GalaxyRG</span><div data-slot="grabstate"></div></td>
-            <td data-label="Indexer" class="mono" role="cell" aria-colindex="5">NZBFinder</td>
-            <td data-label="Size" class="is-num" role="cell" aria-colindex="6">1.4 GB</td>
-            <td data-label="Grabs" class="is-num" role="cell" aria-colindex="7">41</td>
-            <td data-label="Peers" class="is-num muted" role="cell" aria-colindex="8">n/a</td>
-            <td data-label="Category" role="cell" aria-colindex="9">Movies/HD</td>
-            <td data-label="Indexer flags" class="muted" role="cell" aria-colindex="10">None</td>
-            <td data-label="Actions" role="cell" aria-colindex="11"><div class="cell-actions">
-              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open the NZBFinder page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+          <tr data-when="live denied" role="row" aria-rowindex="10">
+            <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r7">Select this release</label><input type="checkbox" id="r7" data-act="rowselect"></td>
+            <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>14 days</td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.720p.WEBRip.x264-GalaxyRG">Dune.Part.Two.2024.720p.WEBRip.x264-GalaxyRG</span><div data-slot="grabstate"></div></td>
+            <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>NZBFinder</td>
+            <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>1.4 GB</td>
+            <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>41</td>
+            <td data-col="peers" class="is-num muted" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>n/a</td>
+            <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/HD</td>
+            <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span>None</td>
+            <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
+              <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
+              <a class="btn btn--icon btn--sm" href="#" title="Open the NZBFinder page for this release, in a new tab" aria-label="Open the NZBFinder page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
-          <tr data-when="live partial denied" role="row">
-            <td data-label="Select" role="cell" aria-colindex="1"><label class="sr" for="r8">Select this release</label><input type="checkbox" id="r8" data-act="rowselect"></td>
-            <td data-label="Protocol" role="cell" aria-colindex="2"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
-            <td data-label="Age" class="is-num" role="cell" aria-colindex="3">21 days</td>
-            <td data-label="Title" role="cell" aria-colindex="4"><span class="mono">Dune.Part.Two.2024.1080p.AMZN.WEB-DL.DDP5.1.H.264-FLUX</span><div data-slot="grabstate"></div></td>
-            <td data-label="Indexer" class="mono" role="cell" aria-colindex="5">TorrentLeech</td>
-            <td data-label="Size" class="is-num" role="cell" aria-colindex="6">9.2 GB</td>
-            <td data-label="Grabs" class="is-num" role="cell" aria-colindex="7">402</td>
-            <td data-label="Peers" class="is-num" role="cell" aria-colindex="8">88 / 11</td>
-            <td data-label="Category" role="cell" aria-colindex="9">Movies/HD</td>
-            <td data-label="Indexer flags" class="muted" role="cell" aria-colindex="10">None</td>
-            <td data-label="Actions" role="cell" aria-colindex="11"><div class="cell-actions">
-              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open the TorrentLeech page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+          <tr data-when="live partial denied" role="row" aria-rowindex="11">
+            <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r8">Select this release</label><input type="checkbox" id="r8" data-act="rowselect"></td>
+            <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>21 days</td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.1080p.AMZN.WEB-DL.DDP5.1.H.264-FLUX">Dune.Part.Two.2024.1080p.AMZN.WEB-DL.DDP5.1.H.264-FLUX</span><div data-slot="grabstate"></div></td>
+            <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>TorrentLeech</td>
+            <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>9.2 GB</td>
+            <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>402</td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>88 / 11<span class="sr"> — 88 seeders, 11 leechers</span></td>
+            <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/HD</td>
+            <td data-col="indexer-flags" class="muted" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span>None</td>
+            <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
+              <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
+              <a class="btn btn--icon btn--sm" href="#" title="Open the TorrentLeech page for this release, in a new tab" aria-label="Open the TorrentLeech page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
           <!-- Grabbing this row fails, so the failure path is reachable. -->
-          <tr data-demo="fail" data-when="live denied" role="row">
-            <td data-label="Select" role="cell" aria-colindex="1"><label class="sr" for="r9">Select this release</label><input type="checkbox" id="r9" data-act="rowselect"></td>
-            <td data-label="Protocol" role="cell" aria-colindex="2"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
-            <td data-label="Age" class="is-num" role="cell" aria-colindex="3">26 days</td>
-            <td data-label="Title" role="cell" aria-colindex="4"><span class="mono">Dune.Part.Two.2024.Hybrid.2160p.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-playBD</span><div data-slot="grabstate"></div></td>
-            <td data-label="Indexer" class="mono" role="cell" aria-colindex="5">HDBits</td>
-            <td data-label="Size" class="is-num" role="cell" aria-colindex="6">74.9 GB</td>
-            <td data-label="Grabs" class="is-num" role="cell" aria-colindex="7">12</td>
-            <td data-label="Peers" class="is-num" role="cell" aria-colindex="8">6 / 1</td>
-            <td data-label="Category" role="cell" aria-colindex="9">Movies/UHD</td>
-            <td data-label="Indexer flags" role="cell" aria-colindex="10"><span class="chip">internal</span></td>
-            <td data-label="Actions" role="cell" aria-colindex="11"><div class="cell-actions">
-              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open the HDBits page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+          <tr data-demo="fail" data-when="live denied" role="row" aria-rowindex="12">
+            <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r9">Select this release</label><input type="checkbox" id="r9" data-act="rowselect"></td>
+            <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>26 days</td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.Hybrid.2160p.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-playBD">Dune.Part.Two.2024.Hybrid.2160p.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-playBD</span><div data-slot="grabstate"></div></td>
+            <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>HDBits</td>
+            <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>74.9 GB</td>
+            <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>12</td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>6 / 1<span class="sr"> — 6 seeders, 1 leechers</span></td>
+            <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/UHD</td>
+            <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip">internal</span></td>
+            <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
+              <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
+              <a class="btn btn--icon btn--sm" href="#" title="Open the HDBits page for this release, in a new tab" aria-label="Open the HDBits page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
-          <tr data-when="live denied" role="row">
-            <td data-label="Select" role="cell" aria-colindex="1"><label class="sr" for="r10">Select this release</label><input type="checkbox" id="r10" data-act="rowselect"></td>
-            <td data-label="Protocol" role="cell" aria-colindex="2"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
-            <td data-label="Age" class="is-num" role="cell" aria-colindex="3">31 days</td>
-            <td data-label="Title" role="cell" aria-colindex="4"><span class="mono">Dune.Part.Two.2024.PROPER.1080p.BluRay.DDP5.1.x265.10bit-QxR</span><div data-slot="grabstate"></div></td>
-            <td data-label="Indexer" class="mono" role="cell" aria-colindex="5">abNZB</td>
-            <td data-label="Size" class="is-num" role="cell" aria-colindex="6">6.1 GB</td>
-            <td data-label="Grabs" class="is-num" role="cell" aria-colindex="7">155</td>
-            <td data-label="Peers" class="is-num muted" role="cell" aria-colindex="8">n/a</td>
-            <td data-label="Category" role="cell" aria-colindex="9">Movies/HD</td>
-            <td data-label="Indexer flags" role="cell" aria-colindex="10"><span class="chip">proper</span></td>
-            <td data-label="Actions" role="cell" aria-colindex="11"><div class="cell-actions">
-              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open the abNZB page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+          <tr data-when="live denied" role="row" aria-rowindex="13">
+            <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r10">Select this release</label><input type="checkbox" id="r10" data-act="rowselect"></td>
+            <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>31 days</td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.PROPER.1080p.BluRay.DDP5.1.x265.10bit-QxR">Dune.Part.Two.2024.PROPER.1080p.BluRay.DDP5.1.x265.10bit-QxR</span><div data-slot="grabstate"></div></td>
+            <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>abNZB</td>
+            <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>6.1 GB</td>
+            <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>155</td>
+            <td data-col="peers" class="is-num muted" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>n/a</td>
+            <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Movies/HD</td>
+            <td data-col="indexer-flags" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Indexer flags</span><span class="chip">proper</span></td>
+            <td data-col="actions" role="cell" aria-colindex="11"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
+              <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
+              <a class="btn btn--icon btn--sm" href="#" title="Open the abNZB page for this release, in a new tab" aria-label="Open the abNZB page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
 
@@ -641,6 +716,88 @@
   </div>
 
   <!-- =====================================================================
+       RECENT GRABS. Nothing recorded that a grab had happened. The
+       confirmation lived in the Title cell of a search-result row, and search
+       results are transient: navigate away and come back and it is gone. So
+       UsArr's only write path produced a 68 GB download with no UsArr-side
+       record, no way to tell whether you already grabbed something an hour
+       ago, no way to recover the release name after a restart and no way to
+       answer "did that one work?" -- which sends the user back to Prowlarr's
+       own UI to grab, the outcome this project exists to prevent.
+
+       The vocabulary is the write queue's own, unchanged:
+       pending | inflight | verifying | done | failed. "done" means UsArr
+       handed the release to the download client and the client accepted it.
+       It does not mean the file exists, and nothing here claims to know that,
+       because UsArr does not talk to a download client.
+       ===================================================================== -->
+  <section class="section" id="recent-grabs" data-when="live partial expired denied empty allfail nosink">
+    <div class="section__head">
+      <h2>Recent grabs</h2>
+      <span class="section__count num">6 in the last 7 days</span>
+      <div class="section__actions"><a href="#recent-grabs">Show all</a></div>
+    </div>
+    <div class="tablewrap">
+      <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Recent grabs" style="--cols: 116px minmax(0,3fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.9fr); --row-lines: 2.94" aria-colcount="5" aria-rowcount="7" role="table">
+        <thead role="rowgroup">
+          <tr role="row" aria-rowindex="1">
+            <th scope="col" role="columnheader" aria-colindex="1">When</th>
+            <th scope="col" role="columnheader" aria-colindex="2">Release</th>
+            <th scope="col" role="columnheader" aria-colindex="3">Indexer</th>
+            <th scope="col" role="columnheader" aria-colindex="4">Sent to</th>
+            <th scope="col" role="columnheader" aria-colindex="5">State</th>
+          </tr>
+        </thead>
+        <tbody role="rowgroup">
+          <tr role="row" aria-rowindex="2">
+            <td data-col="when" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">When</span>14:07<div class="cell-sub">1 minute ago</div></td>
+            <td data-col="release" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Release</span><span class="mono trunc" title="David Grann - The Wager {Dion Graham} [2023] M4B 125kbps">David Grann - The Wager {Dion Graham} [2023] M4B 125kbps</span></td>
+            <td data-col="indexer" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Indexer</span>MyAnonaMouse</td>
+            <td data-col="sent-to" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Sent to</span>qBittorrent</td>
+            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip chip--done">done</span><div class="cell-sub">accepted by the client. Nothing imports an audiobook here.</div></td>
+          </tr>
+          <tr role="row" aria-rowindex="3">
+            <td data-col="when" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">When</span>14:05<div class="cell-sub">3 minutes ago</div></td>
+            <td data-col="release" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Release</span><span class="mono trunc" title="Dune.Part.Two.2024.REPACK.1080p.WEB-DL.DDP5.1.Atmos.H.264-FLUX">Dune.Part.Two.2024.REPACK.1080p.WEB-DL.DDP5.1.Atmos.H.264-FLUX</span></td>
+            <td data-col="indexer" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Indexer</span>IPTorrents</td>
+            <td data-col="sent-to" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Sent to</span>qBittorrent</td>
+            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip chip--pending">pending</span><div class="cell-sub">queued in UsArr, not sent yet</div></td>
+          </tr>
+          <tr role="row" aria-rowindex="4">
+            <td data-col="when" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">When</span>14:04<div class="cell-sub">4 minutes ago</div></td>
+            <td data-col="release" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Release</span><span class="mono trunc" title="Dune.Part.Two.2024.2160p.WEB-DL.DV.HDR.DDP5.1.Atmos.H.265-NTb">Dune.Part.Two.2024.2160p.WEB-DL.DV.HDR.DDP5.1.Atmos.H.265-NTb</span></td>
+            <td data-col="indexer" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Indexer</span>PassThePopcorn</td>
+            <td data-col="sent-to" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Sent to</span>qBittorrent</td>
+            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip chip--pending">verifying</span><div class="cell-sub">the call timed out after the write; it might have landed</div></td>
+          </tr>
+          <tr role="row" aria-rowindex="5">
+            <td data-col="when" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">When</span>13:58<div class="cell-sub">10 minutes ago</div></td>
+            <td data-col="release" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Release</span><span class="mono trunc" title="Dune.Part.Two.2024.Hybrid.2160p.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-playBD">Dune.Part.Two.2024.Hybrid.2160p.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-playBD</span></td>
+            <td data-col="indexer" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Indexer</span>HDBits</td>
+            <td data-col="sent-to" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Sent to</span><span class="muted">—</span></td>
+            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip chip--failed">failed</span><div class="cell-sub">the grab window had expired. Search again to grab it.</div></td>
+          </tr>
+          <tr role="row" aria-rowindex="6">
+            <td data-col="when" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">When</span>13:41<div class="cell-sub">27 minutes ago</div></td>
+            <td data-col="release" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Release</span><span class="mono trunc" title="Shogun.S01.1080p.DSNP.WEB-DL.DDP5.1.Atmos.H.264-FLUX">Shogun.S01.1080p.DSNP.WEB-DL.DDP5.1.Atmos.H.264-FLUX</span></td>
+            <td data-col="indexer" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Indexer</span>NZBgeek</td>
+            <td data-col="sent-to" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Sent to</span>SABnzbd</td>
+            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip chip--pending">inflight</span><div class="cell-sub">handed to Prowlarr, waiting for its answer</div></td>
+          </tr>
+          <tr role="row" aria-rowindex="7">
+            <td data-col="when" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">When</span>15 Aug 2026, 22:12<div class="cell-sub">yesterday</div></td>
+            <td data-col="release" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Release</span><span class="mono trunc" title="Boards.of.Canada-Geogaddi-2002-FLAC-16bit-44.1kHz">Boards.of.Canada-Geogaddi-2002-FLAC-16bit-44.1kHz</span></td>
+            <td data-col="indexer" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Indexer</span>Redacted</td>
+            <td data-col="sent-to" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Sent to</span>qBittorrent</td>
+            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip chip--done">done</span><div class="cell-sub">accepted by the client. Nothing imports music here.</div></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note" style="padding-top:8px"><span class="statebar__tag">mockup</span> <span class="mono">done</span> means the download client accepted the release. It does not mean the file exists, is complete, or has been imported by anything: UsArr does not talk to a download client and will not draw a progress bar over a thing it cannot measure. The five states are the write queue's own — <span class="mono">pending</span>, <span class="mono">inflight</span>, <span class="mono">verifying</span>, <span class="mono">done</span>, <span class="mono">failed</span> — and <span class="mono">verifying</span> exists because a call that times out after the write may still have succeeded.</p>
+  </section>
+
+  <!-- =====================================================================
        The honest dead end, and in v0.1 it is the ordinary case rather than
        the exception. ARCHITECTURE.md 16 gives v0.1 no command sinks at all,
        Readarr was archived on 2025-06-27, and nothing connected here accepts a
@@ -651,7 +808,7 @@
   <div data-when="nosink" hidden>
     <form class="toolbar" onsubmit="return false">
       <label class="toolbar__label" for="q2">Query</label>
-      <input class="input" id="q2" type="search" value="the wager david grann" style="flex:1 1 200px">
+      <input class="input f-query" id="q2" type="search" value="the wager david grann">
 
       <label class="toolbar__label" for="stype2">Search type</label>
       <select class="select" id="stype2">
@@ -663,7 +820,7 @@
       </select>
 
       <label class="toolbar__label" for="indexers2">Indexers</label>
-      <select class="select" id="indexers2" multiple size="3" style="flex:0 1 190px">
+      <select class="select f-list" id="indexers2" multiple size="3">
         <optgroup label="Torrents">
           <option selected>MyAnonaMouse</option>
           <option selected>Bibliotik</option>
@@ -676,8 +833,8 @@
         </optgroup>
       </select>
 
-      <label class="toolbar__label" for="cats2">Category</label>
-      <select class="select" id="cats2" multiple size="3" style="flex:0 1 210px">
+      <label class="toolbar__label" for="cats2">Categories</label>
+      <select class="select f-list f-list--wide" id="cats2" multiple size="3">
         <optgroup label="Audio">
           <option selected>3030 Audio/Audiobook</option>
           <option>3000 Audio</option>
@@ -697,13 +854,13 @@
       <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
       <div class="banner__body">
         <div class="banner__title">Nothing on this install imports a book, so a grab ends in your download client</div>
-        <div class="banner__text">Neither Audiobooks nor Ebooks has a request destination, and neither does Music or Comics: v0.1 connects no command sink, and Readarr — the *Arr that used to own books — was archived on 27 June 2025. Grabbing works and the file will download; after that no service renames it, moves it into a library, or tells UsArr what became of it. Audiobookshelf will show the book once the file is in <span class="mono">/media/books</span>, which is the folder it reports as watched for this library.</div>
+        <div class="banner__text">Neither Audiobooks nor Ebooks has a request destination, and neither does Music or Comics: v0.1 connects no command sink, and Readarr — the *Arr that used to own books — was archived on 27 Jun 2025. Grabbing works and the file will download; after that no service renames it, moves it into a library, or tells UsArr what became of it. Audiobookshelf will show the book once the file is in <span class="mono">/media/books</span>, which is the folder it reports as watched for this library.</div>
       </div>
       <div class="banner__actions"><a href="libraries.html">Open Libraries</a></div>
     </div>
 
-    <div class="fanout" role="status">
-      <span class="fanout__count" aria-live="polite">5 of 5</span> indexers responded
+    <div class="fanout" role="status" aria-atomic="true">
+      <span class="fanout__count">5 of 5</span> indexers responded
       <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:100%"></span></span>
       <span>38 releases, 6 shown after de-duplication</span>
     </div>
@@ -713,13 +870,13 @@
       <button type="button" class="btn">Filter</button>
       <button type="button" class="btn">Options</button>
       <div class="toolbar__spacer"></div>
-      <span class="toolbar__label">Sorted by Age ascending. The grab window closes in <span class="num">27</span> minutes.</span>
+      <span class="toolbar__label">Sorted by age, newest first. The grab window closes in <span class="num">27</span> minutes.</span>
     </div>
 
     <div class="tablewrap">
-      <table class="tbl tbl--stack" aria-label="Audiobook release results" data-watched-default="Audiobookshelf watches /media/books and will show it once the file is there." style="--cols: 60px 88px 80px minmax(0,3fr) minmax(0,1.1fr) 80px 68px 84px minmax(0,1fr) 80px; --row-lines: 2.37" aria-colcount="10" role="table">
+      <table aria-rowcount="7" class="tbl tbl--stack" data-roving="tbody tr" data-media="audiobook" aria-label="Audiobook release results" style="--cols: 60px 88px 80px minmax(0,3fr) minmax(0,1.1fr) 80px 68px 84px minmax(0,1fr) minmax(max-content,auto); --row-lines: 1.39" aria-colcount="10" role="table">
         <thead role="rowgroup">
-          <tr role="row">
+          <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Select</th>
             <th scope="col" role="columnheader" aria-colindex="2">Protocol</th>
             <th scope="col" class="is-num" role="columnheader" aria-colindex="3">Age</th>
@@ -736,104 +893,164 @@
           <!-- The grab that already happened. It says what is true and stops:
                sent to a download client, and no importer exists. There is no
                progress bar, because UsArr has nothing to measure. -->
-          <tr role="row">
-            <td data-label="Select" class="muted" role="cell" aria-colindex="1">n/a</td>
-            <td data-label="Protocol" role="cell" aria-colindex="2"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
-            <td data-label="Age" class="is-num" role="cell" aria-colindex="3">3 years</td>
-            <td data-label="Title" role="cell" aria-colindex="4"><span class="mono">David Grann - The Wager {Dion Graham} [2023] M4B 125kbps</span><div data-slot="grabstate"><span class="chip chip--done">grabbed 14:07 · sent to qBittorrent</span><div class="cell-sub">UsArr does not import downloads. Audiobookshelf watches <span class="mono">/media/books</span> and will show it once the file is there.</div></div></td>
-            <td data-label="Indexer" class="mono" role="cell" aria-colindex="5">MyAnonaMouse</td>
-            <td data-label="Size" class="is-num" role="cell" aria-colindex="6">682 MB</td>
-            <td data-label="Grabs" class="is-num" role="cell" aria-colindex="7">1,904</td>
-            <td data-label="Peers" class="is-num" role="cell" aria-colindex="8">62 / 3</td>
-            <td data-label="Category" role="cell" aria-colindex="9">Audio/Audiobook</td>
-            <td data-label="Actions" role="cell" aria-colindex="10"><div class="cell-actions">
-              <button type="button" class="btn btn--icon btn--sm" aria-label="Grab this release" disabled><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open the MyAnonaMouse page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+          <tr role="row" aria-rowindex="2">
+            <td data-col="select" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span>n/a</td>
+            <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>3 years</td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="David Grann - The Wager {Dion Graham} [2023] M4B 125kbps">David Grann - The Wager {Dion Graham} [2023] M4B 125kbps</span><div data-slot="grabstate"><span class="chip chip--done">grabbed 14:07 · sent to qBittorrent</span><div class="cell-sub">UsArr does not import downloads. Audiobookshelf watches <span class="mono">/media/books</span> and will show it once the file is there.</div></div></td>
+            <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>MyAnonaMouse</td>
+            <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>682 MB</td>
+            <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>1,904</td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>62 / 3<span class="sr"> — 62 seeders, 3 leechers</span></td>
+            <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Audio/Audiobook</td>
+            <td data-col="actions" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
+              <button type="button" class="btn btn--sm" aria-disabled="true"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
+              <a class="btn btn--icon btn--sm" href="#" title="Open the MyAnonaMouse page for this release, in a new tab" aria-label="Open the MyAnonaMouse page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
-          <tr role="row">
-            <td data-label="Select" role="cell" aria-colindex="1"><label class="sr" for="a2">Select this release</label><input type="checkbox" id="a2" data-act="rowselect"></td>
-            <td data-label="Protocol" role="cell" aria-colindex="2"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
-            <td data-label="Age" class="is-num" role="cell" aria-colindex="3">3 years</td>
-            <td data-label="Title" role="cell" aria-colindex="4"><span class="mono">The.Wager.A.Tale.of.Shipwreck.Mutiny.and.Murder.2023.Unabridged.M4B.64k.Dion.Graham</span><div data-slot="grabstate"></div></td>
-            <td data-label="Indexer" class="mono" role="cell" aria-colindex="5">NZBgeek</td>
-            <td data-label="Size" class="is-num" role="cell" aria-colindex="6">246 MB</td>
-            <td data-label="Grabs" class="is-num" role="cell" aria-colindex="7">308</td>
-            <td data-label="Peers" class="is-num muted" role="cell" aria-colindex="8">n/a</td>
-            <td data-label="Category" role="cell" aria-colindex="9">Audio/Audiobook</td>
-            <td data-label="Actions" role="cell" aria-colindex="10"><div class="cell-actions">
-              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open the NZBgeek page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+          <tr role="row" aria-rowindex="3">
+            <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="a2">Select this release</label><input type="checkbox" id="a2" data-act="rowselect"></td>
+            <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>3 years</td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="The.Wager.A.Tale.of.Shipwreck.Mutiny.and.Murder.2023.Unabridged.M4B.64k.Dion.Graham">The.Wager.A.Tale.of.Shipwreck.Mutiny.and.Murder.2023.Unabridged.M4B.64k.Dion.Graham</span><div data-slot="grabstate"></div></td>
+            <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>NZBgeek</td>
+            <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>246 MB</td>
+            <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>308</td>
+            <td data-col="peers" class="is-num muted" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>n/a</td>
+            <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Audio/Audiobook</td>
+            <td data-col="actions" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
+              <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
+              <a class="btn btn--icon btn--sm" href="#" title="Open the NZBgeek page for this release, in a new tab" aria-label="Open the NZBgeek page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
-          <tr role="row">
-            <td data-label="Select" role="cell" aria-colindex="1"><label class="sr" for="a3">Select this release</label><input type="checkbox" id="a3" data-act="rowselect"></td>
-            <td data-label="Protocol" role="cell" aria-colindex="2"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
-            <td data-label="Age" class="is-num" role="cell" aria-colindex="3">2 years</td>
-            <td data-label="Title" role="cell" aria-colindex="4"><span class="mono">David Grann - The Wager [2023] MP3 64kbps CBR {Dion Graham}</span><div data-slot="grabstate"></div></td>
-            <td data-label="Indexer" class="mono" role="cell" aria-colindex="5">MyAnonaMouse</td>
-            <td data-label="Size" class="is-num" role="cell" aria-colindex="6">241 MB</td>
-            <td data-label="Grabs" class="is-num" role="cell" aria-colindex="7">612</td>
-            <td data-label="Peers" class="is-num" role="cell" aria-colindex="8">18 / 1</td>
-            <td data-label="Category" role="cell" aria-colindex="9">Audio/Audiobook</td>
-            <td data-label="Actions" role="cell" aria-colindex="10"><div class="cell-actions">
-              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open the MyAnonaMouse page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+          <tr role="row" aria-rowindex="4">
+            <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="a3">Select this release</label><input type="checkbox" id="a3" data-act="rowselect"></td>
+            <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>2 years</td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="David Grann - The Wager [2023] MP3 64kbps CBR {Dion Graham}">David Grann - The Wager [2023] MP3 64kbps CBR {Dion Graham}</span><div data-slot="grabstate"></div></td>
+            <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>MyAnonaMouse</td>
+            <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>241 MB</td>
+            <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>612</td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>18 / 1<span class="sr"> — 18 seeders, 1 leechers</span></td>
+            <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Audio/Audiobook</td>
+            <td data-col="actions" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
+              <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
+              <a class="btn btn--icon btn--sm" href="#" title="Open the MyAnonaMouse page for this release, in a new tab" aria-label="Open the MyAnonaMouse page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
-          <tr role="row">
-            <td data-label="Select" role="cell" aria-colindex="1"><label class="sr" for="a4">Select this release</label><input type="checkbox" id="a4" data-act="rowselect"></td>
-            <td data-label="Protocol" role="cell" aria-colindex="2"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
-            <td data-label="Age" class="is-num" role="cell" aria-colindex="3">3 years</td>
-            <td data-label="Title" role="cell" aria-colindex="4"><span class="mono">David.Grann-The.Wager-2023-Retail-M4B</span><div data-slot="grabstate"></div></td>
-            <td data-label="Indexer" class="mono" role="cell" aria-colindex="5">abNZB</td>
-            <td data-label="Size" class="is-num" role="cell" aria-colindex="6">701 MB</td>
-            <td data-label="Grabs" class="is-num" role="cell" aria-colindex="7">96</td>
-            <td data-label="Peers" class="is-num muted" role="cell" aria-colindex="8">n/a</td>
-            <td data-label="Category" role="cell" aria-colindex="9">Audio/Audiobook</td>
-            <td data-label="Actions" role="cell" aria-colindex="10"><div class="cell-actions">
-              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open the abNZB page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+          <tr role="row" aria-rowindex="5">
+            <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="a4">Select this release</label><input type="checkbox" id="a4" data-act="rowselect"></td>
+            <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>3 years</td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="David.Grann-The.Wager-2023-Retail-M4B">David.Grann-The.Wager-2023-Retail-M4B</span><div data-slot="grabstate"></div></td>
+            <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>abNZB</td>
+            <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>701 MB</td>
+            <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>96</td>
+            <td data-col="peers" class="is-num muted" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>n/a</td>
+            <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Audio/Audiobook</td>
+            <td data-col="actions" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
+              <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
+              <a class="btn btn--icon btn--sm" href="#" title="Open the abNZB page for this release, in a new tab" aria-label="Open the abNZB page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
           <!-- Selecting both 3030 and 7020 is deliberate: the ebook and the
                audiobook are two editions of one work, and only the category
                tells them apart. -->
-          <tr role="row">
-            <td data-label="Select" role="cell" aria-colindex="1"><label class="sr" for="a5">Select this release</label><input type="checkbox" id="a5" data-act="rowselect"></td>
-            <td data-label="Protocol" role="cell" aria-colindex="2"><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
-            <td data-label="Age" class="is-num" role="cell" aria-colindex="3">3 years</td>
-            <td data-label="Title" role="cell" aria-colindex="4"><span class="mono">David Grann - The Wager (Doubleday, 2023) [EPUB]</span><div data-slot="grabstate"></div></td>
-            <td data-label="Indexer" class="mono" role="cell" aria-colindex="5">Bibliotik</td>
-            <td data-label="Size" class="is-num" role="cell" aria-colindex="6">4.2 MB</td>
-            <td data-label="Grabs" class="is-num" role="cell" aria-colindex="7">241</td>
-            <td data-label="Peers" class="is-num" role="cell" aria-colindex="8">9 / 0</td>
-            <td data-label="Category" role="cell" aria-colindex="9">Books/EBook</td>
-            <td data-label="Actions" role="cell" aria-colindex="10"><div class="cell-actions">
-              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open the Bibliotik page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+          <tr role="row" aria-rowindex="6">
+            <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="a5">Select this release</label><input type="checkbox" id="a5" data-act="rowselect"></td>
+            <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent"><span class="proto__dot"></span>torrent</span></td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>3 years</td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="David Grann - The Wager (Doubleday, 2023) [EPUB]">David Grann - The Wager (Doubleday, 2023) [EPUB]</span><div data-slot="grabstate"></div></td>
+            <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>Bibliotik</td>
+            <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>4.2 MB</td>
+            <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>241</td>
+            <td data-col="peers" class="is-num" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>9 / 0<span class="sr"> — 9 seeders, 0 leechers</span></td>
+            <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Books/EBook</td>
+            <td data-col="actions" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
+              <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
+              <a class="btn btn--icon btn--sm" href="#" title="Open the Bibliotik page for this release, in a new tab" aria-label="Open the Bibliotik page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
-          <tr role="row">
-            <td data-label="Select" role="cell" aria-colindex="1"><label class="sr" for="a6">Select this release</label><input type="checkbox" id="a6" data-act="rowselect"></td>
-            <td data-label="Protocol" role="cell" aria-colindex="2"><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
-            <td data-label="Age" class="is-num" role="cell" aria-colindex="3">11 months</td>
-            <td data-label="Title" role="cell" aria-colindex="4"><span class="mono">The.Wager.David.Grann.2023.Retail.EPUB.MOBI</span><div data-slot="grabstate"></div></td>
-            <td data-label="Indexer" class="mono" role="cell" aria-colindex="5">DrunkenSlug</td>
-            <td data-label="Size" class="is-num" role="cell" aria-colindex="6">7.8 MB</td>
-            <td data-label="Grabs" class="is-num" role="cell" aria-colindex="7">54</td>
-            <td data-label="Peers" class="is-num muted" role="cell" aria-colindex="8">n/a</td>
-            <td data-label="Category" role="cell" aria-colindex="9">Books/EBook</td>
-            <td data-label="Actions" role="cell" aria-colindex="10"><div class="cell-actions">
-              <button type="button" class="btn btn--icon btn--sm" data-act="grab" aria-label="Grab this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg></button>
-              <a href="#" aria-label="Open the DrunkenSlug page for this release"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
+          <tr role="row" aria-rowindex="7">
+            <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="a6">Select this release</label><input type="checkbox" id="a6" data-act="rowselect"></td>
+            <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--usenet"><span class="proto__dot"></span>usenet</span></td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>11 months</td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="The.Wager.David.Grann.2023.Retail.EPUB.MOBI">The.Wager.David.Grann.2023.Retail.EPUB.MOBI</span><div data-slot="grabstate"></div></td>
+            <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>DrunkenSlug</td>
+            <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>7.8 MB</td>
+            <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>54</td>
+            <td data-col="peers" class="is-num muted" role="cell" aria-colindex="8"><span class="stacklabel" aria-hidden="true">Peers</span>n/a</td>
+            <td data-col="category" role="cell" aria-colindex="9"><span class="stacklabel" aria-hidden="true">Category</span>Books/EBook</td>
+            <td data-col="actions" role="cell" aria-colindex="10"><span class="stacklabel" aria-hidden="true">Actions</span><div class="cell-actions">
+              <button type="button" class="btn btn--sm" data-act="grab"><svg class="i i--sm" aria-hidden="true"><use href="#i-download"/></svg>Grab</button>
+              <a class="btn btn--icon btn--sm" href="#" title="Open the DrunkenSlug page for this release, in a new tab" aria-label="Open the DrunkenSlug page for this release, in a new tab"><svg class="i i--sm" aria-hidden="true"><use href="#i-external"/></svg></a>
             </div></td>
           </tr>
         </tbody>
       </table>
     </div>
 
-    <p class="section note"><span class="statebar__tag">mockup</span> The first row is the whole point of this state. It reads <span class="chip chip--done">grabbed 14:07 · sent to qBittorrent</span>, names the watched folder, says in words that UsArr does not import downloads, and then it stops. There is no progress bar, no percentage and no "importing" step, because nothing on this install imports a book and UsArr would have nothing to measure. Four of the six media types here are in exactly this position; the *Arr-backed request path that would change it for the two that are not is v0.2.</p>
+    <section class="section">
+      <div class="section__head">
+        <h2>What happens after a grab, by media type</h2>
+        <span class="section__count">6 types</span>
+      </div>
+      <!-- The four sink-less types used to get a complete, honest sentence and
+           the two that have an *Arr got "UsArr does not import downloads." and
+           nothing else — which a Radarr owner reads as "UsArr doesn't, but
+           obviously Radarr does." It will not: the grab went from UsArr to
+           Prowlarr to the download client, Radarr never requested that release
+           and has no record of it, and the failure is silent and cumulative.
+           Grab five films over a week and come back to five orphaned downloads
+           and an unchanged library. Every sentence below names what will pick
+           the file up and what will not. -->
+      <div class="tablewrap">
+        <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Post-grab behaviour by media type" style="--cols: 104px minmax(0,1fr) minmax(0,3.4fr); --row-lines: 2.22" aria-colcount="3" aria-rowcount="7" role="table">
+          <thead role="rowgroup">
+            <tr role="row" aria-rowindex="1">
+              <th scope="col" role="columnheader" aria-colindex="1">Media type</th>
+              <th scope="col" role="columnheader" aria-colindex="2">What imports it</th>
+              <th scope="col" role="columnheader" aria-colindex="3">What the row says after the grab</th>
+            </tr>
+          </thead>
+          <tbody role="rowgroup">
+            <tr role="row" aria-rowindex="2">
+              <td data-col="media-type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Media type</span>Movies</td>
+              <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub">Radarr is connected and did not request this</div></td>
+              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span>UsArr does not import downloads. Radarr did not request this release, so Radarr will not import it either — the file stays in your download client until you move it into <span class="mono">/media/movies</span> yourself.</td>
+            </tr>
+            <tr role="row" aria-rowindex="3">
+              <td data-col="media-type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Media type</span>TV</td>
+              <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub">Sonarr is connected and did not request this</div></td>
+              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span>UsArr does not import downloads. Sonarr did not request this release, so Sonarr will not import it either — the file stays in your download client until you move it into <span class="mono">/media/tv</span> yourself.</td>
+            </tr>
+            <tr role="row" aria-rowindex="4">
+              <td data-col="media-type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Media type</span>Music</td>
+              <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub">Navidrome is a catalogue, not an importer</div></td>
+              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span>UsArr does not import downloads, and no connected service accepts a music request. Navidrome shows what is already inside the folder it scans, so the file stays in your download client until you move it there.</td>
+            </tr>
+            <tr role="row" aria-rowindex="5">
+              <td data-col="media-type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Media type</span>Audiobooks</td>
+              <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub">Audiobookshelf watches a folder</div></td>
+              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span>UsArr does not import downloads. Audiobookshelf watches <span class="mono">/media/books</span> and will show it once the file is there.</td>
+            </tr>
+            <tr role="row" aria-rowindex="6">
+              <td data-col="media-type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Media type</span>Ebooks</td>
+              <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub">Readarr archived 27 Jun 2025</div></td>
+              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span>UsArr does not import downloads, and Readarr — the *Arr that used to own books — was archived on 27 Jun 2025. Audiobookshelf watches <span class="mono">/media/books</span> and will show it once the file is there.</td>
+            </tr>
+            <tr role="row" aria-rowindex="7">
+              <td data-col="media-type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Media type</span>Comics</td>
+              <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub">Komga is a catalogue, not an importer</div></td>
+              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span>UsArr does not import downloads, and no connected service accepts a comic request. Komga shows what is already inside the folder it scans, so the file stays in your download client until you move it there.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="note" style="padding-top:8px">Two of the six have an *Arr connected and it still does not help, which is the case the copy exists for: a Prowlarr grab never went through Radarr or Sonarr, so neither has a record of it and neither will pick the file up. The *Arr-backed request path that would change that is v0.2.</p>
+    </section>
+
+    <p class="section note"><span class="statebar__tag">mockup</span> The first row of the table above is the whole point of this state. It reads <span class="chip chip--done">grabbed 14:07 · sent to qBittorrent</span>, names the watched folder, says in words that UsArr does not import downloads, and then it stops. There is no progress bar, no percentage and no "importing" step, because nothing on this install imports a book and UsArr would have nothing to measure. Four of the six media types here are in exactly this position; the *Arr-backed request path that would change it for the two that are not is v0.2.</p>
   </div>
 
 </main>
@@ -841,7 +1058,7 @@
 
 </div>
 
-<div class="toasts" aria-live="polite"></div>
+<div class="toasts"></div>
 
 <script src="usarr.js"></script>
 </body>

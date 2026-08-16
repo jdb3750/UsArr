@@ -25,14 +25,34 @@ def block(text, name):
 
 def rewrite_links(html):
     # Filenames may carry a #fragment or a ?query (the media-type nav entries
-    # are search.html?type=..., and the library scope is ?lib=...).
-    for fname, route in ROUTE.items():
-        html = re.sub(r'href="' + re.escape(fname) + r'(?:[?#][^"]*)?"',
-                      'href="' + route + '"', html)
-    return html
+    # are search.html?type=..., the library scope is ?lib=..., and the
+    # Search-to-Requests action is requests.html?q=...&type=...).
+    #
+    # The query is carried across rather than dropped. It used to be thrown
+    # away, which made every media-type nav entry collapse onto a bare #search
+    # and -- once Search grew a "Search indexers" action per row -- would have
+    # silently discarded the query and category the whole action exists to
+    # pass. usarr.js's router splits the hash on "?" so the route still
+    # resolves, and the parameters survive in the address bar where a reader
+    # can see that they are real.
+    def sub(m):
+        route = ROUTE[m.group('file')]
+        query = m.group('query') or ''
+        # A #fragment on a cross-page link cannot survive hash routing; a
+        # ?query can, so only the query is kept.
+        if query.startswith('#'):
+            query = ''
+        return 'href="' + route + query + '"'
+
+    pattern = (r'href="(?P<file>' + '|'.join(re.escape(f) for f in ROUTE) +
+               r')(?P<query>[?#][^"]*)?"')
+    return re.sub(pattern, sub, html)
 
 
-css = (SRC / 'usarr.css').read_text()
+# fonts.css carries the two @font-face rules and nothing else, so usarr.css
+# stays a stylesheet a person can read. Both are inlined here, fonts first,
+# because prototype.html has to be a single file with no external request.
+css = (SRC / 'fonts.css').read_text() + '\n' + (SRC / 'usarr.css').read_text()
 js = (SRC / 'usarr.js').read_text()
 index = (SRC / 'index.html').read_text()
 
@@ -70,7 +90,7 @@ out = f'''<!doctype html>
 {sidebar}
 {body}
 </div>
-<div class="toasts" aria-live="polite"></div>
+<div class="toasts"></div>
 <script>
 {js}
 </script>
