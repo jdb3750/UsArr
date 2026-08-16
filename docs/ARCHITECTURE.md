@@ -1329,6 +1329,12 @@ An earlier revision specified the schema to the column and never said what the u
 section is written **before** the first UI commit, and it is deliberately low-fidelity: prose, not
 pixels.
 
+**The visual system that renders these screens** — colour, type, density, motion, the loading
+policy, the component conventions and §17.2's navigation resolution — lives in
+[`design/DESIGN-DIRECTION.md`](./design/DESIGN-DIRECTION.md), with its canonical values in
+[`design/tokens.css`](./design/tokens.css) and its stack decision in ADR-0024. This section stays
+authoritative over both.
+
 ### 17.1 The UI philosophy, as a design constraint
 
 > **Utilitarian over stylish. Density and speed over animation. Standard patterns over novel ones.

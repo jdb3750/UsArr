@@ -46,6 +46,7 @@ distinctions now matter and are used consistently below:
 | [0021](#adr-0021) | Stable IDs address `service_item_link`, not `work` | **Amended** (rev 2): kind byte, pin, no opacity claim |
 | [0022](#adr-0022) | v1 authentication is local-only; external identity deferred | **Accepted** (rev 2) |
 | [0023](#adr-0023) | UsArr coexists with the ecosystem rather than replacing it | **Accepted** (rev 2) |
+| [0024](#adr-0024) | Styling and typography: Tailwind v4 with the default theme deleted, Bits UI, Tabler, self-hosted IBM Plex | **Accepted** |
 
 ---
 
@@ -1402,3 +1403,200 @@ Two rules follow, and they are the useful part:
 - **Users must run a second service**, and that remains the real objection to the whole approach.
   The mitigation is a good wizard, a first-class compose bundle and honest documentation — not a
   rebuttal, and not absorbing the neighbour.
+
+---
+
+<a id="adr-0024"></a>
+## ADR-0024 — Styling and typography: Tailwind v4 with the default theme deleted, Bits UI, Tabler, self-hosted IBM Plex
+
+**Status:** Accepted · **Depends on ADR-0003**, which fixed the framework and said nothing about the
+styling layer. Full rationale, with citations, in
+[`design/DESIGN-DIRECTION.md`](./design/DESIGN-DIRECTION.md); the canonical values are in
+[`design/tokens.css`](./design/tokens.css).
+
+### Context
+ADR-0003 chose SvelteKit `adapter-static` embedded via `embed.FS`. It left the CSS approach, the
+component library, the icon set and the typeface entirely open — as of this ADR there is no
+styling decision anywhere in the repository and no frontend code to constrain one.
+
+ARCHITECTURE §17.1 sets the brief: utilitarian over stylish, density and speed over animation,
+standard patterns over novel ones, native controls, no flair that costs render time, Navidrome as
+the bar. The owner separately asked for two things that pull in opposite directions: an
+**established framework rather than hand-rolled CSS**, and a result that does **not** look like
+generic generated output.
+
+**The risk actually being managed is not "will it look good".** It is *"will a solo maintainer keep
+it consistent across years"*. The ecosystem supplies the cautionary evidence: Portainer ships
+Angular 1.8 **and** React 17 with Bootstrap 3 **and** Tailwind 3 in one manifest, which is what a
+half-finished migration looks like in a dependency graph; Jellyfin's multi-year rewrite left the
+app internally inconsistent for years. Design *drift* — each screen slightly different because
+there is no token file — and design *sameness* — every screen identical because the tool's
+defaults shipped untouched — have the same root cause: no decision was made and written down.
+
+One further constraint is specific to this repo: `make check` is the pre-commit gate and makes
+**exactly one network call** (govulncheck). Anything that adds network dependence to the build is
+expensive here in a way it would not be elsewhere.
+
+### Decision
+
+**1. Tailwind CSS v4 (4.3.x) via `@tailwindcss/vite`, with the default theme deleted.**
+
+```css
+@import "tailwindcss";
+@import "./tokens.css";
+@theme { --*: initial; }
+```
+
+`--*: initial` is **mandatory and load-bearing**, not a tidy-up. Tailwind's own theme documentation
+states that after a namespace reset "all of the default utilities that use that namespace *(like
+`bg-red-500`)* will be removed, and only your custom values *(like `bg-midnight`)* will be
+available" (<https://tailwindcss.com/docs/theme>). With the whole theme reset, **`bg-indigo-500`,
+`shadow-md` and `rounded-2xl` do not exist as classes at all.** The generic look becomes
+*structurally impossible* rather than a code-review convention, and the one rule density actually
+depends on — every value is a multiple of one base unit — becomes tooling-enforced rather than
+remembered. Arbitrary-value syntax (`[13px]`) becomes a greppable lint target.
+
+Tailwind is a **build-time Vite plugin** that emits a plain `.css` file. Nothing Node-related
+survives into the build output, so ADR-0003's "no Node process in production, ever" is untouched.
+
+**2. Bits UI (2.18.x) for headless behaviour — and only where there is no native element.**
+§17.1 requires native `<select>`, native checkboxes and radios, native focus rings and real form
+submits, and forbids a bespoke dropdown that breaks keyboard navigation. Bits UI is therefore
+scoped to dialog, popover/menu, tooltip and tabs — the cases where correct focus management,
+escape/outside-click handling and ARIA wiring are genuinely hard and hand-rolling them is how
+keyboard support breaks. It imposes no visual opinion, and its runtime dependencies (`runed`,
+`esm-env`, `tabbable`, `svelte-toolbelt`, `@floating-ui/dom`) are exactly the focus-management and
+positioning problems in question.
+
+**3. Tabler icons, inlined and subsetted at build time via `unplugin-icons`, behind an explicit
+import allowlist.** `unplugin-icons` resolves icons from Iconify at build time and inlines them as
+components: no runtime library, no icon font, no extra request, and only imported glyphs are
+bundled. Tabler (MIT, ~5,900 glyphs) is aimed at data-dense admin interfaces and is
+distinguishable from the Lucide/Heroicons house style without being loud — and Lucide is itself
+named as a tell, being "baked into templates, starter kits, and AI-generated components by
+default". Icons render at 16px in rows and 20px in headers, in `currentColor`. **No emoji anywhere
+in the chrome**, which is a correctness rule (per-platform rendering, screen-reader behaviour) as
+well as a taste one.
+
+**4. Self-hosted IBM Plex Sans (UI) and IBM Plex Mono (machine data only), SIL OFL 1.1, subset to
+Latin, served from `embed.FS`, with the system stack as the fallback in the same `font-family`
+declaration.** Mono is semantic — file paths, indexer names, sizes, hashes, log lines, verbatim
+upstream error text — never decorative. **Never a Google Fonts `<link>`:** it is both a documented
+tell and a third-party request in software whose premise is that it runs on your own hardware.
+
+**5. All design values live in one token file**, `docs/design/tokens.css`, mapped into Tailwind
+through `@theme inline`. No literal colour, size, radius or duration in any component.
+
+**6. Serving, per ADR-0003's embedding story** — four traps that are cheap now and expensive later:
+
+- **`//go:embed all:dist`, never `//go:embed dist`.** SvelteKit's `appDir` defaults to `_app`, and
+  Go's `embed` excludes files whose names begin with `.` or `_` (<https://pkg.go.dev/embed>). Plain
+  `//go:embed dist` silently drops the entire application and embeds the favicon. The `all:` prefix
+  "changes [the rule] to include those files beginning with '.' or '_'".
+- **`precompress: true` needs a handler that honours it.** `adapter-static` can emit `.br`/`.gz`,
+  but Go's stock `http.FileServer` will not serve them. Use `statigz`
+  (<https://github.com/vearutop/statigz>). Brotli on the JS bundle is the single largest first-paint
+  lever available, and because compression happens at build time it costs zero CPU per request —
+  which matters on the Pi-class hardware §13 targets.
+- **`paths.base` is baked in at build time**, so a single binary cannot serve itself under an
+  arbitrary reverse-proxy subpath chosen at runtime. Build with `base: ''`, document that UsArr
+  must be proxied at a domain or subdomain root, and treat subpath support as a separate decision
+  if it is ever demanded.
+- **🔍 `paths.relative` defaults to `true` and likely breaks assets under a deep-route SPA
+  fallback.** With one fallback document served at every depth (`/library/movies/12345`), relative
+  asset URLs would resolve against the wrong directory, so `paths.relative: false` is the expected
+  setting. **This is inference from the documented semantics, not a cited statement — it must be
+  tested empirically before the build config is frozen.**
+
+### Consequences
+- **The generic look is unavailable rather than discouraged.** A contributor cannot reach for
+  `rounded-2xl` because it is not generated. This is the whole point of the decision.
+- **Node and a native binary enter the *build*, never the runtime.** The lockfile must be committed
+  and `DEVELOPMENT.md` must document the offline path.
+- **CSS ships small.** Tailwind's v4 material puts a representative purged production build at
+  ~18 KB uncompressed; with a deliberately reduced token set, 🔍 well under 10 KB brotli is the
+  expectation. CSS is not where this app's bytes go — the JS bundle and the fonts are.
+- **The fonts are the real byte cost.** Two subset WOFF2 families at three faces is 🔍 an estimated
+  ~120–180 KB, **unmeasured**, and it must be measured before the fonts are committed. If it lands
+  materially above ~200 KB, drop a weight before dropping the family; if it still does not fit, the
+  zero-webfont fallback below is the answer.
+- **Native controls stay native**, so the surface Bits UI covers is small — which also keeps the
+  dependency footprint small.
+- **Both themes are audited independently.** Every contrast ratio in `tokens.css` is computed and
+  recorded next to the pair it was measured for. A `dark:` prefix per element is not how this
+  works.
+- **The seam is the token file.** Tailwind consumes it; scoped Svelte `<style>` blocks read the
+  same variables. Swapping the utility engine later touches the token file and the class
+  attributes, **not the component logic**.
+
+### The strongest argument against this decision, recorded rather than dismissed
+Tailwind v4's engine, **`@tailwindcss/oxide`, is a native Rust binary distributed as per-platform
+optional dependencies with a postinstall script that fetches the right one**, plus a WASM fallback.
+There is a documented class of CI failures where npm skips the platform-specific optional
+dependency (<https://github.com/tailwindlabs/tailwindcss/pull/17929>; discussions
+[#18427](https://github.com/tailwindlabs/tailwindcss/discussions/18427),
+[#15254](https://github.com/tailwindlabs/tailwindcss/discussions/15254)). **In a project whose
+stated quality gate makes exactly one network call, a native-binary-fetching postinstall is a new
+class of build fragility.** The counter-position is respectable and is not being waved away.
+
+**The pre-agreed fallback is Open Props** — plain CSS custom properties, no engine, no postinstall,
+no native binary. **Trigger condition: if the `@tailwindcss/oxide` install fails on a supported
+build platform, or blocks an offline build, in a way that a committed lockfile does not fix.** The
+migration cost is bounded because both approaches express the same tokens: `tokens.css` is already
+plain CSS and would be consumed directly rather than through `@theme inline`; what changes is the
+class attributes, not the components. Open Props supplies tokens **without enforcement**, and
+enforcement is the reason Tailwind is chosen — so this is a fallback, not a preference.
+
+### Alternatives considered
+- **Open Props** (v1.7.x) — **the defensible runner-up and the recorded fallback**, per the trigger
+  above. Rejected as the primary only because it gives tokens without making the wrong value
+  impossible to type.
+- **The system font stack with no webfont** — the recorded typographic alternative. Zero bytes,
+  zero FOUT, zero layout shift, native feel. Rejected as the default because San Francisco, Segoe
+  UI and Roboto have different x-heights and advance widths, so **the layout is not reproducible
+  across platforms** — a title that fits a 32px row on macOS may wrap on Windows — and MDN warns
+  that `system-ui` "may cause the displayed typeface to be undesirable for some users"
+  (<https://developer.mozilla.org/en-US/docs/Web/CSS/font-family>). For a design built on fixed row
+  heights that is not cosmetic. It remains the answer if the font budget in OQ-3 fails.
+- **Inter, and its substitutes** — Inter is now the most-named typographic tell of generated UI,
+  and Geist, Space Grotesk, Instrument Serif and Poppins are named as its equally-recognisable
+  replacements. The fair counter-argument is that the objection is about *identity, not
+  legibility*: Inter would work fine. It is simply the one choice guaranteed to read as defaulted.
+- **shadcn-svelte** (1.5.x) — a CLI that copies component source into the repo, generating Bits UI
+  + Tailwind components. Genuinely interesting: with `--*: initial` it is a source-code starting
+  point rather than a design language. Rejected because vendored components are yours to maintain
+  and drift, and because UsArr needs a handful of primitives, not a component set.
+- **Flowbite Svelte** (1.33.x) — **disqualified on its dependency graph**: it declares
+  **`apexcharts`** and `date-fns` as *runtime* dependencies. A charting library in the dependency
+  graph of a media browser is exactly the dead weight ADR-0003 rejected SSR over. It also imposes
+  a strong, recognisable look.
+- **Skeleton v5** — credible and well-engineered (Zag.js state machines are a serious foundation),
+  but 23 runtime packages and a plugin-driven theme system is a bigger commitment than five screens
+  need, and it imposes a look.
+- **Melt** — architecturally equal to Bits UI, but it declares **`jest-axe` as a runtime
+  dependency**. 🔍 Almost certainly a packaging mistake rather than something that reaches the
+  browser, but it is a smell, and Bits UI has no equivalent.
+- **Svelte Material UI** — wrong on premise. Material is a design language with animation and
+  elevation baked in, which contradicts §17.1 directly.
+- **Pico.css, Water.css, Bulma** — genuinely charming, very fast to start, and **tuned for
+  comfortable reading density**: generous spacing, wide default typography. That is the exact
+  opposite of §17.1's "density is a feature", and the result would be fought the whole way.
+- **Bootstrap 5** — mature and enormously documented, which is a real advantage for drive-by
+  contributors. Rejected because it brings its own JS for interactive components (duplicating what
+  Bits UI does better in Svelte) and because its look is arguably *more* dated-generic than
+  Tailwind's.
+- **PatternFly** — right in spirit, genuinely built for dense admin consoles, but React-first with
+  the plain-CSS distribution a second-class citizen, and a strong Red Hat visual identity.
+- **Hand-rolled CSS with a custom token layer** — technically the cleanest: zero build dependency,
+  smallest output, total control. Rejected because it is precisely what the owner said he did not
+  want, and because it puts all naming and consistency discipline on review rather than on tooling.
+  🔍 For a solo maintainer that is where CSS rot starts.
+- **Hugo** — **rejected for the application, and the reason is requirements rather than taste.**
+  Hugo renders content through Go templates at build time; it has no client-state model, no
+  reactivity and no component runtime, so a 10k-item filterable grid — ADR-0003's stated
+  requirement — is not something it addresses at any level. Using it would mean hand-writing all
+  the interactivity in vanilla JS, which is strictly worse than what SvelteKit already provides.
+  **The instinct behind the suggestion is sound and is kept alive:** Hugo is a first-rate fit for a
+  future project documentation site — a single Go binary matching the toolchain, and a `docs/` tree
+  already in Markdown that it could render essentially as-is. **That is its own small ADR if a docs
+  site is ever wanted, and is explicitly not part of this one.**
