@@ -1666,6 +1666,789 @@ touch a merged migration.
 
 ---
 
+# Round 6 — five prongs over `main`, the shipped code and a fresh install
+
+**Date:** 2026-08-16. **Target:** `origin/main` at `d38bc8e`, *"docs: name the write-queue seam a
+two-phase sink actually needs"* — the tree as it stands after Round 2's fixes landed. **This entry is
+written onto a branch cut from a later `main` (`cb57e43`), which carries documentation commits plus
+one `Makefile` change (the new `make design` target, ~50 added lines).** No `.go` file moved between
+the two, so every Go citation below is exact on both; the five `Makefile` citations have shifted and
+are mapped at the end of FI-03.
+
+**Inputs:** five independent adversarial passes, run in parallel and without sight of each other:
+
+| Prefix | Pass |
+|---|---|
+| `DS-nn` | Doc/spec consistency — documents against shipped code |
+| `DL-nn` | The data layer — migration 0001, the store package, the pools |
+| `SR-nn` | Security — crypto, SSRF, CSRF/sudo |
+| `FI-nn` | A fresh install — clone, `make tools`, `make check`, first run, backup and restore |
+| — | An independent verification of the one Critical finding, recorded at §5 |
+
+Every claim below was executed, reproduced or read out of primary source by the pass that raised it;
+the proving command and its verbatim output are carried into each entry rather than summarised away.
+
+**Scope of this log:** all 48 findings. Nothing is dropped and nothing is merged silently — where two
+or three passes found the same thing it is recorded **once**, in one entry, saying which passes found
+it.
+
+**Disposition of this round differs from Round 2's, and deliberately so.** This thread reviews and
+records; it does not fix other threads' code or docs. Every entry is therefore **Open — recorded here
+rather than applied**, which is the log's existing vocabulary for a finding that is real but belongs
+to another owner (Round 2, B-01: *"Correction recorded here rather than applied, because ADR-0024
+lives on branch `claude/hearth-thread-vn9w7u`"*). Each such entry states the **fix shape**, so routing
+is a hand-off and not a re-investigation. Findings a reviewer explicitly rebutted, or explicitly
+concluded were **not** defects, are recorded as rebutted in §2 with the reasoning, so they are not
+rediscovered and re-raised next round.
+
+**Working trees were left clean.** The doc prong made no edits. The data prong deleted its
+`zz*_scratch_test.go` harnesses and confirmed `git status` clean with the existing tests green. The
+security prong, the verification pass and the fresh-install pass each worked in a separate clone and
+left `/home/user/UsArr` at `d38bc8e` with an empty `git status --porcelain`. The fresh-install pass
+removed the stray `/config` and `/data` directories it created. The data prong's harness files were
+briefly visible to the doc prong mid-run and were correctly left alone.
+
+---
+
+## Counts
+
+| Severity | Count | IDs |
+|---|---|---|
+| **Critical** | 1 | DS-01 — **confirmed by three independent passes**, see §5 |
+| **High** | 12 | SR-01, DL-01, DL-02, DL-03, DS-02, DS-03, DS-04, FI-02, FI-03, FI-04, FI-11, FI-05 |
+| **Medium** | 13 | SR-02, SR-03, DL-04, DL-05, DL-06, DL-07, DL-08, DS-05, DS-06, DS-07, DS-08, DS-09, FI-06 |
+| **Low** | 17 | SR-04, SR-05, SR-06, DL-09, DL-10, DL-11, DL-12, DL-13, DS-10, DS-11, DS-12, DS-13, DS-14, FI-07, FI-08, FI-09, FI-10 |
+| **Informational / inference** | 6 | SR-07…SR-12 |
+| **Total** | **49** | |
+
+| Disposition | Count |
+|---|---|
+| **Open — recorded here rather than applied** (routed; fix shape stated) | 42 |
+| **Open — fix in flight in the code thread** | 1 (DS-01) |
+| **Recorded as a deliberate decision rather than a defect** | 3 (DL-09, SR-09, DS-08's code half) |
+| **Rebutted — checked and found not to be a defect** — see §2 | 3 |
+| **Already dispositioned in an earlier round; cross-referenced only** | 2 (DS-08 ↔ W-02, SR-09 ↔ SUS-02) |
+| **Environmental, not a repo defect** | 1 (FI-10) |
+| **Applied by this thread** | **0 — by design** |
+
+**Found independently by more than one pass** — recorded once each, and named here so the
+corroboration is visible:
+
+| Finding | Passes that found it |
+|---|---|
+| **DS-01**, the `keys/kek.salt` backup defect | Doc/spec, the **fresh-install** pass, and a dedicated **verification** pass — three, each with its own clone, its own binary and its own end-to-end reproduction |
+| **DS-02**, `DEVELOPMENT.md` marking working `make` targets *(not yet)* | Doc/spec and fresh-install (its item 7c) |
+| **DS-03**, `CONFIGURATION.md` §5 naming files that are never created | Doc/spec and fresh-install (its item 7d) |
+| **DS-08**, conditional `Secure` on the session cookie | Doc/spec (against the documents) and security (by execution) — and it is Round 2's W-02 |
+| **SR-09**, `ClassConfigured` has no address denylist | Security (executed) and fresh-install (read from `policy.go`, confirmed live) — and it is Round 2's SUS-02 |
+
+**Zero critical findings in the data and security prongs.** The data prong says it in as many words:
+*"None. Nothing in the shipped path corrupts data or leaks a credential."* The single Critical is a
+**documentation** defect with a data-loss outcome.
+
+**The cryptography itself came out clean under two independent methods.** The doc prong verified the
+AAD formula, the envelope layout and the SSRF resolve-then-pin discipline **against the documents**;
+the security prong verified the same three **by execution**; the fresh-install pass verified the
+whole master-key validation ladder **by running it**. They agree. The disagreements in this round are
+almost entirely about what is *written down*, what is *swept*, what is *scoped* and what a fresh
+clone can actually run — not about the primitives.
+
+---
+
+## 1. Disposition of every finding
+
+### 1.1 Critical
+
+| # | Finding | Disposition |
+|---|---|---|
+| **DS-01** | **The documented backup/restore procedure destroys every stored credential.** `keys/kek.salt` is per-install key material, is mandatory to derive the KEK, is regenerated silently when absent, and is excluded by the documented backup. Docs: `docs/CONFIGURATION.md:389-437` (§5, declared *"authoritative for the whole project"* at `:11`; its `keys/` tree lists exactly two files, `secret.key` and `secret.key.new`, at `:398-399`), `:465` (§6.1's recoverability table), `:479-480` (§6.1's `tar --exclude='keys'`, annotated *non-negotiable*), `:512-513` (§6.3 step 3), `:516` (§6.3 step 5), `:525-526` (§6.4 step 2). Code: `internal/config/config.go:187` / `:198` (`KEKSaltPath` → `keys/kek.salt`), `:180-198` (*"losing either makes every stored credential unrecoverable"* — the code comment is correct and the user-facing docs contradict it), `internal/crypto/derive.go:52-80` (HKDF takes the salt directly and `derive` hard-errors on an empty one; a **different** salt silently yields a different KEK, with no error), `internal/config/secretkey.go:221-254` (on `os.ErrNotExist`, falls through to `rand.Read(salt)` + `writeSecretFile`), `cmd/usarr/app.go:117` (the sole caller, which logs nothing) | **CONFIRMED, and Open — fix in flight in the code thread** (shape below the table). **Reproduced end to end by three independent passes, each in its own clone with its own binary, and isolated to `kek.salt` by a control experiment** — see §5 for both full reproductions, the byte-identical master-key hashes and the control. **Fix shape** is in three parts, listed in the order they matter: **(1)** the recoverable unit is `keys/` **in its entirety** — `secret.key` **and** `kek.salt` — so §6.1's `--exclude='keys'`, §6.3 step 3 and §6.4 step 2 are rewritten together, §5's `keys/` tree gains the third file, and §6.1's table (`:465`) stops claiming the master key is the only loss path. **(2)** §6.3 step 5's diagnostic (*"A red test with a decryption error means the key does not match the backup"*) is replaced — it misdiagnoses this exact failure, as does the runtime error string, which tells the operator to *"restore the master key that sealed it"* when they already have. **(3)** the code half: **there is no fail-closed guard for a missing salt**, and the asymmetry is the finding — the master key on the same startup path gets **both** a loud `log.Warn(masterKey.BackupNotice())` (`cmd/usarr/app.go:107`) **and** a hard `ErrMissingKeyForExistingData` refusal when the database holds encrypted rows (`app.go:97-100`, verified working by the fresh-install pass). The salt has **neither**, and `ResolveKEKSalt` returns a bare `([]byte, error)` with **no source indicator**, unlike `MasterKey{Source, Path}`, so the caller *cannot* distinguish "read" from "generated" even if it wanted to. It should fail closed identically |
+
+**The fix in flight, recorded so the routing is visible and the finding is not read as dropped.** The
+code thread is **moving `kek.salt` out of `keys/` to sit beside `usarr.db`**, on the reasoning that
+**the salt is not secret**, and that `keys/` being excluded from backups is exactly what turned
+otherwise-correct backup advice into a trap. Four parts:
+
+1. **Relocation**, with a **startup migration of the existing file** so that current installs are not
+   broken by the fix itself — the one thing a fix for this defect must not do is reproduce it.
+2. **A fail-closed guard mirroring the master-key path** — the asymmetry named above, closed.
+3. **Correcting the misdiagnosing error text** at `cmd/usarr/services.go:151-155`, which today tells
+   the operator to restore a master key they already have.
+4. **Both doc sites**, together: `CONFIGURATION.md` §5's self-declared-exhaustive `keys/` listing, and
+   `security.md`'s unlocated salt at `:75`.
+
+**Fallback if the relocation proves risky: guard-plus-docs only** — items 2, 3 and 4, leaving the file
+where it is. That is a strictly smaller change and it still closes the data-loss path, because a guard
+that refuses to start beats a silent regeneration whatever the file's address.
+
+**The one precision qualifier, and it is recorded because the original claim overstated it.**
+"Documented nowhere" is very slightly too strong. `docs/reference/security.md:75` **does** document
+that a stored per-install salt exists, inside the derivation formula:
+
+```
+KEK = HKDF-SHA256(USARR_SECRET_KEY, salt=<per-install random, stored>, info="usarr/kek/v1")
+```
+
+What is documented nowhere is **the file's name, where it lives, that it is inside `keys/`, that
+`--exclude='keys'` discards it, and that it must be restored.** The exact greps, run by the
+verification pass:
+
+```
+$ grep -rn "kek\.salt" docs/ README.md CLAUDE.md
+exit=1   (no match)
+
+$ grep -rniw "kek" docs/ README.md CLAUDE.md --exclude=prototype.html
+docs/DECISIONS.md:1199, 2828        (HKDF info labels only)
+docs/reference/security.md:22,35,36,69,72,75,79
+docs/reference/gateway.md:269
+docs/ARCHITECTURE.md:640
+```
+
+**This makes it worse in one specific respect rather than better.** `docs/CONFIGURATION.md` §5 calls
+itself the single source of truth for on-disk layout and claims property 3, *"Every file both this
+document and `ARCHITECTURE.md` name is here"* — so the omission is **from an explicitly exhaustive
+list**. The code already knows: `internal/config/config.go:191-197` and `secretkey.go:221-225` both
+carry the comment *"security.md §1.3 requires a stored per-install salt but does not say where it
+lives"*. Two further doc-side aggravators, both from the verification pass: §6.1's 🚩 (*"`tar -czf
+backup.tgz /config` is not a backup, it is a compromise"*) actively steers operators away from the
+one archive that **would** have preserved the salt; and §3.5, "If you lose the key", lists what
+survives and never mentions that keeping the key is insufficient.
+
+**Recovery paths — none exist, checked exhaustively.** `internal/db/migrations/00001_initial.sql` has
+no settings table and no salt column (`grep -rniE "salt|setting|kek"` returns a single hit,
+`kek_id INTEGER NOT NULL DEFAULT 1`, a rotation counter). `internal/crypto/envelope.go:27-29` — the
+envelope is `kek_id(4) || nonce(12) || wrapped_dek(40) || ciphertext || tag(16)`, **no salt**. No
+fallback, no legacy path, no second derivation attempt anywhere in `internal/crypto` or `cmd/usarr`.
+32 bytes from `crypto/rand`, not brute-forceable. **And key rotation is not a workaround:**
+`usarr key rotate` is marked *(proposed CLI)* and does not exist, and rotation rewraps DEKs under the
+same salt regardless. The only repair is §3.5's manual re-entry of every credential — which is
+exactly what §6 promises you avoid by keeping the master key.
+
+### 1.2 High
+
+| # | Finding | Disposition |
+|---|---|---|
+| **SR-01** | **Indexer-supplied credentials are written to SQLite verbatim** — `release_candidate.info_url` and inside `raw_release_json`. `servarr.SanitizeRelease` (`internal/servarr/redact.go:48-53`) drops only `DownloadURL` and `MagnetURL`; `InfoURL` survives into the persisted row (`internal/releases/search.go:638`, `internal/releases/storeadapter.go:74`) and into the marshalled blob. Redaction happens **only** at the HTTP boundary (`internal/httpapi/search.go:278-280`, `redactURLField`), so the browser sees a clean URL while the database keeps the credential. This contradicts the codebase's own rule, stated twice — `internal/releases/storeadapter.go:70-73` (*"one copy of a credential is one too many already"*) and `internal/releases/search.go:589-606` (*"this blob lands in the same file, the same VACUUM INTO backup and the same support bundle, so the same rule has to apply to it"*) — and `internal/ssrf/redact.go:24-32` argues at length that `infoUrl` is exactly the field that carries private-tracker passkeys, *"and a leaked passkey on a private tracker means account termination"* | **Open — recorded here rather than applied.** This is the residue of Round 2's SEC-01 and W-01: SEC-01 sanitised the blob of `downloadUrl`/`magnetUrl`, W-01 added the passkey names to the deny-list **at the HTTP boundary**, and the at-rest half of `infoUrl` was never closed. **Fix shape:** redact in `SanitizeRelease` / at the `Candidate` boundary, not at the HTTP boundary — run `ssrf.RedactRawURL` on `InfoURL`/`CommentURL`/`PosterURL` before `persist()` marshals. The `provenance` table has the same shape (`storeadapter.go:160,164`) and must move with it. A tripwire in the shape of Round 2's `TestPersistedBlobNeverCarriesTheAPIKey` belongs on this path too |
+| **DL-01** | **The release-candidate TTL sweep has no production caller — the only shipped write path grows the database without bound.** `internal/releases/service.go:123` defines `EvictExpired`, commented *"Run it from the maintenance worker"*. **There is no maintenance worker.** Load-bearing rather than cosmetic: `docs/reference/schema.md:677-686` argues the missing `UNIQUE (service_instance_id, guid)` is safe precisely because *"the bound on that duplication is the TTL — 25 minutes for Prowlarr-sourced rows, swept via `ix_rel_expiry` — so the table's size is governed by search volume within a 25-minute window, not by uptime."* With no sweeper the table's size **is** governed by uptime, and each row carries `raw_release_json` (`internal/db/migrations/00001_initial.sql:209`) into the file and into every `VACUUM INTO` backup | **Open — recorded here rather than applied.** Directly invalidates the stated bound of Round 2's DB-03 decision, which is why it outranks its own blast radius. **Fix shape:** wire `EvictExpired` to a ticker in `cmd/usarr/main.go` next to `RunProber`. **No schema change needed** — the index is already correct and the sweep is already efficient: `ExpireReleaseCandidates releases.go:158 → SEARCH release_candidate USING COVERING INDEX ix_rel_expiry (expires_at<?)` |
+| **DL-02** | **`release_candidate` and `provenance` carry no `user_id`** — the one principle-4 retrofit migration 0001 exists to prevent. `ARCHITECTURE.md:87-91` enumerates the user-scoped tables and does **not** include `release_candidate`. A `release_candidate` row **is** user-generated content: it is the materialised result of one user's free-text query, and `title` is the answer to "what did that person search for". The only scope available is instance-based (`internal/store/store.go:96`, `instancePredicate("service_instance_id")`), so on the expected homelab topology — two users, one shared Prowlarr — user B enumerating candidate ids reads user A's search results and can grab them. `internal/releases/grab.go:46` claims *"Out-of-scope is reported as not-found so a caller cannot probe for other users' rows"*; with no `user_id` column the scope predicate cannot express "other users' rows" at all, so the comment overstates what the check buys. `provenance` is worse in one respect — immutable, permanent, no instance column, and its only reader takes no scope at all: `GetProvenanceByDownloadID` (`internal/store/releases.go:261`), which has no non-test caller today but is the seam, and already lacks the parameter `internal/store/store.go:15-19` says every such read must carry | **Open — recorded here rather than applied.** The reviewer asks for one of two outcomes and is explicit that *"right now it is neither"*: **(a)** a genuine omission, fixed by a table rebuild in migration 0002 while the tables are still empty in the wild, or **(b)** a decision **written down** in `schema.md` §6 the way the `(service_instance_id, guid)` uniqueness decision was in Round 2. **Fix shape:** pick one — and if (a), note that migration 0001 is frozen, so this is now a rebuild, which is exactly the cost principle 4 exists to avoid paying |
+| **DL-03** | **The read pool is not read-only — the single-writer discipline is convention, and bypassing it produces an unrescuable `database is locked`.** `internal/db/sqlite.go:127` builds the reader DSN with no `mode=ro`; `internal/db/sqlite.go:147` only *says* so in a comment (`// Read returns the read pool. Never start a write transaction on it.`). `ReadTx` is safe (the driver honours `TxOptions.ReadOnly`); bare `Read().ExecContext` and `Read().BeginTx(ctx, nil)` are not. The harm is the exact failure mode `ARCHITECTURE.md:1321` names — a deferred transaction upgrading to a write, which `busy_timeout` does not cover | **Open — recorded here rather than applied.** **Fix shape:** add `mode=ro` (or `_txlock=deferred` + `mode=ro`) to the reader DSN so the invariant is enforced by SQLite rather than by a comment. **Nothing in the current code writes through the read pool, so this is free today and expensive after the first accidental caller** |
+| **DS-02** | **`docs/DEVELOPMENT.md` §3 "Getting running" marks two working `make` targets as `(not yet)`** — `docs/DEVELOPMENT.md:146-147` (and `:23`). `Makefile` `.PHONY: tools` (five pinned `go install` lines) and `.PHONY: dev` (`$(GO) run $(MAIN_PKG) --env-file .env`) both exist and both work — the fresh-install pass confirmed by running them. The doc's own §1 preamble (`:6`) defines `(not yet)` as *"commands referencing files that do not exist yet"*, so this is the one marker a new contributor is told to trust, on the two commands in the quickstart, and it sends them to install the toolchain and start the backend by hand. Same class, same doc: `:557` marks `.golangci.yml` as *"starting point **(not yet)**"* — the file exists at the repo root and its linter list matches the doc's YAML block byte for byte (`errcheck govet staticcheck ineffassign unused bodyclose noctx errorlint gosec sqlclosecheck rowserrcheck`, `formatters: gofumpt goimports`), plus a `_test.go`/gosec exclusion block the doc does not show | **Open — recorded here rather than applied. Found independently by the doc/spec pass and the fresh-install pass (item 7c).** **Fix shape:** drop the three `(not yet)` markers at `:23`, `:146-147` and `:557`. Minor rider in the same edit: `:167` reads `make dev # Terminal 1 — Go backend, hot reload`; the recipe is a plain `go run` and there is **no hot reload** |
+| **DS-03** | **`docs/CONFIGURATION.md` §2.1 documents log rotation that does not exist, and §5 names three more artefacts that are never created.** `:126` — *"Log rotation is fixed at 10 MB × 5 files in `$USARR_DATA_DIR/logs/`"* — and `:423`, inside the §5 tree the header at `:11` declares authoritative: `usarr.log # 0600, + rotated usarr.log.1 … (10 MB × 5)`. `cmd/usarr/main.go:165-198` (`newLogger`) writes to `os.Stdout` only, via `slog.NewTextHandler`/`NewJSONHandler`. **No rotation library is in `go.mod`** — no lumberjack, nothing. `cmd/usarr/app.go:192` creates `logs/` and `config.go:217` exposes `LogsDir()`, but `grep -rn "LogsDir()"` shows `ensureDirs` is its only non-test caller. The fresh-install pass confirmed on a real install, after a full first run **and a service add**: no `cache.db`, no `cache/images/`, no `tmp/`; `logs/` created 0700 and empty; all output on stdout | **Open — recorded here rather than applied. Found independently by the doc/spec pass and the fresh-install pass (item 7d).** Stated as present-tense fact, not marked `(proposed)`, in the section declared authoritative — a user configuring log shipping or disk quotas follows it and gets nothing. **Fix shape:** either mark the four claims `(not yet)` or build them; `CLAUDE.md`'s "no invented status" rule points at the marker, not the feature. Note `cache.db` and `cache/images/` belong to the not-yet image pipeline, and `:424`'s `tmp/ # in-progress work; cleared at startup` describes a directory that is never created and nothing clears |
+| **DS-04** | **ADR-0025 is Accepted, the frontend now exists, and it implements none of it.** `docs/DECISIONS.md:1593-1600` — ADR-0025, **Status: Accepted** — decides Tailwind v4 via `@tailwindcss/vite` with `@theme { --*: initial; }`, Bits UI, Tabler icons, self-hosted IBM Plex, and its Context states *"as of this ADR there is no styling decision anywhere in the repository and **no frontend code to constrain one**."* There is now 1,755 lines of frontend. `web/package.json` contains **no** `tailwindcss`, `@tailwindcss/vite`, `bits-ui`, `@tabler/icons-svelte` or any font package; `web/src/app.css` is 426 lines of hand-rolled CSS; `web/static/` holds one file, `favicon.svg` — no IBM Plex is self-hosted, and `app.css:115` falls back through `'IBM Plex Sans', system-ui, …` to whatever the OS has | **Open — recorded here rather than applied.** The reviewer is explicit that `app.css:1-17` is **candid** about being scaffolding that copies values out of `docs/design/tokens.css`, and that this is a reasonable engineering call — the finding is that ADR-0025's Context is now factually false and nothing in `DECISIONS.md` records that the accepted stack is unimplemented, so the ADR reads as describing the repo. **Fix shape:** an amendment block on ADR-0025 in the house style, saying the stack is accepted and not yet implemented. **Bonus, exact:** `web/src/app.css:4` cites the wrong ADR — *"ADR-0024 chooses Tailwind v4…"*; ADR-0024 (`DECISIONS.md:1540`) is the AGPL-3.0 licence decision, the styling ADR is **0025** |
+| **FI-02** | **`make check` / `make check-offline` fails on a fresh clone: `fmt-check` has no `web-deps` prerequisite.** It is documented as *the* pre-commit gate, and it is the first thing a fresh clone hits — half a second in, before any Go code is examined. `lint-web` and `test-web` both declare `web-deps`; `fmt` and `fmt-check` do not, and `fmt-check` runs **first** in `check-offline`. The undocumented recovery is `make web-deps`, which is mentioned in neither `DEVELOPMENT.md` §3 nor §4 | **Open — recorded here rather than applied.** **Still true on this branch**, checked: `fmt-check` (`Makefile:264-269` here, `:259-263` at `d38bc8e`) has no prerequisite line. **Fix shape:** add `web-deps` as a prerequisite of `fmt` and `fmt-check`, exactly as `lint-web` and `test-web` already declare it — a one-word change on two lines, and the gate's own honesty notice is what makes it worth doing rather than documenting |
+| **FI-03** | **The Makefile resolves every pinned tool from bare `PATH`, while `make tools` installs into `$GOBIN` — which is not on `PATH`. Two failure modes, and the second is worse than the first.** All five tools are invoked as bare names, and `make tools` `go install`s into `$(go env GOPATH)/bin` = `/root/go/bin`, which is absent from the container's `PATH`. **(1) Hard 127s:** immediately after a *successful* `make tools`, `make fmt-check` dies with `gofumpt: command not found`, exit 127. Only `secrets` carries a `command -v … \|\| echo "run: make tools"` guard; `fmt-check`, `lint-go` and `vuln` die with no hint. **(2) A silently wrong linter version, which is the real defect:** `golangci-lint` is the one tool that *is* on the default `PATH` — at `/usr/local/bin/golangci-lint`, **v2.5.0** — while the Makefile pins `GOLANGCI_VERSION ?= v2.12.2` and invokes it bare. So `make lint-go` runs the unpinned v2.5.0 and reports **`0 issues. EXIT=0`**, while the pinned v2.12.2 on the same tree reports 7 (FI-04) | **Open — recorded here rather than applied.** **Any green lint claimed from a container in this shape is not evidence**, which is the sentence worth carrying out of this finding. **Fix shape:** resolve the five tools through an explicit `$(GOBIN)`/`$(shell go env GOPATH)/bin` prefix in the Makefile, or export it onto `PATH` at the top of the file, and extend the `command -v` guard to all of them so a missing tool says `run: make tools` instead of 127. **`Makefile` line mapping**, because this file moved between the review target and this branch: bare invocations at `d38bc8e` `:247, :256, :261, :271, :294, :312, :316, :320, :326` are `:252, :261, :267, :321, :344, :368, :372, :376, :382` here; `make tools` at `d38bc8e` `:359-365` is `:409-415` here. `DEVELOPMENT.md` §1 and §3 never tell the user to add `$GOBIN` to `PATH` |
+| **FI-04** | **`make check` does not pass under the pinned linter — and the true count is 11, not the 7 the gate prints.** The capped, as-is run with `golangci-lint` **v2.12.2** reports `7 issues: * gosec: 4 * noctx: 3`, `EXIT=1`, and `make check`'s own exit status on this tree is **2**, failing at the `lint-go` recipe. **The uncapped run** (`--max-issues-per-linter=0 --max-same-issues=0`) reports **11** — `gosec: 4`, **`noctx: 7`** — see FI-11 for why four were hidden. **All 7 `noctx` hits are `httptest.NewRequest` call sites:** the three the capped run shows, `internal/httpapi/redact_test.go:19`, `:37` and `internal/httpapi/server_test.go:153`, plus the four it hid, `internal/httpapi/services_urlbase_test.go:105`, `internal/web/web_test.go:213`, `:229` and `:317`. Message on all seven: *"net/http/httptest.NewRequest must not be called. use net/http/httptest.NewRequestWithContext (noctx)"* | **Open — recorded here rather than applied. The 4 gosec hits are excluded as owned elsewhere (§3); the 7 `noctx` hits are the in-scope remainder and nothing else appears at any cap setting.** The **11** is **verified by execution against `origin/main` (`cb57e43`) with the pinned v2.12.2 and the cache cleaned** — established fact, not a report. **Fix shape:** seven call sites move to `httptest.NewRequestWithContext(t.Context(), …)`. Two interactions worth carrying: FI-03 means this is only visible when the pinned binary is used, which is why it survived to now; FI-11 means it was **under**-visible even then, and any earlier "3 noctx" figure — including the one this review first recorded — was a floor |
+| **FI-11** | **The pre-commit gate silently drops duplicate-text findings, so every issue count it prints is a floor and not a count.** On `origin/main` at pinned v2.12.2 the gate prints `7 issues`; the true number is **11**. The sole suppressor is golangci-lint's **stock `max-same-issues: 3`**, which caps issues sharing **identical message text** — not issues per linter. All 7 `noctx` findings share one message string, so 4 were dropped with no notice of any kind. **Isolated by execution:** `--max-same-issues=0` alone yields all 11; `--max-issues-per-linter=0` alone still yields 7. **This is an unnoticed upstream default, not a repo misconfiguration** — `.golangci.yml` has no `issues:` section and sets neither cap, and `max-issues-per-linter` defaults to 50, not 3, and is irrelevant here | **Open — fix in flight on another branch, and NOT on `main` as of this entry. Verified rather than taken on report:** `.golangci.yml` at `cb57e43`, the tree this entry is written against, is **33 lines long and has no `issues:` section at all** — it carries `version: "2"`, a `linters:` block (`default: standard` plus the eleven enabled), a single `exclusions.rules` entry excluding `gosec` from `_test\.go`, and a `formatters:` block. `grep -n "issues\|max-same\|max-issues" .golangci.yml` returns **no match**. So neither cap is set here and the gate on `main` still truncates. The code thread reports having set `issues.max-same-issues: 0` (and `max-issues-per-linter: 0`, harmless) on its own branch; that is recorded as **in flight**, not as applied, because it is not in the tree this log lives in. **Fix shape, for whoever merges:** `max-same-issues: 0` is the load-bearing one; confirm it survives the merge, because it is the setting that makes every other number in this section trustworthy. **Why it earns High:** a gate whose output is silently truncated cannot be used as evidence, and this round now has two demonstrations of that in one file — *"0 issues"* from the wrong linter version (FI-03) and *"7 issues"* from the right one were **both** misleading, by different mechanisms. **One sentence worth keeping, because it is a live tripwire:** gosec's 4 were never truncated only by coincidence — its three G124 hits share text and land at **exactly** the limit of 3, and G123's text is distinct. gosec is sitting on the boundary, so it starts silently truncating on the very next duplicate-text finding anyone adds |
+| **FI-05** | **The documented setup path creates `/config` and `/data` at the filesystem root.** `docs/DEVELOPMENT.md:144` says `cp .env.example .env # optional — every value has a working default`, and `.env.example:24` and `:28` ship **uncommented** `USARR_CONFIG_DIR=/config` and `USARR_DATA_DIR=/data`; `internal/config/config.go:29` also hardcodes `DefaultConfigDir = "/config"`. **There is no published image — the README says so — so bare metal is the only install path that exists today, and `/config` is not a working default there.** Running as root silently creates both at `/`; `make dev` with no `.env` at all still creates `/config`; as a non-root user it hard-fails instead (`usarr: create …: mkdir …: permission denied`, exit 1) | **Open — recorded here rather than applied.** **Fix shape:** comment out the two lines in `.env.example` (they are the container values, and the container does not exist yet), and give `DEVELOPMENT.md` §3 a local value — the Makefile **already defines `DEV_CONFIG_DIR ?= ./.dev/config`** for `make migrate`, so the right answer is already in the tree and is simply not offered to the reader. The stray directories were removed by the reviewer |
+
+**DL-01, DL-02, DL-03 and SR-01 — the proving commands, carried verbatim:**
+
+```
+$ grep -rn "EvictExpired" --include=*.go .
+./internal/releases/service.go:123:func (s *Service) EvictExpired(ctx context.Context) (int64, error)
+./internal/releases/search_test.go:691:func TestEvictExpired(t *testing.T) {
+./internal/releases/search_test.go:704:	n, err := svc.EvictExpired(context.Background())
+
+$ grep -n "go func\|Worker\|maintenance" cmd/usarr/app.go cmd/usarr/main.go cmd/usarr/services.go
+cmd/usarr/main.go:123:	go func() {          # http.Serve
+```
+The only background goroutines in the process are `registry.RunProber` (`cmd/usarr/main.go:105`) and
+the HTTP server. Nothing sweeps `release_candidate`. Proven duplication:
+```
+$ go test ./internal/store -run TestZZDuplicateCandidates -v
+    first insert ids=[1] err=<nil>
+    second insert of the IDENTICAL (service_instance_id, guid) ids=[2] err=<nil>
+    rows with guid='same-guid': 2
+```
+
+DL-02, against the live schema:
+```
+$ PRAGMA table_info(release_candidate)   # via harness
+id, work_id, service_instance_id, guid, title, indexer, indexer_id, protocol,
+categories, size_bytes, seeders, leechers, age_days, quality, download_url,
+info_url, info_hash, download_client_id, raw_release_json, rejected,
+rejection_reasons, fetched_at, expires_at        <- no user_id
+```
+Same for `provenance` (`PRAGMA table_info(provenance)`: no `user_id`, and no `service_instance_id`).
+
+DL-03, both halves:
+```
+READ  dsn: file:/var/lib/usarr/usarr.db?_pragma=busy_timeout%285000%29&_pragma=journal_mode%28WAL%29&_pragma=synchronous%28NORMAL%29&_pragma=foreign_keys%28ON%29&_pragma=temp_store%28MEMORY%29&_pragma=wal_autocheckpoint%281000%29&_pragma=cache_size%28-8000%29&_timefmt=sqlite
+WRITE dsn: ...&_txlock=immediate
+
+$ go test ./internal/db -run TestZZReadPoolCanWrite -v
+    INSERT via d.Read(): err=<nil>
+    FINDING: the read pool is NOT read-only; it accepted a write
+    rows written via read pool: 1
+    INSERT inside ReadTx (sql.TxOptions{ReadOnly:true}): err=sqlite3: attempt to write a readonly database
+
+$ go test ./internal/store -run TestZZDeferredUpgradeOnReadPool -v
+    deferred read tx upgrading to a write while the writer holds the lock:
+      err=sqlite3: database is locked after 26.655µs
+    FINDING CONFIRMED: busy_timeout=5000 did NOT rescue it (returned in 89.697µs, not 5s)
+```
+
+SR-01:
+```
+$ go test ./cmd/usarr/ -run TestAudit_CredentialsPersistedInReleaseCandidate -v
+info_url        = "https://tracker.example/details/1234?apikey=SECRETPROWLARRADMINKEY0123456789abcdef"
+raw_release_json= {...,"infoUrl":"https://tracker.example/details/1234?apikey=SECRETPROWLARRADMINKEY0123456789abcdef",...}
+FINDING: release_candidate.info_url stores the credential VERBATIM in SQLite (redacted only on the way out)
+FINDING: raw_release_json still carries the credential (inside infoUrl)
+the raw SQLite file (4096 bytes) contains the plaintext admin key 0 time(s)
+  -wal: 263712 bytes, key appears 2 time(s)
+```
+
+**FI-02, FI-03, FI-04 and FI-05 — the proving commands, carried verbatim:**
+
+```
+$ git clone …; cp .env.example .env; make tools; make check-offline
+> usarr-web@0.0.0 format:check …/web
+> prettier --check .
+[error] Cannot find package 'prettier-plugin-svelte' imported from …/web/noop.js
+ ELIFECYCLE  Command failed with exit code 1.
+ WARN   Local package.json exists, but node_modules missing, did you mean to install?
+make: *** [Makefile:262: fmt-check] Error 1
+EXIT=2      (0.5 s in)
+
+$ go env GOBIN GOPATH
+              (empty)
+/root/go
+$ ls /root/go/bin
+gitleaks  gofumpt  golangci-lint  goose  govulncheck
+$ echo $PATH
+/root/.local/bin:/root/.cargo/bin:/usr/local/go/bin:/opt/node22/bin:/opt/maven/bin:/opt/gradle/bin:/opt/rbenv/bin:/root/.bun/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+$ make fmt-check          # default PATH, no override
+/bin/bash: line 1: gofumpt: command not found
+make: *** [Makefile:261: fmt-check] Error 127
+
+$ which -a golangci-lint
+/usr/local/bin/golangci-lint
+$ golangci-lint --version
+golangci-lint has version 2.5.0 built with go1.25.1 from ff63786c on 2025-09-21T19:04:05Z
+$ /root/go/bin/golangci-lint --version
+golangci-lint has version 2.12.2 built with go1.25.13 …
+$ /usr/local/bin/golangci-lint run
+0 issues.
+EXIT=0
+
+$ export PATH="/root/go/bin:$PATH"; golangci-lint run
+… (4 gosec hits omitted — owned elsewhere) …
+internal/httpapi/redact_test.go:19:28: net/http/httptest.NewRequest must not be called. use net/http/httptest.NewRequestWithContext (noctx)
+internal/httpapi/redact_test.go:37:22: net/http/httptest.NewRequest must not be called. use net/http/httptest.NewRequestWithContext (noctx)
+internal/httpapi/server_test.go:153:27: net/http/httptest.NewRequest must not be called. use net/http/httptest.NewRequestWithContext (noctx)
+7 issues:
+* gosec: 4
+* noctx: 3
+EXIT=1
+
+# FI-11 — the same tree, the same pinned binary, the caps removed.
+# Re-run from scratch while writing this entry, on cb57e43, after `golangci-lint cache clean`,
+# and it reproduced both numbers and all four hidden paths exactly:
+$ golangci-lint run --max-issues-per-linter=0 --max-same-issues=0
+11 issues:
+* gosec: 4
+* noctx: 7
+# the four the capped run hid, all httptest.NewRequest:
+#   internal/httpapi/services_urlbase_test.go:105
+#   internal/web/web_test.go:213
+#   internal/web/web_test.go:229
+#   internal/web/web_test.go:317
+
+# which cap is doing it, isolated:
+$ golangci-lint run --max-issues-per-linter=0      →  7 issues   (not this one; default is 50)
+$ golangci-lint run --max-same-issues=0            → 11 issues   (this one; stock default is 3)
+
+# and the config on the tree this entry is written against sets neither:
+$ grep -n "issues\|max-same\|max-issues" .golangci.yml
+(no match — the file is 33 lines: version, linters, one gosec/_test.go exclusion, formatters)
+
+$ ls -d /config /data
+ls: cannot access '/config': No such file or directory
+ls: cannot access '/data': No such file or directory
+$ ./usarr --env-file .env          # .env is a verbatim copy of .env.example
+$ ls -d /config /data
+/config
+/data
+$ ls -la /data
+drwx------ 3 root root 4096 … logs
+```
+
+### 1.3 Medium
+
+| # | Finding | Disposition |
+|---|---|---|
+| **SR-02** | **The TOFU SPKI pin is never recorded; the pinned-TLS path is dead in production.** `internal/httpapi/services.go:172` stores `TLSSPKIPin: result.TLSSPKIPin`, but the only `ConnectionTester` implementation — `registry.Test`, `cmd/usarr/services.go:211-299` — never sets `TestResult.TLSSPKIPin` (declared at `internal/httpapi/ports.go:81-83`). So `ssrf.Options.SPKIPin` at `cmd/usarr/services.go:172` is always nil and `internal/ssrf/ssrf.go:213-249`'s pinned branch never executes. Direction is fail-closed (full chain verification instead), but a documented control (`ssrf.go:79-104`, *"the supported alternative to `verify_tls=0`"*) does not exist — **a self-signed homelab HTTPS instance simply cannot be added** | **Open — recorded here rather than applied.** **Fix shape:** populate `TestResult.TLSSPKIPin` in `registry.Test`, then fix the second bug in the same area or the pin still will not apply — `cmd/usarr/services.go:245` assigns `si.TLSSPKIPin` **only** in the stored-key branch, so a test with a typed key would not apply the pin even once the column is populated. Distinct from the G123 session-resumption item excluded in §3, and distinct from Round 2's SSRF-02, which documented a `ClassDerived` constraint on a pin that — as this finding shows — is never set in the first place |
+| **SR-03** | **CSRF is a naive double-submit: the token is not bound to the session.** `internal/httpapi/auth.go:229-241` compares the `usarr_csrf` cookie against the `X-CSRF-Token` header and nothing else. Any self-consistent pair passes. Precondition for exploitation is cookie-write on the UsArr host — a sibling subdomain, or a network position on the **documented default deployment** (plain HTTP on a LAN, per the reasoning quoted at `auth.go:293-305`); the cookie has `Path=/` and no `__Host-` prefix | **Open — recorded here rather than applied.** The reviewer is explicit that this is **defence-in-depth, not a working cross-site attack today**: `Content-Type: application/json` is required (`auth.go:219-227`) and there is no CORS handler anywhere — `grep -rn "Access-Control" --include=*.go internal/ cmd/` returns nothing — so a cross-origin `fetch` fails preflight. **Fix shape:** HMAC the token over the session id, or store the expected token in the session row. Not the cookie-flags item excluded in §3 |
+| **DL-04** | **`service_instance.name UNIQUE` is not partial — a soft-deleted instance permanently burns its name.** `internal/db/migrations/00001_initial.sql:136` — `name TEXT NOT NULL UNIQUE`, a table-level constraint (`sqlite_autoindex_service_instance_1`, `PRAGMA index_list(service_instance)`), not `CREATE UNIQUE INDEX … WHERE deleted_at IS NULL`. `SoftDeleteServiceInstance` (`internal/store/serviceinstance.go:240`) only sets `deleted_at`, so the row and its name survive: delete "Prowlarr", try to re-add "Prowlarr", get a constraint error with no way to clear it from the UI. **The tombstone design intends the `id` to be burned, not the human-facing label** | **Open — recorded here rather than applied.** **Fix shape:** replace the table-level constraint with a partial unique index in a later migration — which means a table rebuild, since 0001 is frozen. Reviewer's completeness note, not itself a finding: `base_url` has **no** uniqueness at all (`duplicate base_url, different name: err=<nil>`), which is probably right for `url_base`-differentiated deployments |
+| **DL-05** | **Three FK child columns have no index — a cascading delete full-scans the largest table.** `internal/db/migrations/00001_initial.sql:201` and `:224` declare `ON DELETE CASCADE` from `service_instance`; `:271` declares `ON DELETE CASCADE` from `user` on `tag_assignment`. `ix_ta_tag` is `(tag_id, user_id, work_id)` — `user_id` is not leading, so it cannot serve the cascade | **Open — recorded here rather than applied.** Latent today: `service_instance` is only ever soft-deleted, so the cascade never fires. It becomes real the moment a hard purge, a rotation cleanup or a user delete ships against a `release_candidate` table that DL-01 has let grow — which is the pairing worth routing together. **Fix shape:** three `CREATE INDEX` statements in a later migration, purely additive, no rebuild |
+| **DL-06** | **Every mutating store method takes no scope parameter — authorization is a separate preceding read.** Reads carry scope in the signature exactly as `internal/store/store.go:15-19` demands; the four mutations do not — `UpdateServiceInstance` (`internal/store/serviceinstance_update.go:35`), `UpdateServiceInstanceCredential` (`serviceinstance.go:202`), `UpdateServiceInstanceHealth` (`:215`), `SoftDeleteServiceInstance` (`:240`), each issuing only `WHERE id = ? AND deleted_at IS NULL`. The handlers do gate them — `internal/httpapi/services.go:225` reads with `storeScope(a)` before the update at `:312`, and `:344` before the delete at `:351` — but that is check-then-act across two pools and two transactions, and the safety lives at the call site rather than in the query | **Open — recorded here rather than applied.** **Not exploitable in v0.1** (`OwnerScope` matches everything) — this is a seam finding, and the store package's own stated rule is "in the query signature, not bolted on later", so these four are the bolted-on case. **Fix shape:** thread `Scope` into the four signatures and into the `WHERE`, before multi-user makes it a migration-shaped problem |
+| **DL-07** | **`docs/reference/schema.md` §13 and `ARCHITECTURE.md` §6.5 both assert the four library tables are "all in migration 0001". They are not** — `schema.md:1071`, `:1074` (*"**All four tables are in migration 0001**, which `CLAUDE.md` says can never be edited"*), `:1148` (*"Reserved row: `library.id = 0`, Unfiled. Inserted by migration 0001"*), `ARCHITECTURE.md:1007` (*"**Four tables, all in migration 0001.**"*). The live schema after `d.Migrate(ctx)` has no `library`, `library_source`, `library_member` or `library_override`. `schema.md:3-8`'s own status header lists the correct ten tables, **so the document contradicts itself.** Worse: `internal/db/migrations/00001_initial.sql:11-14` enumerates what is "deliberately absent" and **omits all four**, so a reader working from the migration header would conclude they exist | **Open — recorded here rather than applied.** **Fix shape:** correct §13 and §6.5, and add the four to the migration header's deferred list — the header is the artefact an implementer actually reads. Two riders in the same edit: **(a)** `ARCHITECTURE.md:798`, `:903`, `:2349` and `schema.md:191,222,284,305` all argue "do X in migration 0001 because doing it later is a backfill" — 0001 shipped without any of them, so those cost arguments are now moot and everything lands in 0002+ regardless; the docs should say so rather than keep arguing about a moment that has passed. **(b)** `ARCHITECTURE.md:1310` §7.7 items **3** ("a priority scheduler in front of the single writer" — `db.Write`, `internal/db/sqlite.go:171`, is a plain `BeginTx` on a 1-connection pool, FIFO by `database/sql`'s waiter queue) and **5** (`ANALYZE` after bulk import — appears only in `internal/db/spike/fixture.go:267`, never on a production path) are unimplemented; both belong to sync, which has not shipped, so this is a "§16 wins" note rather than a defect |
+| **DL-08** | **`VerifyAuditChain` is an unbounded full-table read, and nothing prunes `audit_log`.** `internal/store/audit.go:156` issues `SELECT … FROM audit_log ORDER BY id ASC` with no `LIMIT`, no cursor, no checkpointing — `VerifyAuditChain audit.go:159 → SCAN audit_log`, O(n) forever, on a table that is append-only by trigger (`trg_audit_no_delete`) and has no retention job. Every login writes a row | **Open — recorded here rather than applied.** **Fix shape, and the sequencing is the point:** the index a retention sweep needs already exists (`audit retention sweep → SEARCH audit_log USING COVERING INDEX ix_audit_ts (ts<?)`), but the `BEFORE DELETE` trigger at `internal/db/migrations/00001_initial.sql:119` will `RAISE(ABORT)` on it — so any pruning needs a **new migration** replacing the trigger with one that permits a bounded, audited prune. Worth deciding now, while `audit_log` is empty everywhere. Verification itself wants a cursor or a checkpoint independently |
+| **DS-05** | **§3.5's key-loss recovery procedure describes a state the schema and code do not have.** `docs/CONFIGURATION.md:307-308` — *"UsArr marks every instance whose credential fails to open as `needs_credential`. Open each in the UI and paste the key again."* Repeated at `:615` for Navidrome. `grep -rn "needs_credential" --include=*.go --include=*.svelte --include=*.ts .` → **no matches anywhere**. `internal/httpapi/services.go:540-546` enumerates the five states the API can return: `healthy`, `degraded`, `down`, `needs re-identification`, `unknown`; the real behaviour, reproduced by two passes, is `state: "down"` with `action: "Update API key"` | **Open — recorded here rather than applied.** The behaviour is close enough to be usable — the doc names a **token that does not exist**. **Fix shape:** replace the token with what the API returns, or mark §3.5 the way §3.4 (`:274`) already marks the surrounding recovery flow, *"(proposed CLI, v0.1)"*. §3.5 carries no marker at all. Routes with DS-01, whose reproduction runs through this same code path |
+| **DS-06** | **§2.1's redaction deny-list is a stale subset of the one deny-list.** `docs/CONFIGURATION.md:128-131` lists nine names (`apiKey`, `api_key`, `apikey`, `token`, `access_token`, `sig`, `p`, `t`, `s`) plus `Authorization` and `X-Api-Key`. `internal/ssrf/redact.go:39-64` has **nineteen** — adding `auth_token`, `signature`, `secret`, `secret_key` and the seven private-tracker names `passkey`, `torrent_pass`, `torrentpass`, `rsskey`, `authkey`, `apipasskey`, `cookie`. `internal/httpapi/redact.go:29` redacts **four** headers, not two (adds `Cookie`, `X-CSRF-Token`) | **Open — recorded here rather than applied.** This is the drift `internal/ssrf/redact.go:21-22` explicitly warns about — *"ARCHITECTURE.md §14.5 item 5 and security.md §5 document it and must be updated together with it"* — and it is Round 2's W-01 leaving one copy behind: `docs/ARCHITECTURE.md:1984-1993` and `docs/reference/security.md:314-317` both carry the **complete** list, and CONFIGURATION.md §2.1 is a **fourth copy nobody registered as one**. **Fix shape:** update §2.1, and add it by name to `redact.go:21-22`'s maintenance contract so the next W-01 updates three files and not two. Also `:131` — the doc says values are *"replaced with `<redacted>`"*; `<redacted>` is the **header** placeholder (`internal/httpapi/redact.go:32`), query-parameter values become `REDACTED` (`internal/ssrf/redact.go:70`) |
+| **DS-07** | **§16 says the Services UI does not exist; a 677-line Services screen ships.** `docs/ARCHITECTURE.md:2203` — *"the Services health **screen** (its endpoint exists, the UI does not)"*; `README.md:70` — `\| **Services health screen** … \| 📋 Planned — v0.1 \|` with no partial marker, though the README uses `🚧 Partial` elsewhere (`:66`). `web/src/routes/services/+page.svelte` is 677 lines: it lists instances, renders `state` + verbatim `problem` from `GET /api/v1/services/health`, adds, edits, re-tests, removes, and handles the sudo re-prompt. `web/src/routes/+page.svelte:39` tells a fresh user *"Start on Services"* — because without it there is no way to add a Prowlarr instance at all | **Open — recorded here rather than applied.** The file's own header (`:3-15`) is precise and honest about what it is — *"the SCAFFOLDING version… deliberately NOT the screen §17.3 specifies… Delete this file wholesale when §17.3 lands"* — §16 and the README simply have not absorbed it. **Fix shape:** §16 gains a partial/scaffolding row and the README's row moves to `🚧 Partial`. This is the rare direction where §16 **understates**, and it understates by exactly the amount that matters to a first-time user: whether the install is usable without `curl`. Corroborated by the fresh-install pass, which drove the whole add-a-service flow through the shipped screen |
+| **DS-08** | **`HttpOnly; Secure; SameSite=Lax` is stated unconditionally in two docs; `Secure` is conditional in code.** `docs/ARCHITECTURE.md:1786` and `docs/reference/security.md:378`, identical wording. `internal/httpapi/auth.go:306-308` — `secureCookies` returns `clientOf(r.Context()).scheme == "https"`, so `Secure` is omitted on plain HTTP | **Split. The code half is already dispositioned; the doc half is Open.** The reviewer states plainly that **the code is right and the docs are wrong**, and the argument at `auth.go:293-305` is the same one Round 2 accepted at **W-02**: `CONFIGURATION.md:630` (§8.1) makes plain HTTP on a trusted LAN the documented v0.1 default, browsers discard `Secure` cookies over http, so an unconditional `Secure` means nobody can log in on the default deployment. **Recorded as a deliberate decision rather than a defect**, cross-referenced to W-02. What is **still open** is exactly what W-02 did not do: the carve-out exists only as a Go comment, and neither of the two documents a reviewer actually reads records it. **Fix shape:** one sentence in each of `ARCHITECTURE.md:1786` and `security.md:378`. Independently corroborated by the security pass, which verified by execution that both cookies carry `Secure=true` over HTTPS |
+| **DS-09** | **§17.3's state vocabulary and the code's disagree in both directions.** `docs/ARCHITECTURE.md:2489` names four states (`healthy` / `degraded` / `down` / `needs re-identification`); `:2493` asserts *"`not configured` is already a first-class state with its own token"*. `internal/httpapi/services.go:540-546` defines **five** — the four plus `unknown`, returned for a disabled instance (`:679`) and as the fallback (`:694`) — and `not configured` **exists nowhere in the codebase**. The function's own doc comment at `:668` says *"derives the four states"* while its body returns five | **Open — recorded here rather than applied.** Both directions are wrong, which is why it is one entry and not two. **Fix shape:** §17.3 gains `unknown` and drops the `not configured` claim; `services.go:668`'s doc comment says five. **Low-severity rider, flagged as INFERENCE by the reviewer:** §17.3's plain-language amendment (`:2503-2509`) requires `paused — 7 failed attempts, retrying 14:19` rather than `degraded / breaker open`, and `this may be a different Sonarr` rather than `needs re-identification`, while the API returns the raw tokens. That is *plausibly* intended as a UI-layer rendering concern and the §17.3 screen is not built — but **nothing in the code or docs says which layer owns it**, and that is the part worth settling |
+| **FI-06** | **No single-instance lock: two processes will share one config directory and one database.** Both start, both serve, both write. The port collision **is** caught (`usarr: USARR_BIND_ADDRESS/USARR_PORT: cannot listen on 0.0.0.0:18484: bind: address already in use`, exit 1) — a *different* port on the same volume is not | **Open — recorded here rather than applied.** This defeats the documented single-writer discipline from outside the process, where DL-03 defeats it from inside, and it would break key rotation mid-flight. The realistic first-run mistake is a systemd unit plus a manual `./usarr` to "just check something". **Fix shape:** a `flock` on the config directory, failing closed with a message naming the other PID |
+
+**SR-02, SR-03, DL-04…DL-08 and FI-06 — the proving commands, carried verbatim:**
+
+```
+$ go test ./cmd/usarr/ -run TestAudit_SPKIPinIsNeverRecorded -v
+service_instance.tls_spki_pin = 0 bytes (), verify_tls = true
+FINDING: the column is empty after a successful connection test, so ssrf.Options.SPKIPin
+is always nil and internal/ssrf's pinned-TLS path never runs in production.
+
+$ go test ./cmd/usarr/ -run TestAudit_CSRFTokenSessionBinding -v
+POST /auth/sudo with attacker-planted cookie+header pair -> 200 {"authenticated":true,...,"sudo_until":"2026-08-16T16:29:37.73155949Z"}
+FINDING: the CSRF token is a NAIVE double-submit — any self-consistent cookie/header pair passes;
+it is not bound to the session id.
+
+$ go test ./internal/store -run TestZZDuplicateCandidates -v
+    soft delete: err=<nil>
+    re-create with the SAME name after soft delete:
+      err=sqlite3: constraint failed: UNIQUE constraint failed: service_instance.name
+
+$ go test ./internal/store -run TestZZFKChildIndexes -v
+release_candidate.service_instance_id (FK child)   SCAN release_candidate   <<< SCAN
+write_queue.service_instance_id (FK child)         SCAN write_queue   <<< SCAN
+tag_assignment.user_id (FK child)                  SCAN tag_assignment USING COVERING INDEX ix_ta_tag   <<< SCAN
+write_queue.user_id (FK child)                     SEARCH write_queue USING COVERING INDEX ux_wq_idem (user_id=?)
+tag_assignment.service_instance_id (FK child)      SEARCH tag_assignment USING COVERING INDEX ix_ta_inst_lookup (service_instance_id=?)
+tag_assignment.tag_id (FK child)                   SEARCH tag_assignment USING COVERING INDEX ix_ta_tag (tag_id=?)
+session.user_id (FK child)                         SEARCH session USING INDEX ix_session_user (user_id=?)
+client_credential.user_id (FK child)               SEARCH client_credential USING COVERING INDEX ix_cc_user (user_id=?)
+
+$ go test ./internal/db -run TestZZUpDownUp -v
+after UP objects (40): [table audit_log, table client_credential, ..., table user, table write_queue]
+# no library, library_source, library_member, library_override
+
+VerifyAuditChain audit.go:159
+    SCAN audit_log   <<< SCAN ON A GROWING TABLE
+audit retention sweep    SEARCH audit_log USING COVERING INDEX ix_audit_ts (ts<?)
+
+$ ./usarr --config-dir $SP/run1 --port 18484 &     # instance A
+$ ./usarr --config-dir $SP/run1 --port 18686 &     # instance B, same config dir
+{"level":"INFO","msg":"master key loaded","source":"key file",…}
+{"level":"INFO","msg":"listening","address":"0.0.0.0:18686",…}
+$ curl :18484/api/health/ready → {"status":"ready",…}
+$ curl :18686/api/health/ready → {"status":"ready",…}
+port 18484 login HTTP=200
+port 18686 login HTTP=200
+$ pgrep -a usarr
+26912 ./usarr --config-dir …/run1 --port 18484
+29216 ./usarr --config-dir …/run1 --port 18686
+```
+
+### 1.4 Low
+
+| # | Finding | Disposition |
+|---|---|---|
+| **SR-04** | **`crypto.NormalizeHostPort` and `ssrf.canonicalHostPort` disagree on zero-padded ports.** `internal/crypto/derive.go:216-221` round-trips the port through `strconv.Atoi`, stripping leading zeros; `internal/ssrf/policy.go:199-206` does not touch the port. `derive.go:170-181` and `:241-245` both state the two must agree | **Open — recorded here rather than applied.** **Fails closed** (an unusable instance and a misleading error), never open. **Fix shape:** canonicalise the port on one side — most cheaply by having `ssrf` parse it the same way — or reject zero-padded ports at `normalizeBaseURL` with SR-05. Sits one line away from DS-12, which is about the same function's godoc; route them together |
+| **SR-05** | **Userinfo in `base_url` is stored in cleartext and hidden by redaction.** `normalizeBaseURL` (`internal/httpapi/services.go:744-755`) returns the raw string; `crypto.NormalizeOrigin` discards userinfo (`derive.go:208`, `u.Hostname()`), so the §1.6 re-entry check sees no change; `toServiceResponse` (`services.go:64`) redacts it back out | **Open — recorded here rather than applied.** **No outbound `Authorization: Basic` is produced**, so this is a cleartext secret at rest plus a DB/UI disagreement, not a credential channel. **Fix shape:** reject userinfo in `normalizeBaseURL` |
+| **SR-06** | **Secret-bearing structs lack the log guard `config.Config` has.** `config.Config` has both `LogValue` (`internal/config/config.go:125`) and `String` (`:148`) — Round 2's CFG-01. `httpapi.TestRequest.APIKey` (`internal/httpapi/ports.go:55`) and `servarr.Options.APIKey` (`internal/servarr/client.go:65`) have neither | **Open — recorded here rather than applied.** **Latent only:** `grep -rn '%+v\|%#v' --include=*.go internal/ cmd/ \| grep -v _test.go` finds **no production call site**. **Fix shape:** the CFG-01 treatment on both structs — value receivers, explicit allow-list of fields, so a future secret field is invisible until someone adds it |
+| **DL-09** | **`Owner()` (`internal/store/user.go:121`) plans `SCAN user`** and sits on the SPA bootstrap path (`internal/httpapi/auth.go:331`, called on every page load) | **Recorded as a deliberate decision rather than a defect — the reviewer's own framing.** Two rows today, <50 at v1.0; genuinely fine. Noted only so it becomes a *recorded* decision the way `TestServiceInstanceListScanIsIntentional` made the `service_instance` scan one |
+| **DL-10** | **No session pruning and no index that would serve one** — `session expiry sweep → SCAN session`. `GetSession` filters expired rows out but nothing deletes them, so `session` grows one row per login forever | **Open — recorded here rather than applied.** **Fix shape:** routes with DL-08 — same decision (retention), same migration window, and unlike `audit_log` there is no append-only trigger in the way, only a missing index |
+| **DL-11** | **`write_queue` settled-row sweep would scan** — `SELECT id FROM write_queue WHERE state='done' AND settled_at < ?` → `SCAN write_queue`. `ix_wq_runnable` is partial on `('pending','inflight','verifying')` and deliberately excludes `done`/`failed`, so terminal rows are unreachable by index | **Open — recorded here rather than applied.** Latent until the queue ships. **Fix shape:** decide it at the same rebuild WQ-04 already schedules — that entry already requires all three `write_queue` indexes to be recreated by hand, so a fourth index is the cheapest it will ever be. **Distinct from the excluded `awaiting_choice` item** (§3): this is about terminal rows, that one is about non-terminal ones |
+| **DL-12** | **`schema.md` §6/§8/§10 print the DDL with `REFERENCES work(id) ON DELETE CASCADE`, `REFERENCES edition(id)`, `REFERENCES media_file(id)` and `REFERENCES tag_rule(id)` still attached.** Migration 0001 drops all six, documented in the migration and not in `schema.md` | **Open — recorded here rather than applied.** Strengthened by a mechanical diff the reviewer ran: across `schema.md`'s ten shipped `CREATE TABLE` blocks against the live `sqlite_schema`, **those six clauses are the only differences** — every other column, type, `NOT NULL`, `DEFAULT` and `CHECK` matches byte-for-byte after whitespace/comment normalisation. **Fix shape:** one line in `schema.md`, so a reader does not copy the reference DDL into migration 0002 |
+| **DL-13** | **`sqlite_sequence` survives `Down`** — goose's `goose_db_version.id INTEGER PRIMARY KEY AUTOINCREMENT` creates it | **Open — recorded here rather than applied, and cosmetic.** The repo's own `userObjects` filters `sqlite_%`, so `TestMigrationDownLeavesNothingBehind` is unaffected. `goose_db_version` is also the only non-`STRICT` table in the file, and it isn't ours |
+| **DS-10** | **`CLAUDE.md:175`** — *"`docs/reference/` \| Vendored upstream specs and captured API reference material."* `docs/reference/` holds nine `.md` files and **zero specs**; the single vendored spec is `api/specs/prowlarr.json` (with `api/specs/SOURCES.md`) | **Open — recorded here rather than applied.** An agent following `CLAUDE.md`'s table looks in the wrong directory. **Fix shape:** one-line correction — but note `CLAUDE.md` is the project's instruction file, and Round 2 (§2.2) already established it is **left for the owner** rather than edited on an agent's say-so |
+| **DS-11** | **`docs/DEVELOPMENT.md:98`** — the layout block names `api/specs/prowlarr.v1.json`; the actual file is `api/specs/prowlarr.json`, and `internal/servarr/contract_test.go:50` reads that exact path | **Open — recorded here rather than applied.** §2 is labelled "(target)", so this is naming drift rather than a false claim — but the one spec that *does* exist is named differently from the target it is supposed to be an instance of. **Fix shape:** align the target on the shipped name |
+| **DS-12** | **`internal/crypto/derive.go:164-165`** — the godoc first line reads *"NormalizeHostPort reduces a service base URL to the canonical host:port that goes into the AAD."* Its own body ten lines later (`:174`) says *"The AAD does not use this function. It uses NormalizeOrigin."* | **Open — recorded here rather than applied.** The first line is what godoc shows, and it contradicts `docs/reference/security.md:57-61`, which warns implementers **by name** that using `NormalizeHostPort` for the AAD comparison produces credentials that can never be opened again — i.e. it points a reader at exactly the trap Round 2's CRYPTO-01 closed. **Fix shape:** rewrite the first godoc line. Route with SR-04, same function |
+| **DS-13** | **`docs/CONFIGURATION.md:412`** — §5's example backup filename is `usarr-2026-08-16T03-00-00Z.db`; `cmd/usarr/backup.go:73-74` produces `usarr-pre-migration-<ts>-v<N>.db` | **Open — recorded here rather than applied.** The §5 name presumably describes the not-yet nightly job; the only backups a user will actually see today are the pre-migration ones. **Fix shape:** show the real name and mark the nightly one as not-yet. Routes with DS-01 — same section, same edit |
+| **DS-14** | **`docs/ARCHITECTURE.md:2193-2199`'s "Landed so far" list omits four shipped endpoints** — `GET /api/v1/system/status`, `GET /api/v1/auth/session`, `POST /api/v1/auth/sudo` and the whole sudo re-authentication window (`internal/httpapi/server.go:189,196,200`; `internal/httpapi/auth.go:56-62`) | **Open — recorded here rather than applied.** **Sudo mode is a substantive shipped security control that §16 does not record as landed** — the same understatement direction as DS-07, and §16 is the authoritative roadmap. **Fix shape:** four rows added to the landed list |
+| **FI-07** | **`--help` exits 1 and prints an error line first** — `usarr: parse flags: flag: help requested`, then the usage block; `./usarr --help >/dev/null; echo $?` → `1` | **Open — recorded here rather than applied.** Small but it is the very first command a new user runs, and a non-zero `--help` breaks scripts and packaging checks. **Fix shape:** catch `flag.ErrHelp` in `cmd/usarr`'s flag parsing, print usage to stdout and exit 0 |
+| **FI-08** | **No `healthcheck` subcommand, but the README's compose block uses one** — `test: ["CMD","/usarr","healthcheck"]`; `./usarr healthcheck` → `usarr: unexpected argument "healthcheck"`, exit 1 | **Open — recorded here rather than applied, and low precisely because the block is marked a placeholder** and there is no published image for it to run in. **Fix shape:** when the image lands, either the subcommand ships or the compose block uses `wget`/`curl` against `/api/health/ready`, which already exists and answers correctly |
+| **FI-09** | **A failed key validation still creates `backups/ keys/ logs/ providers/` before exiting** — `ls -la` after a placeholder-key refusal shows all four directories. `cmd/usarr/app.go:44` runs `ensureDirs` before the master-key ladder | **Open — recorded here rather than applied.** Harmless in itself, and mildly confusing: a refused start leaves a populated-looking config directory behind. **Fix shape:** run the ladder before `ensureDirs`, or clean up on the refusal path. Weigh against FI-05, where the same eagerness is what creates `/config` at the root |
+| **FI-10** | **The container ships Go 1.24.7; `go.mod` requires 1.25.13, satisfied only by `GOTOOLCHAIN=auto` downloading a toolchain** — `GOTOOLCHAIN=local go build ./cmd/usarr` → `go: go.mod requires go >= 1.25.13 (running go 1.24.7; GOTOOLCHAIN=local)` | **Recorded as environmental, not a repo defect.** The floor is correct and Round 2's B-06 established why (15 called stdlib vulnerabilities below 1.25.13). Recorded because it has one real consequence worth knowing: **an air-gapped machine, or any builder with `GOTOOLCHAIN=local`, cannot build UsArr without first installing 1.25.13 by hand**, and nothing in `DEVELOPMENT.md` says so |
+
+**SR-04, SR-05 and SR-06 — the proving commands, carried verbatim:**
+
+```
+$ go test ./cmd/usarr/ -run TestAudit_ZeroPaddedPortDivergence -v
+crypto.NormalizeHostPort("http://127.0.0.1:041883") = "127.0.0.1:41883"
+ssrf.NormalizeHostPort("http://127.0.0.1:041883")   = "127.0.0.1:041883"
+FINDING: the two normalisers disagree — the AAD/allowlist pair the code says must agree, does not
+POST /services with a zero-padded port -> 502 {"error":"connection_test_failed","message":"... ssrf validate [configured]: ssrf: host not allowed for this request class (127.0.0.1:041883)"}
+
+$ go test ./cmd/usarr/ -run 'TestAudit_UserinfoInBaseURL|TestAudit_UserinfoBecomesOutboundBasicAuth' -v
+PATCH base_url="http://someuser:somepass@127.0.0.1:44077" (same origin, no api_key) -> 200
+service_instance.base_url in SQLite = "http://someuser:somepass@127.0.0.1:44077"
+what the API shows                  = {..."base_url":"http://127.0.0.1:44077"...}
+  RECEIVED: GET /api/v1/system/status X-Api-Key="TYPED" Authorization="" query="" body=""
+
+$ go test ./internal/httpapi/ -run TestAudit_SecretBearingStructsHaveNoLogGuard -v
+fmt.Sprintf("%+v", httpapi.TestRequest{...}) = {InstanceID:0 Kind:prowlarr BaseURL:http://nas:9696 URLBase: APIKey:PLAINTEXT-ADMIN-KEY}
+slog.Any("req", TestRequest{...})            = ... req="{... APIKey:PLAINTEXT-ADMIN-KEY}"
+```
+
+### 1.5 Informational and inference
+
+The security pass labelled these itself, and they are **not counted as defects**. Recorded so the
+trade-off in each is explicit rather than assumed, and so the two inferences are not mistaken for
+executed results.
+
+| # | Item | Disposition |
+|---|---|---|
+| **SR-07** | **Sudo is granted automatically at login** (`internal/httpapi/auth.go:477-480`), so the gate only bites more than 5 minutes after sign-in. Documented intent, but a cookie stolen inside the window is enough for credential operations | **Open — recorded here rather than applied, as an owner decision.** Not a defect against the spec; the question is whether the spec is what the owner wants |
+| **SR-08** | **`handleLogout` clears `usarr_session` but not `usarr_csrf`** (`auth.go:499-508`) | **Open — recorded here rather than applied.** Small, and it pairs naturally with SR-03: a CSRF token bound to the session must be cleared with it |
+| **SR-09** | **`ClassConfigured` has no address denylist at all** — `169.254.169.254`, `::1`, `fd00::1`, `100.100.100.100` all pass, executed. Deliberate per `internal/ssrf/policy.go:133-138` | **Recorded as a deliberate decision rather than a defect, and already dispositioned — this is Round 2's SUS-02**, resolved there as per-spec: `security.md` §2's table says `configured` "may reach private space, but only the exact validated host:port". Cross-referenced, not re-opened. **Two passes reached the same conclusion independently this round** — the security pass by execution, the fresh-install pass from `policy.go:132-137` and then live, by adding `http://127.0.0.1:19696` as a real instance |
+| **SR-10** | **`crypto.AAD.Bytes()` has no length prefixes** (`derive.go:123-139`), so `{Table:"a", Column:"b:c"}` and `{Table:"a:b", Column:"c"}` render identical bytes | **Open — recorded here rather than applied.** Not exploitable today: `Table`/`Column` are hardcoded constants and `PrimaryKey` is numeric. It is a **latent collision** if a future column name ever contains a colon. **Fix shape:** length-prefix the fields, or a comment at the struct forbidding a colon in either constant — the cheap half is worth doing while the constants are few |
+| **SR-11** | **INFERENCE, not executed — HTTP/2 connection coalescing.** `ForceAttemptHTTP2: true` (`ssrf.go:191`) means Go's h2 transport may reuse a connection for a different authority whose certificate covers it | **Recorded as an inference the reviewer could not test.** Their reasoning: for `ClassConfigured` the dialler already pins one host:port, and for `ClassProvider` both endpoints are public, so it should not cross a policy boundary — *"but I could not construct a test for it."* Left open, in the shape Round 2 used for SUS-01: an unverified mechanism is not a basis for shipping a change, and not a basis for closing the question either |
+| **SR-12** | **INFERENCE, not executed — `VerifyPassword` takes Argon2 cost parameters from the stored PHC string** (`password.go:64`), so a hostile `user.password_hash` row could force a large `m=` on every login | **Recorded and effectively self-rebutted by the reviewer:** it requires DB write access, *"which is already game over."* Noted only so a future reader does not re-raise it as a remote memory-exhaustion vector — the one `CLAUDE.md` names is per-request Argon2id on API keys, and §2.4 records that as verified absent |
+
+---
+
+## 2. Rebuttals — checked, and found not to be defects
+
+Recorded because a finding that is quietly ignored comes back, and a *non-finding* that is never
+written down gets re-raised every round.
+
+### 2.1 The missing `UNIQUE (service_instance_id, guid)` on `release_candidate` — rebutted, and its *premise* is now DL-01
+
+The data prong looked at this directly and did **not** report it: *"`schema.md:677-686` argues it
+explicitly and rejects the upsert alternative on grab-window grounds. That argument is sound."* That
+is Round 2's **DB-03** decision holding up under a second, independent look, which is the outcome
+DB-03's disposition was hoping for.
+
+**What is attacked is not the decision but its stated bound.** DB-03's safety argument is *"the bound
+on that duplication is the TTL"*, and DL-01 shows the TTL sweep has no production caller. The
+decision is right; the sentence supporting it is currently false. Fixing DL-01 makes it true again —
+which is the cheapest possible resolution, and the reason DL-01 is ranked High rather than Medium.
+
+### 2.2 `AppendAudit`'s chain-head read is **not** a scan — a false alarm pre-empted
+
+`EXPLAIN QUERY PLAN` reports `SCAN audit_log` for the chain-head read, which reads alarming. The
+reviewer measured rather than assumed:
+
+```
+$ go test ./internal/store -run TestZZAuditChainHeadScaling -v
+chain-head read @  10k rows: 12.246µs
+chain-head read @ 100k rows: 11.849µs
+chain-head read @ 300k rows: 13.065µs
+```
+
+`ORDER BY id DESC LIMIT 1` on the rowid takes the last b-tree entry and stops. **Not a finding** —
+recorded here explicitly because the next reader running EQP will hit the same false alarm, and
+because it is the counterpart to DL-08, where the `SCAN audit_log` **is** real (`ORDER BY id ASC`,
+no `LIMIT`). The two look identical in the plan output and are not the same thing.
+
+### 2.3 Conditional `Secure` on the session cookie is correct — the code is rebutted as a defect, the documents are not
+
+Recorded at **DS-08** and repeated here because it is the third time it has come up (Round 2's W-02,
+then both the doc pass and the security pass this round). The verdict is *"I think the code is right
+and the docs are wrong"*, and the security pass's execution agrees the shipped behaviour is sound:
+`usarr_session` `HttpOnly=true`, `usarr_csrf` `HttpOnly=false` as the double-submit design requires,
+both `SameSite=Lax`, both `Secure=true` over HTTPS. **What survives as open is only the
+documentation** — the carve-out lives in a Go comment and in this log, and in neither of the two
+documents that state the rule.
+
+### 2.4 What the five passes checked and cleared
+
+Not rebuttals — **verified-correct properties**, recorded so the next round does not re-spend its
+budget here and so nothing below is rediscovered as a suspicion. Each was executed or read against
+primary source by the pass named.
+
+**Crypto, executed** (`go test ./internal/crypto/ -run TestAudit_ -v`):
+
+- **The AAD blocks row swapping, origin swapping and scheme downgrade** — all fail closed, e.g.
+  `crypto: authenticated decryption failed: kek_id=1: service_instance.api_key_enc id=2 origin=http://radarr.lan:7878`.
+  Round 2's CRYPTO-01 holding.
+- **Key versioning is handled correctly:** `kek_id` 1→2 (held key) fails on the RFC 3394 integrity
+  check; 1→99 gives `ErrUnknownKEK`; `Rewrap` round-trips cleanly and `KEKID` reports the new id.
+- **No nonce or DEK reuse:** 20 000 seals → 20 000 distinct nonces, 20 000 distinct wrapped DEKs.
+- **Tamper detection at every offset** (nonce, wrapped DEK, ciphertext, tag) — all `ErrDecrypt`, and
+  decrypt errors leak no plaintext.
+- **`NormalizeOrigin`'s equivalence classes are sane** — case, trailing dot, default ports,
+  IPv4-mapped, path/query/userinfo all collapse correctly; `file:`, `gopher:`, no-host and
+  port > 65535 rejected.
+- **The envelope layout matches `security.md` exactly** —
+  `kek_id(4) || nonce(12) || wrapped_dek(40) || ct || tag(16)` (doc pass, against `envelope.go:33-40`),
+  and `kek_id` is a plain column as §1.1 requires.
+
+**The master-key validation ladder, executed twice** — by the security pass
+(`go test ./internal/config/ -run TestAudit_ -v`) and end to end by the fresh-install pass, which
+drove all six refusal rows against the real binary and got the verbatim messages:
+
+- placeholder → *"USARR_SECRET_KEY is the placeholder value shipped in .env.example. A key published
+  in a git repository is not a key."*; empty → *"Empty is not the same as unset…"*; all-zero →
+  *"decodes to 32 zero bytes, which is not a key"*; 31 bytes → *"decodes to 31 bytes, expected
+  exactly 32. UsArr does not pad or truncate a key."*; not base64 → *"not valid base64 (standard
+  alphabet, padding optional)"*; both `USARR_SECRET_KEY` and `_FILE` → *"they are mutually exclusive,
+  and UsArr does not guess which you meant."* **All exit 1.** Placeholder detection survives
+  surrounding whitespace, and no error text echoes key material.
+- **The encrypted-rows-but-no-key guard fails closed** — key file removed with one credential stored
+  → *"the database holds 1 encrypted credential(s) but no master key was supplied … Refusing to start
+  half-decrypted."*, exit 1. **This is the guard DS-01 shows the salt does not have.**
+- **A wrong key degrades honestly rather than silently** — starts, then `state:"down"` with the
+  re-enter message, and search returns 502 `service_unavailable`.
+- **`keys/` 0700, `secret.key` 0600, salt 32 B and stable, `O_EXCL` refuses to clobber an existing
+  key**, and first run emits the loud back-it-up warning.
+
+**SSRF, executed** (`go test ./internal/ssrf/ -run TestAudit_ -v`, plus the 37 pre-existing tests):
+
+- **Resolve-then-pin has no re-resolution window** — with a resolver returning a different address per
+  call, dials 1/2/3 went to `93.184.216.34/.35/.36`, each exactly the address validated in that same
+  call, one resolver call per dial. **DNS rebinding across dials is caught.**
+- **All 15 encoding/metadata/transition forms are blocked under `ClassProvider`**, including
+  `169.254.169.254`, `[::ffff:127.0.0.1]`, `100.100.100.100`, NAT64 `[64:ff9b::7f00:1]`, 6to4
+  `[2002:7f00:1::]`, and the legacy numerics (`2130706433`, `0177.0.0.1`, `0x7f000001`, `127.1`).
+- **Redirects are re-validated at every hop** over the real `http.Client` — 302s to loopback, `[::1]`,
+  `169.254.169.254` and `2130706433` all refused — **and `Referer` is never synthesised**, which is
+  Round 2's SSRF-01 holding.
+- **Allowlist canonicalisation** collapses IPv4-mapped, bracketed, case and trailing-dot spellings to
+  one value. **No `100.64.0.0/10` denylist entry**, as `security.md` §2.1 requires (doc pass).
+
+**HTTP surface and auth, executed** (`go test ./cmd/usarr/ -run TestAudit_ -v`):
+
+- **CSRF gating covers every state-changing route** — all 10 (`auth/setup|login|logout|sudo`,
+  `services` POST, `services/test`, `services/{id}` PATCH/DELETE, `services/{id}/test`,
+  `releases/{id}/grab`): `no-token=403 wrong-token=403 form-ct=415 text-plain=415`, comparison by
+  `subtle.ConstantTimeCompare` (`auth.go:236`).
+- **The sudo gate is not bypassable** on all 5 credential-touching routes: 403 with the window
+  closed, a failed `POST /auth/sudo` does not open it, a successful one does.
+- **Re-entry on host change holds — the evil listener received 0 requests.** PATCH to a new host
+  without a key → 400 `credential_reentry_required`; test against a new host → 400; blank key → 400;
+  `https`↔`http` at the same port → 400; `url_base` traversal → 400. With a key typed in, the evil
+  host saw only `X-Api-Key="TYPED-INTO-THE-FORM"`, never the stored key.
+- **The API key never reaches the wire or the log** — 3 855 bytes of response transcript over 16
+  responses and 3 603 bytes of *debug-level* log: 0 occurrences. Prowlarr's key-in-`downloadUrl`
+  never reaches the SSE stream (5 421 bytes of frames). At rest: `api_key_enc` is a 110-byte envelope
+  beginning `00000001`, `download_url` empty, `session.id` a 64-char sha256 hex, `audit_log.metadata`
+  carries no key.
+- **Argon2id is used for user passwords only** — `auth.go:382`, `:420/:425`, `:429`, `:525`, nothing
+  else; only `internal/crypto/password.go:12` imports it. The keyed-hash path
+  (`crypto.HashClientKey`, HMAC-SHA256 + `ConstantTimeCompare`) has no production caller yet,
+  consistent with there being no northbound surface in v0.1. **Note for a future round:**
+  `crypto.NeedsRehash` also has no caller, so the "transparent upgrade on login" its doc describes is
+  not wired.
+- **SSE delivery is per-user scoped**, including replay (`internal/httpapi/events.go:117,163`).
+
+**The data layer, executed:**
+
+- **Pragmas are genuinely per-connection across both pools** — all 8 read connections held
+  simultaneously plus the writer, every one reporting `journal_mode=wal foreign_keys=1
+  busy_timeout=5000 synchronous=1 temp_store=2 wal_autocheckpoint=1000 cache_size=-8000
+  page_size=4096`. **This is the classic bug the task asked about and it is not present.**
+- **FK enforcement is behavioural on both pools**, not just a pragma readback.
+- **`audit_log.actor_user_id` has no `REFERENCES` and the consequence Round 2's DB-02 claimed is
+  real** — the actor id survives the user's deletion, and both append-only triggers fire.
+- **`BEGIN IMMEDIATE` is taken at BEGIN, before any statement** — a second handle's write while the
+  writer tx is open, with no statement issued yet, gets `database is locked`.
+- **Single-writer discipline holds under load, with zero `SQLITE_BUSY`:** `writers=16 readers=16
+  iters=150 elapsed=329.934611ms ok=2400 busy=0 otherErr=0`; a phase holding a `ReadTx` snapshot open
+  while 8 writers hammered and a goroutine ran `PRAGMA wal_checkpoint(TRUNCATE)` in a loop → 0
+  errors; two independent `db.Open` handles on one file → `ok=3200 busy=0 other=0`.
+- **Down/up round trip is clean, twice through** — 40 objects → 2 → 40, identical list, sentinel row
+  intact.
+- **The scope predicate fails closed, including for a zero-value `Scope{}` → `"1=0"`.**
+- **Timestamps are one format everywhere** — no unix-int / ISO-text mixing, so the lexicographic
+  ordering `ix_audit_ts` / `ix_rel_expiry` / `ix_wq_runnable` depend on is sound. Round 2's DOC-02
+  holding.
+- **Every index in `schema.md` for a shipped table exists live with identical DDL** — 21/21 `SAME`,
+  zero missing, zero extra — and **no claimed index goes unused by the planner**, over seeded volume
+  (20 k `release_candidate`/`provenance`/`audit_log`/`write_queue`, 5 k `session`, 2 k
+  `client_credential`, with `ANALYZE` applied).
+- **Toolchain floor holds:** `ncruces/go-sqlite3` ships **SQLite 3.53.4**, above
+  `docs/reference/schema.md:12`'s `>= 3.43.0`.
+
+**Documents against code, doc pass:**
+
+- **The whole Prowlarr `/api/v1` surface matches the vendored spec.** `internal/servarr/client.go:157`
+  pins `apiPath = "/api/v1"`, and all seven called paths are present in `api/specs/prowlarr.json` with
+  the parameters the code sends: `GET /search` (`client.go:462`, params `query, type, indexerIds,
+  categories, limit, offset` — **exact match** to `search.go:200-227`, including that `indexerIds`
+  and `categories` are repeated, not comma-joined), `POST /search` (grab, `ReleaseResource` body),
+  `GET /system/status`, `GET /indexerstatus`, `GET /indexer`, `GET /downloadclient`, `GET /health`.
+  `api/specs/SOURCES.md` records SHA-256 `efe3dfb9…5d0fbb` and `sha256sum` matches byte for byte. The
+  key travels in `X-Api-Key`, never `?apikey=` (`client.go:251`, `:62-63`).
+- **All 14 env keys** documented in `CONFIGURATION.md` §2 exist in `internal/config/config.go:326-384`
+  and in `.env.example`, with matching defaults and no undocumented key read; **all 11 flags** in
+  `internal/config/flags.go` match their documented env twins, and there is deliberately no
+  `--secret-key`.
+- **The §3.2 startup ladder matches `secretkey.go:72-133`** in all seven branches.
+- **Migration 0001's scope matches ADR-0019 and its own header** — the ten tables, `user_id` on every
+  user-scoped row, dangling FKs dropped with a `-- why` comment, append-only audit enforced by
+  `trg_audit_no_update`/`trg_audit_no_delete`. (DL-07 is the exception, and it is about four tables
+  the *documents* add, not about the ten that shipped.)
+- **README status tables: no row overstates.** ADRs 0026/0027/0028/0029 are unimplemented and
+  correctly listed as not-yet; `POST /api/v1/system/backup` is absent from the router and §16 says so;
+  every make target named in any doc exists except `make seed`, correctly marked **(not yet)**.
+
+**A fresh install, executed end to end:**
+
+- `go build ./...` succeeds in a fresh clone **before any `pnpm` step** (exit 0, 32 s) —
+  `internal/web/spa/.gitkeep` keeps `//go:embed` compiling, which is Round 2's B-03 holding.
+- **A hand-built binary 404s on `/` with the actionable message** `DEVELOPMENT.md:169` claims.
+- `make tools` installs all five pinned tools (`gofumpt v0.11.0`, `golangci-lint 2.12.2`,
+  `goose v3.27.3`, `govulncheck v1.7.0`, `gitleaks`); `make build` produces a **statically linked,
+  stripped 14.9 MB ELF** with the SPA embedded; `make test` passes (11 Go packages `ok`, vitest 3
+  files / 65 tests); `make modverify`, `make secrets`, `make vuln` (*"No vulnerabilities found"*) and
+  `make lint-web` (*"211 FILES 0 ERRORS 0 WARNINGS"*) all exit 0.
+- **First run:** key auto-generated with the loud warning and correct modes, migration 0001 applies
+  (`schema_version:1`), `usarr.db`/`-wal`/`-shm` all 0600, restart is idempotent and the session
+  survives; modes are tightened even on a pre-existing 0755 config dir.
+- **Health, SPA and auth:** `/api/health/live` → `{"status":"ok"}`; `/api/health/ready` →
+  `{"status":"ready","migrations_applied":true,"schema_version":1,"listener_accepting":true,…}`;
+  index, hashed assets, favicon and deep links all serve, unknown API paths 404; the first-run setup
+  wizard, login and CSRF token issuance all work.
+- **End-to-end Prowlarr add against a stub** → 201 `has_credential:true`, then `state:"healthy"`.
+- **Honest degradation with nothing configured** — no service → `409 {"error":"no_indexer_service",
+  "action":"Add Prowlarr"}`; a service with no indexers → `409 {"error":"no_indexers","action":"Enable
+  an indexer in Prowlarr"}`. Principle 3, working.
+- **Port and config-dir validation both fail closed** with exact messages.
+
+**One method caveat, and it is worth a permanent line because it silently poisons evidence.**
+`golangci-lint` **replayed cached diagnostics across two different clones with identical content,
+printing file paths belonging to the other clone.** `golangci-lint cache clean` fixed it and then
+reproduced identical counts. Several passes in this round worked in parallel clones of the same
+commit, which is exactly the shape that triggers it. **Any lint run used as evidence must clean the
+cache first before its paths are trusted** — the counts survive, the paths do not. The 11/7 figures in
+FI-04 and FI-11 were taken after a cache clean.
+
+**Not tested by any pass, and recorded so nobody reads the above as broader than it is:** `make
+docker` (no Dockerfile in tree), `make bench` / `make bench-rss`, real Prowlarr/Sonarr/Radarr (an
+HTTP stub was used, so live indexer search, grab and SSE streaming against real software were never
+exercised), key rotation (no such subcommand), a non-root container run (no image), and
+`--url-base` / reverse-proxy paths.
+
+---
+
+## 3. Seen and deliberately excluded
+
+These were surfaced by one pass or another and are **owned or already known elsewhere**. They are
+named here so the exclusion is visible and nobody concludes the review missed them:
+
+- **gosec G123 at `internal/ssrf/ssrf.go:234`** — the TLS pin skipped on resumed sessions. Already
+  Round 2's **SUS-01**. (Note the interaction with SR-02: the pinned path never runs in production
+  today anyway.)
+- **gosec G124 at `internal/httpapi/auth.go:249,261,275`** — cookie flags. Already Round 2's **W-02**;
+  the surviving doc half is recorded as **DS-08**, which is a *documentation* finding, not the flags.
+- **`write_queue`'s missing `awaiting_choice` state** — already the **Seam audit**, WQ-01…WQ-05.
+  (DL-11 is a different `write_queue` gap: terminal rows, not non-terminal ones.)
+- **The Komga → Kavita documentation sweep.**
+- **The stale v1.0 rows at `docs/DEVELOPMENT.md:90`, `docs/SETUP-CHECKLIST.md:142` and
+  `docs/CONFIGURATION.md:748`.**
+- **The Kavita delta-sync probe.**
+- **The Chromium-dependent design check.**
+
+The four gosec hits in FI-04's linter output are the first two bullets above, which is why FI-04
+counts only the three `noctx` hits as its in-scope remainder.
+
+---
+
+## 4. What routes together
+
+Not a disposition — a routing hint, because several entries are one edit each if they travel in the
+right group and three edits each if they do not.
+
+| Group | Entries | Why |
+|---|---|---|
+| `CONFIGURATION.md` §5/§6 | DS-01, DS-05, DS-13 | Same two sections; DS-01's reproduction is DS-05's evidence |
+| Fail-closed on missing key material | DS-01 (code half), FI-09 | Both are about what `cmd/usarr/app.go` does before and during the ladder |
+| At-rest credential redaction | SR-01, DS-06 | One boundary move in `SanitizeRelease`, and the fourth deny-list copy |
+| The unbounded-growth trio | DL-01, DL-08, DL-10 | One "who sweeps what, and when" decision — a maintenance worker with three tickers |
+| The migration-0002 rebuild set | DL-02, DL-04, DL-05, DL-11 | All need a table rebuild or an additive index; deciding them apart means rebuilding twice |
+| The gate | FI-02, FI-03, FI-11, FI-04 | In that order: a Makefile pass fixes FI-02 and FI-03, uncapping (FI-11) makes the real number visible, and only then is FI-04 a fixed-size job rather than a moving one |
+| First-run ergonomics | FI-05, FI-07, FI-09, DS-02 | Everything a person meets in the first five minutes |
+| `NormalizeHostPort` | SR-04, DS-12 | Same function, ten lines apart |
+| Roadmap understatement | DS-07, DS-14 | Both are §16 not recording something that shipped |
+| CSRF | SR-03, SR-08 | A token bound to the session must be cleared with it |
+
+---
+
+## 5. DS-01, verified independently — the two reproductions and the control
+
+The Critical was raised by the doc/spec pass, then **reproduced separately and without collaboration
+by two further passes**, each with its own clone, its own binary and its own ports. Recorded in full
+because a data-loss claim carries the round, and because the control experiment is what turns three
+matching reproductions into a proof of cause.
+
+**Reproduction A — the fresh-install pass.** One real Prowlarr credential stored, then §6.1's backup
+and §6.4's host move, verbatim:
+
+```
+$ tar -czf $SP/usarr-db.tgz --exclude='keys' -C $SP run1 && tar -tzf $SP/usarr-db.tgz
+run1/ run1/backups/ run1/providers/ run1/usarr.db run1/logs/     # keys/ excluded, as documented
+$ cat $SP/run1/keys/secret.key           # "key → a password manager"
+qngOUxL2FN8j2yoDVHcNJtUxn3KBuMcDT70+a0axRZk=
+$ mkdir -p $SP/newhost/keys; cp $SP/run1/usarr.db $SP/newhost/
+$ cp $SP/run1/keys/secret.key $SP/newhost/keys/secret.key; chmod 600 ...
+$ ./usarr --config-dir $SP/newhost --port 18484
+{"level":"INFO","msg":"master key loaded","source":"key file",...}   # starts happily
+$ curl -b cookies http://127.0.0.1:18484/api/v1/services/health
+{"any_unhealthy":true,"services":[{"id":1,"name":"prowlarr",...,"state":"down",
+ "problem":"the stored API key for \"prowlarr\" cannot be opened for http://127.0.0.1:19696:
+  re-enter it, or restore the master key that sealed it","action":"Update API key",...}]}
+```
+
+**Its control — `kek.salt` isolated as the sole cause:**
+
+```
+$ cat run1/keys/kek.salt   -> Iw54hP9obfmE6KoP3CSRGe76DQlFsytf2CMkbMJ1h1o=
+$ cat newhost/keys/kek.salt-> pawNPqgr1pQwlZX1pOAcI/Autz0HLCBA8/nU2gKq4Gs=   # regenerated
+$ cp run1/keys/kek.salt newhost/keys/ && restart
+{"any_unhealthy":false,"services":[{"id":1,...,"state":"healthy","app_version":"1.30.2.4939"}]}
+```
+
+**Reproduction B — the dedicated verification pass**, on its own ports (19811/18811-18813) to avoid
+contaminating another reviewer's stub. Install A stored a credential through the full HTTP path
+(`GET /auth/session` → `POST /auth/setup` → `POST /api/v1/services`) and proved the *stored* ciphertext
+was live by decrypting it on the wire:
+
+```
+POST /api/v1/services/1/test
+{"ok":true,"reachable":true,"key_proven_valid":true,"app_name":"Prowlarr",
+ "message":"connected to Prowlarr 1.37.0.5076 (api v1)"}
+# and the stub logged: GET /api/v1/system/status OK, key accepted
+```
+
+Then §6.2's `VACUUM INTO`, §6.1's `tar --exclude='keys'` (`tar -tzf | grep keys` → **nothing**), and a
+§6.4 restore into a clean directory. **Startup was completely clean — no error, no warning, not one
+line about a salt:**
+
+```
+INFO "master key loaded" source="key file" path=".../installB/keys/secret.key"
+INFO "listening" address="127.0.0.1:18812"
+```
+
+Login with the restored owner account **worked** — Argon2id hashes carry their own per-hash salt, so
+authentication is unaffected, **which reinforces the false impression that the restore succeeded** —
+and `GET /api/v1/services` showed the row intact with `"has_credential":true`. Only §6.3 step 5,
+"confirm each instance tests green", reveals it:
+
+```
+{"ok":false,"reachable":false,"key_proven_valid":false,
+ "message":"the stored API key for \"prowlarr-main\" cannot be opened for http://127.0.0.1:19811:
+  re-enter it, or restore the master key that sealed it",
+ "action":"Re-enter the API key"}
+```
+
+**The master key was byte-identical in both directions — without which the reproduction proves
+nothing:**
+
+```
+6c8ff7b96bfd0f0cb73183f14a7f92b0b86051f4106e7f990fa118d0b892d194  installA/keys/secret.key
+6c8ff7b96bfd0f0cb73183f14a7f92b0b86051f4106e7f990fa118d0b892d194  installB/keys/secret.key
+cmp: IDENTICAL (byte for byte)
+
+157b1180...684b  installA/keys/kek.salt     # freshly generated salts differ, as expected
+7d43da30...d77c  installB/keys/kek.salt
+```
+
+**Its control, run independently of A's:** stopped install B, copied A's `kek.salt` over B's, changed
+nothing else, restarted → `{"ok":true,...,"key_proven_valid":true,...}`. Same database, same master
+key, same URL. **`kek.salt` alone is the difference between green and permanently unopenable.**
+
+**Verdict: VERIFIED.** Three passes, two full reproductions, two independent control experiments, one
+byte-identical master-key hash pair. The single overstatement in the original claim is *"documented
+nowhere"*, corrected in §1.1: `docs/reference/security.md:75` does say a per-install salt exists — it
+never says what it is called, where it lives, that `--exclude='keys'` discards it, or that it must be
+restored.
+
+---
+
 # Gate audit — the pre-commit gate was running an unpinned linter
 
 **Date:** 2026-08-16. **Branch:** `main`. **Baseline:** `44ad58f`. Not a review round, and no
