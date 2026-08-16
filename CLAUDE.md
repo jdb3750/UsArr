@@ -52,7 +52,7 @@ Utilitarian over stylish. Tried and true beats novel: standard, familiar pattern
 and snappy above all. No visual flair that costs render time — if an effect buys nothing but
 looks, it does not ship. **Navidrome is the reference point for the bar to hit.**
 
-Five screens are essential; the first four ship in v0.1:
+Five screens are essential, and all five ship in v0.1:
 - **Home**, three fixed blocks — a media-type summary, an attention block hidden when empty, and one
   unified recently-added table across all types. Not one strip per media type. See
   `docs/ARCHITECTURE.md` §17.2, as amended by ADR-0028.
