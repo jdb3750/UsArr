@@ -522,12 +522,25 @@ body {
 	display: contents;
 }
 
-/* SvelteKit's own route announcer. It is visually hidden BY A STYLE ATTRIBUTE
- * in .svelte-kit/generated/root.svelte, which `style-src 'self'` refuses — so
- * without this rule it renders as a visible line of text carrying the document
- * title after every navigation. `display: none` rather than the clip pattern is
- * deliberate: it also takes the element out of the accessibility tree, which is
- * the point. SvelteKit's announcer is `aria-live="assertive"` and reads
+/* SvelteKit's own route announcer, taken OUT OF THE ACCESSIBILITY TREE.
+ *
+ * ⚠️ THE VISUAL HALF OF THIS COMMENT WAS WRONG AND IS CORRECTED RATHER THAN
+ * DELETED, because the wrong version is the one a reader would reconstruct. It
+ * said the announcer's inline hiding styles are REFUSED by `style-src 'self'`,
+ * so that without this rule the announcer renders as a visible line of text
+ * carrying the document title after every navigation. Measured against the real
+ * header: they are refused in the console AND THEY APPLY. The announcer's
+ * attribute arrives through `template.innerHTML` + clone, which is Svelte 5's
+ * path, and on that path the violation is reported while the declaration still
+ * takes effect — `style.length` is 11, computed `position: absolute`,
+ * `clip-path: inset(50%)`, 1px x 1px, and stripping the attribute flips those
+ * to `static` / `auto` / `none`. Only `setAttribute` is both reported and
+ * actually blocked. So the announcer is already invisible without this rule.
+ *
+ * THE RULE STAYS, because its real purpose is the other half and that half is
+ * measured and working: `display: none` rather than the clip pattern also takes
+ * the element out of the accessibility tree, which is the point. SvelteKit's
+ * announcer is `aria-live="assertive"` and reads
  * document.title; DESIGN-DIRECTION §11 asks for a POLITE region carrying the
  * page name, and two live regions firing on one navigation is exactly the
  * double announcement §13 rules against. The shell's own region in

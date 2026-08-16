@@ -49,6 +49,7 @@
 	 */
 	import { onMount, tick } from 'svelte';
 	import { resolve } from '$app/paths';
+	import { page } from '$app/state';
 	import {
 		ApiError,
 		SERVICE_KINDS,
@@ -308,8 +309,30 @@
 		}
 	}
 
+	/**
+	 * `#service-<id>` in the URL lands on that instance's row.
+	 *
+	 * IT IS THE OTHER HALF OF §17.3's "a problem is stated canonically once per
+	 * screen". Home's Block B reports what is wrong and links HERE rather than
+	 * growing its own copy of the fix, and a link that lands at the top of a
+	 * table of six instances has not finished the sentence: the user still has
+	 * to find the row Home was talking about. So the fragment names the row and
+	 * this focuses it, which is exactly what the in-page roll-up already does
+	 * through `focusRow`.
+	 *
+	 * Focus rather than scroll: a `tabindex="-1"` target is not reliably focused
+	 * by a fragment navigation across engines, and moving focus is what puts a
+	 * keyboard and screen-reader user on the row too. Awaited after `load()`
+	 * because the row does not exist until the health response has rendered.
+	 */
+	function focusHashRow() {
+		const id = Number(page.url.hash.replace(/^#service-/, ''));
+		if (!page.url.hash.startsWith('#service-') || !Number.isFinite(id)) return;
+		void focusRow(id);
+	}
+
 	onMount(() => {
-		void load();
+		void load().then(focusHashRow);
 		// The table renders from the replica and never blocks on a probe, so this
 		// is a cheap re-read of SQLite rather than an upstream call. It also keeps
 		// "6 minutes ago" from freezing at whatever it said on arrival.

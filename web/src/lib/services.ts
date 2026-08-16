@@ -575,12 +575,32 @@ export interface RollupEntry {
 	title: string;
 }
 
+/**
+ * Whether a row belongs in a "what is wrong" list.
+ *
+ * FACTORED OUT BECAUSE TWO SCREENS ASK IT. The Services roll-up (§17.3) and
+ * Home's Block B (§17.2) are the same question rendered twice, and two copies
+ * of this predicate is how one screen reports three problems while the other
+ * reports four. The user's only available reading of that is that one of them
+ * is lying.
+ *
+ * `ok` is out because a healthy row is not a problem. A `none` row is out only
+ * while the instance is enabled AND has been probed: `turned off` is a fact
+ * the owner should see on Home, and so is `not checked yet` on an instance
+ * nothing has contacted since it was added.
+ */
+export function needsAttention(row: ServiceRow, now: Date): boolean {
+	const state = stateLabel(row, now);
+	if (state.tone === 'ok') return false;
+	if (state.tone === 'none' && row.health.enabled && !row.health.stale) return false;
+	return true;
+}
+
 export function rollup(rows: ServiceRow[], now: Date): RollupEntry[] {
 	const out: RollupEntry[] = [];
 	for (const row of rows) {
+		if (!needsAttention(row, now)) continue;
 		const state = stateLabel(row, now);
-		if (state.tone === 'ok') continue;
-		if (state.tone === 'none' && row.health.enabled && !row.health.stale) continue;
 		const problem = row.health.problem?.trim() ?? '';
 		out.push({
 			id: row.health.id,
@@ -595,8 +615,14 @@ export function rollup(rows: ServiceRow[], now: Date): RollupEntry[] {
 	return out;
 }
 
-/** `1 error, 2 warnings`, or '' when there is nothing to count. */
-export function rollupCount(entries: RollupEntry[]): string {
+/**
+ * `1 error, 2 warnings`, or '' when there is nothing to count.
+ *
+ * Typed on the one field it reads rather than on `RollupEntry`, so Home's
+ * Block B counts its rows with this function instead of a second
+ * implementation that pluralises differently.
+ */
+export function rollupCount(entries: readonly { tone: Tone }[]): string {
 	const errors = entries.filter((e) => e.tone === 'err').length;
 	const warnings = entries.length - errors;
 	const parts: string[] = [];
