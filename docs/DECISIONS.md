@@ -2407,10 +2407,10 @@ away, and the ~200 figure had no measurement behind it.
   for a density change on desktop; a Pi 5 is conservatively 3–5× slower at style recalculation and
   layout, which puts the 100 ms Tier-0 hard fail at roughly **100–300 rows in the DOM** as the
   markup stands, or **300–600** with `table-layout: fixed` and a working containment path (which
-  cut the same operation by 1.5–5× in an isolated `div`-row test). ⚠️ **That per-row cost is a linear
-  fit and the 25,000-row point is superlinear, so the fit is only good to a few thousand rows**; the
-  extrapolation runs downward into the range it covers, and nothing extrapolated beyond it is quoted
-  as measured. **The ceiling is set by the
+  cut the same operation by 1.5–5× in an isolated `div`-row test). ⚠️ **Superseded by §3 of the
+  amendment at the top of this ADR**, which replaces this extrapolation with a measured cost curve and
+  states the limit on it — the 25,000-row point is superlinear, so the linear fit is good only to a
+  few thousand rows. **The ceiling is set by the
   density control, not by scrolling**, and the earlier framing implied 25,000 rows was the number
   in question. Choosing a replacement threshold here from judgement is still refused; what changed
   is *which operation* the benchmark points at. Three mitigations are available before any redesign:
@@ -2430,24 +2430,19 @@ away, and the ~200 figure had no measurement behind it.
   These are rendered **border-box** heights; the declaration sizes the **content** box, so what ships
   is the derived expression the mockups already use —
   `auto calc(2 * var(--row-py) + var(--row-lines) * var(--lh-base))` — which tracks the density token
-  instead of hard-coding three constants. Verified against the mockups rather than assumed: they
-  render exactly 28 / 32 / 36 and 45 / 49 / 53, with computed placeholders within 0.3% of the
-  border-box height each stands in for.
-
-  ✅ **Two confirmations from the same run.** Containment is live on the grid-row primitive — at
-  5,000 rows with a deliberately wrong placeholder the contained and uncontained scroll heights
-  differ by **761,316 px**, while the same rows forced to `display: table-row` differ by **exactly
-  0**, reproducing the `<tr>` limitation as a control. And the density toggle's cost is mostly
-  buyable: at 5,000 rows **containment is worth about 88% and scoping the density attribute to the
-  list container about 25%**, taking the extremes from **911 ms to 80 ms**.
-
-  ⚠️ **The 25,000-row point is superlinear, so the linear per-row fit is only good to a few thousand
-  rows** (0.15 ms/row at 1,000, 0.24 at 5,000, 0.26 at 25,000). The DOM-row ceiling above extrapolates
-  *downward*, inside that range; **no figure extrapolated past a few thousand rows is quoted here as
-  though it were measured.**
+  instead of hard-coding three constants (§1 of the amendment above quotes the shipped app's form of
+  it). Verified against the mockups rather than assumed: they render exactly 28 / 32 / 36 and
+  45 / 49 / 53, with computed placeholders within 0.3% of the border-box height each stands in for.
+  **The same run's other results — the 761,316 px containment confirmation against a Δ of exactly 0
+  on `display: table-row`, the ~88% / ~25% mitigation split, and the superlinear 25,000-row point that
+  limits the linear fit to a few thousand rows — are recorded in the amendment above rather than
+  restated here.**
 - 🚩 **`contain-intrinsic-size: auto` remembers a size measured at the *previous* density — a live
   correctness bug, reported by the frontend thread's bench as new and apparently undocumented
-  upstream.** A keyed `{#each}` reuses row nodes, so after a compact → relaxed switch the reused rows
+  upstream.** This is the measurement the amendment above names in one clause and hands to the design
+  documents; `design/DESIGN-DIRECTION.md` §7.4 owns it, and it is stated here only because it guards
+  this ADR's own *"relying on `auto`'s remembered-size behaviour for the rest"*. A keyed `{#each}`
+  reuses row nodes, so after a compact → relaxed switch the reused rows
   carry the remembered compact size and **the scrollbar is 14.57% wrong, against 0.65% when the same
   rows are rebuilt rather than reused**. Both preconditions are ordinary: density is a first-class
   control on every screen and the lists are keyed by row id. **The rule is required, not advisory:

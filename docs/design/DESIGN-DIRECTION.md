@@ -888,9 +888,11 @@ more" plus `content-visibility: auto` with `contain-intrinsic-size`**, and virtu
 "~1,000 rows" this document previously floated, because the finding against §4.5's "~200" was that it
 had no measurement behind it, and answering an unmeasured number with a different unmeasured number
 concedes the argument while pretending to fix it. `make bench` gains the measurement (ARCHITECTURE
-§4.5, §13); the threshold is whatever it says. **Part of that harness now exists — the frontend
-thread's `pnpm bench:list`, which supplies every measured number below — but it does not yet complete
-a full run (a 25,000-row Chromium out-of-memory), so the threshold itself is still unset.**
+§4.5, §13); the threshold is whatever it says. **Part of that harness exists in the frontend thread's
+tree as `pnpm bench:list` — it is what supplies every measured number below — but it is not on `main`
+and does not yet complete a full run (a 25,000-row Chromium out-of-memory). ADR-0029's 2026-08-16
+amendment carries what it has already settled, including a measured density-toggle cost curve and a
+default page size of 200 rows; the virtualization threshold itself is still unset.**
 
 🚩 **The list primitive is a grid, not a table, and that is a constraint rather than a preference.**
 `content-visibility: auto` is defined entirely in terms of size, layout and paint containment, and
@@ -1020,7 +1022,10 @@ top-bar controls on every screen, both are pure-local no-data interactions, and 
 **Tier 0 by §7.2's own definition, whose hard fail is 100 ms**. 🔍 Extrapolating the measured
 0.15–0.26 ms/row to a Pi 5 at a conservative 3–5× puts that hard fail at **100–300 rows in the DOM**,
 or 300–600 with `table-layout: fixed` and working containment — **so the real ceiling is set by the
-density control, in the hundreds, not by scrolling in the tens of thousands.** ⚠️ **The per-row
+density control, in the hundreds, not by scrolling in the tens of thousands.** ⚠️ **ADR-0029's
+2026-08-16 amendment sharpens this from the shipped primitive** — a measured cost curve of
+0.0146 ms/row + 6.4 ms fixed, a worst-case row shape at 0.214 ms/row, and a **200-row default page
+size** — and that amendment, not this paragraph, is the current arithmetic. ⚠️ **The per-row
 figure is a linear fit, and the linear fit is only good to a few thousand rows**, because the
 **25,000-row point is superlinear**: 0.15 ms/row at 1,000 and 0.24 at 5,000, against 0.26 at 25,000.
 The extrapolation above runs *downward*, into the range the fit covers, which is why it is stated at
