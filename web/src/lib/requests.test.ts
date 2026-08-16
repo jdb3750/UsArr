@@ -23,6 +23,7 @@ import { describe, expect, it } from 'vitest';
 import SCREEN_SOURCE from '../routes/requests/+page.svelte?raw';
 import {
 	DEFAULT_SEARCH_TYPE,
+	EMPTY_IDLE_TITLE,
 	FORBIDDEN_OUTCOME_WORDS,
 	KNOWLEDGE_STOPS_NOTE,
 	NOT_SENT_NOTE,
@@ -32,6 +33,7 @@ import {
 	SEARCH_TYPES,
 	SEARCH_TYPE_NOTE,
 	THIN_COVERAGE_NOTE,
+	correlatedFailure,
 	fanoutSummary,
 	formatAbsolute,
 	formatDate,
@@ -39,7 +41,10 @@ import {
 	formatWhen,
 	grabOutcome,
 	isFreeTextOnly,
-	searchTypeParam
+	legReasons,
+	searchEmptyState,
+	searchTypeParam,
+	type IndexerLeg
 } from './requests';
 
 describe('search types', () => {
@@ -247,6 +252,281 @@ describe('grabOutcome', () => {
 	});
 });
 
+describe('searchEmptyState', () => {
+	// §9.6 requires three distinct messages and §17.5 scopes the middle one by
+	// media type (SW-08). The three are asserted as three rather than by their
+	// wording, because the failure this guards is two of them collapsing into one.
+	const answering = { answered: 9, total: 9 };
+
+	it('separates “not searched yet” from “searched and got nothing”', () => {
+		const idle = searchEmptyState({ submitted: '', typeId: 'basic', answered: 0 });
+		const nothing = searchEmptyState({ submitted: 'norah jones', typeId: 'basic', ...answering });
+		expect(idle.title).toBe(EMPTY_IDLE_TITLE);
+		expect(nothing.title).not.toBe(idle.title);
+		expect(nothing.text).not.toBe(idle.text);
+	});
+
+	it('separates “nothing matched” from “nobody answered”', () => {
+		// Prowlarr answers 200 with [] for both, so a screen that renders one
+		// message over the pair tells a user their query is wrong at the exact
+		// moment their indexers are down.
+		const matched = searchEmptyState({ submitted: 'dune', typeId: 'movie', ...answering });
+		const silent = searchEmptyState({ submitted: 'dune', typeId: 'movie', answered: 0, total: 9 });
+		expect(silent.title).toBe('No indexer answered');
+		expect(silent.title).not.toBe(matched.title);
+		expect(silent.text).toContain('has not actually been tested');
+	});
+
+	it('names thin indexer coverage for music and for books, and only for those', () => {
+		// SW-08's whole point: 403 of Prowlarr's 543 definitions are private and
+		// the trackers that carry these two are invite-only, so an empty answer
+		// from indexers that ANSWERED is usually coverage, not the query.
+		const music = searchEmptyState({ submitted: 'norah jones', typeId: 'music', ...answering });
+		const book = searchEmptyState({ submitted: 'gaiman', typeId: 'book', ...answering });
+		expect(music.title).toBe('No music releases matched');
+		expect(book.title).toBe('No book releases matched');
+		for (const copy of [music, book]) {
+			expect(copy.text).toContain('invite-only');
+			expect(copy.text).toContain('likelier explanation than your query');
+		}
+	});
+
+	it('points a film or an episode search at the query instead, which is the opposite advice', () => {
+		const movie = searchEmptyState({ submitted: 'dune', typeId: 'movie', ...answering });
+		const tv = searchEmptyState({ submitted: 'severance', typeId: 'tv', ...answering });
+		for (const copy of [movie, tv]) {
+			expect(copy.text).toContain('the query is the likelier explanation');
+			expect(copy.text).not.toContain('invite-only');
+		}
+		expect(movie.text).toContain('films');
+		expect(tv.text).toContain('episodes and series');
+	});
+
+	it('names no cause at all for Basic, because the type is what would have named one', () => {
+		// The selector is set to "do not narrow this", so neither the coverage
+		// sentence nor the query sentence is a claim the data supports. It gets
+		// the mechanical fact — UsArr sends the query unchanged — and nothing else.
+		const basic = searchEmptyState({ submitted: 'dune', typeId: 'basic', ...answering });
+		expect(basic.text).not.toContain('invite-only');
+		expect(basic.text).not.toContain('likelier explanation');
+		expect(basic.text).toContain('sends your query unchanged');
+	});
+
+	it('lets a type it does not recognise fall back rather than claim a cause', () => {
+		expect(searchEmptyState({ submitted: 'x', typeId: 'comics', ...answering }).text).toBe(
+			searchEmptyState({ submitted: 'x', typeId: 'basic', ...answering }).text
+		);
+	});
+
+	it('gives “nobody answered” priority over the type, on every type', () => {
+		// Neither scoped sentence is true of a fan-out nobody answered: the query
+		// was never put to an indexer and coverage was never exercised.
+		for (const typeId of SEARCH_TYPES.map((t) => t.id)) {
+			const copy = searchEmptyState({ submitted: 'x', typeId, answered: 0, total: 9 });
+			expect(copy.title).toBe('No indexer answered');
+			expect(copy.text).not.toContain('invite-only');
+		}
+	});
+
+	it('states the counts without inventing a denominator it was not given', () => {
+		expect(searchEmptyState({ submitted: 'x', typeId: 'music', answered: 4 }).text).toContain(
+			'4 indexers answered'
+		);
+		expect(
+			searchEmptyState({ submitted: 'x', typeId: 'music', answered: 1, total: 1 }).text
+		).toContain('1 of 1 indexer answered');
+	});
+
+	it('quotes the query back on the states whose advice is about the query', () => {
+		expect(searchEmptyState({ submitted: 'dune', typeId: 'movie', ...answering }).text).toContain(
+			'“dune”'
+		);
+	});
+});
+
+describe('correlatedFailure', () => {
+	// §17.5: "naming the non-action beats offering a fake one". The screen used
+	// to print the per-indexer banner N times when all N legs came back the same
+	// way, so the one fact worth having — that the N are one condition — was on
+	// screen nowhere.
+	const leg = (over: Partial<IndexerLeg> = {}): IndexerLeg => ({
+		name: 'Indexer',
+		status: 'failed',
+		answered: false,
+		reason: 'indexer query failed: dial tcp: lookup indexer.example: no such host',
+		...over
+	});
+
+	const all = (n: number, over: Partial<IndexerLeg> = {}) =>
+		Array.from({ length: n }, (_, i) => leg({ name: `Indexer ${i + 1}`, ...over }));
+
+	it('collapses N identical failures into one diagnosis naming the count', () => {
+		const diag = correlatedFailure(all(9), 9);
+		expect(diag?.kind).toBe('shared_fault');
+		expect(diag?.indexers).toBe(9);
+		expect(diag?.title).toBe('All 9 indexers came back with the same error');
+	});
+
+	it('carries the upstream sentence exactly once', () => {
+		const diag = correlatedFailure(all(9), 9);
+		expect(diag?.verbatim).toBe(leg().reason);
+	});
+
+	it('refuses to fire when one indexer answered', () => {
+		// One answer makes this a partial result with a gap, which is what the
+		// per-indexer banners already say correctly.
+		const legs = [...all(8), leg({ answered: true, status: 'ok', reason: undefined })];
+		expect(correlatedFailure(legs, 9)).toBeUndefined();
+	});
+
+	it('refuses to fire on a single indexer, because one sample is not a correlation', () => {
+		// There is also nothing to collapse: one banner is already one banner.
+		expect(correlatedFailure(all(1), 1)).toBeUndefined();
+	});
+
+	it('refuses to fire on a partially reported fan-out', () => {
+		// Three legs that happened to fail first are not "every indexer". The
+		// server's own total is the denominator; where it disagrees with the legs
+		// in hand, nothing is concluded.
+		expect(correlatedFailure(all(3), 9)).toBeUndefined();
+	});
+
+	it('refuses to fire on mixed statuses, because that is several conditions', () => {
+		// Deliberately two statuses that BOTH map to a class, and one shared
+		// reason, so the only thing standing between this input and a wrong
+		// verdict is the status-agreement check itself. A mix of `failed` with
+		// anything else would have been caught by the shared-reason rule instead
+		// and would have left this guard untested.
+		const legs = [
+			...all(5, { status: 'timed_out', reason: 'same' }),
+			...all(4, { status: 'blocked', reason: 'same' })
+		];
+		expect(correlatedFailure(legs, 9)).toBeUndefined();
+	});
+
+	it('refuses to call N different errors one fault', () => {
+		// Same status, different messages: that is N errors, which is precisely
+		// not the thing being detected.
+		const legs = all(3).map((l, i) => ({ ...l, reason: `error ${i}` }));
+		expect(correlatedFailure(legs, 3)).toBeUndefined();
+	});
+
+	it('refuses the unclassified remainder with no reason at all to correlate on', () => {
+		expect(correlatedFailure(all(4, { reason: undefined }), 4)).toBeUndefined();
+		expect(correlatedFailure(all(4, { reason: '   ' }), 4)).toBeUndefined();
+	});
+
+	it('classifies off the server’s status field, not off its prose', () => {
+		// internal/releases/search.go sets exactly one status per leg and each
+		// means something different about who is at fault. Nothing here reads an
+		// error message to decide what happened.
+		const kinds = (
+			['timed_out', 'breaker_open', 'blocked', 'disabled', 'unsupported', 'not_found'] as const
+		).map((status) => correlatedFailure(all(4, { status }), 4)?.kind);
+		expect(kinds).toEqual([
+			'timeout',
+			'breaker',
+			'blocked',
+			'disabled',
+			'unsupported',
+			'unknown_ids'
+		]);
+	});
+
+	it('ignores a status it does not know rather than diagnosing one', () => {
+		expect(correlatedFailure(all(4, { status: 'quantum' }), 4)).toBeUndefined();
+	});
+
+	it('never names a cause the evidence only permits', () => {
+		// §17.5's example is a host-level resolution failure inside Prowlarr's own
+		// container. It is one of several conditions that produce exactly this
+		// evidence, so printing it as the verdict would be an invented status.
+		const diag = correlatedFailure(all(9), 9);
+		const copy = `${diag?.title} ${diag?.text} ${diag?.nonAction}`.toLowerCase();
+		for (const invented of ['dns', 'resolution', 'container', 'firewall', 'offline', 'crashed']) {
+			expect(copy).not.toContain(invented);
+		}
+		// What it does say is what was observed, plus how far it reaches.
+		expect(diag?.text).toContain('one fault rather than 9');
+		expect(diag?.text).toContain('the path they share');
+	});
+
+	it('hedges every inference it draws, on every class that draws one', () => {
+		// "every indexer failed the same way, which usually means X" is honest;
+		// asserting X is not.
+		for (const status of ['failed', 'timed_out', 'breaker_open']) {
+			const diag = correlatedFailure(all(6, { status }), 6);
+			expect(`${diag?.text}`).toMatch(/usually/);
+		}
+	});
+
+	it('names the non-action rather than offering a button that cannot act', () => {
+		// The whole rule. A screen that reasons its way to a correct diagnosis and
+		// then hands the user two buttons that cannot act on it is worse than one
+		// that says so.
+		for (const status of [
+			'failed',
+			'timed_out',
+			'breaker_open',
+			'blocked',
+			'disabled',
+			'unsupported'
+		]) {
+			const diag = correlatedFailure(all(6, { status }), 6);
+			expect(diag?.nonAction).toBeTruthy();
+		}
+	});
+
+	it('offers no action at all where nothing on this screen can move it', () => {
+		for (const status of ['breaker_open', 'blocked', 'disabled', 'unsupported']) {
+			expect(correlatedFailure(all(6, { status }), 6)?.action).toBe('none');
+		}
+	});
+
+	it('offers the one action that does resolve it, and then claims no non-action', () => {
+		// Unknown ids are a fact about the REQUEST — a shared link or a remembered
+		// selection from a different Prowlarr — and clearing the scope fixes it.
+		// Saying "there is nothing you can do" beside a button that works would be
+		// its own kind of dishonesty.
+		const diag = correlatedFailure(all(6, { status: 'not_found' }), 6);
+		expect(diag?.action).toBe('clear-scope');
+		expect(diag?.nonAction).toBe('');
+	});
+
+	it('never offers Retry, on any class', () => {
+		// Not in the union, and not in the words. The screen's word for asking
+		// again is Search again, which is a fresh fan-out rather than a re-send.
+		for (const status of ['failed', 'timed_out', 'breaker_open', 'blocked', 'not_found']) {
+			const diag = correlatedFailure(all(6, { status }), 6);
+			expect(diag?.action).not.toBe('retry');
+			expect(`${diag?.title} ${diag?.text} ${diag?.nonAction}`.toLowerCase()).not.toContain(
+				'retry'
+			);
+		}
+	});
+
+	it('leaves the per-leg words to the caller where the legs disagree on them', () => {
+		// A blocked or breaker-open set carries its own unblock time per line, so
+		// dropping the lines would drop real data.
+		const legs = all(3, { status: 'blocked' }).map((l, i) => ({
+			...l,
+			reason: `blocked until 0${i}`
+		}));
+		const diag = correlatedFailure(legs, 3);
+		expect(diag?.kind).toBe('blocked');
+		expect(diag?.verbatim).toBe('');
+		expect(legReasons(legs)).toBe(
+			'Indexer 1: blocked until 00\nIndexer 2: blocked until 01\nIndexer 3: blocked until 02'
+		);
+	});
+
+	it('falls back to the status when a leg has no reason to print', () => {
+		expect(legReasons([leg({ name: 'A', reason: undefined, status: 'blocked' })])).toBe(
+			'A: blocked'
+		);
+	});
+});
+
 describe('the banned vocabulary', () => {
 	// Every user-facing string this module ships, held against §17.5's ban list.
 	// This is the guard: an edit that reintroduces "succeeded" or wires a
@@ -380,6 +660,79 @@ describe('the banned vocabulary, in the screen’s own markup', () => {
 	it('never asserts in the markup that a grab did not happen', () => {
 		expect(GRAB_BLOCK_MARKUP.toLowerCase()).not.toContain('did not go through');
 		expect(GRAB_BLOCK_MARKUP.toLowerCase()).not.toContain('nothing was sent');
+	});
+});
+
+/**
+ * The same two-region rule applied to the strings this module exports for the
+ * SEARCH half of the screen.
+ *
+ * The block near the top of this file holds the grab-related exports against the
+ * full ban list. These are not grab copy: an empty state and a fan-out diagnosis
+ * are statements about a search, which UsArr watches from the first indexer to
+ * the closing report — so they take the same subset the non-grab markup takes,
+ * for the reason recorded above `NEVER_ANYWHERE_ON_THIS_SCREEN`. They still take
+ * something: `retry` and the three words that assert bytes are moving are a
+ * claim about a download wherever they appear, and this copy is rendered on the
+ * same screen as the Grab button.
+ */
+describe('the banned vocabulary, over the search-side copy', () => {
+	const strings = [
+		...['basic', 'movie', 'tv', 'music', 'book', 'comics'].flatMap((typeId) =>
+			[
+				{ submitted: '', typeId, answered: 0 },
+				{ submitted: 'q', typeId, answered: 0, total: 9 },
+				{ submitted: 'q', typeId, answered: 9, total: 9 }
+			].flatMap((input) => {
+				const copy = searchEmptyState(input);
+				return [copy.title, copy.text];
+			})
+		),
+		...['failed', 'timed_out', 'breaker_open', 'blocked', 'disabled', 'unsupported', 'not_found']
+			.map((status) =>
+				correlatedFailure(
+					Array.from({ length: 4 }, (_, i) => ({
+						name: `Indexer ${i + 1}`,
+						status,
+						answered: false,
+						reason: 'shared reason'
+					})),
+					4
+				)
+			)
+			.flatMap((diag) => [diag?.title ?? '', diag?.text ?? '', diag?.nonAction ?? ''])
+	]
+		// The one deliberate empty string in the corpus is `unknown_ids.nonAction`,
+		// which is empty BECAUSE that class has an action that works. Dropping
+		// empties here rather than asserting them away keeps the guard from
+		// silently passing on a helper that returned nothing at all — the count
+		// below is what catches that.
+		.filter((s: string) => s.length > 0);
+
+	it('is holding the strings it thinks it is holding', () => {
+		// A guard that matches nothing is indistinguishable from no guard, so the
+		// corpus is pinned to something only this copy says, and to a floor that a
+		// helper returning `undefined` for everything would fall through.
+		expect(strings.some((s) => s.includes('invite-only'))).toBe(true);
+		expect(strings.some((s) => s.includes('came back with the same error'))).toBe(true);
+		expect(strings.length).toBeGreaterThan(50);
+	});
+
+	it.each(NEVER_ANYWHERE_ON_THIS_SCREEN)('never says “%s”', (word) => {
+		for (const value of strings) {
+			expect(value.toLowerCase()).not.toContain(word);
+		}
+	});
+
+	it('never asserts a cause outside what UsArr observed', () => {
+		// UsArr talks to Prowlarr and Prowlarr talks to the indexers. It sees the
+		// near half and infers nothing about the far half, so no sentence here may
+		// name the mechanism §17.5 gives only as an example of the class.
+		for (const value of strings) {
+			for (const invented of ['dns', 'resolution', 'container', 'firewall', 'crashed']) {
+				expect(value.toLowerCase()).not.toContain(invented);
+			}
+		}
 	});
 });
 

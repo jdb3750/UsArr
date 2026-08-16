@@ -109,6 +109,7 @@
 		SEARCH_TYPE_NOTE,
 		THIN_COVERAGE_NOTE,
 		categoryLabel,
+		correlatedFailure,
 		fanoutSummary,
 		flagsAbsence,
 		formatWhen,
@@ -116,7 +117,9 @@
 		grabWindow,
 		isEmphasisedFlag,
 		isFreeTextOnly,
+		legReasons,
 		liveGrabCopy,
+		searchEmptyState,
 		searchTypeParam
 	} from '$lib/requests';
 
@@ -221,6 +224,14 @@
 	let query = $state('');
 	let searchType = $state(DEFAULT_SEARCH_TYPE);
 	let submitted = $state('');
+	/**
+	 * The type the RUNNING search was sent with, which is not the same thing as
+	 * the selector's current value. The empty state's scoped copy is a claim
+	 * about the search that produced these results (SW-08), so changing the
+	 * selector without pressing Search must not change what the screen says
+	 * about what already came back.
+	 */
+	let submittedType = $state(DEFAULT_SEARCH_TYPE);
 	let searchId = $state<string | undefined>(undefined);
 	let searching = $state(false);
 	let finished = $state(false);
@@ -333,6 +344,38 @@
 		if (order.rows.length === 0) return searching ? 'loading' : 'empty';
 		return problems.length > 0 ? 'partial' : 'default';
 	});
+
+	/**
+	 * THE CORRELATED DIAGNOSIS — §17.5, "naming the non-action beats offering a
+	 * fake one".
+	 *
+	 * Read from the CLOSING REPORT only, never from the running tally. The
+	 * helper refuses a partial fan-out on its own by comparing the leg count
+	 * against the server's total, and this is the second half of the same guard:
+	 * before the report lands there is no authoritative total to compare against,
+	 * and three legs that happened to fail first are not "every indexer".
+	 *
+	 * Where it fires it REPLACES the per-indexer banners rather than joining
+	 * them. That is the whole point — nine banners each carrying the same title,
+	 * the same two-sentence explanation and the same reason is nine renderings of
+	 * one fact, and the fact worth having (that the nine are one condition) was
+	 * on screen nowhere.
+	 */
+	const diagnosis = $derived(
+		report ? correlatedFailure(report.indexers, report.totalIndexers) : undefined
+	);
+
+	/**
+	 * §9.6's three states, and the middle one scoped by media type (SW-08).
+	 *
+	 * `answered` is what separates "your search returned nothing" from "your
+	 * search returned nothing because nobody answered", and the type is what
+	 * separates thin indexer coverage from a query problem. Both live in
+	 * `$lib/requests` where a test can read the strings; this passes the facts in.
+	 */
+	const emptyCopy = $derived(
+		searchEmptyState({ submitted, typeId: submittedType, answered, total: totalIndexers })
+	);
 
 	/**
 	 * The grab window, measured from the EARLIEST expiry on screen.
@@ -533,6 +576,7 @@
 		if (trimmed === '') return;
 
 		submitted = trimmed;
+		submittedType = searchType;
 		searchId = undefined;
 		releases = [];
 		order.reset();
@@ -814,26 +858,93 @@
 	</div>
 {/if}
 
-{#each problems as problem (problem.indexer)}
+{#if diagnosis}
 	<!--
-		One banner per indexer that did not answer, non-modal, with the upstream's
-		own words verbatim (§9.5, §17.3). Per-indexer rather than one aggregate
-		line: "3 indexers are not answering" is not something a user can act on,
-		and the three reasons are usually three different problems.
+		⚠️ ONE DIAGNOSIS, REPLACING N COPIES OF ONE SENTENCE — §17.5.
+
+		The per-indexer banner below is right when three of nine indexers are in
+		three different kinds of trouble, and wrong when all nine are in one: it
+		renders the same title, the same explanation and the same reason nine
+		times, and the fact that actually matters — that these are one condition
+		rather than nine — appears nowhere. `correlatedFailure` decides, off the
+		server's own `status` field rather than off its prose, and refuses to fire
+		on anything short of every leg of a finished fan-out landing the same way.
+
+		WHAT IS NOT CLAIMED HERE. UsArr sees its own half of the path and infers
+		nothing about the far half, so the copy says what was observed and how
+		much it supports — never a named cause the evidence merely permits.
+		§17.5's own example is a resolution failure inside Prowlarr's container;
+		it is one of several conditions that produce exactly this evidence, so it
+		is not printed as the verdict.
+
+		AND WHERE THE ANSWER IS "NOT FROM THIS SCREEN", IT SAYS SO. `nonAction` is
+		the sentence naming what UsArr cannot do, and it is rendered instead of a
+		button that would look like it worked. Only the class that HAS a working
+		action carries one.
 	-->
-	<div class="banner banner--warn" role="status">
+	<div
+		class="banner"
+		class:banner--err={diagnosis.tone === 'err'}
+		class:banner--warn={diagnosis.tone === 'warn'}
+		role="status"
+	>
 		<div class="banner__body">
-			<div class="banner__title">
-				{problem.indexer} did not answer, so its releases are missing from these counts
-			</div>
-			<div class="banner__text">
-				Every other indexer’s results are real. The count above says how many answered rather than
-				implying the search was whole.
-			</div>
-			<p class="verbatim">{problem.error}</p>
+			<div class="banner__title">{diagnosis.title}</div>
+			<div class="banner__text">{diagnosis.text}</div>
+			{#if diagnosis.nonAction}
+				<div class="banner__text">{diagnosis.nonAction}</div>
+			{/if}
+			{#if diagnosis.verbatim}
+				<!-- One shared sentence, so it is Prowlarr's own words ONCE. -->
+				<p class="verbatim">{diagnosis.verbatim}</p>
+			{:else}
+				<!--
+					The legs agreed on the status and not on the words, which is what a
+					blocked or breaker-open set looks like: each line carries its own
+					time, so dropping them would drop real data. They appear once each,
+					as lines in ONE pre-wrapped block, rather than as N whole banners —
+					what §17.5 objects to is the repeated explanation around them, not
+					the upstream's own sentences.
+				-->
+				<p class="verbatim">{legReasons(report?.indexers ?? [])}</p>
+			{/if}
 		</div>
+		{#if diagnosis.action !== 'none'}
+			<div class="banner__actions">
+				{#if diagnosis.action === 'clear-scope'}
+					<button type="button" class="btn btn--primary" onclick={clearScope}>
+						Search all indexers
+					</button>
+				{:else}
+					<button type="button" class="btn" onclick={() => runSearch()}>Search again</button>
+				{/if}
+			</div>
+		{/if}
 	</div>
-{/each}
+{:else}
+	{#each problems as problem (problem.indexer)}
+		<!--
+			One banner per indexer that did not answer, non-modal, with the upstream's
+			own words verbatim (§9.5, §17.3). Per-indexer rather than one aggregate
+			line: "3 indexers are not answering" is not something a user can act on,
+			and the three reasons are usually three different problems — which is
+			exactly the condition the branch above establishes is NOT the case before
+			it collapses them.
+		-->
+		<div class="banner banner--warn" role="status">
+			<div class="banner__body">
+				<div class="banner__title">
+					{problem.indexer} did not answer, so its releases are missing from these counts
+				</div>
+				<div class="banner__text">
+					Every other indexer’s results are real. The count above says how many answered rather than
+					implying the search was whole.
+				</div>
+				<p class="verbatim">{problem.error}</p>
+			</div>
+		</div>
+	{/each}
+{/if}
 
 <!-- ══ BLOCK 3 — release results ══════════════════════════════════════════ -->
 
@@ -917,10 +1028,8 @@
 		loadingNote="Waiting for the first indexer to report."
 		partialNote={report?.summary ??
 			'Some indexers have not answered, so these results are partial.'}
-		emptyTitle={submitted ? 'No releases matched' : 'Nothing searched yet'}
-		emptyText={submitted
-			? `Indexer search matches what the indexer itself matches, and UsArr does not rewrite the query. Nothing came back for “${submitted}”. The line above says how many indexers answered, which is what separates “nothing matched” from “nobody answered”.`
-			: 'Free-text search across the indexers configured in Prowlarr. Results stream in per indexer as they answer, and Grab posts the release back to Prowlarr.'}
+		emptyTitle={emptyCopy.title}
+		emptyText={emptyCopy.text}
 	>
 		{#snippet cell(release: Release, column: ListColumn)}
 			{#if column.id === 'protocol'}

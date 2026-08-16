@@ -666,3 +666,381 @@ export const RELEASE_ROW_INTRINSIC: Record<string, number> = {
 	standard: 49,
 	relaxed: 53
 };
+
+/* ── 10. The empty state, scoped by search type ───────────────────────────── */
+
+/**
+ * ⚠️ THREE EMPTY STATES, NOT ONE, AND THE MIDDLE ONE IS SCOPED BY MEDIA TYPE.
+ *
+ * DESIGN-DIRECTION §9.6 separates *you have not searched yet* from *your search
+ * returned nothing*, and §17.5 adds the third that this screen specifically
+ * needs: Prowlarr answers 200 with `[]` for "nothing matched" and for "every
+ * indexer failed" alike, so one message over both tells a user their query is
+ * wrong at the exact moment their indexers are down.
+ *
+ * THE TYPE SCOPING IS SW-08, and it is a claim about the indexer ecosystem
+ * rather than about the query. 403 of Prowlarr's 543 indexer definitions are
+ * private and the trackers where music and audiobooks actually live are
+ * invite-only, so a stock Prowlarr searches almost none of the places those two
+ * live: "nothing matched" there points the user at a query that was fine. For a
+ * film or an episode the public indexers do carry the content, so an empty
+ * answer from indexers that ANSWERED is more likely the query, and the useful
+ * advice is the opposite one.
+ *
+ * ⚠️ WHAT IS DELIBERATELY NOT DIAGNOSED. `Basic` gets the mechanical fact — the
+ * query is sent unchanged — and no cause at all, because the type is exactly
+ * what tells the two causes apart and Basic withholds it. Guessing there would
+ * be inventing a cause off a control the user set to "do not narrow this".
+ *
+ * ⚠️ AND `answered` OUTRANKS THE TYPE, ALWAYS. Neither sentence is true of a
+ * fan-out nobody answered — the query was never tested and coverage was never
+ * exercised — so `answered === 0` takes its own state and the type is not
+ * consulted.
+ */
+export interface SearchEmptyInput {
+	/** The query that was actually run. Empty means nothing has been searched. */
+	submitted: string;
+	/** The selected search type's id, one of `SEARCH_TYPES`. */
+	typeId: string;
+	/** Indexers that answered. A failed leg is not a response. */
+	answered: number;
+	/** Indexers in the fan-out, where the server has said. */
+	total?: number;
+}
+
+/** §9.6's shape: a heading and one sentence naming why. No container, no
+ * illustration, no centred block — `List.svelte` renders both in flow. */
+export interface EmptyStateCopy {
+	title: string;
+	text: string;
+}
+
+/** "9 of 9 indexers answered", or "9 indexers answered" before the closing
+ * report has named a denominator. Never invents a total. */
+function answeredClause(answered: number, total?: number): string {
+	if (total === undefined || total < 0)
+		return `${plural(answered, 'indexer', 'indexers')} answered`;
+	return `${answered} of ${total} ${total === 1 ? 'indexer' : 'indexers'} answered`;
+}
+
+/**
+ * The words for the two types whose empty answer is usually COVERAGE, keyed by
+ * type id. Separate constants rather than one templated sentence because the
+ * nouns differ and a sentence assembled from a noun slot reads like one.
+ */
+const THIN_COVERAGE_EMPTY: Record<string, { title: string; because: string }> = {
+	music: {
+		title: 'No music releases matched',
+		because:
+			'The trackers that carry music are invite-only, so a stock Prowlarr searches almost none of ' +
+			'the places music lives: thin coverage is a likelier explanation than your query, and adding ' +
+			'a private indexer you already have an account on is what changes it.'
+	},
+	book: {
+		title: 'No book releases matched',
+		because:
+			'The trackers that carry ebooks and audiobooks are invite-only, so a stock Prowlarr searches ' +
+			'almost none of the places they live: thin coverage is a likelier explanation than your ' +
+			'query, and adding a private indexer you already have an account on is what changes it.'
+	}
+};
+
+/** The two types where the public indexers genuinely do carry the content, so an
+ * answer of nothing from indexers that answered points at the query instead. */
+const QUERY_LIKELY_EMPTY: Record<string, string> = {
+	movie: 'films',
+	tv: 'episodes and series'
+};
+
+export const EMPTY_IDLE_TITLE = 'Nothing searched yet';
+export const EMPTY_IDLE_TEXT =
+	'Free-text search across the indexers configured in Prowlarr. Results stream in per indexer as ' +
+	'they answer, and Grab posts the release back to Prowlarr.';
+
+export function searchEmptyState(input: SearchEmptyInput): EmptyStateCopy {
+	const { submitted, typeId, answered, total } = input;
+	if (submitted === '') return { title: EMPTY_IDLE_TITLE, text: EMPTY_IDLE_TEXT };
+
+	const clause = answeredClause(answered, total);
+
+	// §9.6's third state. Nothing below this line is true of it: the query was
+	// never put to an indexer, so neither "your query matched nothing" nor "your
+	// coverage is thin" is a statement UsArr is entitled to make.
+	if (answered === 0) {
+		return {
+			title: 'No indexer answered',
+			text:
+				`${clause}, so this list is empty because nobody reported rather than because nothing ` +
+				'matched, and your query has not actually been tested. What went wrong is stated once above.'
+		};
+	}
+
+	const thin = THIN_COVERAGE_EMPTY[typeId];
+	if (thin) {
+		return { title: thin.title, text: `${clause} and none had a match. ${thin.because}` };
+	}
+
+	const carried = QUERY_LIKELY_EMPTY[typeId];
+	if (carried) {
+		return {
+			title: 'No releases matched',
+			text:
+				`${clause} and none had a match for “${submitted}”. Public indexers do carry ${carried}, ` +
+				'so where they answer and return nothing the query is the likelier explanation: UsArr sends ' +
+				'what you type unchanged, and a title on its own matches more than a title with a year, an ' +
+				'edition or a release group attached.'
+		};
+	}
+
+	// Basic, and any id this build does not know. No cause is named, because the
+	// type is the thing that would have named it.
+	return {
+		title: 'No releases matched',
+		text:
+			`${clause} and none had a match for “${submitted}”. An indexer matches against the release ` +
+			'name it holds and UsArr sends your query unchanged, so a shorter query matches more than a ' +
+			'full release name does.'
+	};
+}
+
+/* ── 11. The correlated failure ───────────────────────────────────────────── */
+
+/**
+ * ⚠️ N COPIES OF ONE SENTENCE IS NOT A DIAGNOSIS, AND §17.5 SAYS SO: *naming the
+ * non-action beats offering a fake one*.
+ *
+ * When every leg of a fan-out comes back the same way, the screen was printing
+ * the per-indexer banner N times — nine titles, nine two-sentence explanations,
+ * nine identical reasons — and the one fact worth having, that the nine are one
+ * condition rather than nine, was the fact nowhere on screen.
+ *
+ * ⚠️ WHAT THE CLASS IS: THE SERVER'S OWN `status`, NOT A GUESS OFF ITS PROSE.
+ * `internal/releases/search.go` sets exactly one of `ok`, `failed`, `timed_out`,
+ * `blocked`, `breaker_open`, `disabled`, `unsupported`, `not_found` per leg, and
+ * every one of those means something different about who is at fault and what,
+ * if anything, can be done. The correlation being detected is therefore simply:
+ * every leg carries the SAME status and none of them answered. That is read off
+ * the wire; nothing here parses an error message to decide what happened.
+ *
+ * ⚠️ WHAT IS REFUSED. The one thing that is NOT asserted anywhere below is a
+ * cause outside what UsArr observed. UsArr talks to Prowlarr and Prowlarr talks
+ * to the indexers; UsArr sees the near half of that and infers nothing about the
+ * far half. So the strong case reads "the same error came back from every
+ * indexer, which is one fault rather than N, and it sits on the path they share"
+ * — which is what the data supports — and never "Prowlarr cannot resolve DNS",
+ * which is one of several conditions that produce exactly this evidence.
+ * §17.5's example names a host-level resolution failure inside Prowlarr's
+ * container; it is an EXAMPLE of the class, and printing it as the verdict would
+ * be the invented status this repo's rules exist to stop.
+ */
+
+/**
+ * The subset of `IndexerOutcome` ($lib/api) this reads. Declared structurally
+ * rather than imported so this module stays free of the fetch layer, exactly as
+ * the rest of the file is: `vitest.config.ts` is `environment: 'node'`.
+ */
+export interface IndexerLeg {
+	name: string;
+	/** The server's `status` field, verbatim. */
+	status: string;
+	answered: boolean;
+	/** The server's human-readable, credential-free `reason`. */
+	reason?: string;
+	blockedUntil?: string;
+}
+
+/** One class per server status that a whole fan-out can land in together. */
+export type CorrelatedKind =
+	'shared_fault' | 'timeout' | 'breaker' | 'blocked' | 'disabled' | 'unsupported' | 'unknown_ids';
+
+/**
+ * The one action the screen may offer for a class, and `none` is a first-class
+ * value rather than an absence: §17.5's rule is that where the correct action is
+ * not something UsArr can offer, naming the non-action beats offering a fake one.
+ *
+ * `retry` is not in the union and never will be. The screen's word for asking
+ * again is `search-again`, which is a fresh fan-out rather than a re-send of an
+ * irreversible grab.
+ */
+export type CorrelatedAction = 'none' | 'search-again' | 'clear-scope';
+
+export interface CorrelatedDiagnosis {
+	kind: CorrelatedKind;
+	/** How many indexers this covers. Always the whole fan-out, by construction. */
+	indexers: number;
+	title: string;
+	/** What was observed, and the most it supports. Hedged where it is a pattern
+	 * rather than a cause. */
+	text: string;
+	/** The sentence that names what this screen cannot do. Empty ONLY where the
+	 * offered action genuinely fixes the condition. */
+	nonAction: string;
+	/** The upstream's own words, once, where every leg gave the same ones. Empty
+	 * where they differ, and the caller then lists them per indexer instead —
+	 * a blocked indexer's reason carries its own unblock time. */
+	verbatim: string;
+	action: CorrelatedAction;
+	tone: 'warn' | 'err';
+}
+
+const CORRELATED_COPY: Record<
+	CorrelatedKind,
+	(n: number) => Omit<CorrelatedDiagnosis, 'kind' | 'indexers' | 'verbatim'>
+> = {
+	shared_fault: (n) => ({
+		title: `All ${n} indexers came back with the same error`,
+		text:
+			`${n} separate indexers do not usually produce one identical error at the same moment, so ` +
+			'this is one fault rather than ' +
+			`${n}. Whatever it is sits on the path they share, which is UsArr to Prowlarr and Prowlarr ` +
+			'outward, rather than at the indexers themselves.',
+		nonAction:
+			'UsArr sees its own half of that path and no further, so it cannot tell you which part of it ' +
+			'is at fault. The sentence below is Prowlarr’s own and is the whole of what UsArr was told.',
+		action: 'search-again',
+		tone: 'err'
+	}),
+	timeout: (n) => ({
+		title: `None of the ${n} indexers answered inside the deadline`,
+		text:
+			`All ${n} legs hit the same per-indexer deadline with nothing to show, which is one condition ` +
+			`rather than ${n}. Indexers timing out together usually means the requests are not getting ` +
+			'through: a slow or unreachable Prowlarr looks exactly like this from here.',
+		nonAction:
+			'Which end is slow is not visible from this screen. UsArr measures how long Prowlarr took to ' +
+			'answer and nothing beyond it.',
+		action: 'search-again',
+		tone: 'err'
+	}),
+	breaker: (n) => ({
+		title: `UsArr has stopped asking all ${n} indexers`,
+		text:
+			'These are UsArr’s own circuit breakers rather than anything Prowlarr said. Each opened after ' +
+			'that indexer kept failing, and all of them being open at once usually means those failures ' +
+			'were shared rather than particular to one indexer.',
+		nonAction:
+			'There is nothing to press here: each breaker closes by itself at the time its line below ' +
+			'gives, and asking again before then asks nobody.',
+		action: 'none',
+		tone: 'err'
+	}),
+	blocked: (n) => ({
+		title: `Prowlarr reports all ${n} indexers as unavailable`,
+		text:
+			'This is Prowlarr’s own indexer status rather than UsArr’s: it has marked every one of them ' +
+			'as failing and will not query them until the times below. UsArr forwards that verdict ' +
+			'instead of forming its own.',
+		nonAction:
+			'This screen can read that state and cannot change it. It clears in Prowlarr, either on its ' +
+			'own or from Prowlarr’s own indexer page.',
+		action: 'none',
+		tone: 'err'
+	}),
+	disabled: (n) => ({
+		title: `All ${n} indexers are switched off in Prowlarr`,
+		text:
+			'Every indexer in the fan-out is disabled at Prowlarr’s end, so none of them was asked. ' +
+			'Nothing on the path is broken and UsArr did not skip them; they are turned off.',
+		nonAction:
+			'The switch belongs to Prowlarr rather than to UsArr, so this screen can report it and ' +
+			'cannot flip it.',
+		action: 'none',
+		tone: 'warn'
+	}),
+	unsupported: (n) => ({
+		title: `All ${n} indexers declined this search`,
+		text:
+			'Each one was asked and each said it does not handle this search, so nothing is broken. ' +
+			'Where every indexer says that, the mismatch is in what was asked for rather than in the ' +
+			'indexers: a search type, a mode or a category none of yours offers.',
+		nonAction:
+			'Narrowing the search will not help and neither will asking again. The reason each one gave ' +
+			'is below, and it names what it will not do.',
+		action: 'none',
+		tone: 'warn'
+	}),
+	unknown_ids: (n) => ({
+		title: `This Prowlarr has none of the ${n} indexers you named`,
+		text:
+			'The indexer selection sent with this search names ids this Prowlarr does not have. That is a ' +
+			'fact about the request rather than about any indexer, and it is what a shared link or a ' +
+			'remembered selection from a different Prowlarr looks like.',
+		// The one class with an action that actually resolves it, so it names no
+		// non-action: saying "there is nothing you can do" beside a button that
+		// works would be its own kind of dishonesty.
+		nonAction: '',
+		action: 'clear-scope',
+		tone: 'warn'
+	})
+};
+
+/** Server statuses that map straight onto a class. `failed` is absent on
+ * purpose: it is the unclassified remainder and needs the extra evidence below
+ * before it may be called one fault. */
+const STATUS_KIND: Record<string, CorrelatedKind> = {
+	timed_out: 'timeout',
+	breaker_open: 'breaker',
+	blocked: 'blocked',
+	disabled: 'disabled',
+	unsupported: 'unsupported',
+	not_found: 'unknown_ids'
+};
+
+/**
+ * The correlated diagnosis, or `undefined` where the evidence does not support
+ * one and the caller should keep rendering per-indexer banners.
+ *
+ * FOUR CONDITIONS, AND EVERY ONE OF THEM IS A REFUSAL TO OVERSTATE:
+ *
+ *  1 **At least two legs.** One indexer failing is that indexer, and there is no
+ *    repetition to collapse — a "correlation" over a single sample is a word
+ *    dressed up as a finding.
+ *  2 **Every leg is the whole fan-out.** `total` is checked where the server has
+ *    named one, so a partially-reported live search cannot fire this off the
+ *    first three legs that happen to have failed together.
+ *  3 **Nobody answered.** One indexer answering makes this a partial result with
+ *    a gap, which is what the per-indexer banners already say correctly.
+ *  4 **One status across every leg**, and for the `failed` remainder ALSO one
+ *    identical reason. Mixed statuses are several conditions and get the several
+ *    banners they deserve; `failed` with differing errors is N different errors,
+ *    which is precisely not the thing being detected.
+ */
+export function correlatedFailure(
+	legs: readonly IndexerLeg[],
+	total?: number
+): CorrelatedDiagnosis | undefined {
+	if (legs.length < 2) return undefined;
+	if (total !== undefined && total >= 0 && legs.length !== total) return undefined;
+	if (legs.some((l) => l.answered)) return undefined;
+
+	const status = legs[0].status;
+	if (legs.some((l) => l.status !== status)) return undefined;
+
+	const reasons = new Set(legs.map((l) => (l.reason ?? '').trim()));
+	const shared = reasons.size === 1 ? [...reasons][0] : '';
+
+	let kind = STATUS_KIND[status];
+	if (kind === undefined) {
+		// The `failed` remainder, and the only place a reason is consulted at
+		// all — not to classify what went wrong, but to establish that there is
+		// ONE thing rather than N. An empty shared reason is no evidence either.
+		if (status !== 'failed' || shared === '') return undefined;
+		kind = 'shared_fault';
+	}
+
+	return { kind, indexers: legs.length, verbatim: shared, ...CORRELATED_COPY[kind](legs.length) };
+}
+
+/**
+ * The per-leg reasons as ONE pre-wrapped block, for the classes whose legs agree
+ * on the status and not on the words — a blocked or breaker-open set, where each
+ * line carries its own time and dropping the lines would drop real data.
+ *
+ * One `.verbatim` box of N lines rather than N boxes: the repetition §17.5
+ * objects to is the surrounding explanation, not the upstream's own sentences,
+ * and each of those still appears exactly once. `.verbatim` is `pre-wrap`, so
+ * the newline is the whole layout.
+ */
+export function legReasons(legs: readonly IndexerLeg[]): string {
+	return legs.map((l) => `${l.name}: ${l.reason ?? l.status}`).join('\n');
+}
