@@ -174,6 +174,26 @@ In this mode `internal/web` serves nothing. The SPA is baked in only by `make bu
 `web-build` first and embeds `web/build`. **Consequence: `go build ./cmd/usarr` by hand produces a
 binary that 404s on `/`.** The Makefile wires the dependency; running `go build` directly bypasses it.
 
+### ⚠️ Run `make test`, not a bare `go test ./...`
+
+On a fresh clone **`go test -race ./...` fails**, and the failure means nothing. `internal/web/spa`
+is the `//go:embed` mirror of the built SPA, and `git ls-files internal/web/spa` tracks exactly one
+file — `.gitkeep`. It is populated by `make test-go`'s `web-build` prerequisite and by nothing else,
+so in a clone that has never built the frontend, `cmd/usarr`'s end-to-end route test has no document
+to find and reports a red that is a missing build step, not a broken repository.
+
+```bash
+make test        # correct: builds the SPA first, then runs the Go and web suites
+go test ./...    # red on a fresh clone until `make web-build` has run once
+```
+
+`internal/web`'s own tests skip honestly here (*"no frontend build embedded — run `make
+web-build`"*), escalating to a hard failure under `USARR_REQUIRE_WEB_BUILD=1` so the embed
+regression test can never silently skip inside `make check`. `cmd/usarr`'s e2e assertions have no
+such skip yet — that gap is `FI-12` in `docs/REVIEW-LOG.md`, and it is a documentation item until
+someone gives them the same `Built()` guard. **Not a regression**, and not a defect in the gate,
+which is green: it is only that the most obvious command a newcomer types is the wrong one.
+
 ---
 
 ## 4. Make targets
@@ -201,10 +221,16 @@ binary that 404s on `/`.** The Makefile wires the dependency; running `go build`
 `check` runs `fmt-check` (verify-only), not `fmt` (rewrite), so it never mutates your tree while
 telling you it passed.
 
-`check` makes **exactly one network call**, govulncheck's query to `vuln.go.dev`. That is a
-deliberate exception to the otherwise-hermetic rule: a project that stores a dozen full-admin
-credentials cannot ship a known-vulnerable crypto or HTTP dependency because the scan was advisory.
+`check` makes **exactly two network calls, both to vulnerability databases**: govulncheck's query to
+`vuln.go.dev`, and `pnpm audit`'s to the npm registry. Both are in the `vuln` target, and
+**`check-offline` drops both** — it is precisely `check` minus that target. They are a deliberate
+exception to the otherwise-hermetic rule: a project that stores a dozen full-admin credentials
+cannot ship a known-vulnerable crypto, HTTP or frontend dependency because the scan was advisory.
 Use `check-offline` when you have no network; run `check` before you push.
+
+This said "exactly one network call" for the life of the project while the `vuln` target ran two
+commands, in three places at once — here, `Makefile`'s honesty notice, and `CLAUDE.md`. Nobody
+counted; everybody copied. §11 has the general rule.
 
 `make design` is deliberately **outside** the gate, and the reason is not the obvious one. It is
 hermetic — the mockups load over `file://` and the IBM Plex subsets are inlined as `data:` URIs, so
@@ -218,9 +244,11 @@ is a shipping artifact, and none of which can break the binary. Run it by hand w
 moves, overriding `PW_BROWSERS_PATH` to point at your own browser cache. If Playwright ever lands
 as a pinned `devDependency`, the browser cost is worth re-arguing on its own merits.
 
-`docs/design/check.mjs` landed on `main` in `56101c1` (observed 2026-08-16). If you are on a branch
-that predates it, `make design` says so and exits 1; if Playwright itself is missing, the script
-prints the install command and every resolution path it tried.
+`docs/design/check.mjs` is on `main`: introduced in `f015655`, merged by `e0d4b26`. **Observed
+present at 2026-08-16 17:34 UTC after a `git fetch`** — a measurement, not a standing guarantee, and
+the sort of claim that goes stale silently. If you are on a branch that predates it, `make design`
+says so and exits 1; if Playwright itself is missing, the script prints the install command and every
+resolution path it tried.
 
 ---
 
@@ -543,7 +571,7 @@ SSRF redirect cases.
 
 ---
 
-## 8. CI: no Docker daemon, no FFmpeg, one network call
+## 8. CI: no Docker daemon, no FFmpeg, two network calls
 
 **The Docker daemon is unavailable in the CI/agent container.** Verified: `docker info` fails. FFmpeg
 is absent too, and stays absent.
@@ -553,8 +581,9 @@ Therefore:
 * `make test`, `make lint`, `make check-offline` and `make build` **must not require Docker, a live
   service, or network access.** If any of them ever does, that is a bug in the target, not an
   environment problem to work around.
-* `make check` adds exactly one network call — govulncheck against `vuln.go.dev`. Nothing else in the
-  gate touches the network, and no target may add a second without a stated reason.
+* `make check` adds exactly two network calls, both to vulnerability databases — govulncheck against
+  `vuln.go.dev`, and `pnpm audit` against the npm registry. Both live in the `vuln` target. Nothing
+  else in the gate touches the network, and no target may add a third without a stated reason.
 * Testcontainers, dockertest and "spin up a real Postgres/Sonarr in a test" are **out of bounds** for
   the default suite. This is also why UsArr uses SQLite rather than anything needing a server.
 * Anything requiring the stack goes behind `//go:build integration`, is gated on
@@ -636,13 +665,41 @@ output.
 ### Frontend
 
 ```bash
-pnpm -C web lint          # eslint
-pnpm -C web format        # prettier --write
-pnpm -C web check         # svelte-check (types + a11y + unused CSS)
+cd web
+pnpm lint            # eslint
+pnpm format          # prettier --write
+pnpm check           # svelte-check (types + a11y + unused CSS)
 ```
+
+**`cd web` first; do not run `pnpm -C web …` from the repo root.** The repo root has no
+`package.json` — this is a Go repository with a `web/` subdirectory, not a JS workspace — so a
+corepack-provided pnpm finds no `packageManager` pin there, falls back to its own default version,
+and then collides with `web/package.json`'s `pnpm@10.33.0`. Running from inside `web/` puts the pin
+where every resolver looks for it. The `Makefile` does the same thing for the same reason, and sets
+`COREPACK_ENABLE_DOWNLOAD_PROMPT=0` so an unattended build cannot stall on corepack's interactive
+download confirmation.
 
 `svelte-check` is part of `make lint`, not an afterthought — with `adapter-static` a type error in a
 route only surfaces at build time otherwise.
+
+#### The `cookie` override in `web/package.json`
+
+```json
+"pnpm": { "overrides": { "cookie": "^0.7.2" } }
+```
+
+**JSON takes no comments, so the reason lives here.** `@sveltejs/kit` 2.70.2 declares
+`"cookie": "^0.6.0"`, and a caret range on a `0.x` version cannot cross the minor — so left alone it
+resolves inside `0.6.x`, entirely within **GHSA-pxg6-pf52-xh8x** (out-of-bounds characters accepted
+in a cookie name, path or domain; fixed in `cookie@0.7.0`). The override lifts the whole tree to
+`^0.7.2`, and `pnpm-lock.yaml` resolves it to exactly one copy — `cookie@0.7.2`, no duplicates,
+confirmed with `pnpm why cookie`. Without it `pnpm audit` fails, and `pnpm audit` is a gating step of
+`make check` (§4), so this is load-bearing and not a tidiness preference.
+
+**Remove it when, and only when, SvelteKit's own dependency range no longer admits a vulnerable
+version.** Check with `cd web && pnpm why cookie`; if the resolved version is ≥ 0.7.2 with the
+override deleted, the override has become a no-op and should go. Deleting it while it is still doing
+work turns the gate red, which is the intended behaviour.
 
 ### Pre-commit
 
@@ -722,6 +779,66 @@ An agent working in this repo should assume:
   403, PascalCase webhook `eventType` against camelCase REST) that are easy to get plausibly wrong.
 * When something is unverified, say so in the comment or the doc, with the date. This repo marks
   uncertainty rather than papering over it, and reviewers rely on that.
+
+### Writing a guard that can be trusted
+
+Every rule below is here because this repo shipped its opposite and stayed green. They are the
+mechanics behind `CLAUDE.md`'s "verify, don't assert" — that rule says what to do, these say how a
+check earns the right to be believed.
+
+**1. Probe the condition, not a proxy for it.** `make design` once carried a fourth guard meant to
+confirm Playwright would resolve. It did not test resolution; it **grepped the import specifier out
+of `check.mjs`** — asserting the shape of the script's source instead of the behaviour it cared
+about. When the static import became a dynamic resolution ladder, the grep matched nothing, and an
+unrelated refactor had silently disarmed a guard nobody was watching. A proxy and its condition
+agree right up until the day they matter. Ask what the guard is really for, then test *that*.
+
+**2. Report what you measured, not just the verdict.** A green with no evidence attached is a
+rumour. Two of them here:
+
+* `make check` resolved `golangci-lint` from `PATH` and, for the life of the project, ran an
+  **unpinned and much older version** while reporting green. Nothing was wrong with the output — it
+  was a true statement made by the wrong tool. This is why `require_tool` now prints the absolute
+  binary path and its version before the linter runs, and why the version is asserted against the
+  pin rather than merely displayed.
+* golangci-lint's stock `max-same-issues: 3` **truncated 11 findings to 7 and said nothing** — no
+  "N more" line, no difference in the summary. `gosec`'s four sat exactly at that boundary: one more
+  finding with the same message text and the security results would have been the ones hidden. The
+  config now sets `max-same-issues: 0` and `max-issues-per-linter: 0`, and a capped run that agrees
+  with an uncapped one is what makes a number a count instead of a floor.
+
+So: name the binary, the version, the commit, the flags and the count. **A gate result without a
+commit sha attached is not a result** — several threads push to `main` within the same hour here, so
+a green measured five minutes ago may already describe a tree that no longer exists.
+
+**3. Exercise the failure path.** A guard's failure branch is code, and untested code does not work.
+It is also the branch that by definition only runs when something is already wrong, which is exactly
+why nobody ever runs it. Fire the guard deliberately — break the thing on purpose — and confirm it
+says what it was written to say. The same `make design` guard from rule 1 makes the point twice
+over: under `.SHELLFLAGS := -eu -o pipefail` it **died at its own variable assignment, before
+reaching the error message it existed to print**. Even a correct probe would have been mute. A guard
+that cannot speak when it fires is indistinguishable from no guard at all.
+
+**4. Adding a check means declaring what it should find, not only what it forbids.** A check with a
+knowable floor asserts that floor and fails beneath it. `fmt-check` refuses to pass when it finds
+zero `.go` files; `vuln` refuses to pass when `go list` yields zero packages. Both would otherwise
+have exited 0 while scanning nothing, which is the most convincing green there is. If you can state
+roughly how much a check ought to see, encode that — "found nothing" and "looked at nothing" must
+never produce the same exit code.
+
+**The pattern worth carrying: two of the first three were introduced by the fixes for the other
+two.** That is not bad luck. A fix is written under the assumption that the failure mode is now
+understood, and that is precisely the moment people stop checking for it. Treat a guard you just
+repaired as the least trustworthy thing in the file, not the most.
+
+**Two mechanical notes when gathering lint evidence:**
+
+* **`golangci-lint cache clean` first.** Cached diagnostics have been observed replaying results
+  against paths from a *different clone* of this repo, which produces findings that cannot be
+  reproduced and, worse, silences ones that can.
+* **A bare `golangci-lint` resolves to whatever is on `PATH`, which is a stale version.** Only
+  `make check` (or `make lint`) is authoritative, because only those go through `require_tool` and
+  assert the pin. Quote the tool line it prints alongside any claim of green.
 
 ### Working alongside other threads
 
