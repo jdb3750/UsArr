@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -138,6 +139,45 @@ func TestURLBaseIsValidated(t *testing.T) {
 		}); err == nil {
 			t.Errorf("URLBase %q was accepted", bad)
 		}
+	}
+}
+
+// The two row-id keys must be DIFFERENT BYTES, and this is the only thing that
+// checks it, because nothing in the repo ever constructs a Config where they are
+// equal — main wires two distinct derivations and every test helper does the
+// same, so the guard in New could be deleted with the whole gate staying green.
+//
+// ⚠️ IT IS NOT THE HKDF-LABEL CHECK WEARING A DIFFERENT HAT. A copy-pasted
+// label is caught in internal/crypto, where the two derivations are asserted to
+// disagree. What only this test can see is the other mistake: two CORRECT keys,
+// each 32 bytes and properly derived, wired into both fields at the call site.
+// That compiles, runs, and silently collapses the provenance and audit id
+// domains into one keyspace — and one response carries both arms, so the client
+// would key two unrelated rows on one id (review finding RG-01.3).
+//
+// The second case is not padding. A regression that rejected every Config would
+// satisfy the first case happily, and a guard that says no to everything is not
+// this guard.
+func TestRowIDKeysMustBeDistinctBytes(t *testing.T) {
+	base := newTestServer(t, nil)
+	cfg := func(grab, audit []byte) Config {
+		return Config{
+			Store:         base.store,
+			Keyring:       base.keyring,
+			GrabRowIDKey:  grab,
+			AuditRowIDKey: audit,
+		}
+	}
+
+	// Cloned rather than the same slice header, so what is under test is
+	// bytes.Equal and not slice identity.
+	key := testGrabRowIDKey(t)
+	if s, err := New(cfg(key, bytes.Clone(key))); err == nil {
+		t.Errorf("New accepted GrabRowIDKey == AuditRowIDKey and returned %v", s != nil)
+	}
+
+	if _, err := New(cfg(testGrabRowIDKey(t), testAuditRowIDKey(t))); err != nil {
+		t.Errorf("New rejected correct, distinct keys: %v", err)
 	}
 }
 

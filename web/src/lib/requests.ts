@@ -983,7 +983,7 @@ export const RECENT_GRAB_ROW_INTRINSIC: Record<string, number> = {
  * MEASURED, and not by this thread: `list.ts`'s ROW_INTRINSIC comment records
  * `scripts/list-bench.mjs` rendering the release row the harness draws — chips,
  * a button, a checkbox and a `<select>` — at 45 / 49 / 53 px content box across
- * the three densities, i.e. 1.6x the one-line default. That is this row's
+ * the three densities, i.e. 1.67x the one-line default. That is this row's
  * shape, so those are the numbers rather than a fresh guess. `auto` in front of
  * the length still means the browser replaces the estimate with the row's own
  * size once it has seen one.
