@@ -172,14 +172,33 @@ await page.waitForSelector('table.tbl tbody tr');
  *      Plex therefore never loads here at all: every number this file has ever
  *      printed is on the fallback face, reproducibly rather than racily, which
  *      is why the distributions have zero spread.
- *      The one-line figures are unaffected either way, because `.tbl tbody tr`
- *      carries `min-height: var(--row-h)` and a one-line row's content is
- *      shorter than it — which is exactly why they came out at 28/32/36, the
- *      density tokens themselves. The RICH row is content-driven and is the
- *      one that could move if the face ever loads.
+ *      ✅ MEASURED, AND IT DOES NOT MOVE THE NUMBERS. The rich-row figures come
+ *      out at 45/49/53 byte-identical with IBM Plex served and with it blocked,
+ *      checked by a canvas advance-width probe rather than assumed, and the row
+ *      `line-height` is a fixed 18px length rather than a unitless multiplier.
+ *      The null result is trustworthy rather than merely convenient because the
+ *      same probe DOES split the two conditions once `line-height: normal` is
+ *      forced, so it can detect a face-driven change and the shipped
+ *      configuration simply has none. Both halves belong in this note: "these
+ *      are fallback metrics" without "and here is why that does not move them"
+ *      is the kind of caveat that gets the work redone.
+ *      The earlier text here said instead that one-line rows were "pinned by
+ *      `min-height: var(--row-h)`" and that the rich row was the one at risk.
+ *      Both halves were wrong, and see the warning above about how they got in.
  *      🔍 The await and the report below change no measurement today (a 404
  *      makes fonts.ready resolve immediately); they exist so the next reader
- *      sees the font state in the output instead of assuming it was handled. */
+ *      sees the font state in the output instead of assuming it was handled.
+ *
+ *   ⚠️ AND THE TELL THAT BOTH OF TODAY'S WRONG EXPLANATIONS SHARED: each one
+ *      accounted for its number to the pixel on the first try. `min-height:
+ *      var(--row-h)` explaining a 28/32/36 result is an exact fit, and it was
+ *      false — the floor was slack by 1px and the match was arithmetic
+ *      coincidence. A mechanism that lands exactly deserves MORE suspicion
+ *      rather than less, because a mechanism and a coincidence are
+ *      indistinguishable from a single agreeing measurement, and the way to
+ *      tell them apart is to perturb the mechanism and see whether the number
+ *      follows. Which is what `floorBinding` below now does on every run,
+ *      rather than leaving the claim in prose where nothing can check it. */
 await page.evaluate(() => document.fonts.ready);
 const fontState = await page.evaluate(() => {
 	const faces = [...document.fonts].map((f) => `${f.family} ${f.weight} ${f.status}`);
@@ -360,10 +379,34 @@ async function intrinsicAt(density) {
 			sum += content;
 		}
 
+		// WHICH REGIME PRODUCED THOSE NUMBERS, MEASURED RATHER THAN ASSERTED.
+		//
+		// `.tbl tbody tr` carries `min-height: var(--row-h)`, and whether that
+		// floor is what SETS the row height or is merely present is not visible
+		// in the height itself: a natural height above the floor and a natural
+		// height below it both render as a number, and only one of them is the
+		// floor's doing. The two cases have been confused in this file's own
+		// prose in both directions, so the run decides it now. Drop the floor,
+		// force a layout, re-measure: if the height moves, the floor was
+		// binding; if it does not, the floor is slack and the figures above are
+		// the content's own.
+		sheet.replaceSync(
+			'.tbl tbody tr { content-visibility: visible !important; min-height: 0 !important; }'
+		);
+		void tbl.offsetHeight;
+		const naturalCounts = new Map();
+		for (const row of rows) {
+			const content = Math.round((row.getBoundingClientRect().height - padY - borderY) * 10) / 10;
+			naturalCounts.set(content, (naturalCounts.get(content) ?? 0) + 1);
+		}
+
 		sheet.replaceSync('');
 		document.adoptedStyleSheets = document.adoptedStyleSheets.filter((s) => s !== sheet);
 
 		const distinct = [...counts.entries()].sort((a, b) => a[0] - b[0]);
+		const naturalDistinct = [...naturalCounts.entries()].sort((a, b) => a[0] - b[0]);
+		const mode = distinct.reduce((a, b) => (b[1] > a[1] ? b : a))[0];
+		const naturalMode = naturalDistinct.reduce((a, b) => (b[1] > a[1] ? b : a))[0];
 		return {
 			rowH: parseFloat(getComputedStyle(tbl).getPropertyValue('--row-h')),
 			padY,
@@ -373,7 +416,11 @@ async function intrinsicAt(density) {
 			min: distinct[0][0],
 			max: distinct[distinct.length - 1][0],
 			mean: Math.round((sum / rows.length) * 10) / 10,
-			mode: distinct.reduce((a, b) => (b[1] > a[1] ? b : a))[0]
+			mode,
+			/** The content box with `min-height` forced to 0: the content's own height. */
+			naturalMode,
+			/** True when dropping the floor changed the height, i.e. the floor was load-bearing. */
+			floorBinding: naturalMode < mode
 		};
 	}, density);
 }
@@ -1361,7 +1408,10 @@ if (!ASSERT_ONLY) {
 		`webfont state while measuring: document.fonts.status=${fontState.status}, ` +
 			`${fontState.count} face(s)${fontState.faces.length ? ': ' + fontState.faces.join(' | ') : ''} ` +
 			`— the harness has no publicDir, so /fonts/*.woff2 404s and these are FALLBACK metrics. ` +
-			`One-line rows are pinned by min-height:--row-h and so are unaffected; the rich row is not.`
+			`Measured identical with the face served and blocked (canvas advance-width probe), because ` +
+			`the row line-height is a fixed 18px length rather than a unitless multiplier; the same ` +
+			`probe does split the two conditions under a forced line-height:normal, so the null result ` +
+			`is a measurement rather than an absence of one.`
 	);
 	note('contain-intrinsic-size, per density (mean rendered content box):');
 	for (const d of ['compact', 'standard', 'relaxed']) {
@@ -1371,6 +1421,25 @@ if (!ASSERT_ONLY) {
 				`${shapes['one-line'][d].distinct.length} distinct)   ·   ` +
 				`rich ${String(recommended[d]).padStart(3)}px ` +
 				`(min ${intrinsic[d].min}, max ${intrinsic[d].max}, ${intrinsic[d].distinct.length} distinct)`
+		);
+	}
+	/* WHICH MECHANISM PRODUCED THE ONE-LINE FIGURES, RE-ESTABLISHED ON EVERY
+	 * RUN. The same six numbers come out of two opposite regimes — a floor that
+	 * binds, and a floor that is slack over a natural height that happens to
+	 * match — so a static sentence here is a claim that can silently flip.
+	 * `floorBinding` is measured by dropping `min-height` and seeing whether the
+	 * height follows, so this line reports rather than asserts, and the reader
+	 * never has to trust the prose above it. The measured scope is
+	 * `stack: 'two-line'`, which is what the harness renders. */
+	for (const shape of ['one-line', 'rich']) {
+		const at = (f) => ['compact', 'standard', 'relaxed'].map((d) => shapes[shape][d][f]).join('/');
+		const binding = ['compact', 'standard', 'relaxed'].every((d) => shapes[shape][d].floorBinding);
+		const slack = ['compact', 'standard', 'relaxed'].every((d) => !shapes[shape][d].floorBinding);
+		note(
+			`  ${shape.padEnd(8)} floor ${binding ? 'BINDING' : slack ? 'SLACK' : 'MIXED across densities'}: ` +
+				`content box ${at('mode')}, natural ${at('naturalMode')} with min-height:0, ` +
+				`against a --row-h of ${at('rowH')}` +
+				(slack ? ' — the floor is not what sets these; the content is' : '')
 		);
 	}
 	note('');

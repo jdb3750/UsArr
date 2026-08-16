@@ -1837,8 +1837,35 @@ select[multiple] {
 
 /* The phone label is display:none above 760px but it is still the first child,
  * so without this every cell's real first element inherits the inter-line
- * margin meant for a second one. */
-.tbl td > .stacklabel + * {
+ * margin meant for a second one.
+ *
+ * ⚠️ `.stacksep` NEEDS THE SAME EXEMPTION AND WAS MISSING FROM IT, and the
+ * reason it is easy to miss is that `display: none` removes the BOX and not the
+ * SIBLING: `+` matches on the DOM tree, so a hidden separator still makes the
+ * cell's real content "a second element" and still collects the 2px. It hit the
+ * second of a two-line stack's second-line columns — in the shipped column sets
+ * that is `Size`, whose `.trunc` follows the `·` — so the tallest cell in every
+ * one-line row of a `stack: 'two-line'` list was 2px taller than the others.
+ *
+ * MEASURED, one-line rows at 1440x900, compact / standard / relaxed, as
+ * `getBoundingClientRect().height` (border box; padding 0, border 1px), with the
+ * second figure taken under a forced `min-height: 0` so it is the NATURAL height:
+ *
+ *   two-line stack, before   29 / 33 / 37   natural 29 / 33 / 37   floor inert
+ *   two-line stack, after    28 / 32 / 36   natural 27 / 31 / 35   floor binds
+ *   labels stack, unchanged  28 / 32 / 36   natural 27 / 31 / 35   floor binds
+ *
+ * ⚠️ THE RENDERED HEIGHT DOES MOVE, BY 1px, AND THE THIRD LINE IS WHY THAT IS
+ * THE FIX RATHER THAN A REGRESSION. A `labels` list never renders a `.stacksep`,
+ * so it never had the bug, and it has always rendered 28/32/36 off a binding
+ * floor. The `two-line` fork was rendering 29/33/37 — one pixel taller than the
+ * other fork of the same primitive at the same density — because its natural
+ * height cleared `min-height: var(--row-h)` by exactly the 1px of slack the
+ * stray 2px margin bought it. The floor was therefore inert on that fork and the
+ * density was being set by a margin nobody intended. After this, both forks
+ * render the same height for the same reason. */
+.tbl td > .stacklabel + *,
+.tbl td > .stacksep + * {
 	margin-top: 0;
 }
 
