@@ -670,9 +670,21 @@
 		document.querySelector<HTMLElement>(`[data-key="${CSS.escape(String(id))}"]`)?.focus();
 	}
 
+	/**
+	 * What to say where the *Arr's own warnings would go when there are none.
+	 *
+	 * "None reported" is a claim about what the instance said, so it may only be
+	 * made when the instance actually answered. An unreachable or disabled
+	 * instance reported nothing because it was never asked, and drawing that as a
+	 * clean bill of health is the same failure as a green tick on a row nothing
+	 * has probed.
+	 */
 	function warningsOf(health: ServiceHealth): string {
+		if (health.warnings.length > 0) return '';
 		if (health.stale) return 'Not readable: no probe has run yet.';
-		return health.warnings.length === 0 ? 'None reported' : '';
+		if (!health.enabled) return 'Not readable: UsArr is not contacting this instance.';
+		if ((health.problem ?? '') !== '') return 'Not readable while the instance is not answering.';
+		return 'None reported';
 	}
 </script>
 
@@ -1011,7 +1023,7 @@
 		{/if}
 		<div class="detail">
 			<div>
-				<h4>Retry schedule</h4>
+				<h4>Probe and retry</h4>
 				<ul>
 					{#each mechanics(row, now) as part, i (i)}
 						<li>{part}</li>
@@ -1404,8 +1416,10 @@
 					{:else}
 						<p>
 							{connectedHeadline(testResult.appName, testResult.appVersion, testResult.apiVersion)}.
-							Naming what actually answered is the only thing that catches a URL pasted under the
-							wrong kind.
+							{#if outcome === 'connected'}
+								Naming what actually answered is the only thing that catches a URL pasted under the
+								wrong kind.
+							{/if}
 						</p>
 						{#if outcome === 'reachable'}
 							<!-- The server's own wording for this case, used as it stands.

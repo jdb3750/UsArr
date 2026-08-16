@@ -491,10 +491,28 @@ export function connectedHeadline(
 	apiVersion: string | undefined
 ): string {
 	const application = [appName, appVersion].filter((p) => p && p !== '').join(' ');
-	if (application === '' && !apiVersion) return 'Connected';
-	if (!apiVersion) return `${application} answered`;
-	if (application === '') return `Something answered on ${apiVersion}`;
-	return `${application} answered on ${apiVersion}`;
+	const path = apiPathOf(apiVersion);
+	if (application === '' && path === '') return 'Connected';
+	if (path === '') return `${application} answered`;
+	if (application === '') return `Something answered on ${path}`;
+	return `${application} answered on ${path}`;
+}
+
+/**
+ * The API PATH, which is what §17.3 asks the panel to show and is not quite
+ * what the wire carries.
+ *
+ * `api_version` is `APIInfoResource.current`, and the *Arrs put the bare
+ * version in it — Prowlarr answers `v1`, Sonarr `v3`. Rendering `answered on
+ * v1` is a version, not a path, and the value the user has to recognise is the
+ * one in their own reverse-proxy config: `/api/v1`. A value that already looks
+ * like a path is left alone rather than double-prefixed.
+ */
+export function apiPathOf(apiVersion: string | undefined): string {
+	const value = apiVersion?.trim() ?? '';
+	if (value === '') return '';
+	if (value.startsWith('/')) return value;
+	return `/api/${value}`;
 }
 
 /**

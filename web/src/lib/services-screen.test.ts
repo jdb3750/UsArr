@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+	apiPathOf,
 	applicationName,
 	classify403,
 	clockOf,
@@ -298,6 +299,18 @@ describe('the connected panel names what actually answered', () => {
 	it('joins the application, its version and its API path', () => {
 		expect(connectedHeadline('Sonarr', '4.0.10.2544', '/api/v3')).toBe(
 			'Sonarr 4.0.10.2544 answered on /api/v3'
+		);
+	});
+
+	it('renders the bare version the *Arrs send as the PATH the user recognises', () => {
+		// APIInfoResource.current is `v1` on Prowlarr and `v3` on Sonarr. `answered
+		// on v1` is a version; the value the user has to match against their own
+		// reverse-proxy config is `/api/v1`.
+		expect(apiPathOf('v1')).toBe('/api/v1');
+		expect(apiPathOf('/api/v3')).toBe('/api/v3');
+		expect(apiPathOf(undefined)).toBe('');
+		expect(connectedHeadline('Prowlarr', '1.37.0.5076', 'v1')).toBe(
+			'Prowlarr 1.37.0.5076 answered on /api/v1'
 		);
 	});
 
