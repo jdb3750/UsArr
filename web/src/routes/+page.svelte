@@ -35,6 +35,11 @@
 	over Prowlarr, with results streaming in per indexer.
 </p>
 
+<p>
+	Start on <a href={resolve('/services')}>Services</a>. A fresh install has nothing configured, so
+	search answers <code>no_indexer_service</code> until a Prowlarr instance is added there.
+</p>
+
 {#if backend.state === 'checking'}
 	<div class="status-line">Checking the backend.</div>
 {:else if backend.state === 'ready'}

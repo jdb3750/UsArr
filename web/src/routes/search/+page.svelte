@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
 	import {
 		ApiError,
 		grabRelease,
@@ -21,6 +22,10 @@
 	let searching = $state(false);
 	let finished = $state(false);
 	let searchError = $state('');
+	// The server's own error code. `no_indexer_service` is not a failure the user
+	// can retry — it means nothing is configured — so it gets the link that fixes
+	// it rather than the generic banner.
+	let searchErrorCode = $state('');
 	let streamGap = $state('');
 	let streamConnected = $state(false);
 
@@ -118,6 +123,7 @@
 		report = undefined;
 		grabs = {};
 		searchError = '';
+		searchErrorCode = '';
 		streamGap = '';
 		finished = false;
 		searching = true;
@@ -127,7 +133,8 @@
 			if (accepted.searchId) searchId = accepted.searchId;
 		} catch (error) {
 			searching = false;
-			searchError = error instanceof ApiError ? error.message : String(error);
+			searchError = error instanceof ApiError ? error.detail : String(error);
+			searchErrorCode = error instanceof ApiError ? error.code : '';
 		}
 	}
 
@@ -171,7 +178,17 @@
 	never greyed out and never replaced — ARCHITECTURE.md §17.7.
 -->
 
-{#if searchError}
+{#if searchErrorCode === 'no_indexer_service'}
+	<!--
+		Not a failure to retry: nothing is configured. The fix is one click away
+		rather than a sentence describing an API call.
+	-->
+	<div class="banner banner-error" role="alert">
+		There is no indexer service to search. Add a Prowlarr instance on
+		<a href={resolve('/services')}>Services</a> and this screen will start working.
+		<p class="banner-detail">{searchError}</p>
+	</div>
+{:else if searchError}
 	<div class="banner banner-error" role="alert">
 		The search did not complete.
 		<p class="banner-detail">{searchError}</p>

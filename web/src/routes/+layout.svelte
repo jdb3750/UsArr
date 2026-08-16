@@ -73,6 +73,10 @@
 				href={resolve('/search')}
 				aria-current={page.url.pathname === resolve('/search') ? 'page' : undefined}>Search</a
 			>
+			<a
+				href={resolve('/services')}
+				aria-current={page.url.pathname === resolve('/services') ? 'page' : undefined}>Services</a
+			>
 		</nav>
 		<div class="app-account">
 			{#if session.current.username}<span class="app-user">{session.current.username}</span>{/if}

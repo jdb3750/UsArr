@@ -608,6 +608,19 @@ type serviceBody struct {
 	HasCredential bool   `json:"has_credential"`
 }
 
+type servicesListBody struct {
+	Services []serviceBody `json:"services"`
+}
+
+// errorBodyShape is internal/httpapi's errorBody. The SPA branches on `error`
+// and renders `message`/`action`, so a test that only checked the status would
+// miss the half of the contract the screens actually use.
+type errorBodyShape struct {
+	Error   string `json:"error"`
+	Message string `json:"message"`
+	Action  string `json:"action"`
+}
+
 type testBody struct {
 	OK             bool   `json:"ok"`
 	Reachable      bool   `json:"reachable"`

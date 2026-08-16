@@ -7,9 +7,23 @@
  *   POST /api/v1/auth/setup            create the one owner          — CSRF
  *   POST /api/v1/auth/login            start a session               — CSRF
  *   POST /api/v1/auth/logout           end it                        — CSRF + session
+ *   POST /api/v1/auth/sudo             reopen the 5-minute window    — CSRF + session
+ *   GET  /api/v1/services              the configured instances      — session
+ *   POST /api/v1/services              add one (tests it first)      — CSRF + session + sudo
+ *   GET  /api/v1/services/health       per-instance state + problem  — session
+ *   POST /api/v1/services/test         test an UNSAVED instance      — CSRF + session + sudo
+ *   PATCH  /api/v1/services/{id}       edit one                      — CSRF + session + sudo
+ *   DELETE /api/v1/services/{id}       remove one                    — CSRF + session + sudo
+ *   POST /api/v1/services/{id}/test    re-test a saved one           — CSRF + session + sudo
  *   GET  /api/v1/search?query=...      starts a search               — session
  *   GET  /api/events                   the one SSE stream            — session
  *   POST /api/v1/releases/{id}/grab    grab a release candidate      — CSRF + session
+ *
+ * `sudo` is the third gate and it is NOT the same as being signed in: every
+ * service write sits behind internal/httpapi's sudo middleware, which answers
+ * 403 `sudo_required` once the five-minute window opened by signing in has
+ * closed. Re-bootstrapping the CSRF token cannot fix that, so sendJson below
+ * refuses to retry it and the caller has to confirm the password instead.
  *
  * All of them are implemented by internal/httpapi. The repo is still pre-alpha
  * and the rest of the surface is not, so everything below is written to degrade
@@ -61,11 +75,32 @@ export class ApiError extends Error {
 	readonly status: number;
 	readonly url: string;
 
-	constructor(message: string, status: number, url: string) {
+	/**
+	 * The `error` field of internal/httpapi's errorBody — `no_indexer_service`,
+	 * `sudo_required`, `credential_reentry_required`, and so on. It is what lets
+	 * a screen turn one failure into the one link that fixes it, instead of
+	 * matching on prose. Empty when the body was not the server's error shape.
+	 */
+	readonly code: string;
+
+	/** The server's `action`: the one thing it says fixes this. */
+	readonly action: string;
+
+	/**
+	 * The server's own `message`, with no `HTTP nnn:` prefix. §17.3 wants the
+	 * verbatim upstream text on screen; `message` stays prefixed because it is
+	 * what a bare `String(error)` shows in a console.
+	 */
+	readonly detail: string;
+
+	constructor(message: string, status: number, url: string, code = '', action = '', detail = '') {
 		super(message);
 		this.name = 'ApiError';
 		this.status = status;
 		this.url = url;
+		this.code = code;
+		this.action = action;
+		this.detail = detail || message;
 	}
 }
 
@@ -300,9 +335,27 @@ async function readError(response: Response, url: string): Promise<ApiError> {
 	} catch {
 		detail = '';
 	}
+
+	// Every failure from internal/httpapi is one errorBody: {error, message,
+	// action?}. Unwrapping it is what turns "HTTP 409: {"error":"no_indexer_..."
+	// into a sentence plus a code a screen can branch on. A body that is not
+	// that shape is kept verbatim rather than replaced with anything invented.
+	let code = '';
+	let action = '';
+	try {
+		const parsed: unknown = JSON.parse(detail);
+		if (isRecord(parsed)) {
+			code = str(parsed.error) ?? '';
+			action = str(parsed.action) ?? '';
+			detail = str(parsed.message) ?? detail;
+		}
+	} catch {
+		// Not JSON. The raw text is still the server's own words.
+	}
+
 	if (detail.length > 500) detail = `${detail.slice(0, 500)}…`;
 	const message = detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`;
-	return new ApiError(message, response.status, url);
+	return new ApiError(message, response.status, url, code, action, detail);
 }
 
 /**
@@ -413,9 +466,20 @@ async function requestJson(url: string, init?: RequestInit): Promise<unknown> {
 	}
 }
 
+/** The methods internal/httpapi routes through `csrfProtected`. */
+type WriteMethod = 'POST' | 'PATCH' | 'DELETE';
+
 /**
  * Every state-changing request goes through here, so the three things
  * csrfProtected + decodeJSON demand cannot be forgotten one at a time.
+ *
+ * PATCH and DELETE are here for the same reason POST is: `csrfProtected` wraps
+ * them identically in server.go, and it checks the CONTENT TYPE before it checks
+ * the token — so a DELETE issued as a bare `fetch(url, {method:'DELETE'})`
+ * answers 415, not 403, and looks like a routing bug rather than a missing
+ * header. DELETE carries a JSON body it does not need for exactly that reason:
+ * the header is the requirement, and sending the pair together is one rule
+ * instead of a per-method exception.
  *
  * The single retry covers the one benign 403: a token that has rotated under a
  * long-lived tab — logging in mints a new one, and a page left open across a
@@ -423,10 +487,10 @@ async function requestJson(url: string, init?: RequestInit): Promise<unknown> {
  * a working click rather than an error the user cannot act on. A second 403 is
  * real and is surfaced.
  */
-async function postJson(url: string, body: unknown = {}): Promise<unknown> {
+async function sendJson(method: WriteMethod, url: string, body: unknown = {}): Promise<unknown> {
 	const send = async (token: string) =>
 		requestJson(url, {
-			method: 'POST',
+			method,
 			headers: { 'content-type': 'application/json', [CSRF_HEADER]: token },
 			// decodeJSON rejects an empty body with 400, so there is always one.
 			body: JSON.stringify(body ?? {})
@@ -436,6 +500,10 @@ async function postJson(url: string, body: unknown = {}): Promise<unknown> {
 		return await send(await ensureCsrfToken());
 	} catch (error) {
 		if (!(error instanceof ApiError) || error.status !== 403) throw error;
+		// `sudo` answers 403 too, and no amount of re-bootstrapping fixes it:
+		// the fix is a password confirmation, which only the caller can ask for.
+		// Retrying would double every service write for nothing.
+		if (error.code === 'sudo_required') throw error;
 		// Re-bootstrap unconditionally: the server reissues the cookie on this
 		// call, so this is the only thing that can actually change the outcome.
 		forgetCsrfToken();
@@ -444,6 +512,10 @@ async function postJson(url: string, body: unknown = {}): Promise<unknown> {
 		if (!token) throw error;
 		return send(token);
 	}
+}
+
+async function postJson(url: string, body: unknown = {}): Promise<unknown> {
+	return sendJson('POST', url, body);
 }
 
 /** True when /api/health/ready answers 200. Any other outcome throws. */
@@ -525,6 +597,412 @@ export async function logout(): Promise<void> {
 		// holding so the next sign-in bootstraps a fresh one.
 		forgetCsrfToken();
 	}
+}
+
+/**
+ * Reopen the five-minute sudo window (internal/httpapi/auth.go handleSudo).
+ *
+ * Signing in opens it, so a first run never sees this. A tab left open for six
+ * minutes does, and without it every service write on that tab answers 403 and
+ * there is nothing the user can click.
+ */
+export async function confirmSudo(password: string): Promise<SessionState> {
+	return toSessionState(await postJson('/api/v1/auth/sudo', { password }));
+}
+
+// ── services ────────────────────────────────────────────────────────────────
+
+/**
+ * One configured instance, as GET /api/v1/services renders it.
+ *
+ * There is NO api key field here and there is not going to be one. The server
+ * never returns the credential — not in full and not masked — so `hasCredential`
+ * is the entire truth this client has about it, and any UI that wants to show
+ * "a key is stored" shows exactly that (internal/httpapi/services.go).
+ */
+export interface ServiceInstance {
+	id: number;
+	kind: string;
+	role: string;
+	name: string;
+	baseUrl: string;
+	urlBase?: string;
+	apiVersion?: string;
+	enabled: boolean;
+	priority: number;
+	managedBy: string;
+	verifyTls: boolean;
+	hasCredential: boolean;
+	healthState: string;
+	breakerState: string;
+}
+
+/** One of the *Arr's OWN health warnings, forwarded by the background prober. */
+export interface ServiceWarning {
+	source?: string;
+	type?: string;
+	message: string;
+	wikiUrl?: string;
+}
+
+/** One indexer Prowlarr is currently refusing to query. */
+export interface BlockedIndexer {
+	indexerId: number;
+	name?: string;
+	disabledTill?: string;
+	mostRecentFailure?: string;
+}
+
+/**
+ * One row of GET /api/v1/services/health.
+ *
+ * `problem` is the VERBATIM upstream error text after credential redaction, and
+ * `action` is the server's own name for the one thing that fixes this state.
+ * Neither is ever replaced with a generic sentence here — that is the whole
+ * point of the endpoint (ARCHITECTURE.md §17.3).
+ */
+export interface ServiceHealth {
+	id: number;
+	name: string;
+	kind: string;
+	role: string;
+	baseUrl: string;
+	enabled: boolean;
+	state: string;
+	problem?: string;
+	action?: string;
+	breakerState: string;
+	breakerRetryAt?: string;
+	consecutiveFailures: number;
+	lastOkAt?: string;
+	appVersion?: string;
+	warnings: ServiceWarning[];
+	blockedIndexers: BlockedIndexer[];
+	observedAt?: string;
+	/** True when no probe has been taken yet. An honest "not measured" beats a green tick. */
+	stale: boolean;
+}
+
+export interface ServicesHealth {
+	services: ServiceHealth[];
+	anyUnhealthy: boolean;
+	/** True when nothing is configured at all: say so, do not render an empty table. */
+	setupRequired: boolean;
+}
+
+/** What both connection-test endpoints answer with. */
+export interface ConnectionTestResult {
+	ok: boolean;
+	reachable: boolean;
+	/**
+	 * False when the instance answered but accepts local requests without a key,
+	 * so a 200 proved reachability and nothing about the credential. Say
+	 * "reachable", never "verified".
+	 */
+	keyProvenValid: boolean;
+	appName?: string;
+	appVersion?: string;
+	apiVersion?: string;
+	message: string;
+	action?: string;
+}
+
+function toServiceInstance(value: unknown): ServiceInstance | undefined {
+	if (!isRecord(value)) return undefined;
+	const id = num(value.id);
+	if (id === undefined || id <= 0) return undefined;
+	return {
+		id,
+		kind: str(value.kind) ?? '',
+		role: str(value.role) ?? '',
+		name: str(value.name) ?? '',
+		baseUrl: str(value.base_url) ?? '',
+		urlBase: str(value.url_base),
+		apiVersion: str(value.api_version),
+		enabled: bool(value.enabled),
+		priority: num(value.priority) ?? 0,
+		managedBy: str(value.managed_by) ?? '',
+		verifyTls: bool(value.verify_tls),
+		hasCredential: bool(value.has_credential),
+		healthState: str(value.health_state) ?? '',
+		breakerState: str(value.breaker_state) ?? ''
+	};
+}
+
+function toWarning(value: unknown): ServiceWarning | undefined {
+	if (!isRecord(value)) return undefined;
+	const message = str(value.message);
+	if (!message) return undefined;
+	return {
+		source: str(value.source),
+		type: str(value.type),
+		message,
+		wikiUrl: str(value.wiki_url)
+	};
+}
+
+function toBlockedIndexer(value: unknown): BlockedIndexer | undefined {
+	if (!isRecord(value)) return undefined;
+	const indexerId = num(value.indexer_id);
+	if (indexerId === undefined) return undefined;
+	return {
+		indexerId,
+		name: str(value.name),
+		disabledTill: str(value.disabled_till),
+		mostRecentFailure: str(value.most_recent_failure)
+	};
+}
+
+function toServiceHealth(value: unknown): ServiceHealth | undefined {
+	if (!isRecord(value)) return undefined;
+	const id = num(value.id);
+	if (id === undefined || id <= 0) return undefined;
+	const warnings = Array.isArray(value.warnings) ? value.warnings : [];
+	const blocked = Array.isArray(value.blocked_indexers) ? value.blocked_indexers : [];
+	return {
+		id,
+		name: str(value.name) ?? '',
+		kind: str(value.kind) ?? '',
+		role: str(value.role) ?? '',
+		baseUrl: str(value.base_url) ?? '',
+		enabled: bool(value.enabled),
+		state: str(value.state) ?? 'unknown',
+		problem: str(value.problem),
+		action: str(value.action),
+		breakerState: str(value.breaker_state) ?? '',
+		breakerRetryAt: str(value.breaker_retry_at),
+		consecutiveFailures: num(value.consecutive_failures) ?? 0,
+		lastOkAt: str(value.last_ok_at),
+		appVersion: str(value.app_version),
+		warnings: warnings.map(toWarning).filter((w): w is ServiceWarning => w !== undefined),
+		blockedIndexers: blocked
+			.map(toBlockedIndexer)
+			.filter((b): b is BlockedIndexer => b !== undefined),
+		observedAt: str(value.observed_at),
+		stale: bool(value.stale)
+	};
+}
+
+function toTestResult(value: unknown): ConnectionTestResult {
+	if (!isRecord(value)) {
+		return { ok: false, reachable: false, keyProvenValid: false, message: '' };
+	}
+	return {
+		ok: bool(value.ok),
+		reachable: bool(value.reachable),
+		keyProvenValid: bool(value.key_proven_valid),
+		appName: str(value.app_name),
+		appVersion: str(value.app_version),
+		apiVersion: str(value.api_version),
+		message: str(value.message) ?? '',
+		action: str(value.action)
+	};
+}
+
+/** Every service kind v0.1 can talk to — `serviceKinds` in internal/httpapi/services.go. */
+export const SERVICE_KINDS = ['prowlarr'] as const;
+
+const DEFAULT_PORTS: Record<string, string> = { 'http:': '80', 'https:': '443' };
+
+/**
+ * A base URL reduced to `scheme://host:port`, the same shape
+ * crypto.NormalizeOrigin produces server-side.
+ *
+ * Undefined for anything that is not an http(s) URL with a host, which is what
+ * normalizeBaseURL rejects with 400 anyway.
+ */
+export function normalizeOrigin(raw: string): string | undefined {
+	const value = raw.trim();
+	if (value === '') return undefined;
+	let parsed: URL;
+	try {
+		parsed = new URL(value);
+	} catch {
+		return undefined;
+	}
+	const scheme = parsed.protocol.toLowerCase();
+	if (scheme !== 'http:' && scheme !== 'https:') return undefined;
+	const host = parsed.hostname.toLowerCase().replace(/\.$/, '');
+	if (host === '') return undefined;
+	return `${scheme}//${host}:${parsed.port || DEFAULT_PORTS[scheme]}`;
+}
+
+/**
+ * The re-entry rule from reference/security.md §1.6, applied before the request
+ * rather than after the 400.
+ *
+ * Changing a base URL's scheme, host or port invalidates the stored API key:
+ * the ciphertext is AAD-bound to the old origin and cannot be opened for the new
+ * one, and sending the stored key to a host the user has just typed is the
+ * exfiltration bug the rule exists to prevent. The server enforces this and
+ * always will — this function exists so the FORM can say "changing the address
+ * means re-entering the key" while the user is still typing, instead of letting
+ * them press Save and receive a 400 whose cause is invisible.
+ *
+ * It fails closed: a URL neither side can parse counts as changed.
+ */
+export function requiresCredentialReentry(current: string, next: string): boolean {
+	if (next.trim() === '') return false; // not editing the address at all
+	const before = normalizeOrigin(current);
+	const after = normalizeOrigin(next);
+	if (before === undefined || after === undefined) return true;
+	return before !== after;
+}
+
+/** The message the re-entry rule produces, in the server's own words. */
+const REENTRY_MESSAGE =
+	'changing this service’s scheme, host or port invalidates the stored API key: ' +
+	'the key is bound to the old host and cannot be moved';
+
+function reentryError(url: string): ApiError {
+	return new ApiError(
+		`HTTP 400: ${REENTRY_MESSAGE}`,
+		400,
+		url,
+		'credential_reentry_required',
+		'Re-enter the API key',
+		REENTRY_MESSAGE
+	);
+}
+
+export const SERVICES_URL = '/api/v1/services';
+
+/** GET /api/v1/services. Never carries a credential; see ServiceInstance. */
+export async function listServices(): Promise<ServiceInstance[]> {
+	const payload = await requestJson(SERVICES_URL);
+	if (!isRecord(payload) || !Array.isArray(payload.services)) return [];
+	return payload.services
+		.map(toServiceInstance)
+		.filter((s): s is ServiceInstance => s !== undefined);
+}
+
+/** GET /api/v1/services/health. Renders entirely from SQLite plus the last probe. */
+export async function fetchServicesHealth(): Promise<ServicesHealth> {
+	const payload = await requestJson(`${SERVICES_URL}/health`);
+	if (!isRecord(payload)) {
+		return { services: [], anyUnhealthy: false, setupRequired: true };
+	}
+	const raw = Array.isArray(payload.services) ? payload.services : [];
+	return {
+		services: raw.map(toServiceHealth).filter((s): s is ServiceHealth => s !== undefined),
+		anyUnhealthy: bool(payload.any_unhealthy),
+		setupRequired: bool(payload.setup_required)
+	};
+}
+
+export interface NewService {
+	kind: string;
+	name: string;
+	baseUrl: string;
+	apiKey: string;
+}
+
+/**
+ * POST /api/v1/services/test — the wizard's test for an instance that has no row
+ * yet. Optional: handleCreateService runs the same test itself and REFUSES to
+ * save a service that fails it, so this endpoint is the "check before I commit"
+ * affordance, not the thing that makes the save safe.
+ */
+export async function testNewService(input: NewService): Promise<ConnectionTestResult> {
+	return toTestResult(
+		await postJson(`${SERVICES_URL}/test`, {
+			kind: input.kind,
+			base_url: input.baseUrl.trim(),
+			api_key: input.apiKey
+		})
+	);
+}
+
+/**
+ * POST /api/v1/services. The body carries ONLY the fields createServiceRequest
+ * declares: decodeJSON runs with DisallowUnknownFields, so one extra key is a
+ * 400 rather than an ignored setting.
+ */
+export async function createService(input: NewService): Promise<ServiceInstance> {
+	const created = toServiceInstance(
+		await postJson(SERVICES_URL, {
+			kind: input.kind,
+			name: input.name.trim(),
+			base_url: input.baseUrl.trim(),
+			api_key: input.apiKey
+		})
+	);
+	if (!created) {
+		throw new ApiError('the service was saved but the response had no id', 200, SERVICES_URL);
+	}
+	return created;
+}
+
+export interface ServiceEdit {
+	name?: string;
+	baseUrl?: string;
+	apiKey?: string;
+	enabled?: boolean;
+	/**
+	 * The address currently stored for this instance. Supplying it lets the
+	 * re-entry rule be applied here, before a request that would 400.
+	 */
+	currentBaseUrl?: string;
+}
+
+/** PATCH /api/v1/services/{id}. */
+export async function updateService(id: number, edit: ServiceEdit): Promise<ServiceInstance> {
+	const url = `${SERVICES_URL}/${encodeURIComponent(String(id))}`;
+	const key = edit.apiKey?.trim() ?? '';
+	if (
+		edit.baseUrl !== undefined &&
+		edit.currentBaseUrl !== undefined &&
+		key === '' &&
+		requiresCredentialReentry(edit.currentBaseUrl, edit.baseUrl)
+	) {
+		throw reentryError(url);
+	}
+
+	const body: Record<string, unknown> = {};
+	if (edit.name !== undefined) body.name = edit.name.trim();
+	if (edit.baseUrl !== undefined) body.base_url = edit.baseUrl.trim();
+	if (edit.enabled !== undefined) body.enabled = edit.enabled;
+	if (key !== '') body.api_key = edit.apiKey;
+
+	const updated = toServiceInstance(await sendJson('PATCH', url, body));
+	if (!updated) throw new ApiError('the service was saved but did not come back', 200, url);
+	return updated;
+}
+
+/**
+ * POST /api/v1/services/{id}/test.
+ *
+ * With no overrides this re-tests the saved instance using the stored
+ * credential. With a changed base URL the stored key is neither used nor
+ * usable, so a key must be supplied — same rule, same reason as the edit above.
+ */
+export async function testService(
+	id: number,
+	edit: Pick<ServiceEdit, 'baseUrl' | 'apiKey' | 'currentBaseUrl'> = {}
+): Promise<ConnectionTestResult> {
+	const url = `${SERVICES_URL}/${encodeURIComponent(String(id))}/test`;
+	const key = edit.apiKey?.trim() ?? '';
+	if (
+		edit.baseUrl !== undefined &&
+		edit.currentBaseUrl !== undefined &&
+		key === '' &&
+		requiresCredentialReentry(edit.currentBaseUrl, edit.baseUrl)
+	) {
+		throw reentryError(url);
+	}
+
+	const body: Record<string, unknown> = {};
+	if (edit.baseUrl !== undefined && edit.baseUrl.trim() !== '') body.base_url = edit.baseUrl.trim();
+	if (key !== '') body.api_key = edit.apiKey;
+	return toTestResult(await postJson(url, body));
+}
+
+/**
+ * DELETE /api/v1/services/{id}. A soft delete server-side: the id stays burned
+ * so a stale reference resolves to "gone" rather than to some other service.
+ */
+export async function deleteService(id: number): Promise<void> {
+	await sendJson('DELETE', `${SERVICES_URL}/${encodeURIComponent(String(id))}`, {});
 }
 
 /**

@@ -36,7 +36,16 @@ type browserClient struct {
 	jar  http.CookieJar
 	http *http.Client
 	root *url.URL
+
+	// transcript is every response body this client has been handed. The SPA
+	// can render anything in here, so "the API key never reaches the browser"
+	// is one assertion over the whole of it rather than one per endpoint
+	// somebody has to remember to add.
+	transcript []string
 }
+
+// everythingSeen is every byte the SPA could possibly have rendered.
+func (b *browserClient) everythingSeen() string { return strings.Join(b.transcript, "\n") }
 
 func newBrowserClient(t *testing.T, serverURL, urlBase string) *browserClient {
 	t.Helper()
@@ -97,6 +106,16 @@ func (b *browserClient) get(path string) browserResponse {
 // body because decodeJSON answers 400 on an empty one.
 func (b *browserClient) postJSON(path string, body any, opts ...func(*http.Request)) browserResponse {
 	b.t.Helper()
+	return b.writeJSON(http.MethodPost, path, body, opts...)
+}
+
+// writeJSON is sendJson(), transcribed: the SPA routes POST, PATCH and DELETE
+// through ONE helper, because csrfProtected wraps all three identically in
+// server.go and checks the content type before the token. A DELETE issued as a
+// bare fetch answers 415, not 403, which reads like a routing bug — so the
+// header set here is the same for every method, DELETE's unused body included.
+func (b *browserClient) writeJSON(method, path string, body any, opts ...func(*http.Request)) browserResponse {
+	b.t.Helper()
 	blob, err := json.Marshal(body)
 	if err != nil {
 		b.t.Fatalf("marshal %s body: %v", path, err)
@@ -106,7 +125,17 @@ func (b *browserClient) postJSON(path string, body any, opts ...func(*http.Reque
 		r.Header.Set("Content-Type", "application/json")
 		r.Header.Set("X-CSRF-Token", b.csrfToken())
 	}}
-	return b.send(b.request(http.MethodPost, path, blob, append(prep, opts...)...))
+	return b.send(b.request(method, path, blob, append(prep, opts...)...))
+}
+
+func (b *browserClient) patchJSON(path string, body any, opts ...func(*http.Request)) browserResponse {
+	b.t.Helper()
+	return b.writeJSON(http.MethodPatch, path, body, opts...)
+}
+
+func (b *browserClient) deleteJSON(path string, opts ...func(*http.Request)) browserResponse {
+	b.t.Helper()
+	return b.writeJSON(http.MethodDelete, path, map[string]any{}, opts...)
 }
 
 func (b *browserClient) request(method, path string, body []byte, opts ...func(*http.Request)) *http.Request {
@@ -136,6 +165,8 @@ func (b *browserClient) send(req *http.Request) browserResponse {
 	if err != nil {
 		b.t.Fatalf("read body: %v", err)
 	}
+	b.transcript = append(b.transcript,
+		fmt.Sprintf("%s %s → %d\n%s", req.Method, req.URL.Path, resp.StatusCode, blob))
 	return browserResponse{
 		path:    req.URL.Path,
 		status:  resp.StatusCode,
@@ -366,6 +397,239 @@ func TestBrowserFlowSetupLoginSearchAndGrab(t *testing.T) {
 	assertNoSecret(t, "SSE stream as the browser saw it", stream.dump(), apiKey)
 }
 
+// TestBrowserFirstRunConfiguresAServiceAndSearches is the WHOLE first-run path,
+// from a container that has never been started to a grabbed release, with every
+// request shaped the way web/src/lib/api.ts shapes it.
+//
+// It exists because that path had a dead end in the middle. The shell could sign
+// you in and could search, and between those two there was nothing: a fresh
+// install has no service, so search answers 409 no_indexer_service, and the only
+// way to fix it was to POST /api/v1/services from a terminal. The step this test
+// adds over its neighbour above is everything the /services route does —
+// listing, testing, the re-entry rule, the edit and the removal — asserted
+// against the real server rather than against a stub of it.
+//
+// The ordering is the user's, not the API's: look, fail, fix, succeed.
+func TestBrowserFirstRunConfiguresAServiceAndSearches(t *testing.T) {
+	const apiKey = "prowlarrKEY7f3c9a2b5e8d1046c7b2f9e3"
+	const password = "correct horse battery"
+
+	prowlarr := newFakeProwlarr(t, apiKey)
+	env := newTestApp(t)
+	b := newBrowserClient(t, env.srv.URL, env.base)
+
+	// ── 1. a container that has never been started ──────────────────────────
+	var boot sessionBody
+	b.mustGet("/api/v1/auth/session", &boot)
+	if !boot.SetupRequired {
+		t.Fatal("a first run must report setup_required")
+	}
+	b.mustPost("/api/v1/auth/setup", map[string]any{"username": "joe", "password": password}, &boot)
+
+	// Sign out and back in, so the path under test is the one a returning user
+	// walks and not just the one setup leaves behind.
+	b.mustPost("/api/v1/auth/logout", map[string]any{}, nil)
+	b.mustGet("/api/v1/auth/session", &boot)
+	b.mustPost("/api/v1/auth/login", map[string]any{"username": "joe", "password": password}, &boot)
+
+	// ── 2. the services screen, with nothing configured ─────────────────────
+	var listed servicesListBody
+	b.mustGet("/api/v1/services", &listed)
+	if len(listed.Services) != 0 {
+		t.Fatalf("a fresh install has no services, got %d", len(listed.Services))
+	}
+	var health servicesHealthBody
+	b.mustGet("/api/v1/services/health", &health)
+	if !health.SetupRequired {
+		t.Fatal("with nothing configured the screen must say setup_required, " +
+			"not render an empty table that looks broken")
+	}
+
+	// ── 3. the dead end this test exists for ────────────────────────────────
+	//
+	// The 409 must NAME the fix, because the search screen turns `error` into
+	// the link to /services. A 409 whose code the client cannot match on is a
+	// banner with nothing to click, which is where a new install used to stop.
+	deadEnd := b.get("/api/v1/search?query=Test+Release")
+	if deadEnd.status != http.StatusConflict {
+		t.Fatalf("search with nothing configured = %d, want 409: %s", deadEnd.status, deadEnd.body)
+	}
+	var failure errorBodyShape
+	deadEnd.decode(t, &failure)
+	if failure.Error != "no_indexer_service" {
+		t.Fatalf("the 409 must carry error=no_indexer_service so the SPA can link to the fix, got %q", failure.Error)
+	}
+	t.Logf("empty install: search → 409 %s (%q, action %q)", failure.Error, failure.Message, failure.Action)
+
+	// ── 4. test before saving, the way the add form's second button does ────
+	var probe testBody
+	b.mustPost("/api/v1/services/test", map[string]any{
+		"kind": "prowlarr", "base_url": prowlarr.URL(), "api_key": "wrong-key",
+	}, &probe)
+	if probe.OK {
+		t.Fatal("a wrong key must not test OK")
+	}
+	if strings.TrimSpace(probe.Message) == "" {
+		t.Fatal("a failed test must carry the upstream's own words; a blank message is the " +
+			"'an error occurred' §17.3 refuses")
+	}
+	t.Logf("unsaved test with a wrong key: ok=%v reachable=%v %q", probe.OK, probe.Reachable, probe.Message)
+
+	b.mustPost("/api/v1/services/test", map[string]any{
+		"kind": "prowlarr", "base_url": prowlarr.URL(), "api_key": apiKey,
+	}, &probe)
+	if !probe.OK {
+		t.Fatalf("the unsaved test with the right key must pass: %+v", probe)
+	}
+
+	// ── 5. add it, with the body createService() builds ─────────────────────
+	var svc serviceBody
+	created := b.postJSON("/api/v1/services", map[string]any{
+		"kind": "prowlarr", "name": "Prowlarr", "base_url": prowlarr.URL(), "api_key": apiKey,
+	})
+	if created.status != http.StatusCreated {
+		t.Fatalf("POST /api/v1/services = %d, want 201: %s", created.status, created.body)
+	}
+	created.decode(t, &svc)
+	if svc.ID == 0 || svc.Role != "indexer" {
+		t.Fatalf("unexpected service row: %+v", svc)
+	}
+
+	// ── 6. what the list gives the screen back ──────────────────────────────
+	b.mustGet("/api/v1/services", &listed)
+	if len(listed.Services) != 1 {
+		t.Fatalf("expected one configured service, got %d", len(listed.Services))
+	}
+	if !listed.Services[0].HasCredential {
+		t.Error("has_credential must be true: it is the ONLY thing the screen can say about a " +
+			"stored key, because the key itself is never returned in any form")
+	}
+
+	// ── 7. re-test the saved instance ───────────────────────────────────────
+	var retest testBody
+	b.mustPost(fmt.Sprintf("/api/v1/services/%d/test", svc.ID), map[string]any{}, &retest)
+	if !retest.OK {
+		t.Fatalf("re-testing the saved instance failed: %+v", retest)
+	}
+	t.Logf("saved-instance test: ok=%v key_proven_valid=%v %q", retest.OK, retest.KeyProvenValid, retest.Message)
+
+	// ── 8. the rule the edit form has to surface ────────────────────────────
+	//
+	// requiresCredentialReentry() in web/src/lib/api.ts refuses this edit before
+	// it is sent. The server refuses it too, and this is the assertion that the
+	// two agree — if the client ever stopped checking, the user would land here.
+	moved := b.patchJSON(fmt.Sprintf("/api/v1/services/%d", svc.ID),
+		map[string]any{"base_url": "http://attacker.example:9696"})
+	if moved.status != http.StatusBadRequest {
+		t.Fatalf("moving base_url with no key = %d, want 400: %s", moved.status, moved.body)
+	}
+	moved.decode(t, &failure)
+	if failure.Error != "credential_reentry_required" {
+		t.Fatalf("the 400 must carry error=credential_reentry_required so the form can explain "+
+			"itself instead of showing a bare 400, got %q", failure.Error)
+	}
+	t.Logf("changed-host PATCH refused: %s — %s", failure.Message, failure.Action)
+
+	// A rename touches no credential and goes through.
+	var renamed serviceBody
+	patched := b.patchJSON(fmt.Sprintf("/api/v1/services/%d", svc.ID), map[string]any{"name": "Prowlarr (LAN)"})
+	if patched.status != http.StatusOK {
+		t.Fatalf("PATCH name = %d, want 200: %s", patched.status, patched.body)
+	}
+	patched.decode(t, &renamed)
+	if renamed.Name != "Prowlarr (LAN)" {
+		t.Fatalf("rename did not stick: %+v", renamed)
+	}
+
+	// ── 9. and now the thing the user came for ──────────────────────────────
+	stream := b.openStream(t)
+	defer stream.close()
+
+	prowlarr.blockIndexer(2)
+
+	var accepted searchAcceptedBody
+	b.mustGet("/api/v1/search?query=Test+Release&type=search&category=2000", &accepted)
+	if accepted.SearchID == "" {
+		t.Fatal("the search must return a search id immediately")
+	}
+
+	var (
+		results []releaseBody
+		report  reportBody
+	)
+	deadline := time.After(30 * time.Second)
+	for report.Summary == "" {
+		select {
+		case <-deadline:
+			t.Fatalf("timed out waiting for search.done; %d results so far", len(results))
+		case ev := <-stream.events:
+			switch ev.name {
+			case httpapi.EventSearchResults:
+				var payload struct {
+					Results []releaseBody `json:"results"`
+				}
+				mustUnmarshal(t, ev.data, &payload)
+				results = append(results, payload.Results...)
+			case httpapi.EventSearchDone:
+				var payload struct {
+					Report reportBody `json:"report"`
+				}
+				mustUnmarshal(t, ev.data, &payload)
+				report = payload.Report
+			}
+		}
+	}
+	if len(results) == 0 {
+		t.Fatal("no results reached the browser over SSE")
+	}
+
+	var grabbed grabBody
+	b.mustPost(fmt.Sprintf("/api/v1/releases/%d/grab", results[0].CandidateID), map[string]any{}, &grabbed)
+	if len(prowlarr.grabs()) != 1 {
+		t.Fatalf("expected exactly one grab upstream, got %d", len(prowlarr.grabs()))
+	}
+	t.Logf("first run finished: configured a service in the browser and grabbed %q", grabbed.ReleaseTitle)
+
+	// ── 10. removal puts the install back where it started ──────────────────
+	removed := b.deleteJSON(fmt.Sprintf("/api/v1/services/%d", svc.ID))
+	if removed.status != http.StatusNoContent {
+		t.Fatalf("DELETE /api/v1/services/%d = %d, want 204: %s", svc.ID, removed.status, removed.body)
+	}
+	b.mustGet("/api/v1/services", &listed)
+	if len(listed.Services) != 0 {
+		t.Fatalf("the removed service is still listed: %+v", listed.Services)
+	}
+	if again := b.get("/api/v1/search?query=Test+Release"); again.status != http.StatusConflict {
+		t.Fatalf("with the only indexer removed, search must be 409 again, got %d: %s", again.status, again.body)
+	}
+
+	// The three write methods, each refused on its own if it drops a header
+	// csrfProtected demands. DELETE is the one that would be hand-rolled without
+	// a content type, and it answers 415 rather than anything that reads like a
+	// routing problem.
+	t.Run("DELETE without the JSON content type is 415", func(t *testing.T) {
+		res := b.deleteJSON("/api/v1/services/999999", func(r *http.Request) { r.Header.Del("Content-Type") })
+		if res.status != http.StatusUnsupportedMediaType {
+			t.Fatalf("= %d, want 415: %s", res.status, res.body)
+		}
+	})
+	t.Run("PATCH without the CSRF header is 403", func(t *testing.T) {
+		res := b.patchJSON("/api/v1/services/999999", map[string]any{"name": "x"},
+			func(r *http.Request) { r.Header.Del("X-CSRF-Token") })
+		if res.status != http.StatusForbidden {
+			t.Fatalf("= %d, want 403: %s", res.status, res.body)
+		}
+	})
+
+	// ── 11. nothing the browser was handed carried the credential ───────────
+	//
+	// Every response body of every request above, plus the SSE stream. The key
+	// went UP on create and on two tests; it must never have come back down.
+	assertNoSecret(t, "everything this browser was served", b.everythingSeen(), apiKey)
+	assertNoSecret(t, "SSE stream as the browser saw it", stream.dump(), apiKey)
+	assertNoSecret(t, "process log", env.logs(), apiKey)
+}
+
 // TestSPARequestsSatisfyTheMiddleware sweeps every endpoint web/src/lib/api.ts
 // calls, issued the way that file issues it, and fails if the middleware in
 // front of it refuses the request.
@@ -384,25 +648,41 @@ func TestSPARequestsSatisfyTheMiddleware(t *testing.T) {
 	b.mustPost("/api/v1/auth/setup",
 		map[string]any{"username": "joe", "password": "correct horse battery"}, &boot)
 
-	// Every call in web/src/lib/api.ts. `write` means it goes through postJson()
-	// and therefore carries the content type, the token and a body.
+	// Every call in web/src/lib/api.ts. A non-empty `method` means it goes
+	// through sendJson() and therefore carries the content type, the token and a
+	// body — for PATCH and DELETE exactly as much as for POST.
 	calls := []struct {
-		name  string
-		path  string
-		write bool
-		body  any
+		name   string
+		method string
+		path   string
+		body   any
 	}{
-		{"checkReady", "/api/health/ready", false, nil},
-		{"fetchSession", "/api/v1/auth/session", false, nil},
-		{"startSearch", "/api/v1/search?query=anything", false, nil},
-		{"openEventStream", "/api/events", false, nil},
+		{"checkReady", "", "/api/health/ready", nil},
+		{"fetchSession", "", "/api/v1/auth/session", nil},
+		{"startSearch", "", "/api/v1/search?query=anything", nil},
+		{"openEventStream", "", "/api/events", nil},
+		{"listServices", "", "/api/v1/services", nil},
+		{"fetchServicesHealth", "", "/api/v1/services/health", nil},
 		// A candidate id that does not exist: the handler answers 404, which
 		// proves the request got PAST csrfProtected and decodeJSON.
-		{"grabRelease", "/api/v1/releases/999999/grab", true, map[string]any{}},
-		{"setupOwner", "/api/v1/auth/setup", true, map[string]any{"username": "x", "password": "correct horse battery"}},
-		{"login", "/api/v1/auth/login", true, map[string]any{"username": "joe", "password": "correct horse battery"}},
+		{"grabRelease", http.MethodPost, "/api/v1/releases/999999/grab", map[string]any{}},
+		// A host nothing is listening on: the connection test fails, the handler
+		// answers 200 with ok=false or 502, and either way the request reached it.
+		{"testNewService", http.MethodPost, "/api/v1/services/test", map[string]any{
+			"kind": "prowlarr", "base_url": "http://127.0.0.1:1", "api_key": "not-a-real-key",
+		}},
+		{"createService", http.MethodPost, "/api/v1/services", map[string]any{
+			"kind": "prowlarr", "name": "Nothing", "base_url": "http://127.0.0.1:1", "api_key": "not-a-real-key",
+		}},
+		// Ids that do not exist: 404 again, and again that is past the middleware.
+		{"testService", http.MethodPost, "/api/v1/services/999999/test", map[string]any{}},
+		{"updateService", http.MethodPatch, "/api/v1/services/999999", map[string]any{"name": "x"}},
+		{"deleteService", http.MethodDelete, "/api/v1/services/999999", map[string]any{}},
+		{"setupOwner", http.MethodPost, "/api/v1/auth/setup", map[string]any{"username": "x", "password": "correct horse battery"}},
+		{"confirmSudo", http.MethodPost, "/api/v1/auth/sudo", map[string]any{"password": "correct horse battery"}},
+		{"login", http.MethodPost, "/api/v1/auth/login", map[string]any{"username": "joe", "password": "correct horse battery"}},
 		// Last: it ends the session every call above depends on.
-		{"logout", "/api/v1/auth/logout", true, map[string]any{}},
+		{"logout", http.MethodPost, "/api/v1/auth/logout", map[string]any{}},
 	}
 
 	refused := map[int]string{
@@ -418,8 +698,8 @@ func TestSPARequestsSatisfyTheMiddleware(t *testing.T) {
 		case call.path == "/api/events":
 			// SSE never returns; opening it and reading the status is the test.
 			res = browserResponse{path: call.path, status: b.streamStatus(t)}
-		case call.write:
-			res = b.postJSON(call.path, call.body)
+		case call.method != "":
+			res = b.writeJSON(call.method, call.path, call.body)
 		default:
 			res = b.get(call.path)
 		}
