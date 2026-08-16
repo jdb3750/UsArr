@@ -1360,6 +1360,234 @@ select[multiple] {
 	font-weight: var(--weight-semibold);
 }
 
+/* --- 2.5a Forms, dialogs and the connection test -------------------------- */
+
+/* The *Arr settings anatomy, which three applications this audience already
+ * runs have standardised: a form, Test next to Save, per-field help (§9.3).
+ * Below ~700px it is a stacked column, which is what it already is — label
+ * above control, every control full width — so there is no responsive fork. */
+.form {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-6);
+	max-width: 560px;
+}
+
+.form__row {
+	display: flex;
+	gap: var(--space-4);
+	align-items: center;
+	flex-wrap: wrap;
+}
+
+.form__foot {
+	display: flex;
+	gap: var(--space-4);
+	align-items: center;
+	flex-wrap: wrap;
+	padding-top: var(--space-4);
+	border-top: 1px solid var(--border);
+}
+
+/* A note beside the page's own content, in the product's voice rather than an
+ * upstream's. Never a container: it is a sentence, not a component. */
+.note {
+	color: var(--fg-muted);
+	font-size: var(--text-sm);
+	line-height: var(--leading-sm);
+	max-width: 78ch;
+}
+
+/* The settings anatomy's second-level nav. Services and Libraries are
+ * top-level screens and are deliberately NOT in it (§17.3): two navigation
+ * trees claiming one node is what shipped two aria-current elements at once. */
+.settings {
+	display: grid;
+	grid-template-columns: 168px minmax(0, 1fr);
+	gap: var(--space-7);
+}
+
+.subnav {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-1);
+	border-right: 1px solid var(--border);
+	padding-right: var(--space-4);
+}
+
+.subnav a {
+	display: block;
+	min-height: var(--row-h);
+	padding: var(--space-2) var(--space-4);
+	color: var(--fg-muted);
+	text-decoration: none;
+	transition: background-color var(--dur-hover) var(--ease-out);
+}
+
+.subnav a:hover {
+	background: var(--bg-hover);
+	color: var(--fg);
+}
+
+.subnav a[aria-current='true'] {
+	background: var(--bg-selected);
+	color: var(--fg);
+	font-weight: var(--weight-semibold);
+}
+
+@media (max-width: 700px) {
+	.settings {
+		grid-template-columns: minmax(0, 1fr);
+		gap: var(--space-5);
+	}
+
+	.subnav {
+		flex-direction: row;
+		flex-wrap: wrap;
+		border-right: 0;
+		border-bottom: 1px solid var(--border);
+		padding: 0 0 var(--space-3);
+	}
+}
+
+/* The row expander, and the panel the add form sits in: a set of small labelled
+ * fact lists rather than prose. §9.1's truncation tier 3 — an explanation is not
+ * a cell value at all — needs somewhere to put the explanation, and this is it. */
+.detail {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+	gap: var(--space-5) var(--space-7);
+	padding: var(--space-2) 0 var(--space-4);
+}
+
+.detail h4 {
+	font-size: var(--text-sm);
+	line-height: var(--leading-sm);
+	font-weight: var(--weight-semibold);
+	color: var(--fg-muted);
+	margin-bottom: var(--space-3);
+}
+
+.detail li {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--space-3);
+	padding: var(--space-1) 0;
+	font-size: var(--text-sm);
+	line-height: var(--leading-sm);
+}
+
+/* THE CONNECTION TEST'S RESULT, in all four of its states (§17.3). The failure
+ * state is the one the design never named and the one whose probability is
+ * highest on a first run, so it gets the same verbatim treatment a configured
+ * service's Problem column gets, plus the likely causes as prose.
+ *
+ * There are THREE non-idle variants and not two, because `ok: true` with
+ * `key_proven_valid: false` proved reachability and nothing about the
+ * credential. It must not be drawn with the confidence of a verified result. */
+.testresult {
+	padding: var(--space-4) var(--space-5);
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+	background: var(--bg-raised);
+	font-size: var(--text-sm);
+	line-height: var(--leading-sm);
+}
+
+.testresult--warn {
+	border-color: var(--status-warn);
+}
+
+.testresult--err {
+	border-color: var(--status-error);
+}
+
+.testresult__title {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	font-weight: var(--weight-semibold);
+}
+
+.testresult--ok .testresult__title {
+	color: var(--status-ok);
+}
+
+.testresult--warn .testresult__title {
+	color: var(--status-warn);
+}
+
+.testresult--err .testresult__title {
+	color: var(--status-error);
+}
+
+.testresult p {
+	margin-top: var(--space-3);
+	color: var(--fg-muted);
+}
+
+.testresult ul {
+	margin-top: var(--space-3);
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-2);
+}
+
+.testresult li {
+	display: list-item;
+	list-style: disc;
+	margin-left: var(--space-6);
+	color: var(--fg-muted);
+}
+
+.testresult .verbatim {
+	margin-top: var(--space-3);
+	max-width: none;
+}
+
+/* A native <dialog>, opened with showModal(). The focus trap, the inert
+ * background, the Escape key and the top-layer stacking are all the platform's,
+ * which is §17.1's "standard controls" applied to the one component §9.4 says
+ * must be modal. What is NOT free is §9.4's rule that Escape over unsaved
+ * credential input confirms before discarding, so that is handled in the
+ * component. */
+.dialog {
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-md);
+	background: var(--bg);
+	color: var(--fg);
+	box-shadow: var(--shadow-overlay);
+	padding: 0;
+	max-width: 560px;
+	width: calc(100vw - var(--space-8));
+	max-height: calc(100vh - var(--space-8));
+}
+
+.dialog::backdrop {
+	background: var(--scrim);
+}
+
+.dialog__head {
+	padding: var(--space-5) var(--space-6) var(--space-3);
+	font-size: var(--text-lg);
+	line-height: var(--leading-lg);
+	font-weight: var(--weight-lg);
+}
+
+.dialog__body {
+	padding: 0 var(--space-6) var(--space-5);
+	overflow-y: auto;
+}
+
+.dialog__foot {
+	display: flex;
+	gap: var(--space-4);
+	justify-content: flex-end;
+	flex-wrap: wrap;
+	padding: var(--space-4) var(--space-6) var(--space-5);
+	border-top: 1px solid var(--border);
+}
+
 /* --- 2.6 Lists: grid rows with explicit ARIA ------------------------------ */
 
 /* The list primitive is a CSS grid, not a table layout, and that is a
