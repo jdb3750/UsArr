@@ -35,7 +35,17 @@ deliberately: this prototype cannot make a claim about speed.
 | `fonts/` | The three woff2 files verbatim, plus the SIL Open Font License they ship under. `fonts.css` is generated from them. |
 | `prototype.html` | All five screens plus the CSS, the fonts and the JS inlined into one file, switched by `#hash` links. Generated from the files above; do not edit it by hand. |
 | `build_prototype.py` | The generator for `prototype.html`. |
-| `selftest.mjs` | Five assertions over the rendered DOM, in Chromium: nothing overflows the viewport — or its own `.tablewrap` — at any width in any state, no availability glyph has an empty accessible name, every list is one tab stop or declares why not, Services and Libraries rows stay inside the row-height band, and the webfont is actually rendering. `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node selftest.mjs`. |
+
+**The tests moved up one directory.** `selftest.mjs` used to sit here and carried five assertions
+over the rendered DOM. It is gone, folded whole into **[`../check.mjs`](../check.mjs)**, which is now
+the single entry point for every design rule this project enforces — the §13 ban list, token drift
+between `tokens.css` and `usarr.css`, contrast on the worst of all five grounds in both themes, the
+overflow sweep, row heights against all three density bands, availability names, one tab stop per
+list, and the containment assertion. Run it from the repo root:
+
+```
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers node docs/design/check.mjs
+```
 
 ## The typeface actually ships now
 
@@ -55,7 +65,7 @@ blocked load degrades to the stack the design was reviewed against. They are emb
 data URIs rather than referenced by URL for two reasons: `prototype.html` is built as a genuinely
 single file, so a relative `url()` would break the moment it is opened anywhere else; and §13 bans
 any reference to the hosts a Google Fonts `<link>` resolves to, which in self-hosted software leaks
-every viewer's IP to a third party. `selftest.mjs` asserts that both faces resolve, so this cannot
+every viewer's IP to a third party. `../check.mjs` asserts that both faces resolve, so this cannot
 silently regress.
 
 IBM Plex is SIL OFL 1.1 and the licence travels with the binaries in `fonts/OFL.txt`. One glyph is
@@ -231,7 +241,7 @@ plus the row padding.
 | Search | 59 | 28 | 28 | 78 | 28–78 |
 | Requests | 85 | 28 | 47 | 79 | 33–68 |
 
-`selftest.mjs` holds Services and Libraries to 49px (48 of content plus the 1px row rule) and the
+`../check.mjs` holds Services and Libraries to 49px (48 of content plus the 1px row rule) and the
 other three to a looser ceiling: their tallest rows are a track listing and a release row carrying
 a two-line post-grab sentence, which is content doing work rather than prose that escaped into a
 cell. The Services **annex** is excluded by name — it is explicitly labelled as documentation for
@@ -473,7 +483,7 @@ never occurs:
   was a real row-height violation that the scroll container had been hiding, and it is fixed
   (a `cell-sub` on the Re-linked row was three lines of prose where its siblings are two).
 
-**The guard is now exact rather than incidental.** `selftest.mjs` asserts two scopes: nothing past
+**The guard is now exact rather than incidental.** `../check.mjs` asserts two scopes: nothing past
 `innerWidth`, *and* nothing past its own `.tablewrap`. The second is not implied by the first — a
 wrapper can be narrower than the viewport, as it is in Home's two-column grid — and it is what
 `overflow-x: auto` was standing in for. It fails the build rather than quietly growing a scrollbar.
@@ -490,7 +500,7 @@ sources. A form laid out in a grid is a form, and its natural tab order is the r
 a roving model on it is what made the Kind `<select>` keyboard-inoperable. That is now a *declared*
 opt-out — `data-roving-optout="…"` carrying the reason — because from outside, a form grid with no
 roving model is indistinguishable from the omission that left the three Requests tables with 28 tab
-stops inside 10 rows and no row reachable by Tab at all. `selftest.mjs` accepts an opt-out and
+stops inside 10 rows and no row reachable by Tab at all. `../check.mjs` accepts an opt-out and
 fails an omission.
 
 `aria-rowcount` and `aria-rowindex` are present now, and `aria-colindex` is the attribute this
@@ -724,7 +734,7 @@ has to cover. **That control is not part of the product.** It exists because the
 the thing worth reviewing, and a mockup that only draws the happy path is not showing you the hard
 part. There are **35 distinct states across the five screens**: home 7, services 7, libraries 4,
 search 8, requests 9 — counted from the `option` values of each screen's own state `<select>`,
-which is what `selftest.mjs` enumerates, so the number and the tests cannot disagree. (Two earlier
+which is what `../check.mjs` enumerates, so the number and the tests cannot disagree. (Two earlier
 versions of this line were wrong in different ways — one said 28 over a breakdown adding to 31, the
 next said 32 over a breakdown that had stopped matching the markup — which is the wrong error to
 have in a document whose value rests on precise counting.)
