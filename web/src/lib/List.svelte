@@ -120,6 +120,27 @@
 		onactivate?: (row: T) => void;
 		/** Extra classes on the `<table>`, for a per-screen variant. */
 		class?: string;
+		/**
+		 * THE ROW EXPANDER, which §17.3 makes a requirement rather than a nicety:
+		 * the breaker state, the *Arr's own health warnings and the verbatim
+		 * upstream text all live behind it, because §9.1's truncation policy is
+		 * explicit that an explanation is not a cell value at all.
+		 *
+		 * It is rendered as a second `<tr>` beneath its row, spanning every
+		 * column, and ONLY when `expanded(row)` is true — a collapsed list costs
+		 * nothing in the DOM, which is what keeps "Load more" cheap on a screen
+		 * whose rows are otherwise one line.
+		 *
+		 * The extra row carries `role="row"` and its own `aria-rowindex` because
+		 * a `rowgroup`'s owned elements are rows and nothing else, so it cannot be
+		 * a `region` however much better that would read. It carries NO
+		 * `data-key`, which is what keeps it out of the roving model: the list
+		 * stays one tab stop and arrowing walks services, not services and their
+		 * expanders alternately.
+		 */
+		rowExtra?: Snippet<[T]>;
+		/** Whether `rowExtra` renders for this row. Ignored without `rowExtra`. */
+		expanded?: (row: T) => boolean;
 	}
 
 	let {
@@ -147,7 +168,9 @@
 		rowIntrinsic,
 		rovingOptOut,
 		onactivate,
-		class: extraClass = ''
+		class: extraClass = '',
+		rowExtra,
+		expanded
 	}: Props = $props();
 
 	let tableEl = $state<HTMLTableElement | null>(null);
@@ -163,6 +186,31 @@
 
 	const columnCount = $derived(columns.length);
 	const cols = $derived(gridTemplate(columns));
+
+	/**
+	 * The `aria-rowindex` of every rendered row, computed once rather than from
+	 * the loop counter.
+	 *
+	 * An open expander is a real row in the grid, so it consumes an index — and
+	 * the moment one does, `offset + i + 2` is wrong for every row beneath it.
+	 * §11's whole point is that a confidently wrong position arriving through the
+	 * accessibility tree is worse than none, so the arithmetic is done here where
+	 * it can account for them instead of in the template where it cannot.
+	 */
+	const laidOut = $derived.by(() => {
+		let consumed = 0;
+		return rows.map((row) => {
+			const index = rowIndex(consumed, offset);
+			consumed += 1;
+			const open = rowExtra !== undefined && expanded?.(row) === true;
+			if (open) consumed += 1;
+			return { row, index, open };
+		});
+	});
+
+	/** Open expanders are rows too, so the total the AT is told includes them. */
+	const openCount = $derived(laidOut.filter((r) => r.open).length);
+	const declaredTotal = $derived(total === undefined || total < 0 ? total : total + openCount);
 	/**
 	 * DENSITY IS SCOPED TO THIS LIST, not to `<html>`.
 	 *
@@ -294,7 +342,7 @@
 			class:tbl--2line={stack === 'two-line'}
 			role="table"
 			aria-label={label}
-			aria-rowcount={rowCount(total)}
+			aria-rowcount={rowCount(declaredTotal)}
 			aria-colcount={columnCount}
 			data-density={density}
 			data-roving={rovingOptOut === undefined ? '' : undefined}
@@ -317,7 +365,8 @@
 			</thead>
 			<!-- svelte-ignore a11y_no_redundant_roles -->
 			<tbody role="rowgroup">
-				{#each rows as row, i (key(row))}
+				{#each laidOut as entry (key(entry.row))}
+					{@const row = entry.row}
 					<!--
 						tabindex is written by the roving action rather than here, and
 						that is deliberate: exactly one row carries 0 at any moment and
@@ -326,7 +375,7 @@
 						seven-row table" bug.
 					-->
 					<!-- svelte-ignore a11y_no_redundant_roles -->
-					<tr role="row" aria-rowindex={rowIndex(i, offset)} data-key={key(row)}>
+					<tr role="row" aria-rowindex={entry.index} data-key={key(row)}>
 						{#each columns as column (column.id)}
 							<td
 								role="cell"
@@ -359,6 +408,21 @@
 							</td>
 						{/each}
 					</tr>
+					{#if entry.open && rowExtra}
+						<!--
+							The expander. `colspan` means nothing to a grid, so the cell
+							says so in grid terms via `.tbl td[colspan]` and repeats the
+							fact to the accessibility tree with aria-colspan. No data-key,
+							so roving walks services rather than services and expanders
+							alternately.
+						-->
+						<!-- svelte-ignore a11y_no_redundant_roles -->
+						<tr role="row" class="is-expand" aria-rowindex={entry.index + 1}>
+							<td role="cell" colspan={columnCount} aria-colspan={columnCount}>
+								{@render rowExtra(row)}
+							</td>
+						</tr>
+					{/if}
 				{/each}
 			</tbody>
 		</table>
