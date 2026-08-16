@@ -98,7 +98,7 @@ func (s *Server) releasesScope(r *http.Request, a authSession) (releases.Scope, 
 	// closed on it — which is the whole point of carrying the parameter.
 	instances, err := s.store.ListServiceInstances(r.Context(), scope)
 	if err != nil {
-		return releases.Scope{}, errStatus(http.StatusInternalServerError, "internal",
+		return releases.Scope{}, errStatus(http.StatusInternalServerError, CodeInternal,
 			"the configured services could not be read").wrapping(err)
 	}
 	ids := make([]int64, 0, len(instances))
@@ -118,7 +118,7 @@ func (s *Server) releasesScope(r *http.Request, a authSession) (releases.Scope, 
 func (s *Server) authenticated(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "" || r.Header.Get("X-Api-Key") != "" {
-			s.writeError(w, r, errStatus(http.StatusUnauthorized, "unauthorized",
+			s.writeError(w, r, errStatus(http.StatusUnauthorized, CodeUnauthorized,
 				"this endpoint authenticates with the session cookie only; "+
 					"bearer and API-key credentials are not accepted here").
 				withAction("Sign in"))
@@ -139,26 +139,26 @@ func (s *Server) authenticated(next http.Handler) http.Handler {
 func (s *Server) resolveSession(r *http.Request) (authSession, error) {
 	c, err := r.Cookie(sessionCookie)
 	if err != nil || c.Value == "" {
-		return authSession{}, errStatus(http.StatusUnauthorized, "unauthorized",
+		return authSession{}, errStatus(http.StatusUnauthorized, CodeUnauthorized,
 			"this request has no session").withAction("Sign in")
 	}
 	now := s.now()
 	sess, err := s.store.GetSession(r.Context(), sessionID(c.Value), now)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return authSession{}, errStatus(http.StatusUnauthorized, "unauthorized",
+			return authSession{}, errStatus(http.StatusUnauthorized, CodeUnauthorized,
 				"this session has expired or been revoked").withAction("Sign in")
 		}
-		return authSession{}, errStatus(http.StatusInternalServerError, "internal",
+		return authSession{}, errStatus(http.StatusInternalServerError, CodeInternal,
 			"the session could not be read").wrapping(err)
 	}
 	user, err := s.store.GetUser(r.Context(), sess.UserID)
 	if err != nil {
-		return authSession{}, errStatus(http.StatusUnauthorized, "unauthorized",
+		return authSession{}, errStatus(http.StatusUnauthorized, CodeUnauthorized,
 			"the account for this session no longer exists").withAction("Sign in").wrapping(err)
 	}
 	if user.IsDisabled {
-		return authSession{}, errStatus(http.StatusForbidden, "forbidden",
+		return authSession{}, errStatus(http.StatusForbidden, CodeForbidden,
 			"this account is disabled")
 	}
 
@@ -178,11 +178,11 @@ func (s *Server) sudo(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		a, ok := sessionFrom(r)
 		if !ok {
-			s.writeError(w, r, errStatus(http.StatusUnauthorized, "unauthorized", "this request has no session"))
+			s.writeError(w, r, errStatus(http.StatusUnauthorized, CodeUnauthorized, "this request has no session"))
 			return
 		}
 		if !a.sudoActive(s.now()) {
-			s.writeError(w, r, errStatus(http.StatusForbidden, "sudo_required",
+			s.writeError(w, r, errStatus(http.StatusForbidden, CodeSudoRequired,
 				"this operation touches a stored credential and needs a fresh password confirmation").
 				withAction("Confirm your password"))
 			return
@@ -220,7 +220,7 @@ func checkContentTypeJSON(r *http.Request) error {
 	ct := r.Header.Get("Content-Type")
 	media, _, _ := strings.Cut(ct, ";")
 	if !strings.EqualFold(strings.TrimSpace(media), "application/json") {
-		return errStatus(http.StatusUnsupportedMediaType, "unsupported_media_type",
+		return errStatus(http.StatusUnsupportedMediaType, CodeUnsupportedMediaType,
 			"state-changing requests must be sent as Content-Type: application/json")
 	}
 	return nil
@@ -229,12 +229,12 @@ func checkContentTypeJSON(r *http.Request) error {
 func checkCSRFToken(r *http.Request) error {
 	c, err := r.Cookie(csrfCookie)
 	if err != nil || c.Value == "" {
-		return errStatus(http.StatusForbidden, "csrf",
+		return errStatus(http.StatusForbidden, CodeCSRF,
 			"this request carries no CSRF token").withAction("Reload the page")
 	}
 	sent := r.Header.Get(csrfHeader)
 	if sent == "" || subtle.ConstantTimeCompare([]byte(sent), []byte(c.Value)) != 1 {
-		return errStatus(http.StatusForbidden, "csrf",
+		return errStatus(http.StatusForbidden, CodeCSRF,
 			"the CSRF token does not match this session").withAction("Reload the page")
 	}
 	return nil
@@ -244,7 +244,7 @@ func checkCSRFToken(r *http.Request) error {
 func (s *Server) setCSRFCookie(w http.ResponseWriter, r *http.Request) (string, error) {
 	token, err := newToken()
 	if err != nil {
-		return "", errStatus(http.StatusInternalServerError, "internal", "a CSRF token could not be generated").wrapping(err)
+		return "", errStatus(http.StatusInternalServerError, CodeInternal, "a CSRF token could not be generated").wrapping(err)
 	}
 	// nolint:gosec // G124 fires here for two reasons, and both are the design.
 	// (1) HttpOnly is false ON PURPOSE: double-submit requires the SPA to read
@@ -346,7 +346,7 @@ func (s *Server) handleSession(w http.ResponseWriter, r *http.Request) error {
 
 	if _, err := s.store.Owner(r.Context()); err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
-			return errStatus(http.StatusInternalServerError, "internal", "the owner account could not be read").wrapping(err)
+			return errStatus(http.StatusInternalServerError, CodeInternal, "the owner account could not be read").wrapping(err)
 		}
 		resp.SetupRequired = true
 	}
@@ -376,10 +376,10 @@ type credentialsRequest struct {
 // administrator against a running install.
 func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) error {
 	if _, err := s.store.Owner(r.Context()); err == nil {
-		return errStatus(http.StatusConflict, "already_setup",
+		return errStatus(http.StatusConflict, CodeAlreadySetup,
 			"an owner account already exists").withAction("Sign in")
 	} else if !errors.Is(err, store.ErrNotFound) {
-		return errStatus(http.StatusInternalServerError, "internal", "the owner account could not be read").wrapping(err)
+		return errStatus(http.StatusInternalServerError, CodeInternal, "the owner account could not be read").wrapping(err)
 	}
 
 	var req credentialsRequest
@@ -388,16 +388,16 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) error {
 	}
 	req.Username = strings.TrimSpace(req.Username)
 	if req.Username == "" {
-		return errStatus(http.StatusBadRequest, "bad_request", "username must not be empty")
+		return errStatus(http.StatusBadRequest, CodeBadRequest, "username must not be empty")
 	}
 	if len(req.Password) < 12 {
-		return errStatus(http.StatusBadRequest, "bad_request",
+		return errStatus(http.StatusBadRequest, CodeBadRequest,
 			"the owner password must be at least 12 characters")
 	}
 
 	hash, err := crypto.HashPassword(req.Password)
 	if err != nil {
-		return errStatus(http.StatusInternalServerError, "internal", "the password could not be hashed").wrapping(err)
+		return errStatus(http.StatusInternalServerError, CodeInternal, "the password could not be hashed").wrapping(err)
 	}
 	id, err := s.store.CreateUser(r.Context(), store.User{
 		Username:     req.Username,
@@ -407,7 +407,7 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) error {
 		IsOwner:      true,
 	})
 	if err != nil {
-		return errStatus(http.StatusConflict, "conflict",
+		return errStatus(http.StatusConflict, CodeConflict,
 			"that account could not be created: "+redactText(err.Error())).wrapping(err)
 	}
 	s.audit(r, "user.create", "user", id, "ok", `{"is_owner":true}`)
@@ -426,7 +426,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	badCredentials := errStatus(http.StatusUnauthorized, "unauthorized",
+	badCredentials := errStatus(http.StatusUnauthorized, CodeUnauthorized,
 		"that username and password do not match").withAction("Try again")
 
 	user, err := s.store.GetUserByUsername(r.Context(), strings.TrimSpace(req.Username))
@@ -473,7 +473,7 @@ var dummyPHC = func() string {
 func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID int64) error {
 	value, err := newToken()
 	if err != nil {
-		return errStatus(http.StatusInternalServerError, "internal", "a session could not be created").wrapping(err)
+		return errStatus(http.StatusInternalServerError, CodeInternal, "a session could not be created").wrapping(err)
 	}
 	now := s.now()
 	sess := store.Session{
@@ -488,7 +488,7 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID int
 		AbsoluteExpiresAt: now.Add(store.SessionAbsoluteTimeout),
 	}
 	if err := s.store.CreateSession(r.Context(), sess); err != nil {
-		return errStatus(http.StatusInternalServerError, "internal", "a session could not be created").wrapping(err)
+		return errStatus(http.StatusInternalServerError, CodeInternal, "a session could not be created").wrapping(err)
 	}
 	// Signing in is itself a fresh authentication, so it opens the sudo window.
 	if err := s.store.GrantSudo(r.Context(), sess.ID, now); err != nil {
@@ -515,7 +515,7 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID int
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) error {
 	a, _ := sessionFrom(r)
 	if err := s.store.RevokeSession(r.Context(), a.Session.ID, s.now()); err != nil {
-		return errStatus(http.StatusInternalServerError, "internal", "the session could not be revoked").wrapping(err)
+		return errStatus(http.StatusInternalServerError, CodeInternal, "the session could not be revoked").wrapping(err)
 	}
 	s.audit(r, "session.revoke", "session", a.User.ID, "ok", "")
 	s.clearSessionCookie(w, r)
@@ -535,17 +535,17 @@ func (s *Server) handleSudo(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if a.User.PasswordHash == "" {
-		return errStatus(http.StatusForbidden, "forbidden",
+		return errStatus(http.StatusForbidden, CodeForbidden,
 			"this account has no local password to confirm with")
 	}
 	if err := crypto.VerifyPassword(a.User.PasswordHash, req.Password); err != nil {
 		s.audit(r, "auth.sudo", "user", a.User.ID, "fail", "")
-		return errStatus(http.StatusUnauthorized, "unauthorized",
+		return errStatus(http.StatusUnauthorized, CodeUnauthorized,
 			"that password does not match").withAction("Try again")
 	}
 	now := s.now()
 	if err := s.store.GrantSudo(r.Context(), a.Session.ID, now); err != nil {
-		return errStatus(http.StatusInternalServerError, "internal", "the sudo window could not be opened").wrapping(err)
+		return errStatus(http.StatusInternalServerError, CodeInternal, "the sudo window could not be opened").wrapping(err)
 	}
 	s.audit(r, "auth.sudo", "user", a.User.ID, "ok", "")
 
