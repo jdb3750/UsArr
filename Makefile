@@ -8,16 +8,20 @@
 # that create it are written against, not a description of a working build.
 #
 # ./docs/design/check.mjs used to be on that list. It is not any more: the design
-# thread landed it in e0d4b26, and `make design` ran green — observed on main at
-# 2026-08-16 16:41 UTC, after a `git fetch`. That is an observation with a
+# thread introduced it in f015655, merged to main by e0d4b26, and `make design`
+# ran green — observed on main at 2026-08-16 16:41 UTC, after a `git fetch`, and
+# the file re-confirmed present at 17:34 UTC. That is an observation with a
 # timestamp, not a standing guarantee; the target's own guards report the truth
 # on the machine you are sitting at.
 #
 # Four rules this file must keep obeying as code lands:
 #   1. `make check` is the pre-commit gate. It must pass with NO Docker daemon
-#      and NO live services. It makes exactly ONE network call — govulncheck's
-#      query to vuln.go.dev. `make check-offline` drops that one step and is the
-#      target to use on a plane. Everything else is hermetic.
+#      and NO live services. It makes exactly TWO network calls, both to
+#      vulnerability databases: govulncheck to vuln.go.dev, and `pnpm audit` to
+#      the npm registry. Both live in the `vuln` target, so `make check-offline`
+#      drops both and is the target to use on a plane. Everything else is
+#      hermetic. This said ONE for the life of the project while the `vuln`
+#      target ran two commands — count the calls, do not count the sentences.
 #   2. `make docker` is the ONLY target allowed to require a Docker daemon, and
 #      it is never part of `check`.
 #   3. `make design` is the ONLY target allowed to require a browser, and like
@@ -78,6 +82,16 @@ GO          ?= go
 # binary in `make build` is still CGO_ENABLED=0.
 GOTESTFLAGS ?= -race -shuffle=on
 PNPM        ?= pnpm
+
+# Never blocks an unattended build on a TTY prompt. When pnpm is provided through
+# corepack — `corepack enable` is the documented install route, so this is the
+# common case even though it is not how this repo's container happens to be built
+# — corepack asks for interactive confirmation before downloading a package
+# manager it does not already have cached. There is no TTY in CI or in an agent
+# container, so that prompt is not a question, it is a hang. Setting it to 0
+# answers "yes, download it" up front; the version being downloaded is the one
+# web/package.json pins, so this is not a floating-version hole.
+export COREPACK_ENABLE_DOWNLOAD_PROMPT := 0
 
 # Dev database used by `make migrate`. Kept out of /config so `make clean` is safe.
 DEV_CONFIG_DIR ?= ./.dev/config
@@ -233,13 +247,31 @@ web-build: web-deps ## Build the SvelteKit SPA -> web/build (embedded by `make b
 # tree is broken, not that the frontend has not been written yet.
 .PHONY: web-deps
 web-deps:
-	$(PNPM) -C $(WEB_DIR) install --frozen-lockfile
+	cd $(WEB_DIR) && $(PNPM) install --frozen-lockfile
+
+# `cd $(WEB_DIR) && pnpm …`, NOT `pnpm -C $(WEB_DIR) …`. The two run the same
+# install and resolve the pnpm BINARY differently, which is the whole point.
+#
+# `-C` changes the directory pnpm operates on; it does not change the process's
+# working directory when the launcher decides which pnpm to be. A corepack shim
+# resolves `packageManager` from the CWD's nearest package.json, and the repo
+# root has no package.json at all — this is a Go repo with a web/ subdirectory,
+# not a JS workspace — so corepack finds no pin, falls back to its own default,
+# and then the pnpm that actually starts reads web/package.json's
+# `packageManager: pnpm@10.33.0` and hard-fails on the mismatch. Running with
+# web/ as the CWD means the pin is found by whichever mechanism is looking, so
+# the class of failure stops existing rather than being worked around.
+#
+# The recovery for the `-C` form was `corepack prepare` first, which is exactly
+# the kind of undocumented prerequisite a fresh clone should not need.
+#
+# Each recipe line gets its own shell, so the `cd` cannot leak into a later line.
 
 # Wrapper so web targets skip cleanly while web/ does not exist.
 # usage: $(call pnpm_if_web,<script>)
 define pnpm_if_web
 	@if [ -f $(WEB_DIR)/package.json ]; then \
-		$(PNPM) -C $(WEB_DIR) $(1); \
+		cd $(WEB_DIR) && $(PNPM) $(1); \
 	else \
 		echo "SKIP: no $(WEB_DIR)/ yet — skipping 'pnpm $(1)'"; \
 	fi
@@ -456,14 +488,20 @@ modverify: ## Verify module contents against go.sum, and that go.mod/go.sum are 
 	$(GO) mod tidy -diff
 
 .PHONY: vuln
-vuln: ## govulncheck + pnpm audit. GATING, part of `check`. THE ONE NETWORK STEP.
+vuln: ## govulncheck + pnpm audit. GATING, part of `check`. THE ONLY NETWORK STEP — two calls.
 	$(call require_tool,$(GOVULNCHECK),$(GOVULNCHECK_WANT))
 	@n=$$($(GO) list ./... | wc -l); \
 	test "$$n" -gt 0 || { \
 		echo "vuln: 0 packages — govulncheck would scan nothing and exit 0."; exit 1; }; \
 	echo "vuln: scanning $$n Go packages against vuln.go.dev"
 	$(GOVULNCHECK) ./...
+	@echo "vuln: auditing the pnpm dependency tree against the npm registry"
 	$(call pnpm_if_web,audit)
+
+# TWO network calls happen here, not one: govulncheck queries vuln.go.dev and
+# `pnpm audit` queries the npm registry's advisory endpoint. They are the only
+# two in the whole gate, which is why both sit in this one target and why
+# `check-offline` is exactly `check` minus this target.
 
 # `|| true` used to live on the line above. It meant a known-vulnerable
 # dependency in the crypto, HTTP or SQLite path shipped with a green build, in a
@@ -556,7 +594,7 @@ clean: ## Remove build artifacts and the dev database
 	@find $(EMBED_DIR) -mindepth 1 -not -name .gitkeep -delete 2>/dev/null || true
 
 .PHONY: check
-check: check-offline vuln ## THE PRE-COMMIT GATE. No Docker. One network call (vuln.go.dev).
+check: check-offline vuln ## THE PRE-COMMIT GATE. No Docker. Two network calls (vuln.go.dev, npm).
 	@echo "check: OK"
 
 .PHONY: check-offline
