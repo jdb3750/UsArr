@@ -3386,6 +3386,35 @@ file-ownership convention, and a code thread editing another thread's section is
 produce one conflict. **Routed there** with the three specifics: the state vocabulary, the resolved
 media-type column, and the pagination shape.
 
+> ✅ **Applied by the design thread, 2026-08-16, and the sweep found the SAME defect pointing the
+> other way in the same section.** §17.5 now carries a shipped-against-target table covering all
+> four deviations — the six columns, the `provenance.acquisition_state` outcome vocabulary in place
+> of the write queue's five states, the clamped `LIMIT` in place of the keyset join, and the absent
+> *nothing-was-sent* state — with the reason for each moved out of the comment above the handler in
+> `internal/httpapi/grabs.go` and into the document a reader consulting the design will actually
+> open. §16's cost note is marked in place rather than rewritten, because **a cost estimate edited
+> after the fact stops being evidence about estimating**. 📌 **The specification is not narrowed to
+> what shipped**, which was the routing's one real risk: all four target properties are still
+> wanted, and the table doubles as the checklist for closing the distance, ordered by dependency —
+> `write_queue` needs a writer before anything else on it can move.
+>
+> 🚩 **The observation worth more than the fix: §17.5 was wrong in BOTH DIRECTIONS AT ONCE.** The
+> block above reads as a description of the present while specifying a future shape; four hundred
+> words later the same section said *"the code thread **is adding** `acquisition_state` to
+> `provenance` in migration 0003"* — a future tense over something that had already landed at
+> `f895ddc`, column, partial index `ix_prov_unconfirmed` and four readers included. Verified against
+> the tree before either edit was written, because a relayed "it shipped" is a hypothesis: `f895ddc`
+> is an ancestor of `main`, `internal/db/migrations/00003_provenance_acquisition_state.sql` is
+> merged, and `internal/store/releases.go`, `internal/releases/grab.go`, `internal/httpapi/grabs.go`
+> and `web/src/lib/api.ts` all read the column. Had it been in flight, the correct edit would have
+> been the opposite one and a sweep looking for one direction only would have written the drift
+> back in. **This is why the failure is not "we forget to update docs when we ship."** If that were
+> the cause, every drift would point the same way — doc behind tree. Drift in both directions inside
+> one section means **nothing checks tense against the tree at all**, and the two errors are one
+> error with two signs. Recorded here rather than fixed with a checker, because the checker is a
+> real proposal and not this pass's work: `docs/DEVELOPMENT.md` §11's "fire a guard deliberately"
+> rule is the shape it would take.
+
 ## RG-01.2 — the secret-leak guard was a denylist. **Applied.**
 
 `internal/httpapi/grabs_test.go` asserted the response carries none of `download_url · downloadUrl ·
