@@ -240,9 +240,14 @@ func planFanOut(
 ) fanOutPlan {
 	plan := fanOutPlan{byID: mapping.IndexerByID(indexers)}
 
-	want, named := indexerFilter(q.IndexerIDs)
+	want, named, magic := indexerFilter(q.IndexerIDs)
 	matched := make(map[int32]bool, len(named))
+	// Which protocols this instance carries AT ALL, recorded before the filter is
+	// applied: it is what the -1/-2 magic values are accounted against below, and
+	// the question there is about the instance rather than about the request.
+	haveProtocol := make(map[servarr.DownloadProtocol]bool, 2)
 	for _, ix := range indexers {
+		haveProtocol[ix.Protocol] = true
 		if !want(ix) {
 			continue
 		}
@@ -323,6 +328,31 @@ func planFanOut(
 		})
 	}
 
+	// The -1/-2 magic values need the same accounting, for a different cause. An
+	// unknown explicit id is a typo or a stale saved filter; "all usenet indexers"
+	// against a torrent-only instance is a well-formed request that this instance
+	// simply cannot serve. Both are unfulfillable as asked and both were silent —
+	// `[-1, 7]` on a torrent-only instance reported "1 of 1 answered" while half
+	// the request evaporated, and `[-1]` alone fell through to ErrNoIndexers,
+	// whose instruction ("enable an indexer") is wrong when the indexers are
+	// enabled and merely all of the other protocol.
+	//
+	// OutcomeNotFound is REUSED rather than joined by a near-synonym, because its
+	// stated meaning — a fact about the request, not about an indexer — is exactly
+	// this: there is no indexer here to make a statement about. The two differ in
+	// what the user does next, and the Reason is what carries that: go fix the id
+	// you sent, versus go add an indexer of that protocol to Prowlarr.
+	for _, m := range magic {
+		proto := magicProtocol(m)
+		if haveProtocol[proto] {
+			continue
+		}
+		plan.skipped = append(plan.skipped, IndexerOutcome{
+			IndexerID: m, Name: fmt.Sprintf("all %s indexers", proto), Status: OutcomeNotFound,
+			Reason: fmt.Sprintf("this Prowlarr instance has no %s indexers", proto),
+		})
+	}
+
 	// Query the highest-priority (lowest-numbered) indexers first, so with bounded
 	// concurrency the best copy of a duplicated release usually arrives first and
 	// fewer supersede events are needed.
@@ -337,23 +367,29 @@ func planFanOut(
 // aggregate endpoint, but the fan-out addresses one indexer per request, so they
 // have to be resolved here.
 //
-// It also returns the explicitly-named ids, deduplicated and in the order asked
-// for. The predicate alone cannot answer "did anything match?", and an id that
-// matched nothing is the caller's mistake rather than a fact about any indexer —
-// so planFanOut needs the list to account for every one of them.
-func indexerFilter(ids []int32) (func(servarr.IndexerResource) bool, []int32) {
+// It also returns the ids the caller actually asked for, deduplicated and in the
+// order asked for, split into the explicitly-named and the magic ones. The
+// predicate alone cannot answer "did anything match?", and a request that matched
+// nothing is a fact about the request rather than about any indexer — so
+// planFanOut needs both lists to account for every entry the caller sent.
+func indexerFilter(ids []int32) (want func(servarr.IndexerResource) bool, named, magic []int32) {
 	if len(ids) == 0 {
-		return func(servarr.IndexerResource) bool { return true }, nil
+		return func(servarr.IndexerResource) bool { return true }, nil, nil
 	}
 	allUsenet, allTorrent := false, false
 	explicit := make(map[int32]bool, len(ids))
-	var named []int32
 	for _, id := range ids {
 		switch {
 		case id == servarr.AllUsenetIndexers:
-			allUsenet = true
+			if !allUsenet {
+				allUsenet = true
+				magic = append(magic, id)
+			}
 		case id == servarr.AllTorrentIndexers:
-			allTorrent = true
+			if !allTorrent {
+				allTorrent = true
+				magic = append(magic, id)
+			}
 		case !explicit[id]:
 			explicit[id] = true
 			named = append(named, id)
@@ -370,7 +406,16 @@ func indexerFilter(ids []int32) (func(servarr.IndexerResource) bool, []int32) {
 			return true
 		}
 		return false
-	}, named
+	}, named, magic
+}
+
+// magicProtocol names the protocol a magic indexer id selects. It is total over
+// the two magic values and is only ever called with one of them.
+func magicProtocol(id int32) servarr.DownloadProtocol {
+	if id == servarr.AllTorrentIndexers {
+		return servarr.ProtocolTorrent
+	}
+	return servarr.ProtocolUsenet
 }
 
 func supportsSearchType(c servarr.IndexerCapabilityResource, t servarr.SearchType) bool {
