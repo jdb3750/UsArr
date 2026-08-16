@@ -114,19 +114,38 @@ describe('ROW_INTRINSIC', () => {
 		}
 	});
 
-	it('is the measured one-line content box, which on this primitive IS --row-h', () => {
+	it('is the measured one-line CONTENT box, which is --row-h minus the row border', () => {
 		// MEASURED, scripts/list-bench.mjs, 2,000 rendered one-line rows per
-		// density: computed row padding 0px, row border 1px, content box exactly
-		// 28 / 32 / 36 — one distinct height each, no spread at all.
+		// density, and re-measured on BOTH stack forks — 'two-line' and 'labels'
+		// agree to the pixel at all three densities: computed row padding 0px,
+		// row border 1px, CONTENT box 27 / 31 / 35, one distinct height each,
+		// no spread at all.
 		//
-		// It equals --row-h because the padding lives on the <td> and not on the
-		// row, so ADR-0029's "padding and border are added on top" correction —
-		// measured on a row that DID carry its own padding — does not apply to
-		// this primitive. Adding a padding term here would over-count and make
-		// every placeholder too tall, which is the same drift in the other
-		// direction. The test is written against the measurement so that a future
-		// change putting padding back on the row fails here rather than silently
-		// re-introducing the error.
-		expect(ROW_INTRINSIC).toEqual({ compact: 28, standard: 32, relaxed: 36 });
+		// THE BOX IS THE WHOLE POINT OF THIS ASSERTION. `contain-intrinsic-size`
+		// sizes the content box and the browser adds padding and border on top,
+		// so the BORDER box is --row-h (28 / 32 / 36) and the content box is one
+		// pixel less. Writing the border-box figure in here is a 1px-per-row
+		// over-estimate that `contain-intrinsic-size: auto` absorbs silently the
+		// moment a row is laid out: it fails no assertion, drifts the scrollbar
+		// on rows nobody has seen, and survives review. That has happened once
+		// already, so the numbers are pinned here and the box is named in both
+		// places.
+		expect(ROW_INTRINSIC).toEqual({ compact: 27, standard: 31, relaxed: 35 });
+	});
+
+	it('is one pixel under the density token, the row border being the difference', () => {
+		// app.css declares --row-h 28 / 32 / 36 and gives `.tbl tbody tr` a 1px
+		// bottom border and no padding of its own. This is that relationship
+		// written down as a check, so a stylesheet change that puts padding back
+		// on the row, or moves the border, breaks here rather than quietly making
+		// every unseen row's placeholder the wrong height.
+		//
+		// It is a MEASURED FACT ABOUT THE CURRENT RULES, not a licence to compute
+		// the property from the token: nothing in CSS says the two must track.
+		const ROW_H = { compact: 28, standard: 32, relaxed: 36 };
+		const ROW_BORDER_PX = 1;
+		for (const density of ['compact', 'standard', 'relaxed'] as const) {
+			expect(ROW_INTRINSIC[density]).toBe(ROW_H[density] - ROW_BORDER_PX);
+		}
 	});
 });

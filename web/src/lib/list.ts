@@ -164,28 +164,89 @@ export function capChips<C>(items: readonly C[], max = 3): { shown: C[]; more: n
  * this estimate with the row's own last-rendered size once it has seen it, so
  * the value only has to be right for rows that have never been on screen.
  *
- * ⚠️ ONE OF ADR-0029'S THREE CORRECTIONS DOES NOT APPLY TO THIS PRIMITIVE, AND
- * THE MEASUREMENT SAYS SO. The ADR's point (c) is that `contain-intrinsic-size`
- * sizes the content box "so padding and border are added on top" — a 24 px row
- * with `auto 28px` produced a 37 px placeholder. That was measured on a row
- * whose padding was on the row. HERE THE ROW HAS NO PADDING OF ITS OWN: the
- * padding lives on the `<td>`, and `.tbl tbody tr` carries only a 1 px bottom
- * border. Measured, at all three densities: computed row padding 0 px, border
- * 1 px, and a one-line row's content box comes out at EXACTLY `--row-h` —
- * 28 / 32 / 36. So the placeholder border box is `--row-h + 1`, which is what a
- * real one-line row measures, and the ADR's arithmetic would have over-counted.
- * Points (a) and (b) stand unchanged.
+ * ⚠️ NAME THE BOX OR THE FIGURE IS UNUSABLE. ADR-0029's point (c) — that
+ * `contain-intrinsic-size` sizes the CONTENT box, so padding and border are
+ * added on top — applies here. What does not apply is its padding term: the
+ * padding lives on the `<td>`, so `.tbl tbody tr`'s own computed padding is
+ * 0 px, and the row carries a 1 px bottom border. The arithmetic is written out
+ * rather than described, because it has been got wrong twice by reading a
+ * border-box figure into a content-box property:
+ *
+ *     border box, as rendered   = --row-h         = 28 / 32 / 36
+ *     content box, as rendered  = --row-h − 1 px  = 27 / 31 / 35  ← belongs here
+ *
+ * ⚠️ AND NAMING THE BOX IS STILL NOT ENOUGH FOR THE MIDDLE FIGURE, SO THE FLOOR
+ * CONDITION IS NAMED WITH IT. `27 / 31 / 35` is the rendered content box WITH
+ * THE FLOOR LIVE and it is also the NATURAL BORDER box with the floor forced
+ * off — same digits, two quantities, and no box label separates them. The value
+ * below is the first: rendered content box, floor binding. (REVIEW-LOG RH-01.)
+ *
+ * MEASURED ON BOTH STACK FORKS, at 1440×900, one-line rows of the real
+ * component, 500 rows sampled per cell, every row forced to lay out so no
+ * placeholder height is in the sample. "natural" is the same row with
+ * `min-height` forced to 0:
+ *
+ *     fork        border, rendered  content, rendered  content, natural  floor
+ *     'two-line'  28 / 32 / 36      27 / 31 / 35       26 / 30 / 34      binds
+ *     'labels'    28 / 32 / 36      27 / 31 / 35       26 / 30 / 34      binds
+ *
+ * The two forks agree to the pixel, which is why this is one constant and not
+ * one per fork, and zero spread within each cell. The floor BINDS on both:
+ * `min-height: var(--row-h)` is what sets these heights, not the content, and
+ * `scripts/list-bench.mjs` re-establishes that on every run by perturbing it
+ * rather than leaving the claim here where nothing can check it.
+ *
+ * ⚠️ AND PERTURB IT ON THE RIGHT ELEMENT. `List.svelte` stamps `data-density`
+ * on the LIST CONTAINER and app.css re-declares the density tokens at that
+ * scope, so a `--row-h` override set on `<html>` is overridden by the container
+ * and nothing moves — a null from a probe that could not fire. Override on the
+ * list, or perturb `min-height` on the row with `!important`, which is what the
+ * numbers above did: forcing `min-height: 0` moved every row, on both forks at
+ * all three densities, so the probe demonstrably fired.
+ *
+ * ⚠️ THIS USED TO READ 28 / 32 / 36 AND THE SIX DIGITS DID NOT CHANGE MEANING
+ * BY ACCIDENT. Before the `.stacksep` margin exemption landed, the stray 2 px
+ * pushed the `two-line` fork's natural height clear of the floor and its
+ * CONTENT box really was 28 / 32 / 36 (border box 29 / 33 / 37, floor inert) —
+ * re-measured here by restoring that margin, not taken on report. The `labels`
+ * fork never renders a `.stacksep`, never had the bug, and was 27 / 31 / 35
+ * content box throughout, so the constant was already wrong for one of the two
+ * forks. The same digits therefore name different boxes on either side of that
+ * commit, which is how a stale number survives being re-read and re-approved.
+ *
+ * ⚠️ AND NOTHING WOULD HAVE FAILED IF IT HAD BEEN LEFT WRONG. `auto` in front
+ * of the length means the browser discards this estimate for the row's own size
+ * the moment the row has been laid out once, so 1 px too tall per row buys a
+ * little scrollbar drift on rows that have never been on screen and trips no
+ * assertion anywhere. The only instrument that catches it is a measurement,
+ * which is why the bench prints the recommendation this constant must match.
+ *
+ * 🔍 The bench serves the harness from its own Vite root with no `publicDir`,
+ * so IBM Plex 404s there and every figure above is nominally on the fallback
+ * face. Re-measured with the real `web/static/fonts` served, the six numbers
+ * come back byte-identical, and the control has teeth — the same probe shows
+ * the cell's advance width moving 169.87 px → 153 px between the two
+ * conditions. `line-height` on the cell is a fixed 18 px length rather than a
+ * unitless multiple, and the floor binds anyway, so the face cannot move it.
  *
  * A list whose rows are taller than one line passes its own measured value in
  * `rowIntrinsic`; a constant would be wrong by ~50% on a design where a
  * services row is six lines and a search row is one. Measured on the release
- * row the harness renders — chips, a button, a checkbox and a `<select>` — the
- * same statistic is 45 / 49 / 53 px, i.e. 1.6× this default.
+ * row the harness renders — chips, a button, a checkbox and a `<select>` — that
+ * row is NOT one height: two distinct content boxes, 44 px ×1308 and 48 px ×692
+ * at compact, so mode 44 / 48 / 52 and mean 45.4 / 49.4 / 53.4, floor SLACK
+ * (the content sets these, not `--row-h`).
+ *
+ * 🚩 WHICH MAKES 45 / 49 / 53 ANOTHER SAME-DIGITS-TWO-QUANTITIES TRAP: it is
+ * both the MEAN CONTENT box and the MODAL BORDER box of that row. Anything
+ * carrying it — `RELEASE_ROW_INTRINSIC` in `requests.ts` — wants the content
+ * reading, and is right by the mean rather than by the mode. Do not "correct"
+ * it to the other reading without re-measuring.
  */
 export const ROW_INTRINSIC: Record<string, number> = {
-	compact: 28,
-	standard: 32,
-	relaxed: 36
+	compact: 27,
+	standard: 31,
+	relaxed: 35
 };
 
 /** The states the primitive itself owns (DESIGN-DIRECTION §10). */
