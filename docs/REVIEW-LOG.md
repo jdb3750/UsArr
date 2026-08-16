@@ -3082,7 +3082,7 @@ now runs past the consistency sweep it started in. None of these three was raise
 reviewer, and none was measured or observed by the thread that wrote them down; each is attributed to
 the thread that produced it.
 
-**SW-22 and SW-23 came from a sixth place: the frontend thread's measurement run — `pnpm bench:list`: the frontend thread's measurement run — `pnpm bench:list`
+**SW-22 and SW-23 came from a sixth place: the frontend thread's measurement run — `pnpm bench:list`
 — reported to this thread rather than measured here.** That distinction is the reason they are
 recorded under their own heading. **This thread did not run the bench and does not claim the
 numbers**; what it did was decide where each one lands in the design documents, check the two that
