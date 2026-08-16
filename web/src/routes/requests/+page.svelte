@@ -34,8 +34,9 @@
 	 * succeeded. The vocabulary lives in `$lib/requests` where a test can read
 	 * it, not in this template.
 	 *
-	 * ADR-0038's freeze-while-aimed rule is not implemented here and that is
-	 * not an omission: it governs a list that reorders under an engaged user,
+	 * ADR-0038 — a list freezes its order while a user is aiming at it, by
+	 * pointer or by focus — is not implemented here and that is not an
+	 * omission: it governs a list that reorders under an engaged user,
 	 * and neither list on this screen does. The release results are the list it
 	 * was written for and they arrive with block 3, which is where it belongs.
 	 */
@@ -451,9 +452,10 @@
 	INTEGRATION POINT, NOT AN OMISSION.
 
 	The per-release results table — sortable columns, indexer flag chips, the
-	grab window countdown, the Grab control and ADR-0038's freeze-while-aimed
-	ordering — arrives here from the /search takeover, which is landing that work
-	on its own screen first. It is not duplicated here in the meantime: two
+	grab window countdown, the Grab control and ADR-0038's ordering rule, which
+	freezes a list while a user is aiming at it by pointer or by focus — arrives
+	here from the /search takeover, which is landing that work on its own screen
+	first. It is not duplicated here in the meantime: two
 	results tables built from the same SSE stream by two threads is how they end
 	up disagreeing about what a de-duplicated row is, and this screen already
 	states the counts that table would have to match.
@@ -593,9 +595,19 @@
 						differ rather than only the tone.
 
 						There is no Retry on any row, on any state, permanently.
+
+						THE SUB-LINE IS CONDITIONAL, and that is §9.1 rather than a
+						nicety: a clause identical on every row of a state is not data,
+						and "the client accepted it" under every `sent` chip restated
+						the chip at the cost of a second line on every confirmed row.
+						The two states that keep a clause carry an instruction the chip
+						does not. $lib/requests decides which; this renders what it is
+						given, and renders nothing when it is given nothing.
 					-->
 					<span class="chip" class:chip--pending={outcome.tone === 'warn'}>{outcome.label}</span>
-					<div class="cell-sub">{outcome.detail}</div>
+					{#if outcome.detail}
+						<div class="cell-sub">{outcome.detail}</div>
+					{/if}
 				{/if}
 			{/snippet}
 		</List>

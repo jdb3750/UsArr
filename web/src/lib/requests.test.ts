@@ -14,6 +14,13 @@
  * to review.
  */
 import { describe, expect, it } from 'vitest';
+// The Requests template AS TEXT, not as a component. `?raw` is Vite's own
+// mechanism and it types as `string`, which is what lets the copy guard at the
+// bottom of this file hold the screen's inline strings against §17.5's ban list
+// in a `environment: 'node'` run with no Svelte plugin. `node:fs` would have
+// been the obvious way and is not available: this workspace ships no
+// `@types/node`, and adding one to read one file is a dependency for nothing.
+import SCREEN_SOURCE from '../routes/requests/+page.svelte?raw';
 import {
 	DEFAULT_SEARCH_TYPE,
 	FORBIDDEN_OUTCOME_WORDS,
@@ -185,6 +192,24 @@ describe('grabOutcome', () => {
 		expect(grabOutcome(OUTCOME_SENT_UNKNOWN).detail).toContain('download client');
 	});
 
+	it('gives the confirmed row no sub-clause, because the chip is the whole fact', () => {
+		// §9.1: a value identical for every row of a group is not data — state it
+		// once in the group header and drop it from the rows. "the client
+		// accepted it" was the chip restated under every confirmed row, at a
+		// second line each, and the fact it carried is above the table already
+		// (KNOWLEDGE_STOPS_NOTE opens on the moment Prowlarr accepts a grab).
+		expect(grabOutcome(OUTCOME_SENT).detail).toBeUndefined();
+		expect(KNOWLEDGE_STOPS_NOTE).toContain('the moment Prowlarr accepts it');
+	});
+
+	it('keeps the clause on the two states where it is an instruction, not a restatement', () => {
+		// The test is §9.1's: delete this clause — does the user lose a fact they
+		// can act on? Yes for these two, no for `sent`. Both say something the
+		// chip cannot: where to look, and why this screen cannot read the row.
+		expect(grabOutcome(OUTCOME_SENT_UNKNOWN).detail).toBeTruthy();
+		expect(grabOutcome('pending').detail).toBeTruthy();
+	});
+
 	it('never offers Retry, on any state', () => {
 		// Retry means "do it again", and doing it again is exactly what produces
 		// two copies of a 68 GB release.
@@ -233,7 +258,7 @@ describe('the banned vocabulary', () => {
 		NOT_SENT_NOTE,
 		...[OUTCOME_SENT, OUTCOME_SENT_UNKNOWN, 'unknown'].flatMap((o) => {
 			const copy = grabOutcome(o);
-			return [copy.label, copy.detail];
+			return [copy.label, copy.detail ?? ''];
 		})
 	];
 
@@ -258,6 +283,103 @@ describe('the banned vocabulary', () => {
 		// dispatched grabs reads as "every grab worked".
 		expect(KNOWLEDGE_STOPS_NOTE).toContain('stops watching');
 		expect(NOT_SENT_NOTE).toContain('never got sent');
+	});
+});
+
+/* ── The same ban, over the copy that is NOT in this module ──────────────── */
+
+/**
+ * WHY THIS READS A FILE INSTEAD OF IMPORTING ONE.
+ *
+ * The ban above only ever held the strings `requests.ts` exports, and roughly
+ * half the words on the Requests screen are not among them: banner titles,
+ * `emptyText`, the block-3 placeholder and the column headers are written
+ * inline in `+page.svelte`. §17.5's rule is about what reaches the user, not
+ * about which file it was typed in, so a guard that stops at the module boundary
+ * is a guard with a hole exactly where the next edit will be — nobody adds copy
+ * to a constants module by accident, they add it to the template.
+ *
+ * `vitest.config.ts` is `environment: 'node'` with no Svelte plugin, so the
+ * component cannot be imported and compiled here. It can be read AS TEXT with
+ * Vite's `?raw`, and text is what the ban is about. So: take the source, drop
+ * `<script>`, `<style>` and HTML comments — none of which reaches a user — and
+ * hold the remainder against the list. Attributes stay in, deliberately:
+ * `emptyTitle`, `emptyText` and `loadingNote` are user-facing strings that live
+ * in attributes.
+ *
+ * TWO REGIONS, TWO RULE SETS, AND THE DISTINCTION IS THE POINT.
+ *
+ * §17.5's ban is on what may be said about A GRAB, whose outcome UsArr stops
+ * observing at handoff. It is not a ban on the words themselves: UsArr watches a
+ * SEARCH from the first indexer to the closing report, so "The search did not
+ * complete" is a true sentence about something UsArr actually observed, and a
+ * guard that flags it would be teaching the next author to write vaguer copy
+ * about a fact the app genuinely has. So the grab block — everything inside
+ * `<section id="recent-grabs">`, where every string is about a grab — carries
+ * the full list, and the rest of the screen carries the subset that is a claim
+ * about a download no matter what sentence it appears in.
+ */
+const SCREEN_MARKUP = SCREEN_SOURCE.replace(/<script[\s\S]*?<\/script>/gi, ' ')
+	.replace(/<style[\s\S]*?<\/style>/gi, ' ')
+	.replace(/<!--[\s\S]*?-->/g, ' ');
+
+/** Everything inside the Recent-grabs section, which is the region where every
+ * string on screen is a statement about a grab. */
+const GRAB_BLOCK_MARKUP = (() => {
+	const open = SCREEN_MARKUP.indexOf('id="recent-grabs"');
+	const close = SCREEN_MARKUP.indexOf('</section>', open);
+	// A guard that silently matches nothing is indistinguishable from no guard,
+	// so a moved marker fails here rather than quietly narrowing the check to an
+	// empty string.
+	if (open < 0 || close < 0) throw new Error('the Recent-grabs section markers moved');
+	return SCREEN_MARKUP.slice(open, close);
+})();
+
+/** The rest of the screen: the toolbar, the fan-out line, every banner and the
+ * block-3 placeholder. */
+const NON_GRAB_MARKUP = SCREEN_MARKUP.replace(GRAB_BLOCK_MARKUP, ' ');
+
+/**
+ * The words that are a claim about a download wherever they appear, so they are
+ * banned across the whole screen rather than only inside the grab block.
+ *
+ * `complete` and `failed` are deliberately NOT here. They are banned about a
+ * grab and true about a search — `+page.svelte`'s "The search did not complete"
+ * is the live case, and it reports a thing UsArr watched end to end.
+ */
+const NEVER_ANYWHERE_ON_THIS_SCREEN = FORBIDDEN_OUTCOME_WORDS.filter(
+	(word) => word !== 'complete' && word !== 'failed'
+);
+
+describe('the banned vocabulary, in the screen’s own markup', () => {
+	it('is reading the file it thinks it is reading', () => {
+		// The failure mode of a text guard is matching nothing at all. These are
+		// strings only the Requests template carries.
+		expect(SCREEN_MARKUP).toContain('Recent grabs');
+		expect(GRAB_BLOCK_MARKUP).toContain('No grabs recorded yet');
+		expect(NON_GRAB_MARKUP).toContain('There is no indexer service to search');
+		expect(NON_GRAB_MARKUP).not.toContain('No grabs recorded yet');
+	});
+
+	it.each(FORBIDDEN_OUTCOME_WORDS)('never says “%s” about a grab', (word) => {
+		expect(GRAB_BLOCK_MARKUP.toLowerCase()).not.toContain(word);
+	});
+
+	it.each(NEVER_ANYWHERE_ON_THIS_SCREEN)('never says “%s” anywhere on the screen', (word) => {
+		expect(NON_GRAB_MARKUP.toLowerCase()).not.toContain(word);
+	});
+
+	it('leaves search copy free to report what UsArr actually watched', () => {
+		// The counter-case, pinned so a later tightening of the guard has to face
+		// it: this sentence is correct and must keep passing. UsArr observes a
+		// search from the first indexer to the closing report, so "did not
+		// complete" is a fact rather than the unknowable claim §17.5 bans.
+		expect(NON_GRAB_MARKUP).toContain('The search did not complete');
+	});
+
+	it('never asserts in the markup that a grab did not happen', () => {
+		expect(GRAB_BLOCK_MARKUP.toLowerCase()).not.toContain('did not go through');
+		expect(GRAB_BLOCK_MARKUP.toLowerCase()).not.toContain('nothing was sent');
 	});
 });
 

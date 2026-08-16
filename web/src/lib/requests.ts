@@ -169,9 +169,23 @@ export interface GrabOutcomeCopy {
 	 */
 	label: string;
 	tone: GrabOutcomeTone;
-	/** ONE clause under the chip. §9.1 bans prose in a cell; the explanation
-	 * lives in the block's own note, once, above the table. */
-	detail: string;
+	/**
+	 * ONE clause under the chip, AND ONLY WHERE IT SAYS SOMETHING THE LABEL DOES
+	 * NOT. §9.1 bans prose in a cell and drops a value identical for every row of
+	 * a group — "state the fact once, in the group header" — and a clause is a
+	 * column one cell wide. The confirmed state therefore carries none: "the
+	 * client accepted it" under every `sent` chip was the chip restated, on every
+	 * confirmed row, at the cost of a second line each. The fact it carried is
+	 * still on screen once, above the table, in `KNOWLEDGE_STOPS_NOTE` — which
+	 * opens by naming the moment Prowlarr accepts a grab.
+	 *
+	 * The two states that keep a clause keep it because it is an INSTRUCTION
+	 * rather than a restatement: where to look when the outcome is unknown, and
+	 * why this screen cannot read a row it has never heard of. Both are facts the
+	 * chip does not carry, so §9.1's test — delete this clause, does the user
+	 * lose a fact they can act on? — answers yes for those two and no for `sent`.
+	 */
+	detail?: string;
 	/**
 	 * Always false, on every state, permanently.
 	 *
@@ -211,11 +225,12 @@ export const OUTCOME_UNRECOGNISED = 'unknown';
 export function grabOutcome(outcome: string | undefined): GrabOutcomeCopy {
 	switch (outcome) {
 		case OUTCOME_SENT:
+			// No detail: see GrabOutcomeCopy.detail. The label is the whole fact,
+			// and the block's own note above the table carries the rest once.
 			return {
 				outcome: OUTCOME_SENT,
 				label: 'sent',
 				tone: 'neutral',
-				detail: 'the client accepted it',
 				offersRetry: false
 			};
 		case OUTCOME_SENT_UNKNOWN:
