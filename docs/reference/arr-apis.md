@@ -181,6 +181,39 @@ complete the flow.
 > to Prowlarr proxy links and caches the original `ReleaseInfo` in memory keyed `"{indexerId}_{guid}"`
 > for `TimeSpan.FromMinutes(30)`. **POST the release back within 30 minutes or the grab fails.**
 
+> 🚩 **A grab that returns 500 may have succeeded, and there is no way to ask.** Prowlarr hands the
+> release to the download client **first** and applies its configuration **second**, with no
+> rollback. `Deluge.AddFromMagnetLink` calls `_proxy.AddTorrentFromMagnet`, then
+> `SetTorrentSeedingConfiguration`, then `SetTorrentLabel` — so a throw in that tail leaves the
+> torrent **running in the client** and still raises `DownloadClientException`.
+> `DownloadService.SendReportToClient` does not catch it, so it propagates and
+> `SearchController.GrabRelease` returns a bare **500**. **A 200 is the only confirmation the API
+> offers; a 500 does not mean nothing was added.** The full upstream trace, and the ordering that
+> makes the 404 and the unconfigured-client 500 provably *pre*-dispatch, is in `search.md`.
+>
+> **The single-release endpoint is the outlier, not the norm.** `GrabReleases`, the bulk endpoint,
+> wraps each release in its own `try`/`catch`, catches `DownloadClientException` as well, logs it and
+> `continue`s. Prowlarr's own bulk path treats "added, then configuration failed" as non-fatal; the
+> endpoint UsArr uses turns the identical condition into a 500.
+>
+> **This is the default configuration, not a corner case.** `DelugeSettings`' constructor sets
+> `Category = "prowlarr"`, so Prowlarr's Add-client form arrives with Default Category pre-filled and
+> saving it opts you in. Deluge's Label plugin rejects a label nobody created. Accept the defaults,
+> grab once, and you are here.
+>
+> ⚠️ **And Prowlarr's own Test button goes green in exactly that state.** `Deluge.TestCategory()`
+> returns `null` immediately when `Categories.Count == 0` — that is the *mapped-categories* list, not
+> `Settings.Category` — so with no category mappings configured the test never checks the Label
+> plugin and never checks the field the add path actually uses (`GetCategoryForRelease(release) ??
+> Settings.Category`). A passing connection test is **not** evidence of a working grab, and a green
+> Services row does not rule this out. Same class of trap as the rest of this file: a check that
+> reports on something adjacent to the thing you care about.
+>
+> **Do not try to discriminate by parsing the error body.** The only signal is a frame in the .NET
+> stack trace: another project's private internals, client-specific, and partly gettext-translated so
+> it breaks against a non-English daemon. UsArr's answer is to stop asserting — see
+> `internal/releases`' `ErrGrabOutcomeUnknown` and migration 0003's `provenance.acquisition_state`.
+
 **Prowlarr failures are soft.** It has historically returned **HTTP 200 with an error in the body**
 when a query limit was hit, and upstream 429s surface only as generic connection failures. Read
 `indexerstatus.disabledTill` and treat search failure as non-fatal.

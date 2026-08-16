@@ -304,3 +304,7 @@ download-client integration to complete the flow.
 > double-sending (`internal/releases/grab.go`, `grabWithReSearch`). 409 is
 > `ReleaseDownloadException`, raised fetching the release from the *indexer*, so it too means nothing
 > reached the client.
+>
+> **How common is it, and can a health check see it coming?** Neither answer is comfortable:
+> Prowlarr's Deluge form ships with Default Category pre-filled, and its own Test button goes green
+> in the state that breaks the grab. `arr-apis.md` §7 has both, with the upstream source for each.

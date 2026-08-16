@@ -16,6 +16,10 @@ CREATE INDEX ix_prov_indexer  ON provenance(indexer_name);
 -- index ix_prov_protocol
 CREATE INDEX ix_prov_protocol ON provenance(protocol);
 
+-- index ix_prov_unconfirmed
+CREATE INDEX ix_prov_unconfirmed ON provenance(user_id, grabbed_at DESC, id DESC)
+  WHERE acquisition_state <> 'confirmed';
+
 -- index ix_prov_user_grabbed
 CREATE INDEX ix_prov_user_grabbed ON provenance(user_id, grabbed_at DESC, id DESC);
 
@@ -137,7 +141,7 @@ CREATE TABLE provenance (
   source_system    TEXT NOT NULL,      -- sonarr|radarr|prowlarr|manual|filesystem
   source_record_id TEXT,
   confidence       REAL NOT NULL DEFAULT 1.0
-, user_id INTEGER NOT NULL DEFAULT 0, size_bytes INTEGER) STRICT;
+, user_id INTEGER NOT NULL DEFAULT 0, size_bytes INTEGER, acquisition_state TEXT NOT NULL DEFAULT 'confirmed') STRICT;
 
 -- table release_candidate
 CREATE TABLE release_candidate (

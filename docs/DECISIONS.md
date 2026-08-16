@@ -61,6 +61,7 @@ distinctions now matter and are used consistently below:
 | [0035](#adr-0035) | Kavita, not Komga, is the comics-and-books catalogue source | **Accepted** — owner-decided 2026-08-16; **reverses one member of [ADR-0032](#adr-0032)**, confirms [ADR-0030](#adr-0030); ⚠️ **amended 2026-08-16** — the catalogue sources sequence **after** v0.1 ([ADR-0036](#adr-0036)), so this ADR picks *which* source, and its spike orders the post-v0.1 sequence |
 | [0036](#adr-0036) | No catalogue source ships in v0.1; they arrive one at a time after it | **Accepted** — owner-decided 2026-08-16; **amends** §16; **re-sequences [ADR-0032](#adr-0032) and [ADR-0035](#adr-0035)** without rejecting any source |
 | [0037](#adr-0037) | TOFU SPKI pin enrolment is removed, not completed; enforcement stays | **Accepted** — 2026-08-16; amends no ADR; reopening conditions stated (a pin field on the update path + the change-acceptance UI) |
+| [0038](#adr-0038) | A list freezes its order while a user is aiming at it | **Accepted** — 2026-08-16; amends no ADR; the argument lives in `design/DESIGN-DIRECTION.md` §9.1a and ARCHITECTURE §17.5, this record holds the rejected alternatives |
 
 ---
 
@@ -2278,16 +2279,18 @@ indistinguishable from one nobody re-checked.
 
 **5. Two gaps in the benchmark, recorded here rather than left as folklore.**
 
-- **Arrow-key traversal at 25,000 rows is unmeasured.** Chromium exhausts memory building that many
-  rich rows — **2.7 GB resident at 5,000 rows** — so the harness cannot reach the 25k point that the
-  required `make bench` line above asks for. A **full** run of the frontend thread's list benchmark
-  therefore **exits non-zero**, while its `--quick` subset passes.
+- **Arrow-key traversal at 25,000 rows was unmeasured at the time of writing**, because Chromium
+  exhausted memory building that many rich rows — **2.7 GB resident at 5,000 rows** — so the harness
+  could not reach the 25k point that the required `make bench` line above asks for.
 - **What would close it:** a lower-memory row shape for the 25k point specifically, so the row count
   the required line names can be reached without the traversal case OOMing first.
 
-  ⚠️ **Status, stated precisely:** that harness (`pnpm bench:list`) is **not on `main` at the time of
-  writing** — `web/package.json` declares no such script — so this records a known gap and its exit
-  behaviour, not a command anyone can run from a clone today.
+  ✅ **Status, updated:** the harness is on `main` — `web/package.json` declares `bench:list`
+  (`web/scripts/list-bench.mjs`), so `pnpm bench:list` is a command anyone can run from a clone. It
+  carries the 25,000-row traversal case (`--quick` skips it, and the `--quick` subset stops at
+  5,000). **What that changes is "unmeasured", not the memory ceiling itself:** whether the full run
+  clears it is an observation from running it on the machine in hand, not a claim this ADR can make
+  for every machine, so the row-shape mitigation above stays recorded rather than struck.
 
 **A sixth measurement is the design thread's to record, not this one's**, and is named here in one
 clause only because it would trip an assertion this ADR owns: `contain-intrinsic-size: auto`
@@ -2406,17 +2409,58 @@ away, and the ~200 figure had no measurement behind it.
   for a density change on desktop; a Pi 5 is conservatively 3–5× slower at style recalculation and
   layout, which puts the 100 ms Tier-0 hard fail at roughly **100–300 rows in the DOM** as the
   markup stands, or **300–600** with `table-layout: fixed` and a working containment path (which
-  cut the same operation by 1.5–5× in an isolated `div`-row test). **The ceiling is set by the
+  cut the same operation by 1.5–5× in an isolated `div`-row test). ⚠️ **Superseded by §3 of the
+  amendment at the top of this ADR**, which replaces this extrapolation with a measured cost curve and
+  states the limit on it — the 25,000-row point is superlinear, so the linear fit is good only to a
+  few thousand rows. **The ceiling is set by the
   density control, not by scrolling**, and the earlier framing implied 25,000 rows was the number
   in question. Choosing a replacement threshold here from judgement is still refused; what changed
   is *which operation* the benchmark points at. Three mitigations are available before any redesign:
   `table-layout: fixed` (never set anywhere) halves it for free; scoping the density attribute to
   the list container rather than `:root` bounds the invalidation; and an explicit 150 ms "applying"
   state on a density change is honest where a silent multi-second freeze is not.
-- ⚠️ **`contain-intrinsic-size` still has no value, and the value this ADR previously prescribed is
-  wrong three ways.** The browser uses it as the placeholder height for skipped elements; when it is
-  wrong the scrollbar drifts as content scrolls in, which reads as *slowness* — the failure this
-  decision exists to prevent. The prescription was `contain-intrinsic-size: auto var(--row-h)`:
+- ✅ **`contain-intrinsic-size` has measured values, and the "no value yet" caveat this ADR carried
+  is withdrawn.** 📏 **Measured by the frontend thread's `pnpm bench:list` — not by the thread that
+  wrote this ADR, which did not run them.**
+
+  | Row shape | compact | standard | relaxed |
+  |---|---|---|---|
+  | one-line row | **28 px** | **32 px** | **36 px** |
+  | rich row (two lines, sub-line or thumbnail) | **45 px** | **49 px** | **53 px** |
+
+  Drift over a full scroll at the one-line values is **0.76 / 0.70 / 0.65%** against the 2% budget.
+  These are rendered **border-box** heights; the declaration sizes the **content** box, so what ships
+  is the derived expression the mockups already use —
+  `auto calc(2 * var(--row-py) + var(--row-lines) * var(--lh-base))` — which tracks the density token
+  instead of hard-coding three constants (§1 of the amendment above quotes the shipped app's form of
+  it). Verified against the mockups rather than assumed: they render exactly 28 / 32 / 36 and
+  45 / 49 / 53, with computed placeholders within 0.3% of the border-box height each stands in for.
+  **The same run's other results — the 761,316 px containment confirmation against a Δ of exactly 0
+  on `display: table-row`, the ~88% / ~25% mitigation split, and the superlinear 25,000-row point that
+  limits the linear fit to a few thousand rows — are recorded in the amendment above rather than
+  restated here.**
+- 🚩 **`contain-intrinsic-size: auto` remembers a size measured at the *previous* density — a live
+  correctness bug, reported by the frontend thread's bench as new and apparently undocumented
+  upstream.** This is the measurement the amendment above names in one clause and hands to the design
+  documents; `design/DESIGN-DIRECTION.md` §7.4 owns it, and it is stated here only because it guards
+  this ADR's own *"relying on `auto`'s remembered-size behaviour for the rest"*. A keyed `{#each}`
+  reuses row nodes, so after a compact → relaxed switch the reused rows
+  carry the remembered compact size and **the scrollbar is 14.57% wrong, against 0.65% when the same
+  rows are rebuilt rather than reused**. Both preconditions are ordinary: density is a first-class
+  control on every screen and the lists are keyed by row id. **The rule is required, not advisory:
+  when row height changes, the remembered intrinsic size must be invalidated** — rebuild the affected
+  nodes (key on `id + density`, or `{#key density}` around the list body) or force re-measurement of
+  every mounted row before the next paint.
+
+  ⚠️ **Not enforced yet, and it cannot be enforced by `docs/design/check.mjs`:** the condition needs
+  node reuse plus thousands of rows, and that check's target is static HTML with neither, so an
+  assertion there could not fire and would pass for ever. Enforcement belongs to `pnpm bench:list`,
+  **fail above 2% drift** — the drift budget above, not a second number. Sequencing is fix, then
+  assert, then claim: `bench:list` exits non-zero on a full run today because of a 25,000-row
+  Chromium out-of-memory. If the app target later mounts large lists, moving the assertion into
+  `check.mjs` is small and uncontested. `design/DESIGN-DIRECTION.md` §7.4 carries the full statement.
+- **The value this ADR previously prescribed was wrong three ways**, kept because each is a way to
+  arrive at a wrong placeholder again. The prescription was `contain-intrinsic-size: auto var(--row-h)`:
   1. **`--row-h` is inert on the element it describes.** `.tbl tbody tr { min-height: var(--row-h) }`
      — `min-height` does not apply to `display: table-row`. Measured: forcing `--row-h: 100px`
      leaves the row at **28.0 px**, with `getComputedStyle(tr).minHeight === "28px"`. Density works
@@ -2432,9 +2476,10 @@ away, and the ~200 figure had no measurement behind it.
      a 24 px row with `auto 28px` produced a **37 px** placeholder (28 + 8 + 1).
 
   **What ships instead: `contain-intrinsic-size: auto <measured content-box height>` per row
-  shape**, relying on `auto`'s remembered-size behaviour for the rest, with the < 2% drift assertion
-  above as the gate. **Until that measurement exists §4.5 is a direction, not an implementable
-  rule**, and this ADR says so rather than shipping a rule nobody can follow.
+  shape**, relying on `auto`'s remembered-size behaviour for the rest — **plus the invalidation rule
+  above wherever row height can change, because that remembered size is the bug** — with the < 2%
+  drift assertion as the gate. The measurement now exists (first bullet in this group), so this is an
+  implementable rule rather than a direction.
 - §16's "virtualized" line item is amended to match.
 
 ### Alternatives rejected
@@ -3507,3 +3552,85 @@ Enrolment without both is the design this ADR rejects, regardless of who propose
   which is this ADR's main objection. It does not help the self-signed single-certificate case the
   pin exists for, and it is not what the column or the enforcement path implement. Worth raising on
   its own merits when the reopening conditions are met; not a way around them.
+
+---
+
+<a id="adr-0038"></a>
+
+## ADR-0038 — A list freezes its order while a user is aiming at it
+
+**Status:** Accepted · **2026-08-16** · **Amends no ADR** — the rule is new, and it constrains every
+mutable list rather than reversing an earlier choice · **The argument is not repeated here.**
+[`design/DESIGN-DIRECTION.md`](./design/DESIGN-DIRECTION.md) §9.1a carries the general component
+rule and [`ARCHITECTURE.md`](./ARCHITECTURE.md) §17.5 the Requests-screen specification. This record
+exists for the part neither of those keeps well — **what was rejected, and why**.
+
+### Context
+
+Settled 2026-08-16 in **four rounds across three threads** — design, frontend and code — over how the
+release result list may reorder itself while a Prowlarr fan-out is still delivering, and closed.
+Logged as **SW-21** in [`REVIEW-LOG.md`](./REVIEW-LOG.md). The frontend thread **converged on the
+suspend ruling independently**, from the implementation side and without the design thread's argument
+in front of it, which is why it was treated as settled rather than as one thread's preference — and
+then improved it twice: **focus-within beside pointer-within**, and **collapsing the late-arrival
+case into the same single control**.
+
+### Decision
+
+> **Instability is acceptable only while nobody is aiming at anything.**
+>
+> The condition keys on whether **a person is committed to a target**, never on whether the
+> **application considers itself settled**. The six clauses that follow — re-sort live and freeze on
+> fan-out completion; freeze while the pointer is inside the results region **or** focus is within
+> it, surfacing anything that would have reordered as one `3 new results · re-sort` control;
+> identity rather than position for focus, hover, selection and pending row state; 0 ms and never
+> animated; sort keys in the URL — live in `DESIGN-DIRECTION.md` §9.1a, and **every mutable list in
+> UsArr inherits them**.
+
+**Why it keys on the person and not the app.** *"The fan-out finished, so the order is final"* is the
+application's own readiness, and it is wrong in both directions: the user reaching for the third row
+is not helped by more legs being outstanding, and the user idly reading is not harmed by a row
+moving. What makes this a correctness question rather than a polish one is the affordance being
+protected — **`Grab` is irreversible from UsArr's side**, since the release is handed to a download
+client UsArr deliberately stops observing after handoff (§17.5, §8.5), so a mis-click cannot be
+detected, cannot be reported and cannot be reversed. **Where there is no undo, prevention is the only
+lever.**
+
+### Alternatives rejected
+
+- **Append a late arrival below the list, marked *late*, instead of counting it in the same
+  control.** Rejected, and this is a rejection rather than an omission. One condition with two
+  surfaces is two rendering rules and two vocabularies to maintain; the *late* marker is meaningless
+  the instant the list is re-sorted; and appending **still** moves the list under an engaged user —
+  the row count changes, the scroll extent changes, and a pointer resting near the foot of the list
+  gets a new row under it. A late arrival is not a special case, it is another thing that would have
+  reordered.
+- **Animate the reorder so the movement is legible.** Rejected, and strictly worse than an instant
+  re-sort for this rule: an animation *widens* the window in which the row under the pointer is
+  neither where it was nor where it is going, and a click landing mid-flight is precisely the
+  ambiguous case the rule exists to remove. §6's 0 ms sort is extended to say a reorder is never
+  animated anywhere.
+- **Key focus, hover, selection and pending row state by index.** Rejected. An index-keyed list
+  reassigns all four the moment the order changes, so the highlighted row, the focused row and the
+  row with a grab in flight silently become different rows. Identity keying is also what makes the
+  keyboard half of the rule work at all: focus is attached to a row, so the row may move and take
+  the focus with it.
+- **Rely on identity keying alone and drop the pointer clause.** Rejected — the two input paths fail
+  differently. Identity fully protects the keyboard user; **the physical pointer is attached to
+  nothing**, sitting at a screen coordinate no amount of re-keying moves, so a row shifting under a
+  resting pointer puts a *different release* under the click, with no error raised and nothing on
+  screen recording the substitution. Neither half of pointer-within **or** focus-within is
+  redundant.
+
+### Consequences
+
+* **Nothing is drawn.** The mockups are static documents with invented data: there is no fan-out to
+  run, nothing to arrive late, and no honest count for the `re-sort` control to carry. §17.5 says so
+  rather than illustrating it — drawing a frozen screenshot would assert a behaviour the artefact
+  cannot exercise, which is `CLAUDE.md`'s invented status by illustration. This is specification for
+  the implementation, verified there or not at all.
+* **The scope is every mutable list**, not one screen. A future list carrying a comparably
+  irreversible action inherits the rule for the same reason; a list of purely local reads does not
+  need it and should not pay for it.
+* **No code, no schema and no mockup changed** when this was settled. The rule lands ahead of the
+  screen it governs, which is the cheapest moment at which an ordering contract can be fixed.

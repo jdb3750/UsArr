@@ -165,12 +165,13 @@ func (a *StoreAdapter) InsertProvenance(ctx context.Context, p Provenance) (int6
 		// DownloadURL stays empty for the same reason as above, and it matters more
 		// here: provenance rows are immutable and outlive everything, so a
 		// credential written here is in every backup forever.
-		DownloadURL:    "",
-		ReleaseGUID:    p.ReleaseGUID,
-		ReleaseTitle:   p.ReleaseTitle,
-		SourceSystem:   p.SourceSystem,
-		SourceRecordID: p.SourceRecordID,
-		Confidence:     p.Confidence,
+		DownloadURL:      "",
+		ReleaseGUID:      p.ReleaseGUID,
+		ReleaseTitle:     p.ReleaseTitle,
+		SourceSystem:     p.SourceSystem,
+		SourceRecordID:   p.SourceRecordID,
+		Confidence:       p.Confidence,
+		AcquisitionState: p.AcquisitionState,
 	}
 	if p.PublishedAt != nil {
 		row.PublishedAt = sql.NullString{String: store.FormatTime(*p.PublishedAt), Valid: true}

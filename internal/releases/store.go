@@ -152,10 +152,32 @@ type Provenance struct {
 	SourceRecordID string
 	Confidence     float64
 
+	// AcquisitionState is AcquisitionConfirmed or AcquisitionUnconfirmed. Empty
+	// is written as confirmed.
+	AcquisitionState string
+
 	// DownloadURL is deliberately absent from this struct even though the column
 	// exists: a Prowlarr download URL is a proxy link carrying the admin API key,
 	// and persisting it would put that key in every VACUUM INTO backup.
 }
+
+// Acquisition states for Provenance.AcquisitionState.
+//
+// These repeat internal/store's constants rather than importing them, for the
+// same reason Provenance and Candidate are defined here at all: this package
+// names what it needs and does not depend on the concrete store. The two
+// vocabularies are the wire format of one column, so
+// TestAcquisitionStatesMatchTheStore fails if they drift.
+const (
+	// AcquisitionConfirmed means Prowlarr answered 2xx, which is the only
+	// confirmation its grab API offers.
+	AcquisitionConfirmed = "confirmed"
+
+	// AcquisitionUnconfirmed means the grab was dispatched and its outcome is
+	// unknown — see ErrGrabOutcomeUnknown. The row exists to keep DownloadID,
+	// and must never be counted as an acquisition.
+	AcquisitionUnconfirmed = "unconfirmed"
+)
 
 // CandidateStore is the narrow slice of internal/store this package needs.
 //

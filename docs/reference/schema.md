@@ -652,12 +652,15 @@ CREATE TABLE provenance (
   published_at TEXT, grabbed_at TEXT, imported_at TEXT,
   source_system    TEXT NOT NULL,      -- sonarr|radarr|prowlarr|manual|filesystem
   source_record_id TEXT,
-  confidence       REAL NOT NULL DEFAULT 1.0
+  confidence       REAL NOT NULL DEFAULT 1.0,
+  acquisition_state TEXT NOT NULL DEFAULT 'confirmed'  -- confirmed|unconfirmed. Migration 0003
 ) STRICT;
 CREATE INDEX ix_prov_protocol ON provenance(protocol);
 CREATE INDEX ix_prov_indexer  ON provenance(indexer_name);
 CREATE INDEX ix_prov_dlid     ON provenance(download_id);
 CREATE INDEX ix_prov_user_grabbed ON provenance(user_id, grabbed_at DESC, id DESC);
+CREATE INDEX ix_prov_unconfirmed  ON provenance(user_id, grabbed_at DESC, id DESC)
+  WHERE acquisition_state <> 'confirmed';
 
 CREATE TABLE release_candidate (
   id                  INTEGER PRIMARY KEY,
@@ -682,6 +685,24 @@ Three principles: **store `release_title` verbatim, forever** (every parsed fiel
 the raw name is not); **never overwrite provenance on upgrade** — insert a new row and link the new
 `media_file`, which gives upgrade history for free; and **manual/filesystem imports get
 `protocol='manual'`** — do not launder `unknown` into `torrent`.
+
+> 🚩 **`acquisition_state` is not optional to read, and it arrived in migration 0003.** A Prowlarr
+> grab that returns 500 may have succeeded — Prowlarr adds the release to the download client before
+> it configures it and never rolls back, so a 200 is the only confirmation the API offers
+> (`reference/arr-apis.md` §7). UsArr writes a provenance row for that ambiguous outcome **solely to
+> keep `download_id`**, the infohash that is the only join key an importer later supplies; without
+> the row a torrent on disk can never be attached to the grab that produced it. **So every read that
+> joins on `download_id` must carry `acquisition_state`**: an `'unconfirmed'` row is a *reservation
+> of the key*, never an acquisition, and a join that treats it as one attaches history UsArr never
+> verified — which is worse than the missing row it replaced. `store.GetProvenanceByDownloadID`
+> returns the column for that reason.
+>
+> It is a separate column rather than a demoted `confidence` because **`confidence` means match
+> confidence** and §7's `ux_extid_work_strong` gates at `>= 1.0`: an unconfirmed acquisition is
+> perfectly *identified*, and demoting it would hide it from the reads that most want it. It carries
+> **no `CHECK` constraint**, exactly as `audit_log.result` carries none — SQLite cannot `ALTER` one,
+> 0001's `audit_log` foreign key is what that costs, and v0.2's request path may want a `'pending'`.
+> The vocabulary lives in `internal/store/releases.go` and is enforced there.
 
 > ⚠️ **`user_id` on these two tables arrived in migration 0002, not 0001, and the two are treated
 > differently on purpose.** Both are `NOT NULL DEFAULT 0` — 0 being the shared/system sentinel — and
