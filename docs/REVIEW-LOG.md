@@ -2460,10 +2460,17 @@ reader of `main` exactly as badly as one that invents status.
 **Nothing above is renumbered, reworded or deleted.** Every row below is an **amendment**; the
 original entry stands as written, and the amendment says what changed and how it was checked.
 
-**Every disposition here was verified by running something on `15a7211`, not by reading a commit
-message.** The command or the file:line that settles it is named in each row. Three findings are new
-and take the next free id in their own prefix — **SR-13**, **DS-15**, **FI-12** — so nothing
-existing is renumbered and nothing collides.
+**Every disposition here was verified by running something, not by reading a commit message.** The
+command or the file:line that settles it is named in each row. Four findings are new and take the
+next free id in their own prefix — **SR-13**, **DS-15**, **FI-12**, **FI-13** — so nothing existing
+is renumbered and nothing collides.
+
+**`main` moved underneath this section while it was being written, and the section says so rather
+than pretending otherwise.** Everything below was first verified on `15a7211`; the merge that carries
+it also brings `1285d88`, which **fixes SR-13**. That entry is re-verified against the merged tree
+and re-dispositioned in §6.3 — raised open and closed the same day — and every other row was re-run
+after the merge and is unchanged. A round that reviews a moving `main` has to record which commit
+each claim was measured on; that is why both are named.
 
 ### 6.1 Amended dispositions
 
@@ -2473,15 +2480,16 @@ existing is renumbered and nothing collides.
 | **DL-03** | Open — recorded here rather than applied | **Closed — fixed on `main` in `e7afbd2`, *"fix: open the read pool mode=ro"*, verified by reading the built DSN.** `internal/db/sqlite.go` now sets `q.Set("mode", "ro")` on the reader branch (`:157`), with the invariant argued in the comment at `:142-158` and restated on the accessor at `:162` — *"It is opened mode=ro, so a write attempted on it fails with `attempt to write a readonly database` rather than silently succeeding and racing the writer."* The single-writer discipline is now enforced by SQLite instead of by a comment, which is precisely the fix shape the entry named. **Verified:** the DSN branch read at `internal/db/sqlite.go:142-159`, and `go test ./internal/db/` green |
 | **DS-01** | **CONFIRMED, and Open — fix in flight in the code thread** | **Closed — fixed on `main` in `9eec372`, *"fix: refuse to start when the KEK salt is missing, and move it out of keys/"*, and independently re-verified here.** The full disposition of the fix is the **Data-loss audit** section below (`SALT-01`…`SALT-07`); what this row adds is the *verification* pass over it, run against `15a7211`. Four things were checked and all four hold — see §6.2 for the detail. **One small item is left open and is recorded as DS-15.** |
 | **SR-02** | Open — recorded here rather than applied | **Closed — RESOLVED BY REMOVAL on `main` in `864cefc`, *"refactor: mark TOFU SPKI pinning unimplemented, not half-built"*, verified by execution.** Not the fix shape this entry proposed, and the different shape is the point: rather than populate `TestResult.TLSSPKIPin` and make the dead path live, the code thread **deleted the half that pretended to work**. `internal/httpapi/ports.go:81` now reads *"There is deliberately NO `TLSSPKIPin` field"*, and `internal/httpapi/services.go:164-190` carries the reasoning in the code — auto-capture would **downgrade** an instance behind a publicly-trusted certificate (a pin *replaces* chain verification, so hostname, expiry and revocation checking are dropped in exchange for nothing), and there is **no way back**, because `store.ServiceInstanceUpdate` carries no pin field, so an ACME renewal or a container regenerating its self-signed certificate would lock the instance out permanently. **Verified:** `grep -rn "InsecureSkipVerify\|SPKIPin\|TLSSPKIPin" --include=*.go internal/ cmd/` over all three request classes — the only remaining `InsecureSkipVerify` is `internal/ssrf/ssrf.go:234`, reachable **only** through `tlsConfig(class, pin)` with a non-nil pin (`:179`, `:224`), and nothing in the tree writes the column. A **hand-seeded** pin is still honoured and a mismatched certificate still refused (`:278`, `subtle.ConstantTimeCompare`), including on a resumed session — `TestSPKIPinIsEnforcedOnAResumedSession`, the Gate audit's GATE-03. **Recorded so the removal is not read as a silent retreat:** the code thread is raising an ADR in `DECISIONS.md` for the decision — `grep -n "SPKI\|TOFU" docs/DECISIONS.md` returns **no match** on `15a7211`, so the ADR is not in the tree yet and that is the outstanding half. The two **reopening prerequisites** belong in it: **(1)** a pin field on the service *update* path, so a recorded pin can be cleared and re-accepted, and **(2)** the change-acceptance UI described in `providers.md` §4 / `CONFIGURATION.md` §7.1 — show the fingerprint, have the user accept it. Enrolment is the easy half; neither prerequisite is optional |
-| **SR-01** | Open — recorded here rather than applied | **PARTIALLY closed — fixed on `main` in `fdd40fb`, *"fix: stop storing private-tracker passkeys in SQLite"*, for credentials in QUERY PARAMETERS, verified by execution. The PATH-SEGMENT case is still open and is now its own finding, SR-13 (§6.3).** The fix landed at the boundary the entry named — `internal/servarr/redact.go:32,57`, in `SanitizeRelease`, not at the HTTP boundary — and it **went further than what this review reported**, which is worth recording plainly: this round found only `info_url` and `raw_release_json`; the code thread found `commentUrl` and `posterUrl` inside the blob as well, and `provenance.nzb_info_url` on the grab path (`internal/releases/grab.go`). **Verified on `15a7211`:** the passkey is gone from `release_candidate.info_url`, from all of `infoUrl`/`commentUrl`/`posterUrl` inside `raw_release_json`, and from `provenance.nzb_info_url` — confirmed down to a byte-grep of the **closed** `.db` and `-wal`, which is the check that matters, since the original reproduction found the plaintext key 0 times in the `.db` and **2 times in the `-wal`**. Tripwires re-run here and green: `go test ./internal/releases/ -run TestPersistedCandidateNeverCarriesATrackerPasskey` and `go test ./internal/servarr/ -run TestSanitizeReleaseRedactsTheIndexerSuppliedURLs` |
+| **SR-01** | Open — recorded here rather than applied | **Closed in two commits, both verified by execution. `fdd40fb`, *"fix: stop storing private-tracker passkeys in SQLite"*, closed the QUERY-PARAMETER case; the PATH-SEGMENT case it did not reach is raised here as SR-13 and closed by `bb74081` (§6.3).** The fix landed at the boundary the entry named — `internal/servarr/redact.go:32,57`, in `SanitizeRelease`, not at the HTTP boundary — and it **went further than what this review reported**, which is worth recording plainly: this round found only `info_url` and `raw_release_json`; the code thread found `commentUrl` and `posterUrl` inside the blob as well, and `provenance.nzb_info_url` on the grab path (`internal/releases/grab.go`). **Verified on `15a7211`:** the passkey is gone from `release_candidate.info_url`, from all of `infoUrl`/`commentUrl`/`posterUrl` inside `raw_release_json`, and from `provenance.nzb_info_url` — confirmed down to a byte-grep of the **closed** `.db` and `-wal`, which is the check that matters, since the original reproduction found the plaintext key 0 times in the `.db` and **2 times in the `-wal`**. Tripwires re-run here and green: `go test ./internal/releases/ -run TestPersistedCandidateNeverCarriesATrackerPasskey` and `go test ./internal/servarr/ -run TestSanitizeReleaseRedactsTheIndexerSuppliedURLs` |
 | **FI-02** | Open — recorded here rather than applied | **Still open — and now diagnosed precisely rather than described.** The cause is one missing prerequisite: `fmt-check` (`Makefile:362`) invokes `prettier` through the `web` workspace but declares **no `web-deps` prerequisite**, while `lint-web` (`:351`) and `test-web` (`:274`) both declare it. `check-offline` (`:567`) runs `fmt-check` **first**, so a fresh clone dies at the very first target — and **any run after a single `make lint` hides it**, because `lint` → `lint-web` → `web-deps` has already populated `node_modules`. That is why the failure survives: it is invisible to anyone who has ever linted. **Verified by reproducing the identical failure on a fresh clone of `origin/main` at `15a7211`** (the original observation was on `56101c1`; the target has moved, the failure has not) — see the transcript in §6.4. **Fix shape unchanged and now exact:** add `web-deps` as a prerequisite of `fmt` and `fmt-check`. One line. Owned by the code thread |
-| **FI-03**, **FI-04** | Open — recorded here rather than applied | **Closed — GREEN on `main`, and this is the first `make check` result in the project that is trustworthy.** `make check` exits **0** on `15a7211` with the **pinned** `golangci-lint v2.12.2`, reporting **0 issues both capped and uncapped**, and `govulncheck` clean. FI-03's two failure modes are both gone: `lint-go` (`Makefile:341-348`) resolves the binary through `$(GOLANGCI_LINT)` and asserts it against the pin via `require_tool`, so a bare-`PATH` v2.5.0 can no longer answer for it. FI-04's 11 issues (4 gosec + 7 `noctx`) are fixed — GATE-03/04/05 in the Gate audit below. **Why this row is worth its space:** every earlier green in this project was measured with the wrong linter version, so "the gate is green" has never been evidence until now. Full transcript with the version banner in §6.4 |
+| **FI-03**, **FI-04** | Open — recorded here rather than applied | **Closed — GREEN on `main`, and this is the first `make check` result in the project that is trustworthy.** `make check` exits **0** on `15a7211` with the **pinned** `golangci-lint v2.12.2`, reporting **0 issues both capped and uncapped**, and `govulncheck` clean. FI-03's two failure modes are both gone: `lint-go` (`Makefile:341-348`) resolves the binary through `$(GOLANGCI_LINT)` and asserts it against the pin via `require_tool`, so a bare-`PATH` v2.5.0 can no longer answer for it. FI-04's 11 issues (4 gosec + 7 `noctx`) are fixed — GATE-03/04/05 in the Gate audit below. **Why this row is worth its space:** every earlier green in this project was measured with the wrong linter version, so "the gate is green" has never been evidence until now. Full transcript with the version banner in §6.4. **The gate did not stay green through the merge, and for a reason that has nothing to do with FI-03 or FI-04 — see FI-13.** |
 | **FI-11** | Open — fix in flight on another branch, and NOT on `main` as of this entry | **Closed on `main` — cross-referenced, not re-dispositioned.** The **Gate audit** section below already closes it as **GATE-02** (*"Applied, and the hole is closed"*), and the fix is in the tree: `.golangci.yml:37-39` now carries `issues: max-same-issues: 0 / max-issues-per-linter: 0`. The `grep -n "issues\|max-same\|max-issues" .golangci.yml` that returned **no match** when FI-11 was written now returns those three lines. FI-11 and GATE-02 are the same defect found twice, from two directions, and GATE-02 owns the disposition |
 
-**Counts, restated for this round only.** Of the 49, **six** are now closed on `main` (DL-01, DL-03,
-DS-01, SR-02, FI-03, FI-04) and **one more** (FI-11) is closed under another section's id. SR-01 is
-half closed. **Three new findings** are added here: SR-13 (High), DS-15 (Low), FI-12 (Low). No
-existing entry's id, text or severity changed.
+**Counts, restated for this round only.** Of the 49, **seven** are now closed on `main` — DL-01,
+DL-03, DS-01, SR-01, SR-02, FI-03, FI-04 — and **one more**, FI-11, is closed under another section's
+id. **FI-02 is the one High from this round still open**, and it is a one-line `Makefile` change.
+**Four new findings** are added here: SR-13 (High, raised and closed on the same day), DS-15 (Low),
+FI-12 (Low) and FI-13 (Low). No existing entry's id, text or severity changed.
 
 ### 6.2 DS-01 — the four things checked on the shipped fix
 
@@ -2522,17 +2530,19 @@ be taken on report.
 |---|---|---|
 | **DS-15** | **Two code comments in `internal/config/secretkey.go` still describe the mechanism the fix moved away from.** `:274` says the relocation lands *"via `writeSaltFile`'s temp-plus-rename"* and `:316`/`:321` describe `writeSaltFile` as *"temp file … then `rename(2)`"*. The relocation path uses `os.Link` (`:375`), and `:364-368` explains at length **why** it must not be a rename | **Open — recorded here rather than applied. Owned by the code thread.** Cosmetic in effect and **not** cosmetic in kind: these comments describe the exact mechanism the race-safety argument rests on, so the next person to read them is told the code does the one thing `:364-368` says it must never do. **Fix shape:** two comment edits, no code change |
 
-### 6.3 SR-13 — a credential in a URL PATH SEGMENT is redacted nowhere
+### 6.3 SR-13 — a credential in a URL PATH SEGMENT was redacted nowhere
 
-The half of SR-01 the fix does not reach, raised as its own finding because it has its own severity
-and its own reason for staying open.
+The half of SR-01 that `fdd40fb` did not reach, raised as its own finding because it has its own
+severity and its own reason for having stayed open. **It was raised open and closed inside the same
+day** — the entry keeps both states, because the reasoning for *not* fixing it is what the fix had to
+answer, and deleting the open state would hide the argument the heuristic is calibrated against.
 
 | # | Finding | Disposition |
 |---|---|---|
-| **SR-13** (High) | **`ssrf.RedactRawURL` matches a deny-list of query-parameter NAMES only, so a passkey carried in a URL *path segment* — `https://tracker.example/rss/<passkey>/torrents`, a completely ordinary private-tracker RSS shape — is not redacted anywhere in UsArr.** `internal/ssrf/redact.go`: `credentialParams` (`:39-64`) is a map of parameter names, `isCredentialParam` (`:70-74`) looks names up in it, and `RedactURL` (`:81-100`) rewrites `clone.RawQuery` and drops `clone.User` — **the path is never touched**. `RedactRawURL` (`:106`) is `RedactURL` over a string. Because `SanitizeRelease` is built on it, the gap propagates to every sink SR-01 named: `release_candidate.info_url`, all three URL fields inside `raw_release_json`, `provenance.nzb_info_url`, and the raw database bytes | **Open — DOCUMENTED and deliberately not fixed, which is a disposition and not an oversight.** **Severity is not uniform across the sinks, and the distinction is the finding:** in `release_candidate` the row **expires**, and since DL-01's sweeper landed it is genuinely swept, so the exposure is bounded by the TTL. `provenance` rows are **immutable** (append-only by design) and have **no delete path anywhere in the tree** — `grep` over `internal/store` finds no `DELETE FROM provenance` — so a path-segment passkey written there is **UNRECOVERABLE, not merely stored**: there is no supported way to remove it short of hand-editing SQLite, and it travels into every `VACUUM INTO` backup and every support bundle. **Why not fixed:** there is **no trustworthy threshold** for telling a secret path segment from a legitimate one. `/rss/a1b2c3…/torrents` and `/details/tt0111161/cast` are the same shape to a matcher; entropy heuristics, length cut-offs and position rules all mis-fire in both directions, and a false positive **silently corrupts `provenance`** — the one table with no way to undo it. Guessing is worse than not guessing, so the decision is to carry the gap in writing rather than paper over it. Recorded in the code too, in `fdd40fb`'s own message: *"the deny-list matches query parameters, so a passkey in a path segment is not covered anywhere in UsArr."* **What would close it:** an explicit per-indexer declaration of which path positions are secret — Prowlarr's indexer definitions already know — not a matcher. That is a v0.2+ shape and belongs in `FUTURE.md` against the `SanitizeRelease` seam |
+| **SR-13** (High) | **`ssrf.RedactRawURL` matched a deny-list of query-parameter NAMES only, so a passkey carried in a URL *path segment* — `https://tracker.example/rss/<passkey>/torrents`, a completely ordinary private-tracker RSS shape — was redacted nowhere in UsArr.** As raised, on `15a7211`: `internal/ssrf/redact.go`'s `credentialParams` was a map of parameter names, `isCredentialParam` looked names up in it, and `RedactURL` rewrote `clone.RawQuery` and dropped `clone.User` — **the path was never touched**. `RedactRawURL` is `RedactURL` over a string, and because `SanitizeRelease` is built on it the gap propagated to every sink SR-01 named: `release_candidate.info_url`, all three URL fields inside `raw_release_json`, `provenance.nzb_info_url`, and the raw database bytes. **Severity was not uniform across those sinks, and the distinction is the finding:** a `release_candidate` row **expires**, and since DL-01's sweeper landed it is genuinely swept, so that exposure is bounded by the TTL. `provenance` rows are **immutable** and have **no delete path anywhere in the tree** — `grep -rn "DELETE FROM provenance\|DeleteProvenance" --include=*.go .` returns nothing — so a path-segment passkey written there is **UNRECOVERABLE, not merely stored**, and it travels into every `VACUUM INTO` backup and every support bundle | **Closed — fixed on `main` in `bb74081`, *"fix: redact private-tracker passkeys held in URL path segments"*, verified by execution.** **The open disposition this entry was first written with is kept above the line, because the fix had to answer it.** That argument was: there is no trustworthy threshold for telling a secret path segment from a legitimate one — `/rss/a1b2c3…/torrents` and `/details/tt0111161/cast` are the same shape to a matcher — and a false positive **silently corrupts `provenance`**, the one table with no way to undo it, so guessing is worse than not guessing. **What the fix does instead of guessing: it calibrates to MISS.** `redactPathSegments` (`internal/ssrf/redact.go:151`) splits each path segment on `.` and redacts a part only when it is ≥20 characters, an unbroken `[A-Za-z0-9]` run with no separator, holds **both** a letter and a digit, and does not read like words (`looksLikeCredential:185`, `looksLikeWords:219`). **The numbers are sourced, not invented** — Prowlarr's own log scrubber, `CleanseLogMessage.cs` on `develop`, whose unanchored path rules use `[a-z0-9]{16,}`, raised to 20 here because upstream's rules are anchored to a host or path prefix and this one runs on every segment of every URL; the `.` split is what catches UNIT3D's `/torrent/download/<id>.<rsskey>`. It is deliberately **not** applied to `stripCredentials`, because removing a path segment from a redirect target changes which resource is requested. **Verified on the merged tree**, by throwaway test (removed; `git status --porcelain` clean): `/rss/<22-char alnum>/torrents` → `/rss/REDACTED/torrents`; `/torrent/download/12345.<22-char alnum>` → `…/12345.REDACTED`; and the control `/details/tt0111161/cast` → **unchanged**. `go test ./internal/ssrf/` green including the new `redactpath_test.go`, and SR-01's tripwires still green. **Residual, recorded rather than claimed closed:** the calibration means a passkey that is shorter than 20 characters, all-digits, all-letters, or hyphenated is still carried verbatim — all four confirmed by execution in §6.3's second transcript. That is the deliberate direction of the miss, not an oversight, and the durable close is still the one the open disposition named: an explicit per-indexer declaration of which path positions are secret, which Prowlarr's indexer definitions already know. `FUTURE.md`, against the `SanitizeRelease` seam |
 
-**Reproduced on `15a7211`**, in a throwaway test in `internal/ssrf` (removed afterwards;
-`git status --porcelain` clean):
+**Reproduced on `15a7211`**, before the fix, in a throwaway test in `internal/ssrf` (removed
+afterwards; `git status --porcelain` clean):
 
 ```
 $ go test ./internal/ssrf -run TestZZPathSegmentCredentialSurvives -v
@@ -2543,8 +2553,33 @@ out: https://tracker.example/details/1?passkey=REDACTED            <- fixed by f
 PASS
 ```
 
-The two lines together are the whole finding: the same secret, the same function, redacted in one
+The two lines together were the whole finding: the same secret, the same function, redacted in one
 position and verbatim in the other.
+
+**Re-run on the merged tree, after `bb74081`** — same harness, real-shaped fixtures, and a control:
+
+```
+in : https://tracker.example/rss/a1b2c3d4e5f6g7h8i9j0k1/torrents
+out: https://tracker.example/rss/REDACTED/torrents                       <- now redacted
+in : https://tracker.example/torrent/download/12345.a1b2c3d4e5f6g7h8i9j0k1
+out: https://tracker.example/torrent/download/12345.REDACTED             <- UNIT3D shape, split on '.'
+in : https://tracker.example/details/tt0111161/cast
+out: https://tracker.example/details/tt0111161/cast                      <- control, untouched
+```
+
+**And the residual, measured rather than assumed** — four shapes the calibration deliberately lets
+through, every one returned verbatim:
+
+```
+/rss/a1b2c3d4e5f6g7h8/torrents          -> unchanged   (16 chars, under the 20 floor)
+/rss/1234567890123456789012/torrents    -> unchanged   (22, digits only — no letter)
+/rss/abcdefghijklmnopqrstuv/torrents    -> unchanged   (22, letters only — no digit)
+/rss/a1b2-c3d4-e5f6-g7h8-i9j0/torrents  -> unchanged   (separators break the run)
+```
+
+A heuristic that misses is the correct trade here — a false positive corrupts `provenance`
+irreversibly and a false negative leaves it exactly where it already was — but *which* shapes it
+misses has to be written down, or the next reader takes the fix for complete coverage.
 
 ### 6.4 The gate, and the fresh clone — transcripts
 
@@ -2599,6 +2634,14 @@ EXIT=1
 # every other package: ok
 ```
 
+**FI-13, found while re-running the gate over the merge that carries this section — and recorded
+because it is the third demonstration in one round that a gate result is only as good as the commit
+it was measured on.**
+
+| # | Finding | Disposition |
+|---|---|---|
+| **FI-13** (Low) | **`make check` is RED on `main` again, on a formatting nit in a file this thread must not touch.** `internal/ssrf/redactpath_test.go:190` is not gofumpt-formatted — a comment-alignment difference of two spaces on the `// ULID` trailing comment, introduced by `c2e2c57` *"fix: make the path-passkey fixtures structurally fake"*, which shortened the literal above it and left the aligned comment behind. `fmt-check` fails first (`Makefile:364`), and `lint-go` fails again on the same line through the `gofumpt` formatter (`1 issues: * gofumpt: 1`). **Confirmed pre-existing and not merge-induced:** `gofumpt -l internal/ssrf/` run in a detached worktree at `origin/main` itself lists the file | **Open — recorded here rather than applied, and deliberately NOT fixed by this thread**, which is scoped to `docs/REVIEW-LOG.md` alone; a review log that quietly reformats another thread's source is exactly the behaviour the round-6 preamble rules out. **Everything else in the gate is green on the merged tree**, run target by target so the scope of the red is exact: `modverify` OK, `secrets` OK (*no leaks found*), `test` OK (all Go packages, 65 web tests), `vuln` OK (*No known vulnerabilities found*). **Fix shape:** `make fmt`, or two spaces on one line. **The point worth carrying:** §6.4's green was real on `15a7211` and was already stale by the time this section merged. FI-03 proved a green can be measured with the wrong *tool*; FI-11 proved it can be measured with the wrong *caps*; FI-13 is the plainest version of the same lesson — it can simply be measured on the wrong *commit*, and on a repository where several threads push to `main` in the same hour that is the common case, not the exotic one |
+
 ### 6.5 A miss by this review, recorded as a method lesson rather than a code finding
 
 Not a defect in the code, and not a finding anyone raised. It is recorded because the round's own
@@ -2624,6 +2667,12 @@ composition, and the synthesis step that merged their outputs deduplicated *iden
 finding about a value that must not leak, check it against every finding about a store that cannot
 forget. Deduplication asks *"did two passes find the same thing?"*; it never asks *"do two different
 things multiply?"*, and the multiplication is where SR-13 was hiding.
+
+**That SR-13 was fixed within hours of being named does not soften the lesson, it sharpens it.** The
+fix was cheap once the finding existed — one function, sourced numbers, a day's work. The expensive
+part was the four weeks it could have sat unnamed while `provenance` accumulated rows nothing can
+delete. What the review nearly missed was not a hard problem; it was an easy problem that no single
+pass was standing in the right place to see.
 
 ---
 
