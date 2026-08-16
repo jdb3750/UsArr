@@ -10,17 +10,53 @@
 	 * — and Recent grabs is NOT it and must not be presented as it. It is a
 	 * local read over rows v0.1 already writes.
 	 *
-	 * FOUR BLOCKS, AND ONE OF THEM IS DELIBERATELY NOT HERE YET:
+	 * FOUR BLOCKS, AND THIS IS NOW THE SCREEN THEY ALL LIVE ON:
 	 *
-	 *   1  the search toolbar          built
-	 *   2  the fan-out status          built
-	 *   3  the release results table   NOT BUILT — see the marked seam below
-	 *   4  Recent grabs                built
+	 *   1  the search toolbar          the query, the type, and the indexer scope
+	 *   2  the fan-out status          real counts, never a progress bar
+	 *   3  the release results table   MOVED HERE FROM /search
+	 *   4  Recent grabs                the local record a grab leaves
 	 *
-	 * Block 3 is arriving from the /search takeover, which owns sortable
-	 * results, the flag chips and indexer scoping. Building a second results
-	 * table here would guarantee two of them disagreeing, so the region is a
-	 * marked seam with an honest placeholder rather than a half-table.
+	 * ⚠️ THERE IS EXACTLY ONE RELEASE-SEARCH SURFACE IN UsArr AND THIS IS IT.
+	 * /search was the other one; it is now an honest account of a screen that is
+	 * not built — §17.4 is search over your OWN library, and there is no local
+	 * index to search yet — plus a pointer here. Two results tables built from
+	 * one SSE stream is how they end up disagreeing about what a de-duplicated
+	 * row is, and this screen already states the counts such a table must match.
+	 *
+	 * ⚠️ THIS SCREEN COMPOSES; IT DOES NOT REIMPLEMENT. Four modules arrived with
+	 * the table and every one of them is portable by design:
+	 *
+	 *   $lib/frozenorder.svelte   ADR-0038, the freeze-while-aimed rule
+	 *   $lib/rowstate.svelte      ADR-0038 clause 4, identity-keyed row state
+	 *   $lib/sortspec             ADR-0038 clause 6, sort key and dir in the URL
+	 *   $lib/indexerscope.svelte  the indexer picker's selection and catalogue
+	 *
+	 * Read `frozenorder.svelte`'s header before touching anything about ordering.
+	 * Those rules took four rounds across three threads to settle and every
+	 * clause is load-bearing — freeze while the pointer OR focus is in the
+	 * results region, identity rather than position, a late straggler is not a
+	 * special case, one explicit control carrying its own count, 0 ms and never
+	 * animated.
+	 *
+	 * ⚠️ WHAT CHANGED IN THE MOVE, AND WHY. Two things, both deliberate:
+	 *
+	 *   THE SORT MOVED FROM THE TOOLBAR ONTO THE COLUMN HEADERS, and the toolbar
+	 *   segment is REMOVED rather than kept beside it. The previous screen said
+	 *   in as many words why it was in the toolbar: a header affordance needed a
+	 *   new prop on `$lib/List.svelte` while another thread was live-editing that
+	 *   file. It is not any more, the prop exists, and the sort is now where a
+	 *   person looks for it. Keeping both would be two controls for one setting —
+	 *   two things to keep in agreement for no gain (CLAUDE.md, "cut before you
+	 *   add"). The header sits INSIDE the frozen results region, which is not a
+	 *   contradiction: the freeze forbids the order changing without the user
+	 *   asking, and pressing a header IS asking. §9.1a names a column header as
+	 *   an explicit sort control in the same breath as the toolbar's.
+	 *
+	 *   RETRY IS GONE FROM EVERY STATE. See `liveGrabCopy` in `$lib/requests` for
+	 *   the argument: once `grab_failed` narrowed, nothing left under it is fixed
+	 *   by pressing the same button again, and the transient cases a retry would
+	 *   help are exactly the ambiguous code that must never offer one.
 	 *
 	 * WHAT THE COPY RULES ARE, because they are correctness rather than tone.
 	 * A grab is irreversible from UsArr's side: the release goes to a download
@@ -28,27 +64,27 @@
 	 * cannot be detected, reported or reversed. Two consequences run through
 	 * this file. Nothing may claim bytes are moving — "sent" is the strongest
 	 * true word for every handed-over state, the successful one included. And
-	 * nothing may assert that a grab did not happen: Prowlarr adds a release to
-	 * the download client BEFORE the step that failed for the owner, and never
-	 * rolls back, so a 5xx can cover an operation that already partly
-	 * succeeded. The vocabulary lives in `$lib/requests` where a test can read
-	 * it, not in this template.
-	 *
-	 * ADR-0038 — a list freezes its order while a user is aiming at it, by
-	 * pointer or by focus — is not implemented here and that is not an
-	 * omission: it governs a list that reorders under an engaged user,
-	 * and neither list on this screen does. The release results are the list it
-	 * was written for and they arrive with block 3, which is where it belongs.
+	 * nothing may assert that a grab did not happen where UsArr cannot know:
+	 * Prowlarr adds a release to the download client BEFORE the step that failed
+	 * for the owner, and never rolls back. The vocabulary lives in
+	 * `$lib/requests` where a test can read it, not in this template.
 	 */
 	import { onMount } from 'svelte';
+	import { replaceState } from '$app/navigation';
+	import { SvelteURLSearchParams } from 'svelte/reactivity';
+	import { page } from '$app/state';
 	import { resolve } from '$app/paths';
 	import List from '$lib/List.svelte';
-	import type { ListColumn } from '$lib/list';
-	import { NOTHING } from '$lib/list';
+	import { NOTHING, capChips, type ListColumn, type ListState } from '$lib/list';
 	import { prefs } from '$lib/prefs.svelte';
+	import { createFrozenOrder, settle } from '$lib/frozenorder.svelte';
+	import { createRowState } from '$lib/rowstate.svelte';
+	import { createIndexerScope, parseIds } from '$lib/indexerscope.svelte';
+	import { compareBy, nextDir, readSort, writeSort, type SortColumn } from '$lib/sortspec';
 	import {
 		ApiError,
 		fetchRecentGrabs,
+		grabRelease,
 		openEventStream,
 		problemsFrom,
 		startSearch,
@@ -58,21 +94,119 @@
 		type SearchReport,
 		type StreamHandles
 	} from '$lib/api';
-	import { formatSize } from '$lib/format';
+	import { formatAge, formatSize } from '$lib/format';
 	import {
+		CODE_OUTCOME_UNKNOWN,
 		DEFAULT_SEARCH_TYPE,
+		FROZEN_ORDER_NOTE,
+		GRAB_ROW_STALE_NOTE,
+		KNOWLEDGE_STOPS_NOTE,
+		LIVE_GRAB_SENT_LABEL,
+		NOT_SENT_NOTE,
+		RECENT_GRAB_ROW_INTRINSIC,
+		RELEASE_ROW_INTRINSIC,
 		SEARCH_TYPES,
 		SEARCH_TYPE_NOTE,
 		THIN_COVERAGE_NOTE,
-		KNOWLEDGE_STOPS_NOTE,
-		NOT_SENT_NOTE,
-		RECENT_GRAB_ROW_INTRINSIC,
+		categoryLabel,
 		fanoutSummary,
+		flagsAbsence,
 		formatWhen,
 		grabOutcome,
+		grabWindow,
+		isEmphasisedFlag,
 		isFreeTextOnly,
+		liveGrabCopy,
 		searchTypeParam
 	} from '$lib/requests';
+
+	/** Per-row grab state, keyed by candidate id. Never by index — ADR-0038
+	 * clause 4, and `$lib/rowstate.svelte` for why this is the one of clause 4's
+	 * four states that has no other home. */
+	type GrabState = {
+		state: 'grabbing' | 'grabbed' | 'sent-unknown' | 'not-sent';
+		message: string;
+		code: string;
+		action: string;
+	};
+
+	/** What the results table can be sorted by. `id` matches the `ListColumn` it
+	 * sorts, which is what lets a header hand its own id back. */
+	const SORT_COLUMNS: SortColumn<Release>[] = [
+		{ id: 'age', defaultDir: 'asc', value: (r) => r.ageDays },
+		{ id: 'size', defaultDir: 'desc', value: (r) => r.sizeBytes },
+		{ id: 'grabs', defaultDir: 'desc', value: (r) => r.grabs },
+		{ id: 'peers', defaultDir: 'desc', value: (r) => r.seeders }
+	];
+
+	/** Newest first. `age_days` is the only sortable field the server sends on
+	 * EVERY release, so it is the one default that orders a usenet-only install
+	 * rather than collapsing straight to the tiebreak. */
+	const DEFAULT_SORT = { key: 'age', dir: 'asc' } as const;
+
+	/**
+	 * `width` is required on every column: `table-layout: auto` has to measure
+	 * every cell in every row, which is the one layout mode no containment can
+	 * help. See `$lib/list.ts`.
+	 *
+	 * `sortable` is the half this move added — the header becomes the sort
+	 * control for the four columns `SORT_COLUMNS` can compare, and stays plain
+	 * text for the rest, which is also what leaves Services untouched.
+	 *
+	 * `stackLine` is the TWO-LINE phone fork, which §9.1 gives to a list that is
+	 * scanned rather than read one row at a time.
+	 */
+	const COLUMNS: ListColumn[] = [
+		{ id: 'protocol', header: 'Protocol', width: '88px', stackLine: 2 },
+		{ id: 'age', header: 'Age', width: '76px', align: 'end', sortable: true, stackLine: 2 },
+		{
+			id: 'title',
+			header: 'Title',
+			width: 'minmax(0, 3fr)',
+			stackLabel: false,
+			stackLine: 1
+		},
+		{ id: 'indexer', header: 'Indexer', width: 'minmax(0, 1fr)', stackLine: 2 },
+		{ id: 'category', header: 'Category', width: 'minmax(0, 0.8fr)', stackLine: 'hidden' },
+		{ id: 'size', header: 'Size', width: '92px', align: 'end', sortable: true, stackLine: 2 },
+		{
+			id: 'grabs',
+			header: 'Grabs',
+			width: '80px',
+			align: 'end',
+			sortable: true,
+			stackLine: 'hidden'
+		},
+		// 112px, not 88px: `Not applicable` is the widest thing this cell can hold
+		// (a usenet release has no seeder count at all) and at 88px it wrapped onto
+		// a second line, which set the row height for every cell beside it — the
+		// tallest-cell failure §9.1 names. Measured in the browser, not guessed.
+		{
+			id: 'peers',
+			header: 'Peers',
+			width: '112px',
+			align: 'end',
+			sortable: true,
+			stackLine: 'hidden'
+		},
+		{ id: 'flags', header: 'Indexer flags', width: 'minmax(0, 1fr)', stackLine: 'hidden' },
+		// minmax(max-content, auto), never a fixed track: §9.1's overflow policy.
+		// A fixed track shears the buttons attached to exactly the rows that are
+		// in trouble, with no scrollbar and no way to reach what was cut.
+		{ id: 'actions', header: 'Actions', width: 'minmax(max-content, auto)', stackLine: 1 }
+	];
+
+	const grabColumns: ListColumn[] = [
+		{ id: 'when', header: 'When', width: '132px' },
+		{ id: 'release', header: 'Release', width: 'minmax(0, 3fr)' },
+		{ id: 'indexer', header: 'Indexer', width: 'minmax(0, 1fr)' },
+		{ id: 'protocol', header: 'Protocol', width: '92px' },
+		{ id: 'size', header: 'Size', width: '10ch', align: 'end' },
+		{ id: 'outcome', header: 'Outcome', width: 'minmax(0, 1.9fr)' }
+	];
+
+	const scope = createIndexerScope();
+	const rowGrabs = createRowState<number, GrabState>();
 
 	/* ── search state ─────────────────────────────────────────────────────── */
 
@@ -88,14 +222,12 @@
 	let searchErrorCode = $state('');
 	let streamGap = $state('');
 	let streamConnected = $state(false);
+	let pickerOpen = $state(false);
 
 	/**
-	 * The de-duplicated candidate set.
-	 *
-	 * It is held even though no results table renders yet, because block 2's
-	 * sentence is a claim about de-duplication and the only honest source for
-	 * "10 after de-duplication" is the merge actually having been done. Counting
-	 * frames instead would report the raw number twice.
+	 * THE ARRIVAL BUFFER, not the rendered list. Results land here in whatever
+	 * order the indexers answer; what the user sees is `order.rows`, which moves
+	 * only when ADR-0038 allows it to.
 	 */
 	let releases = $state<Release[]>([]);
 	let outcomes = $state<IndexerOutcome[]>([]);
@@ -117,6 +249,17 @@
 	 */
 	let now = $state(new Date());
 
+	/**
+	 * A separate, faster clock for the grab window.
+	 *
+	 * Fifteen seconds, because §17.5 requires the countdown to announce at 5, 2
+	 * and 1 minutes remaining and a 60-second clock can step straight over the
+	 * one-minute mark. It does NOT make the live region chatty: `grabWindow`
+	 * returns the same string for every instant inside a step, and an unchanged
+	 * `role="status"` announces nothing.
+	 */
+	let windowNow = $state(new Date());
+
 	let stream: StreamHandles | undefined;
 
 	/* ── derived ──────────────────────────────────────────────────────────── */
@@ -129,6 +272,41 @@
 	const rawReleases = $derived(
 		report ? report.results : outcomes.reduce((sum, o) => sum + o.count, 0)
 	);
+
+	/**
+	 * ADR-0038 clause 6: the sort key and direction live in the URL, so a sorted
+	 * search is linkable and survives a reload exactly rather than approximately.
+	 *
+	 * ⚠️ THE URL IS SEEDED FROM AND MIRRORED TO, NOT DERIVED FROM, and that is a
+	 * measured correction rather than a preference. Deriving `sort` from
+	 * `page.url` meant an explicit re-sort read the OLD comparator:
+	 * `replaceState` does not update `page.url` synchronously, so `order.resort()`
+	 * on the next line re-applied the order it already had. In the browser that
+	 * showed as the URL changing to `?sort=peers&dir=desc` while the rows did not
+	 * move at all — the silent kind of failure, since the control looked as
+	 * though it had worked. Local state is authoritative and `syncUrl` mirrors it.
+	 */
+	let sort = $state(readSort(page.url.searchParams, SORT_COLUMNS, DEFAULT_SORT));
+	const releaseKey = (release: Release) => String(release.candidateId);
+	const compare = $derived(
+		compareBy(
+			SORT_COLUMNS.find((c) => c.id === sort.key),
+			sort.dir,
+			releaseKey
+		)
+	);
+
+	const order = createFrozenOrder<Release>({
+		source: () => releases,
+		key: releaseKey,
+		compare: () => compare,
+		complete: () => finished
+	});
+
+	/** Aliased so the `use:` directive names a plain identifier. The action is
+	 * bound to nothing, so detaching it from the object is safe. */
+	const resultsRegion = order.region;
+
 	const fanout = $derived(
 		fanoutSummary({
 			answered,
@@ -136,20 +314,34 @@
 			releases: rawReleases,
 			deduped: releases.length,
 			finished,
-			// Block 3 is not on this screen, so nothing is "shown". Flip this
-			// with the results table and the sentence becomes §17.5's verbatim.
-			rendered: false
+			// ⚠️ THE TABLE IS ON THIS SCREEN NOW, so `shown` is a true claim about
+			// it and §17.5's sentence renders verbatim — "112 releases, 10 shown
+			// after de-duplication". This flag was the seam; this is it flipped.
+			rendered: true
 		})
 	);
 
-	const grabColumns: ListColumn[] = [
-		{ id: 'when', header: 'When', width: '132px' },
-		{ id: 'release', header: 'Release', width: 'minmax(0, 3fr)' },
-		{ id: 'indexer', header: 'Indexer', width: 'minmax(0, 1fr)' },
-		{ id: 'protocol', header: 'Protocol', width: '92px' },
-		{ id: 'size', header: 'Size', width: '10ch', align: 'end' },
-		{ id: 'outcome', header: 'Outcome', width: 'minmax(0, 1.9fr)' }
-	];
+	const listState: ListState = $derived.by(() => {
+		if (order.rows.length === 0) return searching ? 'loading' : 'empty';
+		return problems.length > 0 ? 'partial' : 'default';
+	});
+
+	/**
+	 * The grab window, measured from the EARLIEST expiry on screen.
+	 *
+	 * Earliest rather than latest, because the promise being kept is "an expired
+	 * release is never offered as grabbable" and one release being past it is
+	 * enough to break the promise. Prowlarr's cache is a non-rolling 30 minutes,
+	 * so in practice every candidate of one search expires within seconds of the
+	 * others and the distinction rarely shows.
+	 */
+	const earliestExpiry = $derived(
+		order.rows
+			.map((r) => r.expiresAt)
+			.filter((v): v is string => v !== undefined && !Number.isNaN(Date.parse(v)))
+			.sort((a, b) => Date.parse(a) - Date.parse(b))[0]
+	);
+	const grabWin = $derived(grabWindow(earliestExpiry, windowNow));
 
 	/**
 	 * `aria-rowcount` is only allowed to be a number when it is the truth. A
@@ -159,12 +351,13 @@
 	 */
 	const grabTotal = $derived(grabs.length < grabsLimit ? grabs.length : undefined);
 	const rowIntrinsic = $derived(RECENT_GRAB_ROW_INTRINSIC[prefs.density] ?? 44);
+	const releaseIntrinsic = $derived(RELEASE_ROW_INTRINSIC[prefs.density] ?? 45);
 
 	/* ── behaviour ────────────────────────────────────────────────────────── */
 
 	// Results stream as indexers answer, so the cross-indexer dedupe cannot be
 	// done up front: a later, higher-priority indexer names the candidate it
-	// replaces (internal/httpapi/search.go).
+	// replaces and this drops the superseded row (internal/httpapi/search.go).
 	function mergeReleases(incoming: Release[]) {
 		let next = releases;
 		for (const release of incoming) {
@@ -178,6 +371,10 @@
 	}
 
 	function noteIndexer(outcome: IndexerOutcome, phase: string) {
+		// Every frame names an indexer, and the started phase names it before it
+		// has answered — which is what makes the picker's catalogue the full set
+		// rather than only the indexers that returned a row.
+		scope.learn(outcome.indexerId, outcome.name);
 		if (phase !== 'indexer_done') return;
 		outcomes = [...outcomes.filter((o) => o.indexerId !== outcome.indexerId), outcome];
 	}
@@ -199,10 +396,13 @@
 		}
 	}
 
+	// One stream for the whole page, opened once. Results are appended as they
+	// arrive per indexer — that progressive render is the point of the SSE design.
 	onMount(() => {
 		void loadGrabs();
 
 		const tick = setInterval(() => (now = new Date()), 60_000);
+		const windowTick = setInterval(() => (windowNow = new Date()), 15_000);
 
 		stream = openEventStream(
 			(event) => {
@@ -227,8 +427,15 @@
 						break;
 					case 'done':
 						report = event.report;
+						for (const outcome of event.report?.indexers ?? []) {
+							scope.learn(outcome.indexerId, outcome.name);
+						}
 						searching = false;
 						finished = true;
+						// ADR-0038 clause 2's completion edge. It is a call rather than
+						// an effect because only this handler knows that the last batch
+						// of rows has already landed; see `settle`.
+						settle(order);
 						break;
 					case 'failed':
 						searchError = event.action ? `${event.message} — ${event.action}` : event.message;
@@ -239,36 +446,156 @@
 			(connected) => (streamConnected = connected)
 		);
 
+		const params = page.url.searchParams;
+		// A link that names indexers wins over the sticky selection: whoever sent
+		// it meant that scope, and adopting it makes the link do what it says.
+		const linked = parseIds(params.getAll('indexer').join(','));
+		if (linked.length > 0) scope.adopt(linked);
+
+		const linkedType = params.get('type') ?? '';
+		if (SEARCH_TYPES.some((t) => t.id === linkedType)) searchType = linkedType;
+
+		const linkedQuery = (params.get('q') ?? '').trim();
+		if (linkedQuery !== '') {
+			query = linkedQuery;
+			void runSearch();
+		}
+
 		return () => {
 			clearInterval(tick);
+			clearInterval(windowTick);
 			stream?.close();
 		};
 	});
 
-	async function runSearch(event: SubmitEvent) {
-		event.preventDefault();
+	/**
+	 * THE ONE PLACE THE URL IS WRITTEN.
+	 *
+	 * `replaceState` from `$app/navigation`, not `goto`: this is shallow routing.
+	 * The screen is not going anywhere — it is recording the state it is already
+	 * in — so there is no load to re-run, no scroll to reset and no focus to
+	 * move. Replace rather than push, because a Back button that walks sort
+	 * directions is not what Back is for.
+	 *
+	 * eslint's `no-navigation-without-resolve` wants the argument to be a
+	 * `resolve()` call, whose type is a bare `ResolvedPathname`. A resolved
+	 * pathname cannot carry a query string, and the query string is the entire
+	 * point here — ADR-0038 clause 6 puts the sort in it — so the URL is built
+	 * from `page.url`, which is already resolved, and the rule is suppressed at
+	 * the single call site rather than turned off for the file.
+	 */
+	function writeUrl(params: URLSearchParams) {
+		const search = params.toString();
+		// `page.url.pathname` already carries any configured base path, so this is
+		// a resolved path with a query string appended and nothing more.
+		const href = search === '' ? page.url.pathname : `${page.url.pathname}?${search}`;
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- see above: a ResolvedPathname cannot carry ?sort=
+		replaceState(href, page.state);
+	}
+
+	/** The query, the type, the sort and the scope — all of it linkable. */
+	function syncUrl(text: string) {
+		const params = new SvelteURLSearchParams();
+		if (text) params.set('q', text);
+		if (searchType !== DEFAULT_SEARCH_TYPE) params.set('type', searchType);
+		writeSort(params, sort);
+		for (const id of scope.selected) params.append('indexer', String(id));
+		writeUrl(params);
+	}
+
+	/**
+	 * AN EXPLICIT RE-SORT, arriving from a column header.
+	 *
+	 * With the re-sort control it is one of exactly two things that may reorder a
+	 * frozen list, and it is allowed precisely because the user operated a sort
+	 * control — §9.1a's own words. The header being inside the frozen region does
+	 * not change that: the freeze forbids the order moving without being asked.
+	 */
+	function onsort(id: string) {
+		// Local state first, so `compare` has already re-derived by the time
+		// `resort()` reads it. See the note on `sort`.
+		sort = { key: id, dir: nextDir(SORT_COLUMNS, sort, id) };
+		syncUrl(submitted);
+		order.resort();
+	}
+
+	async function runSearch(event?: SubmitEvent) {
+		event?.preventDefault();
 		const trimmed = query.trim();
 		if (trimmed === '') return;
 
 		submitted = trimmed;
 		searchId = undefined;
 		releases = [];
+		order.reset();
 		outcomes = [];
 		report = undefined;
+		rowGrabs.clear();
 		searchError = '';
 		searchErrorCode = '';
 		streamGap = '';
 		finished = false;
 		searching = true;
+		windowNow = new Date();
+
+		syncUrl(trimmed);
 
 		try {
-			const accepted = await startSearch(trimmed, searchTypeParam(searchType));
+			// The scope narrows the fan-out server-side, before the legs are
+			// planned, so an unselected indexer spends none of its rate limit.
+			const accepted = await startSearch(trimmed, {
+				type: searchTypeParam(searchType),
+				indexerIds: scope.selected
+			});
 			if (accepted.searchId) searchId = accepted.searchId;
 		} catch (error) {
 			searching = false;
 			searchError = error instanceof ApiError ? error.detail : String(error);
 			searchErrorCode = error instanceof ApiError ? error.code : '';
 		}
+	}
+
+	function toggleIndexer(id: number) {
+		scope.toggle(id);
+		syncUrl(submitted);
+	}
+
+	function clearScope() {
+		scope.clear();
+		syncUrl(submitted);
+	}
+
+	/**
+	 * Send one release to Prowlarr's download client.
+	 *
+	 * §17.5's three-state rule is applied off the server's ERROR CODE and never
+	 * off its prose. `$lib/requests.liveGrabCopy` owns the mapping and the words;
+	 * this owns the request and where the answer is put.
+	 */
+	async function grab(release: Release) {
+		const id = release.candidateId;
+		if (grabWin.expired || rowGrabs.get(id)?.state === 'grabbing') return;
+
+		rowGrabs.set(id, { state: 'grabbing', message: '', code: '', action: '' });
+		try {
+			const result = await grabRelease(id);
+			rowGrabs.set(id, { state: 'grabbed', message: result.message, code: '', action: '' });
+		} catch (error) {
+			if (!(error instanceof ApiError)) {
+				rowGrabs.set(id, { state: 'not-sent', message: String(error), code: '', action: '' });
+			} else {
+				rowGrabs.set(id, {
+					// The one code that is not a failure. See `liveGrabCopy`.
+					state: error.code === CODE_OUTCOME_UNKNOWN ? 'sent-unknown' : 'not-sent',
+					message: error.detail,
+					code: error.code,
+					action: error.action
+				});
+			}
+		}
+		// Both arms refresh the record: the ambiguous state writes a provenance
+		// row too, precisely so the infohash join key survives (internal/releases).
+		void loadGrabs();
 	}
 </script>
 
@@ -283,44 +610,46 @@
 
 <!-- ══ BLOCK 1 — the search toolbar ═══════════════════════════════════════ -->
 
-<form class="toolbar" onsubmit={runSearch}>
-	<label class="toolbar__label" for="req-query">Query</label>
-	<input
-		id="req-query"
-		class="input req-query"
-		name="query"
-		type="search"
-		autocomplete="off"
-		placeholder="Release name, or part of one"
-		bind:value={query}
-	/>
+<div class="section">
+	<form class="searchbar" onsubmit={runSearch}>
+		<label class="sr" for="req-query">Search terms</label>
+		<input
+			id="req-query"
+			name="query"
+			type="search"
+			class="searchbar__input"
+			autocomplete="off"
+			placeholder="Release name, or part of one"
+			bind:value={query}
+		/>
 
-	<label class="toolbar__label" for="req-type">Search type</label>
-	<!--
-		Native <select>. The five values are Prowlarr's own, and the five ids map
-		to the `type=` parameter in $lib/requests rather than here — a label that
-		reads "TV" travels as `tvsearch`, and getting that wrong is invisible:
-		Prowlarr does not error on an unrecognised type, it quietly runs a basic
-		search instead.
-	-->
-	<select id="req-type" class="select" bind:value={searchType} aria-describedby="req-type-note">
-		{#each SEARCH_TYPES as type (type.id)}
-			<option value={type.id}>{type.label}</option>
-		{/each}
-	</select>
+		<label class="toolbar__label" for="req-type">Search type</label>
+		<!--
+			Native <select>. The five values are Prowlarr's own, and the five ids map
+			to the `type=` parameter in $lib/requests rather than here — a label that
+			reads "TV" travels as `tvsearch`, and getting that wrong is invisible:
+			Prowlarr does not error on an unrecognised type, it quietly runs a basic
+			search instead.
+		-->
+		<select id="req-type" class="select" bind:value={searchType} aria-describedby="req-type-note">
+			{#each SEARCH_TYPES as type (type.id)}
+				<option value={type.id}>{type.label}</option>
+			{/each}
+		</select>
 
-	<button type="submit" class="btn btn--primary" disabled={query.trim() === ''}>Search</button>
+		<button type="submit" class="btn btn--primary" disabled={query.trim() === ''}>Search</button>
+		<button
+			type="button"
+			class="btn"
+			aria-expanded={pickerOpen}
+			aria-controls="indexer-picker"
+			onclick={() => (pickerOpen = !pickerOpen)}
+		>
+			{scope.isAll ? 'Indexers' : `Indexers (${scope.selected.length})`}
+		</button>
+	</form>
 
-	<!--
-		SEAM — the indexer and category multi-selects.
-
-		They arrive with the /search takeover, alongside the sortable results
-		table and the flag chips, and they are deliberately absent rather than
-		stubbed: a scope control that does not scope anything is worse than no
-		control, because the user reads the search as narrowed when it was not.
-	-->
-
-	<span class="toolbar__label toolbar__note" id="req-type-note">
+	<p class="req-note" id="req-type-note">
 		{SEARCH_TYPE_NOTE}
 		{#if isFreeTextOnly(searchType)}
 			<!-- SW-08, at the point of use: a search that runs correctly against
@@ -329,8 +658,60 @@
 			     rather than the query. -->
 			<span class="req-coverage">{THIN_COVERAGE_NOTE}</span>
 		{/if}
-	</span>
-</form>
+	</p>
+
+	<!--
+		THE SCOPE IS STATED IN WORDS WHENEVER IT IS NOT THE DEFAULT, next to the
+		search box rather than inside a picker somebody has to open. A filter that
+		persists silently across sessions is how a user concludes an indexer is
+		broken when they simply left it deselected weeks ago.
+	-->
+	{#if scope.summary}
+		<p class="scopeline" role="status">
+			<span>{scope.summary}</span>
+			<span class="muted">This selection is remembered between searches.</span>
+			<button type="button" class="linkish" onclick={clearScope}>Search all indexers</button>
+		</p>
+	{/if}
+
+	{#if pickerOpen}
+		<div class="picker" id="indexer-picker">
+			<fieldset class="picker__set">
+				<legend class="picker__legend">Indexers to search</legend>
+				{#if scope.known.length === 0}
+					<p class="picker__note">
+						No indexer has reported yet. Run one search and every indexer this Prowlarr asked will
+						be listed here.
+					</p>
+				{:else}
+					<div class="picker__grid">
+						{#each scope.known as indexer (indexer.id)}
+							<label class="check">
+								<input
+									type="checkbox"
+									checked={scope.isSelected(indexer.id)}
+									onchange={() => toggleIndexer(indexer.id)}
+								/>
+								<span>{indexer.name}</span>
+							</label>
+						{/each}
+					</div>
+				{/if}
+				<!--
+					⚠️ AN HONEST LABEL ON A FALLBACK. There is no endpoint that lists a
+					Prowlarr instance's indexers, so this catalogue is built from what
+					searches have already reported. Implying it is Prowlarr's configured
+					list would be an invented status.
+				-->
+				<p class="picker__note muted">
+					UsArr has no endpoint that reads Prowlarr's own indexer list, so this is built from the
+					indexers that searches have reported so far. An indexer that has never answered here will
+					not appear until it does. Selecting none searches all of them.
+				</p>
+			</fieldset>
+		</div>
+	{/if}
+</div>
 
 <!--
 	Every banner below is non-modal and sits above the content. Nothing is greyed
@@ -429,8 +810,8 @@
 	<!--
 		One banner per indexer that did not answer, non-modal, with the upstream's
 		own words verbatim (§9.5, §17.3). Per-indexer rather than one aggregate
-		line: "3 indexers failed" is not something a user can act on, and the
-		three reasons are usually three different problems.
+		line: "3 indexers are not answering" is not something a user can act on,
+		and the three reasons are usually three different problems.
 	-->
 	<div class="banner banner--warn" role="status">
 		<div class="banner__body">
@@ -449,29 +830,284 @@
 <!-- ══ BLOCK 3 — release results ══════════════════════════════════════════ -->
 
 <!--
-	INTEGRATION POINT, NOT AN OMISSION.
-
-	The per-release results table — sortable columns, indexer flag chips, the
-	grab window countdown, the Grab control and ADR-0038's ordering rule, which
-	freezes a list while a user is aiming at it by pointer or by focus — arrives
-	here from the /search takeover, which is landing that work on its own screen
-	first. It is not duplicated here in the meantime: two
-	results tables built from the same SSE stream by two threads is how they end
-	up disagreeing about what a de-duplicated row is, and this screen already
-	states the counts that table would have to match.
-
-	When it lands: render it inside this region, and set `rendered: true` on the
-	fanoutSummary() call above so its sentence says "shown after de-duplication"
-	rather than "after de-duplication". That flag is the seam.
+	THE RESULTS REGION: the result rows and their header, and nothing else. While
+	the pointer is inside it OR focus is within it, the order is frozen — and the
+	`use:` action is where both halves of that condition are wired. The section
+	head, the countdown and the re-sort control sit inside it too, which is
+	correct: a hand on the re-sort button is a hand aimed at this list.
 -->
-<div class="section" data-block="release-results">
-	<div class="section__head"><h2>Release results</h2></div>
-	<p class="req-note">
-		The per-release results table is not on this screen yet — it is being finished on
-		<a href={resolve('/search')}>Search</a>, and it moves here when it is. The counts above are real
-		and come from the search you just ran; a release can only be grabbed from Search until then.
-	</p>
-</div>
+<section class="section" id="release-results" use:resultsRegion>
+	<div class="section__head">
+		<h2>Release results</h2>
+		{#if order.rows.length > 0}
+			<span class="section__count num">
+				{order.rows.length}
+				{order.rows.length === 1 ? 'result' : 'results'}
+			</span>
+		{/if}
+		<span class="section__actions">
+			{#if order.hasPending}
+				<!--
+					ADR-0038's ONE EXPLICIT CONTROL, carrying its own count. A late
+					straggler is not a separate case and gets no separate surface: it is
+					another thing that would have reordered, it is counted here, and it
+					does not enter the rendered list until this is pressed. There is no
+					append-below-marked-late mechanism, and that is a rejection rather
+					than an omission.
+				-->
+				<button type="button" class="btn" onclick={() => order.resort()}>
+					{order.pendingLabel}
+				</button>
+			{/if}
+			{#if grabWin.expired && submitted}
+				<button type="button" class="btn btn--primary" onclick={() => runSearch()}>
+					Search again
+				</button>
+			{/if}
+		</span>
+	</div>
+
+	{#if order.hasPending}
+		<p class="req-note">{FROZEN_ORDER_NOTE}</p>
+	{/if}
+
+	<!--
+		THE GRAB WINDOW. §17.5 makes this a requirement rather than a nicety: the
+		screen states that an expired release is never offered as grabbable, and
+		that is only true if the client acts on it. Otherwise a user who read
+		"closes in 18 minutes", worked through the list and pressed Grab receives a
+		400 they were promised could not happen.
+
+		TWO ELEMENTS, ON PURPOSE. The always-visible reading ticks; the
+		`role="status"` beneath it carries a string that CHANGES ONLY at 5, 2 and 1
+		minutes remaining and at zero, so it announces three times rather than
+		every fifteen seconds. An unchanged live region announces nothing.
+	-->
+	{#if order.rows.length > 0 && grabWin.label}
+		<p class="req-note req-window">{grabWin.label}</p>
+	{/if}
+	<p class="req-note req-window" role="status">{grabWin.notice}</p>
+
+	<!--
+		NO `onactivate`. The primitive fires Enter or Space on a focused row if it
+		is given a handler, and the only thing this row does is irreversible — so
+		walking the list with the arrow keys and pressing Enter would send a
+		multi-gigabyte release to a download client. Grab is a button the user aims
+		at, and nothing else on this row is worth a whole-row activation.
+	-->
+	<List
+		label="Release results"
+		columns={COLUMNS}
+		rows={order.rows}
+		key={releaseKey}
+		stack="two-line"
+		state={listState}
+		rowIntrinsic={releaseIntrinsic}
+		sortKey={sort.key}
+		sortDir={sort.dir}
+		{onsort}
+		loadingNote="Waiting for the first indexer to report."
+		partialNote={report?.summary ??
+			'Some indexers have not answered, so these results are partial.'}
+		emptyTitle={submitted ? 'No releases matched' : 'Nothing searched yet'}
+		emptyText={submitted
+			? `Indexer search matches what the indexer itself matches, and UsArr does not rewrite the query. Nothing came back for “${submitted}”. The line above says how many indexers answered, which is what separates “nothing matched” from “nobody answered”.`
+			: 'Free-text search across the indexers configured in Prowlarr. Results stream in per indexer as they answer, and Grab posts the release back to Prowlarr.'}
+	>
+		{#snippet cell(release: Release, column: ListColumn)}
+			{#if column.id === 'protocol'}
+				{#if release.protocol}
+					<span class="proto">{release.protocol}</span>
+				{:else}
+					<span class="muted">{NOTHING.empty}</span>
+				{/if}
+			{:else if column.id === 'age'}
+				{formatAge(release.ageDays) || NOTHING.empty}
+			{:else if column.id === 'title'}
+				<!-- An identity string: truncated at the cell with the full value in
+				     `title`, and never `overflow-wrap: anywhere`, which renders x264
+				     as x26 / 4 and destroys the thing the reader is scanning for. -->
+				<span class="mono trunc" title={release.title}>{release.title}</span>
+				{@const grabState = rowGrabs.get(release.candidateId)}
+				{#if grabState && grabState.state !== 'grabbing'}
+					{@const copy = liveGrabCopy(grabState.code)}
+					<div class="grabstate">
+						{#if grabState.state === 'grabbed'}
+							<!--
+								The strongest true word. Prowlarr's 200 means Prowlarr accepted
+								the release, not that a download is running, and UsArr
+								deliberately stops observing at handoff — so it will never
+								learn more than this.
+
+								⚠️ A PLAIN CHIP, NOT `chip--done`. The previous screen painted
+								this one green and it should not be: §9.5 reserves chroma for
+								what is WRONG, and Recent grabs already renders the SAME state
+								— a stored `sent` row — neutral for exactly that reason. Two
+								renderings of one fact in two colours is the disagreement this
+								move exists to remove. The green also spelled a word §17.5
+								bans on this screen, which is how it was noticed.
+							-->
+							<span class="chip">{LIVE_GRAB_SENT_LABEL}</span>
+						{:else if grabState.state === 'sent-unknown'}
+							<!--
+								⚠️ NOT A FAILURE, AND NEVER RENDERED AS ONE. The release reached
+								Prowlarr; what the download client did with it is unknown, and
+								the owner's own book downloaded end to end in Deluge while
+								UsArr reported an error. The chip sits beside the confirmed one
+								verbally, and the server's action renders as TEXT — the only
+								button that would fit here is one that sends the release again,
+								and that is what produces two copies of a 68 GB release.
+							-->
+							<span class="chip chip--pending">{copy.label}</span>
+							<span class="cell-sub">{grabState.message}</span>
+							{#if grabState.action}<span class="cell-sub">{grabState.action}</span>{/if}
+						{:else}
+							<span class="chip chip--failed">{copy.label}</span>
+							<span class="cell-sub">{grabState.message}</span>
+							{#if grabState.action && !copy.offersSearchAgain}
+								<span class="cell-sub">{grabState.action}</span>
+							{/if}
+						{/if}
+					</div>
+				{/if}
+			{:else if column.id === 'indexer'}
+				<span class="trunc" title={release.indexerName ?? ''}>
+					{release.indexerName ?? NOTHING.empty}
+				</span>
+			{:else if column.id === 'category'}
+				<!-- The server's own `type:` / `format:` tags, not a client-side
+				     re-derivation of the Newznab tree: mapping.MediaType runs two
+				     passes so [3000, 3030] reads `book · audiobook` rather than
+				     `music`, which is exactly what category 3030 exists to prevent. -->
+				{@const label = categoryLabel(release.tags, release.categories)}
+				{#if label}
+					<span class="trunc" title={label}>{label}</span>
+				{:else}
+					<span class="muted">{NOTHING.empty}</span>
+				{/if}
+			{:else if column.id === 'size'}
+				{formatSize(release.sizeBytes) || NOTHING.empty}
+			{:else if column.id === 'grabs'}
+				{release.grabs === undefined ? NOTHING.empty : release.grabs.toLocaleString('en-GB')}
+			{:else if column.id === 'peers'}
+				<!-- `Peers` is Prowlarr's own word, so the header keeps it and the CELL
+				     says what its parts are — §9.1's composite-numeric rule. -->
+				{#if release.seeders === undefined}
+					<span class="muted">
+						{release.protocol === 'usenet' ? NOTHING.inapplicable : NOTHING.empty}
+					</span>
+				{:else}
+					{release.seeders.toLocaleString('en-GB')} / {(release.leechers ?? 0).toLocaleString(
+						'en-GB'
+					)}
+					<span class="sr">
+						— {release.seeders} seeders, {release.leechers ?? 0} leechers
+					</span>
+				{/if}
+			{:else if column.id === 'flags'}
+				<!--
+					⚠️ AN OPEN VOCABULARY. Prowlarr's IndexerFlag is a subclassable
+					class, not an enum — PassThePopcorn adds `golden` and `approved` on
+					top of the base type's seven — so a chip renders whatever string
+					arrives and nothing here matches a known list. An allowlist would
+					drop every future indexer's flags INVISIBLY, the row simply showing
+					fewer chips than the indexer sent.
+
+					The one step of emphasis on `freeleech` and `halfleech` is weight and
+					fill, never hue: chroma marks what is wrong, and a free download is
+					not wrong. Three chips plus `+N more` (§9.1).
+
+					And an empty cell is UNKNOWN, never "not freeleech" — $lib/requests
+					owns which of the two absences it is, and neither of them is "None".
+				-->
+				{#if (release.indexerFlags ?? []).length === 0}
+					<span class="muted">{flagsAbsence(release.protocol)}</span>
+				{:else}
+					{@const chips = capChips(release.indexerFlags ?? [])}
+					<span class="chips">
+						{#each chips.shown as flag, i (i)}
+							<span class="chip" class:chip--leech={isEmphasisedFlag(flag)}>{flag}</span>
+						{/each}
+						{#if chips.more > 0}<span class="chip">+{chips.more} more</span>{/if}
+					</span>
+				{/if}
+			{:else if column.id === 'actions'}
+				{@const grabState = rowGrabs.get(release.candidateId)}
+				{@const copy = liveGrabCopy(grabState?.code ?? '')}
+				<div class="cell-actions">
+					{#if grabState?.state === 'grabbed' || grabState?.state === 'sent-unknown'}
+						<!-- Nothing to offer. The release is handed over, and an unknown
+						     outcome is resolved in the download client, not here. -->
+					{:else if grabState?.state === 'not-sent' && copy.offersSearchAgain}
+						<!-- The cache dropped this listing, so the same opaque id answers
+						     the same 4xx for ever. A fresh search is the one action that
+						     can work. -->
+						<button type="button" class="btn btn--sm" onclick={() => runSearch()}>
+							Search again
+						</button>
+					{:else if grabState?.state === 'not-sent'}
+						<!-- ⚠️ NO BUTTON, AND THIS IS THE NARROWING THE MOVE MADE. Every
+						     code left under here is a bad API key, an open breaker, an
+						     SSRF refusal, a Prowlarr 400 or 409, a corrupt stored blob or
+						     a body Prowlarr would not bind — not one of which is fixed by
+						     pressing the same button again. The server's own sentence is
+						     beside the title, where it says why. -->
+					{:else}
+						<!--
+							A VISIBLE TEXT LABEL, NEVER A BARE ICON. §17.5 and
+							DESIGN-DIRECTION §13: an irreversible multi-gigabyte action may
+							not be an unlabelled glyph eight pixels from a benign one —
+							particularly a download arrow, which means "download this file
+							to my computer" everywhere else and here means "send this to
+							your download client via Prowlarr".
+
+							`aria-disabled` rather than `disabled` once the window has
+							closed, so the control keeps its place in the tab order and can
+							still be read. The handler returns early either way.
+						-->
+						<button
+							type="button"
+							class="btn btn--sm"
+							onclick={() => grab(release)}
+							aria-disabled={grabWin.expired || grabState?.state === 'grabbing'
+								? 'true'
+								: undefined}
+						>
+							{grabState?.state === 'grabbing' ? 'Sending' : 'Grab'}
+						</button>
+					{/if}
+
+					{#if release.infoUrl}
+						<!--
+							THE INDEXER'S OWN PAGE, AND NEVER A DOWNLOAD URL. Prowlarr
+							rewrites downloadUrl and magnetUrl into proxy links carrying its
+							FULL ADMIN API KEY, so neither is on the wire at all
+							(internal/httpapi/search.go). This is `info_url`, which has been
+							through the query-parameter deny-list because a private tracker
+							puts its passkey there.
+
+							`resolve()` is inapplicable and the rule is suppressed rather
+							than satisfied: this is an ABSOLUTE URL AT ANOTHER ORIGIN, chosen
+							by the indexer, and `resolve()` builds an internal path from a
+							route id. `rel="noreferrer noopener"` is the part that actually
+							matters here — a private tracker must not receive UsArr's URL as
+							a Referer, and the opened tab must not get a handle on this one.
+						-->
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- an indexer-supplied absolute URL at another origin; resolve() builds internal paths -->
+						<a class="btn btn--sm" href={release.infoUrl} target="_blank" rel="noreferrer noopener"
+							>Indexer page</a
+						>
+					{/if}
+				</div>
+				{#if grabWin.expired && grabState?.state !== 'grabbed'}
+					<!-- The row-level note §17.5 requires beside a disabled control. The
+					     sentence that explains it is above the table, once. -->
+					<div class="cell-sub">{GRAB_ROW_STALE_NOTE}</div>
+				{/if}
+			{/if}
+		{/snippet}
+	</List>
+</section>
 
 <!-- ══ BLOCK 4 — recent grabs ═════════════════════════════════════════════ -->
 
@@ -527,12 +1163,16 @@
 			labelled one, and this is the second: the question a row answers is
 			"did that one work?", so Outcome may not be one of the fields the
 			two-line fork drops. Ten rows bounds what that costs.
+
+			`key` hands the id straight through rather than through String(): it is
+			already an opaque string, and nothing on this screen may sort on it,
+			compare it numerically or read anything out of its shape.
 		-->
 		<List
 			label="Recent grabs"
 			columns={grabColumns}
 			rows={grabs}
-			key={(g) => String(g.id)}
+			key={(g: RecentGrab) => g.id}
 			total={grabTotal}
 			{rowIntrinsic}
 			stack="labels"
@@ -553,9 +1193,6 @@
 						<span class="muted">{NOTHING.empty}</span>
 					{/if}
 				{:else if column.id === 'release'}
-					<!-- An identity string: truncated at the cell with the full value in
-					     `title`, and never `overflow-wrap: anywhere`, which renders x264
-					     as x26 / 4 and destroys the thing the reader is scanning for. -->
 					<span class="mono trunc" title={grab.releaseTitle}>{grab.releaseTitle}</span>
 				{:else if column.id === 'indexer'}
 					{#if grab.indexerName}
@@ -565,12 +1202,7 @@
 					{/if}
 				{:else if column.id === 'protocol'}
 					{#if grab.protocol}
-						<!-- Achromatic swatch: the words `torrent` and `usenet` carry the
-						     distinction, because a torrent green one column from a status
-						     green is the one collision this ramp cannot afford. -->
-						<span class="proto"
-							><span class="proto__dot" aria-hidden="true"></span>{grab.protocol}</span
-						>
+						<span class="proto">{grab.protocol}</span>
 					{:else}
 						<span class="muted">{NOTHING.empty}</span>
 					{/if}
@@ -621,13 +1253,84 @@
 	 * Nothing is set from a `style` attribute: the server sends
 	 * `style-src 'self'` with no 'unsafe-inline', so an inline style stays in
 	 * the DOM and applies nothing.
+	 *
+	 * And nothing here carries a transition. §9.1a: sort is 0 ms and a reorder is
+	 * never animated anywhere, because an animation widens the window in which
+	 * the row under the pointer is neither where it was nor where it is going.
 	 */
+	.searchbar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--space-3);
+	}
 
-	/* The query field is the control the screen is for, so it takes the slack in
-	 * the toolbar's flex row rather than sitting at its intrinsic width. */
-	.req-query {
-		flex: 1 1 280px;
+	.searchbar__input {
+		flex: 1 1 20rem;
 		min-width: 0;
+		min-height: var(--control-h);
+		padding: 0 var(--space-4);
+		background: var(--bg-inset);
+		color: var(--fg);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-sm);
+		font-size: var(--text-md);
+	}
+
+	.scopeline {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: var(--space-2) var(--space-4);
+		margin: var(--space-4) 0 0;
+		font-size: var(--text-sm);
+		line-height: var(--leading-sm);
+	}
+
+	.picker {
+		margin-top: var(--space-4);
+	}
+
+	.picker__set {
+		margin: 0;
+		padding: var(--space-4) var(--space-5);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius-sm);
+		background: var(--bg-raised);
+	}
+
+	.picker__legend {
+		padding: 0 var(--space-2);
+		font-size: var(--text-sm);
+		line-height: var(--leading-sm);
+		font-weight: var(--weight-semibold);
+	}
+
+	.picker__grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+		gap: var(--space-2) var(--space-5);
+	}
+
+	.picker__note {
+		margin: var(--space-4) 0 0;
+		max-width: 78ch;
+		font-size: var(--text-sm);
+		line-height: var(--leading-sm);
+	}
+
+	/* The chips of one cell wrap together rather than each finding its own line. */
+	.chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+	}
+
+	.grabstate {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: var(--space-2) var(--space-3);
 	}
 
 	/* The type-specific coverage sentence takes its own line under the standing
@@ -656,12 +1359,12 @@
 		min-width: 0;
 	}
 
-	/* A block-level note: the sentences §17.5 requires around Recent grabs, and
-	 * the placeholder in the block-3 seam. Left-aligned in flow at the same
-	 * content edge as the table it sits above, never a centred box. */
+	/* A block-level note: the sentences §17.5 requires around each block. Left
+	 * aligned in flow at the same content edge as the table it sits above, never
+	 * a centred box. */
 	.req-note {
 		max-width: 78ch;
-		margin-top: var(--space-2);
+		margin: var(--space-2) 0 0;
 		color: var(--fg-muted);
 		font-size: var(--text-sm);
 		line-height: var(--leading-sm);
@@ -669,5 +1372,16 @@
 
 	.req-note + .req-note {
 		margin-bottom: var(--space-4);
+	}
+
+	.req-window {
+		margin-top: var(--space-1);
+	}
+
+	/* An empty live region stays IN FLOW and is never display:none — a region
+	 * hidden that way is not announced when it later fills. It simply takes no
+	 * vertical space until it has something to say. */
+	.req-window:empty {
+		margin: 0;
 	}
 </style>

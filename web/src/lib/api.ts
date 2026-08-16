@@ -154,6 +154,22 @@ export interface Release {
 	 * results never carry flags whatever the indexer offers.
 	 */
 	indexerFlags?: string[];
+	/** Raw Newznab category ids, the parent and the specific one together —
+	 * `[2000, 2040]`. The Category column's fallback for a category the server
+	 * derived no `type:` tag for. */
+	categories: number[];
+	/**
+	 * The system tags internal/releases derived — `type:movie`, `source:torrent`,
+	 * `flag:freeleech`.
+	 *
+	 * The Category column reads `type:` and `format:` from HERE rather than
+	 * mapping the raw ids itself, and that is not laziness: `mapping.MediaType`
+	 * runs TWO passes so that `[3000, 3030]` — an audiobook, which Prowlarr emits
+	 * parent-first — comes out `type:book · audiobook` rather than `type:music`,
+	 * which is precisely the mistake category 3030 exists to prevent. One rule,
+	 * server-side.
+	 */
+	tags: string[];
 	infoUrl?: string;
 	expiresAt?: string;
 	/** The candidate this result replaces, when a higher-priority indexer answered later. */
@@ -239,6 +255,11 @@ function bool(value: unknown): boolean {
  * Deliberately NOT validated against a known vocabulary: its only caller is
  * `indexer_flags`, which is open by construction. See Release.indexerFlags.
  */
+function numArray(value: unknown): number[] {
+	if (!Array.isArray(value)) return [];
+	return value.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+}
+
 function strArray(value: unknown): string[] | undefined {
 	if (!Array.isArray(value)) return undefined;
 	const out = value.filter((v): v is string => typeof v === 'string' && v.length > 0);
@@ -270,6 +291,8 @@ export function toRelease(value: unknown): Release | undefined {
 		// `indexer_flags`, not `flags`. The Go field is Flags and the JSON tag is
 		// not, which is exactly how this field went unread for a whole slice.
 		indexerFlags: strArray(value.indexer_flags),
+		categories: numArray(value.categories),
+		tags: strArray(value.tags) ?? [],
 		infoUrl: str(value.info_url),
 		expiresAt: str(value.expires_at),
 		supersedesCandidateId: num(value.supersedes_candidate_id)
@@ -1190,6 +1213,23 @@ export async function deleteService(id: number): Promise<void> {
  * visible to the user, so the caller must not collapse them.
  */
 export interface SearchScope {
+	/**
+	 * The `type=` value internal/httpapi/search.go accepts — `search`, `movie`,
+	 * `tvsearch`, `music`, `book`. Omitted rather than sent empty: the server's
+	 * setSearchType maps "" to a basic search, so both spellings mean the same
+	 * thing and the shorter URL is the one that reads in a log. An unrecognised
+	 * value is a 400 on purpose — Prowlarr itself would silently degrade to a
+	 * basic search, which looks like the filter did nothing.
+	 *
+	 * It lives in this object rather than in a second positional parameter. It
+	 * WAS a positional, and the comment there recorded that as a merge decision
+	 * rather than a design one: two screens called this at the time, and folding
+	 * it would have meant editing one of them from the other's thread. There is
+	 * one caller now — the release-search surface is on Requests and nowhere else
+	 * — so the shape is tidied. A scalar positional beside an object positional is
+	 * exactly the call site people get wrong later.
+	 */
+	type?: string;
 	/** Prowlarr indexer ids. Repeated as `?indexer=` — the server reads them
 	 * with queryInt32s, which takes the parameter more than once. */
 	indexerIds?: number[];
@@ -1208,27 +1248,9 @@ function appendIds(params: URLSearchParams, name: string, ids: number[] | undefi
 	}
 }
 
-/**
- * `type` stays the SECOND POSITIONAL PARAMETER and `scope` is appended as a
- * third, rather than folding `type` into `SearchScope` where it would sit more
- * naturally. That is a merge decision, taken deliberately: the Requests screen
- * already calls `startSearch(trimmed, searchTypeParam(searchType))`, and moving
- * `type` into the object would mean editing that screen from this thread while
- * another one is working in it. The shape can be tidied by whoever owns both.
- */
-export async function startSearch(
-	query: string,
-	type?: string,
-	scope: SearchScope = {}
-): Promise<SearchAccepted> {
+export async function startSearch(query: string, scope: SearchScope = {}): Promise<SearchAccepted> {
 	const params = new URLSearchParams({ query });
-	// `type` is omitted rather than sent empty when the caller has none: the
-	// server's setSearchType maps "" to a basic search, so both spellings mean
-	// the same thing and the shorter URL is the one that reads in a log. An
-	// unrecognised value is a 400 here on purpose — Prowlarr itself would
-	// silently degrade to a basic search, which looks like the filter did
-	// nothing (internal/httpapi/search.go).
-	if (type) params.set('type', type);
+	if (scope.type) params.set('type', scope.type);
 	appendIds(params, 'indexer', scope.indexerIds);
 	appendIds(params, 'category', scope.categories);
 	if (scope.instanceId !== undefined && scope.instanceId > 0) {

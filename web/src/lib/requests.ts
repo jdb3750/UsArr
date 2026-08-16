@@ -372,6 +372,266 @@ export function formatWhen(
 	return { absolute: formatAbsolute(at, now), relative: formatRelative(at, now) };
 }
 
+/* ── 5. The release row's cells ───────────────────────────────────────────── */
+
+/**
+ * ⚠️ THE INDEXER-FLAG VOCABULARY IS OPEN, PERMANENTLY. REVIEW-LOG SW-18,
+ * checked against Prowlarr `develop` rather than inferred.
+ *
+ * `IndexerFlag` is a CLASS, not an enum (`src/NzbDrone.Core/Indexers/
+ * IndexerFlag.cs`): seven statics, every one written `new(...)`, and
+ * `PassThePopcornFlag : IndexerFlag` subclasses it to add `golden` and
+ * `approved`. Nine today and open forever. A first attempt at this column
+ * matched a CLOSED SET OF SEVEN and would have dropped `golden` today and every
+ * future indexer's flags after it — INVISIBLY, the row simply showing fewer
+ * chips than the indexer sent. So a chip renders whatever string arrives and
+ * nothing here is an allowlist.
+ *
+ * `repack` and `proper` are NOT indexer flags and must never be drawn as ones:
+ * both are release-title qualifiers the *Arrs parse out of the NAME. This slot
+ * is fed by `indexer_flags` alone — Go field `Flags`, JSON tag `indexer_flags` —
+ * and never by parsing a title.
+ *
+ * `EMPHASISED_FLAGS` is a two-name EMPHASIS test, not a filter. Those two alone
+ * are DERIVED rather than indexer-supplied — `TorznabRssParser.GetFlags` sets
+ * them from `downloadFactor == 0.0` and `== 0.5` — and they alone change what a
+ * download costs a ratio. Everything else renders as a plain chip.
+ */
+export const EMPHASISED_FLAGS: readonly string[] = ['freeleech', 'halfleech'] as const;
+
+export function isEmphasisedFlag(flag: string): boolean {
+	// Case- and separator-insensitive, because the same flag arrives as
+	// `freeleech`, `FreeLeech` and `Free Leech` from different definitions.
+	return EMPHASISED_FLAGS.includes(flag.toLowerCase().replace(/[^a-z]/g, ''));
+}
+
+/**
+ * ⚠️ AN EMPTY FLAGS CELL MEANS UNKNOWN, NEVER "NOT FREELEECH", AND THE TWO
+ * ABSENCES ARE DIFFERENT FACTS.
+ *
+ * `GetFlags` runs only inside `if (torrentInfo != null)` and `NewznabRssParser`
+ * never touches a flag, so a usenet result carries no flag field at all — the
+ * indexer was never asked. A torrent that reports an empty list WAS asked and
+ * said none. And because the two derived flags are exact-equality tests on a
+ * double defaulting to `1`, a 25% or 75% promotion produces nothing either way.
+ *
+ * `None` is banned for both, for the same reason `list.ts` bans it: it asserts
+ * a value where UsArr has an absence.
+ */
+export const FLAGS_NOT_REPORTED = 'Not reported';
+export const FLAGS_NONE_REPORTED = 'None reported';
+
+/** Which absence a row's empty flag cell is. Usenet was never asked; a torrent
+ * with nothing to say was. */
+export function flagsAbsence(protocol: string | undefined): string {
+	return protocol === 'usenet' ? FLAGS_NOT_REPORTED : FLAGS_NONE_REPORTED;
+}
+
+/**
+ * The Category cell's words.
+ *
+ * It reads the server's derived `type:` and `format:` tags rather than mapping
+ * the raw ids here, and that is not laziness: `mapping.MediaType` runs TWO
+ * passes so that `[3000, 3030]` — an audiobook, which Prowlarr emits
+ * parent-first — comes out `type:book · audiobook` rather than `type:music`,
+ * which is precisely the mistake category 3030 exists to prevent. One rule,
+ * server-side. The raw ids are the fallback, because a category UsArr has no
+ * `type:` for is still a category the indexer filed the release under.
+ */
+export function categoryLabel(tags: readonly string[], categories: readonly number[]): string {
+	const type = tags.find((t) => t.startsWith('type:'))?.slice(5) ?? '';
+	const format = tags.find((t) => t.startsWith('format:'))?.slice(7) ?? '';
+	if (type && format) return `${type} · ${format}`;
+	if (type) return type;
+	if (categories.length > 0) return categories.join(', ');
+	return '';
+}
+
+/* ── 6. The grab window ───────────────────────────────────────────────────── */
+
+/**
+ * ⚠️ PROWLARR'S GRAB CACHE IS A NON-ROLLING 30 MINUTES, AND §17.5 MAKES THIS A
+ * REQUIREMENT RATHER THAN A NICETY.
+ *
+ * The screen states that an expired release is never offered as grabbable,
+ * which is only TRUE IF THE CLIENT ACTS ON IT. Otherwise a user who read
+ * "closes in 18 minutes", worked through the list and pressed Grab receives a
+ * 400 they were promised could not happen.
+ *
+ * ⚠️ THE ANNOUNCEMENT STEPS ARE 5, 2 AND 1 MINUTES, AND THE LIVE REGION'S TEXT
+ * CHANGES ONLY AT THEM. A `role="status"` whose content ticks every second
+ * announces every second, which is how a screen-reader user ends up turning the
+ * screen off. So `notice` is the SAME STRING for every instant inside a step,
+ * and the empty string above the first one — an unchanged live region announces
+ * nothing at all, which is the behaviour being bought.
+ */
+export const GRAB_WINDOW_STEPS_MINUTES = [5, 2, 1] as const;
+
+export interface GrabWindow {
+	/** True once nothing on screen can still be grabbed. */
+	expired: boolean;
+	/** Whole minutes left, floored. -1 when there is no expiry to measure. */
+	minutesLeft: number;
+	/** The always-visible reading. NOT a live region — see `notice`. */
+	label: string;
+	/** The `role="status"` text. Empty above five minutes, by design. */
+	notice: string;
+}
+
+export const GRAB_WINDOW_EXPIRED_NOTICE =
+	'The grab window has closed. Prowlarr keeps a listing grabbable for 30 minutes and these are ' +
+	'past it, so search again to get ones that can still be sent.';
+
+/** The per-row note beside a grab control that has gone `aria-disabled`. The
+ * sentence explaining it is above the table, once — §9.1 bans a clause that is
+ * identical on every row of a state. */
+export const GRAB_ROW_STALE_NOTE = 'listing went stale';
+
+export function grabWindow(expiresAt: string | undefined, now: Date): GrabWindow {
+	// No expiry on the wire is not an expiry of zero. Saying nothing is the only
+	// honest reading, and the grab control stays live.
+	if (!expiresAt) return { expired: false, minutesLeft: -1, label: '', notice: '' };
+	const at = new Date(expiresAt);
+	if (Number.isNaN(at.getTime())) return { expired: false, minutesLeft: -1, label: '', notice: '' };
+
+	const msLeft = at.getTime() - now.getTime();
+	if (msLeft <= 0) {
+		return {
+			expired: true,
+			minutesLeft: 0,
+			label: 'grab window closed',
+			notice: GRAB_WINDOW_EXPIRED_NOTICE
+		};
+	}
+
+	const minutesLeft = Math.floor(msLeft / MINUTE);
+	const label =
+		minutesLeft < 1
+			? 'grab window closes in under a minute'
+			: `grab window closes in ${plural(minutesLeft, 'minute', 'minutes')}`;
+
+	// The step this instant falls in, or none. Constant across a whole step, so
+	// the live region stays quiet between announcements.
+	let notice = '';
+	for (const step of GRAB_WINDOW_STEPS_MINUTES) {
+		if (minutesLeft < step) {
+			notice =
+				step === 1
+					? 'Under a minute left to grab these releases.'
+					: `${step} minutes left to grab these releases.`;
+		}
+	}
+	return { expired: false, minutesLeft, label, notice };
+}
+
+/* ── 7. A grab, as it happens ─────────────────────────────────────────────── */
+
+/**
+ * The live grab's states, mapped off the SERVER'S ERROR CODE and never off its
+ * prose (internal/httpapi/errorcodes.go).
+ *
+ * This is §17.5's three-state rule at the moment the button is pressed. It is
+ * written separately from `grabOutcome` above, which applies the same rule to a
+ * STORED row: the inputs are different — an HTTP error code against a
+ * provenance value — and one function over a union of the two would hide which
+ * mapping produced a label.
+ *
+ * ⚠️ `grab_outcome_unknown` GETS NO BUTTON, AND THAT IS THE STATE'S WHOLE POINT.
+ * The release reached Prowlarr; what the download client did with it is
+ * unknown, and the owner's own book downloaded end to end in Deluge while UsArr
+ * reported an error. The only button that would fit is one that sends the
+ * release again, and sending it again is exactly what produces two copies of a
+ * 68 GB release. The server's own action — "Check your download client" —
+ * renders as TEXT, because that is where the truth actually lives.
+ *
+ * ⚠️ AND THERE IS NO RETRY ON ANY STATE, WHICH NARROWS WHAT THE PREVIOUS SCREEN
+ * DID. It offered Retry on `grab_failed`, on the reasoning that the code
+ * asserts nothing was sent so a second press cannot duplicate anything. True,
+ * and still not worth a button: after the code thread narrowed `grab_failed`,
+ * everything under it is a bad API key, an open circuit breaker, an SSRF
+ * refusal, a Prowlarr 400 or 409, a corrupt stored blob, or a body Prowlarr
+ * would not bind. NOT ONE OF THOSE IS FIXED BY PRESSING THE SAME BUTTON AGAIN —
+ * the transient cases that a retry would help are precisely `ErrServer`,
+ * `ErrTimeout` and `Canceled`, and those are the ambiguous code that must never
+ * offer one. So the honest set of actions is `Search again` where the listing
+ * went stale, and the server's own sentence everywhere else.
+ */
+export type LiveGrabTone = 'neutral' | 'warn' | 'err';
+
+export interface LiveGrabCopy {
+	/** The chip's words. Both handed-over states begin with "Sent". */
+	label: string;
+	tone: LiveGrabTone;
+	/** Whether the row may offer `Search again` — true only where nothing was
+	 * sent AND the listing is genuinely gone from Prowlarr's cache, so a fresh
+	 * search is the one action that can work. */
+	offersSearchAgain: boolean;
+	/** Always false, on every state, permanently. Typed as the literal so an
+	 * edit that switches it on for one state fails to compile rather than
+	 * shipping a safe-looking button. */
+	offersRetry: false;
+}
+
+/** The codes that mean "this listing is gone from Prowlarr's 30-minute cache".
+ * Retrying the same opaque release id returns the same 4xx for ever. */
+export const RESEARCHABLE_CODES: readonly string[] = [
+	'expired',
+	'no_longer_offered',
+	'search_failed'
+] as const;
+
+export const CODE_OUTCOME_UNKNOWN = 'grab_outcome_unknown';
+
+export const LIVE_GRAB_SENT_LABEL = 'Sent to Prowlarr';
+export const LIVE_GRAB_UNKNOWN_LABEL = 'Sent, outcome unknown';
+export const LIVE_GRAB_STALE_LABEL = 'Not sent, the listing went stale';
+export const LIVE_GRAB_NOT_SENT_LABEL = 'Not sent';
+
+export function liveGrabCopy(code: string): LiveGrabCopy {
+	if (code === CODE_OUTCOME_UNKNOWN) {
+		return {
+			label: LIVE_GRAB_UNKNOWN_LABEL,
+			tone: 'warn',
+			offersSearchAgain: false,
+			offersRetry: false
+		};
+	}
+	if (RESEARCHABLE_CODES.includes(code)) {
+		return {
+			label: LIVE_GRAB_STALE_LABEL,
+			tone: 'err',
+			offersSearchAgain: true,
+			offersRetry: false
+		};
+	}
+	// §17.5's state 3: nothing was sent, so nothing is running. The verdict is
+	// on the request rather than on the release — the server's own sentence,
+	// rendered verbatim beside this, says why.
+	return {
+		label: LIVE_GRAB_NOT_SENT_LABEL,
+		tone: 'err',
+		offersSearchAgain: false,
+		offersRetry: false
+	};
+}
+
+/* ── 8. The frozen order's one control ────────────────────────────────────── */
+
+/**
+ * The sentence beside ADR-0038's re-sort control, so the freeze is explained
+ * rather than merely felt.
+ *
+ * The control's own label lives in `$lib/frozenorder.svelte`, because it
+ * carries a count the engine owns. This is the standing explanation, and it is
+ * here rather than there because it is copy and this is the file a copy test
+ * can read.
+ */
+export const FROZEN_ORDER_NOTE =
+	'The order is held while you are pointing at these results or focused inside them, so a release ' +
+	'cannot move out from under the button you are aiming at.';
+
+/* ── 9. Row heights ───────────────────────────────────────────────────────── */
+
 /**
  * `contain-intrinsic-size` for a Recent-grabs row, per density.
  *
@@ -388,4 +648,21 @@ export const RECENT_GRAB_ROW_INTRINSIC: Record<string, number> = {
 	compact: 44,
 	standard: 48,
 	relaxed: 52
+};
+
+/**
+ * The same statistic for a RELEASE RESULT row, which is the taller of the two.
+ *
+ * MEASURED, and not by this thread: `list.ts`'s ROW_INTRINSIC comment records
+ * `scripts/list-bench.mjs` rendering the release row the harness draws — chips,
+ * a button, a checkbox and a `<select>` — at 45 / 49 / 53 px content box across
+ * the three densities, i.e. 1.6x the one-line default. That is this row's
+ * shape, so those are the numbers rather than a fresh guess. `auto` in front of
+ * the length still means the browser replaces the estimate with the row's own
+ * size once it has seen one.
+ */
+export const RELEASE_ROW_INTRINSIC: Record<string, number> = {
+	compact: 45,
+	standard: 49,
+	relaxed: 53
 };

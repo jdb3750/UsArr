@@ -22,9 +22,15 @@ export function formatAge(days: number | undefined): string {
 	return `${Math.round(days)} d`;
 }
 
-/** Protocol drives a colour token, so it has to be a known value or nothing. */
-export function protocolClass(protocol: string | undefined): string {
-	if (protocol === 'torrent') return 'protocol-torrent';
-	if (protocol === 'usenet') return 'protocol-usenet';
-	return '';
-}
+/*
+ * `protocolClass` is deliberately gone, along with `.protocol-torrent` and
+ * `.protocol-usenet` in app.css.
+ *
+ * It handed out a class name for a rule that had already been emptied of
+ * everything except `color: var(--fg-muted)`: the two colour tokens behind it
+ * were WITHDRAWN by DESIGN-DIRECTION §3.3, which makes the protocol swatch
+ * achromatic because a torrent green one column from a status green is the one
+ * collision this ramp cannot afford. The shipping rendering is `.proto` with the
+ * words `torrent` and `usenet` carrying the distinction, and a function handing
+ * out a class that styles nothing is a trap for whoever reads it next.
+ */
