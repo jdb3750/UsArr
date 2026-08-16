@@ -57,7 +57,7 @@ nothing below is built: the Search-and-Grab path is the one shipped feature.
 |---|---|
 | Unified library across **movies and TV** (Sonarr + Radarr) | 📋 Planned — v0.1 |
 | Local-first reads; no upstream call on any render path | 📋 Planned — v0.1 |
-| **Search-and-Grab mode** — free-text indexer search and grab via Prowlarr, with no library | ✅ Shipped — v0.1 |
+| **Search-and-Grab mode** — free-text indexer search and grab via Prowlarr, with no library. ⚠️ For music and books this depends heavily on private trackers: 403 of the 543 indexer definitions Prowlarr ships are `type: private`, and the dedicated music and book trackers are invite-only, so on public indexers alone the results are materially thinner than for film | ✅ Shipped — v0.1 |
 | Instant search: client prefix index → FTS5 hybrid (prefix + substring; **no typo tolerance**) | 📋 Planned — v0.1 |
 | Source tagging: **usenet / torrent**, first-class and filterable | 🚧 Partial — v0.1: derived and served on search results; not yet filterable |
 | Minimal write path — monitor, unmonitor, delete, add — on a durable command queue | 📋 Planned — v0.1 |
