@@ -108,7 +108,7 @@
   <dialog class="dialog" id="shortcut-sheet" aria-labelledby="shortcut-sheet-title">
     <h2 class="dialog__head" id="shortcut-sheet-title">Keyboard shortcuts</h2>
     <div class="dialog__body">
-      <table class="tbl" aria-label="Keyboard shortcuts" style="--cols: 92px minmax(0,1fr)" aria-colcount="2" role="table" aria-rowcount="8">
+      <table class="tbl cols-shortcuts" aria-label="Keyboard shortcuts" aria-colcount="2" role="table" aria-rowcount="8">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Key</th>
@@ -125,7 +125,7 @@
           <tr role="row" aria-rowindex="8"><td role="cell" aria-colindex="1"><span class="mono">?</span></td><td role="cell" aria-colindex="2">Open and close this sheet. It works whether or not the switch below is on.</td></tr>
         </tbody>
       </table>
-      <div class="field" style="margin-top:16px">
+      <div class="field u-mt-16">
         <label class="check" for="f-shortcuts-sheet"><input type="checkbox" id="f-shortcuts-sheet" data-act="shortcuts" checked> Single-key shortcuts</label>
         <span class="field__help">Turning this off disables <span class="mono">/</span>, <span class="mono">l</span>, <span class="mono">j</span> and <span class="mono">k</span>. Arrow keys, Escape and shortcuts that need a modifier are unaffected, and <span class="mono">?</span> keeps working so this sheet stays reachable.</span>
       </div>
@@ -385,7 +385,7 @@
     <div class="banner__body">
       <div class="banner__title">Prowlarr rejected the stored API key, so no indexer was queried</div>
       <div class="banner__text">The search was not sent. Nothing was grabbed and nothing is pending.</div>
-      <div class="verbatim" style="margin-top:8px">GET https://prowlarr.tail9c2e.ts.net/api/v1/search?query=dune+part+two&amp;type=movie 401 Unauthorized
+      <div class="verbatim u-mt-8">GET https://prowlarr.tail9c2e.ts.net/api/v1/search?query=dune+part+two&amp;type=movie 401 Unauthorized
 {"message":"Unauthorized","description":"The request requires a valid X-Api-Key header"}</div>
     </div>
     <div class="banner__actions"><a href="services.html">Update API key</a></div>
@@ -441,7 +441,7 @@
       </div>
     </div>
     <div class="tablewrap">
-      <table aria-rowcount="6" class="tbl tbl--stack" data-roving="tbody tr" aria-label="Indexer failures" style="--cols: minmax(0,1fr) 108px minmax(0,4fr) 68px; --row-lines: 2.61" aria-colcount="4" role="table">
+      <table aria-rowcount="6" class="tbl tbl--stack cols-requests-failures" data-roving="tbody tr" aria-label="Indexer failures" aria-colcount="4" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Indexer</th>
@@ -465,7 +465,7 @@
        below are already grabbable; the remaining indexers only add rows. -->
   <div class="fanout" data-when="partial" role="status" aria-atomic="true" hidden>
     <span class="fanout__count">4 of 9</span> indexers responded
-    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:44%"></span></span>
+    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill u-w-44"></span></span>
     <span>47 releases so far, 5 shown after de-duplication, all of them grabbable now</span>
     <span class="fanout__failed">TorrentDay timed out after 30 s</span>
     <div class="toolbar__spacer"></div>
@@ -474,19 +474,19 @@
 
   <div class="fanout" data-when="live" role="status" aria-atomic="true">
     <span class="fanout__count">9 of 9</span> indexers responded
-    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:100%"></span></span>
+    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill u-w-100"></span></span>
     <span>112 releases, 10 shown after de-duplication</span>
   </div>
 
   <div class="fanout" data-when="expired" role="status" aria-atomic="true" hidden>
     <span class="fanout__count">9 of 9</span> indexers responded
-    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:100%"></span></span>
+    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill u-w-100"></span></span>
     <span>14 releases, 2 shown after de-duplication</span>
   </div>
 
   <div class="fanout" data-when="denied" role="status" aria-atomic="true" hidden>
     <span class="fanout__count">8 of 9</span> indexers responded
-    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:89%"></span></span>
+    <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill u-w-89"></span></span>
     <span>96 releases, 9 shown after de-duplication</span>
     <span class="fanout__failed">PassThePopcorn refused the account</span>
   </div>
@@ -496,7 +496,7 @@
     <div class="banner__body">
       <div class="banner__title">PassThePopcorn refused this account, so its releases are missing from the list</div>
       <div class="banner__text">Every other indexer answered. The results below are real and grabbable; they are just incomplete, and the count above says so rather than pretending the search was whole.</div>
-      <div class="verbatim" style="margin-top:8px">indexer 4 PassThePopcorn: 403 Forbidden
+      <div class="verbatim u-mt-8">indexer 4 PassThePopcorn: 403 Forbidden
 {"error":"Your account does not have permission to use the API. Enable it in your profile."}</div>
     </div>
     <div class="banner__actions"><a href="services.html">Open Services</a></div>
@@ -582,7 +582,7 @@
            tooltip either -- sitting 8px from a visually similar icon that
            opens a browser tab. Tab Tab Enter fired a 68 GB grab, and you could
            not tell which of the two you were on. -->
-      <table aria-rowcount="-1" class="tbl tbl--stack" data-roving="tbody tr" data-media="movie" aria-label="Release results" style="--cols: 60px 88px 80px minmax(0,3fr) minmax(0,1fr) 80px 68px 84px minmax(0,0.9fr) minmax(0,1fr) minmax(max-content,auto); --row-lines: 2.17" aria-colcount="11" role="table">
+      <table aria-rowcount="-1" class="tbl tbl--stack cols-requests-releases" data-roving="tbody tr" data-media="movie" aria-label="Release results" aria-colcount="11" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Select</th>
@@ -860,7 +860,7 @@
       <div class="section__actions"><a href="#recent-grabs">Show all</a></div>
     </div>
     <div class="tablewrap">
-      <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Recent grabs" style="--cols: 116px minmax(0,3fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1.9fr); --row-lines: 2.94" aria-colcount="5" aria-rowcount="7" role="table">
+      <table class="tbl tbl--stack cols-requests-grabs" data-roving="tbody tr" aria-label="Recent grabs" aria-colcount="5" aria-rowcount="7" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">When</th>
@@ -916,7 +916,7 @@
         </tbody>
       </table>
     </div>
-    <p class="note" style="padding-top:8px"><span class="statebar__tag">mockup</span> <span class="mono">sent</span> means UsArr handed the release to your download client and the client accepted it. It does not mean the file exists, is complete, or has been imported by anything: UsArr stops observing at handoff and will not draw a progress bar over a thing it cannot measure. There are three states, and the boundary between them is handed over against never handed over rather than success against failure: <span class="mono">sent</span>, <span class="mono">sent · a problem was reported after handoff</span>, and <span class="mono">not sent</span>. The middle one sits beside <span class="mono">sent</span> rather than beside <span class="mono">not sent</span>, because Prowlarr can accept a release and then fail a later step, so an error can arrive over a grab that already landed. It offers no Retry: doing it again is what produces two copies of a 68 GB release, so it points at your download client, where the truth is.</p>
+    <p class="note u-pt-8"><span class="statebar__tag">mockup</span> <span class="mono">sent</span> means UsArr handed the release to your download client and the client accepted it. It does not mean the file exists, is complete, or has been imported by anything: UsArr stops observing at handoff and will not draw a progress bar over a thing it cannot measure. There are three states, and the boundary between them is handed over against never handed over rather than success against failure: <span class="mono">sent</span>, <span class="mono">sent · a problem was reported after handoff</span>, and <span class="mono">not sent</span>. The middle one sits beside <span class="mono">sent</span> rather than beside <span class="mono">not sent</span>, because Prowlarr can accept a release and then fail a later step, so an error can arrive over a grab that already landed. It offers no Retry: doing it again is what produces two copies of a 68 GB release, so it points at your download client, where the truth is.</p>
   </section>
 
   <!-- =====================================================================
@@ -983,7 +983,7 @@
 
     <div class="fanout" role="status" aria-atomic="true">
       <span class="fanout__count">5 of 5</span> indexers responded
-      <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill" style="width:100%"></span></span>
+      <span class="fanout__meter" aria-hidden="true"><span class="fanout__fill u-w-100"></span></span>
       <span>38 releases, 6 shown after de-duplication</span>
     </div>
 
@@ -996,7 +996,7 @@
     </div>
 
     <div class="tablewrap">
-      <table aria-rowcount="7" class="tbl tbl--stack" data-roving="tbody tr" data-media="audiobook" aria-label="Audiobook release results" style="--cols: 60px 88px 80px minmax(0,3fr) minmax(0,1.1fr) 80px 68px 84px minmax(0,1fr) minmax(max-content,auto); --row-lines: 1.39" aria-colcount="10" role="table">
+      <table aria-rowcount="7" class="tbl tbl--stack cols-requests-releases-audiobook" data-roving="tbody tr" data-media="audiobook" aria-label="Audiobook release results" aria-colcount="10" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Select</th>
@@ -1127,7 +1127,7 @@
            and an unchanged library. Every sentence below names what will pick
            the file up and what will not. -->
       <div class="tablewrap">
-        <table class="tbl tbl--stack" data-roving="tbody tr" aria-label="Post-grab behaviour by media type" style="--cols: 104px minmax(0,1fr) minmax(0,3.4fr); --row-lines: 2.22" aria-colcount="3" aria-rowcount="7" role="table">
+        <table class="tbl tbl--stack cols-requests-postgrab" data-roving="tbody tr" aria-label="Post-grab behaviour by media type" aria-colcount="3" aria-rowcount="7" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">Media type</th>
@@ -1169,7 +1169,7 @@
           </tbody>
         </table>
       </div>
-      <p class="note" style="padding-top:8px">Two of the six have an *Arr connected and it still does not help, which is the case the copy exists for: a Prowlarr grab never went through Radarr or Sonarr, so neither has a record of it and neither will pick the file up. The *Arr-backed request path that would change that is v0.2. <span data-inst="v01" hidden>On this install the other four have no catalogue source either, so the honest sentence for them is shorter and worse — and it is drawn rather than softened.</span></p>
+      <p class="note u-pt-8">Two of the six have an *Arr connected and it still does not help, which is the case the copy exists for: a Prowlarr grab never went through Radarr or Sonarr, so neither has a record of it and neither will pick the file up. The *Arr-backed request path that would change that is v0.2. <span data-inst="v01" hidden>On this install the other four have no catalogue source either, so the honest sentence for them is shorter and worse — and it is drawn rather than softened.</span></p>
     </section>
 
     <p class="section note"><span class="statebar__tag">mockup</span> The first row of the table above is the whole point of this state. It reads <span class="chip chip--done">grabbed 14:07 · sent to qBittorrent</span>, names the watched folder, says in words that UsArr does not import downloads, and then it stops. There is no progress bar, no percentage and no "importing" step, because nothing on this install imports a book and UsArr would have nothing to measure. Four of the six media types here are in exactly this position; the *Arr-backed request path that would change it for the two that are not is v0.2.</p>
