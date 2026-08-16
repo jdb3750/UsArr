@@ -51,8 +51,38 @@ lang:            en | ja | pt | …    ← ISO 639-1, from AUDIO TRACKS not the 
 status:          monitored | unmonitored | missing | upgradable | orphaned
 provider:        tmdb | tvdb | musicbrainz | openlibrary | wikidata | manual
 group:           <release group>
-flag:            freeleech | internal | scene | proper | repack | nuked
+flag:            internal | exclusive | freeleech | neutralleech | halfleech | scene
+                 | doubleupload                       ← Prowlarr IndexerFlag, TORRENTS ONLY
+                 (+ indexer-specific: PassThePopcorn adds golden | approved)
 ```
+
+> **`flag:` is not ours to invent — it mirrors Prowlarr's `ReleaseResource.indexerFlags` verbatim.**
+> An earlier revision of this line listed `proper`, `repack` and `nuked`. **None of the three is a
+> Prowlarr indexer flag**, and the invented names reached the UI mockups before anyone checked; see
+> `docs/REVIEW-LOG.md`. Render only what the field can contain.
+>
+> **Where the vocabulary comes from.** The common set is the statics in
+> `src/NzbDrone.Core/Indexers/IndexerFlag.cs` — seven of them, listed above. It is **not a closed
+> set**: `IndexerFlag` is an ordinary class, and an indexer definition may subclass it to add its
+> own. `PassThePopcornFlag` does exactly that, contributing `golden` and `approved` into the same
+> array. So treat any value as possible, match the seven you know, and pass an unrecognised flag
+> through as an opaque tag rather than dropping it.
+>
+> **Re-check it in one command**, against `develop`, and update this list with what you get:
+>
+> ```bash
+> grep -rn "static IndexerFlag" src/          # in a Prowlarr checkout — 9 hits as of 2026-08-16
+> ```
+>
+> Grep for `static IndexerFlag`, **not** for `new IndexerFlag(`: the file uses C# target-typed
+> `new(...)`, so the latter pattern matches nothing and reads as "the set is empty" — a probe that
+> tests the wrong thing and answers confidently. `DEVELOPMENT.md` §11 rule 1.
+>
+> ⚠️ **`indexerFlags` is populated for torrents only.** `ReleaseResourceMapper.ToResource` does
+> `model as TorrentInfo ?? new TorrentInfo()`, so a usenet release takes the fallback and its flag
+> array is **always empty**. An empty array on a usenet result therefore means *"this field does not
+> apply to this protocol"*, not *"we checked and no flags are set"* — so a usenet release gets no
+> `flag:` tags at all, and the absence must never be rendered as "none apply".
 
 > **`type:audiobook` does not exist.** An audiobook is an `edition` of a `book` work, so it is
 > `type:book` + `format:audiobook` (ARCHITECTURE §6.1). This is the tag-layer half of that decision;
