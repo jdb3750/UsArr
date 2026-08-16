@@ -165,9 +165,10 @@ See `docs/ARCHITECTURE.md` §14 for the full threat model.
 
 Do not duplicate design detail into this file. Link to the document that owns it.
 
-**Licence: AGPL-3.0 is the recommendation, pending the owner's confirmation.** It is not yet
-decided — do not assert it in generated headers, package metadata or README copy until Joe
-confirms.
+**Licence: AGPL-3.0, confirmed by the owner on 2026-08-16.** The verbatim FSF text is in `LICENSE`
+at the repo root; the reasoning is in ADR-0024. **Do not add per-file licence headers** — the root
+`LICENSE` and the README's `## License` section are the whole declaration. New dependencies need an
+AGPL-compatibility check: MIT, BSD and Apache-2.0 are fine, GPL-2.0-only is not.
 
 ## Roadmap in one line each
 

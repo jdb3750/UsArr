@@ -10,7 +10,7 @@ document is downstream of.
 **Constraints this obeys:** [`ARCHITECTURE.md`](../ARCHITECTURE.md) §17 (screens and UI
 philosophy), §16 (scope), §13 (performance budget); [`CLAUDE.md`](../../CLAUDE.md) (the four
 principles); [`DECISIONS.md`](../DECISIONS.md) ADR-0003 (SvelteKit `adapter-static` + `embed.FS`)
-and ADR-0024 (the styling and typography stack, which this document is the rationale for).
+and ADR-0025 (the styling and typography stack, which this document is the rationale for).
 **Deferred UI surfaces and the seams they need:** [`FUTURE.md`](../FUTURE.md).
 
 Where §17 and this document disagree, **§17 wins** and this document is the bug. §17's open
@@ -88,7 +88,7 @@ lint checklist in §13.
 | Tell | Documented by | UsArr's rule |
 |---|---|---|
 | Centred max-width column with vast vertical padding — marketing rhythm on an app screen | Krebs; febbhav | Full-viewport-width app shell with a sidebar. `max-width: 1200px; margin: auto` is a document layout |
-| Everything-is-a-rounded-card, `rounded-2xl`; the untouched shadcn `rounded-2xl shadow-lg p-6` | febbhav; vibecodekit | Radius 0 in the flat plane, 4px on overlays, ceiling 6 (§6). The classes do not exist (§ADR-0024) |
+| Everything-is-a-rounded-card, `rounded-2xl`; the untouched shadcn `rounded-2xl shadow-lg p-6` | febbhav; vibecodekit | Radius 0 in the flat plane, 4px on overlays, ceiling 6 (§6). The classes do not exist (§ADR-0025) |
 | Coloured 3–4px left/top border strip on cards | HN **michaelcampbell**: *"colored left borders are almost as reliable a sign of AI-generated design as em-dashes"* | No coloured strips. Status is icon + text + colour, inline |
 | Three-column icon-top feature grid; badge pill above the H1; stat banner; numbered `01/02/03` rows; bento grid; fake terminal chrome | febbhav; Krebs; [vibecheck](https://www.vibecheck.fail/) ("hero-stat-FAQ scaffolding"); Hallmark gate 47 | **The application has no marketing surfaces at all** (§1.5). This one rule deletes the whole row |
 | Glassmorphism / `backdrop-blur` by reflex — *"had a moment in 2022 and has been the LLM default ever since"* | [developersdigest](https://www.developersdigest.tech/blog/ai-design-slop-and-how-to-spot-it); Krebs | Zero `backdrop-filter`. It also costs GPU on every scroll frame |
@@ -350,7 +350,7 @@ Plex Mono 400), taken as the WOFF2 subsets Google Fonts actually serves and meas
 | `latin` + `latin-ext` | 74.8 KB | 74.8 KB | 27.4 KB | **177.2 KB** |
 
 So the earlier ~120–180 KB estimate was right for `latin` + `latin-ext` and **pessimistic by about
-40% for `latin` alone**, which is what "subset to Latin" in ADR-0024 actually means. At 103.6 KB
+40% for `latin` alone**, which is what "subset to Latin" in ADR-0025 actually means. At 103.6 KB
 over a LAN this is a single-digit-millisecond cost, and WOFF2 is already Brotli-compressed
 internally so the build-time precompression adds nothing here. The number that would have failed
 the ~200 KB trigger is the one that includes `latin-ext`; a self-hoster with an accented library
@@ -358,7 +358,7 @@ will want it, so **decide the subset, not just the family** (OQ-3). If it must b
 `latin-ext` before dropping a weight, and drop a weight before dropping the family.
 Mitigations: the font is served from the same box over a LAN,
 it is content-hashed and immutable, and it is precompressed at build time (`statigz`, see
-ADR-0024). Set `font-display: block` with a short block period, or `optional` — on a LAN the font
+ADR-0025). Set `font-display: block` with a short block period, or `optional` — on a LAN the font
 always wins the race and `swap` risks a visible reflow for no benefit.
 
 **Never a Google Fonts `<link>`.** It is both a documented tell and a third-party request in
@@ -1029,7 +1029,7 @@ the feature does not.** These are layout obligations, not v0.1 work.
 - **The token file is the styling seam.** Every decision here lives as a CSS custom property in one
   file. Tailwind consumes it, and scoped Svelte `<style>` blocks read the same variables. Swapping
   the utility engine later touches the token file and the class attributes, **not the component
-  logic** (ADR-0024).
+  logic** (ADR-0025).
 
 ---
 
@@ -1143,11 +1143,11 @@ AI-generated" an actual gate rather than a vibe.
 |---|---|---|
 | **OQ-1** | **Virtualization threshold.** ARCHITECTURE §4.5 says "virtualize everything over ~200 rows"; §7.4 above argues for "Load more" + `content-visibility: auto` below ~1,000 rows, because virtualization breaks Ctrl+F in a **library browser**. Amend §4.5, or accept the Ctrl+F loss explicitly? | §4.5 is authoritative and this document does not overrule it. It is a real functional trade, not a style preference |
 | **OQ-2** | **Navigation.** §17.2 named two options (home sections / top-navbar type tabs); §8.1 picks a **left sidebar** carrying both. Does that count as resolving §17.2, or does §17.2 exclude a third option? | §17.2 says "pick one and do not relitigate", so this needs settling once |
-| **OQ-3** | **Font budget — now measured, and the question has changed.** IBM Plex Sans 400/600 + Mono 400 is **103.6 KB for `latin` alone, 177.2 KB with `latin-ext`** (§4.1). Neither trips the ~200 KB trigger, so the real question is the **subset**: ship `latin` only and let an accented library fall back mid-string, or pay the extra 73.6 KB? And the argument that beat the system stack — cross-OS metric drift — is inference, uncited, and unmeasured for this design (§4.1) | It is the only decision here that costs bytes on first paint. The mockup makes it live: it loads **no** webfont, so on any machine without Plex installed it renders in the system stack — and its README calls that "the correct and expected result", which is the opposite of ADR-0024's reason for rejecting that stack. Those two statements cannot both stand |
+| **OQ-3** | **Font budget — now measured, and the question has changed.** IBM Plex Sans 400/600 + Mono 400 is **103.6 KB for `latin` alone, 177.2 KB with `latin-ext`** (§4.1). Neither trips the ~200 KB trigger, so the real question is the **subset**: ship `latin` only and let an accented library fall back mid-string, or pay the extra 73.6 KB? And the argument that beat the system stack — cross-OS metric drift — is inference, uncited, and unmeasured for this design (§4.1) | It is the only decision here that costs bytes on first paint. The mockup makes it live: it loads **no** webfont, so on any machine without Plex installed it renders in the system stack — and its README calls that "the correct and expected result", which is the opposite of ADR-0025's reason for rejecting that stack. Those two statements cannot both stand |
 | **OQ-4** | **13 px base type.** That is the Linear/dense register. If it reads small to you, move base to 14 and shift the whole scale up one step — **do not add a seventh step** | Personal legibility; you are the only user in v0.1 |
 | **OQ-5** | **Radius 0 or 2 px** on inputs and buttons. Both are within the budget; 0 is more committed | Taste, and it should be decided once and applied without exception |
 | **OQ-6** | **Theme default.** Auto (Sonarr's default) or Dark (Navidrome's)? | Navidrome is the stated reference point, but Auto is the *Arr convention and UsArr sits next to three of them |
-| **OQ-7** | **Tailwind's native engine.** ADR-0024 records `@tailwindcss/oxide`'s fetching postinstall as the strongest argument against, with Open Props as the pre-agreed fallback. Is that trigger condition acceptable to you as written? | It touches `make check`'s "exactly one network call" property, which is your rule |
+| **OQ-7** | **Tailwind's native engine.** ADR-0025 records `@tailwindcss/oxide`'s fetching postinstall as the strongest argument against, with Open Props as the pre-agreed fallback. Is that trigger condition acceptable to you as written? | It touches `make check`'s "exactly one network call" property, which is your rule |
 
 ---
 
@@ -1155,7 +1155,7 @@ AI-generated" an actual gate rather than a vibe.
 
 Repository documents: [`CLAUDE.md`](../../CLAUDE.md) · [`ARCHITECTURE.md`](../ARCHITECTURE.md)
 §4.4, §4.5, §13, §16, §17 · [`DECISIONS.md`](../DECISIONS.md) ADR-0003, ADR-0004, ADR-0012a,
-ADR-0015, ADR-0019, ADR-0020, ADR-0024 · [`FUTURE.md`](../FUTURE.md) §5, §8, §9 ·
+ADR-0015, ADR-0019, ADR-0020, ADR-0025 · [`FUTURE.md`](../FUTURE.md) §5, §8, §9 ·
 [`DEVELOPMENT.md`](../DEVELOPMENT.md) §2, §9.
 
 **Anti-goal.** <https://www.adriankrebs.ch/blog/design-slop/> ·

@@ -4,7 +4,7 @@
  * Status: design document, pre-alpha. Nothing here is implemented; there is no
  * `web/` directory yet. This file is the single source of truth for every
  * colour, size, duration and radius the UI will ever use, and it is written so
- * it drops straight into Tailwind v4 (see §0 and ADR-0024).
+ * it drops straight into Tailwind v4 (see §0 and ADR-0025).
  *
  * Rationale for every value lives in DESIGN-DIRECTION.md, which owns the
  * reasoning; this file owns the numbers. If the two disagree, the design
@@ -58,7 +58,7 @@
  *   @theme { --*: initial; }     <- deletes Tailwind's ENTIRE default theme.
  *                                   After this, bg-indigo-500, shadow-md and
  *                                   rounded-2xl do not exist as classes. This
- *                                   line is load-bearing (ADR-0024).
+ *                                   line is load-bearing (ADR-0025).
  * --------------------------------------------------------------------------- */
 
 

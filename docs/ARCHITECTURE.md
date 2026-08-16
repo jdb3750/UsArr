@@ -1629,7 +1629,7 @@ pixels.
 **The visual system that renders these screens** — colour, type, density, motion, the loading
 policy, the component conventions and §17.2's navigation resolution — lives in
 [`design/DESIGN-DIRECTION.md`](./design/DESIGN-DIRECTION.md), with its canonical values in
-[`design/tokens.css`](./design/tokens.css) and its stack decision in ADR-0024. This section stays
+[`design/tokens.css`](./design/tokens.css) and its stack decision in ADR-0025. This section stays
 authoritative over both.
 
 ### 17.1 The UI philosophy, as a design constraint

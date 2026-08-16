@@ -249,13 +249,14 @@ and issue templates land alongside the first code.
 
 ## License
 
-**Recommendation: AGPL-3.0** — pending the owner's confirmation, which is needed **before the first
-PR is accepted**, not before the first release. Accepting contributions into a repository with no
-`LICENSE` leaves their terms undefined, and retro-licensing means chasing every contributor.
+UsArr is licensed under the **GNU Affero General Public License, version 3.0** — confirmed by the
+owner on 2026-08-16. The full text is in [`LICENSE`](./LICENSE).
 
-AGPL-3.0 is the default answer given the project's positioning against hosted forks and the
-self-hosted-media norm; MIT is the alternative if embedding matters more. Either is fine. Deferring
-is not.
+AGPL-3.0 matches the self-hosted-media norm (Jellyfin, Navidrome, MediaManager, Mydia,
+DroppedNeedle) and closes the hosted-service loophole: anyone who runs a modified UsArr as a network
+service owes its users that modified source. Self-hosting for yourself carries no obligation.
+The reasoning, and the rejected MIT alternative, are recorded in
+[ADR-0024](./docs/DECISIONS.md#adr-0024).
 
 ---
 
