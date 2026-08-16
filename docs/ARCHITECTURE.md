@@ -1838,6 +1838,14 @@ blocked real work. **What stays in CI:** `EXPLAIN QUERY PLAN` assertions and **r
 on hot queries — deterministic, hardware-independent, fast, and a better proxy for what is being
 protected than wall-clock time.
 
+> 📌 **The Pi 5 is a deliberate floor, and it is not the owner's machine.** Confirmed 2026-08-16
+> (ADR-0035): **the owner runs x86-64 under Proxmox.** Every figure in this section, and every
+> argument elsewhere that extrapolates to Pi-class hardware — DESIGN-DIRECTION §7.4's density-toggle
+> cost, ADR-0022's Argon2id memory argument, §7.2's streaming-import peak — is therefore a
+> **conservative floor** rather than a description of what the first real install will experience.
+> Nothing about the budgets changes; designing against the floor is the point. What changes is that
+> a Pi figure must not be quoted as *"what the owner will see"*.
+
 **Reference hardware: a Raspberry Pi 5. Reference library: six media types, not two.** The earlier
 figure — *"10k movies / 2k series (~400k episode rows)"* — described the product before ADR-0032,
 and every budget below was set against a corpus that no longer describes it. The six-type reference
@@ -2815,6 +2823,28 @@ accompaniment to an action that does not ship until v0.2, and as the *screen* on
 the sole service, which left the ordinary six-service v0.1 install with a specified primary action
 that does not exist. The catalogue affordances that belong to the v0.2 path are hidden rather than
 shown broken, exactly as they are in Search-and-Grab mode.
+
+**Coverage is not the same for every media type, and this screen is where that has to be said —
+SW-08.** A free-text search that runs correctly, against healthy indexers, and returns one row is
+indistinguishable on screen from a search that is broken. For music it is neither: **403 of
+Prowlarr's 543 indexer definitions are `type: private`**, and the trackers where music actually
+lives — Redacted, Orpheus, and MyAnonaMouse for audiobooks — are **invite-only**. A stock Prowlarr
+carrying public indexers therefore returns a materially thinner list for music than the same search
+returns for a film or an episode, and the user cannot see why. **So the empty and near-empty result
+states are scoped by media type, and the music one names the reason** rather than offering the
+generic *"nothing matched"*: the search worked, the indexers answered, and the ones that carry music
+are not on this install. The one action that changes it — adding a private indexer the user already
+has an account on — is the one the state offers. This is the same qualification §8.5 carries for
+Search-and-Grab mode, surfaced at the point of use.
+
+> ⚠️ **What this is *not* saying.** It is not that music is a lesser media type in UsArr. **A
+> library's catalogue source and its request destination are separate bindings** (§8.3), and music
+> has both halves available on the ordinary install: **Navidrome catalogues it in v0.1 exactly as
+> Radarr catalogues films**, and the free-text path requests it. **Lidarr is deferred because no
+> write-capable service ships in v0.1 at all** — not because music is second-class. LazyLibrarian
+> and Mylar3 are deferred on precisely the same ground, and Radarr and Sonarr are present as
+> *destinations* in v0.2 only because they are already there as *sources*. The thin-indexer fact
+> above is narrow, true, and about the indexer ecosystem rather than about UsArr's design.
 
 **A grab leaves a record, and that is v0.1.** The second block on this screen is **Recent grabs** —
 the ten most recent, newest first: time (absolute and relative, §17.3's rule), release name, indexer,

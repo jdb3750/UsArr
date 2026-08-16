@@ -33,8 +33,11 @@
  *                                    colour alone)
  *     status GLYPH        >= 3.2:1  (a non-text graphic under SC 1.4.11, so it
  *                                    MAY take a separate, more saturated value
- *                                    than the word beside it — see
- *                                    DESIGN-DIRECTION §3.2 on the light warn)
+ *                                    than the word beside it. No status
+ *                                    currently needs to: every glyph carries
+ *                                    its word's value and clears the stricter
+ *                                    4.5:1. DESIGN-DIRECTION §3.2 keeps the
+ *                                    rule available; nothing exercises it)
  *     (protocol chips no longer carry colour at all — see §1 below)
  *   Every foreground is measured against all three legitimate grounds it can
  *   land on: --n-0 (page), --n-1 (row hover), --n-2 (row selected). --n-3 is a
@@ -107,14 +110,28 @@
    * (EnableColorImpairedMode, ConfigService.cs).
    * Ratios below are vs --n-0 · --n-1 · --n-2.
    *
-   * OPEN (DESIGN-DIRECTION §3.2): --status-warn light is #8a5300, a value
-   * forced dark by the 4.5:1 TEXT requirement, which took the amber out of it.
-   * A separate glyph token at ~#a9700a (computed 3.98 · 3.68 vs --n-0 · --n-2,
-   * clearing the 3.2 non-text target) is the candidate; #c98a00 (2.80) and
-   * #b8860b (3.09) do NOT clear it. Not landed: run the repo contrast script
-   * and look at it at thumbnail scale first. */
+   * CLOSED 2026-08-16, by the owner: "going more orange would be better for
+   * warnings". --status-warn light was #8a5300, a value forced dark by the
+   * 4.5:1 TEXT requirement, which took the amber out of it and left a brown.
+   * It is now #a44c00. The escape route this file recorded — a separate,
+   * more saturated GLYPH token bound only by SC 1.4.11's 3:1 — was NOT
+   * needed and is NOT taken: #a44c00 clears 4.5:1 as text on all five
+   * grounds (worst 4.55 vs --n-2), so the word and the glyph keep one value
+   * and the system keeps one fewer token. The split stays documented in
+   * DESIGN-DIRECTION §3.2 as available if a future ground makes it binding.
+   *
+   * Why #a44c00 rather than the #a9700a recorded here as the old candidate:
+   * #a9700a is 3.98:1 on --n-0 and 3.28:1 on --n-2, so it never cleared the
+   * TEXT floor on the worst ground and could only ever have been a glyph
+   * value. #a44c00 is BOTH more orange and readable — CIE Lab hue 58.0°
+   * against #8a5300's 70.4°, where CSS `orange` #ff7f00 is 59.6° — at chroma
+   * 62.1 against 52.4. Rejected en route: #b04300 (Lab hue 52.0) is more
+   * chromatic still but lands ΔE76 18.5 from --status-error, and warn must
+   * not read as error; #a44c00 sits at ΔE76 25.2 from it. Recorded so they
+   * are not retried: #c98a00 (2.80:1), #b8860b (3.09:1), #a9700a (3.28:1)
+   * all fail 4.5:1 on --n-2. */
   --status-ok:      #1c6b3a; /* healthy, synced, present.  6.21 · 5.74 · 5.11 */
-  --status-warn:    #8a5300; /* degraded, stale, partial.  6.02 · 5.56 · 4.95 */
+  --status-warn:    #a44c00; /* degraded, stale, partial.  5.53 · 5.11 · 4.55 */
   --status-error:   #b3251c; /* down, failed, rejected.    6.24 · 5.77 · 5.14 */
   --status-unset:   #5a534a; /* not configured. Grey IS a status — a healthy,
                               * nothing-to-see-here row must not be coloured.
@@ -163,7 +180,13 @@
                    *                  15.33:1 · 14.29:1 · 12.47:1 (>= 12)      */
 
   --status-ok:    #5cba7d; /*                     7.56 · 7.04 · 6.15           */
-  --status-warn:  #e0a33a; /*                     8.15 · 7.60 · 6.63           */
+  /* Same hue family as the light value, deliberately: Lab hue 58.6° against
+   * light's 58.0°. It replaces #e0a33a, which was Lab hue 77.8° — a gold, a
+   * different hue from the light theme's brown, so the two themes were not
+   * showing the same colour at different lightness. Chroma (64.0 vs 61.9) and
+   * worst-ground contrast (6.57 vs 6.63) are held where they were; only the
+   * hue moved.                                                               */
+  --status-warn:  #fb9349; /*                     8.07 · 7.52 · 6.57           */
   --status-error: #f0837a; /*                     7.09 · 6.61 · 5.77           */
   --status-unset: #b0a89b; /*                     7.68 · 7.16 · 6.25           */
 
@@ -187,7 +210,7 @@
     --n-8: #efece5;
 
     --status-ok:    #5cba7d;
-    --status-warn:  #e0a33a;
+    --status-warn:  #fb9349;
     --status-error: #f0837a;
     --status-unset: #b0a89b;
   }

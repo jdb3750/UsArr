@@ -44,9 +44,17 @@
   /* --- Status semantics. The only saturated colour in the chrome.
      Always rendered as icon + text + colour, never colour alone.
      Grey is a legitimate status: it means "not configured".
-     Ratios: bg / surface / hover / selected / inset. --- */
+     Ratios: bg / surface / hover / selected / inset.
+
+     --st-warn was #8a5300 light / #e0a33a dark, and the owner called the
+     light value a muddy brown on 2026-08-16. It is now #a44c00 / #fb9349:
+     CIE Lab hue 58.0 and 58.6 against #ff7f00's 59.6, so both themes are
+     the same orange at two lightnesses instead of a brown beside a gold.
+     The word still clears 4.5:1 on the worst of the five grounds (4.55),
+     so the glyph does NOT take a separate, more saturated token -- the
+     split DESIGN-DIRECTION 3.2 permits is available and unexercised. --- */
   --st-ok:       #1c6b3a;  /*                    6.21 5.74 5.43 5.11 6.38    */
-  --st-warn:     #8a5300;  /*                    6.02 5.56 5.26 4.95 6.18    */
+  --st-warn:     #a44c00;  /*                    5.53 5.11 4.84 4.55 5.67    */
   --st-err:      #b3251c;  /*                    6.24 5.77 5.46 5.14 6.41    */
   --st-none:     #5a534a;  /*                    7.20 6.66 6.30 5.93 7.40    */
 
@@ -210,7 +218,7 @@
     --fg-faint:  #9a9284;   /* 5.87 5.47 5.03 4.78 6.22 */
     --focus:     #efece5;
     --st-ok:     #5cba7d;   /* 7.56 7.04 6.48 6.15 8.00 */
-    --st-warn:   #e0a33a;   /* 8.15 7.60 6.99 6.63 8.63 */
+    --st-warn:   #fb9349;   /* 8.07 7.52 6.92 6.57 8.55 */
     --st-err:    #f0837a;   /* 7.09 6.61 6.08 5.77 7.51 */
     --st-none:   #b0a89b;
     --shadow-float: 0 2px 10px rgba(8, 7, 6, 0.62);
@@ -230,7 +238,7 @@
   --fg-faint:  #9a9284;   /* 5.87 5.47 5.03 4.78 6.22 */
   --focus:     #efece5;
   --st-ok:     #5cba7d;   /* 7.56 7.04 6.48 6.15 8.00 */
-  --st-warn:   #e0a33a;   /* 8.15 7.60 6.99 6.63 8.63 */
+  --st-warn:   #fb9349;   /* 8.07 7.52 6.92 6.57 8.55 */
   --st-err:    #f0837a;   /* 7.09 6.61 6.08 5.77 7.51 */
   --st-none:   #b0a89b;
   --shadow-float: 0 2px 10px rgba(8, 7, 6, 0.62);
@@ -992,7 +1000,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 
    So the trade was a fallback for a feature, and measurement says the fallback
    is never reached: scrollWidth - clientWidth is 0 on all 19 tables at 1440,
-   and selftest.mjs asserts nothing exceeds innerWidth at 390/1280/1440/1680/
+   and docs/design/check.mjs asserts nothing exceeds innerWidth at 390/1280/
    1920 on every screen in every state. That assertion is the guard the
    fallback was standing in for, and it is a better one -- it fails the build
    instead of quietly growing a scrollbar. `clip` also keeps overflow-y
