@@ -336,7 +336,7 @@ than no statistics, because people believe them.
 
 | Item | Why deferred | Seam |
 |---|---|---|
-| **Filtered audit UI** | The audit log ships in v0.1 as a plain paginated list; filters are polish | `audit_log` already carries `action`, `target_type`, `actor_user_id`, `result` — filtering is a query |
+| **Filtered audit UI** | The audit log ships in v0.1 as a plain paginated list; filters are polish | `audit_log` already carries `action`, `target_type`, `actor_user_id`, `result` — filtering is a query, and half of it is built: `store.ListAuditLog` takes a scope plus an `AuditQuery{Actions, Results}` for Recent grabs' not-sent arm, over `ix_audit_actor_action`. What is deferred is the screen, not the read |
 | **Security-posture panel** ("you are exposed; 2FA is off") | Serves internet exposure, which is the secondary deployment | It is a read-only view over settings that already exist |
 | **`sqlite-vec` semantic search** ("search by plot description") | Needs an embedding model — a runtime dependency or a remote call, both violating the no-sidecar rule. ⚠️ TMDB's ToU also names ML training/validation as commercial use, so embedding TMDB overviews is legally murky; prefer Wikidata or user-local text | Same retriever seam as §2 |
 | **Download-client visibility** (SAB, NZBGet, qBittorrent, Deluge, Transmission) | Needs session-establishment and JSON-RPC transports that manifests cannot express (`reference/providers.md` §3.2) | Tier 0 providers via the same registry; Search-and-Grab already routes grabs through Prowlarr's own clients, so nothing is blocked meanwhile |
@@ -713,3 +713,62 @@ entry per library" is then a query, not a redesign — which is the same seam th
 `getMusicFolders` return the user's `artist`-kind libraries.
 
 **Trigger.** The OPDS surface has shipped and a user with several libraries asks for the split.
+
+---
+
+## 18. `provenance.service_instance_id` — naming which Prowlarr a grab came from
+
+**What.** A column on `provenance` recording the `service_instance` a grab was dispatched to, so a
+Recent-grabs row can say *which* Prowlarr produced it.
+
+**Why deferred — and this is the judgement, not an oversight.** Recent grabs (§17.5) is a union:
+successes and sent-unknown come from `provenance`, definite failures from `audit_log`. **The failure
+arm can already name its instance** — `audit_log.metadata_json` carries `instance_id` on every grab
+row, written by `internal/httpapi/grab.go`. Only the `provenance` arm cannot, because migration 0001
+gave the table `indexer_name` and `indexer_id` but no service reference.
+
+Four things follow, and together they say *record it*, not *migrate now*:
+
+1. **The union works without it.** This is a display gap on one column of one arm, not a correctness
+   gap. Nothing joins wrongly, nothing is attributed to the wrong user, no read fails. That is the
+   bar the task set — *"if the column is genuinely needed for the union to work"* — and it is not
+   met.
+2. **A migration would not close the gap for existing rows.** `provenance.user_id` could be
+   backfilled to `0` because `0` is a *real* user row that migration 0001 creates and the canonical
+   read predicate already understands. There is no equivalent sentinel in `service_instance`, and
+   inventing one would be a row that names no service. So the column would be `NULL` for every
+   pre-existing acquisition and the UI would still have to render "unknown" — the migration starts
+   closing the gap going forward and does nothing for the history already on disk.
+3. **It would carry no referential integrity anyway.** `provenance` is immutable history, so the
+   column would take **no** foreign key — exactly the argument migration 0002 wrote out for
+   `provenance.user_id`, and 0001 before it for `audit_log.actor_user_id`: `CASCADE` destroys the
+   history the table exists to keep, `SET NULL` erases the actor and cannot be spelled on a
+   `NOT NULL` column, and `RESTRICT` makes deleting a service impossible. A bare `INTEGER` with no
+   constraint is precisely as much integrity as the `audit_log` metadata already gives, at the cost
+   of a fourth migration.
+4. **Cut before you add.** v0.1 has one indexer service in practice, and §16 funds no multi-Prowlarr
+   feature. A migration whose entire benefit is one column of one row in a configuration nobody has
+   yet is the "and also" this project is told to refuse.
+
+**What it would cost.** `ALTER TABLE provenance ADD COLUMN service_instance_id INTEGER` — nullable,
+no default, **no `CHECK`**, no `REFERENCES`, following 0003's pattern and its no-`CHECK` reasoning.
+Plus the write site in `internal/releases`, which already holds the instance id at the moment it
+inserts the row.
+
+**The seam, and it is real rather than aspirational.** The instance id is *in hand* at every point
+that would need it: `internal/releases` receives it before it builds the `Provenance` value, and
+`internal/httpapi/grab.go` already writes it into the audit row on the same request. Nothing has to
+be reconstructed later, which is the property that makes this a one-migration change whenever it is
+wanted rather than an archaeology problem.
+
+**Trigger — either of these, whichever comes first.**
+
+* **A second indexer service becomes a configuration UsArr expects rather than tolerates.** Two
+  Prowlarrs are *creatable* today (nothing enforces uniqueness on `kind`) and each is searched
+  separately, so the ambiguity is live, not hypothetical — but it is a configuration nobody has been
+  pointed at. The trigger fires when the Libraries screen (§17.8) binds more than one indexer, or
+  when a user reports a Recent-grabs row they cannot attribute.
+* **Library sync lands and the import join needs the source service.** Reattaching an imported file
+  to the grab that produced it goes through `provenance.download_id`; if that join ever has to
+  disambiguate by *service* rather than by download id, the column stops being cosmetic and this
+  entry closes.

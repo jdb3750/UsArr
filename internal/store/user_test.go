@@ -314,7 +314,7 @@ func TestUserDeleteSucceedsWhenTheUserHasAuditRows(t *testing.T) {
 	}
 
 	// The audit row must survive intact, still naming the (now deleted) actor.
-	entries, err := s.ListAuditLog(ctx, 10)
+	entries, err := s.ListAuditLog(ctx, OwnerScope(actor), AuditQuery{Limit: 10})
 	if err != nil {
 		t.Fatalf("ListAuditLog: %v", err)
 	}
@@ -363,7 +363,7 @@ func TestAuditAppendAndChain(t *testing.T) {
 		}
 	}
 
-	entries, err := s.ListAuditLog(ctx, 10)
+	entries, err := s.ListAuditLog(ctx, OwnerScope(actor), AuditQuery{Limit: 10})
 	if err != nil {
 		t.Fatalf("ListAuditLog: %v", err)
 	}
