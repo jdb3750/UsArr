@@ -271,9 +271,12 @@ var errSaltAlreadyExists = errors.New("config: a KEK salt already exists at the 
 // redundant instead of wrong.
 //
 // Concurrency: reads are of complete files only, because every write here lands
-// via writeSaltFile's temp-plus-rename. Two processes racing produce identical
-// bytes (both copy the same legacy file), and whichever rename lands second is
-// a no-op replacement of identical content. The function is idempotent.
+// via writeSaltFile's temp-plus-link(2) — NOT temp-plus-rename, and the
+// difference is what makes this race safe. rename(2) would replace the
+// destination, so a second process could clobber the salt a first one had
+// already started sealing credentials under. link(2) refuses when the
+// destination exists, so the loser of the race is told it lost and adopts the
+// winner's file instead of overwriting it. The function is idempotent.
 //
 // It refuses rather than regenerating when there is genuinely no salt anywhere;
 // see ErrKEKSaltAbsent.
@@ -313,16 +316,21 @@ func (c *Config) ResolveKEKSalt() ([]byte, error) {
 }
 
 // writeSaltFile writes a salt atomically: a temp file in the DESTINATION
-// directory, fsynced, then rename(2) within that same directory.
+// directory, fsynced, then link(2) within that same directory.
 //
-// Atomicity is not decoration here. A reader that catches a salt half-written in
-// place sees a short or truncated value; validation would reject it and startup
-// would refuse — a false alarm telling an operator their credentials are at risk
-// when they are not. rename(2) is atomic, so a concurrent reader sees either the
-// old file or the complete new one and never a partial. The temp file must be in
-// the same directory as the destination, because USARR_CONFIG_DIR and
-// USARR_DATA_DIR may be different filesystems and a cross-device rename fails
-// with EXDEV.
+// It is link(2), not rename(2). Both are atomic to a reader, but rename replaces
+// the destination unconditionally and link refuses when it exists — see the long
+// comment at the call below for why "never clobber" is the property that matters
+// on a file whose loss is unrecoverable.
+//
+// Atomicity is not decoration here either. A reader that catches a salt
+// half-written in place sees a short or truncated value; validation would reject
+// it and startup would refuse — a false alarm telling an operator their
+// credentials are at risk when they are not. link(2) publishes the complete file
+// under its real name in one step, so a concurrent reader sees either nothing or
+// the whole thing and never a partial. The temp file must be in the same
+// directory as the destination, because USARR_CONFIG_DIR and USARR_DATA_DIR may
+// be different filesystems and a cross-device link fails with EXDEV.
 //
 // It returns errSaltAlreadyExists — never an overwrite — when the destination
 // appeared underneath it. Callers treat that as "another process won the race"
@@ -393,9 +401,9 @@ func (c *Config) writeSaltFile(path string, salt []byte) (err error) {
 		err = nil
 	}
 	_ = os.Remove(tmpName)
-	// fsync the directory so the rename itself survives a power cut. Best
+	// fsync the directory so the new link itself survives a power cut. Best
 	// effort: some filesystems refuse to open a directory for sync, and the
-	// rename is already durable on every mainstream one.
+	// directory entry is already durable on every mainstream one.
 	//
 	// #nosec G304 -- dir is filepath.Dir of a path this package built from
 	// USARR_CONFIG_DIR, and it is opened read-only purely to fsync the

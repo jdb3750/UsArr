@@ -215,15 +215,26 @@ func (c *Config) NewSecretKeyPath() string { return filepath.Join(c.KeysDir(), "
 // correct exactly as written, which makes the catastrophic restore unreachable
 // rather than merely documented.
 //
-// ResolveKEKSalt relocates an existing keys/kek.salt here on startup; see
-// LegacyKEKSaltPath. It is 0600 like every other file UsArr writes, which is
-// caution rather than necessity.
+// It is CONFIG_DIR and not DATA_DIR, and that is load-bearing rather than
+// arbitrary. CONFIGURATION.md §5 defines DATA_DIR as regenerable and documents
+// it as safe to delete — the cache, the logs, scratch space, all of it rebuilt
+// on the next run. An input that cannot be regenerated therefore cannot live
+// there: putting the salt under DATA_DIR would make "safe to delete" false for
+// exactly one file in it, and the operator who acts on the documented promise
+// loses every stored credential. Do not move it to sit next to the caches.
+//
+// ResolveKEKSalt COPIES an existing keys/kek.salt here on startup and leaves the
+// original in place forever; see LegacyKEKSaltPath. It is 0600 like every other
+// file UsArr writes, which is caution rather than necessity.
 func (c *Config) KEKSaltPath() string { return filepath.Join(c.ConfigDir, "kek.salt") }
 
-// LegacyKEKSaltPath is where the KEK salt lived before it moved beside the
-// database. Installs created before that change still have it here, so startup
-// migrates it forward rather than treating it as missing — treating it as
-// missing would destroy exactly the credentials the move exists to protect.
+// LegacyKEKSaltPath is where the KEK salt lived before KEKSaltPath moved beside
+// the database. Installs created before that change still have it here, so
+// startup COPIES it forward rather than treating it as missing — treating it as
+// missing would destroy exactly the credentials the change exists to protect.
+//
+// The file at this path is never deleted and never renamed. ResolveKEKSalt says
+// why the carry-forward must not be a move.
 func (c *Config) LegacyKEKSaltPath() string { return filepath.Join(c.KeysDir(), "kek.salt") }
 
 // DatabasePath is the main database: library, services, users, audit log.

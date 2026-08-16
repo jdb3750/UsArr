@@ -80,6 +80,27 @@ Distinct `info` labels for the credential KEK and the URL-signing key, so the tw
 independently. The earlier design said only "derived", which left the two purposes sharing one
 secret — meaning rotating the vault key would silently invalidate every outstanding stream URL.
 
+**The salt is `$USARR_CONFIG_DIR/kek.salt`, and your backup must contain it.** 32 random bytes,
+generated once per install, written at mode 0600 beside `usarr.db`. It is **not a secret** — its
+value does not depend on staying confidential, only on being per-install and stable — but it is
+**not regenerable** either, because a different salt is a different KEK. Lose it and every stored
+credential is exactly as unrecoverable as if the master key were lost; `CONFIGURATION.md` §3.5
+covers both under one procedure for that reason.
+
+**The recoverable unit is the whole set: ciphertext + salt + master key.** Any two of the three
+restore nothing. That is what puts the salt beside the database — inside the archive an operator is
+already told to take — and the master key outside it, in a different place entirely
+(`CONFIGURATION.md` §5, §6.1). Two of the three travel together on purpose; the third travels
+separately on purpose.
+
+⚠️ **On an install created before the salt moved, `keys/kek.salt` still exists, and it stays.**
+Startup **copies** it to `$USARR_CONFIG_DIR/kek.salt` — it is a copy, never a move, and the legacy
+file is deliberately kept forever. A move would have a window in which neither path holds the salt,
+and a crash inside that window destroys the credentials the change exists to protect; the copy has
+no such window and costs one 45-byte file. So do not read the new path as a replacement for the old
+one, and do not delete the old one to tidy up. `internal/config.ResolveKEKSalt` carries the full
+argument, and `CONFIGURATION.md` §3.2 states the operator-facing rule.
+
 ### 1.4 `USARR_SECRET_KEY` lifecycle — one behaviour, stated once
 
 | Situation | Behaviour |
@@ -110,6 +131,12 @@ it explicitly, and the host-migration procedure names the key as a **separate st
 
 `usarr key rotate` and `usarr keygen` are **v0.1 deliverables**. A documented recovery path that is
 on no milestone is a recovery path that does not exist when the first user needs it.
+
+⚠️ **None of it is built yet.** The binary has no subcommands at all, and `keys/secret.key.new` has
+no caller anywhere in the tree. What follows is the design the implementation must satisfy;
+`CONFIGURATION.md` §3.4 carries the same warning and §3.5 is the only key-replacement route that
+works today. What *is* implemented is the substrate rotation needs: every envelope carries its
+wrapping key's id (§1.1), and `internal/crypto` re-wraps a DEK without re-encrypting the payload.
 
 ```
 1. Generate KEK_new. Write it to secret.key.new (mode 0600, fsync, fsync the directory).
