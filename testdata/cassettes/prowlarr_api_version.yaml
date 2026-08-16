@@ -1,0 +1,37 @@
+---
+# GET /api reports the API version the instance serves. Prowlarr 2.x still serves
+# v1, so the path is NEVER derived from the app version.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: prowlarr.test:9696
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://prowlarr.test:9696/api
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json
+            X-Application-Version:
+                - 2.6.2.5052
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            {
+              "current": "v1",
+              "deprecated": []
+            }

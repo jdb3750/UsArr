@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/netip"
 	"strings"
-	"time"
 )
 
 // Resolver is the DNS surface this package needs. *net.Resolver satisfies it, so

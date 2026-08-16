@@ -90,17 +90,17 @@ var nonPublicV4 = []netip.Prefix{
 // are denied wholesale rather than unwrapped: they embed an IPv4 address that a
 // naive check would never see, and UsArr has no reason to speak to any of them.
 var nonPublicV6 = []netip.Prefix{
-	mustPrefix("::/128"),        // unspecified
-	mustPrefix("::1/128"),       // loopback
-	mustPrefix("64:ff9b::/96"),  // NAT64 well-known
+	mustPrefix("::/128"),         // unspecified
+	mustPrefix("::1/128"),        // loopback
+	mustPrefix("64:ff9b::/96"),   // NAT64 well-known
 	mustPrefix("64:ff9b:1::/48"), // NAT64 local-use
-	mustPrefix("100::/64"),      // discard-only
-	mustPrefix("2001::/23"),     // IETF protocol assignments, includes Teredo 2001::/32
-	mustPrefix("2001:db8::/32"), // documentation
-	mustPrefix("2002::/16"),     // 6to4
-	mustPrefix("fc00::/7"),      // unique local
-	mustPrefix("fe80::/10"),     // link-local
-	mustPrefix("ff00::/8"),      // multicast
+	mustPrefix("100::/64"),       // discard-only
+	mustPrefix("2001::/23"),      // IETF protocol assignments, includes Teredo 2001::/32
+	mustPrefix("2001:db8::/32"),  // documentation
+	mustPrefix("2002::/16"),      // 6to4
+	mustPrefix("fc00::/7"),       // unique local
+	mustPrefix("fe80::/10"),      // link-local
+	mustPrefix("ff00::/8"),       // multicast
 }
 
 // CheckAddr applies the address policy for a class to one resolved address.

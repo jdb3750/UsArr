@@ -1,0 +1,54 @@
+---
+# Envelope shape (2): a BARE JSON ARRAY of FluentValidation failures, not the
+# usual error object. Decoding it into a struct fails outright, which is why the
+# decoder sniffs the first byte.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 35
+        host: prowlarr.test:9696
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://prowlarr.test:9696/api/v1/search
+        method: POST
+        body: |-
+            {
+              "guid": "x",
+              "indexerId": 1
+            }
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json
+            X-Application-Version:
+                - 2.6.2.5052
+        status: 400 Bad Request
+        code: 400
+        duration: 1ms
+        body: |-
+            [
+              {
+                "propertyName": "IndexerId",
+                "errorMessage": "Indexer Id must be greater than 0",
+                "attemptedValue": 0,
+                "severity": "error",
+                "errorCode": "GreaterThanValidator"
+              },
+              {
+                "propertyName": "Guid",
+                "errorMessage": "'Guid' must not be empty.",
+                "severity": "error",
+                "errorCode": "NotEmptyValidator"
+              }
+            ]
