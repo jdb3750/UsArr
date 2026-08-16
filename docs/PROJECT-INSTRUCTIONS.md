@@ -15,12 +15,48 @@ This file records the instruction text only. The design detail lives in `CLAUDE.
 
 | Version | Date | State | Size |
 | --- | --- | --- | --- |
-| v1.1 | 2026-08-16 | **Proposed — not yet applied** | 7022 bytes |
+| v1.2 | 2026-08-16 | **Proposed — supersedes v1.1, not yet applied** | 7585 bytes |
+| v1.1 | 2026-08-16 | Superseded by v1.2, never applied | 7022 bytes |
 | v1.0 | 2026-08-16 | Applied to project settings | 3849 bytes |
 
-## v1.1 — proposed
+## v1.2 — proposed
 
-This is the text to paste into the Project's settings, replacing v1.0.
+This is the text to paste into the Project's settings, replacing v1.0. It supersedes v1.1,
+which was drafted but never applied.
+
+````
+You are working on UsArr: a fast, self-hosted, unified hub and gateway over the media-acquisition ecosystem, running on a single self-hoster's own server. It aggregates the *Arrs (Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian) and media backends (Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita) into one local library you can browse, search and request from, and it exposes protocol surfaces (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend individually. It is meant to coexist with the rest of the ecosystem, not replace it. The stack is Go compiled to a single static binary with a SvelteKit SPA embedded in it, over SQLite in WAL mode. Do not state a Go minimum from memory: the go directive in go.mod is authoritative, 1.25.13 at the time of writing, and it is a moving floor raised by the gating govulncheck step rather than by the dependency floor beneath it, with the reasoning in docs/DEVELOPMENT.md. Implementation has begun on feature branches while CLAUDE.md, the README and section 16 of ARCHITECTURE.md all still say nothing is implemented; that wording is stale wherever code exists, so check the working tree before describing project status, and name the branch you checked.
+
+Before you propose or write anything, read CLAUDE.md at the repo root and then docs/ARCHITECTURE.md. Those two files, plus the ADRs in docs/DECISIONS.md, are the source of truth. Section 16 of ARCHITECTURE.md is authoritative for what belongs in which milestone, and it wins over every other document, this one included.
+
+Four principles govern every decision.
+
+First, replica not proxy: every user-facing read renders from local SQLite, and no screen ever blocks on an *Arr or a metadata provider. Perceived speed is the owner's number-one requirement, so anything that puts a synchronous upstream call on a render path is wrong by default and needs an explicit argument to survive. Three narrow exceptions are documented where they occur, and none of them blocks a render: byte streams on UsArr's own protocol surfaces, where audio, ebooks and comics are proxied with a plain io.Copy, video links out, and images are always proxied and cached; search over unowned items, which runs out of band and streams into an already-rendered page over SSE; and release search across indexers, which is remote and sits behind progressive disclosure.
+
+Second, UsArr is not a player: it never transcodes, never depends on FFmpeg, and does not implement video playback. It routes and links out to whichever media server owns the bytes.
+
+Third, pluggable by default: UsArr must work over a full stack, over any single library-bearing service, or over Prowlarr alone in Search-and-Grab mode, and every feature degrades honestly when a service is absent rather than rendering an empty screen. Presenting a library requires at least one library-bearing service; Prowlarr alone has no library. Requests are a pillar rather than a side feature: the Prowlarr free-text path ships in v0.1 and the *Arr-backed flow in v0.2.
+
+Fourth, single-user in v0.1 but multi-user in the schema from migration 0001. Two rules hold from the first migration: every user-scoped row carries a user_id, and every read path that aggregates across instances takes an access-scope parameter in its query signature, covering the grid, search, the client prefix index, the availability rollup and every northbound surface, defaulting in v0.1 to the owner's full scope. A rollup computed across instances a user cannot see is an existence oracle. The UI merely hides what has not shipped; authorization is enforced server-side from the first commit and is never bolted on later.
+
+Adversarial review is mandatory, and the owner asked for it explicitly. Substantive design, research or synthesis gets a reviewer pass that attacks assumptions, hunts for gaps and omissions, and verifies factual claims against primary sources. Every finding is then applied or rebutted in writing in docs/REVIEW-LOG.md. Findings are never quietly dropped.
+
+Verify, do not assert. Every claim about an external API, rate limit, licensing term, port, endpoint or field name must cite a primary source: official documentation, an OpenAPI spec, or the service's own source code. Training data about this ecosystem is stale and wrong in specific, load-bearing ways, so treat recollection as a hypothesis to check rather than a fact. Where you are reasoning rather than citing, say so and label it as inference. Never document a feature as existing when it does not. The "Ecosystem facts that stale training data gets wrong" section of CLAUDE.md is the list rather than a sample; re-verify any entry against a primary source before relying on it. The licence is settled: UsArr is licensed AGPL-3.0, confirmed by the owner on 2026-08-16, with the verbatim text in LICENSE and the reasoning in ADR-0024. There are no per-file licence headers, and new dependencies need an AGPL-compatibility check.
+
+Security is not negotiable. *Arr API keys are full-admin credentials: encrypted at rest under a versioned, AAD-bound scheme, never logged, never sent to the browser, and never sent to a host the user has just edited without re-entry. SSRF is a first-class risk because users configure arbitrary internal URLs, so resolve then pin. Argon2id is for user passwords only; per-app API keys verify with a fast keyed hash, because running Argon2id on every request is a remote memory-exhaustion vector. Section 14 of ARCHITECTURE.md owns the full threat model.
+
+Cut before you add, but leave the seams open. The project's largest risk is never shipping, so a proposal that adds a subsystem must say what it removes or defer itself to a later milestone. Deferred is not rejected: docs/FUTURE.md holds the features that are wanted later, each with the specific seam in the current design that keeps it cheap to add. Preserve those seams; do not build the future feature early.
+
+Some things are permanently refused rather than deferred. Section 1.4 of ARCHITECTURE.md lists six: a video transcoder, an in-app media player, any FFmpeg dependency, reimplementing the *Arr download and import engines, a required sidecar (optional backends may exist, but Postgres, Redis or a search server may never be required), and being a dashboard. Section 16 adds native TV or mobile apps. Do not propose these and do not reopen them. Section 16 does name two measured conditions that would reopen playback, a hostile or unusable Jellyfin API and at least two engineers who can own an FFmpeg surface indefinitely including security response; neither is met, so treat it as closed. Anything out of scope that is not on those two lists is deferred rather than closed, so check docs/FUTURE.md before assuming either way.
+
+On interface design, read section 17 of ARCHITECTURE.md before touching a screen. It is the only place the screens are specified, and neither CLAUDE.md nor the README points at it. The constraint is utilitarian over stylish: standard patterns in preference to novel ones, density and speed over animation, and no visual flair that costs render time. Navidrome is the reference point, and "sleek" and "modern" are explicitly not goals. Concretely: no animation on any list, grid or navigation transition; native controls and real middle-clickable links; compact by default; every screen usable in a phone browser; and no skeleton shimmer. Section 17 enumerates the screens and section 16 says which ship in v0.1; read both rather than assuming a count. A degraded backend gets a non-modal banner; the catalogue never greys out.
+````
+
+## v1.1 — superseded
+
+Drafted as the replacement for v1.0 but never applied to the Project's settings. Superseded by
+v1.2, which corrects the Go floor, the licence status and the project-status wording.
+Preserved verbatim as the record of what was proposed — 7022 bytes.
 
 ````
 You are working on UsArr: a fast, self-hosted, unified hub and gateway over the media-acquisition ecosystem, running on a single self-hoster's own server. It aggregates the *Arrs (Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian) and media backends (Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita) into one local library you can browse, search and request from, and it exposes protocol surfaces (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend individually. It is meant to coexist with the rest of the ecosystem, not replace it. The stack is Go 1.24+ compiled to a single static binary with a SvelteKit SPA embedded in it, over SQLite in WAL mode. The project is pre-alpha: extensive design documentation exists and nothing is implemented. Never write or imply otherwise.
@@ -75,6 +111,45 @@ On interface design: utilitarian over stylish. The bar is tried-and-true, easy t
 ````
 
 ## Changelog
+
+### v1.2 — 2026-08-16 (proposed)
+
+Produced by a drift check triggered by the scaffold session's report that `CLAUDE.md`'s Go
+version was wrong. An adversarial review of the draft raised 1 blocker and 4 majors; all were
+applied. Each change below cites what forced it.
+
+- **Go version corrected.** v1.0 and v1.1 both said "Go 1.24+". The binding constraint is
+  govulncheck, not any dependency: run against the code on `claude/hearth-thread-kirqa7`, it
+  reports 15 called stdlib vulnerabilities at go1.25.7, 5 at go1.25.12, and is clean at
+  go1.25.13. goose v3.27.3's own `go` directive is only 1.25.7, so the goose argument for
+  1.25.13 overstates it by six patch releases. `go.mod` on that branch declares `go 1.25.13`.
+- **The number is stated as a dated instance rather than a fact about the stack**, because the
+  floor is time-dependent — it is the newest 1.25.x that scans clean, and when Go 1.27.0 ships,
+  1.25 goes EOL and the floor jumps. The text now points at `go.mod` as authoritative and
+  `docs/DEVELOPMENT.md` for the reasoning.
+- **The reasoning pointer is `docs/DEVELOPMENT.md`, not `CLAUDE.md`.** The draft said
+  `CLAUDE.md` carried it; at review time `CLAUDE.md:131` still said "Go 1.24+" on both
+  `origin/main` and `kirqa7`, so that pointer would have sent agents to the most wrong of the
+  three numbers then in the repo.
+- **Licence corrected from undecided to settled.** `LICENSE` (34,523 bytes, AGPL-3.0) landed on
+  `main` in commit `719c602`, `CLAUDE.md:168-171` and `README.md:250-253` record owner
+  confirmation on 2026-08-16, and ADR-0024 carries the reasoning. The two operational
+  consequences are included: no per-file licence headers, and new dependencies need an
+  AGPL-compatibility check.
+- **Project status reworded.** Code now exists on `claude/hearth-thread-kirqa7` (98 Go files)
+  while `CLAUDE.md:22`, `README.md:3` and `ARCHITECTURE.md:1264` all still assert nothing is
+  implemented — including on that branch. The draft's "check the branch you are on" gave no
+  tiebreak and, because the instructions declare section 16 authoritative over themselves, an
+  agent would have resolved the conflict against the instructions. The text now names the stale
+  documents explicitly and says to check the working tree.
+- **The screens sentence is now a pointer rather than a count.** v1.1 said four screens with the
+  first three in v0.1; the unmerged design branch `claude/hearth-thread-vn9w7u` already changes
+  that to five screens with the first four, adds section 17.8 (Libraries), and carries ADR-0028
+  amending section 17.2 and ADR-0032 amending section 16. A count would need re-applying by hand
+  as soon as that merges.
+- **"Nothing else links to section 17" narrowed** to "neither `CLAUDE.md` nor the README points
+  at it" — seven in-repo references to section 17 do exist, all inside `ARCHITECTURE.md` plus
+  `docs/reference/sync.md:204`.
 
 ### v1.1 — 2026-08-16 (proposed)
 
