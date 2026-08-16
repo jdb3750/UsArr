@@ -58,7 +58,7 @@ distinctions now matter and are used consistently below:
 | [0032](#adr-0032) | Read-only catalogue sources move early; command sinks defer | **Accepted** — **amends** §16; **one member reversed by [ADR-0035](#adr-0035)** |
 | [0033](#adr-0033) | `work.kind` gains `person`; a credit is not a music artist | **Accepted** — owner-decided 2026-08-16; refines ADR-0009, ADR-0031 |
 | [0034](#adr-0034) | The project keeps the name UsArr | **Accepted** — owner-decided 2026-08-16; naming only, nothing in the codebase moves |
-| [0035](#adr-0035) | Kavita, not Komga, is v0.1's comics-and-books catalogue source | **Accepted** — owner-decided 2026-08-16; **reverses one member of [ADR-0032](#adr-0032)**, confirms [ADR-0030](#adr-0030) |
+| [0035](#adr-0035) | Kavita, not Komga, is the comics-and-books catalogue source | **Accepted** — owner-decided 2026-08-16; **reverses one member of [ADR-0032](#adr-0032)**, confirms [ADR-0030](#adr-0030); ⚠️ **amended 2026-08-16** — the catalogue sources sequence **after** v0.1, so this ADR picks *which* source, and its spike orders the post-v0.1 sequence |
 
 ---
 
@@ -2849,12 +2849,42 @@ recorded here so the next attempt does not rediscover them the expensive way.
 
 <a id="adr-0035"></a>
 
-## ADR-0035 — Kavita, not Komga, is v0.1's comics-and-books catalogue source
+## ADR-0035 — Kavita, not Komga, is the comics-and-books catalogue source
 
 **Status:** Accepted · **owner-decided 2026-08-16** · **Reverses one member of
-[ADR-0032](#adr-0032)**, whose shape is otherwise untouched · **amends
-[`ARCHITECTURE.md`](./ARCHITECTURE.md) §16**, which remains authoritative for scope ·
+[ADR-0032](#adr-0032)**, whose shape is otherwise untouched ·
+**[`ARCHITECTURE.md`](./ARCHITECTURE.md) §16** remains authoritative for scope ·
 **re-examines [ADR-0030](#adr-0030)** and confirms it.
+
+### ⚠️ Amendment, 2026-08-16 — the milestone moved under this ADR, and the choice inside it did not
+
+**This ADR was written while the catalogue sources were inside v0.1, and they are not any more.** The
+owner delegated the provider count — *"I'm fine with starting small… we can start with 2 services or
+5"* — and the call taken is that **v0.1 has no catalogue sources at all**: v0.1 is **Sonarr, Radarr
+and Prowlarr**, the \*Arr library sync proves the replica thesis on real data first, and the
+catalogue sources — **Navidrome, Audiobookshelf, Kavita** — then arrive **one at a time, after
+v0.1**. §16 is authoritative for which milestone each lands in, and a status note on ADR-0032 is
+owed there rather than here.
+
+**What that does and does not do to this ADR.** Every judgement below survives; only the milestone
+label on them moves. Specifically:
+
+1. **The choice of Kavita over Komga stands unchanged.** It is a choice about *which* comics-and-books
+   source is built, made on the ground that Kavita is the install the owner actually runs. That ground
+   is untouched by when it is built. **Read every "v0.1" in the text below as "the milestone Kavita
+   lands in".**
+2. **§2's spike is not wasted work, and its branch now orders a different sequence.** It no longer
+   decides a build order *inside* v0.1 — there is no catalogue source in v0.1 to order. It decides the
+   order of the **post-v0.1 sequence**: Kavita first if its watermark works, **Navidrome first if it
+   does not**. The reasoning is unchanged and the Navidrome branch gets stronger, because de-risking
+   v0.4's OpenSubsonic target early matters more when the sequence is serial and one-at-a-time.
+   It is no longer a *day-one* spike; it runs before the first catalogue adapter is written.
+3. **§1's rendering requirement stands and its milestone moves with it.** §17 and the mockups must
+   render free-Kavita's null identifiers as the *normal* case **from the milestone Kavita lands in** —
+   not in v0.1, which draws no comics library at all because it has no comics source.
+4. **§3's confirmation of ADR-0030 is untouched**, and its "more expensive now that the adapter is
+   v0.1" argument weakens to "expensive whenever the adapter lands", which does not change the verdict:
+   a `volume` `work.kind` in migration 0001 for a single adapter is the wrong shape at any milestone.
 
 ### Context
 
@@ -2885,14 +2915,16 @@ it sounds: one member of a four-item list changes place.
 > and **no media type loses its v0.1 source**: Kavita covers comics and manga, and covers books as
 > well.
 >
-> **The build *order* inside v0.1 is not fixed by this ADR. It is decided by the day-one watermark
-> spike in §3 below**, whose result is falsifiable and whose two branches are written down in advance.
+> **The build *order* is not fixed by this ADR. It is decided by the watermark spike in §2 below**,
+> whose result is falsifiable and whose two branches are written down in advance. ⚠️ Per the
+> amendment above, that order is now the order of the **post-v0.1 catalogue sequence**, not an order
+> inside v0.1.
 
-### 1. Identity gets weaker in v0.1, and it is now the default path rather than an edge case
+### 1. Identity gets weaker, and it is the default path rather than an edge case
 
 **Kavita's `aniListId`, `malId`, `comicVineId` and the rest are null without Kavita+.** ADR-0032
 already recorded this as one of the three reasons Kavita was the thing cut. Under this ADR it becomes
-**what an ordinary v0.1 user sees**, not a documented edge case.
+**what an ordinary user sees once Kavita lands**, not a documented edge case.
 
 That state was already designed — the *"identifier fields are null because they are behind a paid
 tier"* case — and the change is one of frequency, not of mechanism. What follows:
@@ -2903,7 +2935,9 @@ tier"* case — and the change is one of frequency, not of mechanism. What follo
   Komga are both title-and-metadata matching; **paid Kavita is strictly better than both**. The
   identity loss against ADR-0032's plan is therefore near zero, and the honest statement is that
   **comics has no strong-identity path in v0.1 under either choice**.
-- **`ARCHITECTURE.md` §17 and the mockups must render this as the normal case.** The "not identified"
+- **`ARCHITECTURE.md` §17 and the mockups must render this as the normal case — from the milestone
+  Kavita lands in.** ⚠️ Not in v0.1, which draws no comics or books library at all, because it has no
+  catalogue source for either. The "not identified"
   badge and the comics gap list are not exception states on a comics library; they are what the
   screen looks like. A design that treats them as edge cases will under-serve the majority path.
 - **It must never read as a defect in UsArr, and it must never read as nagware.** The screen says
@@ -2951,14 +2985,14 @@ actually testing:
 
 **And the spike decides the build order, which is why it is day one:**
 
-- **If Kavita has a usable watermark** → build Kavita first. It is the owner's install, it is the
+- **If Kavita has a usable watermark** → build Kavita first *of the catalogue sources*. It is the owner's install, it is the
   source with the most types riding on it (books, comics, manga), and it is the one that can be
   tested against real data from the first commit.
 - **If Kavita has no usable watermark** → **build Navidrome first.** Kavita then becomes the
   *hardest* of the three rather than the easiest — reconciliation-only, with the channel-3b
   fallback path exercised before the channel-3b happy path exists — and Navidrome de-risks two things
   at once, because it is also the service **v0.4's OpenSubsonic surface** is written against. Kavita
-  still ships in v0.1 either way; only the order moves.
+  still ships either way; only the order moves. ⚠️ Both branches order the **post-v0.1** sequence.
 
 **This ADR deliberately does not pre-judge which branch is taken.** The evidence above says the
 `LastModifiedDate` key is definitely unusable and says nothing conclusive about `LastChapterAdded` —
@@ -2978,7 +3012,7 @@ v0.2 concern, so it is re-examined here rather than inherited.
    Volume is a *grouping of chapters within a series*, not an independently-identified work: it has
    no external id in any provider, it is not what a user searches for, and it is not what any other
    source in the six-type set models. None of that changes with the milestone.
-2. **A third node would now be the only place in the schema with a kind that one source produces.**
+2. **A third node would be the only place in the schema with a kind that one source produces.**
    Komga is two levels; Audiobookshelf, Navidrome, Sonarr and Radarr are all two or fewer below the
    top. Adding `volume` as a `work.kind` in migration 0001 — the one migration that can never be
    edited — for a single adapter is the shape `CLAUDE.md` warns about, and it would be *more*
@@ -2988,18 +3022,21 @@ v0.2 concern, so it is re-examined here rather than inherited.
    makes it more visible, not less true. `volume_label` and `volume_sort` are what the UI renders,
    and `LevelBar` (DESIGN-DIRECTION §9.7) already has a comics rendering.
 
-**Verdict: confirmed, unchanged, and now load-bearing in v0.1.**
+**Verdict: confirmed and unchanged.** ⚠️ The amendment above weakens only the *milestone* half of point 2 — "more expensive now that the adapter is v0.1" becomes "expensive
+whenever the adapter lands" — which does not move the verdict.
 
 ### Consequences
 
-- **v0.1's three non-\*Arr catalogue sources are Navidrome, Audiobookshelf and Kavita.** Komga is
-  v0.2, in the slot Kavita vacated. The count, the payment and the "every media type has a v0.1
+- **The three non-\*Arr catalogue sources are Navidrome, Audiobookshelf and Kavita**, and ⚠️ per the
+  amendment above **none of them is in v0.1** — they sequence after it, one at a time. Komga follows
+  Kavita, in the slot Kavita vacated. The count, the payment and the "every media type has a v0.1
   source" claim are all preserved exactly.
 - **Comics and books have no strong-identity path in v0.1 on a free instance**, and the screens
   render that as the normal case. This is *not* a regression against ADR-0032, because Komga supplies
   no external identifiers at all — see §1.
-- **The day-one spike is Kavita's `LastChapterAdded` ordering, with the criterion in §2**, and its
-  result sets the build order inside v0.1. §16's Komga probe line is superseded by it.
+- **The spike is Kavita's `LastChapterAdded` ordering, with the criterion in §2**, and its result
+  sets the order of the post-v0.1 catalogue sequence. §16's Komga probe line is superseded by it,
+  and the spike is no longer a day-one item — it runs before the first catalogue adapter is written.
 - **v0.4's single-Navidrome assumption is now checked against a real install rather than assumed.**
   The owner runs exactly one Navidrome, which is what `reference/gateway.md`'s narrowed OpenSubsonic
   scope was written against. 🔍 It remains an assumption about *other* users' installs; it is no
