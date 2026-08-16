@@ -180,6 +180,7 @@ binary that 404s on `/`.** The Makefile wires the dependency; running `go build`
 | `make test` | `go test ./... -race -shuffle=on` plus `pnpm test`. No network, no Docker. |
 | `make test-integration` | Behind the `integration` build tag. Needs a live stack; **never in CI**. |
 | `make bench` | Wall-clock performance harness. A **release** gate on named hardware, never a merge gate. |
+| `make bench-rss` | Memory harness: idle and peak process RSS over a 500k-row database, sweeping `cache_size` × `mmap_size`. §5. |
 | `make lint` | `golangci-lint run`, `svelte-check`, `eslint`. |
 | `make fmt` / `fmt-check` | Rewrite / verify formatting. |
 | `make secrets` | `gitleaks dir .` over the working tree. **Gating.** |
@@ -243,6 +244,46 @@ a self-hosted single-point-of-failure runner or emulation whose numbers mean not
 gates on shared CI are flake generators — the predictable outcome is that they get disabled in month
 two, but only after blocking real work first. Record `make bench` output in `docs/BENCHMARKS.md`
 with the hardware and commit named, and treat regressions as a release conversation.
+
+### Memory: `make bench-rss`
+
+```bash
+make bench-rss                                       # 500k rows, 9 pragma cells, ~45 s + fixture
+make bench-rss SPIKE_FLAGS='-rows=50000'             # fast smoke run
+make bench-rss SPIKE_FLAGS='-rebuild'                # rebuild the fixture, remeasure the import peak
+make bench-rss SPIKE_FLAGS='-cache=-2000 -mmap=0'    # one cell
+```
+
+**What it does.** Builds a 500k-row fixture through the **real `internal/db` open path** — so the
+pragmas under test are the ones the binary actually sets, not a copy — then walks *idle → one pinned
+read connection → the whole `NumCPU*2` read pool → a 10,000-row write burst*, sampling process RSS at
+each step, once per `cache_size` × `mmap_size` cell.
+
+Three properties worth knowing before you read a number off it:
+
+* **RSS, not `MemStats`.** `VmRSS` and `VmHWM` from `/proc/self/status`. SQLite's page cache is not on
+  the Go heap; on the reference run the Go heap read 0.3 MB against 235 MB of RSS. On a platform
+  without `/proc` every RSS column reads `n/a` and the output says the run measured nothing —
+  deliberately, rather than substituting a heap figure that would be pasted into an ADR as if it were
+  RSS.
+* **One child process per cell.** `VmHWM` is a per-process high-water mark that never falls, so nine
+  cells in one process would produce one peak and eight fictions.
+* **Each cell gets its own copy of the fixture**, so a cell's write burst cannot bias the next.
+
+**What to do with the output.** It prints a table and writes the same table to `.dev/rss-spike.md`
+(gitignored, removed by `make clean`), formatted to paste into **ADR-0001** — which is where the
+measurement lives, next to the budget it justifies. **Name the hardware.** Architecture, core count
+and page size all move these figures: the read pool is `NumCPU*2`, and the page cache is
+per-connection, so a result from one machine is not a result for another. The harness prints
+`GOOS`/`GOARCH`/CPU count/page size/total RAM into its own header for exactly that reason.
+
+**It is not in `make check` and must never be.** It is not in `make bench` either: that target runs Go
+benchmarks, and this is a minutes-long measurement tool whose output is prose for an ADR. Both live
+behind the `bench` build tag, so neither compiles into a normal build.
+
+The current recorded result — **x86-64 only; arm64 is unmeasured** — is in ADR-0001, correction 3.
+Two things it settled: `mmap_size` is a **no-op** under this driver (mmap is compiled out), and
+`cache_size` is **per-connection**, so it multiplies by pool size rather than costing what it says.
 
 ### Rules
 

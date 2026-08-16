@@ -768,9 +768,10 @@ deliberately rather than by drift (FUTURE.md §10).
    rollup updates — puts every user write behind it. **Import batches commit at `min(2000 rows,
    100 ms)`**, not on row count alone, and interactive commands preempt at batch boundaries. §13
    states the write budget as measured *during a concurrent import*.
-4. **Pragmas** in the sync reference. ⚠️ `mmap_size` and `cache_size` are pending measurement —
-   whether `mmap_size` has any effect under this driver, and whether `cache_size` is per-connection
-   or shared, are both undetermined (§13).
+4. **Pragmas** in the sync reference. Both formerly-pending values are **measured on x86-64**
+   (ADR-0001, `make bench-rss`): `mmap_size` is a **no-op** under this driver, whose SQLite is built
+   with `MAX_MMAP_SIZE=0`; `cache_size` is **per-connection**, so with a `NumCPU*2` read pool it
+   multiplies by pool size + 1 rather than costing what it says. Unmeasured on arm64 (§13).
 5. **`ANALYZE` after bulk import.**
 
 ⚠️ **The NAS case:** SQLite's many-small-writes pattern causes severe write amplification on ZFS and
@@ -1138,8 +1139,8 @@ Reference hardware: a Raspberry Pi 5, 10k movies / 2k series (~400k episode rows
 | `POST` write ack (**measured during a concurrent full import**) | < 10 ms | < 40 ms |
 | `GET /stream/{id}` resolve + authorize (to first byte) | < 5 ms | < 20 ms |
 | Process start to listener accepting | < 300 ms | < 1 s |
-| Idle RSS | ⚠️ target < 80 MB, **unmeasured** | ⚠️ < 120 MB |
-| Peak RSS during a 10k-item import | — | ⚠️ < 300 MB |
+| Idle RSS | target < 80 MB — **storage layer measured at 10 MB** (x86-64, below) | < 120 MB |
+| Peak RSS during a 10k-item import | — | < 300 MB — **500k-row import measured at 50 MB** (x86-64) |
 
 **Cold start** — the run that forms the speed opinion (§4.4.1), previously unbudgeted entirely:
 
@@ -1159,11 +1160,28 @@ review that raised this attributed UsArr's profile to "SQLite compiled to WASM i
 own linear-memory arena and a JIT" — which is **also now wrong**: `ncruces/go-sqlite3` moved off
 wazero to the maintainer's `wasm2go` translator (discussion #361, 2026-03-05; PR #362 ready
 2026-03-09), and its README now states Go and `x/sys` are its only direct dependencies. Neither the
-cgo citation nor the WASM-runtime reasoning describes what UsArr will run. **Required before schema
-work starts:** a one-day spike — a Go binary on `ncruces/go-sqlite3`, a 500k-row fixture, WAL, the
-§7.7 pragmas, idle and peak RSS measured **on arm64**. Record it in ADR-0001 and set the budget from
-it. If it lands materially above 80 MB, the pragma defaults are the first thing to tune, not the
-driver.
+cgo citation nor the WASM-runtime reasoning describes what UsArr will run.
+
+**That measurement now exists, on x86-64.** `make bench-rss` (`internal/db/spike`, behind the `bench`
+tag) builds a 500k-row fixture through the real `internal/db` open path, then measures process RSS
+from `/proc/self/status` in one child process per pragma cell. On the reference x86-64 run recorded
+in **ADR-0001**: **idle 10 MB**, **peak 50 MB** for the 500k-row import, and **peak ~235 MB** for a
+saturating read workload at the shipped `cache_size = -32000` — because the page cache is
+**per-connection**, so `cache_size` multiplies by the pool. `mmap_size` is a **no-op** under this
+driver. The two ⚠️ markers in the budget table above are therefore lifted for x86-64, and §7.7's
+pending note with them.
+
+**Not measured on arm64, and that is now the honest status.** The spike was written as a prerequisite
+to the schema work; the schema shipped, and the deployment target is x86-64, so the prerequisite is
+**re-scoped: an arm64 run is a prerequisite to *claiming arm64 support*, not to v0.1.** Nothing about
+arm64 has been measured, and until it is, the Pi 5 reference hardware in this section is a design
+intent rather than a validated target. The command for that day already exists — run `make bench-rss`
+on the arm64 box and record it in ADR-0001 next to the x86-64 row. Page size and core count both move
+these numbers, so an arm64 result replaces nothing; it is a second row. Logged in
+`docs/REVIEW-LOG.md` §R2.6 so the change of a documented prerequisite is not silent.
+
+If a figure ever lands materially above budget, the pragma defaults are the first thing to tune, not
+the driver.
 
 **Techniques.** Keyset pagination always (`OFFSET` is O(offset) in SQLite; cursor = base64 of
 `(sort_value, id)`) — note `ix_work_kind_sort` **serves** that query rather than covering it, because

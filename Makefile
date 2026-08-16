@@ -195,6 +195,36 @@ bench: ## Wall-clock performance harness. A RELEASE gate on named hardware, neve
 	@echo "these are NOT enforced in CI: a p99 latency gate on shared runners is a"
 	@echo "flake generator, and on emulated arm64 it measures nothing. See DEVELOPMENT.md §5."
 
+# ─── The RSS measurement ─────────────────────────────────────────────────────
+# ARCHITECTURE §13's idle-RSS budget rested on a citation that does not transfer
+# (Navidrome, a cgo driver), and reference/sync.md §6 marks cache_size and
+# mmap_size "pending measurement". This target is the measurement: this driver, a
+# 500k-row fixture, WAL, the §7.7 pragmas, idle and peak process RSS.
+#
+# It is behind the `bench` build tag like every other wall-clock measurement, and
+# it is deliberately NOT part of `make bench`: that target runs Go benchmarks
+# (`-run '^$$' -bench .`), and this is a long-running measurement tool whose
+# output is a table for an ADR. Neither one is ever in `check`.
+#
+# A result belongs to the machine that produced it — architecture, core count and
+# page size all move the numbers, and the report states all three.
+
+.PHONY: bench-rss
+bench-rss: ## Measure idle/peak RSS over a 500k-row DB, sweeping cache_size × mmap_size (ADR-0001)
+	@echo "bench-rss: building a 500k-row fixture, then one child process per pragma cell."
+	@echo "           first run takes a few minutes; the fixture is reused afterwards."
+	$(GO) run -tags=bench ./internal/db/spike $(SPIKE_FLAGS)
+	@echo ""
+	@echo "record .dev/rss-spike.md in docs/DECISIONS.md ADR-0001, with the hardware named."
+	@echo "the numbers are ONLY valid for the machine that produced them: architecture, core"
+	@echo "count and page size all move them. See docs/DEVELOPMENT.md §5."
+
+# Knobs, for a quick check or a different sweep. Examples:
+#   make bench-rss SPIKE_FLAGS='-rows=50000'                  # fast smoke run
+#   make bench-rss SPIKE_FLAGS='-rebuild'                     # remeasure the import peak
+#   make bench-rss SPIKE_FLAGS='-cache=-2000,-32000 -mmap=0'  # narrower sweep
+SPIKE_FLAGS ?=
+
 .PHONY: cover
 cover: ## Coverage report -> cover.html
 	$(GO) test -coverprofile=cover.out -covermode=atomic ./...

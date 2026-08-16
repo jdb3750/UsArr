@@ -94,14 +94,78 @@ WASM tier is deferred (ADR-0008) and the driver no longer depends on wazero (cor
    would need its own evidence. What can be said without evidence is narrower and is what the text
    now says: cgo-free SQLite with FTS5 and the trigram tokenizer.
 
-**A memory claim in this ADR is also unsupported and is now marked so.** The README's acknowledgement
-of *"Navidrome, the existence proof that Go + embedded SQLite idles at ~50 MB"* does not transfer:
-Navidrome uses a **cgo** driver. The `< 80 MB` idle-RSS budget therefore rests on nothing measured.
-**Required before schema work starts:** a one-day spike — this driver, a 500k-row fixture, WAL, the
-architecture's pragmas, idle and peak RSS measured **on arm64**. Record the number here as a
-consequence and set the budget from it. If it lands materially above 80 MB, **the pragma defaults are
-the first thing to tune, not the driver** — noted explicitly so a future reader does not reopen this
-ADR by mistake.
+**A memory claim in this ADR was also unsupported.** The README's acknowledgement of *"Navidrome, the
+existence proof that Go + embedded SQLite idles at ~50 MB"* does not transfer: Navidrome uses a
+**cgo** driver. The `< 80 MB` idle-RSS budget therefore rested on nothing measured. **That is what
+revision 3 fixes.**
+
+### Correction, revision 3 — the memory numbers are measured now (x86-64 only)
+
+Measured with `make bench-rss` (`internal/db/spike`, behind the `bench` build tag): a 500k-row
+fixture built through the **real `internal/db` open path**, so the pragmas under test are the ones
+the binary actually sets; process RSS read from `/proc/self/status` (`VmRSS`, and `VmHWM` for peak),
+because `runtime.MemStats` cannot see SQLite's page cache; **one child process per pragma cell**,
+because `VmHWM` never falls and nine cells in one process would give one peak and eight fictions.
+
+**Hardware — this is an architecture-level datapoint, not a machine-level one.** `GOOS=linux
+GOARCH=amd64`, 4 CPUs (so a read pool of 8 plus 1 writer), 4096 B pages, 15.7 GiB RAM, go1.25.13,
+`ncruces/go-sqlite3 v0.35.3`, in a build container — **not** the owner's ThinkCentre. Core count
+moves these numbers directly (see the per-connection finding), so treat the architecture as
+transferable and the absolute figures as approximate.
+
+**Fixture.** 500,000 rows — 400k `tag_assignment`, 60k `provenance`, 30k `audit_log`, 8k
+`write_queue`, 2k `release_candidate` — an 80.0 MiB database of 20,477 pages, built in **11.5 s**
+through the single writer in batches of 2,000. `work`/`edition`/`media_file`/`search_fts` do not
+exist yet, so the composition targets comparable page and index pressure using the tables migration
+0001 creates. **FTS5 memory is unmeasured**; re-run after the search tables land.
+
+**Import peak RSS: 49.7 MiB** for that 500k-row build at the shipped pragmas — comfortably inside
+§13's `< 300 MB` import budget.
+
+Read sweep, all MiB. Each row: open+migrate (idle) → one pinned connection → all 8 pool readers
+concurrently → a 10,000-row write burst.
+
+| cache_size | mmap_size | idle | 1 reader | 8 readers | after write | peak (VmHWM) | Go heap |
+|---|---|---|---|---|---|---|---|
+| `-2000` (2.0 MiB) | `0` (off) | 10.0 | 17.1 | 33.4 | 34.6 | **35.0** | 0.3 |
+| `-2000` | `64 MiB` | 10.0 | 16.5 | 31.1 | 34.4 | **34.7** | 0.3 |
+| `-2000` | `128 MiB` | 10.0 | 17.2 | 34.5 | 34.4 | **36.0** | 0.3 |
+| `-8000` (7.8 MiB) | `0` (off) | 10.0 | 22.9 | 82.6 | 84.4 | **85.4** | 0.3 |
+| `-8000` | `64 MiB` | 10.0 | 22.8 | 82.7 | 84.1 | **84.6** | 0.3 |
+| `-8000` | `128 MiB` | 10.1 | 23.3 | 82.6 | 83.9 | **84.8** | 0.3 |
+| `-32000` (31.2 MiB) | `0` (off) | 10.0 | 41.3 | 236.7 | 238.6 | **239.4** | 0.3 |
+| `-32000` | `64 MiB` | 10.0 | 41.2 | 235.1 | 238.7 | **238.7** | 0.3 |
+| `-32000` ←**shipped** | `128 MiB` ←**shipped** | 10.0 | 40.3 | 235.1 | 236.4 | **237.1** | 0.3 |
+
+**Four findings.**
+
+1. **Idle RSS of the storage layer is 10 MB**, flat across every pragma combination. The `< 80 MB`
+   budget survives — but note what is *not* in that figure: no HTTP server, no SPA, no *Arr clients,
+   no sync workers. It is the floor, not the binary's idle RSS.
+2. **`mmap_size` is a no-op under this driver.** Every requested value reads back as `0`, and
+   `PRAGMA compile_options` on the build under test reports `MAX_MMAP_SIZE=0` and
+   `DEFAULT_MMAP_SIZE=0` — mmap is compiled out. The `mmap_size` line in the DSN is inert
+   configuration. This closes half of `reference/sync.md` §6's pending note.
+3. **`cache_size` is per-connection**, which closes the other half and is the load-bearing result.
+   One reader → eight readers added **+16 / +60 / +196 MiB** at `-2000` / `-8000` / `-32000`, i.e.
+   0.89–1.19× of what a strictly per-connection cache predicts, rather than staying flat. **The
+   process pays `cache_size` × (read pool + 1).** The shipped `-32000` therefore costs **237 MB peak
+   on 4 cores** — and more on more cores, since the pool is `NumCPU*2`. *(The per-connection verdict
+   is inference from those ratios, not a reading of driver internals.)*
+4. **Go heap is 0.3 MB at every measurement point.** Anyone reasoning about UsArr's memory from
+   `runtime.MemStats` would be off by three orders of magnitude. Use RSS.
+
+**Consequence, and one deliberately unmade decision.** The `< 80 MB` idle budget stands, now on
+evidence. `cache_size = -32000` is **not** confirmed as tuned: it is a ~235 MB peak against a ~35 MB
+alternative, and changing a shipped default is an owner decision with a latency side this harness
+does not measure. Recorded, not silently changed. **`mmap_size` should be dropped from the pragma
+list** as dead configuration when someone touches it next.
+
+**arm64 is unmeasured, and the requirement is re-scoped.** The original text made this spike a
+prerequisite to the schema work; the schema shipped and the deployment target is x86-64, so an arm64
+run is now a prerequisite to **claiming arm64 support**, not to v0.1 — see ARCHITECTURE §13 and
+REVIEW-LOG §R2.6. The command is `make bench-rss` on the arm64 machine; add its output as a second
+row here. Page size and core count both move these figures, so it replaces nothing.
 
 ### Alternatives rejected
 - **Rust + Axum** — the honest runner-up. 2–3× lower memory, no GC pauses during a 500k-row

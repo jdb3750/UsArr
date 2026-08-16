@@ -42,14 +42,25 @@ var pragmas = []string{
 	"temp_store(MEMORY)",
 	"wal_autocheckpoint(1000)",
 
-	// UNVERIFIED, 2026-08-16, docs/reference/sync.md §6: under
-	// ncruces/go-sqlite3 it is undetermined whether cache_size is
-	// per-connection or shared, and whether mmap_size has any effect at all.
-	// With NumCPU*2 readers a per-connection 32 MB page cache is a very
-	// different memory profile from a shared one. Measure in the arm64 spike
-	// before treating either as tuned.
-	"cache_size(-32000)",   // 32 MB
-	"mmap_size(134217728)", // 128 MB
+	// MEASURED 2026-08-16 on x86-64 by `make bench-rss` (internal/db/spike);
+	// full result in docs/DECISIONS.md ADR-0001 correction 3. Both values were
+	// previously marked unverified; neither is unverified now, and neither has
+	// been changed on the strength of the measurement — that is an owner
+	// decision, recorded rather than taken here.
+	//
+	//   cache_size is PER-CONNECTION. The process pays it once per pool
+	//   connection plus the writer, so with NumCPU*2 readers -32000 measured
+	//   ~235 MB peak RSS on 4 cores against ~35 MB at -2000. It costs more on a
+	//   machine with more cores, not less.
+	//
+	//   mmap_size does NOTHING here. Every value reads back as 0 and PRAGMA
+	//   compile_options reports MAX_MMAP_SIZE=0 — memory-mapped I/O is compiled
+	//   out of this driver's SQLite. The line below is inert; drop it next time
+	//   this list is touched.
+	//
+	// Unmeasured on arm64. Page size and core count both move these numbers.
+	"cache_size(-32000)",   // 32 MB per connection
+	"mmap_size(134217728)", // inert; see above
 }
 
 // DB holds the read and write pools.

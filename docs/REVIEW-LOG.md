@@ -271,6 +271,44 @@ clean.
   `paths.relative` bullet, which lives on another branch (B-01).
 
 ---
+
+## 6. A documented prerequisite was re-scoped, not dropped
+
+**Date:** 2026-08-16. Logged here because ARCHITECTURE §13 and ADR-0001 both carried a hard
+prerequisite, and changing one quietly is exactly the drift this log exists to prevent.
+
+**What the documents said.** "**Required before schema work starts:** a one-day spike — this driver, a
+500k-row fixture, WAL, the §7.7 pragmas, idle and peak RSS measured **on arm64**." The reference
+hardware behind it is a Raspberry Pi 5.
+
+**What was actually true.** The prerequisite was never met: the first code drop shipped with the
+provisional pragma values and `reference/sync.md` §6 still read "pending measurement". Meanwhile the
+schema landed anyway (migration 0001), so the gate had already been passed without being satisfied —
+and the owner's deployment target is a ThinkCentre running Proxmox, i.e. **x86-64**. The only arm64
+hardware in reach never runs UsArr. An arm64 measurement would have been a number about a machine
+nobody deploys on, blocking work on the machine everybody deploys on.
+
+**Disposition — applied, with the requirement re-scoped rather than deleted.**
+
+1. **The measurement was built and run**, on x86-64: `make bench-rss` (`internal/db/spike`, behind
+   the `bench` tag, never in `check`). Full result in **ADR-0001, correction 3**. It settles both of
+   `reference/sync.md` §6's pending values — `mmap_size` is a **no-op** under this driver
+   (`MAX_MMAP_SIZE=0`), `cache_size` is **per-connection** and therefore multiplies by the read pool
+   — and it puts a measured 10 MB idle / 50 MB import-peak under §13's previously unmeasured budget.
+2. **arm64 is recorded as explicitly unmeasured**, and its requirement is now a prerequisite to
+   **claiming arm64 support**, not to v0.1. The harness is architecture-neutral; the command for that
+   day is `make bench-rss` on the arm64 box, and its output is a second row in ADR-0001, not a
+   replacement for the first. Until then, the Pi 5 reference hardware in §13 is design intent, not a
+   validated target — said in §13 in those words.
+3. **Nothing was tuned on the strength of it.** `cache_size = -32000` costs 235 MB peak against
+   35 MB at `-2000` on 4 cores, which is a real finding and an owner decision; the default is
+   unchanged and the finding is recorded. Documents now assert the measurement, not the default.
+
+**What would make this wrong.** If UsArr is ever run on arm64 — a Pi, an Ampere VPS, an Apple-silicon
+container — none of the above transfers, and §13's budget is again unmeasured for that machine. The
+re-scoping is a statement about the current deployment target, not a claim that arm64 is fine.
+
+---
 ---
 
 # Round 1 — the design documents
