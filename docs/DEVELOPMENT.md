@@ -26,6 +26,13 @@ Optional, installed on demand by `make tools` **(not yet)**:
 | `goose` | SQL migration runner (`github.com/pressly/goose/v3`). |
 | `govulncheck` | Vulnerability scan against the Go vuln DB. Advisory in CI, not a gate. |
 
+**There is no FFmpeg dependency, and there never will be.** UsArr does not stream, transcode,
+remux, or serve media bytes — it routes clients to the backend that owns them (Jellyfin, Navidrome,
+Audiobookshelf, Komga/Kavita). Do not add a media-processing dependency, a `ffmpeg`/`ffprobe` shell
+out, or a codec library. If a feature seems to need one, it belongs in a backend, not here. (FFmpeg
+is also absent from the agent container, so such a dependency would break the build immediately —
+but the reason it is banned is architectural, not environmental.)
+
 **No CGO, ever.** UsArr builds with `CGO_ENABLED=0` and produces a static binary.
 `ncruces/go-sqlite3` is a WebAssembly build of SQLite executed by a pure-Go runtime, which is
 precisely why it was chosen over `mattn/go-sqlite3`. If you find yourself needing a C toolchain,
@@ -55,8 +62,14 @@ UsArr/
 │   ├── servarr/                # ONE client for Sonarr/Radarr/Lidarr/Readarr/Prowlarr/Whisparr
 │   │   └── mapping/            # per-media-type mapping onto the unified schema
 │   ├── lazylibrarian/          # separate: cmd= RPC, HTTP 200 + {"Success":false} errors
-│   ├── jellyfin/               # playback + identity delegation
+│   ├── jellyfin/               # video playback handoff + identity delegation
+│   ├── navidrome/              # music, over OpenSubsonic (apiKeyAuthentication ONLY)
+│   ├── audiobookshelf/         # audiobooks; ABS owns listening position, UsArr mirrors it
+│   ├── komga/                  # comics/manga; X-API-Key, OPDS 1.2 + 2.0
+│   ├── kavita/                 # comics/ebooks
 │   ├── downloadclient/         # sabnzbd, nzbget, qbittorrent, transmission, deluge
+│   ├── requests/               # request → route to the right *Arr by media type
+│   ├── tsnet/                  # embedded Tailscale node + WhoIs-based identity
 │   ├── metadata/               # tmdb, tvmaze, musicbrainz, openlibrary, wikidata, anilist
 │   ├── search/                 # unified search; FTS5 default, meilisearch plugin
 │   ├── tagging/                # namespaced tags, aliases, virtual parents, rule engine
@@ -86,7 +99,14 @@ UsArr/
 └── .gitignore
 ```
 
-Rationale worth stating once, because it is a design decision and not a convention:
+Two rationales worth stating once, because they are design decisions and not conventions.
+
+**UsArr is northbound-thin and southbound-wide.** `internal/{jellyfin,navidrome,audiobookshelf,
+komga,kavita}` are read + handoff adapters: they populate the unified library and produce a playback
+URL or a deep link. None of them proxy media bytes in v0.1. `internal/requests` is the write path —
+it takes "I want this" and routes it to Sonarr/Radarr/Lidarr/LazyLibrarian by media type, which is
+why the *Arr clients are the ones with real write coverage.
+
 **`internal/servarr` is one client, not six.** Sonarr, Radarr, Lidarr, Readarr, Prowlarr, and
 Whisparr are forks of the same codebase; auth, paging, tags, commands, SignalR, `/ping`, and
 `system/status` are byte-for-byte identical contracts. What differs is the API version path
@@ -241,7 +261,7 @@ Rules:
   A binary is always able to bring its own database forward without an external tool.
 * Migrations are **forward-only (proposed)**. Write a `-- +goose Down` block anyway — it is the
   cheapest way to test a migration locally — but downgrades are not a supported user path, and the
-  restore procedure in `docs/CONFIGURATION.md §6` says so.
+  restore procedure in `docs/CONFIGURATION.md §7` says so.
 * **Never edit a migration that has shipped.** Add a new one.
 * SQLite cannot drop or retype a column in older versions and its `ALTER TABLE` support is narrow.
   For anything beyond `ADD COLUMN`/`RENAME`, use the 12-step table rebuild
@@ -270,9 +290,17 @@ services:
   lidarr:     { image: lscr.io/linuxserver/lidarr:latest,     ports: ["8686:8686"] }
   prowlarr:   { image: lscr.io/linuxserver/prowlarr:latest,   ports: ["9696:9696"] }
   jellyfin:   { image: lscr.io/linuxserver/jellyfin:latest,   ports: ["8096:8096"] }
+  navidrome:  { image: deluan/navidrome:latest,               ports: ["4533:4533"] }
+  audiobookshelf: { image: ghcr.io/advplyr/audiobookshelf:latest, ports: ["13378:80"] }
+  komga:      { image: gotson/komga:latest,                   ports: ["25600:25600"] }
+  kavita:     { image: jvmilazz0/kavita:latest,               ports: ["5000:5000"] }
   sabnzbd:    { image: lscr.io/linuxserver/sabnzbd:latest,    ports: ["8080:8080"] }
   qbittorrent:{ image: lscr.io/linuxserver/qbittorrent:latest,ports: ["8081:8080"] }
 ```
+
+⚠️ Image names and internal port mappings for the four southbound backends are from general
+knowledge, not verified in this pass — check each project's own compose example before committing
+this file.
 
 The awkward part is **seeding**. A fresh *Arr has an empty library and a random API key, so the
 stack is not reproducible on its own. Two ways to fix that, both worth having:
@@ -376,11 +404,27 @@ the real world, so use them only where reality is hard to provoke:
 | **Jellyfin** | `https://demo.jellyfin.org/stable` — username `demo`, **empty password**. An `unstable` demo also exists. Status is tracked at <https://status.jellyfin.org/service/stable-demo>. | **Manual exploration only.** Good for eyeballing response shapes and sanity-checking the `Authorization: MediaBrowser` header. Never in automated tests: it is read-only, shared, rate-limited by circumstance, and its uptime is nobody's commitment to you. Do a manual pass, then record a cassette against your own Jellyfin. |
 | **Sonarr / Radarr / Lidarr / Prowlarr / Whisparr** | **None found.** Searched 2026-08-16; no official or community public demo with API access exists. | n/a — compose fixtures + cassettes are the only path. |
 | **LazyLibrarian** | None found. | n/a |
+| **Navidrome** | `https://demo.navidrome.org` — 📄 widely referenced with credentials `demo` / `demo`; ⚠️ **not verified in this pass**. | Manual exploration only, same caveats as Jellyfin. Useful for confirming whether an OpenSubsonic server advertises `apiKeyAuthentication` via `getOpenSubsonicExtensions`. |
+| **Audiobookshelf / Komga / Kavita** | ⚠️ Not checked in this pass. Komga and Kavita both ship Swagger UI on a local instance (`/swagger-ui.html` for Komga), which is a better reference than a demo anyway. | Compose fixtures + cassettes. |
 | Metadata providers (TMDB, Open Library, MusicBrainz, Wikidata, TVmaze) | Their production APIs are the "demo" — public and reachable. | Use them **once**, to record cassettes, with a compliant `User-Agent`. Never in the normal test loop; MusicBrainz's 1 req/s and Wikidata's `api.php` throttle make live testing actively hostile. |
 
 **Recommended path if you own no *Arr stack at all:** work entirely from committed cassettes and the
 vendored specs (§7.2, §7.3), and ask a contributor with a real stack to re-record when you touch a
 client. That is a supported workflow, not a degraded one — it is why the cassettes are committed.
+
+### 7.6 Testing the Tailscale path
+
+`tsnet` joins a real tailnet, so it cannot be exercised in a hermetic test. Split it:
+
+* **Unit-testable, and where the bugs will be:** the identity mapping. Given a `WhoIs` result (or its
+  absence, for a tagged device), does UsArr resolve the right user, and does it correctly refuse when
+  `USARR_TSNET_AUTH_ALLOWED_LOGINS` does not contain the login? Put `WhoIs` behind a small interface
+  and test the mapping against fixtures. Same for the `Tailscale-User-Login` header path — including
+  the case that matters most: **a request carrying `Tailscale-User-Login` that did not arrive through
+  the trusted path must be rejected**, not honoured.
+* **Not unit-testable:** actually joining a tailnet. That lives behind the `integration` tag and runs
+  on a developer machine with a real (ideally throwaway) tailnet and a non-reusable auth key.
+* Default `USARR_TSNET_ENABLED=false` in dev so the normal loop binds an ordinary TCP port.
 
 ---
 
@@ -477,7 +521,11 @@ auto-formats, because a hook that rewrites your files mid-commit produces commit
   the hostname, validates the resulting IP against the policy for that request class, connects to
   the pinned IP, refuses redirects, denies non-HTTP(S) schemes, and caps response size. Integration
   fetches may reach RFC1918 (that is the whole point of a homelab hub); metadata/image fetches may
-  not, including `169.254.169.254`. Bypassing this package is a review-blocking change.
+  not, including `169.254.169.254` **and the Tailscale CGNAT range `100.64.0.0/10`** — UsArr's
+  default deployment is a tailnet, so "private space" is larger than RFC1918. Bypassing this package
+  is a review-blocking change.
+* **UsArr never invokes a media processing tool.** No `exec.Command("ffmpeg", …)`, ever. Playback is
+  delegated; see §1.
 * **Never join on an *Arr's local `id`.** Those integers are per-instance and unrelated across
   instances — the same is true of *Arr tag IDs, where instance A's tag `3` has nothing to do with
   instance B's tag `3`. Join on external IDs (tvdb/tmdb/imdb/MBID/OLID/ISBN) or on

@@ -1,0 +1,123 @@
+# ─── Secrets and local environment ───────────────────────────────────────────
+# The single most important block in this file. UsArr's config carries *Arr API
+# keys (full admin on those instances), Jellyfin tokens, Tailscale auth keys and
+# the master encryption key.
+.env
+.env.*
+!.env.example
+*.env
+secrets/
+secret.key
+*.pem
+*.key
+!**/testdata/**/*.pem
+!**/testdata/**/*.key
+
+# ─── Build artifacts ─────────────────────────────────────────────────────────
+/usarr
+/usarr.exe
+/usarr-*
+dist/
+build/
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+!**/testdata/**/*.out
+cover.out
+cover.html
+coverage.*
+*.prof
+*.pprof
+
+# ─── Go ──────────────────────────────────────────────────────────────────────
+vendor/
+go.work
+go.work.sum
+
+# ─── Frontend (SvelteKit / Vite / pnpm) ──────────────────────────────────────
+node_modules/
+web/build/
+web/.svelte-kit/
+web/.vite/
+web/dist/
+.pnpm-store/
+.pnpm-debug.log*
+npm-debug.log*
+yarn-error.log*
+.eslintcache
+*.tsbuildinfo
+
+# ─── SQLite ──────────────────────────────────────────────────────────────────
+# WAL mode produces -wal and -shm alongside the database. All three are runtime
+# state; never commit any of them, and never back up the .db alone while running
+# (use `VACUUM INTO` — see docs/CONFIGURATION.md §7).
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+
+# ─── Runtime data directories ────────────────────────────────────────────────
+# Local bind mounts and dev state. `/config` also holds the Tailscale node
+# identity (config/tsnet/) and the master key file.
+/config/
+/data/
+/.dev/
+/logs/
+/plugins/data/
+/tmp/
+
+# ─── Test fixtures that must NOT be committed ────────────────────────────────
+# Seeded *Arr config volumes for the local compose stack contain generated API
+# keys. The intentionally-fake seed set lives under deploy/compose/seed/ and is
+# committed on purpose; anything else generated locally is not.
+deploy/compose/*/config/
+deploy/compose/**/appdata/
+!deploy/compose/seed/
+
+# go-vcr cassettes ARE committed (scrubbed by a recorder hook), but unscrubbed
+# in-progress recordings are not.
+testdata/cassettes/*.unscrubbed.yaml
+testdata/cassettes/**/*.raw.yaml
+
+# ─── Editors and IDEs ────────────────────────────────────────────────────────
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.shared.json
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.\#*
+\#*\#
+.projectile
+nvim.log
+.zed/
+
+# ─── OS ──────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# ─── Misc ────────────────────────────────────────────────────────────────────
+*.log
+*.bak
+*.tmp
+*.orig
+*.rej
+.cache/
+.direnv/
+.tool-versions.local

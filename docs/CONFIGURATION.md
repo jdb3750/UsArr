@@ -29,10 +29,14 @@ Three concrete topologies, in the order they are recommended:
 2. **Tailscale Serve in front of a loopback listener** — UsArr binds `127.0.0.1`; the host's
    `tailscaled` proxies to it and injects identity headers. §6.3.
 3. **Reverse proxy (Traefik/Caddy/nginx), tailnet or public** — the conventional path. Everything in
-   §2.2 about `USARR_TRUSTED_PROXIES` applies with full force. §7.3.
+   §2.2 about `USARR_TRUSTED_PROXIES` applies with full force. §8.4.
 
 Anything about "internet-exposed" hardening in this document is written for topology 3 with a public
 address. If you are on a tailnet, most of it is defence in depth rather than the primary control.
+
+**v0.1 is single-user.** Multi-user — roles, quotas, per-user library visibility, external identity
+import — comes later. Settings that only matter with more than one account are documented where they
+belong but are marked inert for v0.1, so nothing here should read as a task blocking a first release.
 
 **UsArr does not stream or transcode media.** It routes clients to the backend that owns the bytes —
 Jellyfin for video, Navidrome for music, Audiobookshelf for audiobooks, Komga/Kavita for
@@ -176,7 +180,38 @@ LinuxServer.io convention and are consumed by the **container entrypoint**, not 
 the app port directly is any user, including the owner — this is why the default is empty and why
 forward-auth hard-fails rather than silently degrading.
 
-### 2.3 Metadata providers
+### 2.3 Tailscale (`tsnet`)
+
+Full explanation and the security reasoning in §6. All **(proposed)** — no code exists yet.
+
+| Variable | Purpose | Default | Required | Example |
+|---|---|---|---|---|
+| `USARR_TSNET_ENABLED` | Join the tailnet as an embedded node instead of binding a local TCP port. When on, `USARR_BIND_ADDRESS`/`USARR_PORT` no longer publish a listener on the host. | `false` | No | `true` |
+| `USARR_TSNET_HOSTNAME` | Device name in the tailnet; becomes the MagicDNS name (`usarr.<tailnet>.ts.net`). | `usarr` | No | `usarr` |
+| `USARR_TSNET_AUTHKEY` | **Secret.** Tailscale auth key used to register the node on first start. Only needed once — after registration the node state in `USARR_TSNET_STATE_DIR` is what authenticates it. See §6.2 for handling and key-type guidance. | *(unset)* | No — without it, UsArr prints an interactive login URL on first start | `tskey-auth-REPLACE-ME` |
+| `USARR_TSNET_AUTHKEY_FILE` | Path to a file holding the auth key. Preferred over the inline variable. Mutually exclusive with it. | *(unset)* | No | `/run/secrets/ts_authkey` |
+| `USARR_TSNET_STATE_DIR` | Where the node's identity and keys are persisted. **Must be on the persistent volume** or UsArr registers a new device on every restart. | `$USARR_CONFIG_DIR/tsnet` | No | `/config/tsnet` |
+| `USARR_TSNET_LISTEN_PORT` | Port UsArr listens on *within the tailnet*. | `443` when `USARR_TSNET_TLS=true`, else `80` | No | `443` |
+| `USARR_TSNET_TLS` | Terminate TLS inside UsArr using the tailnet certificate for its MagicDNS name. Requires HTTPS and MagicDNS enabled on the tailnet. | `true` | No | `false` |
+| `USARR_TSNET_AUTH_ENABLED` | Treat the identity of the calling tailnet node as an authentication source, resolved from the connection itself (§6.1). | `false` | No | `true` |
+| `USARR_TSNET_AUTH_ALLOWED_LOGINS` | Comma-separated allowlist of tailnet logins permitted to authenticate this way. Empty means *any* tailnet user — acceptable on a solo tailnet, wrong on a shared one. | *(empty)* | No | `joe@example.com` |
+| `USARR_TAILSCALE_HEADER_AUTH` | Trust `Tailscale-User-Login` / `Tailscale-User-Name` headers injected by **Tailscale Serve**. Separate from `_TSNET_AUTH_ENABLED` because the trust model is weaker (§6.3). Refuses to enable unless the listener is bound to loopback or `USARR_TRUSTED_PROXIES` is set. | `false` | No | `true` |
+
+### 2.4 Southbound backends (playback and library aggregation)
+
+UsArr aggregates these read-side and hands playback off to them. Same **create-if-absent** semantics
+as §2.7 — for anything beyond a first run, use `services.yaml`.
+
+| Variable | Purpose | Default | Required | Example |
+|---|---|---|---|---|
+| `USARR_JELLYFIN_URL` / `USARR_JELLYFIN_API_KEY` | Jellyfin (video) — the primary playback and identity backend. Port 8096. Key from Dashboard → API Keys; if the URL is set with no key, the setup wizard can mint UsArr's own key via `/Auth/Keys` from admin credentials, so an admin password is never stored. | *(unset)* | No | `http://jellyfin:8096` |
+| `USARR_NAVIDROME_URL` / `USARR_NAVIDROME_USER` / `USARR_NAVIDROME_PASSWORD` | Navidrome (music), spoken over OpenSubsonic. Port 4533. ⚠️ **Unverified:** whether the installed Navidrome exposes the `apiKeyAuthentication` extension — if it does, prefer an API key (`USARR_NAVIDROME_API_KEY`) and leave user/password unset. The legacy Subsonic `u`/`t`/`s` scheme requires the server to hold a recoverable password and UsArr will not implement it. | *(unset)* | No | `http://navidrome:4533` |
+| `USARR_AUDIOBOOKSHELF_URL` / `USARR_AUDIOBOOKSHELF_API_KEY` | Audiobookshelf (audiobooks/podcasts). Port 13378. Bearer token from `/login` or a user API token. Also the source of truth for listening position — UsArr mirrors progress, it does not own it. | *(unset)* | No | `http://audiobookshelf:13378` |
+| `USARR_KOMGA_URL` / `USARR_KOMGA_API_KEY` | Komga (comics/manga). Port 25600. Header `X-API-Key`; HTTP Basic also works. OPDS 1.2 and 2.0 available. | *(unset)* | No | `http://komga:25600` |
+| `USARR_KAVITA_URL` / `USARR_KAVITA_API_KEY` | Kavita (comics/ebooks). Port 5000. ⚠️ **Unverified:** Kavita's REST auth scheme was not confirmed from primary sources during research — verify the header/token exchange before relying on this. | *(unset)* | No | `http://kavita:5000` |
+| `USARR_PLEX_URL` / `USARR_PLEX_TOKEN` | Plex. Port 32400, `X-Plex-Token`. Secondary/migration source only — Plex paywalled *remote* playback of personal media in 2025, so a Plex-only setup will not serve remote users without a Plex Pass. | *(unset)* | No | `http://plex:32400` |
+
+### 2.5 Metadata providers
 
 All optional. Absent keys disable the corresponding provider; they never cause a startup failure.
 See §4 for licensing and rate limits before setting any of these.
@@ -190,7 +225,7 @@ See §4 for licensing and rate limits before setting any of these.
 | `USARR_METADATA_USER_AGENT` | Contact string appended to UsArr's outbound `User-Agent`. **MusicBrainz requires an identifying UA with contact info**, and Open Library raises you from 1 to 3 req/s if you send one. Set this if you use either. | `UsArr/<version> (+https://github.com/<owner>/UsArr)` | No, but strongly recommended | `UsArr/0.1 ( admin@example.com )` |
 | `USARR_TMDB_CACHE_TTL` | Max age of cached TMDB rows. **Capped at 6 months by TMDB's terms** (§4.1) — values above `4320h` are clamped and logged. | `720h` | No | `2160h` |
 
-### 2.4 Search backend
+### 2.6 Search backend
 
 | Variable | Purpose | Default | Required | Example |
 |---|---|---|---|---|
@@ -198,18 +233,22 @@ See §4 for licensing and rate limits before setting any of these.
 | `USARR_MEILISEARCH_KEY` | Meilisearch API key. Use a key scoped to UsArr's indexes, not the master key. | *(unset)* | Only if `_URL` is set and the instance requires auth | `<meili-key>` |
 | `USARR_MEILISEARCH_INDEX_PREFIX` | Prefix for UsArr's indexes, so one Meilisearch can serve several apps. | `usarr` | No | `usarr_prod` |
 
-### 2.5 Service bootstrap (headless first run)
+### 2.7 Acquisition service bootstrap (*Arr, headless first run)
 
 These are **create-if-absent only** (§1, precedence). They exist so a single `docker run` produces a
 working install; they are not a configuration channel. For real IaC use `services.yaml`.
+
+**These credentials are what makes the *requests* feature work.** A user asking for something the
+library does not have is routed to the right *Arr by media type — Sonarr for a series, Radarr for a
+film, Lidarr for an album, LazyLibrarian for a book — with Prowlarr providing cross-indexer search
+and the `usenet`/`torrent` protocol tag. Without at least one *Arr instance and Prowlarr, requests
+have nowhere to go.
 
 For a second instance of the same kind, append `_2`, `_3`, … (`USARR_SONARR_2_URL`).
 Every `*_API_KEY` also accepts a `*_API_KEY_FILE` twin.
 
 | Variable | Purpose | Default | Required | Example |
 |---|---|---|---|---|
-| `USARR_JELLYFIN_URL` | Jellyfin base URL — the primary playback and identity backend. | *(unset)* | No | `http://jellyfin:8096` |
-| `USARR_JELLYFIN_API_KEY` | Jellyfin server API key (Dashboard → API Keys). If omitted while `_URL` is set, UsArr can mint its own key at setup via `/Auth/Keys` given admin credentials in the wizard — the approach Jellyseerr uses, so an admin password is never stored. | *(unset)* | No | `<jellyfin-api-key>` |
 | `USARR_SONARR_URL` / `USARR_SONARR_API_KEY` | Sonarr (TV). Default port 8989, API base `/api/v3`. Key is 32 hex chars, from Settings → General → Security. | *(unset)* | No | `http://sonarr:8989` |
 | `USARR_RADARR_URL` / `USARR_RADARR_API_KEY` | Radarr (movies). Port 7878, `/api/v3`. | *(unset)* | No | `http://radarr:7878` |
 | `USARR_LIDARR_URL` / `USARR_LIDARR_API_KEY` | Lidarr (music). Port 8686, **`/api/v1`**. | *(unset)* | No | `http://lidarr:8686` |
@@ -223,7 +262,7 @@ Every `*_API_KEY` also accepts a `*_API_KEY_FILE` twin.
 `SONARR__AUTH__APIKEY`. The options-binding code exists in the Servarr source but the researcher
 could not confirm the configuration key prefix. Don't rely on it in compose examples until tested.
 
-### 2.6 Container conventions (LinuxServer.io)
+### 2.8 Container conventions (LinuxServer.io)
 
 Read by the container entrypoint before it drops privileges. The Go binary never reads them.
 
@@ -358,8 +397,10 @@ $USARR_CONFIG_DIR/            # /config — PERSIST THIS. Irreplaceable.
 ├── config.yaml               # bootstrap settings (optional; env vars override)
 ├── services.yaml             # optional declarative provisioning (§1 Tier 2b)
 ├── secret.key                # mode 0600 — only if USARR_SECRET_KEY is not set
+├── tsnet/                    # embedded Tailscale node identity + keys (mode 0700).
+│                             #   PERSIST THIS or every restart registers a new device.
 ├── usarr.db                  # SQLite, WAL mode
-├── usarr.db-wal              # write-ahead log      ┐ transient, but see §6:
+├── usarr.db-wal              # write-ahead log      ┐ transient, but see §7:
 ├── usarr.db-shm              # shared-memory index  ┘ never copy these by hand
 └── backups/
     └── usarr-2026-08-16T03-00-00Z.db   # output of the scheduled backup job
@@ -389,7 +430,139 @@ most common corruption cause for SQLite-backed self-hosted apps.
 
 ---
 
-## 6. Backup and restore
+## 6. Tailscale
+
+Everything in this section is **(proposed)** — no code exists yet. Facts about Tailscale's behaviour
+are cited; design decisions on top of them are marked.
+
+### 6.1 Embedded node — `tsnet` (recommended)
+
+[`tailscale.com/tsnet`](https://pkg.go.dev/tailscale.com/tsnet) embeds a full Tailscale node inside a
+Go process. It runs a userspace TCP/IP stack (gVisor), needs **no `tailscaled` daemon, no root, and
+no system-level network configuration**, and a single binary can run several independent nodes.
+([tsnet docs](https://tailscale.com/kb/1244/tsnet),
+[tsnet.Server API](https://tailscale.com/docs/reference/tsnet-server-api))
+
+For UsArr this is close to ideal. The app appears in the tailnet as its own device at
+`usarr.<tailnet>.ts.net`, **publishes no port on the host at all**, and gets TLS from the tailnet
+certificate. There is no reverse proxy in the path, so there is no forwarded header to trust and
+`USARR_TRUSTED_PROXIES` is simply not part of the picture.
+
+```
+USARR_TSNET_ENABLED=true
+USARR_TSNET_HOSTNAME=usarr
+USARR_TSNET_STATE_DIR=/config/tsnet      # MUST be on the persistent volume
+USARR_TSNET_TLS=true
+USARR_TSNET_LISTEN_PORT=443
+USARR_TSNET_AUTH_ENABLED=true
+USARR_TSNET_AUTH_ALLOWED_LOGINS=joe@example.com
+```
+
+**Identity comes from the connection, not from a header.** `Server.LocalClient()` returns a client
+whose `WhoIs` method identifies who is making a request. That identity is derived from the WireGuard
+session, so it cannot be forged by anyone who is not already an authenticated member of the tailnet —
+categorically stronger than any `Remote-User`-style scheme, and the reason `USARR_TSNET_AUTH_ENABLED`
+is a *separate* setting from `USARR_TAILSCALE_HEADER_AUTH`.
+
+⚠️ **Unverified:** exactly what `WhoIs` returns for a **tagged** device (one authenticated with an
+ACL tag rather than owned by a user). Tailscale documents that Serve's identity *headers* are
+populated only for users, not tagged devices, and the same distinction is expected here. UsArr's
+rule **(proposed)**: a caller with no resolvable user identity is **not** authenticated by this path
+and falls through to normal login. Verify against a live tailnet before shipping.
+
+Gotchas worth knowing before choosing `tsnet`:
+
+* **Nothing listens on localhost.** Container healthchecks, `curl localhost:8484`, and monitoring
+  probes all stop working. UsArr should expose a small loopback-only admin/health listener
+  alongside the tsnet listener **(proposed)** — otherwise you have no way to check on it from the
+  host.
+* **State is identity.** If `USARR_TSNET_STATE_DIR` is not persisted, every restart registers a new
+  device and your tailnet fills with `usarr-1`, `usarr-2`, …
+* **Node key expiry** applies as it does to any device. Either disable key expiry for the UsArr node
+  in the admin console or expect it to drop off the tailnet on the tailnet's expiry schedule.
+* **Tailnet ACLs remain the outer boundary.** `USARR_TSNET_AUTH_ALLOWED_LOGINS` is an application-level
+  allowlist inside a network that already decided you may connect. Both layers matter; neither
+  replaces the other.
+
+### 6.2 Handling `USARR_TSNET_AUTHKEY`
+
+A Tailscale auth key (`tskey-auth-…`) can add a device to your tailnet. Treat it exactly like the
+master key: never inline in a committed compose file, never in a shell history you keep, always via
+`USARR_TSNET_AUTHKEY_FILE` or a Docker/Kubernetes secret.
+
+Recommended key properties **(proposed)**:
+
+* **Not reusable**, short expiry. UsArr needs it exactly once.
+* **Not ephemeral.** Ephemeral nodes are removed when they disconnect, which is wrong for a service
+  that restarts.
+* **Pre-authorized and tagged** (e.g. `tag:usarr`) so tailnet ACLs can name UsArr as a source or
+  destination without depending on a person's account.
+* For long-lived automation that must re-register unattended, Tailscale's OAuth clients are the
+  intended mechanism rather than a perpetual auth key. ⚠️ Not verified against the current
+  Tailscale API surface.
+
+**After first registration, delete the key from your environment.** The node's persisted state in
+`USARR_TSNET_STATE_DIR` is what authenticates it from then on; leaving the key mounted only widens
+the blast radius of a compromised container. If you never set a key at all, UsArr prints a login URL
+on first start and waits — which is the better path for an interactive install.
+
+### 6.3 Tailscale Serve (identity headers)
+
+If you would rather run the host's `tailscaled` and put UsArr behind it:
+
+```bash
+# UsArr binds loopback only
+USARR_BIND_ADDRESS=127.0.0.1
+USARR_PORT=8484
+USARR_TAILSCALE_HEADER_AUTH=true
+
+tailscale serve --bg 127.0.0.1:8484
+```
+
+Serve acts as an authenticating reverse proxy and adds **`Tailscale-User-Login`** (the user's email),
+**`Tailscale-User-Name`**, and **`Tailscale-User-Profile-Pic`** to proxied requests. It also
+**strips those headers from incoming requests** specifically to prevent spoofing.
+([Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve),
+[Tailscale identity](https://tailscale.com/docs/concepts/tailscale-identity))
+
+🚩 **The header is only as trustworthy as the listener.** Tailscale's own documentation is explicit:
+when using identity headers to authenticate to a backend, the backend should listen **only on
+localhost**, because any user who can call the service directly rather than through the Serve URL can
+trivially supply their own values for these headers. That makes this weaker than §6.1, where identity
+is cryptographic.
+
+UsArr's rules **(proposed)**:
+
+1. `USARR_TAILSCALE_HEADER_AUTH` refuses to enable unless the listener is bound to loopback **or**
+   `USARR_TRUSTED_PROXIES` names the proxy's network. No silent degradation.
+2. The `Tailscale-User-*` headers are stripped from every inbound request before processing and
+   re-read only from the trusted path — the same discipline as `USARR_FORWARD_AUTH_*` (§2.2).
+3. Identity headers are populated **only for users, not tagged devices**. A request with no
+   `Tailscale-User-Login` is unauthenticated, never anonymous-but-allowed.
+4. This path is never applied to API-key endpoints.
+
+**Tailscale Funnel** puts the service on the public internet. Funnel traffic is anonymous — there is
+no tailnet user to identify — so enabling it moves you squarely into the internet-exposed model and
+every control in §2.2 becomes primary rather than defence in depth. Do not enable Funnel and assume
+identity headers still cover you.
+
+### 6.4 What a tailnet does *not* solve
+
+* **`USARR_SECRET_KEY` is still required.** A private network does not encrypt your database. Anyone
+  with the volume has the credentials without it.
+* **SSRF policy still matters, and the tailnet makes it broader.** UsArr fetches user-configured
+  URLs server-side. On a tailnet, the reachable private space now includes the CGNAT range
+  **`100.64.0.0/10`** on top of RFC1918. UsArr's metadata/artwork fetch policy must deny
+  `100.64.0.0/10` along with `10/8`, `172.16/12`, `192.168/16`, `127/8`, `169.254/16` (including the
+  cloud metadata address `169.254.169.254`), `::1`, `fc00::/7`, `fe80::/10`, and `0.0.0.0`.
+  Integration fetches to admin-configured service URLs are the only outbound calls allowed into
+  private space — and on a tailnet, "private space" is your entire tailnet.
+* **Audit logging and login rate limiting stay on.** A tailnet is a small trusted group, not zero
+  adversaries, and the audit log answers "who deleted this" regardless of trust.
+
+---
+
+## 7. Backup and restore
 
 ### What must be backed up
 
@@ -398,6 +571,7 @@ most common corruption cause for SQLite-backed self-hosted apps.
 | `usarr.db` | Library index, users, service configs, tags, links, request history | No |
 | `USARR_SECRET_KEY` (or `secret.key`) | Decrypts every stored credential in that DB | The DB opens, but every service credential is garbage — re-paste every API key |
 | `config.yaml` / `services.yaml` | Bootstrap + provisioning | Yes, rewrite by hand |
+| `tsnet/` | The node's tailnet identity | Yes — but restoring without it registers a **new** device; delete the old one in the admin console |
 | `$USARR_DATA_DIR` | Caches, logs | Yes — UsArr rebuilds it |
 
 **The key and the database are two halves of one backup.** Storing them together in the same
@@ -442,9 +616,51 @@ bare-metal install to Docker, where `http://localhost:8989` must become `http://
 
 ---
 
-## 7. Worked examples
+## 8. Worked examples
 
-### 7.1 Minimal Docker Compose
+### 8.1 Tailnet deployment with an embedded node (the default topology)
+
+No published ports, no reverse proxy, no TLS configuration. Reachable at
+`https://usarr.<your-tailnet>.ts.net` from any tailnet device.
+
+```yaml
+services:
+  usarr:
+    image: ghcr.io/<owner>/usarr:latest      # not yet published — pre-alpha
+    container_name: usarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Lisbon
+      - USARR_SECRET_KEY_FILE=/run/secrets/usarr_key
+      - USARR_TSNET_ENABLED=true
+      - USARR_TSNET_HOSTNAME=usarr
+      - USARR_TSNET_STATE_DIR=/config/tsnet
+      - USARR_TSNET_TLS=true
+      - USARR_TSNET_AUTH_ENABLED=true
+      - USARR_TSNET_AUTH_ALLOWED_LOGINS=you@example.com
+      # First start only. Remove once /config/tsnet holds the node state.
+      - USARR_TSNET_AUTHKEY_FILE=/run/secrets/ts_authkey
+    volumes:
+      - ./config:/config
+      - ./data:/data
+    # NOTE: no `ports:` — that is the point.
+    secrets:
+      - usarr_key
+      - ts_authkey
+    restart: unless-stopped
+
+secrets:
+  usarr_key:
+    file: ./secrets/usarr_key
+  ts_authkey:
+    file: ./secrets/ts_authkey
+```
+
+Southbound services (Sonarr, Jellyfin, Navidrome, …) are still reached over the container network or
+the LAN as usual — `tsnet` governs how clients reach *UsArr*, not how UsArr reaches its backends.
+
+### 8.2 Plain Docker Compose (LAN or behind your own proxy)
 
 ```yaml
 services:
@@ -471,7 +687,7 @@ secrets:
     file: ./secrets/usarr_key            # contains ONLY the base64 key, no newline needed
 ```
 
-### 7.2 Headless / IaC, with provisioning
+### 8.3 Headless / IaC, with provisioning
 
 `services.yaml` **(proposed schema)**:
 
@@ -489,17 +705,35 @@ services:
     name: "Prowlarr"
     url: http://prowlarr:9696
     api_key_file: /run/secrets/prowlarr_key
-  - kind: jellyfin
-    name: "Jellyfin"
-    url: http://jellyfin:8096
-    api_key: ${JELLYFIN_API_KEY}
   - kind: lazylibrarian
     name: "LazyLibrarian"
     url: http://lazylibrarian:5299
     api_key: ${LL_RO_KEY}              # read-only key is enough for browsing
+
+  # Southbound playback / library backends — UsArr aggregates and hands off to these.
+  - kind: jellyfin
+    name: "Jellyfin"
+    url: http://jellyfin:8096
+    api_key: ${JELLYFIN_API_KEY}
+  - kind: navidrome
+    name: "Navidrome"
+    url: http://navidrome:4533
+    api_key: ${NAVIDROME_API_KEY}      # OpenSubsonic apiKeyAuthentication; never u/t/s
+  - kind: audiobookshelf
+    name: "Audiobookshelf"
+    url: http://audiobookshelf:13378
+    api_key: ${ABS_TOKEN}
+  - kind: komga
+    name: "Komga"
+    url: http://komga:25600
+    api_key: ${KOMGA_API_KEY}
+  - kind: kavita
+    name: "Kavita"
+    url: http://kavita:5000
+    api_key: ${KAVITA_API_KEY}
 ```
 
-### 7.3 Behind Traefik at a sub-path with forward auth
+### 8.4 Behind Traefik at a sub-path with forward auth (internet-exposed)
 
 ```yaml
 environment:
@@ -522,9 +756,18 @@ purpose, so a browser cannot accidentally authenticate a machine endpoint.
 
 ---
 
-## 8. Open configuration questions
+## 9. Open configuration questions
 
 Tracked here so they are not silently forgotten:
+
+* What `tsnet`'s `WhoIs` returns for a tagged (non-user-owned) device, and therefore whether
+  `USARR_TSNET_AUTH_ENABLED` can ever authenticate a tagged caller (§6.1).
+* Whether a Tailscale OAuth client is the right long-lived alternative to an auth key for
+  unattended re-registration (§6.2).
+* Navidrome's `apiKeyAuthentication` extension support in the version users actually run — this
+  decides whether UsArr can talk to it without a recoverable password (§2.4).
+* Kavita's REST auth scheme, unconfirmed from primary sources (§2.4).
+* Audiobookshelf's exact play-session request schema, needed for progress mirroring (§2.4).
 
 * Whether TMDB will grant UsArr a bundled key, or users must always bring their own (§4.1).
 * Whether the *Arr apps accept `SONARR__AUTH__APIKEY`-style env injection (§2.5) — this would let
