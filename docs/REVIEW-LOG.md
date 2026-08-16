@@ -2467,10 +2467,11 @@ is renumbered and nothing collides.
 
 **`main` moved underneath this section while it was being written, and the section says so rather
 than pretending otherwise.** Everything below was first verified on `15a7211`; the merge that carries
-it also brings `1285d88`, which **fixes SR-13**. That entry is re-verified against the merged tree
-and re-dispositioned in §6.3 — raised open and closed the same day — and every other row was re-run
-after the merge and is unchanged. A round that reviews a moving `main` has to record which commit
-each claim was measured on; that is why both are named.
+it also brings `1285d88` and `087fbdb`, which between them **fix SR-13 and FI-13** — the two
+findings this section itself raised. Both are re-verified against the merged tree and
+re-dispositioned in place, raised and closed the same day, and every other row was re-run after each
+merge. A round that reviews a moving `main` has to record which commit each claim was measured on;
+that is why every measurement below names one.
 
 ### 6.1 Amended dispositions
 
@@ -2488,8 +2489,10 @@ each claim was measured on; that is why both are named.
 **Counts, restated for this round only.** Of the 49, **seven** are now closed on `main` — DL-01,
 DL-03, DS-01, SR-01, SR-02, FI-03, FI-04 — and **one more**, FI-11, is closed under another section's
 id. **FI-02 is the one High from this round still open**, and it is a one-line `Makefile` change.
-**Four new findings** are added here: SR-13 (High, raised and closed on the same day), DS-15 (Low),
-FI-12 (Low) and FI-13 (Low). No existing entry's id, text or severity changed.
+**Four new findings** are added here: SR-13 (High, raised and closed the same day), DS-15 (Low),
+FI-12 (Low) and FI-13 (Low, likewise raised and closed the same day). **DS-15 and FI-12 are the two
+new items still open**, and both are one-line changes. No existing entry's id, text or severity
+changed.
 
 ### 6.2 DS-01 — the four things checked on the shipped fix
 
@@ -2634,13 +2637,13 @@ EXIT=1
 # every other package: ok
 ```
 
-**FI-13, found while re-running the gate over the merge that carries this section — and recorded
-because it is the third demonstration in one round that a gate result is only as good as the commit
-it was measured on.**
+**FI-13, found while re-running the gate over the merge that carries this section, and closed on
+`main` before that merge landed — recorded in full anyway, because it is the third demonstration in
+one round that a gate result is only as good as the commit it was measured on.**
 
 | # | Finding | Disposition |
 |---|---|---|
-| **FI-13** (Low) | **`make check` is RED on `main` again, on a formatting nit in a file this thread must not touch.** `internal/ssrf/redactpath_test.go:190` is not gofumpt-formatted — a comment-alignment difference of two spaces on the `// ULID` trailing comment, introduced by `c2e2c57` *"fix: make the path-passkey fixtures structurally fake"*, which shortened the literal above it and left the aligned comment behind. `fmt-check` fails first (`Makefile:364`), and `lint-go` fails again on the same line through the `gofumpt` formatter (`1 issues: * gofumpt: 1`). **Confirmed pre-existing and not merge-induced:** `gofumpt -l internal/ssrf/` run in a detached worktree at `origin/main` itself lists the file | **Open — recorded here rather than applied, and deliberately NOT fixed by this thread**, which is scoped to `docs/REVIEW-LOG.md` alone; a review log that quietly reformats another thread's source is exactly the behaviour the round-6 preamble rules out. **Everything else in the gate is green on the merged tree**, run target by target so the scope of the red is exact: `modverify` OK, `secrets` OK (*no leaks found*), `test` OK (all Go packages, 65 web tests), `vuln` OK (*No known vulnerabilities found*). **Fix shape:** `make fmt`, or two spaces on one line. **The point worth carrying:** §6.4's green was real on `15a7211` and was already stale by the time this section merged. FI-03 proved a green can be measured with the wrong *tool*; FI-11 proved it can be measured with the wrong *caps*; FI-13 is the plainest version of the same lesson — it can simply be measured on the wrong *commit*, and on a repository where several threads push to `main` in the same hour that is the common case, not the exotic one |
+| **FI-13** (Low) | **`make check` went RED on `main` again, on a formatting nit in a file this thread must not touch.** `internal/ssrf/redactpath_test.go:190` is not gofumpt-formatted — a comment-alignment difference of two spaces on the `// ULID` trailing comment, introduced by `c2e2c57` *"fix: make the path-passkey fixtures structurally fake"*, which shortened the literal above it and left the aligned comment behind. `fmt-check` fails first (`Makefile:364`), and `lint-go` fails again on the same line through the `gofumpt` formatter (`1 issues: * gofumpt: 1`). **Confirmed pre-existing and not merge-induced:** `gofumpt -l internal/ssrf/` run in a detached worktree at `origin/main` itself lists the file | **Closed — fixed on `main` in `087fbdb`, *"style: restore gofumpt comment alignment in redactpath_test.go"*, while this section was being committed.** Recorded rather than deleted, because the entry's whole value is the sequence. It was **deliberately NOT fixed by this thread**, which is scoped to `docs/REVIEW-LOG.md` alone — a review log that quietly reformats another thread's source is exactly the behaviour the round-6 preamble rules out — and while it was open, the gate was measured target by target so the scope of the red was exact: `modverify` OK, `secrets` OK (*no leaks found*), `test` OK (all Go packages, 65 web tests), `vuln` OK (*No known vulnerabilities found*), with only `fmt-check` and `lint-go` red on that one line. **Re-verified after `087fbdb`: `make check` exits 0**, cache cleaned, banner `golangci-lint has version 2.12.2 built with go1.25.13`, `check: OK`. **The point worth carrying, and it survives the fix:** §6.4's green was real on `15a7211`, was stale by `1285d88`, and is real again at `087fbdb`. FI-03 proved a green can be measured with the wrong *tool*; FI-11 proved it can be measured with the wrong *caps*; FI-13 is the plainest version of the same lesson — it can simply be measured on the wrong *commit*, and on a repository where several threads push to `main` in the same hour that is the common case, not the exotic one. **A gate result without a commit sha attached is not a result** |
 
 ### 6.5 A miss by this review, recorded as a method lesson rather than a code finding
 
