@@ -957,6 +957,46 @@ another user's `payload` and state. A key that exists under a different `user_id
 `ix_wq_runnable` is also the reconciliation guard's index: the sweep skips any `work_id` with a row
 in `pending`, `inflight` **or** `verifying`.
 
+### ⚠️ Do this during the library-sync migration's `write_queue` rebuild
+
+**There is no `state` value meaning "waiting for a human", and a two-phase asynchronous request
+destination needs one.** Every non-terminal state above assumes a *machine* owes the row an answer:
+`pending` is claimed by a worker on its next pass, `inflight` means an upstream request is
+outstanding, and `verifying` carries `verify_until` — a 15-minute TTL that ends in one final
+verification and an explicit `failed` (ADR-0012a, ARCHITECTURE §7.6), which for a row nobody has
+answered resolves to `fail_reason = 'unknown'`. A sink whose flow is *search → present results →
+**a person chooses** → enqueue* (`FUTURE.md` §11) has to park a row between phase one and phase two
+for however long its owner takes to come back, and none of those four states can hold it: a user
+asleep is not a failed request. `kind` is unconstrained free text, so the *verb* half of that flow is
+already expressible; the `state` half is not.
+
+**The fix is deliberately deferred to the migration that ships library sync, because that migration
+must rebuild this table anyway.** `write_queue.work_id` is `INTEGER` with **no** foreign key in
+`00001_initial.sql` — the `REFERENCES work(id) ON DELETE CASCADE` shown above is dropped there, with
+a comment naming library sync as the migration that restores it, because `work` does not exist yet.
+SQLite cannot add a foreign key to an existing column, so restoring it costs a full 12-step table
+rebuild that is **already mandatory**. Adding a `CHECK` value during a rebuild that is happening
+regardless costs nothing, and SQLite equally cannot `ALTER` a `CHECK` constraint, so doing it any
+earlier would mean either editing a merged migration or paying for a second rebuild. Neither is
+worth it while nothing is released. **`00001_initial.sql` is not to be edited for this.**
+
+When that rebuild is written, do all four:
+
+1. Add `'awaiting_choice'` to the `state` `CHECK` list.
+2. Recreate **all three** indexes on the rebuilt table — `ux_wq_idem`, `ix_wq_work`, and
+   `ix_wq_runnable` **including its partial `WHERE` predicate**. A rebuilt table does not inherit
+   indexes, and a partial index silently rebuilt as a full one changes which rows the sweep sees.
+3. Decide whether `'awaiting_choice'` joins `ix_wq_runnable`'s predicate — see below.
+4. Regenerate the schema snapshot: `go test ./internal/db -run TestMigrationRoundTrip -update-schema`.
+
+**Whether `'awaiting_choice'` belongs in `ix_wq_runnable`'s predicate is open, and is the owner's
+call at rebuild time.** ⚠️ Recorded as a **lean, not a decision**: it should probably be **excluded**,
+because a row waiting on a person is not runnable — leaving it in exposes it to the retry sweep and
+to the `verify_until` TTL, which is the whole defect above, reintroduced through the index. It is not
+settled here because that predicate also serves the reconciliation guard, and that call wants the
+reconciliation code in front of it rather than an argument from the schema alone. Whichever way it
+goes, write the reason next to the predicate: an exclusion looks like an oversight otherwise.
+
 **`fail_reason`'s `CHECK` must test `NULL` separately.** It previously read
 `CHECK (fail_reason IN (NULL,'rejected','unknown','exhausted'))`, which enforced **nothing at all**:
 in SQL, `x IN (NULL, 'a')` evaluates to `NULL` — not `FALSE` — when `x` matches no list entry, and a

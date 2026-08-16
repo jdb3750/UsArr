@@ -371,10 +371,35 @@ no structured metadata, so **UsArr cannot turn a slskd result into a catalogue r
 record "you asked for X, slskd fetched these files", and any album-completeness claim after a Soulseek
 grab is guesswork until Navidrome re-scans.
 
-**The seam.** The provider registry plus the durable command queue (ADR-0012a). **The one property to
-protect is that the queue's verb model can express a two-phase asynchronous operation** — if every
-verb is assumed to be a single request with a single outcome, this becomes a rewrite rather than a
-provider.
+**The seam, and ⚠️ the half of it that is not there yet.** The provider registry plus the durable
+command queue (ADR-0012a). **The property to protect is that the queue can express a two-phase
+asynchronous operation** — if every verb is assumed to be a single request with a single outcome,
+this becomes a rewrite rather than a provider.
+
+Two of the three parts hold today, and the third does not. `library.sink_service_instance_id`
+(`reference/schema.md` §6) takes any capable instance, so the sink binding is fine. The `Grabber`
+interface (`reference/providers.md` §2) is already two calls — `Releases` then `Grab(rel)` — so the
+verb shape is fine, and `write_queue.kind` is unconstrained free text, so a new verb needs no schema
+change. **But `write_queue.state`'s `CHECK` has no legal value meaning "waiting for a human"**, and
+that is the state a two-phase sink lives in between the phases. `pending` gets claimed by a worker on
+its next pass; `inflight` asserts an outstanding upstream request that does not exist while a person
+is deciding; and `verifying` carries a 15-minute `verify_until` TTL that ends in an explicit `failed`
+— so a user who wandered off mid-choice would come back to their own request settled as
+`fail_reason = 'unknown'`. This document previously listed the queue as the seam without qualifying
+it. It was overclaiming: the queue protects the verb, not the wait.
+
+**The fix is one `CHECK` value, `'awaiting_choice'`, and it is scheduled rather than done.** It lands
+in the migration that ships library sync, which has to rebuild `write_queue` anyway to restore the
+`work_id → work(id)` foreign key that `00001_initial.sql` drops — SQLite can neither add a foreign
+key nor alter a `CHECK` in place, so both changes ride the same already-mandatory 12-step rebuild and
+the second one is free. `00001_initial.sql` is **not** edited for it. The full instruction, including
+recreating `ix_wq_runnable`'s partial predicate and regenerating the schema snapshot, sits next to
+the DDL in [`reference/schema.md`](./reference/schema.md) §10, where whoever writes that rebuild will
+be reading. ⚠️ Whether `'awaiting_choice'` joins `ix_wq_runnable`'s predicate is **undecided** — the
+owner's lean is to exclude it, since a row waiting on a person is not runnable and must not be swept
+or TTL'd, but that predicate also serves the reconciliation guard and the call is being made with the
+reconciliation code in view. Until then this seam is **identified and scheduled, not protected**, and
+nothing about it should be read as shipped.
 
 **Trigger.** A user who actually runs slskd asks, *and* the request path (v0.2) has shipped and
 settled.
