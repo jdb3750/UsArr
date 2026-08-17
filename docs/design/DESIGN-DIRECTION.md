@@ -1760,7 +1760,9 @@ treatment by media type.** Same slots, same positions, different values.
   explanation column absorbs the remainder; a genuine overflow degrades to a scroll, never to a
   clip.** ⚠️ This interacts with the sticky-header rule above — `overflow-x: auto` on the wrapper is
   what breaks sticky headers between 761 and 1,099 px — so the scroller goes **inside the row**,
-  which satisfies both. **CI asserts it**, and it is cheap: no element's
+  which satisfies both. **`docs/design/check.mjs` asserts it** — the guard is real, and the actor
+  named here was not: there is no CI (`REVIEW-LOG` `NOCI-01`), and what runs the assertion is
+  whoever types `make design` (`OPTIN-01`). It is cheap: no element's
   `getBoundingClientRect().right` may exceed `innerWidth` on any screen × state × width triple.
 - **A figure and its unit are two slots, not one string.** `tabular-nums` on 222 cells buys nothing
   when what is right-aligned is the *word after the number*: `1,204 films` / `275 series` /
@@ -2072,7 +2074,7 @@ else. Rules:
   right direction. §11's `dominant_color` rule is **retained without a call site, and that is
   stated rather than dressed up**: it still binds any surface that sets text on a computed fill, and
   after this change **no surface does** — the poster card was the only one, in the mockups and in
-  `web/src/app.css` alike. So it is a rule waiting for a case, not a rule doing work, and §11's CI
+  `web/src/app.css` alike. So it is a rule waiting for a case, not a rule doing work, and §11's
   assertion has nothing to run over until one appears. Recording it that way is the point: a rule
   described as active over a surface that does not exist is the invented status `CLAUDE.md` bans,
   and it is also how a deleted subsystem grows back.
@@ -2581,8 +2583,9 @@ Two supporting rules, because otherwise the ratio is not computable from what sh
 title nor the year carries `opacity`** — compositing changes the effective ratio (by ~0.45 on the
 measured pair) through a mechanism no contrast check sees, so the year gets a real colour token.
 And **12 px semibold is normal text under WCAG, not large** (large is ≥18.66 px bold or ≥24 px), so
-4.5:1 applies to both lines. **Asserted in CI over any computed-fill / foreground pair that ships in
-a fixture**, and §13's checklist carries the entry. **The assertion is retained deliberately, and
+4.5:1 applies to both lines. **To be asserted over any computed-fill / foreground pair that ships in
+a fixture** — in the design gate, and in a CI if one is ever added — and §13's checklist carries the
+entry. **The assertion is retained deliberately, and
 the reason is the shape of the rule above:** a conditional rule needs a *standing* guard, because a
 guard added by whoever writes the first call site is a guard that call site had to know about
 first — which is the same as having no rule. It binds the moment any surface sets text on a computed
