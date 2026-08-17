@@ -1794,10 +1794,18 @@ treatment by media type.** Same slots, same positions, different values.
     both numbers, on different columns** — 68 px is `Grabs` in the mockups and `Age` in the app,
     80 px is `Age` in the mockups and `Protocol` in the app — which is exactly how one came to be
     quoted for the other. So **every width in this section names the file it came from**, and the
-    divergence itself is the finding: of the ten columns the two trees share, **eight carry
-    different widths** — only `Category` (`0.9fr`) and `Actions` (`minmax(max-content, auto)`)
-    agree — `Category` is column 9 in the mockups and column 5 in the app, and the mockups carry a
-    `Select` column the app does not have at all. Recorded in `docs/REVIEW-LOG.md`
+    divergence itself is the finding: of the ten columns the two trees share, **nine carry
+    different widths** — only `Category` (`0.9fr`) still agrees — `Category` is column 9 in the
+    mockups and column 5 in the app, and the mockups carry a `Select` column the app does not have
+    at all. ⚠️ **That count was eight when it was walked at 03:21 Z, and nine six minutes later.**
+    `Actions` agreed at `minmax(max-content, auto)` in both trees until **`7fc932e`** gave the app a
+    `198px` reserve — because ADR-0029 makes every row its own grid and a content-sized track has no
+    cross-row agreement to appeal to — and that commit reached `main` at 03:27 Z, while this
+    section's gates were still running. **The divergence widened during the round that documents
+    it**, which is the most direct evidence this bullet could have that it describes a live drift
+    rather than a one-off. **So a count of divergent columns is perishable and dates itself**, the
+    same discipline this bullet imposes on widths, applied to the count. Recorded in
+    `docs/REVIEW-LOG.md`
     as **SU-10**, in the same family as SU-05 — a mockup is a measuring instrument, so a mockup that
     disagrees with the product keeps generating numbers that are right about one tree and wrong
     about the other.

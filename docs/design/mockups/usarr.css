@@ -384,11 +384,17 @@ button, input, select, textarea { font: inherit; color: inherit; }
    `COLUMNS` in web/src/routes/requests/+page.svelte has read Age 68px since
    cd94779. Both trees hold both numbers on different columns — 68px is `Grabs`
    here and `Age` there, 80px is `Age` here and `Protocol` there — which is how
-   one came to be quoted for the other. Eight of the ten columns the two trees
-   share carry different widths; only `Category` and `Actions` agree, `Category`
+   one came to be quoted for the other. NINE of the ten columns the two trees
+   share carry different widths; only `Category` still agrees, `Category`
    sits in a different position, and the `Select` column here has no counterpart
-   there. That belongs in REVIEW-LOG rather than in a stylesheet comment. See
-   SU-10. */
+   there. ⚠️ That count was EIGHT when it was walked at 03:21Z: `Actions` agreed
+   at `minmax(max-content,auto)` in both trees until `7fc932e` gave the app a
+   `198px` reserve, because ADR-0029 makes every row its own grid and a
+   content-sized track has no cross-row agreement to appeal to. That commit
+   reached main at 03:27Z, six minutes after the walk — so the count widened
+   while the finding that names it was being gated, which is the finding. A
+   count of divergent columns is perishable and dates itself. That belongs in
+   REVIEW-LOG rather than in a stylesheet comment. See SU-10 and SU-10d. */
 .unit {
   color: var(--fg-muted);
   display: inline-block;
