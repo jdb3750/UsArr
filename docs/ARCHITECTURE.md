@@ -920,10 +920,43 @@ closure over external ids — 0.95; (3) `normalized_title` + year ±1 + same kin
 + year ±1 + same kind — 0.75; (5) Jaro-Winkler ≥ 0.94 + year ±1 + same kind + shared credited person
 — 0.65. Below 0.65: **do not merge.**
 
-**v0.1 runs tier 1 only.** Its providers are Sonarr and Radarr and every row from both carries
+**v0.1 runs tier 1 only** — and ⚠️ **what tier 1 is worth in v0.1 changed when the source did.** This
+paragraph read *"Its providers are Sonarr and Radarr and every row from both carries
 `tmdbId`/`imdbId`/`tvdbId`, so tier 1 resolves essentially 100% of the v0.1 identity problem —
-including the dual-Radarr case, which joins on `tmdbId`. Tiers 2–5 and the `work_merge`/un-merge
-machinery land with the first provider that lacks strong ids. `normalized_title` and `norm_version`
+including the dual-Radarr case, which joins on `tmdbId`."* That was true of the providers it named,
+and [ADR-0041](./DECISIONS.md#adr-0041) replaced them: **v0.1's catalogue source is Kavita**, with
+Sonarr and Radarr re-sequenced behind it. It is kept as the statement about the \*Arrs that it is, and
+restated here against the source v0.1 actually has:
+
+* **Kavita's external-id fields are present in the payload and empty on a free instance.** `SeriesDto`
+  in the vendored `api/specs/kavita.json` carries `aniListId`, `malId`, `hardcoverId`, `metronId` and
+  `cbrId` as integers and `comicVineId` and `mangaBakaEditionId` as nullable strings, alongside
+  `mangaBakaId` — **all of them written only by the Kavita+ match path**, so a free instance returns
+  `0`, `null` or `""` for every one. [ADR-0035](./DECISIONS.md#adr-0035) §1 states the consequence in
+  its own words: null identifiers are *"what an ordinary user sees once Kavita lands"*, not an edge
+  case. This section already says the same three paragraphs down, about the *"not identified"* badge.
+* **So the honest claim is not a percentage.** How much of v0.1's identity problem tier 1 resolves is
+  now **a property of the instance, not of the design** — essentially all of it on a Kavita+ install,
+  close to none on a free one. What is unchanged is that tier 1 is the only tier v0.1 runs, and that a
+  work it cannot resolve is kept, marked *"not identified"* and stays searchable (the rule below),
+  which is why v0.1 still ships without tiers 2–5.
+* **Tiers 2–5 and the `work_merge`/un-merge machinery still do not land in v0.1**, and the trigger
+  above — *"the first provider that lacks strong ids"* — is not read as having fired. The fuzzy tiers
+  *merge rows*, and merging comics on title similarity across a catalogue with no ids is the exact
+  disaster the 0.65 floor and the un-merge machinery exist to prevent. **Failing to identify is
+  honest; merging wrongly is not**, so a source with weak ids is an argument for the badge, not for
+  the cascade.
+
+🚩 **What this does to the correction UI's v0.3 cap is FLAGGED here, not decided.** §16.0 caps the
+library correction UI at v0.3, describes the cap as *"a scheduling detail"*, and routes the question
+here on this exact sentence — *"§6.4 owns the tier-1 claim and has not been restated against Kavita"*.
+It is restated now, and the restatement **withdraws the support the cap was resting on**: a v0.1 whose
+only source may carry no external ids at all is a v0.1 where a user has something to correct on day
+one, which is not what *"a cap on a declared no-op"* describes. Whether the cap survives is a **scope**
+question, scope is owned by the ADRs with §16 authoritative (`DEVELOPMENT.md` §11), and this pass
+deliberately does not make it: it needs an ADR and an owner decision.
+
+`normalized_title` and `norm_version`
 are **columns on `work` from the migration that creates it** (adding them later is a backfill over
 the largest table in the schema — `internal/db/migrations` says which migration that was), populated
 by a deliberately
@@ -989,14 +1022,17 @@ where it was remembered.
 
 **A work with no resolvable identity is kept, marked, and stays searchable — and that is a v0.1
 rule, not a later one.** Whatever the backend reports, UsArr writes the row: a title, a file, and a
-quiet *"not identified"* marker. **It is written now because it cannot be retrofitted**, not because
-v0.1 renders it often: v0.1's only sources are Sonarr and Radarr, which carry TVDB and TMDB ids, so
-the state first *renders* with the first catalogue source (§16) — and per
-[ADR-0035](./DECISIONS.md#adr-0035) §1 it renders as the **ordinary** case when that source is
-Kavita, whose identifier fields are null without Kavita+. Komga supplies **no external identifiers at
-all**, so comics has no strong-identity path under either choice. The rule is v0.1's because the
-nullable column belongs on `work` from the migration that creates it and the badge belongs in the
-first grid, not because the badge is common on day one. It costs one nullable column and one badge, and it is precisely what
+quiet *"not identified"* marker. **It is written now because it cannot be retrofitted — and, since
+[ADR-0041](./DECISIONS.md#adr-0041), because v0.1 also renders it constantly.** ⚠️ Those are two
+separate arguments and only the first used to apply. This passage read *"not because v0.1 renders it
+often: v0.1's only sources are Sonarr and Radarr, which carry TVDB and TMDB ids, so the state first
+renders with the first catalogue source (§16)"* — **v0.1's only catalogue source is Kavita**, and per
+[ADR-0035](./DECISIONS.md#adr-0035) §1 the state renders as the **ordinary** case on any instance
+without Kavita+, whose identifier fields are null. Komga supplies **no external identifiers at
+all**, so comics has no strong-identity path under either choice. The rule would still be v0.1's on
+the retrofit argument alone — the nullable column belongs on `work` from the migration that creates it
+and the badge belongs in the first grid — and it now carries the cheaper argument too. It costs one
+nullable column and one badge, and it is precisely what
 LazyLibrarian's absence of disqualifies it as a catalogue (§6.5): a file its matcher cannot bind gets
 no row at all. The badge is never a synonym for "broken" — an unidentified book is a book you own,
 and the honest statement is that UsArr could not find an identifier for it, not that it is missing.
@@ -1160,11 +1196,18 @@ Mechanics in full: [`reference/sync.md`](./reference/sync.md).
 | # | Channel | Latency | Covers | In |
 |---|---|---|---|---|
 | 1 | Full import | minutes | Bootstrap, disaster recovery | **v0.1** |
-| 3 | Delta poll (`/history/since`) | 30–120 s | **Library-bearing acquisition apps only** — Sonarr, Radarr | **v0.1** |
-| **3b** | **Ordered page-walk delta** | **5–15 min** | **The catalogue sources — Navidrome, Audiobookshelf, Kavita, Komga. None has a changed-since endpoint** | **specified now, built with the first catalogue adapter (§16.1)** |
+| 3 | Delta poll (`/history/since`) | 30–120 s | **Library-bearing acquisition apps only** — Sonarr, Radarr | **with the first \*Arr adapter** |
+| **3b** | **Ordered page-walk delta** | **5–15 min** | **The catalogue sources — Navidrome, Audiobookshelf, Kavita, Komga. None has a changed-since endpoint** | **v0.1, built, for Kavita**; the other three with their own milestones (§16.1) |
 | 4 | Reconciliation sweep | 6–24 h | Silent drift, out-of-band edits, deletions | **v0.1** |
 | 2 | SignalR stream | < 1 s | Live changes while connected | later |
 | 4b | Webhook receiver | < 1 s | Push from services with no SignalR | later |
+
+⚠️ **The `In` column was amended 2026-08-17 by [ADR-0041](./DECISIONS.md#adr-0041)**, and both changed
+rows are named rather than silently rewritten. Channel 3 read **v0.1** and channel 3b read *"specified
+now, built with the first catalogue adapter (§16.1)"* — both correct only while v0.1's library-bearing
+services were Sonarr and Radarr. **v0.1's catalogue source is Kavita**, which has no `/history/since`
+at all, so ADR-0041 clause 4 sets v0.1's channels to **1, 3b and 4 — not 1, 3 and 4**. Channel 3 is
+not cut; it lands with the first \*Arr adapter, which is re-sequenced rather than refused.
 
 The numbering is historical; the order is not. **Channel 3 is the correctness guarantee, channel 4 is
 the safety net, channel 2 is an optimisation.** The earlier roadmap shipped SignalR before
@@ -1233,10 +1276,15 @@ delta time, and the library row (§17.8) carries the same, with the last full-co
 freshness number that is not backed by a delta must never be rendered with the same weight as one
 that is.
 
-⚠️ **Per-source status. No source in this table ships in v0.1** (§16) — they arrive one at a time
-afterwards. Dated 2026-08-16, **amended 2026-08-17: Kavita's row is now verified against a live
-instance** and is no longer one of "the two that carry the strategy are both unverified" — Komga's
-is. The rows are in the order the sources are expected to land.
+⚠️ **Per-source status. Kavita ships in v0.1 and the other three do not** (§16.1,
+[ADR-0041](./DECISIONS.md#adr-0041)) — they arrive one at a time afterwards, in the order the rows are
+written. This framing sentence read *"No source in this table ships in v0.1"* until ADR-0041 moved
+Kavita into v0.1; it is amended here rather than left to contradict §16 on the same screen. **The
+status cells below are dated records and are not touched** — they say what was probed, when, and
+against what, and `DEVELOPMENT.md` §11 is explicit that a citation inside a dated record is history
+rather than staleness. Dated 2026-08-16, **amended 2026-08-17: Kavita's row is now verified against a
+live instance** and is no longer one of "the two that carry the strategy are both unverified" —
+Komga's is.
 
 | Source | Ordering key | Status |
 |---|---|---|
@@ -1245,14 +1293,23 @@ is. The rows are in the order the sources are expected to land.
 | Kavita | `LastChapterAdded` ordering on `POST /api/Series/all-v2` | ✅ **VERIFIED 2026-08-17 against a live instance** (Kavita 0.9.0.2, 151 series, page size 10 — the run and its numbers are in [ADR-0035](./DECISIONS.md#adr-0035) §2a). Clause (a) ordering **PASS**; clause (b) resumability **PASS** (no id overlap between pages, page 1 byte-identical across two fetches); clause (c) settled from Kavita's source rather than live — `UpdateLastChapterAdded()` has one production call site, in the new-chapter branch, so the key moves on a **chapter add** and not on edits, deletions, retitles or cover changes. 🚩 **With one qualification that changes the mechanism:** `SeriesFilterField` has **no timestamp member**, so there is no server-side since-filter — resumption is a **sorted page walk with a client-side stop**, not a re-request at the watermark. `SortField.LastModifiedDate` exists but `SeriesDto` returns **no** last-modified property, so that key remains unusable. |
 | Komga (later) | `sort=lastModified,desc` on the series list | ⚠️ **Could not be verified from the spec** — Spring `Pageable` sort properties are not enumerated and the DTO field name may not be the entity property name. **The whole Komga delta strategy rests on it**, so it is a probe at the milestone Komga lands in. If it fails, Komga drops to reconciliation-only and says so on its row. |
 
-Budget rows for the walk are in §13. **This channel is specified here but built with the first
-catalogue adapter, not in v0.1** — v0.1's services are Sonarr, Radarr and Prowlarr, for which
-channels 1, 3 and 4 are the whole story. It is written ahead of its milestone because the watermark
-column and the overlap rule are what the adapters are written against, and because the probe that
-decided whether Kavita or Navidrome went first had to have its pass condition on paper before it
-ran. ✅ **It has since run** — 2026-08-17, against a live Kavita — **and it passed**, ordering the
-sequence **Kavita, then Navidrome** ([ADR-0035](./DECISIONS.md#adr-0035) §2a). The rule stands
-regardless of that result: the next probe writes its pass condition down first too.
+Budget rows for the walk are in §13. **This channel is v0.1 work, and it is built here rather than
+only specified** — v0.1's services are **Kavita and Prowlarr**, and channel 3 does not apply to Kavita
+at all, so v0.1's channels are **1, 3b and 4** ([ADR-0041](./DECISIONS.md#adr-0041) clause 4, §16.1).
+⚠️ **This paragraph read *"specified here but built with the first catalogue adapter, not in v0.1 —
+v0.1's services are Sonarr, Radarr and Prowlarr, for which channels 1, 3 and 4 are the whole story"*,
+and ADR-0041 names it as one of the three sites that decision amends.** The move is a real addition to
+v0.1 and is not glossed as free: it is one more channel in the milestone, taken on because it is the
+channel whose pass condition was written down before it ran and then verified against the owner's live
+instance.
+
+**The section was still written ahead of the adapter that consumes it, and the reason it was is worth
+keeping** — the watermark column and the overlap rule are what an adapter is written against, and the
+probe that decided whether Kavita or Navidrome went first had to have its pass condition on paper
+before it ran. ✅ **It has since run** — 2026-08-17, against a live Kavita — **and it passed**, ordering
+the sequence **Kavita, then Navidrome** ([ADR-0035](./DECISIONS.md#adr-0035) §2a); that result is what
+put Kavita into v0.1 in the first place. The rule stands regardless of the result: the next probe
+writes its pass condition down first too.
 
 ### 7.2 Channel 1 — full import
 
@@ -1811,8 +1868,12 @@ challenge-retry handshakes (Transmission), JSON-RPC envelopes (NZBGet, Transmiss
 > `(subsonicSalt, subsonicToken)` pair is session establishment. The list above describes what a
 > manifest *could* express once the tier exists, not how these sources ship. That is **four
 > hand-written Go adapters**, one per source, rather than "the marginal cost of a provider adapter" —
-> priced honestly in §16.0. ⚠️ **None of the four is in v0.1**: ADR-0036 moved them into the §16.1
-> sequence that starts after it, so this is a cost the roadmap carries, not one v0.1 pays.
+> priced honestly in §16.0. ⚠️ **One of the four is in v0.1 — Kavita — and the other three are not**
+> ([ADR-0041](./DECISIONS.md#adr-0041)). This read *"None of the four is in v0.1"* while ADR-0036 had
+> moved all four into the §16.1 sequence; ADR-0041 returned Kavita to v0.1 as the sync core's first
+> adapter, keeping ADR-0036's one-source rule and changing only which source that one is. So v0.1 pays
+> for **one** hand-written Go adapter and one auth scheme (Kavita's static `x-api-key`, which has no
+> lifecycle), and the roadmap carries the remaining three.
 >
 > Two further consequences worth naming, because the \*Arr machinery does not have them: **auth here
 > is four schemes, and one has a lifecycle.** Navidrome is a login round trip yielding a JWT;
