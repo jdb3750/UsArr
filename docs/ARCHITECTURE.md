@@ -1981,9 +1981,11 @@ door. **Do not make Tailscale a requirement.**
 Enforcing p50/p99 wall-clock in CI needs either a self-hosted Pi 5 runner (one person's single point
 of failure for every merge) or emulation (numbers that mean nothing), and latency gates under shared
 CI are flaky enough that the predictable outcome is disabling them in month two — after they have
-blocked real work. **What stays in CI:** `EXPLAIN QUERY PLAN` assertions and **row-count assertions**
-on hot queries — deterministic, hardware-independent, fast, and a better proxy for what is being
-protected than wall-clock time.
+blocked real work. **What stays in the gate:** `EXPLAIN QUERY PLAN` assertions and **row-count
+assertions** on hot queries — deterministic, hardware-independent, fast, and a better proxy for what
+is being protected than wall-clock time. **There is no CI** — the gate is `make check`, which a
+person or an agent has to type, and a CI added later inherits this split unchanged
+(`docs/DEVELOPMENT.md` §8).
 
 **Reference hardware: a Raspberry Pi 5. Reference library: six media types, not two.** The earlier
 figure — *"10k movies / 2k series (~400k episode rows)"* — described the product before ADR-0032,
@@ -2658,8 +2660,8 @@ positions are the ones the rules have to survive:
 
 | Install | Services | What the screens show |
 |---|---|---|
-| **Full stack** (the mockups' default) | Sonarr, Radarr, Prowlarr, Navidrome, Audiobookshelf, Kavita | All six media types catalogued. This is the default because six populated types is the case the layout has to survive, and a design judged only on two has not been judged. **It is a later milestone than v0.1** — §16 is authoritative, and it sequences the catalogue sources one at a time *after* v0.1 — so no screen, count or caption may present it as what v0.1 ships. |
-| **v0.1** | Sonarr, Radarr, Prowlarr | Movies and TV catalogued; music, audiobooks, ebooks and comics present as media types with **no catalogue source**, each naming the service that will populate it (§17.2). Requests still covers all six over the Prowlarr free-text path. |
+| **Full stack** (the mockups' default) | Sonarr, Radarr, Prowlarr, Navidrome, Audiobookshelf, Kavita | All six media types catalogued. This is the default because six populated types is the case the layout has to survive, and a design judged only on two has not been judged. **It is later than v0.1, which connects one catalogue source and not six** — §16 is authoritative for which, and for when the rest arrive — so no screen, count or caption may present this position as what v0.1 ships. |
+| **v0.1** | **§16 owns this list; read it there.** At the time of writing it is one catalogue source plus Prowlarr | The media types that one source covers are catalogued; the rest are present as media types with **no catalogue source**, each naming the service that will populate it (§17.2). Requests still covers all six over the Prowlarr free-text path. |
 
 Where a rule below reads differently on the two — Block A's sourceless rows (§17.2), the group set
 on Search (§17.4), `matched by title` (§17.3), a library's binding (§17.8) — the difference is marked
@@ -2761,21 +2763,22 @@ Block B   Attention             hidden entirely when empty
 Block C   Recently added        ONE unified table across all types, with a Type column
 ```
 
-⚠️ **In v0.1, four of Block A's six rows have no catalogue source, and they are rendered rather than
-omitted.** v0.1 connects **Sonarr, Radarr and Prowlarr and nothing else** — the catalogue sources
-sequence after it, one at a time (§16 is authoritative) — so **Movies and TV have a source and music,
-audiobooks, ebooks and comics do not**. Each of those four renders in the per-type **`unconfigured`**
-state (§17.7): the type, `no catalogue source connected`, **the service that will populate it and the
-milestone it arrives in**, and a link to Add. **This is not the "never render a section with no
+⚠️ **In v0.1, most of Block A's six rows have no catalogue source, and they are rendered rather than
+omitted.** v0.1 connects **one** catalogue source, and the rest sequence after it one at a time, so
+the types that one source does not cover have no row content. **§16 is authoritative for which source
+that is and which types it covers, and this section does not restate it** — a second copy of §16's
+membership is what went stale here (REVIEW-LOG SD-01). Each sourceless row renders in the per-type
+**`unconfigured`** state (§17.7): the type, `no catalogue source connected`, **the service that will
+populate it and the milestone it arrives in**, and a link to Add. **This is not the "never render a section with no
 content" rule being broken** — that rule (§17.1, and `design/DESIGN-DIRECTION.md` rule 13) bans a
 region that says *nothing*, and these rows carry a state, a cause and an action, which is the most
 useful thing the screen can say. **The alternative is worse and was rejected explicitly:** dropping
-the four rows leaves a Home screen showing only films and TV, from which the only available
-inference is that UsArr does not do books, music or comics — precisely the misreading principle 3
-exists to prevent. **Block C is unified across the types that have rows**, which in v0.1 is two;
-it gains rows rather than regions as each source lands. Requests still covers **all six types** in
-v0.1 over the Prowlarr free-text path, so the four sourceless types are navigable, searchable
-upstream and grabbable — they are simply not catalogued yet, and the copy says so.
+the sourceless rows leaves a Home screen showing only the types v0.1's one source covers, from which
+the only available inference is that UsArr does not do the others — precisely the misreading
+principle 3 exists to prevent. **Block C is unified across the types that have rows**, a minority of
+the six in v0.1; it gains rows rather than regions as each source lands. Requests still covers **all
+six types** in v0.1 over the Prowlarr free-text path, so the sourceless types are navigable,
+searchable upstream and grabbable — they are simply not catalogued yet, and the copy says so.
 
 - **Block A** answers "what do I have?" completely in six lines — name, count, availability rollup,
   last import, "see all" — and *gains* from more types instead of degrading. A media-type summary's
@@ -3610,14 +3613,14 @@ sub-page of it**, and the split is meaningful:
 > **Services answers "is the pipe up, and how do I fix it?". Libraries answers "what is in it, what
 > is it called, and where do requests go?".**
 
-⚠️ **What this screen holds in v0.1, before the examples below are read.** v0.1 connects **Sonarr,
-Radarr and Prowlarr and nothing else** — the catalogue sources sequence after it, one at a time, so
-the \*Arr sync proves the replica thesis on real data first (§16 is authoritative). **In v0.1 a
-library therefore binds to a Radarr or Sonarr container** — a whole instance, a root folder or an
-\*Arr tag — and **music, audiobooks, ebooks and comics have no catalogue source, so they have no
-library to show**. The media-server examples in the rest of this section (Audiobookshelf's
-ebook/audiobook split, Kavita's containers, the upstream-library binding) **specify the mechanism for
-the milestone each source lands in**, and are marked where they occur. They are kept rather than cut
+⚠️ **What this screen holds in v0.1, before the examples below are read.** v0.1 connects **one**
+catalogue source plus Prowlarr, which has no library at all; the remaining sources sequence after it,
+one at a time. **§16 is authoritative for which source that is, and this section does not restate it**
+— a second copy of §16's membership is what went stale here (REVIEW-LOG SD-01). **A v0.1 library
+therefore binds to a container that v0.1's one source already named**, and the media types no source
+covers have no library to show. The examples in the rest of this section span more sources than v0.1
+connects; each **specifies the mechanism for the milestone its own source lands in**, and is marked
+where it occurs. They are kept rather than cut
 because the mechanism is the same one and the findings behind it were expensive; they are marked
 because a screen that draws a library v0.1 cannot have is the "invented status" failure.
 
