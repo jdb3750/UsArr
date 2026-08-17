@@ -11,20 +11,27 @@ a measured number as though the two were like for like — DESIGN-DIRECTION §13
 
 ## 1. The machine, which is part of every number here
 
-|                 |                                                                                                   |
-| --------------- | ------------------------------------------------------------------------------------------------- |
-| CPU             | Intel Xeon @ 2.80 GHz, **x86-64**, 4 vCPU (containerised, shared host)                            |
-| Memory          | 15 GiB total                                                                                      |
-| Class           | **x86-64 desktop/server class.** A proxy for a ThinkCentre-under-Proxmox box, **not** for a Pi 5. |
-| Node            | v22.22.2                                                                                          |
-| Chromium        | 141.0.7390.37 (`chromium_headless_shell-1194`, `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`)       |
-| playwright-core | 1.56.1                                                                                            |
-| Viewport        | 1440×900                                                                                          |
-| Corpus          | `scripts/harness`, the rich release row — chips, a button, a checkbox, a `<select>`               |
-| Date            | 2026-08-17                                                                                        |
+|                 |                                                                                                               |
+| --------------- | ------------------------------------------------------------------------------------------------------------- |
+| CPU             | Intel Xeon @ 2.80 GHz, **x86-64**, 4 vCPU (containerised, shared host)                                        |
+| Memory          | 15 GiB total                                                                                                  |
+| Class           | **x86-64 desktop/server class.** A proxy for a ThinkCentre-under-Proxmox box, **not** for a Pi 5.             |
+| Node            | v22.22.2                                                                                                      |
+| Chromium        | 141.0.7390.37 (`chromium_headless_shell-1194`, `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`)                   |
+| playwright-core | 1.56.1                                                                                                        |
+| Viewport        | 1440×900                                                                                                      |
+| Corpus          | `scripts/harness`, the rich release row — chips, a button, a checkbox, a `<select>`                           |
+| Tree            | `claude/hearth-thread-d247f2-bench` at `0d70dd4`, merged with `origin/main` @ `8415911`                       |
+| Code path       | `densityToggleCostShipped` in `web/scripts/list-bench.mjs` — `prefs.setDensity` → `flushSync` → forced layout |
+| Date            | 2026-08-17                                                                                                    |
 
 A shared-vCPU container is a noisy instrument, and §4 quantifies exactly how noisy. That noise is
 the reason this gate no longer asserts a budget.
+
+📌 **Every figure below names the code path it was taken on, not only the machine.** DEVELOPMENT §11
+rule 5 — _"name the surface, not just the value"_ — was promoted at `8415911` from this file's own
+§2 defect: two individually correct numbers, ~75.7 ms and ~18 ms, subtracted as though they were
+about the same operation. A figure here without its path is not a measurement.
 
 ## 2. The gate was measuring the wrong operation — found, and fixed here
 
@@ -37,10 +44,10 @@ mandatory was skipped entirely.
 Probed at 200 rows, fresh renderer per arm, four changes per arm, `MutationObserver` on the class.
 **Machine class: x86-64 container, 4 vCPU, shared host.**
 
-| arm                               | mean (ms) | `.tbl--remeasure` applied |
-| --------------------------------- | --------- | ------------------------- |
-| old gate site — `setAttribute`    | **18.8**  | **never**                 |
-| shipped path — `prefs.setDensity` | **64.9**  | yes                       |
+| arm           | code path                                                            | mean (ms) | `.tbl--remeasure` applied |
+| ------------- | -------------------------------------------------------------------- | --------- | ------------------------- |
+| old gate site | `toggleCost` — `tbl.setAttribute('data-density', v)` + forced layout | **18.8**  | **never**                 |
+| shipped path  | `prefs.setDensity(v)` → `flushSync` → forced layout                  | **64.9**  | yes                       |
 
 **Roughly 3.5×, and the gate was reporting the cheaper wrong one.** This was corrected as a
 **correctness fix, not an improvement**: the attribute arm was not a cheaper approximation of the
@@ -127,9 +134,10 @@ asserted against.** ADR-0029's 5× is a design floor about hardware nobody on th
 
 ## 5. The gate's own figure, and what it is not
 
-The gate measures one page, four changes, on a fresh renderer. **The first change is cold and the
-other three land on a renderer that has just toggled**, so the mean is a blend. Observed at
-200 rows, x86-64 4 vCPU shared host:
+The gate measures one page, four changes, on a fresh renderer, via
+`densityToggleCostShipped` — `prefs.setDensity` → `flushSync` → forced layout, the same path the
+product takes. **The first change is cold and the other three land on a renderer that has just
+toggled**, so the mean is a blend. Observed at 200 rows, x86-64 4 vCPU shared host:
 
 ```
 full run    38.4 ms mean of 4   (samples 41.7, 50.7, 28.8, 32.4)   -> tripwire 10.4x clear
