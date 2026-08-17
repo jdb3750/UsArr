@@ -52,6 +52,9 @@
  *
  * Run: PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers pnpm bench:list
  *      pnpm bench:list -- --quick     (skip the 25k sweep; ~40s instead of ~3m)
+ *      USARR_BENCH_FORCE_CEILING=5000 pnpm bench:list   (fire the ceiling guard
+ *      deliberately at that size — see the guard's own note below; the run ends
+ *      RED on purpose, because a fired ceiling is a failure)
  * =============================================================================
  */
 import { createServer } from 'node:http';
@@ -273,9 +276,23 @@ async function browserRssGb() {
  * was. Dying on `Target page, context or browser has been closed` deep inside
  * an evaluate reports a Playwright message that names nothing, and reads like a
  * broken bench rather than a machine limit. An honest ceiling beats a red gate
- * whose redness means nothing. */
+ * whose redness means nothing.
+ *
+ * ⚠️ AND IT IS FIREABLE ON DEMAND, WHICH IS THE ONLY REASON TO BELIEVE IT.
+ * `USARR_BENCH_FORCE_CEILING=<rows>` navigates the renderer to `chrome://crash`
+ * at that size, so the guard is exercised by a REAL renderer death rather than
+ * by a thrown stand-in — the catch, the message, the largest-size bookkeeping
+ * and the stop-escalating behaviour all run against the thing they exist for.
+ * Without a hook like this the guard is untriggered code that is
+ * indistinguishable from no guard, which is the standard this repo sets for
+ * itself. Fire it at a size the sweep actually visits, e.g.
+ *
+ *	USARR_BENCH_FORCE_CEILING=5000 pnpm bench:list
+ *
+ * The run is EXPECTED to end red when it is set: a fired ceiling is a failure. */
 let ceilingHit = null;
 let largestCompleted = 0;
+const FORCE_CEILING_AT = Number(process.env.USARR_BENCH_FORCE_CEILING ?? 0);
 
 function rendererGone(err) {
 	return /target (page|closed)|has been closed|browser has been closed|crash/i.test(
@@ -292,6 +309,9 @@ async function atSize(n, what, body) {
 	if (ceilingHit) return null;
 	await recyclePage();
 	try {
+		// The deliberate firing. `chrome://crash` kills the renderer process for
+		// real, so what follows is the same failure a machine limit produces.
+		if (FORCE_CEILING_AT === n) await page.goto('chrome://crash');
 		await setRows(n);
 		const value = await body();
 		largestCompleted = Math.max(largestCompleted, n);
@@ -799,9 +819,33 @@ for (const n of SIZES) {
 			(themed.live.mean > 100 ? '   <-- above the 100 ms Tier-0 hard fail' : '')
 	);
 }
-await page.evaluate(() => {
-	document.documentElement.removeAttribute('data-theme');
-});
+
+/* ⚠️ THERE IS DELIBERATELY NO `removeAttribute('data-theme')` CLEANUP HERE, AND
+ * ITS REMOVAL IS WHY THIS RUN REACHES SECTION 6 AT ALL.
+ *
+ * The line that used to sit here restyled the 25,000-row page section 4 had just
+ * finished with, and it was dead work three times over:
+ *
+ *   · `toggleCost` in root scope ALREADY restores `data-theme` to whatever it
+ *     found (`restoreRoot`) on its way out, so there was nothing left to undo
+ *     except the harness's own opening stamp from `prefs`;
+ *   · section 5's first act is `atSize(100)`, whose `recyclePage()` closes that
+ *     page outright — so the page being restyled was discarded seconds later,
+ *     and every section after this one runs on a FRESH page that carries the
+ *     harness's normal theme regardless of what was done here;
+ *   · and it sat OUTSIDE `atSize`, so the ceiling guard did not cover it. A
+ *     renderer death on this line reports a bare Playwright message naming no
+ *     size, which is the exact failure mode the guard exists to replace.
+ *
+ * MEASURED, on the run that first got past it: ~5 minutes of wall clock for one
+ * attribute removal — a full re-style of 25,000 laid-out rows on the heaviest
+ * page in the run, straight after the theme sweep that had already forced every
+ * one of them to lay out, pinning a core at ~110% with RSS climbing from 5.6 to
+ * 6.4 GB and printing NOTHING the whole time. That is what a bench that "never
+ * reaches section 6" looks like from the outside: not a crash, a silent stall
+ * between two section headers that nobody waits out. Deleting it is a pure
+ * subtraction — no measurement anywhere in this file depended on it.
+ */
 
 /* =============================================================================
  * 5. The DOM-row ceiling that sets the "Load more" page size
@@ -923,22 +967,38 @@ for (const [name, fit] of [
  * default, so the cost at that many rows must leave enough headroom under the
  * 100 ms Tier-0 hard fail to survive the Pi-5 multiplier the ADR uses. 5x is
  * the pessimistic end of that multiplier, so the desktop budget is 20 ms. */
+/* ⚠️ ON A FRESH PAGE, VIA `atSize`, NOT `setRows` ON WHATEVER THE SWEEP LEFT.
+ * This used to be a bare `setRows(200)`, which ran on the page the sweep's LAST
+ * point left behind — 25,000 rows — so the gate's number was taken on a renderer
+ * that had just torn 25,000 keyed components down through one `flushSync`, on
+ * the dirtiest heap in the run. Two things wrong with that and only one of them
+ * is speed: the teardown itself cost minutes of silent wall clock (the same
+ * shape as the theme-cleanup note above), and a Tier-0 gate measured on a page
+ * with that allocation history is not measuring the 200-row page a user gets.
+ * `atSize` gives it a fresh renderer and brings it under the ceiling guard. */
 const PAGE_SIZE = 200;
-await setRows(PAGE_SIZE);
-const atPageSize = await toggleCost(page, {
-	attribute: 'data-density',
-	values: DENSITY_VALUES,
-	scope: 'container',
-	containment: true
-});
-assert(
-	atPageSize.mean <= 20,
-	`one page (${PAGE_SIZE} rows): density toggle ${atPageSize.mean} ms on this desktop, which is ` +
-		`${(100 / atPageSize.mean).toFixed(0)}x under the 100 ms Tier-0 hard fail — enough headroom for ` +
-		`ADR-0029's 3–5x Pi 5 multiplier`,
-	`one page (${PAGE_SIZE} rows): density toggle ${atPageSize.mean} ms, which leaves less than the 5x ` +
-		`headroom the Pi-5 multiplier needs. LOAD_MORE_PAGE_SIZE in src/lib/list.ts is too large.`
+const atPageSize = await atSize(PAGE_SIZE, 'section 5 page-size gate', () =>
+	toggleCost(page, {
+		attribute: 'data-density',
+		values: DENSITY_VALUES,
+		scope: 'container',
+		containment: true
+	})
 );
+if (!atPageSize)
+	note(
+		`the ${PAGE_SIZE}-row page-size gate was SKIPPED: the ceiling was already hit, and atSize stops ` +
+			`escalating once it is. The run is red on the ceiling regardless.`
+	);
+else
+	assert(
+		atPageSize.mean <= 20,
+		`one page (${PAGE_SIZE} rows): density toggle ${atPageSize.mean} ms on this desktop, which is ` +
+			`${(100 / atPageSize.mean).toFixed(0)}x under the 100 ms Tier-0 hard fail — enough headroom for ` +
+			`ADR-0029's 3–5x Pi 5 multiplier`,
+		`one page (${PAGE_SIZE} rows): density toggle ${atPageSize.mean} ms, which leaves less than the 5x ` +
+			`headroom the Pi-5 multiplier needs. LOAD_MORE_PAGE_SIZE in src/lib/list.ts is too large.`
+	);
 
 /* =============================================================================
  * 6. Arrow-key traversal: sibling walk vs the rescan it replaced
