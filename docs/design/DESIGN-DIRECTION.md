@@ -1,12 +1,13 @@
 # UsArr — Design direction
 
-**Status:** design document, pre-alpha. **None of this design is implemented.** A `web/` directory
-now exists and carries a SvelteKit shell — sign-in, a search page and a scaffold `/services` route
-whose own header says to delete it when §17.3 lands — but it implements none of the system below:
-not the tokens, not the density model, not the component set, not the state sets. Treat every value
-here as still ahead of the code. This document and [`tokens.css`](./tokens.css) remain upstream of
-the UI, in the same spirit as [`ARCHITECTURE.md`](../ARCHITECTURE.md) §17 — which owns what the
-screens *are*, and which this document is downstream of.
+**Where implementation status lives — not here, deliberately.** This document says what the design
+*is*. [`ARCHITECTURE.md`](../ARCHITECTURE.md) §16 is authoritative for what ships in which
+milestone, and the tree is authoritative for what exists right now; a status line restated here
+would have nothing keeping it in step with either. So read nothing below as a claim that a value is
+or is not yet built — check §16, or the code, before describing it either way. This document and
+[`tokens.css`](./tokens.css) remain upstream of the UI, in the same spirit as
+[`ARCHITECTURE.md`](../ARCHITECTURE.md) §17 — which owns what the screens *are*, and which this
+document is downstream of.
 
 **Last revised:** 2026-08-16.
 **Constraints this obeys:** [`ARCHITECTURE.md`](../ARCHITECTURE.md) §17 (screens and UI
@@ -916,11 +917,11 @@ more" plus `content-visibility: auto` with `contain-intrinsic-size`**, and virtu
 "~1,000 rows" this document previously floated, because the finding against §4.5's "~200" was that it
 had no measurement behind it, and answering an unmeasured number with a different unmeasured number
 concedes the argument while pretending to fix it. `make bench` gains the measurement (ARCHITECTURE
-§4.5, §13); the threshold is whatever it says. **Part of that harness exists in the frontend thread's
-tree as `pnpm bench:list` — it is what supplies every measured number below — but it is not on `main`
-and does not yet complete a full run (a 25,000-row Chromium out-of-memory). ADR-0029's 2026-08-16
-amendment carries what it has already settled, including a measured density-toggle cost curve and a
-default page size of 200 rows; the virtualization threshold itself is still unset.**
+§4.5, §13); the threshold is whatever it says. **That harness is `pnpm bench:list`, and it is what
+supplies every measured number below — the harness is authoritative for what it measures and where
+it stops, so read it rather than a summary of it here. ADR-0029's 2026-08-16 amendment carries what
+it has already settled, including a measured density-toggle cost curve and a default page size of
+200 rows, and ADR-0029 is authoritative for the virtualization threshold itself.**
 
 🚩 **The list primitive is a grid, not a table, and that is a constraint rather than a preference.**
 `content-visibility: auto` is defined entirely in terms of size, layout and paint containment, and
@@ -1130,22 +1131,22 @@ prevent. **The corollary is that rebuild is the baseline to beat:** forced re-me
 permitted option above, wins only by matching rebuild's *scrollbar-error* figure and not merely its
 cost — otherwise "cheaper" reads as "better" while the correctness half quietly regresses.
 
-⚠️ **Where that rule will be enforced, and the fact that it is not enforced today.** It cannot be
-asserted by `docs/design/check.mjs`. The bug needs node **reuse** across a density change, plus
+⚠️ **Where that rule is enforced, and the one place it cannot be.** It cannot be asserted by
+`docs/design/check.mjs`. The bug needs node **reuse** across a density change, plus
 enough rows for the drift to exceed threshold; the check's target is `prototype.html`, which is
 static HTML with no reuse semantics and no list at that scale, so **an assertion written there could
 not reproduce the condition and would pass for ever** — a rule that can never fire, indistinguishable
 from a rule that passes, which is the exact failure shape this repository caught three times in a
-single day. Enforcement therefore belongs to the frontend thread's **`pnpm bench:list`**, the only
-harness that mounts a large keyed list. **Threshold, once it lands: fail above 2% drift** — the same
+single day. Enforcement therefore belongs to **`pnpm bench:list`**, the only harness that mounts a
+large keyed list. **Threshold: fail above 2% drift** — the same
 budget `contain-intrinsic-size` is already held to rather than a second number invented for this,
 and the two cases sit either side of it with room to spare (0.65–0.76% rebuilt, 14.57% stale).
-**The honest sequencing is fix, then assert, then call it enforced:** `bench:list` currently exits
-non-zero on a full run because of a 25,000-row Chromium out-of-memory, so the OOM is fixed first, the
-assertion lands second, and nobody writes "the bench asserts this" until both are true. If the app
-target later grows large-list mounting, moving the assertion into `check.mjs` is a small change and
-the frontend thread would not object — the split is *where the condition can exist*, not a
-territorial line.
+**The honest sequencing is fix, then assert, then call it enforced:** a harness that cannot complete
+a full run cannot host the assertion either, so whatever stops it is fixed first, the assertion
+lands second, and nobody writes "the bench asserts this" until both are true — `bench:list` itself
+is the record of which of those it has done. If the app target later grows large-list mounting,
+moving the assertion into `check.mjs` is a small change and nobody would object — the split is
+*where the condition can exist*, not a territorial line.
 
 **And the earlier prescription — `contain-intrinsic-size: auto var(--row-h)` — was wrong three ways.**
 Kept here because each one is a way to arrive at a wrong placeholder again:
