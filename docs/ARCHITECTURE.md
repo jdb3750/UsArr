@@ -3027,16 +3027,24 @@ be a different Sonarr`** rather than `needs re-identification`; **`matched by ti
 `no work identity` (§6.4), which reads to a normal person as "something is broken with my copy of
 this book" when it means "the source gave us no ISBN".
 
-⚠️ **`matched by title` is not reachable in v0.1, and the rule is written now because it cannot be
-retrofitted.** v0.1's only sources are Radarr and Sonarr, which carry TMDB and TVDB ids, so every
-v0.1 work resolves at the identifier tier. The state arrives with the first catalogue source — and
-per [ADR-0035](./DECISIONS.md#adr-0035) §1 it arrives as the **ordinary** rendering rather than an
-edge case, because **Kavita's `aniListId`, `malId`, `comicVineId` and the rest are null without a
-paid Kavita+ subscription**, so on a free instance *every* series in those libraries sits at the
-title-and-metadata tier. From that milestone the badge and the gap list are what those screens *look
-like*, and §17 and the mockups must draw them that way. ⚠️ The honest comparison, kept because it
-stops this reading as a regression: **Komga supplies no external identifiers at all**, so comics has
-no strong-identity path under either choice; only paid Kavita beats both. The copy says what is
+⚠️ **`matched by title` is reachable in v0.1 and may be the ORDINARY rendering there, and the rule
+is written now because it cannot be retrofitted.** This paragraph read `matched by title is not
+reachable in v0.1 … v0.1's only sources are Radarr and Sonarr, which carry TMDB and TVDB ids, so
+every v0.1 work resolves at the identifier tier`, and [ADR-0041](./DECISIONS.md#adr-0041) replaced
+those sources: **v0.1's catalogue source is Kavita.** §16.0 flagged the consequence rather than
+answering it — `§6.4 owns the tier-1 claim and has not been restated against Kavita` — and **§6.4 has
+since been restated, so the claim is read there and not restated here**: how much of the identity
+problem the identifier tier resolves is **a property of the instance, not of the design** —
+essentially all of it on a Kavita+ install, close to none on a free one. Two things §6.4 settles that
+this screen must not soften. First, **Kavita's `aniListId`, `malId`, `comicVineId` and the rest are
+present in the payload and empty on a free instance** (`0`, `null` or `""`), written only by the
+Kavita+ match path: **present-and-empty, never absent**, so no adapter can detect the paid tier by a
+missing key and the only signal is the value — which is why per
+[ADR-0035](./DECISIONS.md#adr-0035) §1 this badge is the **ordinary** rendering on such an instance
+rather than an edge case. Second, ⚠️ **it is not a regression against the source Kavita replaced**:
+**Komga supplies no external identifiers at all**, so comics has no strong-identity path under either
+choice and only paid Kavita beats both. The badge and the gap list are therefore what these screens
+*look like* from v0.1 onward, and §17 and the mockups must draw them that way. The copy says what is
 missing and why — the identifier fields are a paid Kavita feature and this instance has not supplied
 them — and then stops. It must never read as a defect in UsArr, and never as nagware.
 
@@ -3719,10 +3727,17 @@ Each is a named screen, not an accident.
   two hours overstates freshness by exactly the interval that matters. A banner whose number is
   reassuring and wrong is worse than no banner, and it is the precise failure the replica
   principle's honesty rules exist to prevent. Where an instance has **no delta channel at all**
-  (§7.1a), the number is its last full compare and the sentence says so: *"Kavita is unreachable —
-  showing cached data from the last full compare at 09:12"*. ⚠️ **No v0.1 source is in this position**
-  — Sonarr and Radarr both have a delta channel — so this branch of the rule first renders at the
-  milestone the first catalogue source lands in.
+  (§7.1a), the number is its last full compare and the sentence says so: *"Komga is unreachable —
+  showing cached data from the last full compare at 09:12"*. ⚠️ **Kavita was this branch's exemplar
+  and is withdrawn, because the honest distinction is "no channel 3", not "no delta".**
+  [ADR-0035](./DECISIONS.md#adr-0035) §2a verified against the owner's live instance that Kavita
+  **has** a usable delta — channel 3b's ordered page walk (§7.1a) — and what it lacks is only a
+  changed-since endpoint, which is channel 3. An instance reaches this branch only when the
+  **ordering guarantee** fails and it falls back to reconciliation-only, and today that is Komga's
+  open probe rather than Kavita's verified pass. **No v0.1 source is in this position** — Kavita is on
+  3b and Prowlarr carries no catalogue — so the milestone claim survives while its reason does not:
+  it read `Sonarr and Radarr both have a delta channel` before
+  [ADR-0041](./DECISIONS.md#adr-0041) replaced those sources.
 - **Instance needs re-identification** → a blocking banner on that instance's rows and on the Services
   screen, explaining that its identity changed and sync is paused, with a Re-link action. Loud on
   purpose: silently doing the wrong thing here destroys a library.
@@ -3962,11 +3977,17 @@ out**) · *all sources down* (fully browsable from the replica — this is the r
 sentence from "not synced yet") · *orphaned* (shown with its reason, Delete offered, never
 auto-deleted) · *no sink* (requests disabled with the reason) · *needs re-identification* (blocking
 banner, membership recompute paused, because membership derived from an untrustworthy id space is
-worse than stale membership) · **no change feed** (*"Kavita has no changed-since endpoint. Last full
-compare 09:12."* — ⚠️ **not reachable in v0.1**, whose only sources are \*Arrs on channel 3; it is the
-steady state for a catalogue source on channel 3b's reconciliation-only fallback from the milestone
-that source lands in, §7.1a, and it must be a named state rather than an absent delta time, because "no number" and "a
-number from four hours ago" read identically otherwise).
+worse than stale membership) · **no change feed** (*"Komga has no change feed. Last full compare
+09:12."* — ⚠️ **Kavita was the exemplar here and is withdrawn, on the same ruling as §17.7's
+degraded banner: the honest distinction is "no channel 3", not "no delta".** Kavita indeed has no
+changed-since endpoint, but [ADR-0035](./DECISIONS.md#adr-0035) §2a verified against the owner's live
+instance that it **has** a usable delta — channel 3b's ordered page walk — so it is not in this
+state. The state is the reconciliation-only fallback a catalogue source drops to when the **ordering
+guarantee** fails, §7.1a, which today is Komga's open probe; **no v0.1 source is in it**, Kavita
+being on 3b and Prowlarr carrying no catalogue. The reason previously read `whose only sources are
+*Arrs on channel 3`, which [ADR-0041](./DECISIONS.md#adr-0041) replaced. It must be a named state
+rather than an absent delta time, because "no number" and "a number from four hours ago" read
+identically otherwise).
 
 **Overrides must be listable in one place** — what was excluded, re-linked or overridden, by whom,
 when and why, each revertible in one click — or they become invisible magic nobody can undo.
