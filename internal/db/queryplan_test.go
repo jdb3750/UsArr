@@ -199,6 +199,13 @@ func TestQueryPlans(t *testing.T) {
 			// Home's unified recently-added table (ADR-0028 block C). The
 			// partial predicate is what keeps the 7-day tombstone window from
 			// degrading exactly this view.
+			//
+			// THIS CASE PINS THE INDEX, NOT THE SHIPPED READ. The statement
+			// GET /api/v1/library/recent actually issues is rendered by
+			// store.recentWorksSQL and EXPLAINed through that function by
+			// internal/store's TestRecentWorksKeysetPlanIsNormative and its
+			// siblings — which is the assertion to change if the read changes.
+			// This one stays because it is the bare property of the index.
 			name:  "recently added, all kinds",
 			index: "ix_work_added",
 			query: `SELECT id, title, kind FROM work WHERE deleted_at IS NULL

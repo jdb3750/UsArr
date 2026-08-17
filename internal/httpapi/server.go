@@ -253,6 +253,14 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle("DELETE /api/v1/services/{id}", s.csrfProtected(s.authenticated(s.sudo(s.wrap(s.handleDeleteService)))))
 	mux.Handle("POST /api/v1/services/{id}/test", s.csrfProtected(s.authenticated(s.sudo(s.wrap(s.handleTestService)))))
 
+	// ── Library ─────────────────────────────────────────────────────────────
+	//
+	// Home's Block C (§17.2, ADR-0028): one unified recently-added table across
+	// every media type, keyset-paginated. A pure SQLite read, and the first
+	// request the Home screen makes, so nothing on this path may block on an
+	// upstream. See library.go.
+	mux.Handle("GET /api/v1/library/recent", s.authenticated(s.wrap(s.handleRecentWorks)))
+
 	// ── Search and grab ─────────────────────────────────────────────────────
 	//
 	// /indexers serves the REQUESTS screen's indexer and category picker
