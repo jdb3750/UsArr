@@ -165,7 +165,7 @@ cp .env.example .env       # optional — every value has a working default
 
 make tools                 # REQUIRED FIRST. Installs the pinned toolchain into $GOBIN.
 make check                 # the gate. Installs web/node_modules itself on the way through.
-make dev                   # backend on :8484                  (not yet)
+make dev                   # backend on :8484
 ```
 
 `make tools` is not a convenience. Every recipe invokes its pinned binary by **absolute path** under
@@ -1027,10 +1027,14 @@ paths you are about to touch, not by what your thread is called.
 |---|---|
 | `internal/` and `cmd/` — the Go backend | lands backend features and their tests |
 | `web/` — the SvelteKit SPA and its browser checks | lands screens and frontend behaviour |
+| `api/specs/` — the vendored upstream specs and `SOURCES.md` | lands the client that consumes the spec, today `internal/servarr`. A spec arrives with the code that reads it and the contract test behind it, never ahead of either, so what `SOURCES.md` says about which specs are present is a fact about the backend |
 | implementation-status wording in `CLAUDE.md`, `README.md` and `ARCHITECTURE.md` §16 | landed the code being described |
 | `ARCHITECTURE.md` §17 and `docs/design/` | owns the screens and the visual system |
+| `docs/CONFIGURATION.md` | lands `internal/` and `cmd/`. The onboarding bullet above already binds the §2 table, `.env.example` and `internal/config` into one commit, and that binding decides this row: the file moves with the code that reads the keys |
+| `docs/DEVELOPMENT.md` — this file | lands `internal/`, `cmd/` and the build. Almost every fact here is a `Makefile` target or a path the build produces, so the change that makes a target true is the change that corrects the sentence describing it |
 | `docs/PROJECT-INSTRUCTIONS.md` | maintains the project-settings text |
 | `docs/REVIEW-LOG.md` | ran the adversarial review that produced the finding |
+| `docs/reference/` — the per-subsystem design notes | **has no fixed lead, and that is the answer rather than a gap in this table** — it follows whichever change drove it. Each file goes to the work that lands the code it describes; where a note pins itself to the migration state, it goes to whoever lands the next migration, because that is the commit that falsifies it |
 
 **These are leads, not exclusive ownership**, because in practice edits cross the lines routinely.
 `README.md`, `CLAUDE.md` and `ARCHITECTURE.md` are shared documents; a §17 change routinely lands
