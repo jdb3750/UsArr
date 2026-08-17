@@ -6788,6 +6788,40 @@ make: *** [Makefile:681: docker] Error 1
 and it **re-measures §8's own claim on today's tree**, since the guard only speaks when `docker info`
 fails. The rest of this commit is prose and has no failure path to fire.
 
+### NOCI.6 Appended 2026-08-17 on `b2dc092` — `NOCI-01` and `OPTIN-01` are one finding with two entry points
+
+📎 **A pure append. Nothing above is renumbered, reworded or deleted** — §6.1's convention, and the
+mechanism `DEVELOPMENT.md` §11 prescribes for correcting a dated record (*"amend underneath, with the
+new date and the new tree, leaving the original standing"*). This entry used that mechanism on
+`OPTIN-01`; this sub-note is it being used on this entry.
+
+**The design thread, which owns [`OPTIN-01`](#optin-01--every-design-guard-can-speak-and-nothing-in-the-tree-asks-any-of-them-to-recorded-the-decision-it-forces-is-named-and-deliberately-not-taken-here),
+has put the two together, and the unification holds on re-reading it: they are one finding met from
+opposite ends.** The pattern has **three forms**, and no repo-level defect is needed to produce any
+of them — each is a guard that is individually correct:
+
+1. **A guard that cannot speak when it fires.** `DEVELOPMENT.md` §11 rule 3, and the `make design`
+   guard that died at its own variable assignment before reaching the message it existed to print.
+2. **A guard that nothing invokes.** `OPTIN-01`, which names itself as rule 3's *"other half"* in
+   those terms — *"a guard that can speak but that nothing invokes is indistinguishable from no guard
+   too, and it is the harder of the two to notice — because every time somebody does invoke it, it
+   works."*
+3. **A guard that misdescribes its own invocation.** This entry — nine sites naming a CI as the
+   thing that runs the checks, in a repo where the only runner is a person typing a target.
+
+🔍 **The link between forms 2 and 3 is already in the record as a direction of travel, and the
+unification is what makes it a single claim rather than a hand-off.** This entry exists because
+`OPTIN-01`'s *"Raised, not fixed"* section found form 3 **while verifying form 2's absence claim**,
+and said why the two were inseparable there: *"a reader who believes an enforcing CI exists reads
+'not part of `check`' as 'not in that one step', which is exactly the misreading this entry is
+about."* So form 3 is not merely adjacent to form 2 — **it is why form 2 went unnoticed.** All three
+end in the same place: a green nobody is entitled to believe, for three different reasons.
+
+🚩 **The reverse pointer, from `OPTIN-01` back to here, is not added by this commit and is
+outstanding.** `OPTIN-01` is the design thread's entry per §11's area map, and §6.1's convention puts
+any amendment underneath the entry's own text; the pointer back is therefore theirs to append, not
+ours to insert.
+
 ---
 
 # M5-32 — §16 applied ADR-0041, and the renumber was the smallest part of it: eleven surrounding sentences had gone false

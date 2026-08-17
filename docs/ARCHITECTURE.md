@@ -2451,7 +2451,9 @@ its own metadata. ⚠️ **The evidence for that clause named Radarr's `MovieRes
 series and volume payloads is **owed and not yet made here** — it needs the same primary-source check
 against Kavita's API that the \*Arr claim had, and this section will not assert it before that runs.
 The *requirement* — zero external providers in v0.1 — is unchanged. Docker image, `VACUUM INTO`
-backups. CI: `EXPLAIN QUERY PLAN` + row-count assertions; `make bench` as a manual release gate.
+backups. In the gate: `EXPLAIN QUERY PLAN` + row-count assertions; `make bench` as a manual release
+gate. **There is no CI** — the gate is `make check`, which a person or an agent has to type, and a CI
+added later inherits this split unchanged (`docs/DEVELOPMENT.md` §8).
 **One day-one spike, before the schema is written:** the arm64 RSS spike (§13). **The catalogue
 watermark probe was deferred out of day-one and has since been run.** ADR-0032 funded a day-one probe
 of Komga's `sort=lastModified,desc` and [ADR-0035](./DECISIONS.md#adr-0035) §2 retargeted it to
@@ -2475,8 +2477,8 @@ the set of backend surfaces, `internal/db/migrations` the schema that actually e
 `git log` the order they arrived in. What is worth stating at this altitude is the gap the whole
 milestone is about, and it is one sentence: **no sync channel runs yet, so there is no catalogue** —
 nothing replicates from any source, v0.1's own Kavita adapter included, and every screen that
-would render a library says so rather than drawing an empty one. (CI query-plan assertions are in
-place for the tables that exist.)
+would render a library says so rather than drawing an empty one. (The query-plan assertions are in
+place for the tables that exist, in `make test` — the gate named above, not a CI.)
 
 **v0.2 — "Requests."** Request model, routing rules, approval workflow, quotas, single-user
 auto-approve. **One search box over owned and unowned** (§8.6). One Add that routes; availability
