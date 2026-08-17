@@ -62,7 +62,7 @@ distinctions now matter and are used consistently below:
 | [0036](#adr-0036) | No catalogue source ships in v0.1; they arrive one at a time after it | **Accepted** — owner-decided 2026-08-16; **amends** §16; **re-sequences [ADR-0032](#adr-0032) and [ADR-0035](#adr-0035)** without rejecting any source |
 | [0037](#adr-0037) | TOFU SPKI pin enrolment is removed, not completed; enforcement stays | **Accepted** — 2026-08-16; amends no ADR; reopening conditions stated (a pin field on the update path + the change-acceptance UI) |
 | [0038](#adr-0038) | A list freezes its order while a user is aiming at it | **Accepted** — 2026-08-16; amends no ADR; the argument lives in `design/DESIGN-DIRECTION.md` §9.1a and ARCHITECTURE §17.5, this record holds the rejected alternatives |
-| [0039](#adr-0039) | `write_queue.state` loses its `CHECK`; `work_id` gets its foreign key back | **Accepted** — 2026-08-17; **supersedes** `reference/schema.md` §10 step 1 and the seam in `FUTURE.md` §11 / §11.1; closes `REVIEW-LOG.md` WQ-05; ⚠️ **amended 2026-08-17** — decision 3's ground 1 is **struck**, on a misquotation of `reference/sync.md` §4 that dropped the words *toward the \*Arr*: the decision stands on grounds 2 and 3, which are independent of it |
+| [0039](#adr-0039) | `write_queue.state` loses its `CHECK`; `work_id` gets its foreign key back | **Accepted** — 2026-08-17; **supersedes** `reference/schema.md` §10 step 1 and the seam in `FUTURE.md` §11 / §11.1; closes `REVIEW-LOG.md` WQ-05; ⚠️ **amended 2026-08-17** — decision 3's ground 1 is **struck**, on a misquotation of `reference/sync.md` §4 that dropped the words *toward the \*Arr*: the decision stands on grounds 2 and 3, which are independent of it; ⚠️ **corrected 2026-08-17** — decision 1 and the first rejected alternative wrote the Go `state` validation as **done**; it is **owed by the first `write_queue` writer** and nothing validates the vocabulary today (`REVIEW-LOG.md` M5-25) |
 | [0040](#adr-0040) | The six subtype tables land with the catalogue source that writes each | **Accepted** — 2026-08-17; records as a decision what `00005_library_sync.sql` did; **in tension with** ARCHITECTURE §16's enumerated v0.1 schema line, which is left to the thread that owns §16 |
 
 ---
@@ -3917,8 +3917,9 @@ a 15-minute `verify_until` TTL that would settle a sleeping user's request as
 
 > **1. `write_queue.state`'s `CHECK` is dropped entirely, not widened.** The column is
 > `TEXT NOT NULL DEFAULT 'pending'` with no constraint. The vocabulary — `pending` · `inflight` ·
-> `verifying` · `awaiting_choice` · `done` · `failed` — moves to Go and is documented and validated
-> there.
+> `verifying` · `awaiting_choice` · `done` · `failed` — has no home in the schema, and **declaring
+> and validating it in Go is owed by whoever writes the first `write_queue` writer**. ⚠️ **Nothing
+> validates it today**, in Go or anywhere else — see the dated correction immediately below.
 >
 > **2. `'awaiting_choice'` is excluded from `ix_wq_runnable`'s partial predicate**, which stays
 > byte-identical to `00001`'s `WHERE state IN ('pending','inflight','verifying')`, with the reason
@@ -3927,6 +3928,49 @@ a 15-minute `verify_until` TTL that would settle a sleeping user's request as
 > **3. `write_queue.work_id` regains `REFERENCES work(id) ON DELETE CASCADE`.**
 >
 > **4. `fail_reason`'s `CHECK` is kept**, in its `IS NULL OR … IN (…)` form.
+
+### ⚠️ Correction, 2026-08-17 — decision 1's Go validation is **owed**, and this ADR twice wrote it as done
+
+**As first written, decision 1 said the vocabulary *"moves to Go and is documented and validated
+there"*, and the first rejected alternative said *"the vocabulary is validated in Go on the way
+in"*. Both are present tense and both were false on the day they were written.** No Go code declares
+or validates `write_queue.state`. Measured 2026-08-17 on `49dfa6c`:
+`grep -rn "awaiting_choice" --include='*.go' internal/ cmd/` returns **six hits, all in
+`internal/db/migrate_test.go`** (`:719`, `:758`, `:761`, `:1748`, `:1749`, `:1800`) — tests that
+assert what the *schema* does, not a vocabulary a writer enforces. The non-test picture is unchanged
+from the one this ADR already recorded under *"Why — decision 3"*, ground 3: the only non-test
+`write_queue` references under `internal/` and `cmd/` are the RSS-spike binary in
+`internal/db/spike/`, which is behind `//go:build bench` and so is compiled by no step of
+`go build ./...`, plus one comment at `internal/httpapi/grabs.go:58` whose own text is *"Nothing
+writes `write_queue` yet."*
+
+**So this ADR contained the refutation of its own decision-1 wording, three sections further down.**
+Ground 3 is the measured claim and it is right; decision 1 and the first rejected alternative are
+the claim stated as complete. The corrected reading, which is what the decision always meant:
+**Go is where the vocabulary is going to live and it is not there yet.** The first `write_queue`
+writer owes the declaration and the validation, and until it lands the vocabulary is documented in
+`00005_library_sync.sql`'s header and nowhere that runs.
+
+📌 **Corrected in place rather than by an amendment section or a new ADR, and the reasoning is the
+file's own.** Both of the heavier mechanisms exist here for a reason that does not apply. ADR-0035's
+§2a and its `⚠️ Amendment` section record a **fact about the world changing under a standing
+decision** — a milestone moved, a spike ran and returned a result — so the original text stays true
+of its own date and the new fact is appended beside it. ADR-0036's alternatives set the other rule:
+*"the file's convention is a new entry plus a flag on the old"*, and that is scoped to **reversing a
+decision**. Neither is this. **Nothing here changes, reverses or re-dates a decision** — the `CHECK`
+is still dropped, `work_id` still gains its key — and nothing in the world changed either: the
+sentence was wrong the moment it was written, hours ago, and preserving it verbatim would preserve
+only a false status claim. `CLAUDE.md` is explicit that status is read off the tree and never
+restated, so the sentence has no historical value to protect. **The one place strike-through *is*
+used below is decision 3's ground 1, and the difference is instructive: that ground was an argument,
+and a withdrawn argument someone may re-derive is worth showing struck.** A wrong tense is not an
+argument.
+
+⚠️ **Both sites are corrected — decision 1 above, and the first rejected alternative below — and the
+consequences bullet that already said this correctly is left alone.** It reads *"Until that code
+exists, the vocabulary is documented in `00005`'s header and nowhere else, which is a real gap and is
+why this bullet exists"*, which was the honest sentence in the ADR all along. Recorded as
+`REVIEW-LOG.md` **M5-25**.
 
 ### Why — decision 1
 
@@ -4020,9 +4064,12 @@ ground 1.
   against a vocabulary that has already moved once. It also leaves the schema inconsistent with the
   two shipped columns of the same class. **What it would have bought is real and is given up
   knowingly:** SQLite will now accept a misspelt state, and a bug that writes `'pendign'` reaches
-  disk. The mitigation is that the vocabulary is validated in Go on the way in and that
+  disk. ⚠️ **The mitigation is currently one half of what this bullet first claimed** (corrected
+  2026-08-17, see the correction above): validating the vocabulary in Go on the way in is **owed by
+  the first `write_queue` writer and does not exist**, so the only mitigation running today is that
   `ix_wq_runnable`'s predicate is the operational filter — a misspelt state is simply never runnable,
-  which is a visible stall rather than silent wrong behaviour.
+  which is a visible stall rather than silent wrong behaviour. That half is enough to keep a
+  misspelling from being *silently wrong*, and it is not enough to keep it from being *written*.
 - **Drop `fail_reason`'s `CHECK` too, for symmetry.** Rejected. That vocabulary is *closed* — it is
   the terminal taxonomy (`rejected` · `unknown` · `exhausted`), not the lifecycle one — and the
   column is DB-01's regression witness: it is the one place in the schema that proves

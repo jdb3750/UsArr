@@ -6066,3 +6066,96 @@ does not read `DESIGN-DIRECTION.md` and it does not read `REVIEW-LOG.md`** — t
 change touches. A green attests that nothing the checker covers was broken, which is a different
 claim from the edit being right. **No formatter is claimed either**: prettier's root is `web/`, so
 `make fmt-check` never reaches `docs/`.
+
+---
+
+# M5-25 and M5-26 — two documents taught the migration-0005 mistakes back, one as a settled decision and one as a rule
+
+**Date:** 2026-08-17. **Branch:** `claude/hearth-thread-93bfq1`, cut fresh from `origin/main` at
+`49dfa6c`. **Continues the M5 series** — both findings come out of the same review pass that produced
+M5-12…M5-24, and both are against **documentation that outlived the SQL it described**. Neither
+changes a decision, a migration or a line of Go. **`M5-25` is the next free id**: checked rather than
+assumed with `grep -on "M5-[0-9]\+" docs/REVIEW-LOG.md`, whose highest hit before this entry is
+**M5-24**.
+
+The two share a shape worth naming. `00005_library_sync.sql` paid, in one commit, for a pragma that
+does nothing and for a test that measured nothing. **In both cases a document was still standing
+upstream of the mistake** — one asserting the missing code already existed, the other prescribing the
+pragma and the empty-database test by name. The migration was fixed; what taught it was not.
+
+## M5.12 Disposition of both
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| **M5-25** | Medium | **ADR-0039 asserts, in the present tense and twice, Go code that does not exist.** Decision 1: the `state` vocabulary *"moves to Go and is documented and validated there"*. First rejected alternative: *"The mitigation is that the vocabulary is validated in Go on the way in"* — a mitigation offered in exchange for dropping a `CHECK`, so it is load-bearing for the rejection | **APPLIED, in place, and the premise was measured first.** `grep -rn "awaiting_choice" --include='*.go' internal/ cmd/` on `49dfa6c` returns **six hits, every one in `internal/db/migrate_test.go`** (`:719`, `:758`, `:761`, `:1748`, `:1749`, `:1800`) — tests asserting what the *schema* does, not a vocabulary any writer enforces. Non-test `write_queue` references under `internal/`/`cmd/`: the spike binary in `internal/db/spike/` (behind `//go:build bench`, so `go list ./...`'s 11 packages never mention it) and one comment at `internal/httpapi/grabs.go:58` reading *"Nothing writes `write_queue` yet."* 🚩 **The ADR already contained its own refutation**: *"Why — decision 3"* ground 3 states the measured fact — *"Nothing outside `internal/db/spike/` reads `write_queue`"*, measured on `b8bb500` — three sections below the sentence that says the Go validation is done. Decision 1 now says the declaration and validation are **owed by whoever writes the first `write_queue` writer** and that **nothing validates the vocabulary today**; the alternatives bullet is marked as **one half of the mitigation it claimed**, keeping the `ix_wq_runnable` half that does run; a dated **⚠️ Correction, 2026-08-17** section under the Decision carries the measurement and the mechanism choice; the index-table row gains the flag |
+| **M5-26** | Medium | **`DEVELOPMENT.md` §6 prescribes both mistakes 0005 just paid for**, as rules, to whoever writes the next migration. (a) *"write the 12-step table rebuild explicitly …, inside a transaction, with `PRAGMA foreign_keys=OFF` around it. **Do not hope.**"* — inside goose's per-migration transaction that pragma is a documented no-op, so the sentence prescribes hope and calls it rigour. (b) It names the empty-in-memory-DB round-trip test as *the* drift catcher, which is true of shape and false of data | **APPLIED, as pointers rather than fresh prose, and (a) was verified by execution rather than by citation** — see §M5.13. (a) The bullet now says the pragma is unavailable here and why, carries the measurement, and gives the thing that actually works: establish that the rebuilt table is a **parent of nothing** so step 6's `DROP` cascades nowhere, and **assert it with `PRAGMA foreign_key_check` in a test** where a violation can fail a build. `defer_foreign_keys` is named and refused. Worked example cited: `00005`'s `write_queue` rebuild and its header, plus §M5.7 above. (b) Two new bullets: the round-trip test is labelled a **SHAPE** check that moves **zero rows** through any rebuild copy, with 0005's silently-NULLed `work_id` (M5-12, M5-13) as the incident; and a rebuild is given its own required test shape — migrate to **N-1**, populate every column with both `NULL` and non-`NULL`, migrate, **diff every column of every row by name off the result set** — pointing at `TestMigrate0005WriteQueueCopyIsLossless` and `TestMigrate0005AbortsRatherThanDroppingWorkID` as the pattern, the second for the rule that the honest outcome for uncarriable rows is an **abort naming the count and the remedy** |
+
+## M5.13 The pragma claim, executed rather than cited
+
+**`00005`'s header, §M5.7 and now `DEVELOPMENT.md` §6 all rest on one sentence — *"`PRAGMA
+foreign_keys=OFF` is a documented no-op inside a transaction"* — and until this entry every one of
+them cited it rather than ran it.** A documentation fix that propagates an unexecuted claim into a
+third file is exactly the failure `CLAUDE.md` names: *"fire a guard deliberately before trusting
+it."* So it was run, against this project's own driver and this project's own pragma set, through
+`openTestDB` — not against a system `sqlite3` binary, which is a different SQLite.
+
+**Environment:** `go1.25.13 linux/amd64`, `github.com/ncruces/go-sqlite3 v0.35.3` (SQLite 3.53.4),
+tree `49dfa6c`. A temporary `internal/db` test, run with `go test ./internal/db -v -count=1` and
+**deleted afterwards** — this entry's commit is documentation-only, and `git status --porcelain` is
+clean of it. Verbatim log lines:
+
+```
+A. outside any transaction, before: PRAGMA foreign_keys = 1
+B. INSIDE a transaction, after PRAGMA foreign_keys=OFF: PRAGMA foreign_keys = 1  (no error was raised; the statement is a silent no-op)
+B2. INSIDE the same transaction, insert violating write_queue.work_id -> work(id): err = sqlite3: constraint failed: FOREIGN KEY constraint failed
+C. OUTSIDE a transaction, after the identical statement: PRAGMA foreign_keys = 0
+```
+
+**Four things are established, and C is the one that makes the finding sharp.** (A) the pragma set
+really is on. (B) inside `BEGIN IMMEDIATE` the disable **raises no error and changes nothing** —
+which is the whole defect: a failing statement would have been caught by whoever wrote it. (B2) the
+constraint is still live, so the protection the pragma was written for was never in force. (C) **the
+identical statement on the same connection, moved outside the transaction, works** — so the
+statement is not malformed, not unsupported by this driver and not blocked by the pragma set. It is
+inert *only* in the one place a migration ever runs.
+
+## M5.14 The two judgement calls, stated
+
+* **In place, not an amendment section, for M5-25.** `DECISIONS.md` has two heavier mechanisms and
+  neither fits. ADR-0035's `⚠️ Amendment` and its §2a record **the world changing under a standing
+  decision** — a milestone moved, a spike ran — so the original text stays true of its own date.
+  ADR-0036's alternatives set the other rule, *"the file's convention is a new entry plus a flag on
+  the old"*, scoped to **reversing a decision**. This is neither: no decision moves, and nothing
+  changed in the world — the sentence was false when written, hours earlier. `CLAUDE.md` is explicit
+  that status is read off the tree and never restated, so a preserved false status claim has no
+  historical value. ⚠️ **Contrast the one strike-through the same ADR does keep** — decision 3's
+  ground 1 — **and the difference is the rule**: that was an *argument* someone could re-derive, and
+  a withdrawn argument is worth showing struck. A wrong tense is not an argument. The correction is
+  dated and flagged in the index either way, so no reader meets the new wording without meeting the
+  fact that it changed.
+* **This is not an in-place rewrite of the kind M5-06 caught.** That finding was about **this file**,
+  where §6.1's mechanism forbids editing a recorded row's id, text or severity. No row here is
+  touched; M5-25 and M5-26 are new ids appended after M5-24, and the ADR edit is recorded in them
+  rather than performed on them.
+
+## M5.15 Raised, not fixed
+
+* **`docs/reference/schema.md` §10 and `FUTURE.md` §11 / §11.1 are superseded by ADR-0039 and still
+  describe the widened `CHECK`.** ADR-0039's own header says so, which is the pointer working as
+  intended; whether either file should be edited belongs to whoever owns them, and this entry does
+  not reach into them on its own initiative.
+* **Nothing pins the pragma result.** §M5.13's evidence is a log in a document, from a test that was
+  deleted. The durable form is a permanent test asserting `PRAGMA foreign_keys` still reads `1`
+  inside a transaction, which would fail loudly if a driver or SQLite upgrade ever changed the
+  behaviour these three files depend on. It belongs with whoever next touches `internal/db`, and it
+  is a code change rather than a documentation one, so it is out of this entry's scope.
+
+### On the gate for M5-25 and M5-26
+
+`make check` was run on this tree and is green — command, tool paths, versions and the verbatim tail
+are in the commit message. ⚠️ **State plainly what that green is worth here: almost nothing about
+this edit.** Both files changed are under `docs/`; `gofumpt` sweeps `.go` files, prettier's root is
+`web/`, and no step of the gate reads `DECISIONS.md`, `DEVELOPMENT.md` or `REVIEW-LOG.md`. The green
+attests that a documentation-only commit broke no code, which it could not have. **The evidence that
+matters for this entry is §M5.13's execution log and the `grep` behind M5-25**, both run on
+`49dfa6c`.

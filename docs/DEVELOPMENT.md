@@ -516,11 +516,41 @@ Rules:
   `docs/CONFIGURATION.md` §6.3 says so.
 * **Never edit a migration that has shipped.** Add a new one.
 * SQLite's `ALTER TABLE` support is narrow. For anything beyond `ADD COLUMN`/`RENAME`, write the
-  12-step table rebuild explicitly (create new → copy → drop old → rename), inside a transaction,
-  with `PRAGMA foreign_keys=OFF` around it. Do not hope.
+  12-step table rebuild explicitly (create new → copy → drop old → rename), inside a transaction.
+  ⚠️ **Do not write `PRAGMA foreign_keys=OFF` around it — steps 1 and 12 of the published procedure
+  are unavailable here.** SQLite documents that pragma as a **no-op inside a transaction**, and goose
+  runs every migration in one (`internal/db/migrate.go`), so the line looks like protection and is
+  none. Measured on `49dfa6c`, Go 1.25.13, `ncruces/go-sqlite3 v0.35.3`: inside `BEGIN IMMEDIATE`,
+  `PRAGMA foreign_keys = OFF` **raises no error** and `PRAGMA foreign_keys` still reads **`1`**; the
+  identical statement on the same connection outside the transaction reads **`0`**; and an insert
+  violating a foreign key inside that transaction still fails with `FOREIGN KEY constraint failed`.
+  What to do instead: the pragma exists so that the `DROP TABLE` of step 6 does not cascade into
+  **child** tables, so **establish that the table you are rebuilding is a parent of nothing** and the
+  step is not needed — and assert it rather than assuming it, with `PRAGMA foreign_key_check` in a
+  test, where a violation can fail a build instead of being discarded mid-migration. If the table
+  *is* a parent, the rebuild needs a different design, not a pragma. `PRAGMA defer_foreign_keys` is
+  not the escape either — it relocates the same failure to `COMMIT` with a worse message.
+  **Worked example: `internal/db/migrations/00005_library_sync.sql`'s `write_queue` rebuild**, whose
+  header carries this argument in full next to the SQL, plus `REVIEW-LOG.md` §M5.7.
 * The round-trip test runs every migration against an empty in-memory DB and asserts the result
   matches a checked-in `schema.sql` snapshot. This catches "works on my dev DB because it was created
   three migrations ago" drift.
+* ⚠️ **That round-trip test is a check on SHAPE, and it proves nothing whatever about DATA.** Against
+  an empty database a table-rebuild's `INSERT INTO new SELECT … FROM old` copies **zero rows**, so
+  every way the copy can be wrong — a dropped column, a swapped column, a `CASE` that quietly
+  rewrites a value — passes it. This is not hypothetical: migration `00005`'s `write_queue` copy
+  NULLed every non-NULL `work_id` and went through the whole suite green
+  (`REVIEW-LOG.md` **M5-12**, **M5-13**).
+* **So a rebuild needs a populated test of its own, and the shape is fixed:** migrate to **N-1**,
+  populate the table being rebuilt with rows that exercise every column — `NULL` and non-`NULL` for
+  every nullable one, every value a `CHECK` permits, the boundary integers, non-BMP and control
+  characters in the free-text columns — then migrate to **N** and **diff every column of every row**,
+  reading column names off the result set so a column a later migration adds is compared too. **The
+  pattern to copy is `internal/db/migrate_test.go`'s `TestMigrate0005WriteQueueCopyIsLossless` and
+  `TestMigrate0005AbortsRatherThanDroppingWorkID`** — the second because the honest outcome for rows a
+  rebuild cannot carry is to **abort with a message naming the count and the remedy**, never to write
+  a `NULL` and continue. 🔥 Fire the test against the unfixed migration before trusting it; both of
+  those were.
 * `cache.db` is a second database and is **never `ATTACH`ed inside a `usarr.db` write transaction** —
   cross-database locking reintroduces the `SQLITE_BUSY` class the single-writer design exists to
   avoid.
