@@ -5806,3 +5806,23 @@ diff, this section included, was copied into the detached worktree and the gate 
 figures above describe the tree that is about to be committed and not an earlier draft of it. **The
 one thing the gate cannot attest is the commit sha**, which does not exist until this file is
 committed; the base commit plus the five files reproduce it exactly.
+
+### Amendment — the gate re-run at the sha, and the nested-worktree obstruction lifting
+
+📌 **`make check` was re-run twice more after the entry above was committed, and both are `check:
+OK`.** The first is the one that closes the gap the last paragraph named: `git checkout -f --detach
+33f698f` in the same outside-the-repo worktree, `git status --short` **empty**, `git rev-parse HEAD`
+→ `33f698f9b81997dce2c835f9d0eaeea310048279` — so the green is attached to a **commit sha** and a
+clean tree, not to a base plus a copied diff. The second is in the **primary checkout**, `135 .go
+files`, `0 issues.`, `no leaks found`, `check: OK`.
+
+⚠️ **That second run means the paragraph above, which says the gate *"cannot be run in the primary
+checkout of this tree **right now**"*, describes a condition that had already lifted about fifteen
+minutes later: the concurrent agent removed `.claude/worktrees/review-sql-a1/` itself, and `ls -d`
+now reports `No such file or directory`. **The original paragraph is left standing rather than
+edited** — it is a dated measurement and this file's own rule (*"a citation inside a dated record is
+history, not staleness"*) says to amend underneath. ℹ️ It is also `SD-02r`'s defect committed once
+more, in the entry that closes two of `SD-02`'s rows: **a present-tense phrase about a live
+condition**. *"Right now"* should have been *"at 16:20 on 2026-08-17"* when it was written, and the
+amendment is here instead of the edit. **The `Makefile` gap it reports is unaffected and still real**
+— nothing about `fmt-check`'s glob changed, only the directory it was tripping over.
