@@ -170,7 +170,7 @@ var kavitaCreditRoles = []creditRole{
 		// and nothing writes — and this pass deliberately does not write it:
 		// that column belongs to the phase-B metadata backfill that also owns
 		// SeriesMetadataDto's summary and releaseYear, which is a different
-		// change. Recorded in docs/REVIEW-LOG.md as LS-12.
+		// change. Recorded in docs/REVIEW-LOG.md as LS-18.
 		name:   "publishers",
 		people: func(m kavita.SeriesMetadataDto) []kavita.PersonDto { return m.Publishers },
 	},

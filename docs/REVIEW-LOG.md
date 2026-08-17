@@ -9686,14 +9686,408 @@ What it still does not attest: that the mappings match a real Kavita (LS.8), tha
 progress frames (LS-05 — it does not), or that any prose in this entry is true. The prose was
 established by reading `00005_library_sync.sql`, `api/specs/kavita.json`, `internal/kavita/stream.go`
 and §17.8 directly, and by `go tool cover` for the coverage numbers in LS.4.
+---
+
+# VN9-02 — the stack question answered off the tree, `--bg-hover` traced to its literals, and the em-dash rule's laundering channel closed
+
+**Date:** 2026-08-17. **Branch:** `claude/hearth-thread-vn9w7u`, off `origin/main` at `d8130d2`
+(this thread's own [`VN9-01`](#vn9-01--the-entry-id-convention-17s-five-remaining-restatements-and-the-request-destination-column-decided)).
+**One commit:** `7df1f76` (the copy rule). ⚠️ **Two of the three items end in a report rather than an
+edit, deliberately** — both are decisions the brief reserved, and this entry is the record of what
+was established for them, not of anything applied.
+
+## VN9.9 The stack question: neither predicted case holds, and the tree says why
+
+The brief set two cases and asked which. **Neither.** ADR-0025 *has* been superseded, and it *was*
+recorded — an **amendment dated 2026-08-16 sits in the ADR body**, above the Context, headed
+*"⚠️ Amendment, 2026-08-16 — Tailwind is not used, and the enforcement it was chosen for is gone
+with it"*. It states: *"There is no `@tailwindcss/vite`, no `@theme`, no utility class anywhere in
+`web/`"*, owner-confirmed with the quoted words *"if custom css is what it wants that's probably
+fine; I only suggested tailwind for speed"*. It replaces decision points **1** and **5**, leaves
+**2** (Bits UI), **3** (Tabler) and **4** (IBM Plex) standing, and the index row at the top of
+`DECISIONS.md` already carries it. **No later ADR supersedes it.**
+
+**Verified independently of the ADR, because an amendment is a claim too.** `web/package.json` lists
+no Tailwind package in `devDependencies`; `grep -i tailwind web/pnpm-lock.yaml` returns nothing; the
+only match under `web/src` is `web/src/lib/tokenparity.test.ts`, which mentions Tailwind in the
+*reason string* of the very exemption at issue. `web/src/app.css` says so in its own voice —
+*"THIS FILE IS A HAND-PORT OF tokens.css, NOT AN IMPORT"*.
+
+**So the third thing is this: the decision was amended and the token file was not.** `tokens.css`
+is stale against its own governing ADR, in three places, and they are one finding rather than three
+loose ends:
+
+| Site in `tokens.css` | What it still says |
+| --- | --- |
+| §0, *"How this file is consumed"* | Instructs `@import "tailwindcss"` and `@theme { --*: initial; }` in `web/src/app.css`, and calls that line *"load-bearing (ADR-0025)"* |
+| §5 | `--spacing: 4px;` — *"Tailwind's base unit: p-3 == 12px, gap-2 == 8px"* |
+| §10, *"Tailwind v4 mapping"* | An `@theme inline` block of 34 re-exports |
+
+⚠️ **This is not the "vestigial, delete it" conclusion, and the difference matters.** The frontend
+thread's parity work read `--spacing` as a cut candidate. What the tree actually shows is a **file
+describing a consumption path that a recorded decision retired** — so the change is a documentation
+correction to §0 with a pointer to the amendment, and only then a question about §5 and §10.
+✅ **Nothing was deleted and no ADR was touched**, per the brief. **Routing note:** ADR-0025 needs no
+amendment; it is already correct. `tokens.css` is what is behind.
+
+ℹ️ **One thing worth keeping in view before §10 is cut.** The amendment's own "What is gained" list
+leads with *"The token layer is unchanged, because it never depended on Tailwind … it was consumed
+through `@theme inline` and is now consumed directly"*, and calls that the seam being used for what
+it was left for. `CLAUDE.md`'s *"Build the base with intentional space for what comes later"* cuts
+both ways on a 34-line block that costs nothing and documents the seam.
+
+## VN9.10 `--bg-hover`: a real colour divergence, not a naming one
+
+Traced to literals in every theme block of both files. **They differ, in both themes.**
+
+| | light | dark (`[data-theme='dark']` and `prefers-color-scheme: dark`) |
+| --- | --- | --- |
+| `tokens.css` `--bg-hover: var(--n-1)` | `#f2f0ec` | `#1e1d1a` |
+| `app.css` `--bg-hover: var(--hover)` | `#eceae5` | `#26241f` |
+
+`app.css` declares `--hover` in all three of its state blocks (`:root`, `:root[data-theme='dark']`,
+and the `prefers-color-scheme` block), at the same pair each time, so the divergence is uniform
+rather than theme-specific. **`tokens.css` has no `--hover` at all**; the token exists only in
+`app.css`.
+
+⚠️ **But neither file is wrong about the design, and that is the finding.** `tokens.css` §4 carries a
+note that names both roles, gives these exact values — *"`--hover` `#eceae5` light / `#26241f` dark —
+a row/control hover fill DISTINCT from `--bg-selected`"* — explains the problem with its own mapping
+(*"§4 currently maps hover and raised to the same `--n-1` … which leaves hover-over-a-selected-row
+with nothing to say"*), and then **explicitly defers**: *"that is a decision for the pass that writes
+`web/src/app.css`, not for a mockup"*, adding in capitals that whether it has been taken *"IS NOT A
+FACT THIS FILE OWNS"*. `app.css` §1 answers it by name — *"This is the pass that writes
+`web/src/app.css`, which is the pass tokens.css names as the one that decides — so both are adopted
+here, at tokens.css's own stated values."*
+
+**So it is a decision that was taken correctly and never propagated back.** The divergence is the
+gap between a deferral and its answer, which is why the parity test could pin both values honestly
+and why its recorded reason ends *"RETIRED BY: the same adoption that retires `--hover`."*
+
+**Which token would be canonical, asked and not acted on**, per the brief. `--hover`, and
+`tokens.css` §4 should read `--bg-hover: var(--hover)` with `--hover` promoted into the ramp section
+as an interstitial beside `--inset`. Two reasons, both from the files rather than from taste: the
+values are already **tokens.css's own**, quoted in its §4 note, so nothing is invented by adopting
+them; and the mapping being replaced is one `tokens.css` **itself argues against in writing**.
+⚠️ **Not applied — three tokens (`--hover`, `--inset`, `--bg-inset`) and the §4 note move together,
+and the brief reserved this.**
+
+## VN9.11 The copy rule: the hole was the corpus, and the floor reads backwards
+
+⚠️ **The brief's diagnosis inverts the code, and the correction is load-bearing rather than
+pedantic.** The rule is `t.includes('—') && t.split(/\s+/).length < 15` — **`< 15` is what fires.**
+It does not exempt short strings; it *confines the rule to them*, which is §13's stated position that
+*"the em dash is fine in prose and banned in UI microcopy"*. Removing the floor wholesale would fire
+on every legitimate paragraph, so the brief's caution was right even though its reading was not.
+
+**What was actually broken is the order of operations.** A UI label is authored in §17 and copied
+into a mockup afterwards, and §17 was in `check.mjs` **only as the source of an exemption**:
+`exempt()` blesses a short em-dash string when §17 contains its two-words-either-side window. So
+writing the em dash into §17 *first* made every mockup copy of it exempt **because §17 said so** — a
+**laundering channel**, and a §17-originated em dash could not be caught by construction. `VN9.8`
+records the instance from the other side.
+
+**Two changes, and the second exists because the first was tested rather than trusted.**
+
+1. **§17's shipping copy is now a corpus of its own** — the `*"…"*` spans, **56** today — running
+   through the same `checkCopy` with the §17 exemption **withheld**, because a string cannot be its
+   own authority. `exempt()` is untouched: with the source gated, it can only propagate copy that has
+   already been through the rule.
+2. ✅ **That alone was not sufficient, and planting it is how that was found rather than argued.**
+   The drafted sentence `VN9.8` quotes runs to **twenty-four words**. Restored verbatim into §17, the
+   corpus fix passed it with **exit 0**. So the floor is **narrowed to the corpus it was meant for
+   and nowhere widened**: it is a proxy for *"is this a UI string"*, worth having only where a corpus
+   mixes microcopy with prose, and every `*"…"*` span in §17 is a specified UI string by
+   construction. §13 grounds the floor on *"a sentence long enough to need one is already too long
+   for a button, a tooltip, a toast or an empty state"* — a claim about the **element**, not the
+   count. The rendered walk keeps it exactly as it was.
+
+**Six §17 strings are recorded individually, each with a reason and what retires it.** Four are the
+head-and-detail error form §13 prescribes and then writes as the copy to imitate
+(*"Sonarr unreachable — connection refused at 10.0.0.4:8989"*), which no word count can distinguish
+from prose: `Kavita is unreachable — showing cached data…`, `Grab failed — HTTP 502`, and the
+`TV — catalogue source…` / `Music — catalogue source…` pair. Matched after `norm()`, so a rewrite
+loses the exemption and a change of emphasis does not — the same property `exempt()` has.
+
+## VN9.12 Raised, not fixed — two §17 copy questions the narrowing surfaced
+
+Dropping the floor for §17 surfaced two strings over fifteen words that were invisible to this rule
+under **any** corpus. ⚠️ **Both are recorded as open questions, not blessings**, and neither is
+asserted to be correct. They are carried visibly rather than rewritten because **§17 shipping copy is
+the owner's to word, and a checker does not edit the specification it checks** — the same ownership
+line `f9b038f` worked under.
+
+1. **§17.5** — *"1 more film is on a linked row in the **Ebooks** group: Dune (2021). — [Show it]"*.
+   The em dash separates the sentence from a `[Show it]` affordance, so it may be §17 **notation for
+   two adjacent elements** rather than one string a user reads. If it is notation, the span should not
+   be quoted as copy at all.
+2. **§17.8** — *"Editing any proposal marks that library user-managed, after which a later connect
+   can only offer to add sources — never reshape it"*. **The likelier real finding.** A twenty-two-word
+   UI sentence with a mid-sentence em-dash beat is the construction §13 bans on its own stated ground,
+   and no word floor was ever going to catch it.
+
+## VN9.13 On the gate
+
+**`make design` was run six times**, `/opt/node22/bin/node`, target `docs/design/check.mjs`, all on
+this tree: a **baseline before any edit (exit 0, 132 s)**; after the corpus fix (exit 0, 131 s); a
+**planted short label** (exit 2); after gating the `ok` line so the §17 sweep cannot print *"clean"*
+beside its own failure (exit 2, re-fired); the **real twenty-four-word sentence under the corpus fix
+alone (exit 0 — the residue that forced change 2)**; and the same sentence after the narrowing
+(**exit 2**). The final tree closes on `all design checks pass`, **exit 0, 127 s**.
+
+✅ **Fired deliberately, and the message is quoted rather than summarised.** The planted label
+`*"Accept 4 proposals — 2 need review"*` produces:
+
+```
+FAIL  §13 copy: 1 violation(s) in user-visible text
+      ARCHITECTURE §17: em dash in specified UI copy — "Accept 4 proposals — 2 need review"
+FAIL  §13 copy §17: 1 violation(s) in ARCHITECTURE §17's own shipping copy, out of 56 string(s) read
+```
+
+**The counts were measured on both sides, because a widened rule that moves them is inspecting
+something else.** Rendered corpus **6,978 before and 6,978 after**; rendered exemptions **24 before
+and 24 after** — the rendered rule inspects exactly what it did. The new source is **56 §17 strings
+against a floor of 45**, with **6** recorded exceptions. §17 is counted apart from `strings` on
+purpose: `STRING_FLOOR`'s margin is **derived** — 6978 − 6750 = 228, argued against a 293-string
+regression — and folding documentation strings into that total would move the number the derivation
+is about while claiming the derivation still held.
+
+⚠️ **What `make design` is and is not evidence for, per item.** For **VN9.11** it is direct evidence:
+the rule changed, and both its pass and its deliberate failure were observed on this tree. For
+**VN9.9** and **VN9.10** it is a **regression check only** — neither item changed a file, and the
+check reads `ARCHITECTURE.md` §17 and the mockups, not `tokens.css` §0/§5/§10 or `app.css`. It says
+nothing about the stack finding or the hover trace; those were established by reading
+`DECISIONS.md`, `package.json`, `pnpm-lock.yaml`, `tokens.css` and `app.css` directly, and the
+citations are above.
+
+⚠️ **`make design` does not cover `web/` at all**, which bears on VN9.10: it runs against
+`docs/design/mockups/prototype.html`, so the `--bg-hover` divergence is outside everything it
+inspects. The check that *does* hold those two files together is `web/src/lib/tokenparity.test.ts`,
+inside `make check`.
+
+✅ **`make check`: exit 0, 80 s**, closing on `check: OK`, **417** frontend tests passed,
+`govulncheck` **v1.7.0 asserted against the pin** reporting *"No vulnerabilities found"*, `pnpm audit`
+*"No known vulnerabilities found"*. ⚠️ **Its scope over this diff is narrow:** the one commit touches
+two files under `docs/design/`, no Go and no `web/`, so every language gate reads files it does not
+touch. **What the green attests is that the parity test still passes** — which matters here, because
+VN9.10 deliberately left `--bg-hover` alone and a green parity run is the evidence that the recorded
+exception still matches both pinned values.
 
 ---
 
-# Round 5 continued — `LS-11`: author and creator credits (ADR-0044, migration 0007)
+# Round 5 continued — `LS-11`: the ComicVine identity path, corrected before it wrote a merge
 
-**Date:** 2026-08-17. **Prefix:** `LS-` (library sync), continuing from `LS-10` above — re-read after
+`internal/libsync` was merged at `5b40662` on a premise stated in `kavita.go`'s own comment:
+
+> Every one of these fields is written only by the Kavita+ match path, so a free instance returns
+> 0, null or "" for all of them.
+
+**That premise is false for tagged comics, and the consequence was an unrecoverable data bug rather
+than an inaccuracy.** `kavitaExternalIDs` wrote `SeriesDto.comicVineId` through an `add` closure
+that hard-codes `Confidence: 1.0`. An `external_id` row at 1.0 satisfies `ux_extid_work_strong`
+(`UNIQUE(source, value) WHERE work_id IS NOT NULL AND confidence >= 1.0`, migration
+`00005_library_sync.sql:465`), and in UsArr that index **is the merge signal** —
+`store.ApplyCatalogueBatch` resolves it by reusing the work that already holds the id, making two
+works one. **v0.1 has no `work_merge` table and no un-merge.**
+
+## What was verified, and against what
+
+Everything below was read from **Kavita's own source at tag `v0.9.0.2`** — the owner's version
+(ADR-0035 §2a) — in a full working tree, not a sparse one, and cross-checked at `develop`
+`9c3e5400` where noted. The vendored `api/specs/kavita.json` was read for every DTO claim.
+
+| Claim | Verified how |
+| --- | --- |
+| `Series.ComicVineId` has exactly **three** writers in the whole v0.9.0.2 tree | `grep -rn "ComicVineId" --include=*.cs` over all 1,454 `.cs` files: `ProcessSeries.cs:162`, `ProcessSeries.cs:365`, `ExternalMetadataIdHelper.cs:38` |
+| **None is behind a licence check** | All three read in full. The first two are the plain scanner; the third is `SetExternalMetadataIds`, whose only callers are `SeriesController.cs:188`, `VolumeController.cs:43`, `ChapterController.cs:253` — user-submitted `Update*Dto`s |
+| The kind is **erased** | `WeblinkParser.cs:55-61` returns `extractedId.Split('-')[1]` — the id with its `4050`/`4000` prefix stripped. Kavita's own test pins it: `WeblinkParserTests.cs:24` expects `.../4000-159233/` → `"159233"` |
+| `4050` = volume/series, `4000` = issue | `WeblinkParser.cs:23-31` doc comment, verbatim |
+| A `4050`-only value is genuinely a **volume** id when the flag is off | `ProcessSeries.cs:159-163` fills `series.ComicVineId` from `ParserInfo.ComicVineSeriesId`, and `DefaultParser.cs:169-172` sets *that* only inside `if (parsedCvWeblink.Item2)` — the 4050 branch |
+| 🚩 With `inheritWebLinksFromFirstChapter`, the value is the **first chapter's** id, kind discarded | `ProcessSeries.cs:359-366`, inside `UpdateSeriesMetadata`, which `ProcessSeries.cs:165` calls **after** the line-162 assignment. It writes `GetComicVineId(...).Item1` and drops `Item2`. On `develop` it is even plainer: `ProcessSeries.cs:433` reads `var (comicVineId, _) = ExternalIdParser.GetComicVineId(...)` |
+| `webLinks` exists on `ChapterDto` and `SeriesMetadataDto`, **never** on `SeriesDto` or `VolumeDto` | Enumerated every schema in `api/specs/kavita.json` carrying `webLinks` or `comicVineId` |
+| `LibraryDto.inheritWebLinksFromFirstChapter` **is** exposed | `api/specs/kavita.json`, and already modelled at `internal/kavita/resources.go:149` |
+| `<Notes>` is a dead end | `Parser.cs:717-718`: `ComicVineScrapperRegex = @"ComicVine\s\[CVDB(?<Id>\d+)\]"`. UsArr never reads `<Notes>` in any case — nothing on `SeriesDto` carries it |
+
+**Taken on trust, not verified here:** that ComicTagger's and Mylar3's `<Notes>` output does not match
+that CVDB regex, and that both write `site_detail_url` into `<Web>`. Neither tool's source was read.
+Nothing in this commit depends on either: UsArr never reads `<Notes>`, and the `<Web>` claim only
+affects *how often* the corrected path fires, not what it does.
+
+**Contradicted, and recorded rather than adopted:** a relayed claim that "Kavita+ writes the SAME
+columns (`ExternalMetadataIdHelper.cs:16`)". That file at both refs is the **Edit Series / Edit
+Chapter API helper**, reached only from the three controllers above — not a Kavita+ matcher, and at
+v0.9.0.2 no Kavita+ path writes `Series.ComicVineId` at all. The *conclusion* the claim drew is
+nevertheless right and is what this code assumes: **the field's provenance is unrecoverable from its
+value**, so no value in it may be treated as matcher-written.
+
+## Findings
+
+| # | Finding | Severity | Disposition |
+| --- | --- | --- | --- |
+| **LS-11** | `SeriesDto.comicVineId` was written at **confidence 1.0**, satisfying `ux_extid_work_strong`. Kavita erases the volume/issue discriminator, so a `4000` issue id and a `4050` volume id are indistinguishable in that field — and they are drawn from **different ComicVine number spaces**, so `comicvine=159233` could name either. A wrong-kind strong write **merges two unrelated works**, and v0.1 cannot undo it | **High** | **Applied.** `comicvine.go`; every ComicVine row now lands at `0.90` under source `comicvine_volume` |
+| **LS-12** | The same measurement found `Series.AniListId`, `MalId` and `MangaBakaId` are **also** weblink-parsed at v0.9.0.2 (`ProcessSeries.cs:363-366`) rather than matcher-written, so §6.4 amendment 3 arguably reaches them too — and they are still written at 1.0 | **High** | **Raised, not fixed.** A behaviour change against different fixtures; shipping it inside a ComicVine correction would make neither reviewable. Recorded in `kavitaExternalIDs`'s comment, decision 1 |
+| **LS-13** | 🚩 With `inheritWebLinksFromFirstChapter` on, Kavita **overwrites** a correct volume id with the first chapter's **issue** id and the DTO carries no discriminator. The importer read the flag nowhere | **High** | **Applied.** The flag is carried on `kindDecision` from `Containers()` — free, since `Libraries()` is already called — and a bare id from such a library is **refused outright** |
+| **LS-14** | A ComicVine **issue** id is one level below the work, exactly as §6.4 amendment 4 says an ISBN is. Nothing stopped one being written as a work identity | **High** | **Applied.** `comicVineIdentity` refuses any value that classifies as `4000`, at any confidence |
+| **LS-15** | `testdata/cassettes/kavita_series_all_v2_identified.yaml` carried `"comicVineId": "4050-42563"` — **a value Kavita cannot produce**, because `WeblinkParser` strips the prefix. The fixture encoded the wrong premise and so could never have caught it | Medium | **Applied.** Corrected to `"42563"`, with the source citation in the cassette header |
+| **LS-16** | A refused identity claim was silently dropped, against principle 3's "says what is missing and why" | Medium | **Applied.** `KavitaSource.Log`; `StreamItems` logs the series, the raw value, the flag and the reason. Wired in `cmd/usarr/import.go` |
+| **LS-04** | *(from `LS-01`)* `ARCHITECTURE.md` §17.8 withdraws `LibraryType 3 (Image)`; the vendored spec declares six members | Medium | **✅ RESOLVED.** `refs/heads/main` is `9795080` and declares `<AssemblyVersion>0.7.8.0</AssemblyVersion>` — **Kavita's `main` is frozen at v0.7.8 (Sept 2023)**; the release line is `develop` plus tags. §17.8 quoted `main`'s `API/Entities/Enums/LibraryType.cs` accurately; that tree moved to `Kavita.Models/` between v0.8.9.1 and v0.9.0, where all six members are declared. **The spec wins.** Recorded in `mapLibraryType`'s comment as the pointer, not rewritten into §17.8 |
+
+## The confidence assigned, and why each
+
+| Shape reaching `comicVineId` | Kind | Written as | Confidence |
+| --- | --- | --- | --- |
+| `` / `0` | — | nothing | — |
+| bare digits, library flag **off** | volume — only `DefaultParser.cs:169-172`'s 4050 branch can have written it | `comicvine_volume` | **0.90** |
+| a `4050` URL or `4050-…` token | volume, **proven by the text itself** | `comicvine_volume` | **0.90** |
+| a `4000` URL or `4000-…` token | issue — below the work | **nothing** | — |
+| 🚩 bare digits, library flag **on** | **unknowable**; may be the first chapter's issue id | **nothing** | — |
+| anything else | unrecognised | **nothing** | — |
+
+**Why 0.90 and never 1.0, even for a proven volume id.** §6.4 amendment 3: *"identity parsed out of a
+free-text field is never strong … confidence 0.90, never 1.00, because a confidence-1.00 write hits
+`ux_extid_work_strong` and merges works — a mistyped link must not be able to do that."* All three
+writers of the field are free text. A proven-volume id is *better* evidence than a bare one, but not
+a different **kind** of evidence, and §6.4 caps the kind rather than the instance. 0.90 also keeps
+the row out of `ApplyCatalogueBatch`'s tier-1 reuse lookup, which skips anything below 1.0
+(`catalogue.go:551`).
+
+**Why a namespaced `comicvine_volume` rather than `comicvine`.** `ux_extid` and `ux_extid_work_strong`
+are both over `(source, value)`. Volume 159233 and issue 159233 are different objects in different
+number spaces; one source string would let them collide. The namespace makes the kind part of the
+key, which is the property the raw DTO threw away.
+
+**Why the inherit case writes nothing rather than something weak.** There is no source string under
+which a value of unknown kind is a true statement. Writing it as `comicvine_volume` at 0.5 would be
+a false claim held more quietly, and a later tier that reads it would inherit the lie.
+
+## Guards fired
+
+Every guard was broken deliberately, watched red, and reverted. Three breaks, each isolating a
+different property.
+
+**Break A — the original wrong premise restored** (`comicvine` at 1.0, flag ignored):
+
+```
+--- FAIL: TestComicVineIsNeverWorkStrongThroughTheMapping/inherited_bare_id
+    comicvine_test.go:236: comicvine=159233 came out at confidence 1 — it satisfies ux_extid_work_strong and would MERGE WORKS
+--- FAIL: TestInheritedFirstChapterIssueIDIsNeverWritten
+    comicvine_test.go:259: an inherit-flagged library produced comicvine=159233 at confidence 1; it must produce NOTHING, because Kavita discarded the only fact that said whether 159233 names a volume or an issue
+--- FAIL: TestComicVineIdentityEndToEndAgainstTheDatabase
+    comicvine_test.go:356: series 203 holds [{comicvine https://comicvine.gamespot.com/chew-1-taster-s-choice-part-1-of-5/4000-159233/ 1}], want []
+    comicvine_test.go:356: series 204 holds [{comicvine 159233 1}], want []
+    comicvine_test.go:373: 4 ComicVine rows satisfy ux_extid_work_strong's predicate (work_id IS NOT NULL AND confidence >= 1.0); want 0
+--- FAIL: TestIdentifiedCassetteMapsEveryIDSourceAndDropsTheEditionID
+    kavita_test.go:281: 104: comicvine=42563 came out at confidence 1; a ComicVine id is parsed out of a free-text field and at 1.0 it satisfies ux_extid_work_strong and MERGES WORKS
+```
+
+**Break B — the 0.90 cap KEPT, only the inherit-flag refusal removed.** This is the one that matters:
+it proves the flag guard tests the **flag** and not the confidence, so a future change that keeps the
+cap and drops the flag check cannot pass unnoticed.
+
+```
+--- FAIL: TestComicVineIdentity/🚩_a_bare_id_with_the_flag_ON_is_refused
+    comicvine_test.go:170: comicVineIdentity("159233", true) ok=true, want false (reason "")
+--- FAIL: TestInheritedFirstChapterIssueIDIsNeverWritten
+    comicvine_test.go:259: an inherit-flagged library produced comicvine_volume=159233 at confidence 0.9; it must produce NOTHING, because Kavita discarded the only fact that said whether 159233 names a volume or an issue
+--- FAIL: TestComicVineIdentityEndToEndAgainstTheDatabase
+    comicvine_test.go:356: series 204 holds [{comicvine_volume 159233 0.9}], want []
+--- FAIL: TestKavitaSourceLogsARefusedComicVineClaim
+    comicvine_test.go:407: logged 1 refusals, want 2:
+        time=... level=INFO msg="kavita: refused a ComicVine identity claim" series_id=203 series=Saga library_id=10 comic_vine_id=https://comicvine.gamespot.com/chew-1-taster-s-choice-part-1-of-5/4000-159233/ inherit_web_links_from_first_chapter=false reason="comicVineId carries a ComicVine ISSUE (4000) link and no volume (4050) one; an issue is one level below the work and is never written as a work id"
+```
+
+**Break C — the volume/issue distinction erased in the parser**, i.e. Kavita's own erasure reproduced
+inside UsArr:
+
+```
+--- FAIL: TestParseComicVineWebLinks/a_4000_issue_url,_the_shape_Kavita's_own_test_uses
+    comicvine_test.go:107: ref 0 = {Kind:volume ID:159233}, want {Kind:issue ID:159233}
+--- FAIL: TestParseComicVineWebLinks/a_slug_containing_4050_must_not_be_read_as_the_id
+    comicvine_test.go:107: ref 0 = {Kind:volume ID:1}, want {Kind:issue ID:1}
+--- FAIL: TestComicVineIdentity/a_4000_url_is_an_issue_and_is_refused
+    comicvine_test.go:170: comicVineIdentity("https://comicvine.gamespot.com/chew-1-taster-s-choice-part-1-of-5/4000-159233/", false) ok=true, want false (reason "")
+--- FAIL: TestComicVineIdentityEndToEndAgainstTheDatabase
+    comicvine_test.go:356: series 203 holds [{comicvine_volume 159233 0.9}], want []
+```
+
+## Fixtures
+
+Two new cassettes, **both synthetic and both saying so in their own headers**, along with the Kavita
+version each claims (`0.9.0.2`, the owner's — not develop, because the behaviour they exercise was
+verified there):
+
+* `kavita_libraries_comicvine.yaml` — libraries 10 and 11 are **both** `LibraryType 1` and differ in
+  **nothing but** `inheritWebLinksFromFirstChapter`, which is what makes the end-to-end assertion
+  about the flag. Library 12 is the Book control. No other cassette in the directory sets the flag at
+  all, so Go's zero value made every existing library a `false` one — the safe side, testing nothing.
+* `kavita_series_all_v2_comicvine.yaml` — series 201 (bare id, flag off), 202 (a pasted `4050` URL),
+  203 (a pasted `4000` issue URL), 204 (🚩 the inherited bare issue id, flag on) and 205 (a plain
+  untagged EPUB with every id null). Each value's shape is justified from source in the header.
+
+`kavita_series_all_v2_identified.yaml` was **corrected**, not extended — see LS-15.
+
+**What a synthetic cassette buys, unchanged from `internal/kavita/vcr_test.go`:** it proves this
+mapping, not the server's behaviour. It cannot discover that a field is always null in practice or
+that a controller enforces something the schema does not. **The database side is not synthetic** —
+`TestComicVineIdentityEndToEndAgainstTheDatabase` runs the whole channel-1 path against a real
+migrated SQLite, populates it, then asks SQLite in `ux_extid_work_strong`'s own predicate what it
+holds.
+
+## The general lesson, recorded in the code
+
+**A spec tells you a field exists. It does not tell you which code path populates it, or whether any
+does.** That is precisely the error corrected here, and it now sits in `internal/libsync/doc.go`
+under *"Before you trust a field on an upstream DTO"*, where the next person about to trust a Kavita
+field will read it. Its corollary, from LS-04: read the version the **owner runs**, not the branch
+the spec was vendored from — and a Kavita citation with an `API/Entities/…` path is reading a branch
+frozen in 2023.
+
+## What this does NOT change
+
+* **The books and manga path is untouched.** Degraded identity remains the ordinary case there, and
+  every non-ComicVine id still lands at 1.0 — with LS-12 recorded as the open question about whether
+  it should.
+* **No `webLinks` is fetched.** `SeriesDto` carries none, and every `webLinks`-bearing endpoint in
+  the vendored spec (`GET /api/Series/metadata`, `GET /api/Chapter`, `GET /api/Series/volumes`) is
+  **per series or per chapter** — an N+1 upstream call across the whole library. `ParseComicVineWebLinks`
+  is written and tested against the real comma-joined `ChapterDto.webLinks` shape so the phase-B
+  chapter walk (`doc.go`) has the classifier ready; the seam ships, the fetch does not.
+* **No `sync_report` row** for a refused claim. That needs a channel through `store.CatalogueItem`
+  that does not exist, and adding one inside this correction is the "and also" `CLAUDE.md` refuses.
+  The refusal is logged instead.
+* **No live Kavita was contacted.** As with `LS-01`, the only live measurement this project has is
+  ADR-0035 §2a's channel-3b probe. Everything above is Kavita's **source** and the **vendored spec**,
+  which is stronger evidence than a schema alone and weaker than a wire capture.
+
+---
+
+# Round 5 continued — `LS-17`: author and creator credits (ADR-0044, migration 0007)
+
+**Date:** 2026-08-17. **Prefix:** `LS-` (library sync), continuing from `LS-16` above — re-read after
 this thread's last merge with `origin/main`, which is where the counter's true value lives
 (`DEVELOPMENT.md` §11).
+
+🚩 **AND THAT RE-READ IS THE POINT: these entries were written as `LS-11`–`LS-20` and RENUMBERED to
+`LS-17`–`LS-26` at merge time.** `LS-10` was the highest id observable when this pass started; the
+ComicVine thread landed `LS-11`–`LS-16` on `origin/main` while it was in flight, and the collision
+surfaced as a `docs/REVIEW-LOG.md` conflict at EOF — the same shape `EXPL-01` and `LS-01` describe
+for the prefix itself. **An id counter is a shared counter and its true value includes what nobody
+has pushed yet**, so re-reading after the *last* merge rather than before the *first* commit is what
+catches it. The renumber is mechanical and the two code sites that cite an id
+(`internal/libsync/credits.go`'s publisher drop, `cmd/usarr/import_e2e_test.go`'s last-writer-wins
+note) moved with it.
+
+⚠️ **One direct interaction with the ComicVine entry above, recorded because that entry's own words
+are now partly overtaken.** It refuses to fetch `webLinks` on the ground that every `webLinks`-bearing
+endpoint — `GET /api/Series/metadata` among them — is *"per series or per chapter — an N+1 upstream
+call across the whole library"*, and concludes *"the seam ships, the fetch does not"*. **This pass
+ships that fetch**, for credits, because for credits there is no alternative endpoint at all (`LS.10`
+lists the three that were checked and rejected). So the N+1 that entry priced now exists, once, in
+`StreamCredits` — which means `webLinks` is available on a response UsArr already decodes, and the
+ComicVine classifier could read it without a second call. **That is a follow-up for whoever owns the
+ComicVine path, not a change made here**: the two passes were concurrent, `SeriesMetadataDto.WebLinks`
+is decoded and unread, and wiring one thread's classifier into another thread's pass without its
+author is exactly the "and also" `CLAUDE.md` refuses.
 **Target:** `internal/db/migrations/00007_work_credit.sql`, `internal/store/credits.go`,
 `internal/libsync/credits.go`, `internal/kavita`'s credit DTOs, and the four documents that described
 `work_credit` as deferred.
@@ -9703,7 +10097,7 @@ me"* — after the cost was put to him: `work_credit.creator_work_id` points at 
 `person`, and nothing in v0.1 created one, so this is **authors as first-class rows, not one column**.
 ADR-0044 records the decision; migration 0007 creates the table; the Kavita adapter fills it.
 
-**The finding that shaped the whole change** is `LS-11`: the deferral was correct when it was made
+**The finding that shaped the whole change** is `LS-17`: the deferral was correct when it was made
 and had been falsified by a source change nobody had re-read it against. `00006`'s own header had
 already written down the consequence in terms — *"any creator a Kavita series reports has NOWHERE TO
 LAND in v0.1 — not a lossy landing, none at all"* — so this pass did not discover the gap so much as
@@ -9715,16 +10109,16 @@ act on a note the previous pass had left for it.
 
 | # | Finding, in one line | Severity | Disposition |
 |---|---|---|---|
-| **LS-11** | `ADR-0040` filed `work_credit` with the **music** tables under Navidrome, on the assumption that "a credit" is a performer. `ADR-0041` made **Kavita** first, and Kavita reports **eight** creator roles that have no other home | **High** | **Applied.** ADR-0044 **applies ADR-0040's rule rather than overriding it** — the landing point is the source that writes the table. `work_album` and `work_track` do not move |
-| **LS-12** | Kavita's `publishers` array has a real home in the schema — `work_comic.publisher`, created by `00006` and **written by nothing** — and this pass does not write it | Low | **Raised, not fixed.** It belongs to the phase-B metadata backfill that also owns `summary` and `releaseYear`; writing it here would be "and also". Recorded in `internal/libsync/credits.go` at the drop site |
-| **LS-13** | A work that **two remote items** resolve onto (tier-1 reuse) gets **last-writer-wins** credits: the replace is per-*work*, the drive is per-*remote item* | Low | **Recorded as a deliberate consequence**, asserted in `cmd/usarr`'s end-to-end test rather than left to be rediscovered. Same shape as `LS-07` in a second column |
-| **LS-14** | `INSERT OR IGNORE` swallows the **`role` CHECK** as well as the duplicate, so an adapter emitting an illegal role would be dropped silently with nothing to count | Medium | **Applied**, and it was **measured, not reasoned**: the guard read `CreditsRejected = 0` against the first version. `ON CONFLICT (…) DO NOTHING` scopes the tolerance to uniqueness |
-| **LS-15** | The task brief stated there is *"an existing CI assertion"* that people stay out of the FTS corpus. **There was not one** — `person`'s exclusion existed only as a comment on `search_doc.kind` in `00005` | Medium | **Applied.** It could not have failed before, because nothing created a `person`. Three assertions now exist, at the store, importer and end-to-end levels; the store one was fired |
-| **LS-16** | `cmd/usarr`'s end-to-end test counted `SELECT COUNT(*) FROM work` **bare**, twice. Person rows are `work` rows, so both assertions broke on the first import that credited anyone | Medium | **Applied.** Both narrowed to `kind <> 'person'`, with the reason written at the assertion rather than in a commit message. This is ADR-0044's sharpest consequence and it surfaced as a red test on the first run |
-| **LS-17** | `PersonDto.roles` is the obvious input to the role mapping and is **wrong**: it is instance-wide, so a person who writes one series and colors another returns `{Writer, Colorist}` in both | Medium | **Avoided by construction.** The mapping keys on the ARRAY a person arrived in, and every fixture person in `credits_test.go` carries a deliberately wrong `roles` so the mistake cannot pass |
-| **LS-18** | Nothing collects a `person` work that ends up credited on nothing | Low | **Raised, not fixed**, and carried as ADR-0044's open question. The right shape is a sweep and a sweep is a subsystem; `ix_credit_creator` is the index it would read |
-| **LS-19** | `TestMigrate0006DownAndUp` calls `MigrateDown` once and asserts version 5. With `0007` on top it walked to 6 and asserted 5 | Nit | **Applied.** It steps past `0007` first and back up past it at the end; a migration landing on top of a Down/Up test is a foreseeable break and this is the second time it will happen |
-| **LS-20** | `TestDeferredTablesAreAbsent`'s failure message said *"migrations 0001-0006"* | Nit | **Applied.** A message naming a stale range is how a reader concludes the test is stale |
+| **LS-17** | `ADR-0040` filed `work_credit` with the **music** tables under Navidrome, on the assumption that "a credit" is a performer. `ADR-0041` made **Kavita** first, and Kavita reports **eight** creator roles that have no other home | **High** | **Applied.** ADR-0044 **applies ADR-0040's rule rather than overriding it** — the landing point is the source that writes the table. `work_album` and `work_track` do not move |
+| **LS-18** | Kavita's `publishers` array has a real home in the schema — `work_comic.publisher`, created by `00006` and **written by nothing** — and this pass does not write it | Low | **Raised, not fixed.** It belongs to the phase-B metadata backfill that also owns `summary` and `releaseYear`; writing it here would be "and also". Recorded in `internal/libsync/credits.go` at the drop site |
+| **LS-19** | A work that **two remote items** resolve onto (tier-1 reuse) gets **last-writer-wins** credits: the replace is per-*work*, the drive is per-*remote item* | Low | **Recorded as a deliberate consequence**, asserted in `cmd/usarr`'s end-to-end test rather than left to be rediscovered. Same shape as `LS-07` in a second column |
+| **LS-20** | `INSERT OR IGNORE` swallows the **`role` CHECK** as well as the duplicate, so an adapter emitting an illegal role would be dropped silently with nothing to count | Medium | **Applied**, and it was **measured, not reasoned**: the guard read `CreditsRejected = 0` against the first version. `ON CONFLICT (…) DO NOTHING` scopes the tolerance to uniqueness |
+| **LS-21** | The task brief stated there is *"an existing CI assertion"* that people stay out of the FTS corpus. **There was not one** — `person`'s exclusion existed only as a comment on `search_doc.kind` in `00005` | Medium | **Applied.** It could not have failed before, because nothing created a `person`. Three assertions now exist, at the store, importer and end-to-end levels; the store one was fired |
+| **LS-22** | `cmd/usarr`'s end-to-end test counted `SELECT COUNT(*) FROM work` **bare**, twice. Person rows are `work` rows, so both assertions broke on the first import that credited anyone | Medium | **Applied.** Both narrowed to `kind <> 'person'`, with the reason written at the assertion rather than in a commit message. This is ADR-0044's sharpest consequence and it surfaced as a red test on the first run |
+| **LS-23** | `PersonDto.roles` is the obvious input to the role mapping and is **wrong**: it is instance-wide, so a person who writes one series and colors another returns `{Writer, Colorist}` in both | Medium | **Avoided by construction.** The mapping keys on the ARRAY a person arrived in, and every fixture person in `credits_test.go` carries a deliberately wrong `roles` so the mistake cannot pass |
+| **LS-24** | Nothing collects a `person` work that ends up credited on nothing | Low | **Raised, not fixed**, and carried as ADR-0044's open question. The right shape is a sweep and a sweep is a subsystem; `ix_credit_creator` is the index it would read |
+| **LS-25** | `TestMigrate0006DownAndUp` calls `MigrateDown` once and asserts version 5. With `0007` on top it walked to 6 and asserted 5 | Nit | **Applied.** It steps past `0007` first and back up past it at the end; a migration landing on top of a Down/Up test is a foreseeable break and this is the second time it will happen |
+| **LS-26** | `TestDeferredTablesAreAbsent`'s failure message said *"migrations 0001-0006"* | Nit | **Applied.** A message naming a stale range is how a reader concludes the test is stale |
 
 ---
 
@@ -9733,7 +10127,7 @@ act on a note the previous pass had left for it.
 `DEVELOPMENT.md` §11's rule: a guard that has never been triggered is indistinguishable from no
 guard. Each break below was made, run, and reverted; the reverts are proven by the final green.
 
-**Guard 1 — a person leaking into the FTS corpus** (`LS-15`). The break: `personWorkID` calls
+**Guard 1 — a person leaking into the FTS corpus** (`LS-21`). The break: `personWorkID` calls
 `rebuildSearchDoc` for the person it just created, which is exactly what a builder that had not read
 §6.1 would do.
 
@@ -9859,7 +10253,7 @@ the vendored spec and fails on a fourteenth:
 | `coverArtists` | `CoverArtist` (8) | `cover_artist` | `cover_artist` |
 | `editors` | `Editor` (9) | `editor` | `editor` |
 | `translators` | `Translator` (12) | `translator` | `translator` |
-| `publishers` | `Publisher` (10) | **dropped** — an organisation, not a creator; home is `work_comic.publisher` (LS-12) | same |
+| `publishers` | `Publisher` (10) | **dropped** — an organisation, not a creator; home is `work_comic.publisher` (LS-18) | same |
 | `imprints` | `Imprint` (13) | **dropped** — a publisher's sub-brand; no column anywhere | same |
 | `teams` | `Team` (14) | **dropped** — a studio or a fictional super-team, depending on who filled in the ComicInfo | same |
 | `characters` | `Character` (11) | **dropped** — FICTIONAL; a subject of the work, not a creator of it. Home is the tag system (v1.0) | same |
@@ -9874,7 +10268,7 @@ every novelist under a comics role.
 `illustrator` (the interior artist — Kavita has no array for it, and a cover artist is not one) and
 `narrator` (Kavita serves no audio). They are in the `CHECK` because SQLite cannot `ALTER` one.
 
-**The mapping keys on the ARRAY, not on `PersonDto.roles`** (`LS-17`). `roles` is the set of roles a
+**The mapping keys on the ARRAY, not on `PersonDto.roles`** (`LS-23`). `roles` is the set of roles a
 person holds **across the whole instance**, so a person who writes one series and colors another
 comes back `{Writer, Colorist}` in both series' metadata; reading it would credit a series' writer as
 its colorist. Every fixture person in `internal/libsync/credits_test.go` therefore carries
@@ -9947,7 +10341,7 @@ claim reads:
   by §6.4's own amendment 3. The honest framing — already half-present in §6.4 and now stated in
   full — is that **identity coverage is a property of the instance, not of the design**.
 
-### On the gate for `LS-11`
+### On the gate for `LS-17`
 
 `make check` from a **cleaned lint cache** — `/root/go/bin/golangci-lint cache clean` by absolute path
 first. Binaries, versions, the commit and the verbatim tail are in the commit message.

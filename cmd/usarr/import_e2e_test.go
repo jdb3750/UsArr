@@ -275,7 +275,7 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 	// have (ApplyCatalogueBatch's doc comment, work_merge is v1.0). The loss is
 	// bounded to works that two remote items resolve onto, it lands in a table
 	// the operator can see, and re-importing after the thinner row is fixed
-	// upstream repairs it. Recorded as LS-13.
+	// upstream repairs it. Recorded as LS-19.
 	if n := countIn(t, env, `SELECT COUNT(*) FROM work_credit`); n != 4 {
 		t.Errorf("work_credit rows = %d, want 4 — see the last-writer-wins note above", n)
 	}

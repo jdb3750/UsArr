@@ -1719,7 +1719,11 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
   const arch = readFileSync(join(ROOT, 'docs', 'ARCHITECTURE.md'), 'utf8');
   const s17 = arch.slice(arch.indexOf('\n## 17. '));
   const norm = (s) => s.toLowerCase().replace(/[`*_"“”]/g, '').replace(/\s+/g, ' ').trim();
-  const fixedBy17 = norm(s17.slice(0, s17.indexOf('\n## ', 10) === -1 ? undefined : s17.indexOf('\n## ', 10)));
+  /* The raw body is named because the §17 sweep below reads it too, and it must
+   * be the SAME slice the exemption is granted from — an exemption drawn from
+   * one span of the document and a check drawn from another is two rules. */
+  const s17Body = s17.slice(0, s17.indexOf('\n## ', 10) === -1 ? undefined : s17.indexOf('\n## ', 10));
+  const fixedBy17 = norm(s17Body);
   if (fixedBy17.length < 5000) fail('§13 copy: ARCHITECTURE §17 could not be located, so the fixed-wording exemption is not being applied');
   /* What §17 fixes is the CONSTRUCTION, not the instance. Its banner is quoted
    * as "Radarr 4K is unreachable — showing cached data from 14:02"; the mockup
@@ -1789,11 +1793,19 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
                             was two whole panels the sweep had never opened. */
     'placeholder': 245,  /* 288 today, 156 before panel traversal */
     'option': 1400,      /* 1602 today, 1298 before panel traversal */
+    'ARCHITECTURE §17 copy': 45, /* 56 today. Not a rendered source at all; see
+                                    the §17 block below for why it is here. */
   };
   const seenBySource = {};
   const countSource = (src, n) => { seenBySource[src] = (seenBySource[src] || 0) + n; };
 
   let strings = 0, exempted = 0; const bad = [];
+  /* §17's copy is counted apart from `strings` on purpose. STRING_FLOOR's
+     margin below is DERIVED from the rendered corpus — 6978 − 6750 = 228,
+     argued against a 293-string regression — and folding documentation strings
+     into that total would move the number the derivation is about while
+     claiming the derivation still held. */
+  let s17Strings = 0, s17Exempted = 0, s17Bad = 0;
   /* 2000 against 4203 while no panel was ever opened; 5800 against 6685 once
      the traversal landed; 6750 against 6978 now the unit is a run of inline
      content rather than a childless block element.
@@ -1807,10 +1819,87 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
      885 of slack, enough to lose every group heading twice over. */
   const STRING_FLOOR = 6750;
 
-  /* One place the three §13 rules are applied, so the rendered walk and the
-     attribute sweep cannot drift into checking different things. */
-  const checkCopy = (where, t) => {
-    strings++;
+  /* ---------------------------------------------------------------------
+   * §17's own shipping copy, and the laundering channel that was in this rule.
+   *
+   * Everything else here reads the MOCKUP. But a UI label is authored in
+   * ARCHITECTURE §17 first and copied into a mockup afterwards, and §17
+   * appeared in this file only as the SOURCE OF AN EXEMPTION: exempt() blesses
+   * a short em-dash string when §17 contains its two-words-either-side window.
+   * So the order of operations laundered the rule. Write the em dash into §17,
+   * copy the label into a mockup, and the mockup string is exempt BECAUSE §17
+   * says so — which means a §17-originated em dash could never be caught here,
+   * by construction, no matter how many mockups repeated it. One was drafted
+   * during the §17.8 pass and removed by hand rather than by this file.
+   *
+   * ⚠️ THE HOLE IS THE CORPUS, NOT THE FIFTEEN-WORD FLOOR, and the floor is
+   * easy to read backwards. `< 15` is what FIRES: the floor does not exempt
+   * short strings, it confines the rule TO them. That is §13's actual position
+   * — "the em dash is fine in prose and banned in UI microcopy", on the ground
+   * that "a sentence long enough to need one is already too long for a button,
+   * a tooltip, a toast or an empty state" — so raising or removing it would
+   * fire on every paragraph of legitimate prose in the product. It is left
+   * exactly as it was, and §17's copy is brought INTO the corpus instead.
+   *
+   * Shipping copy in §17 is marked `*"…"*`, the italic-quoted form every
+   * specified label and sentence uses; 56 spans today. They run through the
+   * same checkCopy, and the §17 exemption is withheld from them, because a
+   * string cannot be its own authority. exempt() itself is untouched: with the
+   * source now gated, the mockup exemption can only propagate copy that has
+   * already been through the rule, which is the layering it always implied.
+   * ------------------------------------------------------------------- */
+  const S17_EMDASH_ALLOWED = new Map([
+    /* All four predate this sweep and are the construction §13's own worked
+     * example endorses. DESIGN-DIRECTION §13 states the ban and then writes
+     * "Sonarr unreachable — connection refused at 10.0.0.4:8989" as the copy to
+     * imitate: a short head, an em dash, the observed detail. The fifteen-word
+     * proxy cannot see that construction, so each instance is recorded here
+     * rather than generalised into a grammar rule this file would then have to
+     * be right about — an enumerated four fails on the fifth and asks a human,
+     * where a shape rule would silently bless everything shaped like it.
+     * Matched after norm(), so a rewrite loses the exemption and a change of
+     * emphasis does not: the same property exempt() has. */
+    ['kavita is unreachable — showing cached data from the last full compare at 09:12',
+      'The stale-data banner exempt() was built for, at §17 source. Head is the ' +
+      'failing component, detail is the observed symptom and its time. ' +
+      'RETIRED BY: §13 gaining a construction rule the checker can evaluate.'],
+    ['grab failed — http 502',
+      'Error copy in the specified form: failing verb, then the upstream status ' +
+      'verbatim, which §17.6 requires be shown rather than summarised. ' +
+      'RETIRED BY: the same.'],
+    ['tv — catalogue source, request destination',
+      "§17.8's per-kind source gloss. The head is a media kind and the detail is " +
+      'what the kind gets, which is a label-and-value pair rather than a sentence. ' +
+      'RETIRED BY: the same, or by the gloss becoming a real two-column row.'],
+    ['music — catalogue source; no request destination',
+      'The negative half of the pair above, and it must keep the same shape as ' +
+      'its positive or the two stop reading as one column. RETIRED BY: the same.'],
+    /* ⚠️ RAISED, NOT BLESSED. These two are over fifteen words and so were
+     * invisible to this rule under any corpus; dropping the floor for §17 is
+     * what surfaced them. They are recorded rather than rewritten because §17
+     * shipping copy is the owner's to word, not this file's, and a checker that
+     * edits the specification it checks is not a checker. Neither is asserted
+     * to be correct — each is an open copy question carried visibly instead of
+     * silently, which is the only thing this file can honestly do with it. */
+    ['1 more film is on a linked row in the ebooks group: dune (2021). — [show it]',
+      '⚠️ OPEN. §17.5. The em dash separates the sentence from a [Show it] ' +
+      'affordance, so it may be §17 NOTATION for two adjacent elements rather ' +
+      'than one string a user reads. If it is notation the span should not be ' +
+      'quoted as copy at all. RETIRED BY: a ruling on which it is.'],
+    ['editing any proposal marks that library user-managed, after which a later connect can only offer to add sources — never reshape it',
+      '⚠️ OPEN, and the likelier of the two to be a real finding. §17.8. A ' +
+      '22-word UI sentence with a mid-sentence em-dash beat is the construction ' +
+      '§13 bans on its own stated ground, and no word floor was ever going to ' +
+      'catch it. RETIRED BY: a copy decision on the sentence.'],
+  ]);
+
+  /* One place the three §13 rules are applied, so the rendered walk, the
+     attribute sweep and the §17 sweep below cannot drift into checking
+     different things. `isS17` moves the BOOKKEEPING — which counter, and which
+     exemption — and never a rule: all three rule bodies are literally shared,
+     which is the property this single function exists to hold. */
+  const checkCopy = (where, t, isS17 = false) => {
+    if (isS17) s17Strings++; else strings++;
     const low = t.toLowerCase();
     for (const w of BANNED_WORDS) {
       if (new RegExp('\\b' + w.replace('-', '[- ]') + '\\b').test(low)) {
@@ -1818,9 +1907,24 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
       }
     }
     if (t.includes('!')) bad.push(`${where}: "!" in "${t.slice(0, 70)}"`);
-    if (t.includes('—') && t.split(/\s+/).length < 15) {
-      if (exempt(t)) exempted++;
-      else bad.push(`${where}: em dash in a string under 15 words — "${t.slice(0, 70)}"`);
+    /* ⚠️ The fifteen-word floor is a PROXY for "is this a UI string", and it
+       earns its keep only where the corpus MIXES microcopy with prose — the
+       rendered walk reads paragraphs as well as buttons, and firing on those
+       is the false positive the floor exists to prevent. §17's `*"…"*` spans
+       are specified UI strings by construction, so there the proxy has no
+       question left to answer and is not applied. That is the floor's own
+       stated reason read literally: §13 grounds it on "a sentence long enough
+       to need one is already too long for a button, a tooltip, a toast or an
+       empty state", which is a claim about the ELEMENT, not about the count.
+       Narrowing it to the corpus it was meant for is what catches the 24-word
+       §17.8 sentence that was drafted with an em dash and fixed by hand — the
+       instance this sweep was written for, and one a floor of any length would
+       have missed. */
+    if (t.includes('—') && (isS17 || t.split(/\s+/).length < 15)) {
+      /* A §17 string cannot be exempted BY §17 — that is the whole hole this
+         sweep closes, so it is checked against the recorded set instead. */
+      if (isS17 ? S17_EMDASH_ALLOWED.has(norm(t)) : exempt(t)) { if (isS17) s17Exempted++; else exempted++; }
+      else bad.push(`${where}: em dash in ${isS17 ? 'specified UI copy' : 'a string under 15 words'} — "${t.slice(0, isS17 ? 140 : 70)}"`);
     }
   };
 
@@ -1830,6 +1934,21 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
     const t = await page.evaluate(() => document.title.replace(/\s+/g, ' ').trim());
     countSource('document.title', t ? 1 : 0);
     if (t) checkCopy('document.title', t);
+  }
+
+  /* §17's shipping copy, read once for the same reason: it is a property of the
+     document, not of a screen or a state. The span is `*"…"*` and the bold form
+     `**"…"**` falls out of the same pattern, which is wanted — the emphasis a
+     sentence is quoted with is not what makes it a label. */
+  {
+    for (const m of s17Body.matchAll(/\*"([^"]+)"\*/g)) {
+      const t = m[1].replace(/\s+/g, ' ').trim();
+      if (!t) continue;
+      countSource('ARCHITECTURE §17 copy', 1);
+      const before = bad.length;
+      checkCopy('ARCHITECTURE §17', t, true);
+      s17Bad += bad.length - before;
+    }
   }
 
   for (const install of INSTALLS) {
@@ -1975,6 +2094,23 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
   else if (floorOk('§13 copy', strings, STRING_FLOOR, 'user-visible string(s)')) {
     ok(`§13 copy: ${strings} user-visible strings clean of banned words, "!" and short-string em dashes ` +
       `(floor ${STRING_FLOOR} over both installs; ${exempted} short em-dash string(s) exempt because ARCHITECTURE §17 fixes their wording verbatim)`);
+  }
+  /* Reported separately from the line above because it is a separate corpus
+     with a separate exemption, and one combined number would hide which of the
+     two moved. Printing the recorded count is the point: it is the number that
+     goes up when a fifth short em dash is argued into §17's copy. */
+  if (s17Bad) {
+    /* The violations themselves are already in `bad` and printed above; this
+       line exists so the §17 sweep never prints "clean" beside its own
+       failure, which is the shape of pass this file was rewritten to stop. */
+    fail(`§13 copy §17: ${s17Bad} violation(s) in ARCHITECTURE §17's own shipping copy, out of ${s17Strings} string(s) read`);
+  } else if (S17_EMDASH_ALLOWED.size !== s17Exempted) {
+    fail(`§13 copy §17: ${S17_EMDASH_ALLOWED.size} recorded em-dash exemption(s) but ${s17Exempted} matched — ` +
+      `a recorded string no longer appears in §17, so the record is describing copy that is not there`);
+  } else {
+    ok(`§13 copy §17: ${s17Strings} shipping-copy string(s) in ARCHITECTURE §17 clean of banned words, "!" and ` +
+      `em dashes at ANY length (the fifteen-word floor is not applied to specified UI copy; ${s17Exempted} ` +
+      `recorded exception(s), 2 of them open copy questions; §17 cannot exempt itself here, which is the point)`);
   }
   /* Each non-layout source is floored on its own. A source that stops being
    * collected -- an attribute renamed, a selector narrowed, a <title> dropped

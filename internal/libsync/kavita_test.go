@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/jdb3750/UsArr/internal/kavita"
@@ -261,12 +262,25 @@ func TestIdentifiedCassetteMapsEveryIDSourceAndDropsTheEditionID(t *testing.T) {
 		t.Fatalf("mapped %d items, want 5 (six series, one in a declined library)", len(byID))
 	}
 
+	// ⚠️ THE CONFIDENCE RULE IS NOT UNIFORM, and it used to be asserted here as
+	// though it were — on the premise that every one of these is "a typed
+	// Kavita+ field, not free text". That premise is FALSE FOR ComicVine:
+	// Series.ComicVineId has three writers at Kavita v0.9.0.2
+	// (ProcessSeries.cs:162, ProcessSeries.cs:365,
+	// ExternalMetadataIdHelper.cs:38), none behind a licence check, and all
+	// three free text. §6.4 amendment 3 therefore caps it below 1.0, and
+	// comicvine_test.go owns that rule in full.
 	ids := func(remoteID string) map[string]string {
 		out := map[string]string{}
 		for _, x := range byID[remoteID].ExternalIDs {
-			if x.Confidence < 1.0 {
-				t.Errorf("%s: %s=%s came out at confidence %v; these are typed Kavita+ fields, "+
-					"not free text (§6.4 amendment 3)", remoteID, x.Source, x.Value, x.Confidence)
+			isComicVine := strings.HasPrefix(x.Source, "comicvine")
+			if !isComicVine && x.Confidence < 1.0 {
+				t.Errorf("%s: %s=%s came out at confidence %v; want 1.0", remoteID, x.Source, x.Value, x.Confidence)
+			}
+			if isComicVine && x.Confidence >= 1.0 {
+				t.Errorf("%s: %s=%s came out at confidence %v; a ComicVine id is parsed out of a "+
+					"free-text field and at 1.0 it satisfies ux_extid_work_strong and MERGES WORKS",
+					remoteID, x.Source, x.Value, x.Confidence)
 			}
 			out[x.Source] = x.Value
 		}
@@ -276,7 +290,9 @@ func TestIdentifiedCassetteMapsEveryIDSourceAndDropsTheEditionID(t *testing.T) {
 	if got := ids("101"); got["anilist"] != "30013" || got["mal"] != "2" || len(got) != 2 {
 		t.Errorf("Berserk external ids = %v", got)
 	}
-	if got := ids("104"); got["comicvine"] != "4050-42563" || got["cbr"] != "7" || len(got) != 2 {
+	// Library 6 does not set inheritWebLinksFromFirstChapter, so the bare
+	// "42563" the scanner wrote can only have come from a 4050 volume link.
+	if got := ids("104"); got[ComicVineVolumeSource] != "42563" || got["cbr"] != "7" || len(got) != 2 {
 		t.Errorf("Saga external ids = %v", got)
 	}
 	if got := ids("106"); got["mal"] != "9115" || len(got) != 1 {
