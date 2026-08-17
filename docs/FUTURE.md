@@ -687,18 +687,28 @@ visible **"not identified"** state: whatever the backend reports, UsArr keeps th
 a title and a file and a quiet marker, still searchable. That single behaviour is what
 LazyLibrarian's absence of disqualifies it as a catalogue, and it costs one nullable column and one
 badge. **It is a v0.1 requirement**, not a v0.3-or-later one, **because it cannot be retrofitted** —
-the nullable column belongs in migration 0001 and the badge in the first grid. It is *reached*
-rarely in v0.1, whose Sonarr and Radarr carry TVDB and TMDB ids, and becomes the ordinary case with
-the first catalogue source (ARCHITECTURE §16.1): free Kavita's identifier fields are null, and Komga
-supplies **no external identifiers at all**. It now lives in ARCHITECTURE §6.4 as a rule; it is
-recorded here only so the connection is not lost.
+the nullable column belongs in migration 0001 and the badge in the first grid. ⚠️ **The frequency
+claim that stood here is inverted, and the inversion is the point.** It read *"it is reached rarely
+in v0.1, whose Sonarr and Radarr carry TVDB and TMDB ids, and becomes the ordinary case with the
+first catalogue source"* — but [ADR-0041](./DECISIONS.md#adr-0041) made Kavita the first catalogue
+source **and** put it in v0.1, and [ADR-0045](./DECISIONS.md#adr-0045) moved Sonarr and Radarr to
+v0.2, so the two halves of that sentence swapped milestones: free Kavita's identifier fields are
+null and Komga supplies **no external identifiers at all**, which makes "not identified" the
+**ordinary** case from v0.1 rather than the rare one. What that changes is not the requirement — it
+was always v0.1's, on the same not-retrofittable grounds — but how hard v0.1 exercises it.
+`internal/libsync` is where the null-identifier path is actually taken. It now lives in
+ARCHITECTURE §6.4 as a rule; it is recorded here only so the connection is not lost.
 
 **Trigger.** ⚠️ **Rewritten, because the previous one — *"the milestone that ships any book
 catalogue source with real user data behind it"* — was satisfied by v0.1** under ADR-0032, which
 would have made this a deferred entry whose reopening condition fires one milestone *before* the
-roadmap line that used to claim it. (Under [ADR-0036](./DECISIONS.md#adr-0036) no book catalogue
-source ships in v0.1 at all, so the old trigger would now fire later — but it was the wrong *kind* of
-condition either way, being about data rather than about machinery, and the rewrite stands on that.) **The trigger is now: after v0.3, once the Wikidata edge pipeline has
+roadmap line that used to claim it. (⚠️ The parenthetical here read *"under
+[ADR-0036](./DECISIONS.md#adr-0036) no book catalogue source ships in v0.1 at all, so the old trigger
+would now fire later"*. [ADR-0041](./DECISIONS.md#adr-0041) amended ADR-0036 and put **Kavita** — a
+book, comic and manga source — back into v0.1, so the old trigger is back to firing at v0.1 and the
+round trip changed nothing: it was the wrong *kind* of condition each time round, being about data
+rather than about machinery, and the rewrite stands on that. A trigger that moves whenever the
+roadmap does is the defect the rewrite removed.) **The trigger is now: after v0.3, once the Wikidata edge pipeline has
 proved the confidence/evidence path on real data.** That is the machinery this pass writes into, and
 until it exists there is nowhere to put a computed link.
 

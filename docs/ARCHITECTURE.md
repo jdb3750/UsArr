@@ -2713,11 +2713,17 @@ design document goes wrong: it was still asserting that the Services health scre
 after the screen had shipped, on a page whose own §17.3 describes that screen's rendered bugs. The
 tree answers the question and cannot go stale — `web/src/routes` is the set of screens, `internal/`
 the set of backend surfaces, `internal/db/migrations` the schema that actually exists, and
-`git log` the order they arrived in. What is worth stating at this altitude is the gap the whole
-milestone is about, and it is one sentence: **no sync channel runs yet, so there is no catalogue** —
-nothing replicates from any source, v0.1's own Kavita adapter included, and every screen that
-would render a library says so rather than drawing an empty one. (The query-plan assertions are in
-place for the tables that exist, in `make test` — the gate named above, not a CI.)
+`git log` the order they arrived in. ⚠️ **The correction was applied and then immediately undercut**:
+this paragraph went on to keep *one* sentence of inventory — *"no sync channel runs yet, so there is
+no catalogue — nothing replicates from any source, v0.1's own Kavita adapter included, and every
+screen that would render a library says so rather than drawing an empty one"* — on the grounds that
+it stated the gap rather than the contents, and it went stale the same way and for the same reason,
+in a commit that never touched this file. The gap is a moving quantity, so it is a pointer here too:
+**`internal/libsync` is the sync core, and its package comment states which of `reference/sync.md`
+§1's channels it implements and which it does not** — that is the sentence that used to live here,
+and it now lives beside the code it describes, where a change to one is a change to the other.
+(The query-plan assertions are in place for the tables that exist, in `make test` — the gate named
+above, not a CI.)
 
 **v0.2 — "Requests."** Request model, routing rules, approval workflow, quotas, single-user
 auto-approve. **One search box over owned and unowned** (§8.6). One Add that routes; availability

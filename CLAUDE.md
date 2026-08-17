@@ -19,10 +19,15 @@ misread the project.
 
 Owner: Joe (GitHub `jdb3750`). Repo: `github.com/jdb3750/UsArr`.
 
-**Status: pre-alpha.** The binary builds, serves an embedded SPA, and runs the Prowlarr
-Search-and-Grab path end to end on top of the §14 security floor. No sync channel runs yet, so
-there is no catalogue behind any of it. **Past that, this file deliberately does not list what has
-landed** — such a list is false within days, and this one was — so read it off the tree:
+**Status: pre-alpha.** The binary builds, serves an embedded SPA, and runs on top of the §14
+security floor. **How much of the sync engine runs, and therefore whether there is a catalogue
+behind anything, is read off the tree and not off this paragraph** — the sentence that stood here
+said *"no sync channel runs yet, so there is no catalogue"*, and one commit falsified it without
+touching a line of this file. `internal/libsync` is the sync core and its `doc.go` states which
+channels it does and does not implement; `docs/reference/sync.md` §1 names all of them, so the two
+together answer the question that a status sentence here cannot keep answering. **Past that, this
+file deliberately does not list what has landed** — such a list is false within days, and this one
+was, twice — so read it off the tree:
 `web/src/routes` for screens, `internal/` for backend surfaces, `internal/db/migrations` for the
 schema that exists. `docs/ARCHITECTURE.md` §16 is authoritative for which milestone owns a thing,
 which is a different question from whether it is built. Read the code before describing behaviour
