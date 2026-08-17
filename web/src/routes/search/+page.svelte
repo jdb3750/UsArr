@@ -56,7 +56,7 @@
 
 <div class="pagehead">
 	<p class="pagehead__meta">
-		Search across the library UsArr has replicated from your services. Not built yet — below is what
+		Search across the library UsArr has replicated from your services. Not built yet: below is what
 		it is waiting on, and where to search indexers in the meantime.
 	</p>
 </div>
