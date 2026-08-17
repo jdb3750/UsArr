@@ -5187,6 +5187,17 @@ but its evidence missing — a correct document made weaker by a search scope. �
 `git cat-file -e origin/main:…`, which reports *"does not exist in 'origin/main'"* — and is
 deliberately not cited anywhere in this sweep.
 
+**[Update, 2026-08-17.** The sentence above is left standing as the dated record of *why* the
+citation was deferred, per §6.1's convention that nothing above is reworded or deleted — but it is
+written in the present tense and no longer describes the tree.
+`web/scripts/measurements/2026-08-17-density-toggle.md` **landed on `main` at
+`1b8942645e50a11dfebdd0af0637436181b6d507`** (2026-08-17 07:56 UTC, *"the density gate measured a
+setAttribute, not the toggle"*), verified as an ancestor of `origin/main` with `git merge-base
+--is-ancestor` and absent from that merge's first parent. **The deferral it justified is therefore
+closed**: the record is citeable, and a later entry may cite it without repeating the check. Nothing
+else in LAT-01.5 changes — the finding it reports is about search roots, not about this file, and no
+entry above depends on the record's absence.**]**
+
 ---
 
 ## LAT-02 — ADR-0029's arithmetic all divides by the borrowed number. **Applied, as a marked amendment.**
