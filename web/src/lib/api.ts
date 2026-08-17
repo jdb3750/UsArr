@@ -666,6 +666,25 @@ export async function checkReady(): Promise<void> {
 	await requestJson('/api/health/ready');
 }
 
+/**
+ * ONE READ, THROUGH THIS FILE'S SINGLE FETCH PATH, FOR A FEATURE MODULE THAT
+ * OWNS ITS OWN WIRE TYPES.
+ *
+ * `requestJson` is where the 401 handoff, the ApiError shaping — status, the
+ * server's `error` code, its `action`, its verbatim `message` — and the
+ * not-JSON body case all live. A module that fetched with a bare `fetch` would
+ * have to reimplement four behaviours and would get the 401 one wrong silently,
+ * because nothing fails when a screen renders from an unauthenticated read.
+ *
+ * So this is the seam rather than a second client: `$lib/library` reaches for
+ * it and keeps its own types, its own URL and its own parsing next to the
+ * endpoint they describe. It is GET-only by construction; every write still
+ * goes through `sendJson`, which is what carries the CSRF token.
+ */
+export async function getJson(url: string): Promise<unknown> {
+	return requestJson(url);
+}
+
 // ── auth ────────────────────────────────────────────────────────────────────
 
 export const SESSION_URL = '/api/v1/auth/session';
