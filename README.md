@@ -3,9 +3,10 @@
 > **Status: pre-alpha. One path works; the rest is still design and its evidence base.**
 > What runs today is Prowlarr Search-and-Grab: free-text indexer search, results streaming in per
 > indexer, and grab — served by a Go binary with an embedded SPA shell. There is no release and no
-> container image yet, so running it means building it (`make build`). The *Arr library sync, the
-> library grid, requests, cross-media and the gateway surfaces are not implemented. If you are here
-> to install something finished, come back later.
+> container image yet, so running it means building it (`make build`). Nothing syncs a library in
+> yet, so there is no catalogue — and the rest moves week to week, so what exists is whatever is in
+> the tree (`web/src/routes`, `internal/`) rather than whatever this paragraph last claimed. If you
+> are here to install something finished, come back later.
 
 **One unified, searchable catalogue over everything you own and everything you might want —
 that plugs into the players you already use.**
@@ -46,8 +47,10 @@ movies-and-TV-only.
 
 ## Feature status
 
-Status reflects **planned milestone**, not progress, except where a row says otherwise. Almost
-nothing below is built: the Search-and-Grab path is the one shipped feature.
+Status reflects **planned milestone**, not progress, except where a row says otherwise: `📋 Planned
+— v0.1` names the milestone that owns a feature, never that the feature exists. Most of this table
+is not built yet, and which parts are changes faster than the table does — for that, read the tree
+(`web/src/routes` for screens, `internal/` for backend surfaces), not this page.
 
 > **This table is generated from [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §16. If they
 > disagree, §16 wins.** Ideas that are deliberately deferred are not listed here at all — they live

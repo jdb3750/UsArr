@@ -955,7 +955,7 @@
      picked a text colour against the fill and then moved the fill until the
      pair cleared 4.5:1. It is gone, and it was not a bug fix -- it was doing
      its job correctly. It existed only to keep a title legible ON TOP OF the
-     fill, and DESIGN-DIRECTION 9.7 had already ruled that the title and year
+     fill, and DESIGN-DIRECTION 9.2 had already ruled that the title and year
      sit BELOW the tile, on the chrome's own ground. The mockup had simply not
      caught up. With the title on a known ground the whole runtime-contrast
      problem disappears: the title and year are ordinary --fg / --fg-muted

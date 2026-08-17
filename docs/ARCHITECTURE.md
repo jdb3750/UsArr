@@ -1,8 +1,9 @@
 # UsArr — Architecture
 
 **Status:** design document, pre-alpha. One slice of it is now built — the §8.5 Search-and-Grab path
-over Prowlarr and the §14 security floor beneath it; the rest is still design. §16 says what has
-landed and what has not.
+over Prowlarr and the §14 security floor beneath it. §16 is authoritative for which milestone owns a
+thing; whether a thing is built is read off the tree (`web/src/routes`, `internal/`), not off this
+document.
 **Last revised:** 2026-08-16 (revision 2, after a three-way adversarial review —
 [`REVIEW-LOG.md`](./REVIEW-LOG.md) records what was applied and what was rebutted).
 **Evidence:** [`RESEARCH.md`](./RESEARCH.md). **Decisions:** [`DECISIONS.md`](./DECISIONS.md).
@@ -2098,8 +2099,8 @@ stop, replace the file, start**, with the key as a separate, explicitly-named st
 **§16 is authoritative for scope.** Where the README or any other document disagrees about what ships
 when, **this section wins.** Versions are scope markers, not dates. **A milestone label is scope, not
 status:** it says which milestone owns a thing, never that the thing exists. Only part of v0.1 is
-built — see the landed/not-yet split at the end of the v0.1 entry; v0.2 and later are wholly
-unimplemented. Deferred ideas are not listed here at all; they are in [`FUTURE.md`](./FUTURE.md)
+built, and this section does not enumerate which part — that answer lives in the tree, where it
+cannot go stale; v0.2 and later are wholly unimplemented. Deferred ideas are not listed here at all; they are in [`FUTURE.md`](./FUTURE.md)
 with their seams.
 
 **The ordering rationale, since it changed:** *the earliest milestone that is not already available
@@ -2318,19 +2319,17 @@ the first catalogue adapter is written**, and its result orders §16.1's sequenc
 it passes, Navidrome first if it fails.** Its pass condition stays written down in advance
 (ADR-0035 §2, §7.1a) precisely so that deferring it does not turn it back into a guess.
 
-*Landed so far:* the Go binary with the embedded SPA shell; SQLite + WAL and goose migration 0001
-with its automatic pre-migration `VACUUM INTO`; **Prowlarr in Search-and-Grab mode** end to end —
-per-indexer fan-out, results streamed over one SSE channel, the indexer-status Report, grab — with
-the `source:`, `type:`, `format:` and `indexer:` tags derived from each result; the owner account,
-Argon2id, cookie sessions and CSRF; encrypted credentials with AAD binding and the `kek_id` column
-that makes rotation resumable; the SSRF egress policy; redaction middleware; the services CRUD and
-connection-test endpoints; `/api/health/live` and `/api/health/ready`.
-*Not yet:* Sonarr and Radarr; every sync channel; the write path and its command queue; the
-`work`/`edition`/`media_file`/`external_id`/`service_item_link` tables; the library grid and the
-image pipeline; search tiers 1 and 2; the `quality:` tag and the `downloadId` provenance join; the
-Services health **screen** (its endpoint exists, the UI does not); the "1080p ✓ / 4K ✗" badge; a
-working `usarr key rotate`; the Docker image; nightly backups and `POST /api/v1/system/backup`; and
-the arm64 RSS spike. (CI query-plan assertions are in place for the tables that exist.)
+*Which of the above is built is not listed here, and the omission is the correction.* This entry
+used to carry a landed/not-yet inventory, and it went wrong in exactly the way an inventory in a
+design document goes wrong: it was still asserting that the Services health screen had no UI long
+after the screen had shipped, on a page whose own §17.3 describes that screen's rendered bugs. The
+tree answers the question and cannot go stale — `web/src/routes` is the set of screens, `internal/`
+the set of backend surfaces, `internal/db/migrations` the schema that actually exists, and
+`git log` the order they arrived in. What is worth stating at this altitude is the gap the whole
+milestone is about, and it is one sentence: **no sync channel runs yet, so there is no catalogue** —
+no `work`/`edition`/`media_file` tables, no Sonarr or Radarr replication, and every screen that
+would render a library says so rather than drawing an empty one. (CI query-plan assertions are in
+place for the tables that exist.)
 
 **v0.2 — "Requests."** Request model, routing rules, approval workflow, quotas, single-user
 auto-approve. **One search box over owned and unowned** (§8.6). One Add that routes; availability

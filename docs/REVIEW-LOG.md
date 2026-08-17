@@ -4468,3 +4468,543 @@ Three items: the `43 px` in `web/src/lib/format.ts` is the mockups' `months` (`S
 *"Home's `Items` is 107.375px"* in `web/src/app.css` is a mockup measurement of a block that file's
 own `+page.svelte` declares `NOT DRAWN`; and if the app takes the `Age` split, its reserve sits in a
 **44px** content box with **1px** of slack, not the design tree's 13px.
+
+---
+
+## SD-01 — `DESIGN-DIRECTION.md` restated a fact it is not authoritative for. **Applied.**
+
+**Found.** The header of `docs/design/DESIGN-DIRECTION.md` read *"**Status:** design document,
+pre-alpha. **None of this design is implemented.** A `web/` directory now exists and carries a
+SvelteKit shell — sign-in, a search page and a scaffold `/services` route whose own header says to
+delete it when §17.3 lands — but it implements none of the system below: not the tokens, not the
+density model, not the component set, not the state sets. Treat every value here as still ahead of
+the code."* Every clause of that was false on the tree it sat on: `web/src/app.css` is ~2,556 lines
+of ported tokens and components, `web/src/routes/services/+page.svelte`'s header is a §17.3
+implementation rather than a delete-me note, and `web/src/routes/` carries `libraries`, `requests`
+and `settings` besides. **This is the second correction of this line's class**, which is the finding
+— the first correction replaced a wrong status with a right one and bought roughly a day.
+
+**The rule, and it is the point rather than the edit.** *A document that is not authoritative for a
+fact should not restate it — it should name the document that is.* A restated fact has no mechanism
+holding it in step with the original; it is correct only until the original moves, and nothing
+signals when that happens. `ARCHITECTURE.md` §16 owns milestone status and the tree owns what exists
+today, so the design document's job is to point at them, not to mirror them. **Applied as wording
+that asserts no status at all** rather than as a hedged or dated one, because a carefully hedged
+status claim decays on the same schedule as a careless one. The header now opens *"Where
+implementation status lives — not here, deliberately"* and routes the reader to §16 and to the code;
+the "upstream of the UI" framing and the §17-wins rule below it are unchanged.
+
+**Swept the rest of the file for the same shape, two more applied.** Both in §7.4, both about the
+list bench: *"it is not on `main` and does not yet complete a full run (a 25,000-row Chromium
+out-of-memory)"* and *"`bench:list` currently exits non-zero on a full run because of a 25,000-row
+Chromium out-of-memory, so the OOM is fixed first"*. `pnpm bench:list` is on `main`
+(`web/scripts/list-bench.mjs`, `web/package.json`), the OOM is handled as a named ceiling with
+`recyclePage`, and the 2% drift gate the passage called *"once it lands"* is section **2b** of that
+script. The design content — why `check.mjs` cannot host the assertion, the 2% budget, and the
+fix→assert→enforce sequencing — is kept verbatim in substance; only the dated status is gone, with
+`bench:list` and ADR-0029 named as the authorities for their own state. Two headings lost a status
+clause with them: *"the fact that it is not enforced today"* → *"the one place it cannot be"*, and
+*"Threshold, once it lands"* → *"Threshold"*.
+
+⏭️ **Reported, not applied — and now settled; the deferral is kept above so the sequence is
+readable.** §11's contrast rule said *"as of §9.7 **no such pair ships**, so the assertion currently
+has nothing to run over"*. Same shape, but the surrounding prescription (a runtime WCAG solver over
+`dominant_color`) was itself superseded by the poster title moving off the fill, so rewriting the
+status sentence alone would have tidied a passage whose design content needed a decision first.
+That decision is below.
+
+**§11's computed-fill rule is restated as conditional rather than as current. Applied.** Verified
+against the tree before writing: `constrainDominant` survives in `docs/design/mockups/usarr.js`
+**only as the comment recording its deletion** — *"What used to live here was constrainDominant():
+a WCAG ratio solver … It is gone, and it was not a bug fix — it was doing its job correctly"* — and
+nothing in `docs/design/` sets text on a computed fill, so there was no live call site to change
+the answer. **The rule survives, because it is right and cheap to keep; only its tense changes.**
+The blockquote now opens *"**Where a surface sets text on a computed fill**, pick whichever of the
+two theme text tokens scores higher…"*, so it binds a future call site without asserting anything
+about the present. The CI sentence loses *"as of §9.7 no such pair ships, so the assertion currently
+has nothing to run over and must not be reported as passing"* and gains the reason the assertion is
+kept: *"a conditional rule needs a **standing** guard, because a guard added by whoever writes the
+first call site is a guard that call site had to know about first — which is the same as having no
+rule."* The retention is now deliberate on the page rather than inferable from a status note that
+would go stale the moment a call site appeared. Which surfaces set text on a computed fill is named
+as §9.2's question and the tree's answer, not §11's — SD-01's own rule, applied to the section that
+prompted it. **One rider, and three more left as a follow-up:** four sites attributed the
+poster-title move to **§9.7**, which is *"The minimum component set, and where per-type divergence
+is allowed"*; the rule they mean is **§9.2**'s poster-grid entry, which is where *"the title and
+year sit BELOW the tile"* is actually written. The one **inside** this passage is corrected, because
+leaving it would have made the paragraph cite two different sections for one rule. The other three —
+§2's summary table (*"The title sits below it, not in it (§9.7)"*), §7.1, and §13's checklist entry —
+are **not** touched: that is a citation sweep, not a status one, and it is recorded here rather than
+folded in.
+
+ℹ️ **The follow-up has since run, and "three" was an undercount — the sweep found six live sites,
+not four.** The three named above are corrected. Three more carried the same misattribution in code
+comments the grep for markdown never reached: `docs/design/check.mjs`'s §1d CSSOM carve-out
+(*"`--dc-fg` went with §9.7's move of the poster title off the fill"*),
+`docs/design/mockups/usarr.css`'s `.card__t` comment (*"this is §9.7's rule rather than a
+preference"*) and `docs/design/mockups/usarr.js`'s `constrainDominant` deletion note (*"DESIGN-DIRECTION
+9.7 had already ruled that the title and year sit BELOW the tile"*). The last two are copied into
+`prototype.html` by `build_prototype.py`, so it was **regenerated rather than hand-edited**, and its
+two copies moved with them. **The undercount is the reportable part**, and its cause is that the
+citation was counted over `*.md` while three of the six sites are `.mjs`, `.css` and `.js` — a
+corpus chosen by file type rather than by where the rule is actually cited. 🚩 **Two further
+mentions in this log are deliberately left standing**: `D-50` (*"which §9.7 had already ruled
+against"*) and `PG-01` (*"the exact construction §9.2 and §9.7 ban"*). Both are dated records of
+what a commit claimed at its own time, and §6.1's convention is that *"nothing above is renumbered,
+reworded or deleted"*; correcting them would rewrite the evidence rather than the rule. §11's
+superseded *"as of §9.7 no such pair ships"*
+is quoted twice above for the same reason and is not a live citation — that sentence no longer
+exists in the tree.
+
+---
+
+## SD-01a — the notice was unguarded, not pinned, and the guard gains the properties it was missing. **Applied.**
+
+**Found.** The mockups' permanent notice — the label `DESIGN-DIRECTION` §13's fabricated-data ban
+grants as its one exception — read *"Static design mockup of UsArr, which is pre-alpha software:
+none of these screens is implemented and every value on them is invented"*, on all five source
+pages and in the published `prototype.html`. **The first half went false when the screens shipped**
+(`web/src/routes`; `ARCHITECTURE.md` §16's own inventory of the same claim was removed in `0b8637c`
+for the same reason). The second half is true, and it is the entire reason the exception exists:
+the data really is invented.
+
+**The finding is that nothing asserted this sentence at all, and that is the whole of it.**
+`grep -rn "none of these screens"` over the tree returns the five source pages, the generated
+`prototype.html` and `mockups/README.md` — **no check at all**. `check.mjs`'s existing notice sweep
+tested one property already (`/every catalogue source/`, that the notice describes the selected
+install) and simply had no opinion about the rest of the sentence, and `build_prototype.py` asserts
+only that `class="mocknote"` is present. So the string was not pinned; it was **unguarded**, which
+is how it went stale in the first place. 🚩 **A sentence with no assertion over it has nothing
+keeping it true, and will drift silently.** The guard here was **property-based from the start** —
+it asserted one property where three were needed — so the fix below is *the missing properties*,
+not the conversion of a literal into one.
+
+**The general rule survives; it is the diagnosis of this incident that it is not, and an entry that
+confused the two would misteach the next reader.** The rule: a guard that asserts a string
+**verbatim** pins whatever that string says. Had such a guard existed here it would have been green
+while the claim was wrong, and it would have **failed the first person to correct it** — which
+inverts what a guard is for: it stops being a check on drift and becomes the drift's enforcement
+mechanism. *A guard should assert a **property**, not a **fact**.* "The footer names its data as
+invented" is a property and survives any honest rewording; the sentence itself is a fact, and
+pinning a fact makes the guard an obstacle to fixing it. **Worth stating in that direction, because
+it is the direction the fix took: a literal assertion over this notice would have been the defect,
+not the safeguard.** The rule is why the replacement is three properties rather than one longer
+string — it is not what went wrong here, because here there was nothing at all.
+
+**Applied, three properties instead of one.** `check.mjs` now asserts, for **each** install: the
+notice describes the selected install (unchanged); **it names its data as invented**, the half rule
+13's exception is granted for; and **it makes no implementation-status claim at all** — `/pre-alpha|
+unimplemented|implemented|shipped|ships/`. The third is the one that would have caught this, and it
+is SD-01's rule expressed as a check rather than as prose: §16 and the tree own that fact, so a
+mockup restating it owns a copy nothing keeps in step. The notice itself now reads *"Static design
+mockup of UsArr. Every value on these screens is invented."* in both installs, with the compact
+form losing its `Pre-alpha ` prefix for the same reason, edited in the five source pages and
+regenerated into `prototype.html` through `build_prototype.py` rather than by hand.
+
+**Fired deliberately before being trusted**, per `CLAUDE.md`'s *"fire a guard deliberately … one
+that has never been triggered is indistinguishable from no guard"*. With `invented` removed from
+the notice and the old *"which is pre-alpha software"* put back, `node docs/design/check.mjs` exits
+**1** with exactly **4 FAILURES**, all of them the new checks and two per install:
+
+> `FAIL  install: the full mockup notice does not name its data as invented, which is the one thing
+> rule 13's exception is granted for — "Static design mockup of UsArr, which is pre-alpha software.
+> Drawn over an install with every catalogue source connected,"`
+> `FAIL  install: the full mockup notice makes an implementation-status claim ("pre-alpha") — §16
+> and the tree own that fact, a mockup restating it owns a copy that goes stale (SD-01)`
+
+Both repeat for `v01`, and the pre-existing install check stayed green throughout — which is the
+other half of the evidence: the old guard could not see either defect.
+
+**Counted rather than assumed, because a green over one fixed instance and eleven unfixed ones is
+the failure this whole entry is about.** Measured against `30cd8db`, the tree before the sweep, and
+against the tree after it:
+
+| String | Before | After |
+|---|---|---|
+| the notice, long form — *"…none of these screens is implemented and every value on them is invented"* | **12**, in **6 files** (5 source pages × 2 installs, plus `prototype.html` × 2) | **0** |
+| the notice, compact form — *"Pre-alpha mockup, invented data, …"* | **12**, same 6 files | **0** carrying a status word |
+| `prototype.html`'s `<title>` — *"…static, invented data, **nothing implemented**"* | **1** generated, from **1** f-string in `build_prototype.py` | **0** |
+| `tokens.css`'s header — *"Status: design document, pre-alpha. **None of these tokens is implemented.**"* | **1** | **0** |
+
+**The last two are the point of counting.** The footer was the instance that was reported; the
+`<title>` and the token header carried the same claim, in the same defect class, and would have
+survived a pass that fixed only what it was pointed at — and the check would have gone green over
+them. The `<title>` is the worse of the two, because it is the one user-visible string a rendered
+DOM walk **cannot see**: §13's corpus counts `document.title` but does not read it. So the guard is
+extended to it — *"document.title makes an implementation-status claim"* — and **fired deliberately
+too**, by restoring the old title alone: `node docs/design/check.mjs` exits **1** with **1 FAILURE**,
+
+> `FAIL  document.title makes an implementation-status claim ("implemented") — "UsArr screen mockups:
+> static, invented data, nothing implemented". §16 and the tree own that fact (SD-01); the tab is not
+> the place to restate it`
+
+while all six notice assertions stayed green — the two guards are independent, and neither covers
+the other. `tokens.css`'s header is rewritten to the SD-01 shape and keeps the claim that does **not**
+go stale: nothing *imports* that file, `web/src/app.css` and the mockups' `usarr.css` both *port* it,
+so its canonicity is a review rule rather than a build dependency.
+
+**Four occurrences of the old wording are retained deliberately**, each framed as history rather
+than as a claim: two superseded titles quoted in `build_prototype.py`'s comment, one in `check.mjs`'s
+new comment, one in `tokens.css`'s new header. A record of what a string used to say is not a
+restatement of it. **One is left for another pass and named here rather than stretched into this
+one:** `docs/design/mockups/README.md:269` presents *"UsArr screen mockups: static, invented data,
+nothing implemented"* as the **current** title in its changelog of the previous title fix, so it goes
+stale with this change. That file is being swept separately. It quotes the same two strings this
+entry corrects, in the same wording — **one sentence, not two variants**. ⚠️ **`SD-02r` records that
+line and verdicts it *"True — `docs/design/mockups/prototype.html:6` matches byte for byte"*; that
+was true when it was measured and is not true after this entry's `<title>` change, so `SD-02r` needs
+re-verdicting by the pass that owns it.** `SD-02` is otherwise disjoint from this sweep — no row of
+it names `tokens.css`, which is the one site here that was found by counting rather than by being
+reported.
+
+⚠️ **This entry's own headline and opening argument were corrected after it landed, and the change
+is recorded rather than made silently, because §6.1's convention is that nothing above is
+reworded.** It was first written as *"a guard that asserts a fact pins the fact"*, with the
+verbatim-pinning argument leading and the *"nothing actually asserted this sentence"* finding
+arriving a paragraph later — so the headline asserted a diagnosis the entry's own investigation had
+already ruled out. The two are now in evidence order: the notice was **unguarded**, the guard was
+property-based from the start and gained the properties it lacked, and the pinning rule is kept as
+the counterfactual it always was. **Nothing measured changed** — not a count, not a quoted `FAIL`
+line, not the `check.mjs` behaviour; only the framing over them. Logged here because an entry whose
+headline contradicts its evidence teaches the wrong rule to whoever reads it next, which is a
+sharper failure than a stale sentence.
+
+---
+
+## DS-07 and DS-14 — closed by `0b8637c`. **Amended dispositions.**
+
+Both were **Open — recorded here rather than applied**, both against `ARCHITECTURE.md` §16's
+landed/not-yet inventory, and both are closed by the code thread's `0b8637c`, *"docs: replace
+per-feature shipped/not-shipped claims with pointers to the tree"* (on `main`; verified with
+`git merge-base --is-ancestor 0b8637c origin/main` and by reading the diff). That commit **removed
+the inventory** — from §16, and the equivalent claims from `CLAUDE.md` and `README.md` — leaving §16
+authoritative for *which milestone owns a thing* and sending the reader to `web/src/routes`,
+`internal/` and `internal/db/migrations` for whether it is built.
+
+| # | Original disposition | Amended disposition |
+|---|---|---|
+| **DS-07** | Open — recorded here rather than applied | **Closed — and closed by a fix it did not propose, which is the clause worth reading.** DS-07 asked for the inventory to be **completed**: *"§16 gains a partial/scaffolding row and the README's row moves to `🚧 Partial`."* `0b8637c` did the opposite and **deleted the inventory**, on the reasoning that a fresher inventory is how this one went wrong. The sentence DS-07 quoted — *"the Services health **screen** (its endpoint exists, the UI does not)"* — is gone from `docs/ARCHITECTURE.md` rather than corrected, so a reader tracing DS-07's fix will not find the row it asked for and should not go looking. The defect is genuinely gone: nothing in §16 now claims the Services UI does not exist, so §17.3's account of that screen's rendered bugs no longer contradicts the section above it |
+| **DS-14** | Open — recorded here rather than applied | **Moot by removal, not fixed** — the distinction matters because **nothing was added**. DS-14 named four shipped endpoints missing from §16's *"Landed so far"* list (`GET /api/v1/system/status`, `GET /api/v1/auth/session`, `POST /api/v1/auth/sudo`, and the sudo re-authentication window). `0b8637c` deleted the list. The four are still undocumented as landed *in §16*, and now correctly so: §16 no longer undertakes to say. **Sudo mode remains a substantive shipped security control**, so the underlying want — that a reader can discover it — is now served by `internal/httpapi/` and by `git log`, and by nothing in the docs. If that turns out to be too thin, it is a new finding against a document that chooses to carry an endpoint list, not a reopening of this one |
+
+**The part that is not bookkeeping.** DS-07 was a **correct, written-down, still-open finding while
+the documentation it described stayed wrong**. The log recorded the defect and did not prevent it;
+what fixed it was a different thread hitting the same wrongness from the other side and arriving at
+a better fix than the one recorded here. **A finding recorded is
+not a finding fixed, and an open finding with no owner is a record that we knew better.** This log's
+promise is that findings are never silently dropped — that promise is about the log, not about the
+tree, and DS-07 is what the gap between the two looks like from the inside. Stated here rather than
+turned into a process: a rule nobody applies at four in the morning would be a third record of
+knowing better.
+
+---
+
+# The status-claim inventory — one rule, twenty-one remaining sites, and three that closed while it was being written
+
+**Date:** 2026-08-17. **Compiled by the instructions gatekeeper from a drift check, not by a
+reviewer, and the gatekeeper is applying none of it.** Every site was re-read against
+**`0656bd9`**, the tip of `origin/main` when the sites were read, because the candidate list came
+out of an earlier check and this repo moves fast enough that part of such a list is routinely
+already fixed. **Three sites were**, between the first read at `0e7839e` and this one, and they are
+recorded as fixed rather than carried. ℹ️ **`main` then moved to `b62eeb3` before this was
+pushed**, and `git diff --stat 0656bd9..b62eeb3` touches `docs/PROJECT-INSTRUCTIONS.md` alone —
+**every site cited below is byte-identical at both**, which is why the reads were not repeated and
+why the pair is named rather than the later SHA alone. 🚩 **`main` moved again while this was being
+corrected, to `a29a07f`, and that one is not inert: it flipped `SD-02r` from *true* to *false*.**
+Amended in place with both SHAs on the row, because a verdict that decayed within a working day is
+the strongest evidence this entry has and hiding the flip would waste it. The entry exists so the
+inventory has a durable home and a named owner instead of living in cross-session messages, which is
+the one place a finding reliably dies.
+
+🚩 **SCOPE, AND IT IS THE FIRST THING TO READ: every verdict in this entry was measured against
+`0656bd9` and means nothing about any later tree. Re-verify your own row against the current tree
+before you act on it.** An inventory published without the SHA it was taken at silently reads as
+*now* to every reader, forever — which is `SD-01`'s own defect committed by the document that logs
+it, and the reason each verdict below carries a commit rather than a date alone. ⚠️ **This is not a
+hypothetical hedge. Two rows needed correcting within about an hour of the entry being written**:
+`SD-02r` went from **true** to **false** under `c2cefa3`, and `docs/design/tokens.css` turned out to
+be **missing from the inventory entirely** — one decay and one gap, found by re-walking the tree and
+recorded below as amendments. ✅ **That is the argument for the caveat, not against the inventory.**
+Both defects were caught by exactly the re-verification this line asks of every reader; an inventory
+that says which commit it saw is falsifiable, and one that does not is merely old.
+
+## SD-02 — twenty-one sites restate an implementation status they do not own. **Instances of `SD-01`. Queued, not applied.**
+
+**`SD-01` is the governing rule and this is not a second one.** It reads: *A document that is not
+authoritative for a fact should not restate it — it should name the document that is. A restated
+fact has no mechanism holding it in step with the original; it is correct only until the original
+moves, and nothing signals when that happens.* `SD-01` applied it to `DESIGN-DIRECTION.md`'s header
+and recorded that this was already **the second correction of that line's class**; `SD-01a` then
+turned it into a `check.mjs` assertion for the mockup notice. 🚩 **What follows is one missing rule
+applied twenty-one times, not twenty-one findings** — and that distinction is the whole value of
+writing it down. A list of stale lines invites a round of one-off corrections and teaches nothing;
+the rule is what prevents the twenty-second.
+
+ℹ️ **`SD-01`, not `SD-01a`, is the parent, and the choice was made rather than defaulted to.**
+`SD-01a` is the sharper rule — *a guard should assert a **property**, not a **fact*** — but it
+governs sites that have a guard, and its own finding records that the notice it fixed *"was not
+pinned; it was **unguarded**."* **Every site below is unguarded prose.** `SD-01a` is therefore the
+*better fix* wherever a site has somewhere to put an assertion — `check.mjs` for the design tree, a
+test for `Makefile` targets — and it is named as such in the rows where that applies; it is not the
+rule the sites violate. **Both are quoted from the current text at `0656bd9`, not from an earlier
+read**, because `SD-01`'s trailing paragraph was rewritten and `SD-01a` added while this was being
+compiled.
+
+**Placement follows §6.1 rather than inventing one.** That section's convention is *"Nothing above
+is renumbered, reworded or deleted"*, new findings *"take the next free id in their own prefix … so
+nothing existing is renumbered and nothing collides"*, and every claim names the commit it was
+measured on. This entry is a pure append; `SD-02` is the next free id after `SD-01` and `SD-01a`; no
+earlier round's table row is amended, because none of these sites is an earlier finding — the three
+that closed are recorded as closed below rather than as amendments to rows that never existed.
+
+**The fix at every site is one move, and `d11a1ca` is the worked example to copy.** So no row below
+proposes corrected wording — each names **what is actually authoritative for the fact**, and the
+edit is to route the reader there and assert no status locally. `SD-01`'s reason applies unchanged:
+it was *"applied as wording that asserts no status at all rather than as a hedged or dated one,
+because a carefully hedged status claim decays on the same schedule as a careless one."* A refreshed
+count buys only the interval until the next migration lands.
+
+🚩 **THE SCOPE LINE, AND AN OWNER WHO MISREADS IT WILL DESTROY CORRECT HISTORY. Only claims about
+what CURRENTLY EXISTS are in scope. A claim about which migration created a thing is PROVENANCE, it
+does not decay, and it must not be swept.** `docs/reference/schema.md` carries **15** `migration
+000N` mentions and **13 of them are provenance** — *"`user_id` on these two tables arrived in
+migration 0002, not 0001"* (`:768`), *"`acquisition_state` … arrived in migration 0003"* (`:750`),
+*"`ix_audit_actor_action` (migration 0002) serves …"* (`:1047`), *"Inserted by migration 0001"*
+(`:1297`), the `### 5.1 … · **v0.1, migration 0004**` heading, and the rest. **Every one of those is
+a historical fact that is true forever, and deleting them would be a worse outcome than the drift
+this entry logs.** Exactly two of the fifteen — `SD-02e` and `SD-02f` below — say something about
+*how much exists*, and only those two are in scope. **This entry is not "remove migration references
+from `schema.md`."**
+
+### Three states, and two of them are not "open"
+
+⚠️ **A queued work list that marks a site open while somebody is mid-fix invites duplicate work or a
+collision on the same line — the same class of problem the entry exists to prevent.** So every site
+carries one of:
+
+- ✅ **Fixed** — verified gone at `0656bd9`. Recorded below with its commit and left out of the
+  table.
+- 🔶 **Claimed** — another area has said it is running this file as its own pass. Not open; talk to
+  that area before touching it.
+- ⏭️ **Open** — nobody has it.
+
+✅ **Fixed while this was being compiled, all three verified gone at `0656bd9`:**
+
+1. **`docs/reference/schema.md:3-6` — fixed by `d11a1ca`, the derived way.** It had read *"Migration
+   0001 exists and creates `user`, `session`, … `tag_assignment`"* against **four** migrations on
+   disk. 🚩 **It was worse than stale, and this is the part worth carrying: the roster read as
+   COMPLETE while omitting `indexer_catalog`, which `00004_indexer_catalog.sql` creates and which
+   the same file documents at §5.1 — so line 3 contradicted its own document.** A reader had no
+   signal, because a complete-looking list does not advertise its gap. ✅ **The replacement divides
+   authority rather than refreshing the roster**: the file owns the *shape*, `internal/db/migrations`
+   owns *what exists*, and — the clause that makes it hold — *"A table given in full below may still
+   be design-only."* **That is the template for every remaining row.**
+2. and 3. **`docs/design/mockups/README.md:6-8` and `:15-16` — fixed by `2e357a5`, merged as
+   `a19df1a`, and logged as `SD-01a`.** The permanent mockup notice and the README's *"none of this
+   design has been implemented"* both went. ℹ️ **Reported to this compilation as "6 files, 12+
+   occurrences" still outstanding; re-verified, that is no longer the tree.** `grep -rn "none of
+   these screens is implemented" docs/` at `0656bd9` returns **one hit, and it is this log quoting
+   the old string at `:4546`** — the five source pages and the generated `prototype.html` were all
+   regenerated through `build_prototype.py`. The count was true before `a19df1a` and is 0 now, and
+   it is recorded that way because a stale count inside an entry about stale claims would be the
+   joke telling itself.
+
+⚠️ **"Currently true" is not a defence, and 19 of the 21 remaining rows are — 14 true outright and 5 coarse-but-true, against two that are false.** ⚠️ **One of those two, `SD-02r`, was verdicted *true* here and went false about six hours later; it is amended in place below rather than rewritten, so the flip stays legible.** That is
+the finding rather than a mitigation of it: a true restatement is indistinguishable, at the moment
+you read it, from one that went false last night. The verdicts mean only *what the tree said at
+`0656bd9`* — **true**, **false**, or **coarse-but-true** (defensible as written, but reading as a
+narrower or wider claim than the tree supports).
+
+| # | Site | The claim, quoted | At `0656bd9` | Authoritative for that fact | State |
+|---|---|---|---|---|---|
+| **SD-02a** | `docs/reference/crossmedia.md:3` | *"**Status:** designed, not implemented. **Scope:** **v0.3.**"* | **True** — no Wikidata or link-resolution code under `internal/` or `cmd/` | `ARCHITECTURE.md` §16 for scope; the tree for existence | ⏭️ Open |
+| **SD-02b** | `docs/reference/gateway.md:3-4` | *"designed, not implemented … the OpenSubsonic read-only subset is **v0.4**"* | **True** — no OpenSubsonic or OPDS route in `internal/httpapi/server.go`'s mux | `ARCHITECTURE.md` §16; the mux in `internal/httpapi/server.go` | ⏭️ Open |
+| **SD-02c** | `docs/reference/search.md:3` | *"designed, not implemented. **Scope:** tiers 1 and 2 are **v0.1**."* | **Coarse-but-true** — no `search_doc` / `search_fts` / `search_trgm` in any migration, so both tiers are genuinely absent; but `internal/httpapi/search.go` **does** ship a Prowlarr indexer search over SSE, and a reader who knows that reads this header as false | `ARCHITECTURE.md` §16; `internal/db/migrations/` for whether the FTS tables exist | ⏭️ Open |
+| **SD-02d** | `docs/reference/sync.md:3-4` | *"designed, not implemented. **Scope:** channels 1, 3 and 4 plus the write queue are **v0.1**"* | **True** — no sync package; `write_queue` has a table and no writer (`grep -rl write_queue internal/ --include=*.go` returns the migrations, tests, the spike, and one comment in `internal/httpapi/grabs.go`) | `ARCHITECTURE.md` §16; the tree | ⏭️ Open |
+| **SD-02e** | `docs/reference/schema.md:1125` | *"the `REFERENCES work(id) ON DELETE CASCADE` shown above is dropped there … **because `work` does not exist yet**"* | **True**, and 🚩 **it flips the day library sync lands** — the same pin `d11a1ca` just removed from line 3, surviving in the body of the file it was removed from. *(The surrounding sentences about which migration drops the FK are provenance and stay.)* | **`internal/db/migrations/`** | ⏭️ Open |
+| **SD-02f** | `docs/reference/schema.md:1517` | *"Present in the design, **not in migration 0001**, added with the milestone named:"* — the *later tables* appendix header | **True**, and 🚩 **the same pin again**: absence is asserted against migration **0001** specifically, so the header goes wrong the moment a later migration creates any row of its own table. ℹ️ It is the second half of the sentence `d11a1ca` corrected — line 7's *"everything else is in the 'later tables' appendix"* now points here, and here still pins | **`internal/db/migrations/`** for existence; this appendix owns the *milestone* column | ⏭️ Open |
+| **SD-02g** | `docs/reference/providers.md:3-5` | *"There is a Prowlarr client and a working connection test (§4); the registry seam (§1) and the Go provider interface (§2) are designed, not implemented, and **no code has been written for Sonarr or Radarr**"* | **True** — the only Sonarr/Radarr occurrences under `internal/` are comments asserting field-shape equivalence (`internal/servarr/resources.go:21,61,267,285`; `internal/releases/tags.go:38-39,60`) | `ARCHITECTURE.md` §16; `internal/servarr/` and `api/specs/` | ⏭️ Open |
+| **SD-02h** | `docs/reference/security.md:3-4` | *"§1's envelope, AAD binding and `kek_id` column are built (the `usarr key rotate` command is not), and §2 and §5 are built."* | **True** — and it is the most granular status claim in the set, which is exactly what makes it the most expensive to keep true | `internal/crypto/`, `internal/ssrf/`, `internal/db/migrations/`; `ARCHITECTURE.md` §16 for scope | ⏭️ Open |
+| **SD-02i** | `docs/reference/tags.md:3-5` | *"`source:`, `type:`, `format:` and `indexer:` are derived from Prowlarr search results today … `quality:`, persistence into the `tag` tables and any filtering by tag are designed, not implemented."* | **True** — `internal/releases/tags.go` derives them onto the response; no `INSERT` into `tag` or `tag_assignment` exists anywhere in `internal/store/` | `internal/releases/tags.go` and `internal/store/`; `ARCHITECTURE.md` §16 | ⏭️ Open |
+| **SD-02j** | `docs/CONFIGURATION.md:3-8` | *"A first group of keys is now read by shipped code — the listener, the URL base, the data and config directories, logging, trusted proxies, the metadata User-Agent and the secret key (including `_FILE`)."* | **Coarse-but-true** — that enumerates 11 of the 13 `USARR_*` names `internal/config` reads; the two omitted, `USARR_INTEGRATION` and `USARR_RECORD`, are test-harness switches, so the omission is defensible and undeclared. ⚠️ **Same failure mode as `SD-02e`'s predecessor: a roster that reads complete** | **`internal/config`** — `DEVELOPMENT.md` §11 already binds the §2 table, `.env.example` and `internal/config` to land in one commit, so this header restates a fact that trio owns | ⏭️ Open |
+| **SD-02k** | `docs/CONFIGURATION.md:126-132` | *"`USARR_LOG_LEVEL` and `USARR_LOG_FORMAT` are both live … **file logging is not implemented.** `$USARR_DATA_DIR/logs/` is created at startup and stays empty"* | **True** — nothing under `internal/` writes into `logs/` | `internal/config` and the logging setup in `cmd/usarr`; `ARCHITECTURE.md` §16 for the milestone | ⏭️ Open |
+| **SD-02l** | `docs/CONFIGURATION.md:296-299`, restated at `:444` | *"There is no `usarr key rotate`, no `usarr keygen`, and no CLI subcommand of any kind — the binary takes flags only and **exits 1 on any positional argument**. `keys/secret.key.new` is never written: the path is defined in `internal/config` and has no caller anywhere in the tree."* | **True** — `internal/config/flags.go:67` rejects `fs.NArg() > 0`, and `Config.NewSecretKeyPath` (`internal/config/config.go:195`) is referenced only from `config_test.go`. ⚠️ **Stated twice in one file**, which is the restatement defect nested inside itself: two copies now decay independently | `internal/config/flags.go` and `cmd/usarr/` | ⏭️ Open |
+| **SD-02m** | `docs/CONFIGURATION.md:432-434` | *"**It is the target layout, not an inventory of a running install.** Entries marked `[planned]` belong to subsystems that have not shipped … Everything unmarked is created or written by the code on `main`."* | **True**, and ℹ️ **the best-shaped claim in the set** — it declares its own genre and confines the perishable half to a marker instead of to prose. It is still a hand-maintained per-entry status inventory | `internal/config` for what the binary creates. **§5 of this same file is authoritative for the *layout*** — which is the half it does own, and which the rewrite must keep | ⏭️ Open |
+| **SD-02n** | `docs/CONFIGURATION.md:220-224`, restated at `:788` | *"**`USARR_TSNET_*`** — later milestone (§9); documented, not shipped, not in `.env.example`."* / *"**Not in v0.1. Not implemented. Not in `.env.example`.**"* | **True** — no `tsnet` reference in `internal/`, `cmd/` or `go.mod`. **Stated twice** | `go.mod` and `ARCHITECTURE.md` §16 | ⏭️ Open |
+| **SD-02o** | `docs/DEVELOPMENT.md:3-6` | *"**Status: pre-alpha. The first code has landed** … Most of the *layout* is still contract rather than description: commands referencing files that do not exist yet are marked **(not yet)**."* | **Coarse-but-true** as a header; ⚠️ it is also the sentence that **licenses** the markers in `SD-02p` and `SD-02q`, so it is the root of that half of the inventory rather than one more instance of it. Fixing the markers without fixing this leaves the mechanism in place | `Makefile` for what a target does; `ARCHITECTURE.md` §16 for the milestone | ⏭️ Open |
+| **SD-02p** | `docs/DEVELOPMENT.md:168` | 🚩 *"`make dev                   # backend on :8484                  **(not yet)**`"* | 🚩 **FALSE.** `Makefile:284` declares `.PHONY: dev` and `dev:` runs `$(GO) run $(MAIN_PKG) --env-file .env`. ⚠️ **And this file already knows.** `:48` records *"An earlier revision of this line marked the target **(not yet)**, which was stale"* — about a different target, in the same document, **120 lines above a marker carrying the identical defect**. A correction that does not sweep its own file is `SD-01`'s *"second correction of this line's class"* arriving early | **`Makefile`** — the target list is the only thing that can answer whether a target exists | ⏭️ Open |
+| **SD-02q** | `docs/DEVELOPMENT.md:615`, `:628` | *"`deploy/compose/dev-stack.yml` **(not yet)**"* / *"Instead, `make seed` **(not yet)** drives each app's own API after startup"* | **True** — `deploy/compose/` does not exist and the `Makefile` has no `seed` target. ℹ️ **Both are correct today by the same mechanism that made `SD-02p` wrong**: nobody re-walks them, and two of the three happen still to hold | **`Makefile`** and the tree | ⏭️ Open |
+| **SD-02r** | `docs/design/mockups/README.md:269` | *"`prototype.html`'s `<title>` read … **It is now** *"UsArr screen mockups: static, invented data, nothing implemented"*"* | ⚠️ **CORRECTED — verdicted True at `0656bd9`, and FALSE at `a29a07f`, which is roughly six hours later.** 📌 **The commit that invalidated it is `c2cefa3`, *"docs(design): the same status claim, in the two places it was not reported"* — named because "false at `a29a07f`" says where the flip was *noticed* and not where it *happened*, and only the latter is re-findable.** `git log --oneline -L6,6:docs/design/mockups/prototype.html` returns `c2cefa3` as the sole change to that line since the verdict was taken, and `git merge-base --is-ancestor c2cefa3 0656bd9` is **false**, which is the check that proves the original reading was correct when it was made rather than merely asserted to be. ℹ️ `c2cefa3`'s own message closes the loop from the other side: *"`docs/design/mockups/README.md:269` still presents the old title as current and is left for the pass that owns that file"* — the design area knew it was leaving this row false and said so, so the defect is a hand-off that was never picked up, not a silent decay. The original reading stands as taken: `prototype.html:6` did match byte for byte. It no longer does — the design area's own sweep (logged above `DS-07 and DS-14`, and it flagged this row itself) extended `check.mjs` to `document.title` and the tag is now `<title>UsArr screen mockups: static, invented data</title>`, **without** *"nothing implemented"*. So the README's *"It is now"* quotes a title that no longer exists. 🚩 **This was the row called "the weakest in the table" and "NOT the same defect", and it is the only row that has since gone false — which makes it the entry's own thesis demonstrated on the entry, inside one working day.** ℹ️ **The reasoning that filed it as an exception was not wrong**: a dated record of an edit *is* a genre allowed to restate. What the reasoning missed is that this one restates in the **present tense** — *"It is now"* — and a present-tense quotation of a live string is a status claim wearing a historian's coat. **The fix is one word: past-tense it**, so the changelog records what the title was changed *to* at the time without asserting what it is *now* | **`prototype.html`** itself | 🔶 **Claimed by the design area**, which is running this README as its own pass — `SD-01a` and the `document.title` guard already landed here |
+| **SD-02s** | `docs/ARCHITECTURE.md` §17.5, the *"Specified above \| Shipped in v0.1 \| Why they differ"* table (~`:3049-3063`) | *"**Six columns** — When · Release · Indexer · Protocol · Size · Outcome"*; *"on the wire as `sent \| sent_outcome_unknown \| unknown`"* | **Coarse-but-true.** Six columns confirmed in `grabColumns` (`web/src/routes/requests/+page.svelte`), though the first header renders `Time`, not `When` — the same file's comment explains why. The wire vocabulary in `internal/httpapi/grabs.go` is **four** values, not three: `wireOutcomeNotSent = "not_sent"` sits beside the three quoted, and the section's own prose does describe it. 📌 **NOT a request to delete the table**, which exists *because* `RG-01.1` found §17.5 describing something that never shipped; the rule asks only that the shipped column cite its two sources rather than assert independently | `internal/httpapi/grabs.go` and `web/src/routes/requests/+page.svelte` for what shipped; `ARCHITECTURE.md` §16 for what was funded | ⏭️ Open |
+| **SD-02t** | `docs/ARCHITECTURE.md:2296-2301` | *"⚠️ **The cost estimate held; the shape it costed did not ship whole.** What landed is `GET /api/v1/grabs/recent` — **six columns, no join, no keyset cursor, a server-clamped `LIMIT`**"* | **True**, and ✅ **deliberately left standing** — `RG-01.1` records the reason: *a cost estimate edited after the fact stops being evidence about estimating*. ℹ️ **Listed as a legitimate exception rather than as an instance**: it is a dated estimate plus an amendment, and it already names §17.5 as authoritative for the difference, which is the move this entry asks for everywhere else | `ARCHITECTURE.md` §17.5, which this passage already names | ⏭️ Open, **as an exception to leave alone** |
+| **SD-02u** | `api/specs/SOURCES.md:69` | *"They are absent because **no code consumes them yet**, and a vendored spec with no contract test behind it is a file that silently goes stale."* | **True** — `api/specs/` holds `prowlarr.json` and this file; `internal/servarr/contract_test.go` is the only consumer. ℹ️ **The claim is also its own rule** (*"Add each one with the client that reads it"*), which is the healthiest form on the list: it is falsified by the same commit that fixes it | **`api/specs/`** — a directory listing beside `internal/servarr/` | ⏭️ Open |
+
+## Owners, taken from `docs/DEVELOPMENT.md` §11 rather than from the routing message
+
+⚠️ **The owner split was re-derived from §11's own map, because assigning it from a recollection
+would be this entry's own defect committed inside the entry that logs it.** §11's map is *"keyed by
+area of the repo, not by thread name"*, and its rows are leads rather than exclusive ownership —
+*"The map says who to talk to, not who is permitted to type."*
+
+| Sites | Owner, in §11's own words | Which part of §11 |
+|---|---|---|
+| `SD-02r` — `docs/design/mockups/README.md` | the work that **"owns the screens and the visual system"** — and it is **already there**, so this row is a hand-off note, not an assignment | `ARCHITECTURE.md` §17 and `docs/design/` |
+| `SD-02s` — `ARCHITECTURE.md` §17.5 | the same row: §17 is design-owned. ✅ **Precedent inside this file**: `RG-01.1` routed §17.5 to the design area on this convention, gave the reason — *"a code thread editing another thread's section is how two threads produce one conflict"* — and the design area applied it | `ARCHITECTURE.md` §17 and `docs/design/` |
+| `SD-02t` — `ARCHITECTURE.md` §16's cost note | the work that **"landed the code being described"** | implementation-status wording in `CLAUDE.md`, `README.md` and `ARCHITECTURE.md` §16 |
+| `SD-02a`–`SD-02i` — `docs/reference/*` | §11 gives no table row; its closing paragraph gives the rule instead: **"`docs/reference/` follows whichever change drove it."** So each file goes to the work that lands the code it describes — the backend work for all nine, with `SD-02e` and `SD-02f` specifically to whoever lands the next migration, which is the commit that falsifies them | closing paragraph, not a table row |
+| `SD-02j`–`SD-02n` — `docs/CONFIGURATION.md` | §11 gives no ownership row; its onboarding bullet binds the file to the backend instead — **"A new setting goes in the §2 table, in `.env.example`, and in `internal/config` in the same commit — one that exists in two of the three is a bug."** So: the work that lands **`internal/` and `cmd/`** | onboarding bullet, plus the `internal/`/`cmd/` row |
+| `SD-02o`–`SD-02q` — `docs/DEVELOPMENT.md` | §11 gives no row for its own file. The facts at issue are `Makefile` targets and `deploy/` paths, so: the work that lands **`internal/` and `cmd/`** and the build | `internal/` and `cmd/` row, reached by the fact rather than by the file |
+| `SD-02u` — `api/specs/SOURCES.md` | §11 gives no row; the fact is which spec `internal/servarr` consumes, so: the work that lands **`internal/` and `cmd/`** | `internal/` and `cmd/` row, reached by the fact |
+
+🚩 **The gap is itself worth reporting. §11's map has rows for `internal/`+`cmd/`, `web/`,
+implementation-status wording in `CLAUDE.md`/`README.md`/§16, §17 + `docs/design/`,
+`PROJECT-INSTRUCTIONS.md` and this file — and none for `docs/reference/`, `docs/CONFIGURATION.md`,
+`docs/DEVELOPMENT.md` or `api/specs/`.** Four of the seven assignments above are therefore derived
+from prose or from the fact at issue rather than read off the table. That is a defensible derivation
+and it is not the same thing as a stated owner. **Offered as the follow-up: either §11 grows four
+rows, or its closing "follows whichever change drove it" rule is restated as covering them.**
+Deciding which is not this entry's to make.
+
+⏭️ **Queued, not applied. No file in the repository was edited for this entry except this one.** The
+gatekeeper compiled and verified the inventory; it owns none of the twenty-one sites, and applying
+another area's wording is precisely what §11's *"announce before pushing an edit to a shared
+document outside the area you lead"* exists to prevent.
+
+**Two things the owners should not have to rediscover.** ℹ️ **`SD-01`'s reason for asserting no
+status at all** — the nineteen non-false rows above are its evidence: they are correct, and they are not
+safe, and `SD-02r` is what that sentence looks like when it comes due. 🚩 **And `RG-01.1`'s observation, which is why a one-directional sweep is not enough** — §17.5
+was *"wrong in BOTH DIRECTIONS AT ONCE"*, doc-behind-tree in one paragraph and tree-behind-doc four
+hundred words later, and the conclusion drawn there holds for every row here: *"nothing checks tense
+against the tree at all."* A sweep that only hunts for *doc is stale* will write the other direction
+back in. `SD-01a` is the one shape that escapes both — a guard asserting a **property** — and where
+a site has a guard that can carry it, that beats prose.
+
+**The inversion, carried here from the design area because `SD-01`'s rule is only half an answer.**
+`SD-01`'s advice to every row above is *assert no status at all, route the reader to §16 and the
+tree*. That works because none of these sites **needs** to carry a status. 🚩 **But some strings
+must, and for those "route the reader elsewhere" is not available** — the mockup notice is the case
+in point. `DESIGN-DIRECTION.md` bans fabricated data in any shipped surface and grants exactly one
+exception, *"a design mockup, **which must say on every page that its data is fabricated** — not
+only in a sibling README, because the single-file published build is detached from it"*. The label
+**is** the condition the exception is granted on, so it cannot be replaced by a pointer to §16
+without withdrawing the exception. **For strings like that, `SD-01a`'s own diagnosis is the
+instruction: the stale sentence *"was not pinned; it was **unguarded**"*** — `grep -rn "none of
+these screens"` returned the five source pages, the generated `prototype.html` and the mockups
+README, and **no check at all** — **so it went stale because nothing asserted it, and no amount of
+careful wording would have changed that.** ⚠️ **A more carefully worded sentence decays on the same
+schedule as a careless one; only something that runs can notice.** ✅ **The durable fix is therefore
+a guard that fires, and `docs/design/check.mjs` is the worked example:** it now asserts, **per
+install** — the loop runs over both, so neither variant can drift alone — that the notice *describes
+the install that is selected*, that it *names its data as invented*, and that it *makes no
+implementation-status claim*, plus the third property again over `document.title`. **Each is a
+property, so any honest rewording survives it**, which is the whole of `SD-01a`. 🚩 **And they were
+fired deliberately before being trusted, per `CLAUDE.md`'s *"one that has never been triggered is
+indistinguishable from no guard"*: the notice assertions exit 1 with exactly `4 FAILURES` (two
+properties × two installs) when the old *"which is pre-alpha software"* wording is restored, and the
+title assertion exits 1 with `1 FAILURE` naming `"implemented"` when the old `<title>` alone is put
+back — with all six notice assertions staying green through that second probe, which is what
+establishes the two guards are independent rather than one covering the other.** **So: `SD-01`'s
+rule and its complement, and a site takes whichever applies — where a claim does not need to live
+locally, delete it and name the owner; where it genuinely must, guard the property and fire the
+guard.** ℹ️ **Nothing in this paragraph changes a row above.** Every one of the twenty-one is
+unguarded prose with no natural place to put an assertion, which is why `SD-01` and not `SD-01a` is
+their parent; the complement is recorded so the *next* site with somewhere to put a check is not
+argued about from scratch.
+
+**What was actually done, stated as the method rather than as a verdict.** Each site was read in the
+file at **`0656bd9`**, reached by `git fetch origin && git checkout -B main origin/main` immediately
+before the read; each existence claim was answered by `ls`, `grep -rl` or `git log` over
+`internal/`, `cmd/`, `web/src/routes/`, `api/specs/`, `internal/db/migrations/`, `Makefile` and
+`go.mod` — **not from any other document**. ⚠️ **Line numbers are a claim with a shelf life** — §11 says so in as many words — so each is
+dated to `0656bd9` and the quoted string is the durable half of every citation; `docs/reference/schema.md`
+and `docs/design/mockups/README.md` both moved during compilation and their rows were
+re-read after the move. ✅ **Nothing was carried over unverified from the routing messages that
+prompted this**, which is the reason `SD-02p` is in the table (reported as one of ~5 markers, and
+the only false one), the reason `schema.md:3` is recorded as **fixed** rather than open, and the
+reason the mockup banner count reads 0 rather than the 12+ it was handed.
+
+**What a `make check` green on a docs-only commit does and does not attest — measured, because the
+absolute version of this claim is wrong.** The tempting sentence is *"`make check` does not read
+`docs/` at all"*, and it is **false**: `secrets` (`Makefile:562`) runs `$(GITLEAKS) dir . --redact=100
+--no-banner --exit-code 1` over the **whole working tree**, `docs/` included. Everything else does
+ignore it — `fmt-check` globs `*.go` on the Go side and runs prettier with its cwd in `web/`;
+`modverify`, `test` and `vuln` never leave the module. ✅ **Fired in both directions rather than read
+off the `Makefile`**, on `919623a`: a planted `ghp_`-shaped token in `docs/ZZ-probe.md` gives
+*"leaks found: 1"* and `make secrets` **exits 1**; a malformed Markdown file at the same path passes
+`make fmt-check` at **exit 0** (*"All matched files use Prettier code style!"*); the clean tree
+scans **~8,308,092 bytes** and reports no leaks. **So the accurate statement is narrow and
+defensible: a green on a docs-only commit attests exactly "no credential-shaped string in it", and
+nothing whatever about whether the prose is true.** That is still the reason no green is quoted as
+evidence for a single row above — quoting one would be `DEVELOPMENT.md` §11's *"probe the condition,
+not a proxy for it"* violated inside an entry about documents claiming things they cannot back — but
+it is the reason at its real size.
+
+🚩 **And the first probe of that guard was a false negative, which is the part worth carrying.** The
+planted string was the canonical `AKIAIOSFODNN7EXAMPLE` / `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
+pair from AWS's own documentation — **gitleaks allowlists it upstream**, so `make secrets` reported
+*"no leaks found"* and exited **0** on a tree with a textbook AWS key pair sitting in `docs/`.
+⚠️ **Had the probe stopped there it would have "proven" the secrets step ignores `docs/` — the exact
+claim this paragraph was written to correct, arrived at through a working guard.** The `ghp_` re-run
+is what separated *the guard did not look* from *the guard looked and correctly declined*. ℹ️ **This
+is `DEVELOPMENT.md` §11's rule 1 — *"probe the condition, not a proxy for it"* — landing on the
+probe rather than on the guard**, and it generalises: a **negative** result from a guard is only
+evidence when the probe is known to be something that guard would catch. §11's existing instances
+are all guards asserting the wrong thing; this one is a correct guard asserted with the wrong
+stimulus, and it fails just as silently. **Recorded rather than fixed**: nothing in the repo needs
+changing — gitleaks is right to allowlist a documentation example, and `.gitleaks.toml` is
+untouched — what needed writing down is that the next person verifying this step must not reach for
+the most famous fake key on the internet.
+
+### SD-02 — amended dispositions, same day
+
+**Three rows moved within hours of the entry landing, and the mechanism is `§6.1`'s: nothing above
+is renumbered, reworded or deleted, and each amendment names what changed and how it was checked.**
+Verified at **`98916fe`**.
+
+| # | Original | Amended, and what settles it |
+|---|---|---|
+| **SD-02p** | ⏭️ Open — the one **false** row: `make dev` marked **(not yet)** | ✅ **Closed by `8756d02`.** `docs/DEVELOPMENT.md:168` now reads `make dev                   # backend on :8484` with the marker gone. Confirmed on disk at `98916fe` |
+| **SD-02q** | ⏭️ Open — `deploy/compose/dev-stack.yml` and `make seed`, both **true** | ⏭️ **Still open, and now dated in the file itself by `98916fe`**, which is the better outcome: rather than delete two correct markers, it re-derived them (`deploy/` is absent from disk **and** from `git ls-files`; `seed` does not occur in the `Makefile` at all) and wrote the result down with its SHA. 🚩 **That is the shape this entry was asking for and did not think to ask for — a true claim made *checkable* rather than removed.** The same note records `SD-02p`'s marker as false and removed, so the file now carries the distinction between its three markers instead of one blanket licence |
+| **SD-02r** | ⏭️ Open, verdicted **true** | ⚠️ **Amended in place in the table above: FALSE at `a29a07f`.** Cross-referenced here so the two amendments are found together |
+
+✅ **The `§11` ownership gap is closed, by `8756d02`, and it is closed in the direction this entry
+could not choose.** The map gained four rows — `api/specs/`, `docs/CONFIGURATION.md`,
+`docs/DEVELOPMENT.md` and `docs/reference/` — and the last of them answers the open question rather
+than dodging it: *"**has no fixed lead, and that is the answer rather than a gap in this table** — it
+follows whichever change drove it … where a note pins itself to the migration state, it goes to
+whoever lands the next migration, because that is the commit that falsifies it."* ℹ️ **So the
+follow-up's two options were not chosen between; the table grew rows AND one of them states the
+rule.** Every owner assignment in the section above is now readable off `§11` directly instead of
+derived from prose — which retires the 🚩 that section carries, and the 🚩 is left standing as the
+record of why the rows exist.
+
+⏭️ **Still open after all of it: SD-02a–SD-02o, SD-02q, SD-02s–SD-02u — eighteen of the
+twenty-one.** The three that moved are the two the routing message happened to name and the one that
+decayed on its own. **That distribution is worth noticing**: attention went where a message pointed,
+which is exactly the dynamic that put twenty-one sites in one table.
+
+### Two sites the inventory missed entirely, both already fixed
+
+**Same §6.1 mechanism, and folded in here rather than opened as a second amendments block** — one
+entry with two places to look for amendments is the defect this entry is about, wearing a different
+hat. Nothing above is renumbered or reworded; both **take the next free id in the `SD-02` prefix**,
+so nothing collides; both are quoted from the file at **`0656bd9`**, the same pin the table uses, and
+each names the commit that settles it. 🚩 **These are a GAP, not decay, and the difference is the
+reason they are worth their space.** `SD-02r` was *found and verdicted* and the verdict expired.
+These two were never looked at: the compilation walked prose and rendered text, so it saw neither a
+CSS file's comment header nor an HTML `<head>`. **A row that went false is a shelf-life problem and
+re-reading the table finds it; a site that never got a row is a coverage problem and re-reading the
+table cannot find it, because the absence looks exactly like completeness** — which is `SD-02e`'s
+predecessor, *"the roster read as COMPLETE while omitting `indexer_catalog`"*, committed by the
+inventory that quotes it.
+
+| # | Site, at `0656bd9` | The claim, quoted | At `0656bd9` | Authoritative for that fact | State |
+|---|---|---|---|---|---|
+| **SD-02v** | `docs/design/tokens.css:4-6`, the file header | *"Status: design document, pre-alpha. **None of these tokens is implemented.** A `web/` directory exists and carries a SvelteKit shell, but **it does not consume this file.**"* | 🚩 **FALSE, and it had been false since the shell landed.** `git show 0656bd9:web/src/app.css` opens *"LAYER 1 TOKENS — `docs/design/tokens.css`, **ported here under its own canonical names. Every value is verbatim from that file**"*, and that text arrived with `a279517`, *"feat: land the v0.1 core packages and embedded web shell"*. Both halves were wrong: the tokens were implemented, and `web/` did consume the file. ℹ️ **The same false half as `SD-01a`'s notice** — *"none of these … is implemented"* — in a third location, which is what made it findable only by looking rather than by re-reading | `ARCHITECTURE.md` §16 for the milestone; **`web/src/app.css`** for whether anything ports the tokens | ✅ **Fixed by `c2cefa3`**, *"docs(design): the same status claim, in the two places it was not reported"* (`git log --oneline -- docs/design/tokens.css`). The header now routes to §16 and the tree and keeps only the half that does not decay: *"nothing IMPORTS this file … so this file being canonical is a review rule rather than a build dependency"* |
+| **SD-02w** | `docs/design/mockups/prototype.html:6`, the `<title>` | *"`<title>UsArr screen mockups: static, invented data, **nothing implemented**</title>`"* | 🚩 **FALSE**, by the same reading against the same tree — `git ls-tree -r 0656bd9 web/src/routes/` counts **seven** `+page.svelte` routes. ⚠️ **A distinct site from `SD-02r`, which is why it takes its own id rather than being folded into that row**: `SD-02r` is the README *quoting* this string, and applying `SD-02r`'s one-word fix would have left the string itself asserting the same status to every browser tab, bookmark and history entry. 🚩 **It is the one user-visible string a rendered DOM walk cannot see** — `check.mjs` §13's copy corpus counts `document.title` but never reads it — which is exactly why an inventory assembled from prose and rendered text missed it | `ARCHITECTURE.md` §16 and the tree. ℹ️ The string is **generated**, so **`build_prototype.py`**'s f-string owns it and the HTML does not — editing `prototype.html` would have been overwritten by the next build | ✅ **Fixed by `c2cefa3`**, at the f-string, and — unlike every other row in this entry — now **guarded**: see the inversion paragraph above |
+
+**Counts, restated because a stale count inside this entry would be the joke telling itself.** The
+heading's *"twenty-one remaining sites"* is **unchanged, deliberately**: both additions are ✅ Fixed,
+so neither is remaining, and the eighteen-still-open figure above is unaffected. What changes is the
+number of sites **inventoried** — 24 (21 tabled + 3 closed during compilation) becomes **26**. ℹ️
+The heading's *"three that closed while it was being written"* also stands as worded: these two
+closed **after** it was written, which is the distinction that clause draws.

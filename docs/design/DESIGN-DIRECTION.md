@@ -1,12 +1,13 @@
 # UsArr — Design direction
 
-**Status:** design document, pre-alpha. **None of this design is implemented.** A `web/` directory
-now exists and carries a SvelteKit shell — sign-in, a search page and a scaffold `/services` route
-whose own header says to delete it when §17.3 lands — but it implements none of the system below:
-not the tokens, not the density model, not the component set, not the state sets. Treat every value
-here as still ahead of the code. This document and [`tokens.css`](./tokens.css) remain upstream of
-the UI, in the same spirit as [`ARCHITECTURE.md`](../ARCHITECTURE.md) §17 — which owns what the
-screens *are*, and which this document is downstream of.
+**Where implementation status lives — not here, deliberately.** This document says what the design
+*is*. [`ARCHITECTURE.md`](../ARCHITECTURE.md) §16 is authoritative for what ships in which
+milestone, and the tree is authoritative for what exists right now; a status line restated here
+would have nothing keeping it in step with either. So read nothing below as a claim that a value is
+or is not yet built — check §16, or the code, before describing it either way. This document and
+[`tokens.css`](./tokens.css) remain upstream of the UI, in the same spirit as
+[`ARCHITECTURE.md`](../ARCHITECTURE.md) §17 — which owns what the screens *are*, and which this
+document is downstream of.
 
 **Last revised:** 2026-08-16.
 **Constraints this obeys:** [`ARCHITECTURE.md`](../ARCHITECTURE.md) §17 (screens and UI
@@ -216,7 +217,7 @@ These are not new. They are restated because every decision below is downstream 
 | **ARCHITECTURE §17.1** | **No animation on any list, grid or navigation transition** |
 | **ARCHITECTURE §17.1** | **Density is a feature**, and compact is what loads |
 | **ARCHITECTURE §17.1** | **Every screen usable on a phone browser** — responsive layout, not a separate mobile design |
-| **ARCHITECTURE §17.1 / §4.4.1** | **No skeleton shimmer.** The image placeholder is a `dominant_color` block — the cover's own average colour, reserved at the right aspect before the image arrives. Informative, not decorative, and it never pulses. **The title sits below it, not in it** (§9.7) |
+| **ARCHITECTURE §17.1 / §4.4.1** | **No skeleton shimmer.** The image placeholder is a `dominant_color` block — the cover's own average colour, reserved at the right aspect before the image arrives. Informative, not decorative, and it never pulses. **The title sits below it, not in it** (§9.2) |
 | **ARCHITECTURE §2.3 / §5.5 / §17.7** | Degraded ≠ blocked. A small **non-modal** banner. **The catalogue never greys out and never shows a spinner** |
 | **ARCHITECTURE §13** | Client-side prefix filter p50 < 5 ms, p99 < 16 ms — one frame. The UI's own budget, not the server's |
 | **ARCHITECTURE §16** (amended by ADR-0032, then re-sequenced) | **v0.1 connects three services: Sonarr, Radarr and Prowlarr.** The six media types stay in the model and the navigation, but **v0.1 has no catalogue source for music, audiobooks, ebooks or comics** — the read-only catalogue sources (**Navidrome, Audiobookshelf, Kavita**, then Komga) sequence **after** v0.1, one at a time, so the \*Arr library sync proves the replica thesis on real data first. Of the pair, **Kavita is the one that ships and Komga follows it** — ADR-0032 cut Kavita and **ADR-0035 reversed that**, because Kavita is the install the owner actually runs and it covers books, comics and manga in one source. ARCHITECTURE §16 is authoritative for which milestone each lands in. The **command sinks are all out of v0.1**, and they do not all land together: **LazyLibrarian is v0.3** (the first Tier 1 manifest, request sink only), while **Lidarr, Mylar3 and Kapowarr are v1.0**. Requests in v0.1 is the **Prowlarr Search-and-Grab path only — for all six types**, which is what keeps the four sourceless types navigable |
@@ -823,7 +824,7 @@ data. So the policy is not austerity; the case simply does not arise.
 placeholder*: a reserved box carrying the cover's own average colour, present because §4.4.1 makes
 `dominant_color` available before ThumbHash. It is the item's real data rather than a stand-in
 animation — it never pulses, and what it replaces is a grey box, not the title. The title is not in
-it; §9.7 puts the title and year below the tile, on the chrome's own ground.
+it; §9.2 puts the title and year below the tile, on the chrome's own ground.
 
 ### 7.2 The four tiers
 
@@ -916,11 +917,11 @@ more" plus `content-visibility: auto` with `contain-intrinsic-size`**, and virtu
 "~1,000 rows" this document previously floated, because the finding against §4.5's "~200" was that it
 had no measurement behind it, and answering an unmeasured number with a different unmeasured number
 concedes the argument while pretending to fix it. `make bench` gains the measurement (ARCHITECTURE
-§4.5, §13); the threshold is whatever it says. **Part of that harness exists in the frontend thread's
-tree as `pnpm bench:list` — it is what supplies every measured number below — but it is not on `main`
-and does not yet complete a full run (a 25,000-row Chromium out-of-memory). ADR-0029's 2026-08-16
-amendment carries what it has already settled, including a measured density-toggle cost curve and a
-default page size of 200 rows; the virtualization threshold itself is still unset.**
+§4.5, §13); the threshold is whatever it says. **That harness is `pnpm bench:list`, and it is what
+supplies every measured number below — the harness is authoritative for what it measures and where
+it stops, so read it rather than a summary of it here. ADR-0029's 2026-08-16 amendment carries what
+it has already settled, including a measured density-toggle cost curve and a default page size of
+200 rows, and ADR-0029 is authoritative for the virtualization threshold itself.**
 
 🚩 **The list primitive is a grid, not a table, and that is a constraint rather than a preference.**
 `content-visibility: auto` is defined entirely in terms of size, layout and paint containment, and
@@ -1130,22 +1131,22 @@ prevent. **The corollary is that rebuild is the baseline to beat:** forced re-me
 permitted option above, wins only by matching rebuild's *scrollbar-error* figure and not merely its
 cost — otherwise "cheaper" reads as "better" while the correctness half quietly regresses.
 
-⚠️ **Where that rule will be enforced, and the fact that it is not enforced today.** It cannot be
-asserted by `docs/design/check.mjs`. The bug needs node **reuse** across a density change, plus
+⚠️ **Where that rule is enforced, and the one place it cannot be.** It cannot be asserted by
+`docs/design/check.mjs`. The bug needs node **reuse** across a density change, plus
 enough rows for the drift to exceed threshold; the check's target is `prototype.html`, which is
 static HTML with no reuse semantics and no list at that scale, so **an assertion written there could
 not reproduce the condition and would pass for ever** — a rule that can never fire, indistinguishable
 from a rule that passes, which is the exact failure shape this repository caught three times in a
-single day. Enforcement therefore belongs to the frontend thread's **`pnpm bench:list`**, the only
-harness that mounts a large keyed list. **Threshold, once it lands: fail above 2% drift** — the same
+single day. Enforcement therefore belongs to **`pnpm bench:list`**, the only harness that mounts a
+large keyed list. **Threshold: fail above 2% drift** — the same
 budget `contain-intrinsic-size` is already held to rather than a second number invented for this,
 and the two cases sit either side of it with room to spare (0.65–0.76% rebuilt, 14.57% stale).
-**The honest sequencing is fix, then assert, then call it enforced:** `bench:list` currently exits
-non-zero on a full run because of a 25,000-row Chromium out-of-memory, so the OOM is fixed first, the
-assertion lands second, and nobody writes "the bench asserts this" until both are true. If the app
-target later grows large-list mounting, moving the assertion into `check.mjs` is a small change and
-the frontend thread would not object — the split is *where the condition can exist*, not a
-territorial line.
+**The honest sequencing is fix, then assert, then call it enforced:** a harness that cannot complete
+a full run cannot host the assertion either, so whatever stops it is fixed first, the assertion
+lands second, and nobody writes "the bench asserts this" until both are true — `bench:list` itself
+is the record of which of those it has done. If the app target later grows large-list mounting,
+moving the assertion into `check.mjs` is a small change and nobody would object — the split is
+*where the condition can exist*, not a territorial line.
 
 **And the earlier prescription — `contain-intrinsic-size: auto var(--row-h)` — was wrong three ways.**
 Kept here because each one is a way to arrive at a wrong placeholder again:
@@ -2371,27 +2372,30 @@ both. One bad hand-picked swatch would have been a nit; having no rule was the f
 an average taken over arbitrary cover art, mid-luminance fills are common and *both* black and white
 land near 3.5:1 on them.
 
-**§9.7 resolved that by moving the text rather than by constraining the colour**, and the rule below
+**§9.2 resolved that by moving the text rather than by constraining the colour**, and the rule below
 survives it as a general one. The reason the move beats the constraint is worth keeping: a solver
 constrains against a **single averaged colour**, and real cover art is not one colour — a white
 title over the light half of a Blue Note sleeve fails whatever the average says. The poster title
 and year are now ordinary `--fg` / `--fg-muted` on a known ground, which the contrast sweep above
 already covers.
 
-> **Pick whichever of the two theme text tokens scores higher against the computed
-> `dominant_color`. If the winner is still below 4.5:1, adjust `dominant_color`'s lightness — away
-> from the text colour, in 2% steps in OKLCh, preserving hue and chroma — until it clears. The fill
-> is decoration; the title is content, and content wins.**
+> **Where a surface sets text on a computed fill, pick whichever of the two theme text tokens
+> scores higher against the computed `dominant_color`. If the winner is still below 4.5:1, adjust
+> `dominant_color`'s lightness — away from the text colour, in 2% steps in OKLCh, preserving hue and
+> chroma — until it clears. The fill is decoration; the title is content, and content wins.**
 
 Two supporting rules, because otherwise the ratio is not computable from what ships. **Neither the
 title nor the year carries `opacity`** — compositing changes the effective ratio (by ~0.45 on the
 measured pair) through a mechanism no contrast check sees, so the year gets a real colour token.
 And **12 px semibold is normal text under WCAG, not large** (large is ≥18.66 px bold or ≥24 px), so
 4.5:1 applies to both lines. **Asserted in CI over any computed-fill / foreground pair that ships in
-a fixture** — and as of §9.7 **no such pair ships**, so the assertion currently has nothing to run
-over and must not be reported as passing. It binds the moment a surface sets text on a computed
+a fixture**, and §13's checklist carries the entry. **The assertion is retained deliberately, and
+the reason is the shape of the rule above:** a conditional rule needs a *standing* guard, because a
+guard added by whoever writes the first call site is a guard that call site had to know about
+first — which is the same as having no rule. It binds the moment any surface sets text on a computed
 fill, and it binds in the image pipeline where the colour is produced regardless (ARCHITECTURE
-§4.4.1).
+§4.4.1). **Which surfaces do that is not this section's to say** — §9.2's poster-grid entry owns the
+call-site question, and the tree owns the answer. §11 fixes the rule; it does not keep an inventory.
 
 **Two ARIA requirements the grid-row primitive creates, both stated as requirements rather than as
 review items**, because a hand-built grid supplies nothing a native `<table>` supplies for free
@@ -2861,7 +2865,7 @@ widened, and nothing else. The `[review]` rules below are still human judgement 
 - `[review]` Contrast re-measured in both themes when any token changes.
 - `[grep]` **Every `dominant_color` / foreground pair in a fixture clears 4.5:1** (§11). This is the
   one colour that is data rather than a token, so it cannot be checked once. ⚠️ **No such pair ships
-  today** — §9.7 moved the poster title off the fill and the constraint machinery was deleted with
+  today** — §9.2 moved the poster title off the fill and the constraint machinery was deleted with
   it — so this line is armed and idle. Do not record it as passing; it has nothing to check until a
   surface sets text on a computed fill again.
 - `[review]` No live region missing on a determinate progress readout or on a control that changes a

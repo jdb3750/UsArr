@@ -78,12 +78,19 @@ body = '\n'.join(rewrite_links(block((SRC / f).read_text(), 'PAGE:' + r).strip()
 # page whose default view is the full stack, which §16 sequences AFTER v0.1.
 # The milestone belongs to the install switcher, which can state it truthfully
 # for whichever install is selected; a fixed title cannot.
+#
+# It then read "UsArr screen mockups: static, invented data, nothing
+# implemented" until the screens shipped and "nothing implemented" went false —
+# the same defect as the top-bar notice, in the one string a rendered DOM walk
+# cannot see. What survives is the half that stays true: the data is invented.
+# Implementation status is §16's and the tree's, not a browser tab's, and
+# check.mjs asserts that document.title claims none (REVIEW-LOG SD-01a).
 out = f'''<!doctype html>
 <html lang="en" data-density="compact">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>UsArr screen mockups: static, invented data, nothing implemented</title>
+<title>UsArr screen mockups: static, invented data</title>
 <style>
 {css}
 </style>
