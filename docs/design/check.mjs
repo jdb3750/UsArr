@@ -1849,10 +1849,23 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
    * already been through the rule, which is the layering it always implied.
    * ------------------------------------------------------------------- */
   const S17_EMDASH_ALLOWED = new Map([
-    /* All four predate this sweep and are the construction §13's own worked
-     * example endorses. DESIGN-DIRECTION §13 states the ban and then writes
-     * "Sonarr unreachable — connection refused at 10.0.0.4:8989" as the copy to
-     * imitate: a short head, an em dash, the observed detail. The fifteen-word
+    /* All four predate this sweep and are the head-and-detail construction
+     * DESIGN-DIRECTION prescribes — §1.4's "UI copy states facts about system
+     * state", whose worked example this file used to cite as §13 endorsing the
+     * EM DASH: it read "Sonarr unreachable — connection refused at
+     * 10.0.0.4:8989" and was the copy to imitate, two sections from §13's ban
+     * on that punctuation in the same string.
+     *
+     * ⚠️ RULED 2026-08-17, and the four entries below are unchanged by it. The
+     * construction stays prescribed; its beat is now a COLON for a statement
+     * and its reason ("Sonarr unreachable: connection refused at …"), or a full
+     * stop and two sentences for a statement and an instruction. §1.4 and §13's
+     * Copy block both say so at the endorsement, so an author who never reaches
+     * the ban still lands on the right glyph. That makes these four §17's
+     * EXISTING wording rather than a licence for new copy — they are carried,
+     * not blessed, because §17's shipping copy is the owner's to word and a
+     * checker does not edit the specification it checks. A fifth is a finding.
+     * The fifteen-word
      * proxy cannot see that construction, so each instance is recorded here
      * rather than generalised into a grammar rule this file would then have to
      * be right about — an enumerated four fails on the fifth and asks a human,
@@ -2119,8 +2132,9 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
   } else {
     ok(`§13 copy §17: ${s17Strings} shipping-copy string(s) in ARCHITECTURE §17 clean of banned words, "!" and ` +
       `em dashes at ANY length (the fifteen-word floor is not applied to specified UI copy; ${s17Exempted} ` +
-      `recorded exception(s), all of them the short-head-then-detail construction ` +
-      `§13's own worked example endorses; §17 cannot exempt itself here, which is the point)`);
+      `recorded exception(s), all of them §17's existing wording of the head-and-detail construction ` +
+      `§1.4 prescribes — whose beat is a colon since 2026-08-17, so these are carried, not blessed; ` +
+      `§17 cannot exempt itself here, which is the point)`);
   }
   /* Each non-layout source is floored on its own. A source that stops being
    * collected -- an attribute renamed, a selector narrowed, a <title> dropped

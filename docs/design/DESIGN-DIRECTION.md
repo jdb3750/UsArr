@@ -143,12 +143,23 @@ lint checklist in §13.
   grounds that a sentence long enough to need one is already too long for a button, a tooltip, a
   toast or an empty state.
 
-**UI copy states facts about system state.** "Sonarr unreachable — connection refused at
+**UI copy states facts about system state.** "Sonarr unreachable: connection refused at
 10.0.0.4:8989" beats "We couldn't connect. Let's get you back on track!" No exclamation marks, no
 first-person plural: the application is a tool, not a company. Error copy names **the failing
 component, the observed symptom, and the next action** — which is CLAUDE.md principle 3 expressed
 as microcopy, and conveniently the strongest anti-slop signal available, because generated copy is
 systematically vague about failure.
+
+**The head-and-detail shape is the copy to imitate; the beat that joins its two halves is a colon,
+not the em dash the bullet above bans.** A statement and its **reason** take the colon — *"Sonarr
+unreachable: connection refused at 10.0.0.4:8989"*. A statement and an **instruction** take a full
+stop and two sentences — *"Sonarr unreachable. Check the host and port on Services."* — because an
+instruction is a second thing to do, not a subordinate clause. ⚠️ **This example carried an em dash
+until 2026-08-17**, and it is the sentence `check.mjs` cited as the construction §13 endorsed while
+§13 banned its punctuation. That is why the punctuation is named here rather than left to be
+inferred from the ban: an author who reads the endorsement and never reaches §13's Copy block must
+still land on the right glyph. (The mannerism the Copy bullet above rejects is the
+bolded-label-plus-colon *bullet*, a document tic; a colon inside a sentence is not that.)
 
 ### 1.5 The tell that most directly threatens UsArr: marketing grammar inside an application
 
@@ -2894,9 +2905,14 @@ for a button, a tooltip, a toast or an empty state"*, which is a claim about the
 about the count. The rendered walk keeps the floor exactly as it was.
 
 **Six §17 strings are recorded individually in `check.mjs`, each with a reason and what retires it.**
-Four are the head-and-detail error form this section prescribes two paragraphs above
-(`Grab failed — HTTP 502`), which no word count can distinguish from prose. ⚠️ **Two are open copy
-questions rather than blessings** — §17.5's `— [Show it]`, which may be notation for two adjacent
+Four are the head-and-detail error form **§1.4** prescribes — not, as this paragraph read until
+2026-08-17, "two paragraphs above", which pointed at the fifteen-word floor and prescribed nothing —
+(`Grab failed — HTTP 502`), which no word count can distinguish from prose. ⚠️ **The form is still
+prescribed; its punctuation no longer is.** §1.4 and the Copy block below now write that beat as a
+colon, so these four are §17's **existing wording** rather than a licence for new copy: they predate
+the ruling, §17's shipping copy is the owner's to word, and a checker does not edit the
+specification it checks. ⚠️ **Two are open copy questions rather than blessings** — §17.5's
+`— [Show it]`, which may be notation for two adjacent
 elements rather than one string, and §17.8's twenty-two-word `add sources — never reshape it`, which
 is the likelier real finding. They are carried visibly because §17 shipping copy is the owner's to
 word and a checker does not edit the specification it checks. A seventh fails and asks a human, which
@@ -3025,8 +3041,10 @@ widened, and nothing else. The `[review]` rules below are still human judgement 
   Measured: H2 → H4 on the Libraries detail screen, with `Identity` appearing as both.
 - `[review]` **No raw schema identifier in running copy**, outside an explicitly-labelled
   Diagnostics panel where identifiers are the content: `managed_by user` → "user-managed",
-  `sort_title` → "sort title", `no work identity` → "matched by title", `breaker open` → "paused —
-  7 failed attempts, retrying 14:19".
+  `sort_title` → "sort title", `no work identity` → "matched by title", `breaker open` → "paused:
+  7 failed attempts, retrying 14:19". The replacement obeys the Copy block below like any other UI
+  string, so its beat is a colon; it carried an em dash until 2026-08-17, which is a seven-word
+  violation this checklist was prescribing three bullets above the rule that bans it.
 - `[review]` **One label per action across the whole product.** Shipped: four labels for "test",
   three for "retry", two for "add a service", four for a destructive action, and `Run full sync now`
   beside `Run full sync`. A verb that reads as a task description (`Confirm your password`) is a
@@ -3055,7 +3073,12 @@ widened, and nothing else. The `[review]` rules below are still human judgement 
   [`ARCHITECTURE.md`](../ARCHITECTURE.md) §17.7 fixes the wording**: its degraded-instance banner
   is quoted verbatim as *"Radarr 4K is unreachable — showing cached data from 14:02"*, which is
   eight words. §17 wins over this checklist, so the rule carries the exception rather than the
-  banner carrying a rewrite.
+  banner carrying a rewrite. **What the ban forbids is the punctuation, never the construction:**
+  §1.4's head-and-detail form is prescribed, and in a UI string its beat is a **colon** for a
+  statement and its reason (*"Grab failed: HTTP 502"*), or a full stop and two sentences for a
+  statement and an instruction (*"Grab failed. Check the indexer on Services."*). Stated here as
+  well as at §1.4 because a section that endorses a construction and bans its punctuation produces
+  correct-looking violations forever, and this one did.
 - `[grep]` No `!` in UI strings.
 - `[grep]` **The UI locale is en-GB** — `catalogue`, `behaviour`, `colour`, `organisation` —
   **with one exception: a string quoted verbatim from an \*Arr keeps the \*Arr's spelling**
