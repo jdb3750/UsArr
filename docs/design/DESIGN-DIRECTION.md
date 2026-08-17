@@ -1704,6 +1704,24 @@ treatment by media type.** Same slots, same positions, different values.
     mockups drawing data the product cannot emit — is recorded separately in `docs/REVIEW-LOG.md` as
     **SU-05**, because until the sample data is corrected it will keep producing measurements that
     are right about the mockup and wrong about the product.
+  - **An absent value gets no unit box, and the reserve is the only thing this rule governs.** A
+    `3ch` box held open around an em dash reserves width for a unit that is not there, so the
+    absent-value branch emits `—` and no `.unit` span. ⚠️ **Whether the em dash is reachable is a
+    property of the wire contract, not of the markup, and the two cases look identical in the
+    code.** On the release tables `size_bytes` is a plain `int64` with no `omitempty`, so the server
+    always sends it and the branch is **defensive and unreachable**. On Recent grabs the field is
+    `*int64` with `omitempty` and `toNotSentGrabResponse` **never assigns it at all**, so a not-sent
+    row **structurally cannot carry a size** — the branch is guaranteed reachable, and that is the
+    reason the Recent-grabs Size column was worth the split and the release table's was not. Keep
+    the distinction in writing wherever both appear, because a defensive arm nobody can reach and a
+    guaranteed one are different objects wearing the same three lines.
+  - **The rule constrains the unit box. The surrounding table's own conventions govern everything
+    else about an absent value.** Recent grabs wraps its em dash in `<span class="muted">` because
+    every other absent value in that table already mutes — `when`, `indexer`, `protocol` — and that
+    is correct: this rule's requirement is *no `.unit` box on an absent value*, and the wrapper does
+    not violate it. **Stated explicitly so the question stops recurring**: every new table that
+    meets this rule otherwise re-litigates its own local conventions against it, and a design rule
+    that reaches past what it is about turns every local convention into a conflict.
   - 🚩 **The alternative was the unit in the column header with bare numbers in the cells, and it is
     rejected: it only works where every row of the column shares one unit, which rules out size.**
     A `Size` column holding `68.4 GiB` beside `820 MiB` beside `4.2 KiB` has no unit to put in its
