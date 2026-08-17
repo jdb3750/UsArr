@@ -3907,3 +3907,123 @@ already in a transaction), **benign** (can disagree; nothing observable depends 
 store and guarded by a test watched failing. **Nothing else in the tree has it.** The negative result
 is the deliverable for the other thirteen paths, and each one's reason is recorded above so the next
 sweep argues with the reasoning rather than repeating the search.
+
+---
+
+# INST-01 — a second indexer service is configurable, is never searched, and nothing says so
+
+**Origin: the Requests thread, building the indexer picker.** It reported a narrow, correct thing —
+*the indexer id in the catalogue is the indexer service's own id, so two configured indexer services
+can each carry an id 3, and a picker keyed on that id alone reconciles two different rows onto one.*
+It fixed the render key (`` `${indexer.instanceId}:${indexer.indexerId}` `` at
+`web/src/routes/requests/+page.svelte:968`) and flagged the ambiguity upward.
+
+**The investigation found something wider, and the wider thing is the finding.** Chasing the
+collision into the search path turned up a configuration that UsArr *accepts today* and then
+*silently under-serves*. **Open. Not applied, not deferred — owners are named at the bottom.**
+
+## INST-01.1 — the framing, because it is the part that matters
+
+🚩 **The id collision is a consequence, not the defect.** It is one symptom of the real shape:
+
+> **Instance selection is implicit on a screen that presents a multi-instance catalogue, and it
+> degrades silently.**
+
+The picker enumerates every indexer of every configured indexer service and says so out loud —
+`"%d indexers across %s"` at `internal/httpapi/indexers.go:310` renders *"6 indexers across 2 indexer
+services"*. The search that the same screen launches asks **one** of those two services. Nothing in
+the request, the response, or the screen names which. **Principle 3 forbids exactly this**: *"every
+feature degrades honestly when a service is absent — it says what is missing and why, rather than
+rendering an empty screen that looks broken."* Here the degradation is worse than an empty screen,
+because a screen that renders half an answer under a heading that promises the whole one does not
+look broken at all.
+
+📌 **This is a live gap in a supported configuration, not future work.** Nothing in the product
+forbids the second service, nothing warns about it, and nothing in `docs/ARCHITECTURE.md` §16 makes
+one indexer service a documented constraint. It is reachable by a user following the Services screen
+as designed. Filing it as "multi-Prowlarr, later" would be reclassifying a defect as a feature.
+
+## INST-01.2 — what was measured
+
+Executed, not inferred. Two fake Prowlarrs, both registered through the real API, one search run
+through the real handler.
+
+| Claim | How it was established | Result |
+|---|---|---|
+| Two indexer services can be configured | Two `POST /api/v1/services` calls | **Both `201`** |
+| Nothing but the name stands in the way | `service_instance` DDL, `internal/db/migrations/00001_initial.sql:136` | **`name TEXT NOT NULL UNIQUE` is the table's ONLY uniqueness.** No constraint on `kind`, none on `role`, none on `base_url` |
+| Only one service is searched | Per-instance request counters on the two fakes, one UsArr search | **`P1 searchCounts=map[1:1 2:1]`, `P2 searchCounts=map[]`** — every indexer of the first service was asked once, the second service received **zero requests** |
+| The choice is `candidates[0]` | `resolveIndexerInstance`, `internal/httpapi/search.go:364-416` | Filters `role == "indexer" && Enabled`, then returns `candidates[0]` from a list `ListServiceInstances` orders **by priority then name**. The comment calls it *"the user's own stated preference rather than an arbitrary pick"* — which is true of the **ordering** and says nothing about the **silence** |
+| Grab is unaffected | `handleGrab` | Resolves the searcher from `cand.ServiceInstanceID`, so a grab always goes back to the service that produced the candidate. **No cross-instance mis-grab exists.** This is the one part of the path that carries the instance end to end |
+
+## INST-01.3 — the exact user-visible failure
+
+In order, on a two-Prowlarr install:
+
+1. The picker's summary reads **"6 indexers across 2 indexer services"** — the user is told, by
+   UsArr, that both services are in play.
+2. The grid lists all six in **one flat list with no instance label**. Nothing on a row says which
+   service it came from.
+3. Selection is keyed on the **indexer id alone** — `scope.isSelected(indexer.indexerId)` and
+   `toggleIndexer(indexer.indexerId)` at `+page.svelte:983-985`. Where two services share an indexer
+   id, **ticking one row ticks its twin.** (The *render* key is already instance-scoped; the
+   *selection* key is not, and they are different keys.)
+4. Directly under that grid the copy reads **"Selecting none searches all of them."** It does not.
+   It searches all of *one service's*.
+5. The search returns the first service's results under the degraded report — `internal/httpapi/
+   search.go:358`, *"%d of %d indexers answered — %d failed, %d skipped; these results are
+   incomplete"*, e.g. **"2 of 3 indexers answered … these results are incomplete."** Every number in
+   that sentence is counted **within the one service that was searched**. It therefore reads as a
+   **partly-degraded search**, when what actually happened is that **an entire service was never
+   asked**. The user is shown the wrong problem, with a count that invites them to go fix one
+   indexer.
+6. Where the ids **differ** between instances, the planner is honest — the un-matched selection
+   surfaces as `OutcomeNotFound`. Where they **collide**, the user ticks one tracker and gets the
+   other instance's.
+
+🚩 **Step 5 is the worst step, and it is worse than an error would be.** An empty screen or a "which
+service?" prompt is a question the user can answer. A confident, incomplete result under a report
+that mis-describes its own incompleteness is a wrong answer that looks like a right one.
+
+## INST-01.4 — the seam is already built, and nothing uses it
+
+⚠️ **`?instance=` already exists, already works, and has no production caller.**
+`resolveIndexerInstance` handles it fully: it parses the id, reads the instance in the caller's
+scope, **rejects a non-indexer role** with a message naming the actual role, and **rejects a
+disabled instance** with `409 CodeServiceDisabled` and the action *"Enable this service"* — with a
+comment explaining that falling back to the auto-picked instance would *"silently answer a different
+question from the one asked, which is worse than an error because the results look right."* That
+comment is a precise description of INST-01, written by the author of the very branch that avoids
+it. It is tested in `internal/httpapi/search_resolve_test.go`.
+
+`SearchScope.instanceId` exists on the client too, at `web/src/lib/api.ts:1258`, and is serialised
+into `params.set('instance', …)` at line 1275-1276. **No production caller sets it.** The label is
+already there as well: the catalogue row carries `instance_name`
+(`internal/httpapi/indexers.go:97`) and the client already parses it into `instanceName`
+(`web/src/lib/api.ts:1551`) — it is simply never rendered.
+
+So this is not a missing capability. It is a wired socket with nothing plugged into it — the same
+shape as **SNAP-02** (`db.ReadTx` written for exactly its purpose and reached only from a test), and
+the same lesson applies: *an unused helper is not evidence that nothing needed it; it is evidence
+that nobody looked.*
+
+## INST-01.5 — the three candidate fixes, recorded as options rather than chosen
+
+**Deliberately not decided here.** Two threads own the two halves and picking one for them is how a
+fix lands twice or not at all.
+
+| Option | What it does | Owner |
+|---|---|---|
+| **(a)** | The frontend labels each picker row with `instanceName`, keys **selection** on `(instanceId, indexerId)` as the render key already is, and passes `instanceId` on the search. Uses the seam in §INST-01.4 that already exists — `instance_name` is already on the wire and already parsed. **Needs no Go, and no new API field.** | **The Requests thread** |
+| **(b)** | The handler states in the search report when it **auto-picked from more than one candidate**, and names the instance it chose and the ones it did not — so any UI, present or future, can say which service was searched and which was not. Closes the honesty half at the source, for every client including ones that never send `?instance=`. | **This thread** |
+| **(c)** | Both. (a) and (b) are not alternatives — (a) makes the choice explicit, (b) makes an *implicit* choice audible. A client that never adopts (a) still needs (b); a report that says "auto-picked" still leaves the user no way to pick. | Both threads |
+
+📌 **(a) alone closes the user-visible half without a line of Go**, which is the fact worth carrying
+out of this entry: the expensive-looking finding has a cheap first move, and taking it does not
+foreclose (b).
+
+**Not proposed, and named so it is not re-proposed:** fanning one search out across every configured
+indexer service. That is a real feature with a real cost — merged reports, per-instance partial
+failure, duplicate releases across two Prowlarrs pointed at the same tracker — and §16 funds none of
+it. **This finding does not ask for multi-instance search. It asks for the single-instance search
+UsArr already does to stop presenting itself as something else.**
