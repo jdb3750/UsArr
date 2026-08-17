@@ -3,6 +3,10 @@
 Two rounds so far. **Round 1** reviewed the design documents; **Round 2** reviewed the first code
 drop. Round 2 is below; Round 1 begins at [§R1](#round-1--the-design-documents).
 
+**Before you append an entry, read `docs/DEVELOPMENT.md` §11 on entry ids.** New entries carry the
+prefix of the thread that wrote them; `M5-` is retired for new ones and the existing `M5-` ids stand
+as dated records. §11 owns the rule and this line does not restate it.
+
 ---
 
 # Round 2 — the first code drop
@@ -8239,3 +8243,419 @@ actually executes, every guard above lives, and the schema snapshot in
 `internal/db/testdata/schema.sql` is compared. What the green still does **not** attest is anything
 in §M5.59: no step of it has seen a Kavita payload, and `gitleaks`, `gofumpt`, `golangci-lint`,
 `govulncheck` and `pnpm audit` read no Markdown in `docs/` at all.
+
+---
+
+<a id="adrc-01"></a>
+
+# ADRC-01 — the ADR amendment convention, settled from the file's own history rather than asserted, and the README lag M5-34 measured and routed
+
+Two tasks, one thread. [M5-34](#m5-34) §M5.47 raised ADR-0035 §1's stale rider and refused to fix it
+*"pending a convention"*; §M5.46 measured the README's lag and routed it here under §11's area map
+(*"implementation-status wording in `CLAUDE.md`, `README.md` and `ARCHITECTURE.md` §16"*). Both are
+discharged here.
+
+ℹ️ **On the prefix, because it is new.** This entry was drafted as `M5-36` and renumbered before
+commit: the generic `M5-` prefix is retired after **three numbering collisions on this file in one
+evening** (`952a472`, `d64b8fc` and `e7c3b0a`, all recorded in `DEVELOPMENT.md` §11), while
+per-thread prefixes have never collided. `ADRC-` was checked as unused **in `docs/REVIEW-LOG.md`, in
+every file under `docs/`, and on all eighteen remote heads** before it was taken. **No existing `M5-`
+id is renumbered by this entry** — they are dated records, and §6.1's invariant holds. Cross-references
+to `M5-32`, `M5-34`, `M5.44`, `M5.46` and `M5.47` below point at other threads' entries and are left
+exactly as they are.
+
+🚩 **The renumber was not precautionary — the collision it avoids is real and is in this file.** The
+design thread pushed [`M5-36`](#m5-36) at `10e7b00` while this entry sat uncommitted on `f716210`
+under that same drafted id. Both threads read the highest id (`M5-35`) correctly, and both were
+right when they looked — §11's *"a sequential id read out of a file is a race, not a lookup"*, for
+the **fourth** time in one evening. The merge that brought `M5-36` in was the usual append-vs-append
+conflict at EOF, **resolved by keeping both entries whole, in landing order, with nothing renumbered
+on either side.** Under the retired scheme this would have been a fourth collision to unpick; under
+per-thread prefixes there was nothing to unpick, which is the argument for the change.
+
+## ADRC.1 The convention was already in the file, and the file's history contradicts the obvious reading of it
+
+The proposal put to this thread was *"ADR bodies are immutable; supersession is announced in the
+Status line and the index row"*, on the precedent of ADR-0036's flag. **That reading is right about
+the rule and wrong about the evidence for it**, and the difference matters, so the history was read
+rather than the current text alone.
+
+**What was checked, and with what.** `git log -p -- docs/DECISIONS.md`, `git log -S` for the offending
+sentence, and a `grep` for every amendment marker in the file (`Amendment`, `AMENDED`, `STRUCK`,
+`Correction`).
+
+| Question | Measured answer |
+|---|---|
+| Does ADR-0036 carry a Status-line + index-row flag from ADR-0041? | **Yes.** `d64b8fc` — and its `docs/DECISIONS.md` diff **removes exactly two lines**, the index row and the Status line's tail. ADR-0036's body is untouched, with a `> ⚠️ **AMENDED …**` blockquote *added* under the Status line naming the two superseded consequences |
+| Is that the only shape in the file? | **No.** ADR-0002, ADR-0025, ADR-0029 and ADR-0039 all carry a dated `### ⚠️ Amendment, <date>` **section** under the Status line; ADR-0029 additionally flags the two falsified paragraphs **at their own sites**; ADR-0039 `~~`-strikes a ground and writes *"struck rather than deleted because the error is instructive"* |
+| Has any ADR body been rewritten in place? | **Yes — once, and it is the origin of this very finding.** `162dca5` rewrote ADR-0035's **title**, its §1 **heading** and its §1 **prose**, and *introduced* the rider *"Not in v0.1, which draws no comics or books library at all"* |
+| Does the file already state the convention anywhere? | **In an ADR body, as a justification, not as process**: ADR-0036's rejected alternatives read *"The file's convention is a new entry plus a flag on the amended ADR's Status line, which is what ADR-0035 itself did to ADR-0032."* Nothing in the preamble, `CLAUDE.md` or `DEVELOPMENT.md` §11 said it about ADRs |
+
+**The `162dca5` finding is what settles it, and it argues for the annotating rule rather than against
+it.** The one time an ADR body was rewritten in place, the rewrite manufactured a claim that (a) no
+ADR had ever decided, (b) was falsified within a day by ADR-0041, and (c) was untraceable to any
+decision when the next sweep found it — which is exactly why M5-34 could flag it but not fix it.
+🔍 **Inference, marked as such:** had `162dca5` annotated instead, ADR-0041's amendment would have
+landed on the annotation and §1 would never have needed a second pass.
+
+**Settled, and recorded in [`DECISIONS.md`](./DECISIONS.md)'s preamble** under *How an ADR is amended
+when the world moves under it* — chosen over `CLAUDE.md` and `DEVELOPMENT.md` §11 because it is the
+file an ADR author already has open, and **stated in one place only**: §11's existing
+`REVIEW-LOG.md` rule is *cited* from it, not restated. The rule: bodies are **annotated, never
+rewritten**; three marks always owed (index row, `Status:` line, dated block under it) plus a fourth
+inline flag where a reader could take the sentence as live; **the decision lives in the superseding
+ADR, the note only points**. The preamble also draws the distinction that was doing the real work
+unstated — **dated records are annotated, design documents are corrected in place** — which is the
+same line `M5.44` drew when it edited `ARCHITECTURE.md` §7.1a's prose but left the dated status cells
+beneath it alone.
+
+## ADRC.2 ADR-0035, and why the sentence itself was not edited
+
+Applying the convention to itself: **§1's rider was not rewritten and not deleted.** Three marks
+added, one site struck.
+
+* **Index row** — gains `⚠️ amended 2026-08-17 by ADR-0041`, naming both falsified sites.
+* **`Status:` line** — gains the same flag.
+* **A `> ⚠️ **AMENDED 2026-08-17**` blockquote under it**, in ADR-0036's shape, naming *which* claims
+  fall: the **2026-08-16 amendment's** framing (*"v0.1 has no catalogue sources at all"*, and its
+  clause 1 instruction to read every "v0.1" below as *"the milestone Kavita lands in"* — Kavita's
+  milestone now **is** v0.1) and **§1's rider**. It states what survives: §1's identity finding,
+  §2/§2a's probe, §3's confirmation of ADR-0030.
+* **§1's rider itself** — `~~`-struck with a dated `🚩 STRUCK 2026-08-17 by ADR-0041` note, per
+  ADR-0039's precedent, because a reader arriving at the `#adr-0035` anchor lands mid-document.
+
+⚠️ **The 2026-08-16 amendment block is deliberately left standing and unedited**, and now says so.
+It is a dated record of the call taken that day; rewriting it would destroy the evidence that the
+milestone moved twice, which is the fact ADR-0041's reasoning turns on.
+
+**One thing the task's framing got wrong and is corrected here:** the defect was *not* only that
+ADR-0041's list of amended sites was incomplete. ADR-0041 amends **ADR-0036**, and ADR-0035's staleness
+is inherited through ADR-0035's own 2026-08-16 amendment — so the mark was owed on ADR-0035
+regardless of ADR-0041's list, and the convention is what makes that obligation legible.
+
+## ADRC.3 The README: seven lines measured, four more found, and one false claim about the file itself
+
+**`README.md`'s tables are NOT generated.** Checked: no `scripts/`, no `tools/`, no `Makefile` target,
+and `grep -rl README` across `*.go`, `*.mjs`, `*.js`, `*.ts`, `Makefile` and `*.y*ml` (excluding
+`node_modules`) returns **nothing**. The line *"This table is generated from `ARCHITECTURE.md` §16"*
+was itself a false status claim — and a load-bearing one, because `M5-32` and `M5.46` both cited it
+as the **reason** the README could be left to move on its own (*"generated from §16, so they move
+after §16 does"*). It is now *"maintained by hand against §16 — nothing in the repo generates it, so
+it lags §16 and has."*
+
+**All seven of M5-34's measured lines were stale; none was a false positive.** Line numbers held —
+`git diff f722054 f716210 -- README.md` is empty — but each was relocated by content, per §11.
+
+| Was | Now |
+|---|---|
+| *"**v0.1 aggregates Sonarr, Radarr and Prowlarr** — the \*Arr library sync plus…"* | *"**v0.1 aggregates Kavita and Prowlarr** — one catalogue source in front of the sync core, plus…"* |
+| *"Navidrome and Kavita (whichever the delta probe favours), then Audiobookshelf, then Komga"* | *"Navidrome, then Audiobookshelf, then Komga"*, plus *"**Sonarr and Radarr are re-sequenced out of v0.1 rather than cut**"* |
+| *"**\*Arr library sync — Sonarr and Radarr** … \| 📋 Planned — v0.1"* | Split in two: a **sync core / Kavita** row at v0.1, and an **\*Arr** row at *"📋 Planned — §16 has not yet named the milestone"* |
+| *"Navidrome, Audiobookshelf, Kavita, then Komga … Order set by a delta-watermark probe"* | *"Navidrome, then Audiobookshelf, then Komga … ✅ the probe **ran 2026-08-17 and passed**, which is what moved Kavita into v0.1 ahead of them"* |
+| *"full import + `/history/since` delta (Sonarr/Radarr) … page-walk delta … specified now and built with the first of them"* | *"Sync channels **1, 3b and 4** … channel 3b … v0.1 work and **built** for Kavita … `/history/since` (channel 3) does not apply to Kavita"* |
+| *"**\"1080p ✓ / 4K ✗\"** — one poster across two Radarr instances \| 📋 Planned — v0.1"* | same claim + *"⚠️ **unexercised in v0.1**, because it needs two Radarrs and Radarr re-sequenced out"*; status split into the link (v0.1) and the demonstration |
+| *"Navidrome and Kavita first (order set by the delta-watermark probe), then Audiobookshelf, then Komga"* | *"**Navidrome (#1), then Audiobookshelf (#2), then Komga (#3)**. Kavita left this sequence for v0.1 and is not a fourth entry"* |
+
+⚠️ **M5-34's list of seven was short by four**, which is worth recording because the next sweep should
+not treat it as complete:
+
+1. *"**the v0.1 catalogue itself is film and TV**, because the library servers arrive after v0.1"* —
+   flatly contradicted by §16.1's own blockquote (*"the catalogue is books and comics/manga"*). Now says so.
+2. *"migration 0001 **or never**"* — §16's enumeration reads *"migration 0001 **or a backfill over the
+   largest tables**"*, and the three subtype tables Kavita writes are owed in a **new** migration
+   (ADR-0040 + ADR-0041). Corrected to *"or a backfill"*, with the ADR-0040 rule named.
+3. The **minimal write path** row asserted `v0.1` flatly; §16 says its \*Arr targets left with ADR-0041
+   and *"whether it re-sequences with them or stays for Prowlarr's grab path alone"* is open. Now
+   *"📋 Planned — v0.1, scope open"*, pointing at §16 rather than resolving it — that call is §16's.
+4. The *"generated from §16"* claim above.
+
+**The standing rule was applied where a fresher claim would just go stale again.** The \*Arr row
+says *"§16 has not yet named the milestone"* rather than inventing one — checked: §16 nowhere assigns
+Sonarr or Radarr a milestone, and §16.1's table has three numbered slots, none of them theirs. The
+write-path row points at §16's open question instead of answering it.
+
+## ADRC.4 Raised, not fixed
+
+- ✅ **`ARCHITECTURE.md` §17's install-switcher table — raised here, and FIXED independently by the
+  design thread while this entry was being written.** It was found stale during ADRC.3's sweep and
+  deliberately not touched (§17 and `docs/design/` are the design thread's): its **v0.1** row read
+  *"Sonarr, Radarr, Prowlarr | Movies and TV catalogued…"*, falsified by ADR-0041 on both halves.
+  [`M5-36`](#m5-36) landed at `10e7b00` and merged into this branch before its gate. **Its fix is
+  better than the one this thread would have written**, and worth recording as the convention rather
+  than the instance: it replaced the membership list with ***"§16 owns this list; read it there"***
+  instead of restating a fresher copy — the same standing rule ADRC.3 applied to the README's \*Arr
+  and write-path rows, arrived at independently on the same day. **The lesson generalises: a second
+  copy of §16's membership goes stale wherever it is kept, so the fix is a pointer, not a refresh.**
+- **`CLAUDE.md` carries the same lag and was left alone** — its roadmap line reads *"v0.1 — the \*Arr
+  library sync (Sonarr, Radarr) + search … **No catalogue source ships in v0.1**"*. It is in §11's
+  area map beside `README.md`, so it is arguably this thread's, but `CLAUDE.md` is agent-facing
+  project instruction rather than status prose and a coordinator may want it batched with
+  `docs/PROJECT-INSTRUCTIONS.md`. **Named here rather than edited; it should not survive another sweep.**
+- **ADR-0035's 2026-08-16 amendment clause 2** (*"It is no longer a day-one spike"*) is now doubly
+  overtaken — the spike ran, and its result is load-bearing inside v0.1. Covered by the blanket flag
+  rather than site-flagged, because §2a already records the run.
+
+### On the gate for ADRC-01
+
+`make check` from a **cleaned lint cache** — `/root/go/bin/golangci-lint cache clean` by absolute
+path first, per `DEVELOPMENT.md` §11's rule that a cached green is a rumour. Binaries, versions and
+tail are in the commit message.
+
+🚩 **State the green at its real size, because on this diff it is nearly worthless as evidence.**
+The diff is **three Markdown files** — `docs/DECISIONS.md`, `README.md`, `docs/REVIEW-LOG.md` — and
+**not one line of Go, TypeScript, Svelte, SQL or `go.mod`**. Of the gate's steps, exactly one reads
+any of them: `secrets` runs `gitleaks dir .` from the repo root over the whole working tree, so the
+green attests **that these three files leak no credential**. `fmt-check` lists `.go` files and runs
+`pnpm format:check` scoped to `web/`; `lint`, `build-tagged`, `modverify`, `test` and `vuln` do not
+read `docs/` or `README.md` at all. **Markdown prose is not checked by any tool in this repo** — there
+is no markdown linter and no link checker in `make check`, so nothing mechanical verified a single
+claim, cross-reference or anchor in this entry. What the green really attests is the **negative**:
+that the tree these edits sit on was not broken by them, which for a docs-only diff was never in
+doubt. The load-bearing verification here is the `git log -p` / `git show` / `grep` work recorded in
+§ADRC.1 and §ADRC.3, and it is manual.
+
+⚠️ **Two greens, and the second is the one that counts — but only the first is about this work.**
+The gate ran on `f716210` + these three files, then again after **two** merges with `origin/main`
+(`10e7b00`, then `191be31`, which carries `M5-37`'s migration 0006 and its tests). The second run is
+green on a tree that **does** contain Go and SQL, so `lint`, `test`, `build-tagged` and `vuln` had
+real work to do — **but that work is somebody else's commit, not this one.** Stated plainly so the
+green is not over-read in either direction: **this entry's own contribution is still three Markdown
+files, and the gate's verdict on it is still only `gitleaks`.** What the second run adds is that this
+branch's merge resolution did not break the code that arrived with it — the `docs/REVIEW-LOG.md`
+conflict was resolved by hand both times, and a mis-resolution there could have corrupted the file
+without any tool noticing.
+
+---
+
+# VN9-01 — the entry-id convention, §17's five remaining restatements, and the request-destination column decided
+
+**Date:** 2026-08-17. **Branch:** `claude/hearth-thread-vn9w7u`, off `origin/main` at `10e7b00`
+(this thread's own [`M5-36`](#m5-36--17s-half-of-adr-0041-three-sites-were-relayed-nine-more-were-there-and-the-ownership-convention-is-why-they-were-the-last-to-go)),
+merged with `origin/main` at `111371d` before the gate — a clean merge, no conflict in this file.
+**Three commits, one per item:** `ca67ea3` (the convention), `79921b1` (five §17 sites), `f9b038f`
+(§17.8's `Request destination` column).
+
+ℹ️ **On the prefix.** `VN9-` is this thread's, taken under the convention this entry's first commit
+writes down, and checked as unused on **every one of the eighteen refs `git ls-remote --heads origin`
+returns, `main` among them**, before it was taken. This is the second entry under the new scheme; [`ADRC-01`](#adrc-01--the-adr-amendment-convention-settled-from-the-files-own-history-rather-than-asserted-and-the-readme-lag-m5-34-measured-and-routed)
+was the first, and it is the other end of the collision described below. **Subsections are `VN9.N`**,
+which retires the `M5.N` shared counter for this thread along with the entry id — the two raced
+together and they are fixed together. **No existing `M5-` id is renumbered**, here or by the rule.
+
+## VN9.1 Where the convention went, and why it is not in the review log's header
+
+The brief named this file's header as the likely home *"if the file genuinely has [a] process
+section"*. **It does not.** The header is two sentences of navigation — *"Two rounds so far.
+**Round 1** reviewed the design documents; **Round 2** reviewed the first code drop."* — and then a
+rule and the Round 2 heading. There is nothing here that owns how this log is written; every process
+rule this file obeys lives in `DEVELOPMENT.md` §11 or in §6.1's invariant.
+
+**So the rule went to `DEVELOPMENT.md` §11, and that is the better home for a second reason the
+fallback instruction did not have to make.** §11 already carries the bullet this amends —
+*"**A sequential id read out of a file is a race, not a lookup.** `M5-NN` entry ids, `M5.N`
+subsection numbers, ADR numbers and migration numbers are all allocated by reading the highest one
+already present"* — with all three of the historical collisions attached to it. Putting the new rule
+anywhere else would have left **two live formulations of one rule in two files**, which is the exact
+failure `SD-01` names and which this thread has now written up twice. The new bullet therefore states
+its own narrowness in its first line: subsection numbers, ADR numbers and migration numbers are still
+shared counters and still want the re-read discipline; **entry ids no longer do.**
+
+**The log gets a pointer, not a copy** — three lines under its header naming §11 as the owner,
+because that is where an author about to append actually looks.
+
+## VN9.2 The rule's motivating case is live, and it is better evidence than the three historical ones
+
+The three collisions in `DEVELOPMENT.md` §11 are all of the same shape: an agent read the highest id,
+another landed one first, the reader was stale by the time it wrote. **The case that arrived while
+this rule was being written is sharper**, and it is recorded in `ADRC-01` from the other side: a
+second thread had drafted `M5-36` for its own entry at the moment this thread's `M5-36` landed as
+`10e7b00`, and **both had read `M5-35`, and both were right when they looked.** The collision
+happened entirely inside the uncommitted window.
+
+**That is the whole argument in one line: reading the file is not enough, because a shared counter's
+true value includes what nobody has pushed yet.** No re-read discipline reaches it — a monotonic id
+cannot be allocated safely by reading, only won by racing. A per-thread prefix needs no global read to
+be *correct*; it needs a cheap one only to be *unused*. **An id should be a fact about its author,
+not a claim on a global sequence.**
+
+## VN9.3 The three refinements, each verified on the tree rather than taken from the relay
+
+They arrived as a relay with the instruction to check them, which is the right instruction and is why
+one of the three came back with a different number.
+
+| Refinement | What was checked, and with what | Result |
+|---|---|---|
+| **Prefixes must be multi-letter** | `grep -n "\bC-01\b" docs/REVIEW-LOG.md` | ✅ **Confirmed.** `C-01` names **two different findings**: round 1's *"Typo tolerance does not exist; the flagship search example returns zero rows"* and round 4's *"The four library tables and `work_credit` have no DDL anywhere"*. The single-letter prefixes are round-scoped and were reused across rounds, so a one-letter namespace has already failed as a fact about its author |
+| **`SYNC-` is reserved** | `grep -n "SYNC" docs/ARCHITECTURE.md` | ✅ **Confirmed.** `SYNC["Sync engine<br/>import · delta · reconcile · write queue"]` is a Mermaid node id in §3's diagram. The S neighbourhood independently measured at **ten** prefixes — `S-`, `SD-`, `SR-`, `SU-`, `SW-`, `SALT-`, `SNAP-`, `SSRF-`, `SCOPE-`, `SEC-` — matching the relay exactly, and `SW-` is the **frontend bench**, not sync. The hazard is scanning, not collision, and it is named as reserved so the next thread does not rediscover why it feels wrong |
+| **Check `main`, then land promptly** | `grep -oE '\b[A-Z][A-Z0-9]*-[0-9]{2}\b'` over `git show origin/<head>:docs/REVIEW-LOG.md` for **every** head from `git ls-remote --heads origin` | ✅ **Confirmed, with the count derived rather than relayed.** **51** prefixes on `main` at `10e7b00` under that regex — which excludes `ADR-` by construction, four digits defeating `\b…[0-9]{2}\b` — and the relayed **52** is recovered by adding `OQ-`, whose ids are single-digit (`OQ-1`, `OQ-2`, `OQ-3`, `OQ-7`). **The union across the seventeen non-`main` heads equals `main`'s set exactly**: every one returned an empty *not on main* difference |
+
+⚠️ **The third one's condition is worth more than its conclusion, and the rule states the condition.**
+Checking `main` alone is sufficient **because prefixes are allocated by landing**. A thread that
+claims a prefix on a branch and sits on it has made the check unsound for everyone else **with
+nothing anyone can observe** — which is the uncommitted-window failure of VN9.2 wearing different
+clothes. So the rule is two-part: *check `main`, then land your first entry promptly.* The
+measurement is dated to its tree per §11's own citation rule, and `main` has since moved: `ADRC-01`
+landed at `99bf254` and the two-digit count on `main` is 52 as this is written. **The dated record is
+left as measured** rather than refreshed.
+
+⚠️ **A declared registry of who holds which prefix was considered and is refused in the rule text.**
+A roster is a shared mutable list — the same defect one level up, requiring an edit from every thread
+that claims a prefix and certain to drift from the log it describes. **The log is the registry,
+derived rather than declared**: a grep over the entries cannot go stale against the entries.
+
+## VN9.4 Five of `M5-36`'s nine, replaced with pointers
+
+Same treatment as that entry's four: **a pointer to §16 rather than a fresher list**, keeping only
+what is load-bearing for describing a screen. `M5-36` numbering is used for the addresses so the two
+lists line up.
+
+| # | Site | What it said | What it says now |
+|---|---|---|---|
+| **2** | §17.3, the add flow's name field | *"the **\"1080p ✓ / 4K ✗\"** badge §16 names as v0.1's power-user signal is unrenderable if the second instance arrives indistinguishable from the first"* | The badge survives as the example, the milestone attribution goes: *"**§16 owns which milestone exercises that badge and this section does not restate it**; the name field is owed as soon as a second instance of any kind can be added, which the add flow has never prevented."* §16 now reads ⚠️ *"It is unexercised in v0.1"* — so the old clause was arguing for a v0.1 field from a post-v0.1 consequence, and the argument is restated on ground §17 owns |
+| **3** | §17.4 rule 5 | *"(⚠️ the equivalent over an Ebooks library and Audiobookshelf is the post-v0.1 form of the same rule)"* | **Removed.** The labels are swapped now, and the parenthetical only restated that the rule generalises — which the sentence after it already says, in general terms. The worked example is untouched |
+| **4** | §17.5's *"what this is not saying"* note | *"⚠️ **And the catalogue half is deferred for every non-\*Arr type alike** — music, audiobooks, ebooks and comics have **no catalogue source in v0.1** … the \*Arr sync proves the replica thesis on real data first. Music is not singled out; it is in the same position as the other three"* | *"⚠️ **And the catalogue half is deferred alike for every type v0.1's one catalogue source does not cover** … **§16 is authoritative for which types those are** … Music is not singled out; it is in the same position as every other uncovered type."* The load-bearing half — music is not second-class, the deferral is uniform — names no types at all now |
+| **6** | §17.8, the auto-proposal clause | *"**in v0.1, one `movie` library per Radarr and one `series` per Sonarr**, and **none for Prowlarr** … ⚠️ From the milestone each lands in, one per upstream library for Audiobookshelf / Kavita / Navidrome (then Komga, then Jellyfin — ADR-0035, §16)"* | *"**one proposal per container the connected service itself reports**: one per upstream library for a media server (Kavita, Navidrome, Audiobookshelf, Komga, Jellyfin), one `movie` library per Radarr and one `series` per Sonarr, and **none for Prowlarr** … **§16 is authoritative for which of those services a given milestone connects**"* |
+| **7** | §17.8, the removal warning | *"(⚠️ the same warning over an Audiobookshelf feeding Ebooks and Audiobooks is the post-v0.1 form of the identical rule)"* | **Removed.** Same shape as #3 |
+
+⚠️ **#6's second sentence went with its first rather than being left behind**, which is the one place
+this pass edited text the relay did not name. It files Kavita as post-v0.1 — *"From the milestone each
+lands in … for Audiobookshelf / Kavita / Navidrome"* — so keeping it would have left the paragraph
+with **no proposal rule at all for the source v0.1 actually connects**, which is worse than the
+staleness being fixed. `M5-36` §M5.49 hit the identical case in Block A and resolved it the same way.
+
+ℹ️ **Nothing here names a service §17 did not already name, and no edit adds a milestone claim.**
+Every one subtracts.
+
+## VN9.5 §17.8's request-destination column: the premise was checked first, and it held
+
+The brief flagged that the premise **might dissolve** — if Prowlarr, or anything else v0.1 connects,
+can be a library's request destination, then the column varies, the reported consequence is wrong,
+and the only defect is `M5-36` #9's miscount. **That check ran before anything was edited.** It is
+the same discipline `M5-36` §M5.48 applied to the relayed scope claim, and it is cheap precisely
+because the failure it guards is not.
+
+**What can legally be a request destination, established from the documents rather than assumed:**
+
+1. **§8.3 defines the sink as a capability-filtered pin, not a free choice.** *"A library declares one
+   request sink, and that sink is a **pin inside the capability filter, not a bypass**: an instance
+   that does not probe `Caps.MediaKinds ∋ (kind, format)` and advertise `Add` cannot be chosen, is
+   not offered in the UI."* So the question reduces to: **does any v0.1 service advertise `Add`?**
+2. **`Add` and `Grab` are different capabilities on different interfaces.** §11 lists `Caps` as
+   *"`Search, LibrarySync, DeltaSync, Push, Add, Monitor, Delete, Queue, Grab, Images`"*, and
+   [`reference/providers.md`](./reference/providers.md) splits them across two Go interfaces —
+   `Requester` (`Add` / `SetMonitored` / `Delete`) and `Grabber` (`Releases` / `Grab`). **Prowlarr
+   implements the second.** §8.5: grab is *"`POST /api/v1/search` with the `ReleaseResource` body"*,
+   and `ReleaseResource.downloadClientId` selects one of **Prowlarr's own** download clients. A grab
+   ends in a download client; it does not route a request to a sink.
+3. **Nothing else in v0.1 advertises `Add` either.** §16.1's v0.1 entry: *"**No command sinks** — no
+   Lidarr, no LazyLibrarian, no Mylar3, no Kapowarr."* [ADR-0041](./DECISIONS.md#adr-0041) clause 3
+   re-sequences Sonarr and Radarr out. [ADR-0032](./DECISIONS.md#adr-0032) makes Kavita a read-only
+   catalogue source with no command sink, which ADR-0041's own consequences restate: *"Kavita is a
+   read-only catalogue source with no command sink."*
+4. **§17.5 already says it in one line**, on the same screen family: *"no write-capable service ships
+   in v0.1 at all"*.
+
+✅ **So the premise holds. Every row reads `none`, not four of six** — the column is identical for all
+of them, which fires §17.4's rule 5, *a column whose value is identical for every row is not data*, on
+the column that paragraph was written to defend.
+
+## VN9.6 What the decision changed, and the three things it deliberately did not touch
+
+**Applied as the brief decided it, under §17 ownership**, since ADR-0041 had already settled the scope
+the question turns on.
+
+**Was:** *"**The `Request destination` column states its shared fact once and keeps only the per-row
+exceptions.** Four of six rows read `none` … **Above the table, once:** *"v0.1 connects no request
+destination for music, audiobooks, ebooks or comics. Indexer search still works and the grab ends in
+your download client."* **In the cells:** `None`."*
+
+**Now:** the column **does not render in v0.1**. Collapsing the shared fact above the table fixed the
+cells and not the column: six cells reading `None` **look like data and carry none**, which is what
+rule 5 forbids. In its place, one sentence of the screen's own copy — principle 3's honest
+degradation, which is to say what is missing and why rather than render an empty grid: *"No request
+destination can be set yet: no connected service accepts requests. Indexer search still works, and
+the grab ends in your download client."*
+
+⚠️ **Stated as sequencing, not a cut**, which is the care [ADR-0041](./DECISIONS.md#adr-0041) clause 3
+needed for Sonarr and Radarr and the same care this needs: **the column, its per-row exceptions and
+the Ebooks row's Readarr note return unchanged with the first service that can be a destination**, and
+§16 owns when that is.
+
+Three things were left alone on purpose:
+
+- 🚩 **The four write-path verbs.** §16's open question — *"had only \*Arr targets and now has
+  none"* — is with Joe, and **nothing in this edit asserts anything about it in either direction.**
+  The argument runs entirely on §8.3's capability filter and on which services v0.1 connects, neither
+  of which moves with the answer. `M5-36` §M5.51 named this column as one of three sites to revisit
+  when Joe answers; **that pointer still holds**, because the milestone at which the column returns is
+  the thing his answer could move.
+- **The `Row view` line keeps the column** and gains a five-word marker pointing down to the rule, so
+  the enumeration and the decision do not read as contradicting each other. Deleting it there would
+  have made the product's column set milestone-dependent, which is not what was decided.
+- **The detail view's `Requests` panel is untouched**, and the entry says why: **one field on one
+  library is not a column across rows.** Rule 5 is a rule about columns; the panel already specifies
+  **None** *"with the reason inline"*, which is the same sentence delivered where the user would
+  otherwise set the thing.
+
+## VN9.7 Raised, not fixed — the four that need a decision, unchanged from `M5-36`
+
+Four of the nine are **not substitutions**, and guessing at them under cover of a wording pass is how
+a scope question gets resolved twice. They are reported to the coordinator and restated here so
+nothing is silently dropped. The addresses are `M5-36` §M5.50's and are re-verified as still present
+on this tree:
+
+1. **§17.3** — *"v0.1's only sources are Radarr and Sonarr, which carry TMDB and TVDB ids, so every
+   v0.1 work resolves at the identifier tier."* ⚠️ **Inverted, not merely stale**, and it is the §17
+   end of a question **§16 itself flags rather than answers**: *"Whether the correction UI's v0.3 cap
+   still holds against a source with no ids is a live question this section flags rather than
+   answers — §6.4 owns the tier-1 claim and has not been restated against Kavita."* §17 cannot answer
+   ahead of §6.4.
+5. **§17.7** — *"⚠️ **No v0.1 source is in this position** — Sonarr and Radarr both have a delta
+   channel"*, whose worked example is *"Kavita is unreachable — showing cached data from the last full
+   compare at 09:12"*. ADR-0035 §2a verified Kavita **does** have a usable channel-3b watermark, so
+   Kavita is now the wrong exemplar for *no delta channel at all* — **and choosing the right one is a
+   §7.1a question**, not a §17 one.
+8. **§17.8** — *"⚠️ **not reachable in v0.1**, whose only sources are \*Arrs on channel 3"*, on the
+   `no change feed` per-library state. Same exemplar problem as #5 and it wants the same answer.
+9. **§17.8's `Request destination` column** — **decided by the owner and applied above** (VN9.5,
+   VN9.6). This is the one exception to the stop-and-report rule, and it was granted explicitly.
+
+ℹ️ **#5 and #8 are one question, not two**, and the answer exists upstream — `M5-34` corrected §7.1a's
+per-source status and §7's channel table; only §17's two local echoes have not been told. **They want
+one pass, not four.**
+
+## VN9.8 On the gate
+
+**`make design` was run four times** — `/opt/node22/bin/node` **v22.22.2**, target
+`docs/design/check.mjs` — **a baseline on `10e7b00` before any edit (exit 0, 131 s), after the §17
+edits (exit 0, 132 s), after the copy sentence was tightened (exit 0, 130 s), and on the merged tree
+this commit records (exit 0, 132 s).** All four closed on `all design checks pass`. The baseline is
+what makes the others mean anything, and the merged run is separate because `origin/main` moved —
+`ADRC-01` plus migration `00006` — between the first run and the push.
+
+✅ **The exemption count was measured on both sides rather than assumed, because "it still passed"
+would not have shown it.** `check.mjs` reads §17 out of `ARCHITECTURE.md` **at run time** to exempt
+mockup labels whose em-dash wording §17 *"fixes verbatim"*, so **a reworded or deleted §17 phrase a
+label leans on withdraws that label's exemption and fails the run** — which puts this diff inside what
+the checker actually inspects. It reported **24 short em-dash strings exempt on the baseline and 24 on
+every run after**, against an unchanged corpus of **6,978** user-visible strings. **Equal counts are
+the result**: none of the seven removed or reworded §17 phrases was load-bearing for a mockup label.
+
+⚠️ **One phrasing choice was made *for* that mechanism rather than discovered by it.** The new
+shipping sentence in §17.8 was first drafted with an em dash — *"No request destination can be set
+yet — no connected service accepts requests"* — and was changed to a colon before the final run. The
+checker would **not** have caught it: its short-string rule fires under fifteen words and the sentence
+is longer. It was changed because §17 shipping copy is exactly the corpus a mockup label later copies
+verbatim, at which point the em dash becomes a §13 violation needing an exemption rather than a
+sentence needing no defence.
+
+✅ **`make check` was also run and passed** on the merged tree — **exit 0, 86 s**, closing on
+`check: OK`, with **407** frontend tests passed, `govulncheck` **v1.7.0 asserted against the pin**
+reporting *"No vulnerabilities found"*, and `pnpm audit` *"No known vulnerabilities found"*.
+⚠️ **Its scope over this diff is narrow and is stated rather than left to be assumed:** this branch's
+own three commits are three Markdown files under `docs/`, no Go and no `web/`, so `gofumpt`,
+`golangci-lint`, `go test`, `eslint`, `svelte-check` and `govulncheck` all read files these commits do
+not touch. **What the green attests is that no credential-shaped string is in the tree, and that the
+merge which brought `00006_kavita_subtypes.sql` and its 425 lines of migration tests in did not break
+them.** It says nothing about whether the prose above is true — that was established by reading each
+site against §16, the ADRs and `reference/providers.md`, and VN9.5 records those checks.

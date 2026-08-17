@@ -2958,8 +2958,9 @@ exactly that, and drawing them as top-level rows is what took the sidebar to fif
 specified as kind, base URL and API key, and the field the whole screen is keyed on was missing from
 the one flow that creates a row. `service_instance.name` is what tells two Radarrs apart — it is the
 first column of this table, it is what the `Radarr 4K` row is called, and the **"1080p ✓ / 4K ✗"**
-badge §16 names as v0.1's power-user signal is unrenderable if the second instance arrives
-indistinguishable from the first. **The field is defaulted from the probed application and instance
+badge is unrenderable if the second instance arrives indistinguishable from the first. **§16 owns
+which milestone exercises that badge and this section does not restate it**; the name field is owed
+as soon as a second instance of any kind can be added, which the add flow has never prevented. **The field is defaulted from the probed application and instance
 (`Radarr`, then `Radarr (2)` on collision) and is editable in place**, so the common single-instance
 case is still three things typed; it is not an extra question, it is a pre-filled answer. It must be
 unique per user, which the inline settings form's own help text already states and the add flow never
@@ -3151,8 +3152,7 @@ carries eleven groups in a `SearchResultGroup`.
    group contains more than one distinct value; otherwise state it once in the group header.** The
    same applies to any per-group column with one distinct value.
    **When the collapsed value is stated in the header beside the media-type name, the noun
-   `library` is mandatory** — *"all in the **Movies** library · all from Radarr 4K"* (⚠️ the
-   equivalent over an Ebooks library and Audiobookshelf is the post-v0.1 form of the same rule), never
+   `library` is mandatory** — *"all in the **Movies** library · all from Radarr 4K"*, never
    *"all in Ebooks"*. The `<h2>` is a media type (a closed enum of six) and the collapsed value is a
    library (unbounded, user-named); on the common install they are the same string, so without the
    noun the line reads as a tautology and teaches that the two axes ADR-0027 exists to separate are
@@ -3248,10 +3248,10 @@ Search-and-Grab mode, surfaced at the point of use.
 > because music is second-class:** no write-capable service ships in v0.1 at all, so Lidarr,
 > LazyLibrarian and Mylar3 are deferred on identical ground, and Radarr and Sonarr are present as
 > *destinations* in v0.2 only because they are already there as *sources*. ⚠️ **And the catalogue
-> half is deferred for every non-\*Arr type alike** — music, audiobooks, ebooks and comics have **no
-> catalogue source in v0.1**, because the catalogue sources are sequenced after it, one at a time,
-> so the \*Arr sync proves the replica thesis on real data first. Music is not singled out; it is in
-> the same position as the other three, and §16 is authoritative for when each arrives. The
+> half is deferred alike for every type v0.1's one catalogue source does not cover**, because the
+> remaining sources are sequenced after it, one at a time. **§16 is authoritative for which types
+> those are and for when each of the remaining sources arrives, and this section does not restate
+> it.** Music is not singled out; it is in the same position as every other uncovered type. The
 > thin-indexer fact above is narrower still, true, and about the indexer ecosystem rather than about
 > UsArr's design.
 
@@ -3633,15 +3633,16 @@ of a library anywhere. Cost: one line.
 
 They cross-link both ways: a degraded source on a library row links to that instance's Services row,
 and a Services row lists the libraries it feeds and warns before removal — *"Radarr feeds 2
-libraries. Removing it will leave Movies and Kids films with no source."* (⚠️ the same warning over
-an Audiobookshelf feeding Ebooks and Audiobooks is the post-v0.1 form of the identical rule). **No credential field ever
+libraries. Removing it will leave Movies and Kids films with no source."* **No credential field ever
 appears on this screen**; API keys live only behind Services plus sudo mode (§12.1).
 
 **Nothing about libraries is asked before a service exists.** The §17.7 wizard is unchanged; on a
 successful connect and capability probe UsArr **proposes** libraries as one pre-checked "Accept" step,
-each editable inline — **in v0.1, one `movie` library per Radarr and one `series` per Sonarr**, and
-**none for Prowlarr**, which has no library. ⚠️ From the milestone each lands in, one per upstream
-library for Audiobookshelf / Kavita / Navidrome (then Komga, then Jellyfin — ADR-0035, §16). Two proposals are decisions rather than defaults:
+each editable inline — **one proposal per container the connected service itself reports**: one per
+upstream library for a media server (Kavita, Navidrome, Audiobookshelf, Komga, Jellyfin), one `movie`
+library per Radarr and one `series` per Sonarr, and **none for Prowlarr**, which has no library.
+**§16 is authoritative for which of those services a given milestone connects, and this section does
+not restate it** (ADR-0035). Two proposals are decisions rather than defaults:
 
 - **Adding a second instance of the same kind proposes joining the existing library, not creating a
   new one.** Two Radarrs → *one* Movies library with two sources, which is what makes the
@@ -3675,8 +3676,9 @@ library for Audiobookshelf / Kavita / Navidrome (then Komga, then Jellyfin — A
   keep their checkbox, the declined row keeps its word, and an `Accept` header over a cell reading
   `declined` is a header contradicting its own cell.
 
-**Row view:** name · kind · item count · source chips with per-source health · request destination ·
-state · reorder handle, plus **Add library** and the auto-proposal banner.
+**Row view:** name · kind · item count · source chips with per-source health · request destination
+(⚠️ **absent in v0.1** — see the `Request destination` rule below) · state · reorder handle, plus
+**Add library** and the auto-proposal banner.
 
 - **`Add library` is specified rather than named, because it is the recovery path when the
   auto-proposal got it wrong** — which is the single most likely reason a user opens this screen at
@@ -3746,14 +3748,27 @@ definition of each verb is exemplary and is the only place they are defined. ⚠
 defined nowhere**, because that panel is v0.3; if the four verbs appear anywhere in v0.1 copy they
 carry their definitions with them.
 
-**The `Request destination` column states its shared fact once and keeps only the per-row
-exceptions.** Four of six rows read `none` and each carried its own explanatory paragraph, which is
-§17.4 rule 5's own rule (a column whose value is identical for every row is not data) firing on a
-column that survived it — and one of those paragraphs ran to sixty-two words of competitive analysis
-inside a table cell. **Above the table, once:** *"v0.1 connects no request destination for music,
-audiobooks, ebooks or comics. Indexer search still works and the grab ends in your download
-client."* **In the cells:** `None`. **Kept as a per-row footnote:** the Ebooks row's Readarr note,
-which is a real, dated, specific fact a user cannot infer.
+**The `Request destination` column does not render in v0.1, and it returns with the first service
+that can be a destination.** As drawn, most rows read `none` and each of those carried its own
+explanatory paragraph — one of them sixty-two words of competitive analysis inside a table cell —
+which is §17.4 rule 5 (*a column whose value is identical for every row is not data*) firing on the
+column that paragraph was written to defend. **Collapsing the shared fact above the table fixed the
+cells and not the column.** No service v0.1 connects can be a library's request sink at all: a sink
+is a pin inside §8.3's capability filter and must advertise `Add`, which the Prowlarr path does not —
+it posts a release to Prowlarr's own download client (§8.5) — and **§16 is authoritative for the rest
+of the membership, which this section does not restate.** So the value is identical on *every* row,
+and a column that structurally cannot vary is not data at any width; six cells reading `None` look
+like data and carry none, which is the failure rule 5 names.
+
+**In v0.1 the column is absent and the screen says so once, in its own copy** — principle 3's honest
+degradation, which is to say what is missing and why rather than render an empty grid:
+*"No request destination can be set yet: no connected service accepts requests. Indexer search still
+works, and the grab ends in your download client."* ⚠️ **This is sequencing, not a cut.** The column,
+its per-row exceptions and the Ebooks row's Readarr note — a real, dated, specific fact a user cannot
+infer — all return unchanged with the first service that can be a destination, and §16 owns when that
+is. **The detail view's `Requests` panel is unaffected**, because it is one field on one library
+rather than a column across rows: it already specifies **None** with the reason inline, which is the
+same sentence at the point where the user would otherwise set the thing.
 
 **Deleting a library says exactly what it does — including the part that is destructive:** *"This
 removes the library from UsArr. It does not delete anything from Radarr, Sonarr, or your disks. It
