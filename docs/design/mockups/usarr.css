@@ -323,8 +323,15 @@ button, input, select, textarea { font: inherit; color: inherit; }
    size column must reserve room for the widest unit it can ever print, or the
    digits jump the first time a row crosses from GiB to MiB. Widths are
    MEASURED in the cell font (13px IBM Plex Sans, 1ch = 8px), rounded up to the
-   next half-ch: MiB 22px is the widest size unit, months 43px the widest
-   duration, episodes 52px the widest item noun.
+   next half-ch — AND THE FAMILY IS THE ONE THAT COLUMN PRINTS, which is the
+   half this comment got wrong twice, so each family below names where its
+   members come from. Size, from `sizeParts`: MiB 22px is the widest, so 3ch.
+   Duration, from `formatAge`: `h` 7px and `d` 8px, so 1ch. Home's `Items`,
+   from that table's own six rows: films 28px, series 34px, books 35px,
+   artists 37px — widest `artists`, so 5ch. NOT `episodes` at 52px, which this
+   comment used to give as the item-noun reserve: `episodes` is a word the
+   `Have` column prints one column along, and `Items` counts a comic library in
+   series rather than in issues.
    ⚠️ THE SIZE FAMILY IS THE BINARY ONE — B · KiB · MiB · GiB · TiB — because
    that is what the application prints and what every indexer and every *Arr
    reports. This reserve was first derived at 2.5ch from the DECIMAL family
@@ -341,29 +348,47 @@ button, input, select, textarea { font: inherit; color: inherit; }
    what it says. The alternative that was NOT taken — the unit in the column
    header and bare numbers in the cells — is recorded in §9.1 with its
    reason.
-   ⚠️ ONLY THE SIZE FAMILY SHIPS SO FAR, AND THE REASON IS MEASURED RATHER THAN
-   a matter of taste: A RESERVED UNIT BOX COSTS COLUMN WIDTH, and two tracks are
-   already too narrow to pay it. `Age` in the release tables is an 80px track —
-   24px of padding leaves 56px, and `months` alone is 43px, so the figure had
-   almost nothing left and the cell wrapped to two lines. Home's `Items` is
-   107.375px: 52px of reserve for `episodes` plus 24px of padding leaves 31px,
-   and `1,842` is 36px. Both were measured wrapping, at +18px per cell over 224
-   cells across the sweep. The rule is right and the tracks are wrong; widening
-   a declared track is its own decision, on the two densest tables in the
-   product, and it is not folded in here. §9.1 names the columns still
-   carrying the old treatment so a reader can tell an unfinished job from a
-   decision.
-   TWO CORRECTIONS TO THAT PARAGRAPH, both from measuring rather than quoting,
-   and both left standing rather than acted on. This comment said 68px for the
-   `Age` track; the resolved track is 80px and 68px is `Grabs`, two columns
-   along, a miscount as old as the class. And `months` is not a word the product
-   prints: `formatAge` emits `h` and `d`, the mockups' Age sample data has been
-   converted to match, and the real family's widest member is `d` at 8px, so the
-   reserve would be 1ch rather than 5.5ch and would leave 13px of slack against
-   the widest figure the column can print (`1095 d`). The cost argument is
-   therefore void for `Age` — but extending the scope of this treatment is a
-   design decision, not a correction, so it is recorded here and in §9.1 and not
-   applied. See REVIEW-LOG SU-08. */
+   ⚠️ SIZE AND AGE SHIP; HOME'S `Items` DOES NOT, AND THE REASON IS MEASURED
+   RATHER THAN a matter of taste: A RESERVED UNIT BOX COSTS COLUMN WIDTH, and
+   that one track cannot pay it. A 5ch reserve takes `Items` from 48 wrapped
+   cells to 96 over the whole sweep — 5 widths x 3 densities x 2 installs x
+   every state. The failure is at 1280px, the narrowest desktop width the design
+   check sweeps: `minmax(0,1.15fr)` resolves to 87.80px there and leaves 63.80px
+   of content, three of the six rows already wrap in it with no reserve at all
+   (`1,204 films` 67px, `612 artists` 64px, `1,842 books` 74px), and the reserve
+   takes that to six of six. At 1440px and above it fits, with 9.38px to spare.
+   ⚠️ THE 107.375px THIS COMMENT USED TO QUOTE FOR `Items` IS THAT TRACK'S
+   RESOLUTION AT 1440px, NOT ITS WIDTH. A fractional track has no single number,
+   and quoting one hides the width at which it actually fails. Widening it is
+   its own decision on Home and is not folded in here; §9.1 names the column
+   still carrying the one-string treatment so a reader can tell an unfinished
+   job from a decision.
+   `Age` WAS DEFERRED HERE TOO, ON A COST THAT WAS NEVER REAL, AND NOW SHIPS.
+   This comment said `months` alone is 43px; `months` is a word `formatAge`
+   cannot emit, the sample data has since been converted, and the real family is
+   `h` 7px and `d` 8px. Re-measured, the reserve costs exactly nothing: `1095 d`
+   is 43px in the same 56px content box with the box as without it, 0 of 1920
+   cells sit on more than one line either way, and `d`'s 8px ink in the 8px box
+   spills in 0 of 1920 spans.
+   ⚠️ AND WHAT THE `Age` BOX BUYS IS 1.00px, NOT 14.00px. The control that
+   justified the size reserve forces rows onto the widest and the narrowest unit
+   and reads the figures' right edges: for size the spread goes 14.00px -> 0.00px,
+   for `Age` it goes 1.00px -> 0.00px, because `h` and `d` differ by one pixel.
+   The reserve is still right — a two-member family is a family, and the box is
+   what stops the digits moving when a row crosses from days to hours — but on
+   this column the larger half of the treatment is the muting, not the box, and
+   nobody should quote size's number for it.
+   ⚠️ THE `Age` TRACK IS 80px HERE AND 68px IN THE APPLICATION, and that is a
+   real divergence rather than anyone's miscount. `.cols-requests-releases`
+   below has read `60px 88px 80px ... 80px 68px 84px` since it was written;
+   `COLUMNS` in web/src/routes/requests/+page.svelte has read Age 68px since
+   cd94779. Both trees hold both numbers on different columns — 68px is `Grabs`
+   here and `Age` there, 80px is `Age` here and `Protocol` there — which is how
+   one came to be quoted for the other. Eight of the ten columns the two trees
+   share carry different widths; only `Category` and `Actions` agree, `Category`
+   sits in a different position, and the `Select` column here has no counterpart
+   there. That belongs in REVIEW-LOG rather than in a stylesheet comment. See
+   SU-10. */
 .unit {
   color: var(--fg-muted);
   display: inline-block;
@@ -376,6 +401,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   text-align: left;
 }
 .unit--size { --unit-w: 3ch; }  /* B · KiB · MiB · GiB · TiB — widest is MiB at 22px */
+.unit--age  { --unit-w: 1ch; }  /* h · d — widest is d at 8px, and `d` fills the box exactly */
 .sr {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip-path: inset(50%); white-space: nowrap;

@@ -402,8 +402,15 @@ button, input, select, textarea { font: inherit; color: inherit; }
    size column must reserve room for the widest unit it can ever print, or the
    digits jump the first time a row crosses from GiB to MiB. Widths are
    MEASURED in the cell font (13px IBM Plex Sans, 1ch = 8px), rounded up to the
-   next half-ch: MiB 22px is the widest size unit, months 43px the widest
-   duration, episodes 52px the widest item noun.
+   next half-ch — AND THE FAMILY IS THE ONE THAT COLUMN PRINTS, which is the
+   half this comment got wrong twice, so each family below names where its
+   members come from. Size, from `sizeParts`: MiB 22px is the widest, so 3ch.
+   Duration, from `formatAge`: `h` 7px and `d` 8px, so 1ch. Home's `Items`,
+   from that table's own six rows: films 28px, series 34px, books 35px,
+   artists 37px — widest `artists`, so 5ch. NOT `episodes` at 52px, which this
+   comment used to give as the item-noun reserve: `episodes` is a word the
+   `Have` column prints one column along, and `Items` counts a comic library in
+   series rather than in issues.
    ⚠️ THE SIZE FAMILY IS THE BINARY ONE — B · KiB · MiB · GiB · TiB — because
    that is what the application prints and what every indexer and every *Arr
    reports. This reserve was first derived at 2.5ch from the DECIMAL family
@@ -420,29 +427,44 @@ button, input, select, textarea { font: inherit; color: inherit; }
    what it says. The alternative that was NOT taken — the unit in the column
    header and bare numbers in the cells — is recorded in §9.1 with its
    reason.
-   ⚠️ ONLY THE SIZE FAMILY SHIPS SO FAR, AND THE REASON IS MEASURED RATHER THAN
-   a matter of taste: A RESERVED UNIT BOX COSTS COLUMN WIDTH, and two tracks are
-   already too narrow to pay it. `Age` in the release tables is an 80px track —
-   24px of padding leaves 56px, and `months` alone is 43px, so the figure had
-   almost nothing left and the cell wrapped to two lines. Home's `Items` is
-   107.375px: 52px of reserve for `episodes` plus 24px of padding leaves 31px,
-   and `1,842` is 36px. Both were measured wrapping, at +18px per cell over 224
-   cells across the sweep. The rule is right and the tracks are wrong; widening
-   a declared track is its own decision, on the two densest tables in the
-   product, and it is not folded in here. §9.1 names the columns still
-   carrying the old treatment so a reader can tell an unfinished job from a
-   decision.
-   TWO CORRECTIONS TO THAT PARAGRAPH, both from measuring rather than quoting,
-   and both left standing rather than acted on. This comment said 68px for the
-   `Age` track; the resolved track is 80px and 68px is `Grabs`, two columns
-   along, a miscount as old as the class. And `months` is not a word the product
-   prints: `formatAge` emits `h` and `d`, the mockups' Age sample data has been
-   converted to match, and the real family's widest member is `d` at 8px, so the
-   reserve would be 1ch rather than 5.5ch and would leave 13px of slack against
-   the widest figure the column can print (`1095 d`). The cost argument is
-   therefore void for `Age` — but extending the scope of this treatment is a
-   design decision, not a correction, so it is recorded here and in §9.1 and not
-   applied. See REVIEW-LOG SU-08. */
+   ⚠️ SIZE AND AGE SHIP; HOME'S `Items` DOES NOT, AND THE REASON IS MEASURED
+   RATHER THAN a matter of taste: A RESERVED UNIT BOX COSTS COLUMN WIDTH, and
+   that one track cannot pay it. A 5ch reserve takes `Items` from 48 wrapped
+   cells to 96 over the whole sweep — 5 widths x 3 densities x 2 installs x
+   every state. The failure is at 1280px, the narrowest desktop width the design
+   check sweeps: `minmax(0,1.15fr)` resolves to 87.80px there and leaves 63.80px
+   of content, three of the six rows already wrap in it with no reserve at all
+   (`1,204 films` 67px, `612 artists` 64px, `1,842 books` 74px), and the reserve
+   takes that to six of six. At 1440px and above it fits, with 9.38px to spare.
+   ⚠️ THE 107.375px THIS COMMENT USED TO QUOTE FOR `Items` IS THAT TRACK'S
+   RESOLUTION AT 1440px, NOT ITS WIDTH. A fractional track has no single number,
+   and quoting one hides the width at which it actually fails. Widening it is
+   its own decision on Home and is not folded in here; §9.1 names the column
+   still carrying the one-string treatment so a reader can tell an unfinished
+   job from a decision.
+   `Age` WAS DEFERRED HERE TOO, ON A COST THAT WAS NEVER REAL, AND NOW SHIPS.
+   This comment said `months` alone is 43px; `months` is a word `formatAge`
+   cannot emit, the sample data has since been converted, and the real family is
+   `h` 7px and `d` 8px. Re-measured over 960 rendered cells the reserve costs
+   exactly nothing: `1095 d` is 43px in the same 56px content box with the box
+   as without it, and 0 cells sit on more than one line either way.
+   ⚠️ AND WHAT THE `Age` BOX BUYS IS 1.00px, NOT 14.00px. The control that
+   justified the size reserve forces rows onto the widest and the narrowest unit
+   and reads the figures' right edges: for size the spread goes 14.00px -> 0.00px,
+   for `Age` it goes 1.00px -> 0.00px, because `h` and `d` differ by one pixel.
+   The reserve is still right — a two-member family is a family, and the box is
+   what stops the digits moving when a row crosses from days to hours — but on
+   this column the larger half of the treatment is the muting, not the box, and
+   nobody should quote size's number for it.
+   ⚠️ THE `Age` TRACK IS 80px HERE AND 68px IN THE APPLICATION, and that is a
+   real divergence rather than anyone's miscount. `.cols-requests-releases`
+   below has read `60px 88px 80px ... 80px 68px 84px` since it was written;
+   `COLUMNS` in web/src/routes/requests/+page.svelte has read Age 68px since
+   cd94779. Both trees hold both numbers on different columns — 68px is `Grabs`
+   here and `Age` there, 80px is `Age` here and `Protocol` there — which is how
+   one came to be quoted for the other. Nine of this table's tracks disagree
+   between the two trees, as does the position of `Category`; that belongs in
+   REVIEW-LOG rather than in a stylesheet comment. See SU-10. */
 .unit {
   color: var(--fg-muted);
   display: inline-block;
@@ -455,6 +477,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
   text-align: left;
 }
 .unit--size { --unit-w: 3ch; }  /* B · KiB · MiB · GiB · TiB — widest is MiB at 22px */
+.unit--age  { --unit-w: 1ch; }  /* h · d — widest is d at 8px, and `d` fills the box exactly */
 .sr {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip-path: inset(50%); white-space: nowrap;
@@ -5704,7 +5727,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <tr data-when="live partial denied" role="row" aria-rowindex="2">
             <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r1">Select this release</label><input type="checkbox" id="r1" data-act="rowselect"></td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent">torrent</span></td>
-            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>2 d</td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>2 <span class="unit unit--age">d</span></td>
             <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.2160p.UHD.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-FraMeSToR">Dune.Part.Two.2024.2160p.UHD.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-FraMeSToR</span><div data-slot="grabstate"></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>TorrentLeech</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>63.7 <span class="unit unit--size">GiB</span></td>
@@ -5723,7 +5746,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <tr data-when="expired" hidden role="row" aria-rowindex="3">
             <td data-col="select" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span>n/a</td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent">torrent</span></td>
-            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>2 d</td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>2 <span class="unit unit--age">d</span></td>
             <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.2160p.UHD.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-FraMeSToR">Dune.Part.Two.2024.2160p.UHD.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-FraMeSToR</span><div data-slot="grabstate"><span class="chip">grab window closed 4 minutes ago</span></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>TorrentLeech</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>63.7 <span class="unit unit--size">GiB</span></td>
@@ -5740,7 +5763,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <tr data-when="live partial denied" role="row" aria-rowindex="4">
             <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r2">Select this release</label><input type="checkbox" id="r2" data-act="rowselect"></td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--usenet">usenet</span></td>
-            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>3 d</td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>3 <span class="unit unit--age">d</span></td>
             <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-FLUX">Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-FLUX</span><div data-slot="grabstate"></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>NZBgeek</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>20.2 <span class="unit unit--size">GiB</span></td>
@@ -5757,7 +5780,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <tr data-when="expired" hidden role="row" aria-rowindex="5">
             <td data-col="select" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span>n/a</td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--usenet">usenet</span></td>
-            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>3 d</td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>3 <span class="unit unit--age">d</span></td>
             <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-FLUX">Dune.Part.Two.2024.2160p.WEB-DL.DDP5.1.Atmos.DV.HDR.H.265-FLUX</span><div data-slot="grabstate"><span class="chip">grab window closed 4 minutes ago</span></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>NZBgeek</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>20.2 <span class="unit unit--size">GiB</span></td>
@@ -5774,7 +5797,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <tr data-when="live denied" role="row" aria-rowindex="6">
             <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r3">Select this release</label><input type="checkbox" id="r3" data-act="rowselect"></td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent">torrent</span></td>
-            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>4 d</td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>4 <span class="unit unit--age">d</span></td>
             <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.1080p.BluRay.x264-SbR">Dune.Part.Two.2024.1080p.BluRay.x264-SbR</span><div data-slot="grabstate"></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>TorrentDay</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>11.3 <span class="unit unit--size">GiB</span></td>
@@ -5791,7 +5814,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <tr data-when="live partial denied" role="row" aria-rowindex="7">
             <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r4">Select this release</label><input type="checkbox" id="r4" data-act="rowselect"></td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--usenet">usenet</span></td>
-            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>6 d</td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>6 <span class="unit unit--age">d</span></td>
             <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.1080p.BluRay.DDP5.1.x264-NTb">Dune.Part.Two.2024.1080p.BluRay.DDP5.1.x264-NTb</span><div data-slot="grabstate"></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>DrunkenSlug</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>13.9 <span class="unit unit--size">GiB</span></td>
@@ -5813,7 +5836,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <tr data-when="live partial denied" role="row" aria-rowindex="8">
             <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r5">Select this release</label><input type="checkbox" id="r5" data-act="rowselect"></td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent">torrent</span></td>
-            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>8 d</td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>8 <span class="unit unit--age">d</span></td>
             <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.REPACK.1080p.WEB-DL.DDP5.1.Atmos.H.264-FLUX">Dune.Part.Two.2024.REPACK.1080p.WEB-DL.DDP5.1.Atmos.H.264-FLUX</span><div data-slot="grabstate"><span class="chip chip--pending">pending</span></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>IPTorrents</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>8.0 <span class="unit unit--size">GiB</span></td>
@@ -5832,7 +5855,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <tr data-when="live" role="row" aria-rowindex="9">
             <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r6">Select this release</label><input type="checkbox" id="r6" data-act="rowselect"></td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent">torrent</span></td>
-            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>11 d</td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>11 <span class="unit unit--age">d</span></td>
             <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.2160p.WEB-DL.DV.HDR.DDP5.1.Atmos.H.265-NTb">Dune.Part.Two.2024.2160p.WEB-DL.DV.HDR.DDP5.1.Atmos.H.265-NTb</span><div data-slot="grabstate"><span class="chip chip--pending">sent · a problem was reported after handoff</span></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>PassThePopcorn</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>22.6 <span class="unit unit--size">GiB</span></td>
@@ -5849,7 +5872,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <tr data-when="live denied" role="row" aria-rowindex="10">
             <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r7">Select this release</label><input type="checkbox" id="r7" data-act="rowselect"></td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--usenet">usenet</span></td>
-            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>14 d</td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>14 <span class="unit unit--age">d</span></td>
             <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.720p.WEBRip.x264-GalaxyRG">Dune.Part.Two.2024.720p.WEBRip.x264-GalaxyRG</span><div data-slot="grabstate"></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>NZBFinder</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>1.3 <span class="unit unit--size">GiB</span></td>
@@ -5866,7 +5889,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <tr data-when="live partial denied" role="row" aria-rowindex="11">
             <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r8">Select this release</label><input type="checkbox" id="r8" data-act="rowselect"></td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent">torrent</span></td>
-            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>21 d</td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>21 <span class="unit unit--age">d</span></td>
             <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.1080p.AMZN.WEB-DL.DDP5.1.H.264-FLUX">Dune.Part.Two.2024.1080p.AMZN.WEB-DL.DDP5.1.H.264-FLUX</span><div data-slot="grabstate"></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>TorrentLeech</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>8.6 <span class="unit unit--size">GiB</span></td>
@@ -5884,7 +5907,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <tr data-demo="fail" data-when="live denied" role="row" aria-rowindex="12">
             <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r9">Select this release</label><input type="checkbox" id="r9" data-act="rowselect"></td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent">torrent</span></td>
-            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>26 d</td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>26 <span class="unit unit--age">d</span></td>
             <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.Hybrid.2160p.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-playBD">Dune.Part.Two.2024.Hybrid.2160p.BluRay.REMUX.HDR.DV.HEVC.TrueHD.7.1.Atmos-playBD</span><div data-slot="grabstate"></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>HDBits</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>69.8 <span class="unit unit--size">GiB</span></td>
@@ -5901,7 +5924,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <tr data-when="live denied" role="row" aria-rowindex="13">
             <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="r10">Select this release</label><input type="checkbox" id="r10" data-act="rowselect"></td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--usenet">usenet</span></td>
-            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>31 d</td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>31 <span class="unit unit--age">d</span></td>
             <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="Dune.Part.Two.2024.PROPER.1080p.BluRay.DDP5.1.x265.10bit-QxR">Dune.Part.Two.2024.PROPER.1080p.BluRay.DDP5.1.x265.10bit-QxR</span><div data-slot="grabstate"></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>abNZB</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>5.7 <span class="unit unit--size">GiB</span></td>
@@ -6119,7 +6142,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <tr role="row" aria-rowindex="2">
             <td data-col="select" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span>n/a</td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent">torrent</span></td>
-            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>1095 d</td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>1095 <span class="unit unit--age">d</span></td>
             <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="David Grann - The Wager {Dion Graham} [2023] M4B 125kbps">David Grann - The Wager {Dion Graham} [2023] M4B 125kbps</span><div data-slot="grabstate"><span class="chip">grabbed 14:07 · sent to qBittorrent</span><div class="cell-sub"><span data-inst="full">UsArr does not import downloads. Audiobookshelf watches <span class="mono">/media/books</span> and will show it once the file is there.</span><span data-inst="v01" hidden>UsArr does not import downloads, and no service on this install catalogues books, so nothing will show it until one is connected.</span></div></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>MyAnonaMouse</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>650 <span class="unit unit--size">MiB</span></td>
@@ -6134,7 +6157,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <tr role="row" aria-rowindex="3">
             <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="a2">Select this release</label><input type="checkbox" id="a2" data-act="rowselect"></td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--usenet">usenet</span></td>
-            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>1095 d</td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>1095 <span class="unit unit--age">d</span></td>
             <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="The.Wager.A.Tale.of.Shipwreck.Mutiny.and.Murder.2023.Unabridged.M4B.64k.Dion.Graham">The.Wager.A.Tale.of.Shipwreck.Mutiny.and.Murder.2023.Unabridged.M4B.64k.Dion.Graham</span><div data-slot="grabstate"></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>NZBgeek</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>235 <span class="unit unit--size">MiB</span></td>
@@ -6149,7 +6172,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <tr role="row" aria-rowindex="4">
             <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="a3">Select this release</label><input type="checkbox" id="a3" data-act="rowselect"></td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent">torrent</span></td>
-            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>730 d</td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>730 <span class="unit unit--age">d</span></td>
             <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="David Grann - The Wager [2023] MP3 64kbps CBR {Dion Graham}">David Grann - The Wager [2023] MP3 64kbps CBR {Dion Graham}</span><div data-slot="grabstate"></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>MyAnonaMouse</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>230 <span class="unit unit--size">MiB</span></td>
@@ -6164,7 +6187,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <tr role="row" aria-rowindex="5">
             <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="a4">Select this release</label><input type="checkbox" id="a4" data-act="rowselect"></td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--usenet">usenet</span></td>
-            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>1095 d</td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>1095 <span class="unit unit--age">d</span></td>
             <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="David.Grann-The.Wager-2023-Retail-M4B">David.Grann-The.Wager-2023-Retail-M4B</span><div data-slot="grabstate"></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>abNZB</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>669 <span class="unit unit--size">MiB</span></td>
@@ -6182,7 +6205,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <tr role="row" aria-rowindex="6">
             <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="a5">Select this release</label><input type="checkbox" id="a5" data-act="rowselect"></td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent">torrent</span></td>
-            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>1095 d</td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>1095 <span class="unit unit--age">d</span></td>
             <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="David Grann - The Wager (Doubleday, 2023) [EPUB]">David Grann - The Wager (Doubleday, 2023) [EPUB]</span><div data-slot="grabstate"></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>Bibliotik</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>4.0 <span class="unit unit--size">MiB</span></td>
@@ -6197,7 +6220,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <tr role="row" aria-rowindex="7">
             <td data-col="select" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span><label class="sr" for="a6">Select this release</label><input type="checkbox" id="a6" data-act="rowselect"></td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--usenet">usenet</span></td>
-            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>330 d</td>
+            <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>330 <span class="unit unit--age">d</span></td>
             <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="The.Wager.David.Grann.2023.Retail.EPUB.MOBI">The.Wager.David.Grann.2023.Retail.EPUB.MOBI</span><div data-slot="grabstate"></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>DrunkenSlug</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>7.4 <span class="unit unit--size">MiB</span></td>

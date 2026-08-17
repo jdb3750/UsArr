@@ -1688,13 +1688,24 @@ treatment by media type.** Same slots, same positions, different values.
     the first time a row crosses from GiB to MiB. Reserve the widest unit the column can ever print,
     measured in the cell font (13 px IBM Plex Sans, `1ch` = 8 px) and rounded up to the next half-ch:
     **size** `B · KiB · MiB · GiB · TiB`, widest `MiB` at 22 px → `3ch`; **duration** `h · d`,
-    widest `d` at 8 px → `1ch`; **item nouns** `films · series · books · artists · issues ·
-    episodes`, widest `episodes` at 52 px → `6.5ch`. ⚠️ **The duration family read `days · weeks ·
-    months · years · hours`, widest `months` at 43 px → `5.5ch`, and that was a family the mockups
-    invented.** `formatAge` emits `h` below a day and `d` above it and nothing else, so five of the
-    seven members were never printable — the same calibration error as the size family, one column
-    along. Re-measured on the real family, the reserve is `1ch`; see the deferral bullet below for
-    why `Age` still does not take it.
+    widest `d` at 8 px → `1ch`; **Home's item nouns** `films · series · artists · books`, widest
+    `artists` at 37 px → `5ch`. ⚠️ **The duration family read `days · weeks · months · years ·
+    hours`, widest `months` at 43 px → `5.5ch`, and that was a family the mockups invented.**
+    `formatAge` emits `h` below a day and `d` above it and nothing else, so five of the seven
+    members were never printable — the same calibration error as the size family, one column along.
+    Re-measured on the real family the reserve is `1ch`, and `Age` now takes it.
+    ⚠️ **The item-noun family read `films · series · books · artists · issues · episodes`, widest
+    `episodes` at 52 px → `6.5ch`, and it is the same error a third time — a family assembled from
+    the words the table uses SOMEWHERE rather than the words that column prints.** Home's `Items`
+    holds one noun per media type and there are six types: `films`, `series`, `artists`, `books`,
+    `books`, `series`. `episodes` and `issues` belong to `Have`, one column along — `13,204 /
+    14,061 episodes`, `7,891 issues · 34 with gaps` — and Items counts a comic library in series,
+    not in issues. Measured on the four nouns that column can print: `films` 28 px, `series` 34 px,
+    `books` 35 px, `artists` 37 px, so the reserve is **`5ch`, not `6.5ch`**. ℹ️ **The family here
+    is the DESIGN's, not the product's, and that is stated rather than glossed**: Home's Block A is
+    `NOT DRAWN` in the app — `web/src/routes/+page.svelte` says so and gives the reason — so unlike
+    `formatAge` there is no shipping function to read the nouns off. §17.2's six rows are the
+    source, and the day Block A is built the family is re-derived from whatever the builder emits.
   - ⚠️ **The size family is the BINARY one, and mistaking it for the decimal one is how this
     reserve was first mis-measured.** The rule shipped at `2.5ch`, derived from
     `B · KB · MB · GB · TB` whose widest member `MB` is 19 px — the family **the mockups drew at the
@@ -1710,8 +1721,10 @@ treatment by media type.** Same slots, same positions, different values.
     departure from it**: the rule is unchanged and only its input was wrong. The defect underneath —
     mockups drawing data the product cannot emit — is recorded separately in `docs/REVIEW-LOG.md` as
     **SU-05**, because until the sample data is corrected it will keep producing measurements that
-    are right about the mockup and wrong about the product. **The size half of SU-05 is done**;
-    `Age` and `Category` are still open there.
+    are right about the mockup and wrong about the product. **All three of SU-05's columns are
+    closed** — size in `SU-07`, `Age` in `SU-08`, `Category` in `SU-09` — and the class of defect
+    it names is not: `SU-10` is the same error twice more, in the item-noun family and in the two
+    trees' column widths.
   - **An absent value gets no unit box, and the reserve is the only thing this rule governs.** A
     `3ch` box held open around an em dash reserves width for a unit that is not there, so the
     absent-value branch emits `—` and no `.unit` span. ⚠️ **Whether the em dash is reachable is a
@@ -1739,35 +1752,55 @@ treatment by media type.** Same slots, same positions, different values.
     rule. The header form remains right for a column whose unit is genuinely constant — but that
     column is covered already, by the rule four bullets above: a value identical for every row is
     not data and is not rendered.
-  - ⚠️ **Applied so far to the size columns only — 98 cells — and the reason is a measured cost, not
-    an unfinished opinion.** A reserved unit box costs column width, and two declared tracks cannot
-    pay it. `Age` in the release tables is an **80 px** track: 24 px of padding leaves 56 px and
-    `months` alone is 43 px, so the figure had almost nothing left and the cell wrapped to two
-    lines. (⚠️ This bullet said **68 px** until the track was walked rather than quoted; 68 px is the
-    `Grabs` track in the same row, and the miscount is as old as the class. `months` is measured at
-    43 px in both readings, so the verdict was right for a partly wrong reason.) Home's `Items`
-    is 107.375 px: 52 px of reserve plus 24 px of padding leaves 31 px against a 36 px `1,842`.
-    Both were measured wrapping at **+18 px per cell over 224 cells** across the render sweep.
-    **Still carrying the old one-string treatment, named so that a reader can tell an unfinished job
-    from a decision:** `Age` on *Release results* and *Audiobook release results* (36 cells), and
-    `Items` on Home's *Library by media type* (16 cells). Widening a declared track is its own
-    decision on the two densest tables in the product, and §9.1's own overflow bullet is the reason
-    it is not folded in casually. **The move to `3ch` above does not disturb this**: it changes the
-    size reserve only, and both deferred columns are excluded from the reserve entirely. ⚠️ Their
-    stated *premise* is a separate matter — `months` and `years` are what **the mockups** put in the
-    `Age` column, while `formatAge` in the shipping app emits only `d` and `h`, so the 43 px figure
-    the deferral is argued from is a measurement of the mockup rather than of the product. That is
-    the same calibration error as the size family, and it is filed with it under **SU-05**.
-    ✅ **The mockups' `Age` sample data has since been converted to `formatAge`'s output, so the
-    premise is now void and the measurement that replaces it is recorded here rather than acted
-    on.** The duration family is `h · d`: measured by a span in a rendered `Age` cell, `h` is 7 px
-    and `d` is 8 px, so the widest is `d` at **1ch** — against 5.5ch for `months`. Widest figure the
-    column can print is four digits (`1095 d`, three years of indexer retention) at 32 px under
-    `tabular-nums`, so figure plus gap plus a 1ch box is **43 px in the 56 px content box, 13 px of
-    slack, one line at every density**. **The cost argument for the `Age` deferral no longer holds.**
-    It is nonetheless **left deferred**: this bullet's scope is *"size columns only"*, extending it
-    is a design decision rather than a correction, and the whole point of the paragraph above is
-    that a scope which changes quietly reads as an unfinished job.
+  - ✅ **Applied to the size columns (98 cells) and to `Age` (36 cells). One column is still
+    deferred — Home's `Items`, 16 cells — and the reason is a measured cost, not an unfinished
+    opinion.** A reserved unit box costs column width, and that track cannot pay it. Measured over
+    the render sweep — 5 widths × 3 densities × 2 installs × every state — a correctly-sized `5ch`
+    reserve takes `Items` from **48 wrapped cells to 96**. ⚠️ **The failing width is 1280 px, and
+    the deferral has never named it, because `Items` is a FRACTIONAL track and the number the
+    deferral quotes is a resolution rather than a width.** `minmax(0, 1.15fr)` is 107.375 px at
+    1440 px and **87.80 px at 1280 px**, the narrowest desktop width the design check sweeps —
+    63.80 px of content, in which `1,204 films` (67 px), `612 artists` (64 px) and `1,842 books`
+    (74 px) **already wrap today with no reserve at all**, and the reserve takes three of six rows
+    to six of six. At 1440 px and above the reserve fits, with 9.38 px to spare. Widening a
+    fractional track on Home is its own decision, and §9.1's own overflow bullet is the reason it is
+    not folded in casually. ⚠️ **The deferral's stated premise was wrong twice over and the verdict
+    survives both corrections**, which is worth saying plainly because a verdict that survives is
+    not thereby vindicated: the reserve was costed at **52 px for `episodes`**, a word this column
+    never prints (see the family bullet above — the real reserve is `5ch`, 40 px), and the track was
+    costed at its 1440 px resolution, where it does not fail. **Corrected, re-measured, and still
+    deferred.**
+    ✅ **`Age` is no longer deferred, and both numbers the deferral rested on are gone.** `months`
+    at 43 px is a word `formatAge` cannot emit; the mockups' sample data has been converted, and the
+    real family is `h` 7 px and `d` 8 px, so the reserve is `1ch`. **The cost is exactly nothing**,
+    measured twice: 960 cells per arm before anything was edited, by rewriting the cells in the
+    rendered page, and **1,920 cells and 1,920 `.unit--age` spans afterwards against the shipped
+    class**. `1095 d` — four digits at 32 px under `tabular-nums`, plus a 3 px gap, plus an 8 px
+    box — is **43 px in the 56 px content box, 13 px of slack**, identical with the box and without
+    it, and **0 cells on more than one line either way**. `d`'s ink is 8 px in an 8 px box, so **0
+    of 1,920 spans spill**, which is the test `2.5ch` failed for `MiB`. ⚠️ **What the box buys on this column is 1.00 px, and that is the number to quote, not
+    size's 14.00 px.** Forced onto the widest and narrowest unit the family has, the figures' right
+    edges sit at **416.00 px and 416.00 px with the box — spread 0.00 px — and at 416.00 px and
+    417.00 px without it, spread 1.00 px**, because `h` and `d` differ by one pixel. The reserve is
+    still correct: a two-member family is a family, and the box is what stops the digits moving the
+    first time a row crosses from days to hours. But on `Age` the treatment's larger half is the
+    **muting** — the figure is the value, `d` is only its scale — and a reader who expects size's
+    payoff here will not find it. ℹ️ **A one-member family would earn no box at all**, and that test
+    was run rather than assumed.
+  - ⚠️ **The `Age` track is 80 px in the mockups and 68 px in the application, and neither reading is
+    a miscount.** `.cols-requests-releases` in `docs/design/mockups/usarr.css` has read `60px 88px
+    80px … 80px 68px 84px` since it was written; `COLUMNS` in
+    `web/src/routes/requests/+page.svelte` has read `Age` 68 px since `cd94779`. **Both trees hold
+    both numbers, on different columns** — 68 px is `Grabs` in the mockups and `Age` in the app,
+    80 px is `Age` in the mockups and `Protocol` in the app — which is exactly how one came to be
+    quoted for the other. So **every width in this section names the file it came from**, and the
+    divergence itself is the finding: of the ten columns the two trees share, **eight carry
+    different widths** — only `Category` (`0.9fr`) and `Actions` (`minmax(max-content, auto)`)
+    agree — `Category` is column 9 in the mockups and column 5 in the app, and the mockups carry a
+    `Select` column the app does not have at all. Recorded in `docs/REVIEW-LOG.md`
+    as **SU-10**, in the same family as SU-05 — a mockup is a measuring instrument, so a mockup that
+    disagrees with the product keeps generating numbers that are right about one tree and wrong
+    about the other.
   - **`Category` prints UsArr's derived tags; the indexer's own Newznab path goes in `title`.** The
     same release found on two indexers comes back with two different paths, so the raw value renders
     one fact two ways depending on who answered. UsArr's tags are stable across indexers, so they are
