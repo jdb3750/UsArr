@@ -6525,3 +6525,106 @@ verbatim tail are in the commit message. **The green is load-bearing here**, unl
 is four Go files, so `test` (with `-race -shuffle=on`), `lint` and `vuln` all read it. The
 `golangci-lint` cache was cleaned by absolute path (`/root/go/bin/golangci-lint cache clean`) before
 the run, per the standing M5-01…M5-11 gate note.
+
+---
+
+# M5-31 — v0.1's success criterion was unmeetable as scoped, and the question that found it was "does the owner actually run these services?"
+
+**Date:** 2026-08-17. **Branch:** `claude/hearth-thread-93bfq1`, reset from `origin/main` at
+`a855e23`. **This is a scope finding, not a citation finding** — the first in the M5 series that is
+about a claim being *unsatisfiable* rather than *stale*. It lands as
+[ADR-0041](./DECISIONS.md#adr-0041) plus a proposed §16 amendment, not as an in-place correction,
+because a milestone's membership is a decision and decisions go in `DECISIONS.md`.
+
+🚩 **On the id, because the check disagreed with the remote and the working tree was right.**
+`M5-31` is the next free id, checked with the standing method —
+`grep -on "M5-[0-9]\+" docs/REVIEW-LOG.md | sed 's/.*M5-//' | sort -n | tail -1`. ⚠️ **It returned
+`30`, while every remote head still topped out at `29`**: `M5-30` was at that moment **in flight and
+uncommitted in the shared working tree**, another thread's `internal/servarr` streaming work, written
+into `REVIEW-LOG.md` before its Go files were committed. It has since landed as `6f33464`, complete
+with those files. **The one-liner reads the working tree rather than `HEAD` or `origin`, and that is
+exactly why it gave the right answer** — an id check against `git show origin/main:docs/REVIEW-LOG.md`
+would have handed this entry a number another thread was already using. On a repo where several
+threads push to `main` within the hour, **a uniqueness check must read the tree it is about to write
+to.** While M5-30 was still uncommitted this entry's staging was built to exclude it — committing
+prose that describes `StreamList[T]` while `internal/servarr/stream.go` was untracked would have
+created the exact defect M5-25 through M5-28 exist to catch, a document that outruns its code — and
+that precaution turned out to be unnecessary, because M5-30's own author committed it first. Recorded
+rather than deleted, because the precaution was right on the information available.
+
+## M5.23 How it was found, and why nothing before it could have
+
+The finding came out of a **scoping pass over §16, not a review of §16's prose.** Every M5 entry
+before it compared a document against another document or against the tree; this one compared a
+document against **the owner's actual machine**, by asking a question none of the ADRs in the chain
+had asked:
+
+> **Does Joe actually run Sonarr and Radarr?**
+
+He does not, and said so plainly on 2026-08-17: *"I don't run sonarr or radarr just yet. eventually i
+want to start collecting movies and tv shows. but thats gonna have to be future."*
+
+**That single fact falsifies a success criterion two Accepted ADRs and one authoritative roadmap
+section are built on.** [ADR-0036](./DECISIONS.md#adr-0036) put the \*Arr library sync first
+*"because it is the thing that proves the replica thesis on real data — a real Sonarr and a real
+Radarr, imported, delta-synced, reconciled, searched and rendered fast"*, and `ARCHITECTURE.md`
+§16.1's v0.1 entry carries the same words. **On the hardware the milestone targets, "a real Sonarr
+and a real Radarr, imported" has no satisfying assignment.** Not difficult — unmeetable.
+
+**Why the review process could not have caught it.** Three passes had already been over this text.
+ADR-0032 argued the roadmap bucket, ADR-0035 argued which comics source, ADR-0036 argued the count,
+and M5-27 through M5-29 audited the citations *between* them. Every one of those is internally valid.
+**The premise was never stated, so it was never checked**: "the milestone's success criterion is
+achievable on the owner's install" is the kind of assumption that reads as background rather than as
+a claim, and the repo's standing rules — cite a primary source, mark inference, name the tool and the
+tree — are all aimed at claims. **The generalisable rule, and the reason this entry exists at all: a
+success criterion is a factual claim about the world, and it needs verifying like any other.** ⚠️
+`CLAUDE.md`'s *"verify, don't assert"* names external APIs, rate limits, licensing terms, ports,
+endpoints and field names. **It does not name the operator's own environment**, and this is the case
+that argues it should.
+
+## M5.24 Disposition
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| **M5-31** | **High** | **v0.1's success criterion cannot be met on the machine v0.1 targets.** [ADR-0036](./DECISIONS.md#adr-0036)'s decision and `ARCHITECTURE.md` §16.1's v0.1 entry both scope the milestone to **Sonarr and Radarr** and both state the criterion as proving the replica thesis **on real data** — *"a real Sonarr and a real Radarr, imported"*. **The owner runs neither service** and has said collecting film and TV is *"gonna have to be future"*. What remains reachable is verification against **recorded fixtures and the vendored specs**, which is a method this repository has already documented failing in this exact subsystem: `ARCHITECTURE.md` §7.2 and `reference/sync.md` §2 record that `GET /api/v3/episode` is not a bare-array endpoint although **the OpenAPI spec marks its parameters `required: false`** — *"the constraint lives in the controller, not the schema"* | **APPLIED as a decision, not as an edit — [ADR-0041](./DECISIONS.md#adr-0041), owner-approved 2026-08-17.** ⚠️ **The criterion is kept and the source is changed**, which is the opposite of the tempting fix: **Kavita becomes the sync core's first adapter in v0.1**, because it is the source the owner runs and the only one whose delta has been verified against a live instance (ADR-0035 §2a — Kavita 0.9.0.2, 151 series, run 2026-08-17, passed clause by clause). **Sonarr and Radarr are re-sequenced, not cut**; they land on a core already proven on real data. ADR-0036's *rule* — one source, proven on real data, before a second adapter — survives untouched; only its membership moves, and the count stays at one. **§16 is NOT edited by this thread**: the replacement text for §16.1's v0.1 entry is drafted inside ADR-0041 as a marked block, with the current text quoted verbatim above it, and routed to the thread that owns §16 per `DEVELOPMENT.md` §11 — the same route [ADR-0040](./DECISIONS.md#adr-0040) took |
+
+## M5.25 What the fix costs, stated here rather than only in the ADR
+
+**One consequence is a genuine addition to v0.1 and must not be read as free.** Channel 3
+(`/history/since`) **does not apply to Kavita** — `ARCHITECTURE.md` §7.1a says so in its opening
+sentence, and `reference/sync.md` §1 defines channel 3 as an \*Arr history poll that no catalogue
+source exposes. So Kavita's channels are **1, 3b and 4** where the \*Arrs would have used **1, 3 and
+4**, and **channel 3b — the ordered page walk with a client-side stop — moves from "specified but not
+built in v0.1" into v0.1 work.** Three texts currently say otherwise and are amended by ADR-0041:
+§7.1a's closing paragraph, §16.1's v0.1 entry, and ADR-0036's own channel-3b consequence bullet
+(*"Nothing about it is implemented in v0.1."*). **The delta is also weaker than channel 3 would have
+been** — a page walk cannot observe a deletion (§7.1a), and Kavita's watermark moves on a chapter
+*add* only (ADR-0035 §2a clause (c)) — so reconciliation carries more weight in v0.1 than it would
+have. All of that is priced in the ADR rather than glossed.
+
+## M5.26 Raised, not fixed
+
+* **v0.1's minimal write path now has no target, and this entry does not decide it.** §16.1 names
+  *"minimal write path (`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue"*, and
+  every verb is \*Arr-shaped; **Kavita is a read-only catalogue source with no command sink**
+  ([ADR-0032](./DECISIONS.md#adr-0032)). Whether it re-sequences with the \*Arr adapters or stays and
+  is exercised only by Prowlarr's grab path is a §16 scope call. Flagged in ADR-0041's consequences
+  and in the proposed amendment, decided in neither.
+* **`docs/SETUP-CHECKLIST.md` was not read or touched by this entry**, and ADR-0036 amended it on
+  the reasoning this ADR has now changed — *"the owner does not need to stand up anything new for
+  v0.1 beyond what he runs"* is **more** true after ADR-0041, not less, but the per-service milestone
+  labels in that file will be wrong. Named here so it is a hand-off rather than a silent omission.
+* **The README's status tables are generated from §16** (`CLAUDE.md`), so they move when §16 moves
+  and not before. Deliberately untouched.
+
+### On the gate for M5-31
+
+`make check` was run on this tree and is green — command, absolute tool paths, versions, SHA and the
+verbatim tail are in the commit message. ⚠️ **The green is NOT load-bearing for this entry, and the
+honest statement of what it attests is narrower than usual.** This commit's diff is two files, both
+under `docs/`, and **the only gate step that reads `docs/` at all is `gitleaks dir .`** — so the green
+says no credential-shaped string appears anywhere in the tree and says **nothing whatever** about
+whether ADR-0041's reasoning is sound, whether its quotations are accurate, or whether the proposed
+§16 text is correct. Those were checked by hand against the sources and each quotation carries its
+file and section. ℹ️ **On which tree it was measured**, since that is the M5 series' own standing

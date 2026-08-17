@@ -59,11 +59,12 @@ distinctions now matter and are used consistently below:
 | [0033](#adr-0033) | `work.kind` gains `person`; a credit is not a music artist | **Accepted** — owner-decided 2026-08-16; refines ADR-0009, ADR-0031 |
 | [0034](#adr-0034) | The project keeps the name UsArr | **Accepted** — owner-decided 2026-08-16; naming only, nothing in the codebase moves |
 | [0035](#adr-0035) | Kavita, not Komga, is the comics-and-books catalogue source | **Accepted** — owner-decided 2026-08-16; **reverses one member of [ADR-0032](#adr-0032)**, confirms [ADR-0030](#adr-0030); ⚠️ **amended 2026-08-16** — the catalogue sources sequence **after** v0.1 ([ADR-0036](#adr-0036)), so this ADR picks *which* source, and its spike orders the post-v0.1 sequence; ✅ **§2's spike RAN 2026-08-17 and PASSED** — dated result in §2a, with one qualification (no server-side since-filter exists) |
-| [0036](#adr-0036) | No catalogue source ships in v0.1; they arrive one at a time after it | **Accepted** — owner-decided 2026-08-16; **amends** §16; **re-sequences [ADR-0032](#adr-0032) and [ADR-0035](#adr-0035)** without rejecting any source |
+| [0036](#adr-0036) | No catalogue source ships in v0.1; they arrive one at a time after it | **Accepted** — owner-decided 2026-08-16; **amends** §16; **re-sequences [ADR-0032](#adr-0032) and [ADR-0035](#adr-0035)** without rejecting any source; ⚠️ **amended 2026-08-17 by [ADR-0041](#adr-0041)** — the owner runs neither Sonarr nor Radarr, so this ADR's *"prove the replica thesis on real data"* criterion was unmeetable as scoped: **Kavita ships in v0.1 as the sync core's first adapter** and the \*Arr adapters re-sequence behind it. The rule — one source, proven on real data, before a second adapter — is kept unchanged |
 | [0037](#adr-0037) | TOFU SPKI pin enrolment is removed, not completed; enforcement stays | **Accepted** — 2026-08-16; amends no ADR; reopening conditions stated (a pin field on the update path + the change-acceptance UI) |
 | [0038](#adr-0038) | A list freezes its order while a user is aiming at it | **Accepted** — 2026-08-16; amends no ADR; the argument lives in `design/DESIGN-DIRECTION.md` §9.1a and ARCHITECTURE §17.5, this record holds the rejected alternatives |
 | [0039](#adr-0039) | `write_queue.state` loses its `CHECK`; `work_id` gets its foreign key back | **Accepted** — 2026-08-17; **supersedes** `reference/schema.md` §10 step 1 and the seam in `FUTURE.md` §11 / §11.1; closes `REVIEW-LOG.md` WQ-05; ⚠️ **amended 2026-08-17** — decision 3's ground 1 is **struck**, on a misquotation of `reference/sync.md` §4 that dropped the words *toward the \*Arr*: the decision stands on grounds 2 and 3, which are independent of it; ⚠️ **corrected 2026-08-17** — decision 1 and the first rejected alternative wrote the Go `state` validation as **done**; it is **owed by the first `write_queue` writer** and nothing validates the vocabulary today (`REVIEW-LOG.md` M5-25) |
 | [0040](#adr-0040) | The six subtype tables land with the catalogue source that writes each | **Accepted** — 2026-08-17; records as a decision what `00005_library_sync.sql` did; **in tension with** ARCHITECTURE §16's enumerated v0.1 schema line, which is left to the thread that owns §16 |
+| [0041](#adr-0041) | The sync core ships with **Kavita** as its first adapter; Sonarr and Radarr re-sequence behind it | **Accepted** — owner-decided 2026-08-17; **amends [ADR-0036](#adr-0036)** (*"No catalogue source ships in v0.1"*) and **amends** ARCHITECTURE §16, whose replacement text is proposed here and routed to the thread that owns §16; **re-sequences, rejects nothing** — Sonarr and Radarr still arrive; confirms [ADR-0035](#adr-0035) and [ADR-0040](#adr-0040) |
 
 ---
 
@@ -3556,7 +3557,22 @@ whenever the adapter lands" — which does not move the verdict.
 **Status:** Accepted · **owner-decided 2026-08-16** · **Amends
 [`ARCHITECTURE.md`](./ARCHITECTURE.md) §16**, which remains authoritative for scope ·
 **Re-sequences [ADR-0032](#adr-0032) and [ADR-0035](#adr-0035)** · **Rejects nothing** — every source
-either of them names still arrives.
+either of them names still arrives. · ⚠️ **Amended 2026-08-17 by [ADR-0041](#adr-0041)** — see the
+flag below.
+
+> ⚠️ **AMENDED 2026-08-17 by [ADR-0041](#adr-0041): the decision line *"No catalogue source ships in
+> v0.1"* no longer holds, and the reason is a fact this ADR never checked.** It scoped v0.1 to the
+> \*Arr library sync *"because it is the thing that proves the replica thesis on real data — a real
+> Sonarr and a real Radarr, imported"*. **The owner runs neither** (his words, 2026-08-17:
+> *"I don't run sonarr or radarr just yet … thats gonna have to be future"*), so that success
+> criterion was unmeetable on the hardware the milestone targets. **ADR-0041 keeps this ADR's rule —
+> one source, proven on real data, before a second adapter is written — and changes which source:
+> Kavita ships in v0.1 as the sync core's first adapter, and Sonarr and Radarr re-sequence behind
+> it.** The count stays at one, nothing is cut, and everything below about *why* a one-source
+> milestone beats a three-source one is unaffected and still correct. **Two specific consequences
+> below are superseded**: the channel-3b bullet's *"Nothing about it is implemented in v0.1"* (3b is
+> now v0.1 work, because Kavita has no channel 3), and *"The catalogue is film and TV"* (it is books
+> and comics/manga). Read ADR-0041 for both.
 
 > **Read alongside [ADR-0035](#adr-0035)'s own amendment, which records the same call from the other
 > side.** The two were written in parallel by the design and implementation threads and they agree;
@@ -4208,3 +4224,278 @@ books-and-comics three land with Kavita. 00005's header names both, per table.
   table given in full may be design-only.
 * **No code and no schema changed when this was written.** The decision it records shipped in
   `00005_library_sync.sql`; what lands here is the authority the deferral did not have.
+
+---
+
+<a id="adr-0041"></a>
+## ADR-0041 — The sync core ships with Kavita as its first adapter; Sonarr and Radarr re-sequence behind it
+
+**Status:** Accepted · **owner-decided 2026-08-17** · **Amends [ADR-0036](#adr-0036)**, whose
+decision line *"No catalogue source ships in v0.1"* is the sentence this changes ·
+**Amends [`ARCHITECTURE.md`](./ARCHITECTURE.md) §16**, which remains authoritative for scope — the
+replacement text for §16.1's v0.1 entry is drafted below and **routed to the thread that owns §16
+rather than applied here** · **Re-sequences, rejects nothing** — Sonarr and Radarr both still arrive ·
+**Confirms [ADR-0035](#adr-0035)** (which source) and **[ADR-0040](#adr-0040)** (when each subtype
+table lands), neither of which is reopened.
+
+### Context
+
+**ADR-0036 got the principle right and the source wrong, on a fact nobody had asked for.** Its
+decision reads: *"The \*Arr library sync lands first, because it is the thing that proves the replica
+thesis on real data — a real Sonarr and a real Radarr, imported, delta-synced, reconciled, searched
+and rendered fast."* §16.1's v0.1 entry says the same in the roadmap's own words: **Tier 0 Go adapters
+for Sonarr and Radarr**, *"which is what proves the replica thesis on real data"*.
+
+**A scoping pass asked the question the argument had skipped — does the owner actually run these
+services — and the answer was no.** In his words, 2026-08-17:
+
+> *"I don't run sonarr or radarr just yet. eventually i want to start collecting movies and tv shows.
+> but thats gonna have to be future."*
+
+**So the milestone's stated success criterion is not merely hard, it is unmeetable on the hardware it
+targets.** "A real Sonarr and a real Radarr, imported" cannot be satisfied where neither exists. This
+is not a quibble about wording: *on real data* is the load-bearing half of ADR-0036's argument for
+putting the \*Arr sync first, and it is the half that evaporated.
+
+**What is left if the milestone is attempted anyway is verification against recorded fixtures and the
+vendored specs — and this repository has already written down, twice, what that is worth against this
+ecosystem.**
+
+- **§7.2 and [`reference/sync.md`](./reference/sync.md) §2:** `GET /api/v3/episode` is **not** a
+  bare-array endpoint — Sonarr's `EpisodeController` rejects a parameterless call with
+  `BadRequestException("seriesId or episodeIds must be provided")` — while **the OpenAPI specs mark
+  those parameters `required: false`**, *"which is why a spec-derived design gets it wrong: the
+  constraint lives in the controller, not the schema."* A cassette recorded against the wrong shape
+  records the wrong shape faithfully.
+- **[ADR-0035](#adr-0035) §2a is the same lesson from the other direction**, and it is the only live
+  contact this project has made: running the probe against a real instance found that
+  `SeriesFilterField` carries **no timestamp member**, so the since-filter the pass condition was
+  written around **is not expressible**; that `SortField.LastModifiedDate` exists while `SeriesDto`
+  returns no last-modified property, so that key is unusable; and that `lastChapterAddedUtc` values
+  cluster on the **scan job's** clock — three series within microseconds at `07:00:30` — which is why
+  §7.1a's overlap window is not optional. **None of those three is discoverable from a fixture
+  recorded against the assumptions being tested.**
+
+**Kavita is the source the owner actually runs, and it is the one catalogue source that can be seen
+working.** Its channel-3b watermark criterion — written down in advance, per ADR-0035 §2 — **ran
+2026-08-17 against his live instance (Kavita 0.9.0.2, 151 series, page size 10) and passed clause by
+clause** (§2a). §16.1 already re-sequenced it to slot #1 on that result, in commit `34383c9`.
+
+**And the cost of the swap is small, because the sync core is source-agnostic.** The streaming import
+and its two-phase rendering, the batched writes and the single-writer discipline, the upsert and
+identity path, the search-document builder, library membership derivation, and the reconciliation
+sweep with both its guards are the same work whichever adapter feeds them. §16.0 says this in its own
+words — *"the read machinery is genuinely shared … `RemoteItem`, the registry, the circuit breaker,
+the import phasing, the write-queue-free read path and the reconciliation sweep are reused unchanged
+by every catalogue adapter"* — and then draws the conclusion that the shared layer must be shaped by
+whichever source goes first. That conclusion is kept. **Only the identity of that source changes**,
+to the one that can be run against real data.
+
+### Decision
+
+> **1. The sync machinery is built now, and Kavita is its first adapter.** v0.1's catalogue source is
+> **Kavita**, not Sonarr and Radarr.
+>
+> **2. ADR-0036's rule survives; its membership changes.** The rule is *"prove the replica thesis on
+> real data, on one source, before a second adapter is written."* ADR-0036 named the wrong source for
+> it, on a fact it did not have. **The count is unchanged at one.**
+>
+> **3. The Sonarr and Radarr adapters are RE-SEQUENCED, NOT CUT.** The owner intends to run both.
+> When they arrive they land on a core **already proven against real data**, rather than being the
+> thing that has to prove it. Nothing about them is refused, and no work already done on
+> `internal/servarr` is discarded — Prowlarr Search-and-Grab runs on it today.
+>
+> **4. v0.1's sync channels for its catalogue source are 1, 3b and 4 — not 1, 3 and 4.**
+
+### What "first adapter" means for the sync channels, stated exactly
+
+This is the one place the swap is **not** a like-for-like substitution, and it must not be glossed.
+
+**Channel 3 does not apply to Kavita.** §7.1a opens by saying so — *"Channel 3 does not apply to
+Navidrome, Audiobookshelf, Komga or Kavita, and none of them has a changed-since endpoint"* — and
+`reference/sync.md` §1 defines channel 3 as the `/history/since` delta poll, exposed by six \*Arr
+apps and by no catalogue source. Kavita has no history endpoint and no library entity feed to poll.
+
+| | \*Arrs, as ADR-0036 scoped it | **Kavita, as this ADR scopes it** |
+|---|---|---|
+| Channel 1 — full import | ✅ | ✅ |
+| Channel 3 — `/history/since` delta poll | ✅ | ❌ **not applicable** (§7.1a, `reference/sync.md` §1) |
+| Channel 3b — ordered page walk with a client-side stop | ❌ specified, not built | ✅ **built** |
+| Channel 4 — reconciliation sweep + both guards | ✅ | ✅ |
+
+**So channel 3b, previously "specified but not built in v0.1", becomes v0.1 work.** Three documents
+say the opposite today and all three are amended by this decision: §7.1a's closing paragraph
+(*"specified here but built with the first catalogue adapter, not in v0.1"*), §16.1's v0.1 entry
+(*"Channel 3b is specified (§7.1a) and not built here, because the sources that need it are not
+here"*), and ADR-0036's own Consequences (*"Nothing about it is implemented in v0.1."*). **That is a
+real addition to v0.1 and this ADR is not pretending otherwise** — but it is the channel whose pass
+condition was written down in advance and then verified against the owner's live instance, which is
+the strongest position any channel in this project is in.
+
+**The delta is weaker than channel 3 would have been, and that is the honest price.** Two limits,
+both already documented and neither newly introduced here:
+
+- **A page walk cannot observe a deletion, structurally** (§7.1a). Channel 4 is the only deletion path
+  for Kavita, so the sweep does more work in v0.1 than it would have for the \*Arrs.
+- **Kavita's watermark moves on a chapter *add* only.** ADR-0035 §2a clause (c) settled this from
+  source: `UpdateLastChapterAdded()` has exactly one production call site, in the new-chapter branch.
+  Edits, retitles, deletions and cover changes are reconciliation's business, not the delta's.
+
+Both are surfaced rather than swallowed — §7.1a's *"no change feed — full compare at 09:12"* Services
+state and §17.3's per-channel freshness rule already specify how.
+
+### Alternatives considered
+
+- **(a) Build Radarr as scoped, and verify against the recorded fixtures plus a throwaway Radarr we
+  stand up ourselves.** ⚠️ **The strongest alternative, and it is not a strawman:** it is the smallest
+  possible deviation from an Accepted ADR, `internal/servarr` is genuinely part-built, and a throwaway
+  instance is *real HTTP against real Radarr code* — strictly better than a cassette, and it would in
+  fact have caught §7.2's controller-versus-spec divergence. **It loses on the criterion's actual
+  word, which is *data*, not *HTTP*.** A throwaway instance holds a synthetic library: a handful of
+  films added minutes ago, no history depth, no root-folder sprawl, no accumulated quality-profile
+  mess, and nothing remotely like the **30–80 MB single response on a 1 GB Pi** that §7.2's entire
+  streaming-import design exists to survive. The defects it would *not* show are precisely the ones
+  this project has catalogued: `/history/since` returning a week of unbounded history in one array,
+  the `Date`-header clock skew that channel 3's overlap window is derived from, and cross-app
+  behavioural parity that `reference/sync.md` §1 explicitly marks *"not verified — probe at connect
+  time"*. It buys real HTTP and not real data. And it is **nobody's install**: it is torn down after
+  the milestone, so no regression it would have caught is ever caught twice.
+- **(b) Stand up a real Radarr on the owner's box, and let real data accumulate.** Also not a
+  strawman — it is the only option that satisfies ADR-0036 as literally written. It loses on the
+  owner's own sentence: *"thats gonna have to be future."* A Radarr he has not chosen to fill is
+  alternative (a) relocated to his hardware; making it *real* means him adopting a service and
+  starting a film collection he has said is not now, and then waiting weeks for the library to reach
+  a depth that tests anything. **Scope is the project's constraint to manage, not the owner's media
+  habits**, and asking the user to change what he runs so that a milestone label stays true inverts
+  who the product is for.
+- **(c) Do nothing on sync until the owner runs an \*Arr.** It has the virtue of leaving ADR-0036
+  untouched. It loses hardest of the three. The sync core is **the largest unbuilt subsystem in the
+  project**, `CLAUDE.md` names never shipping as the biggest risk, and this blocks the core *and* all
+  four milestones of §16.1 behind an event with no date — while the one catalogue source that can be
+  demonstrated is already gate-cleared. It also wastes the probe: ADR-0035 §2's criterion was written
+  down in advance and run against a live instance **in order to decide build order**, and (c) declines
+  to use the answer it bought.
+- **(d) Keep Sonarr and Radarr in v0.1 and weaken the success criterion to "verified against
+  fixtures and the vendored specs".** Rejected because it is the failure this project has already
+  been bitten by, dressed as a decision. `DEVELOPMENT.md` §11's guard rules exist because *"this repo
+  shipped its opposite and stayed green"*, and §7.2's controller-versus-spec case is the concrete
+  instance in this exact subsystem. Redefining the criterion to whatever is reachable is not scoping;
+  it is deleting the measurement.
+- **(e) Do both — \*Arrs as scoped, plus Kavita.** Two adapters in the milestone whose job is proving
+  one thesis. This is ADR-0036's own rejected alternative at a smaller size, and its reason applies
+  unchanged: a milestone that tests two things at once learns nothing clean from a failure.
+
+### Consequences
+
+**What this changes:**
+
+- **v0.1's catalogue is books and comics/manga, not film and TV.** §16.0's *"what the six-type claim
+  honestly is in v0.1"* paragraph and the README rows derived from §16 both need the noun swapped.
+  The other two thirds are untouched: the **schema** is still six-type because migration 0001 can
+  never be edited, and **requesting** is still six-type because Prowlarr Search-and-Grab covers all
+  six categories and already ships.
+- **Channel 3b moves into v0.1** — see the section above. §7.1a's closing paragraph, §16.1's v0.1
+  entry and ADR-0036's channel-3b consequence bullet are each amended by this ADR.
+- **`work_book`, `work_comic` and `work_comic_issue` are now due with THIS work, not later.**
+  [ADR-0040](#adr-0040) is confirmed, not reopened: each subtype table still lands with the catalogue
+  source that writes it, and **Kavita is what writes those three**. They arrive in a **new migration**
+  — `00005_library_sync.sql` is merged and `CLAUDE.md` is unambiguous that a merged migration is never
+  edited. **The music three are unaffected**: `work_album`, `work_track` and `work_credit` still wait
+  for Navidrome, which still has no adapter.
+- **ADR-0035 §1's identity consequence lands in v0.1 rather than being rescheduled.** Free Kavita's
+  null identifier fields make *"not identified"* the ordinary case, which ADR-0036 pushed out to
+  Kavita's own milestone. The nullable column and the badge were already v0.1 work because they cannot
+  be retrofitted; what changes is that the path is now **exercised** in v0.1 instead of merely present.
+- **The libraries subsystem gets back a real demonstration**, which ADR-0036 recorded losing. Not
+  Audiobookshelf's Ebooks/Audiobooks split — that still moves with Audiobookshelf — but an Ebooks
+  library and a Comics library derived from one Kavita's own containers, which is the §17.8 binding
+  doing exactly its job.
+- **⚠️ v0.1's minimal write path loses its target, and that question is NOT decided here.** §16.1's
+  v0.1 entry names *"minimal write path (`monitor`, `unmonitor`, `delete`, `add`) on the durable
+  command queue"*, and every one of those verbs is \*Arr-shaped. **Kavita is a read-only catalogue
+  source with no command sink** ([ADR-0032](#adr-0032)). Whether that write path re-sequences with the
+  \*Arr adapters, or stays and is exercised only by Prowlarr's grab path, is a scope call that belongs
+  to whoever owns §16. It is flagged here rather than answered, because this ADR does not own §16 and
+  `DEVELOPMENT.md` §11 requires an edit to a shared document outside your area to be announced before
+  it is pushed.
+
+**What this does NOT change — stated explicitly, because a re-sequencing ADR is easy to over-read:**
+
+- **[ADR-0035](#adr-0035) still picks Kavita over Komga.** That ADR answers *which* comics-and-books
+  source; this one answers *when*. Its reversal of ADR-0032's Komga membership stands untouched.
+- **§16.1's post-v0.1 sequence keeps its order: Navidrome, then Audiobookshelf, then Komga.** Kavita
+  is lifted out of slot #1 into v0.1 and the remaining three shift up by one **without reordering**.
+- **Komga is still last**, for the reason §16.0 gives and this ADR cannot improve on: nobody on this
+  project can point it at a real library — which is, note, the same test this ADR has just applied to
+  Sonarr and Radarr, applied consistently.
+- **Navidrome must still precede v0.4**, whose success criterion needs a populated music replica. At
+  #1 in the post-v0.1 sequence it satisfies that with more room than before, not less.
+- **[ADR-0040](#adr-0040) stands whole.** The six subtype tables still land with the source that
+  writes each; only *which milestone* three of them fall in moves, and it moves for exactly the reason
+  ADR-0040 gave — the landing point is the source, not the date.
+- **No ADR is reversed and no merged migration is edited.** `work.kind` keeps its full twelve-member
+  `CHECK` from 00005, ADR-0030's `comic_issue` and ADR-0033's `person` were already paid for up front,
+  and the provider registry absorbs the adapter swap by construction.
+- **The success criterion itself is unchanged**, which is the whole point: *prove the replica thesis
+  on real data.* This ADR changes the source so the criterion can be met, rather than changing the
+  criterion so the source can be kept.
+
+### 📋 Proposed replacement for ARCHITECTURE §16.1's v0.1 entry — WRITTEN HERE, NOT APPLIED
+
+**§16 is authoritative for scope and this thread does not own it.** Per `DEVELOPMENT.md` §11 the
+amendment is routed to the thread that does, exactly as [ADR-0040](#adr-0040) routed its own. The
+current text is quoted first so the diff is legible; the italics, bolds and escapes are reproduced as
+they appear in the source.
+
+**Current, `ARCHITECTURE.md` §16.1, verbatim:**
+
+```
+**v0.1 — "It reads your library, it is fast, and you can act on it."**
+Go binary + embedded SPA; SQLite + WAL with the §7.7 discipline; goose migrations. **Tier 0 Go
+adapters** for **Sonarr and Radarr** — the \*Arr library sync, which is what proves the replica
+thesis on real data — plus **Prowlarr in Search-and-Grab mode** (§8.5), which is the request path for
+**all six** media types. **No catalogue source ships in v0.1** (§16.0, ADR-0036): Navidrome,
+Audiobookshelf, Kavita and Komga arrive one at a time afterwards, in §16.1's sequence. **No command
+sinks** — no Lidarr, no LazyLibrarian, no Mylar3, no Kapowarr.
+Sync channels **1, 3 and 4**: full import for every service; **channel 3 (`/history/since`) for
+Sonarr and Radarr**, which is every library-bearing service v0.1 has; **reconciliation with 7-day
+tombstones and both sweep guards** for everything. **Channel 3b is specified (§7.1a) and not built
+here**, because the sources that need it are not here. SignalR and webhooks are **out**. **Minimal
+write path** (`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue; no optimistic
+apply.
+```
+
+**Proposed:**
+
+```
+**v0.1 — "It reads your library, it is fast, and you can act on it."**
+Go binary + embedded SPA; SQLite + WAL with the §7.7 discipline; goose migrations. **The sync core,
+with one Tier 0 Go adapter in front of it: Kavita** — which is what proves the replica thesis on real
+data, because it is the source the owner runs and the only one whose delta has been verified against
+a live instance ([ADR-0035](./DECISIONS.md#adr-0035) §2a) — plus **Prowlarr in Search-and-Grab mode**
+(§8.5), which is the request path for **all six** media types. **Sonarr and Radarr re-sequence out of
+v0.1** (ADR-0041): the owner runs neither, so *"a real Sonarr and a real Radarr, imported"* was a
+criterion no v0.1 could meet. **They are re-sequenced, not cut** — they arrive onto a sync core
+already proven on real data. **No command sinks** — no Lidarr, no LazyLibrarian, no Mylar3, no
+Kapowarr.
+Sync channels **1, 3b and 4**: full import; **channel 3b (§7.1a) — the ordered page walk with a
+client-side stop — for Kavita**, which is every library-bearing service v0.1 has, and which is
+therefore **built here rather than only specified** (ADR-0041). **Channel 3 (`/history/since`) is not
+applicable to Kavita** (§7.1a) and lands with the first \*Arr adapter. **Reconciliation with 7-day
+tombstones and both sweep guards** for everything — and it carries more weight here than it would for
+an \*Arr, because a page walk cannot observe a deletion (§7.1a) and Kavita's watermark moves on a
+chapter *add* only (ADR-0035 §2a clause (c)). SignalR and webhooks are **out**. ⚠️ **The minimal
+write path** (`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue **had only \*Arr
+targets and now has none** — whether it re-sequences with them or stays for Prowlarr's grab path
+alone is this section's call to make; no optimistic apply either way.
+```
+
+**Two riders for whoever applies it**, both consequences of this ADR that fall outside the v0.1 entry
+itself: **(i)** §16.1's numbered table drops Kavita from row #1 and renumbers Navidrome, Audiobookshelf
+and Komga to #1–#3 **without reordering them**, with a line recording that Kavita moved *into* v0.1
+rather than being cut; **(ii)** §16.0's *"what the six-type claim honestly is in v0.1"* paragraph reads
+**"the catalogue is film and TV"** and should read **books and comics/manga**, and its *"the honest
+payment is that v0.1 ships no catalogue source at all"* paragraph is the prose this ADR amends. The
+*"Schema, enumerated"* clause needs `work_book` / `work_comic` / `work_comic_issue` moved into v0.1 —
+which is the same clause [ADR-0040](#adr-0040) already flagged to this section, so the two edits should
+be made together.
