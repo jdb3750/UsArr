@@ -4344,12 +4344,36 @@ that is later honoured is worth more visible than one quietly deleted:
   `Protocol` — `SU-10`.**
 - **`SU-09b`** said the union helper is *"exactly wrong here"*. **Stronger than that: `SU-09e`.**
 
-**Gate**: `node docs/design/check.mjs` — **exit 0, all checks, both installs, every panel** — on the
-merged tree, twice: once at the merge and once on the final tree after the stylesheet comments and
-`prototype.html` were brought back into step. §13 copy corpus **6978** strings, `title` **406**,
-`aria-label` **468**, all **unchanged**, which is what a change confined to `<td>` content should do and was checked rather
-than predicted. `make check: OK`, Go linting via **`/root/go/bin/golangci-lint` 2.12.2** (built with
-go1.25.13) after an absolute-path `cache clean`, per PG-04.
+**Gate**: `node docs/design/check.mjs` — **exit 0, 78 checks, both installs, every panel** — on the
+merged tree at **`baff65e`**, which is both the tree this section describes and the tree now on
+`origin/main`. §13 copy corpus **6978** strings, `title` **406**, `aria-label` **468**, all
+**unchanged**, which is what a change confined to `<td>` content should do and was checked rather
+than predicted. `make check: OK` — `check-offline: OK`, then `govulncheck` v1.7.0 asserted against
+its pin, no vulnerabilities found. Go linting via **`/root/go/bin/golangci-lint` 2.12.2** (built
+with go1.25.13), which is the Makefile's own `GOBIN_DIR` pin and **not** the `$PATH` binary at
+2.5.0, per PG-04.
+
+⚠️ **`SU-13`: the paragraph above originally reported a run that had not happened, and the
+correction is recorded rather than overwritten.** It read *"on the merged tree, twice: once at the
+merge and once on the final tree after the stylesheet comments and `prototype.html` were brought
+back into step"*. That sentence was committed in **`a844e8a` (03:21:35Z)** — **2 min 37 s before
+`9fab501` (03:24:12Z) created the final tree it claims to have been run against.** The merge
+`baff65e` followed 9 s later and was on `origin/main` within the next 16 s, against a check that
+takes roughly four minutes. 🚩 **So the second run was not merely unrecorded, it was impossible —
+and the branch reached `origin/main` before any gate had passed on it**, inverting this repo's own
+rule that `check.mjs` passes on the *merged* tree before *every* push. ✅ **Both gates have since
+been run to completion on `baff65e` itself and both pass** — `check.mjs` exit 0 and `make check: OK`,
+which is what the corrected paragraph above now reports — **so the verdict was right, but it was
+right by luck rather than by check, and those are not the same claim.** ℹ️ **The measurements this
+section rests on were independently re-run at the same time** and every load-bearing number
+reproduced exactly: `months` **43px**, `h` **7px**, `d` **8px**, `1095 d` **43px** in the mockups'
+**56px** content box, the `Age` control **1.00px → 0.00px** against size's **14.00px → 0.00px**, the
+`Items` nouns **28/34/35/37px**, and the **87.80px** 1280px resolution in which three of six rows
+already wrap. 🚩 **The general shape is this round's own lesson one level up**: a gate result written
+ahead of its gate is the same defect as a track width quoted rather than walked, and it fails in the
+same direction — **it reads as evidence and contains none.** This is why a green must name its
+binary and its tree; one that names neither is a rumour, and one recorded before its run is not even
+that.
 
 **The before/after capture.** Baseline is the tree `SU-09` landed, so this isolates the `Age` split.
 **1040 combos**, **1,296,736 element rects before and 1,299,616 after**. The split **adds**
