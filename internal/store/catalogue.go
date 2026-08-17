@@ -124,9 +124,20 @@ type CatalogueItem struct {
 
 	AltTitles []AltTitle
 
-	// Overview feeds search_fts only. Kavita's series list carries none, so it
-	// is empty today; the column exists in the FTS table and a phase-B backfill
-	// is what fills it.
+	// Overview lands on work.overview AND in search_fts. Kavita's series list
+	// carries none, so it is empty today and a phase-B backfill is what fills it.
+	//
+	// IT IS PERSISTED ON `work` RATHER THAN ONLY INDEXED, and that is load-bearing
+	// rather than tidy: search_fts is contentless, so its stored text CANNOT be
+	// read back (measured — `SELECT people FROM search_fts` returns NULL), and
+	// fts5 refuses to update a subset of a contentless-delete table's columns
+	// ("cannot UPDATE a subset of columns on fts5 contentless-delete table",
+	// executed against this schema). Every rewrite of a document is therefore a
+	// full DELETE + INSERT of all five columns, and the credit pass now performs
+	// one — so any column that lives ONLY in the FTS row is a column the credit
+	// pass would silently blank. `work.overview` is the column that already
+	// exists for this; whoever writes the phase-B backfill writes it there and
+	// rebuilds the doc.
 	Overview string
 
 	// RemotePath is the path the UPSTREAM reported, verbatim
@@ -575,10 +586,11 @@ func applyOneItem(
 	case 0:
 		r, err := tx.ExecContext(ctx, `
 			INSERT INTO work (kind, title, sort_title, normalized_title, norm_version,
-			                  original_title, added_at, created_at, updated_at)
-			VALUES (?,?,?,?,?,?,?,?,?)`,
+			                  original_title, overview, added_at, created_at, updated_at)
+			VALUES (?,?,?,?,?,?,?,?,?,?)`,
 			it.Kind, it.Title, it.SortTitle, it.NormalizedTitle, it.NormVersion,
-			nullString(it.OriginalTitle), nullTime(it.AddedAt), nowStr, nowStr)
+			nullString(it.OriginalTitle), nullString(it.Overview),
+			nullTime(it.AddedAt), nowStr, nowStr)
 		if err != nil {
 			return res, fmt.Errorf("insert work: %w", err)
 		}
@@ -589,10 +601,10 @@ func applyOneItem(
 	default:
 		if _, err := tx.ExecContext(ctx, `
 			UPDATE work SET title = ?, sort_title = ?, normalized_title = ?, norm_version = ?,
-			                original_title = ?, updated_at = ?, deleted_at = NULL
+			                original_title = ?, overview = ?, updated_at = ?, deleted_at = NULL
 			 WHERE id = ?`,
 			it.Title, it.SortTitle, it.NormalizedTitle, it.NormVersion,
-			nullString(it.OriginalTitle), nowStr, workID); err != nil {
+			nullString(it.OriginalTitle), nullString(it.Overview), nowStr, workID); err != nil {
 			return res, fmt.Errorf("update work %d: %w", workID, err)
 		}
 		res.WorksUpdated++
@@ -715,7 +727,21 @@ func applyOneItem(
 	res.Members++
 
 	// ── 9. The search document. THIS IS THE INVARIANT-OWNING BLOCK.
-	if err := rebuildSearchDoc(ctx, tx, workID, it); err != nil {
+	//
+	// The `people` column is read from work_credit rather than taken from `it`,
+	// and it is read HERE — on the ITEM pass — even though the credit pass has
+	// not run yet in this import. That is not pointless on a re-import: the
+	// credits from the PREVIOUS import are still in work_credit when this runs,
+	// and writing "" would blank the column for the whole window between the two
+	// passes. On a first import it reads back nothing and the credit pass in
+	// §credits.go fills it.
+	d := it.searchDocText()
+	people, err := creditedNames(ctx, tx, workID)
+	if err != nil {
+		return res, err
+	}
+	d.people = people
+	if err := writeSearchDoc(ctx, tx, workID, d); err != nil {
 		return res, err
 	}
 	res.SearchDocs++
@@ -736,7 +762,180 @@ func applyOneItem(
 	return res, nil
 }
 
-// rebuildSearchDoc replaces one work's search document across all three tables.
+// searchDocText is the TEXT of one work's search document — the five FTS
+// columns plus the two search_doc columns derived from the same facts.
+//
+// It exists because the document now has TWO writers with two different sources
+// for the same fields: the item pass, which already holds every value on the
+// CatalogueItem it just wrote, and the credit pass, which holds none of them and
+// must re-read them from the replica. One struct and one writer (writeSearchDoc)
+// keep the two from drifting into two different documents;
+// TestTheCreditPassRebuildKeepsEveryOtherColumn is what proves they have not.
+type searchDocText struct {
+	kind          string
+	normTitle     string
+	title         string
+	originalTitle string
+	altTitles     string
+	people        string
+	overview      string
+}
+
+// searchDocText builds the document from the item the adapter projected. It
+// leaves `people` empty; the caller fills it from work_credit, which is the one
+// field no CatalogueItem carries.
+func (it CatalogueItem) searchDocText() searchDocText {
+	return searchDocText{
+		kind:          it.Kind,
+		normTitle:     it.NormalizedTitle,
+		title:         it.Title,
+		originalTitle: it.OriginalTitle,
+		altTitles:     it.altTitleBlob(),
+		overview:      it.Overview,
+	}
+}
+
+// readSearchDocText rebuilds the document from the replica, for the writer that
+// does not hold a CatalogueItem — the credit pass.
+//
+// Every field comes from a row the item pass wrote in an earlier transaction, so
+// this is a re-derivation and not a second source of truth. It is three reads
+// rather than one because alt titles and credits are both 1:N.
+//
+// ⚠️ ONE FIELD CAN DIVERGE FROM WHAT THE ITEM PASS WROTE, and it is pre-existing
+// rather than introduced here: `kind`. The item pass takes it from the container
+// binding and writes it into search_doc, but its UPDATE of an existing work does
+// NOT set work.kind, so a container an operator retyped in Kavita leaves
+// work.kind at the old value and search_doc.kind at the new one. This function
+// reads work.kind, i.e. what the rest of the replica — the subtype table,
+// recent.go's queries — already believes. Reconciling the two is a separate
+// question (changing a work's kind means moving its subtype row) and is not
+// this function's to answer.
+func readSearchDocText(ctx context.Context, tx *sql.Tx, workID int64) (searchDocText, error) {
+	var d searchDocText
+	var orig, overview sql.NullString
+	if err := tx.QueryRowContext(ctx, `
+		SELECT kind, normalized_title, title, original_title, overview
+		  FROM work WHERE id = ?`, workID).
+		Scan(&d.kind, &d.normTitle, &d.title, &orig, &overview); err != nil {
+		return d, fmt.Errorf("read work %d for its search document: %w", workID, err)
+	}
+	d.originalTitle, d.overview = orig.String, overview.String
+
+	// ORDER BY id is insertion order, which is the order the adapter reported —
+	// work_alt_title has an INTEGER PRIMARY KEY and the item pass inserts the
+	// alt titles in CatalogueItem.AltTitles order. Nothing about FTS matching
+	// depends on it; determinism does, so a test can compare two builds.
+	alt, err := scanStrings(ctx, tx,
+		`SELECT title FROM work_alt_title WHERE work_id = ? ORDER BY id`, workID)
+	if err != nil {
+		return d, fmt.Errorf("read alt titles of work %d: %w", workID, err)
+	}
+	d.altTitles = strings.Join(alt, "\n")
+
+	if d.people, err = creditedNames(ctx, tx, workID); err != nil {
+		return d, err
+	}
+	return d, nil
+}
+
+// creditedNames is the `search_fts.people` column: every name credited on this
+// work, newline-joined, so that a search for a creator returns the WORK.
+//
+// # Why the column is filled at all, when 'person' is excluded from the corpus
+//
+// The two rules point in opposite directions and both hold. schema.md §6.1 and
+// search.md §2 keep 'person' WORKS out of search_doc because a person hit is a
+// result row with nowhere to land — there is no person screen in any milestone —
+// and TestPeopleNeverEnterTheSearchCorpus enforces it. This column is the
+// opposite construction: it puts a creator's NAME on the book's document, so
+// "Susanna Clarke" returns Piranesi, which is a destination that exists. Filling
+// it adds no row to the corpus at all, so it settles the ⚠️ both documents carry
+// — "find everything by this author is unanswered in v0.1" — without touching
+// the exclusion those documents state.
+//
+// IT IS NOT THE CANDIDATE EITHER DOCUMENT NAMED. Both proposed folding the names
+// into `alt_titles`; this uses `people`, which already exists in the FTS table
+// and was already reserved for exactly this. The difference is not cosmetic: a
+// name in `alt_titles` is indistinguishable from a title at query time, so it
+// can never be weighted, filtered or explained separately, whereas `people` is
+// its own fts5 column. REVIEW-LOG LS-100 carries the argument.
+//
+// # Every role, not a chosen subset
+//
+// All eighteen members of work_credit.role qualify, and the filter that was
+// considered — authorship-ish roles only — is refused on two grounds. It would
+// be a SECOND vocabulary in Go beside the CHECK that defines the first, free to
+// drift from it (credits.go's Role comment refuses exactly that duplication for
+// the same reason). And in a comics-first v0.1 it would empty the column: the
+// nine roles Kavita actually reports are mostly the comics ones, so "authors
+// only" means a library of manga whose pencillers, letterers and cover artists
+// are unsearchable while the column looks populated. A user who types "Vince
+// Haig" wants the book he drew the cover for; there is no other screen that
+// answers them.
+//
+// The ranking objection — a long people list diluting a title match — is real
+// and is not this function's to answer. `people` is its own FTS column, and
+// fts5's bm25() takes one weight per column, so search.md §4's fusion query can
+// down-weight it when retrieval lands; today that query passes no weights at all
+// because nothing queries either FTS table yet. Choosing `alt_titles` instead
+// would have closed that door, which is the concrete reason this column was
+// taken over the candidate the documents named.
+//
+// # credited_as AND the person work's title, not one or the other
+//
+// Both strings are emitted when they differ. The person work's title is the
+// first spelling any source used for that human; credited_as is what THIS
+// release printed ("Sting" on a Police reissue). A user searching either one is
+// asking the same question, so dropping either loses a real query. The UNION
+// dedupes exactly — the same person credited in three roles on one work
+// contributes one name, not three, which keeps the term frequency honest.
+//
+// Kavita reports no printed variant, so credited_as is NULL on every row this
+// project writes today; the branch is here for the sources that do.
+func creditedNames(ctx context.Context, tx *sql.Tx, workID int64) (string, error) {
+	names, err := scanStrings(ctx, tx, `
+		SELECT w.title FROM work_credit c JOIN work w ON w.id = c.creator_work_id
+		 WHERE c.work_id = ?
+		UNION
+		SELECT c.credited_as FROM work_credit c
+		 WHERE c.work_id = ? AND c.credited_as IS NOT NULL AND trim(c.credited_as) <> ''
+		ORDER BY 1`, workID, workID)
+	if err != nil {
+		return "", fmt.Errorf("read credited names of work %d: %w", workID, err)
+	}
+	// Newline-joined for altTitleBlob's reason: both tokenizers treat it as a
+	// separator, so the join cannot fuse one name's end onto the next name's
+	// start into a token neither contains.
+	return strings.Join(names, "\n"), nil
+}
+
+// corpusExcludedKinds is search.md §2's exclusion list, in the one place the
+// document writer can enforce it.
+//
+// It is a WRITER-SIDE refusal rather than only a CI query, because the CI query
+// (TestPeopleNeverEnterTheSearchCorpus) can only report a corpus that has
+// already been corrupted, and the FTS tables carry no foreign key, so a bad doc
+// cannot be cleaned up by a cascade. Failing the import is the correct blast
+// radius: an excluded doc is also a search_doc_library row, so it appears inside
+// the user's library grid as an item.
+//
+// THE FIVE KINDS ARE EXCLUDED FOR TWO DIFFERENT REASONS and search.md §2 keeps
+// them apart: 'season', 'episode', 'track' and 'comic_issue' are a VOLUME
+// problem (~400k episode rows against ~13k top-level works, swamping every
+// query), 'person' is a DESTINATION problem (no person screen in any milestone).
+// The refusal is the same either way, which is why one list serves both.
+//
+// ⚠️ NOTHING SHIPPED REACHES IT. Kavita's adapter maps containers to 'comic' and
+// 'book' only (internal/libsync/kavita.go), so today this is a guard against a
+// future caller — the phase-B comic_issue walk is the obvious one — routing a
+// child kind through the top-level item path. Its witness has to construct the
+// call directly; see TestTheDocumentWriterRefusesAnExcludedKind.
+var corpusExcludedKinds = map[string]bool{
+	"season": true, "episode": true, "track": true, "comic_issue": true, "person": true,
+}
+
+// writeSearchDoc replaces one work's search document across all three tables.
 //
 // The order is forced and every step of it is load-bearing:
 //
@@ -749,7 +948,30 @@ func applyOneItem(
 //  4. insert that rowid EXPLICITLY into both FTS tables;
 //  5. file the doc under every library the work is a member of, and under
 //     library 0 if that set is empty — invariant 5.
-func rebuildSearchDoc(ctx context.Context, tx *sql.Tx, workID int64, it CatalogueItem) error {
+//
+// EVERY WRITER SUPPLIES ALL FIVE FTS COLUMNS, and that is forced rather than
+// tidy. Measured against this schema (a throwaway probe, run and then deleted):
+// fts5 answers a partial update with "cannot UPDATE a subset of columns on fts5
+// contentless-delete table: search_fts", and `SELECT people FROM search_fts`
+// returns NULL, so the columns an update would leave alone cannot be read back
+// and reconstructed either. Hence searchDocText: whoever rebuilds the document
+// must hold all five values, and readSearchDocText exists for the writer that
+// holds none of them.
+//
+// ⚠️ The all-column form DOES work — the same probe ran `UPDATE search_fts SET
+// title=…, original_title=…, alt_titles=…, people=…, overview=…` with no error —
+// so delete-then-insert is not the only mechanism for search_fts alone. It is
+// still the mechanism here, because search_doc.rowid is the allocator for all
+// three tables and this function rewrites search_doc and search_doc_library
+// beside the two index rows; an UPDATE path would have to keep three tables and
+// a junction in step by hand where the delete keeps them in step by construction.
+func writeSearchDoc(ctx context.Context, tx *sql.Tx, workID int64, d searchDocText) error {
+	if corpusExcludedKinds[d.kind] {
+		return fmt.Errorf("work %d is of kind %q, which search.md §2 excludes from the "+
+			"search corpus — a document for it would swamp the corpus or be a result row "+
+			"with nowhere to land, and its search_doc_library row would put it in the "+
+			"user's library grid as an item", workID, d.kind)
+	}
 	old, err := existingDocRowIDs(ctx, tx, workID)
 	if err != nil {
 		return err
@@ -771,7 +993,7 @@ func rebuildSearchDoc(ctx context.Context, tx *sql.Tx, workID int64, it Catalogu
 	// a corpus statistic that only a pass over the whole corpus can compute.
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO search_doc (work_id, kind, popularity, in_library, title_idf, norm_title)
-		VALUES (?,?,0,1,0,?)`, workID, it.Kind, it.NormalizedTitle)
+		VALUES (?,?,0,1,0,?)`, workID, d.kind, d.normTitle)
 	if err != nil {
 		return fmt.Errorf("insert search_doc for work %d: %w", workID, err)
 	}
@@ -780,16 +1002,15 @@ func rebuildSearchDoc(ctx context.Context, tx *sql.Tx, workID int64, it Catalogu
 		return fmt.Errorf("insert search_doc for work %d: rowid: %w", workID, err)
 	}
 
-	alt := it.altTitleBlob()
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO search_fts (rowid, title, original_title, alt_titles, people, overview)
 		VALUES (?,?,?,?,?,?)`,
-		docID, it.Title, it.OriginalTitle, alt, "", it.Overview); err != nil {
+		docID, d.title, d.originalTitle, d.altTitles, d.people, d.overview); err != nil {
 		return fmt.Errorf("insert search_fts %d: %w", docID, err)
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO search_trgm (rowid, title, alt_titles) VALUES (?,?,?)`,
-		docID, it.Title, alt); err != nil {
+		docID, d.title, d.altTitles); err != nil {
 		return fmt.Errorf("insert search_trgm %d: %w", docID, err)
 	}
 
@@ -841,6 +1062,31 @@ func existingDocRowIDs(ctx context.Context, tx *sql.Tx, workID int64) ([]int64, 
 		return nil, fmt.Errorf("read search docs for work %d: %w", workID, err)
 	}
 	return out, nil
+}
+
+// scanStrings runs a one-column query and drains it into a slice.
+//
+// It exists for existingDocRowIDs' reason and not for brevity: the *sql.Rows is
+// CLOSED before the caller issues its next statement, and both callers here are
+// mid-transaction on the single writer connection, where a cursor held open
+// across a write is the shape that produces a SQLITE_BUSY on a statement that
+// contended with nothing.
+func scanStrings(ctx context.Context, tx *sql.Tx, query string, args ...any) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []string
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
 }
 
 // altTitleBlob is what goes into the FTS tables' alt_titles column: this work's

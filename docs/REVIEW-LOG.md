@@ -12011,3 +12011,140 @@ top-level status documents, this pass searched `docs/reference/`, `docs/FUTURE.m
 comments under `internal/`. Neither root is redundant.
 
 The `LS.82` divergences and the `LS.83` guard firing are unaffected and remain open as reported.
+
+---
+
+# `search_fts.people` — the column the document builder wrote blank
+
+**2026-08-17**, branch `people-1787008364`, cut from `origin/main` at `999f538`. Id `LS-100`
+(allocated to this thread; `LS-101`–`LS-109` were reserved and are unused — they stay as gaps).
+
+**The premise this pass attacked** is one sentence carried identically by two reference documents:
+*"find everything by this author" is unanswered in v0.1.* It was true, and the reason was one
+literal: `internal/store/catalogue.go` inserted `""` into `search_fts.people` on every document it
+built, so no credited name was searchable anywhere in the product.
+
+## LS-100 The credited names now fill `search_fts.people`, and stay current
+
+`creditedNames` renders the column out of `work_credit` — the person work's title `UNION`ed with
+`credited_as` where the two differ, newline-joined — and both writers of the search document supply
+it. The behaviour, and the guard that fired against each half:
+
+| Behaviour | Guard | Fired by breaking |
+| --- | --- | --- |
+| A work is found by a creator's name that is nowhere in its own text | `TestAWorkIsFoundByItsAuthorsName` | `creditedNames` → `""`; step 4 disabled |
+| Every role, not an authorship subset | `TestEveryRoleReachesTheColumnNotJustAuthorship` | same |
+| `credited_as` beside the canonical name | `TestThePrintedVariantIsIndexedBesideTheCanonicalName` | same |
+| A credit change updates the column, in both directions | `TestAChangedCreditUpdatesTheDocument` | step 4 disabled |
+| An unchanged re-import rebuilds nothing | `TestARepeatCreditImportRebuildsNothing` | step 4 made unconditional |
+| The item pass does not blank the column mid-import | `TestAReimportKeepsTheCreditedNamesInTheDocument` | item pass forced to write `""` |
+| The credit-pass rebuild loses no other column | `TestTheCreditPassRebuildKeepsEveryOtherColumn` | each of `original_title`, `alt_titles`, `overview` dropped from the re-derivation, and `Overview` un-persisted from `work` |
+| The five excluded kinds are refused at the writer | `TestTheDocumentWriterRefusesAnExcludedKind` | the refusal deleted |
+
+**Every one of those breaks was executed and the failure output read**, per `CLAUDE.md`'s rule that a
+guard which has never been triggered is indistinguishable from no guard. Two non-firings are recorded
+below rather than papered over, because both are correct and both say something.
+
+## LS-100.1 It takes the `people` column, NOT the `alt_titles` candidate both documents named
+
+`schema.md` §6.1 and `search.md` §2 each proposed folding credited names into `alt_titles`. That is
+refused. A name in `alt_titles` is indistinguishable from a title at query time, so it could never be
+weighted, filtered or explained apart from one; `people` is its own fts5 column and `bm25()` takes one
+weight per column, so `search.md` §4's fusion query can down-weight it when retrieval lands. The
+ranking objection — a long name list diluting a title match — is real, and this is the shape that
+leaves it answerable.
+
+**Every role in the vocabulary is indexed, and the obvious filter is refused on two grounds.**
+"Authorship-ish roles only" would be a second vocabulary in Go beside the `CHECK` that defines the
+first, free to drift from it — which `credits.go`'s own `Role` comment already refuses for the same
+reason — and in a comics-first v0.1 it would empty the column, because the roles Kavita reports are
+mostly the comics ones. A library of manga whose pencillers, letterers and cover artists are
+unsearchable *while the column looks populated* is the worst of the available failures.
+
+## LS-100.2 The cost `schema.md` weighed is paid only when a name changed
+
+`schema.md` §6.1 left this owed because folding names in means *"a second FTS write per item, in the
+transaction the 100 ms batch window exists to keep short"*. The answer is that step 3 of
+`applyOneCreditSet` replaces credit rows unconditionally, so "did anything change" cannot be read off
+a row count — but it can be read off the **rendered name list**, compared before and after. A
+steady-state re-import rebuilds nothing; an uncredited item compares `""` to `""` and touches no FTS
+table.
+
+`CreditResult.DocsRebuilt` was added to report it, and it is load-bearing rather than decorative:
+`search_fts` is contentless and its rows are replaced in place, so **no query outside the store can
+tell a rebuild that produced identical text from no rebuild at all.** The counter is the only witness
+the negative assertion has, which is why the test that uses it also asserts retrieval — otherwise a
+step 4 that never fires would satisfy it by doing nothing.
+
+## LS-100.3 Two claims in the salvaged draft were measured and found overstated
+
+* **"DELETE-THEN-INSERT IS THE ONLY MECHANISM AVAILABLE."** Not true as stated. The probe the draft's
+  own author ran shows a *partial* update failing (`cannot UPDATE a subset of columns on fts5
+  contentless-delete table: search_fts`) and an **all-column `UPDATE` succeeding with no error**. What
+  is actually forced is that every writer supply all five columns — the stored text cannot be read
+  back (`SELECT people FROM search_fts` returns `NULL`), so the columns an update would leave alone
+  cannot be reconstructed. Delete-then-insert remains the mechanism *here* for a different reason:
+  `search_doc.rowid` is the allocator for all three tables and this function rewrites `search_doc` and
+  `search_doc_library` beside the two index rows. The comment now says that instead.
+* **"the bm25 weight vector in search.md §4."** §4 has no weight vector; its query calls
+  `bm25(search_fts)` with no weights at all. The comment now says that fts5's `bm25()` *takes* one
+  weight per column and that §4 can carry them when retrieval lands.
+
+**Both are the same failure mode**: a measurement generalised one step past what it measured. They
+are recorded rather than quietly fixed because the draft asserted them in capitals.
+
+## LS-100.4 The ADR the draft cited does not exist
+
+The salvaged comments cited **ADR-0047** twice. `docs/DECISIONS.md` stops at ADR-0046, and this repo
+has had five collisions on that shared counter. **No number was allocated.** Both citations were
+rewritten to stand on `schema.md` §6.1, `search.md` §2 and this entry, which is where the reasoning
+actually lives.
+
+⚠️ **This plausibly deserves an ADR anyway** — it closes off the `alt_titles` candidate that two
+reference documents named, and it closes off the authorship-only role filter. The argument is written
+in full in `creditedNames`' doc comment and in `LS-100.1` above; what it lacks is a number, and
+allocating one is not this thread's to do.
+
+## LS-100.5 The writer-side exclusion, and the guard that could not have caught it
+
+`writeSearchDoc` now refuses `search.md` §2's five excluded kinds outright. The existing guard,
+`TestPeopleNeverEnterTheSearchCorpus`, is a query over the corpus: it can only report a corpus that
+has **already** been corrupted, and the FTS tables carry no foreign key, so nothing cascades the bad
+rows away afterwards.
+
+**Measured, not assumed:** deleting the refusal leaves `TestPeopleNeverEnterTheSearchCorpus` GREEN.
+That is a correct non-firing — no shipped path routes a person through the builder, so the corpus
+really is clean — and it is also the precise demonstration that the CI query is not a substitute for
+the refusal. `TestTheDocumentWriterRefusesAnExcludedKind` calls the writer directly, which is the
+honest option: Kavita's adapter maps containers to `comic` and `book` only, so nothing shipped reaches
+the branch, and the caller that will — the phase-B `comic_issue` walk — is a later commit.
+
+## LS-100.6 The other correct non-firing
+
+Disabling step 4 (the credit pass's rebuild) leaves `TestAReimportKeepsTheCreditedNamesInTheDocument`
+green. That is correct: that test's subject is the **item** pass reading `work_credit` instead of
+writing `""`, and under a disabled step 4 the item pass still does exactly that. Conversely, forcing
+the item pass to write `""` fires that test and **nothing else**. The two halves of the mechanism have
+one guard each and neither absorbs the other's break.
+
+⚠️ One break in this pass was initially a **no-op and looked like an absorbed guard**: `d.altTitles`
+was zeroed on a line that a later assignment overwrote, and the drift test passed. Re-broken at the
+assignment itself, it fired. Recorded because "the guard did not fire" and "the break did not break
+anything" are indistinguishable from the test output alone, and only re-reading the patched source
+tells them apart.
+
+## LS-100.7 What this pass did NOT do
+
+* **No reader.** Nothing queries either FTS table yet. This is an indexing change with no consumer,
+  and the retrieval path — which is what will set the per-column weights — is a later commit. The
+  tests query `search_fts MATCH` directly for that reason.
+* **No existing test reversed.** The repo was searched for an assertion pinning the old empty-`people`
+  behaviour as correct (this has happened three times here). There is none: before this branch, no
+  test in `internal/` referenced the `people` column at all.
+* **No fix for one pre-existing divergence, REPORTED instead.** `applyOneItem`'s `UPDATE` of an
+  existing work does not set `work.kind`, so a container an operator retypes in Kavita leaves
+  `work.kind` at the old value while `search_doc.kind` takes the new one. `readSearchDocText` reads
+  `work.kind`, i.e. what the subtype table and `recent.go` already believe. Reconciling the two means
+  moving a subtype row and is a separate question; the divergence is noted at the function.
+* **No `alt_titles` change**, no `search_trgm` change, and no migration. `search_fts.people` has
+  existed since migration 0005 and was reserved for exactly this.

@@ -72,16 +72,22 @@ A large manga library does to the corpus with chapter titles exactly what episod
 
 `person` (ADR-0033) is excluded for a different reason from the other four: it is not a volume
 problem, it is a destination problem — there is no person screen in any milestone, so a person hit
-would be a result row with nowhere to go. ⚠️ **The consequence is that "find everything by this
-author" is unanswered in v0.1.** The cheap candidate is to fold credited names into the `alt_titles`
-column of the works they are credited on, so the query returns the books rather than the person, but
-that is a decision for whoever writes the document builder and it is not specified here. Adding
-`person` to the corpus later is a predicate change plus a re-index — not a migration, which is why
-it can wait and the kind itself could not.
+would be a result row with nowhere to go. Adding `person` to the corpus later is a predicate change
+plus a re-index — not a migration, which is why it can wait and the kind itself could not.
+
+⚠️ This paragraph used to end *"the consequence is that 'find everything by this author' is unanswered
+in v0.1"*, and to name folding credited names into `alt_titles` as the cheap candidate. **The
+consequence is answered and the candidate was not taken.** `internal/store`'s `creditedNames` fills
+**`search_fts.people`** from `work_credit` — its own column, so it can carry its own bm25 weight in §4
+below, which `alt_titles` never could — and the credit pass rebuilds the document whenever a credited
+name changes. The exclusion above is untouched: a creator's *name* is on the *work's* document, and no
+`person` row enters the corpus. schema.md §6.1 owns the detail.
 
 CI asserts
 `SELECT COUNT(*) FROM search_doc WHERE kind IN ('season','episode','track','comic_issue','person')`
-is 0.
+is 0, and `internal/store`'s `writeSearchDoc` now refuses all five at the writer as well — the CI
+query can only report a corpus that has already been corrupted, and the FTS tables carry no foreign
+key, so nothing cascades the bad rows away.
 
 **Permission filtering happens in the join, not after it**, and **the mechanism is a junction table,
 `search_doc_library(library_id, doc_rowid)` `PRIMARY KEY (library_id, doc_rowid) WITHOUT ROWID`** —
