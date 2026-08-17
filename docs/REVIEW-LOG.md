@@ -6276,6 +6276,167 @@ whatever about whether the prose is true. The `golangci-lint` cache was cleaned 
 
 ---
 
+# OPTIN-01 — every design guard can speak, and nothing in the tree asks any of them to. **Recorded. The decision it forces is named and deliberately not taken here.**
+
+**Date:** 2026-08-17. **Branch:** `claude/hearth-thread-vn9w7u`. **Verified against `a855e23`** by
+reading the tree rather than the routing message. **`OPTIN-` has not been used before** — checked
+rather than assumed, with `git grep -ncE '\bOPTIN-[0-9]' origin/main`, which exits 1 with no output.
+
+**This entry takes nothing back from the work it follows.** `PG-02b` fired four of `check.mjs`'s
+newly-covered sweeps deliberately, one at a time, each failure message naming the panel it came from;
+`SW-11` gave every static check a floor so a glob that matches nothing can no longer print `ok`;
+`PG-03` recorded a guard whose first firing was a **null** and reported that rather than quietly
+picking a string that worked. **That work stands. Each guard is real, and each one can speak.**
+
+🚩 **What none of it established is that any of them ever runs.** `docs/design/check.mjs` executes
+only when a person types `make design`, and **nothing in the tree types it**. `DEVELOPMENT.md` §11
+rule 3 closes with *"a guard that cannot speak when it fires is indistinguishable from no guard at
+all."* This is that sentence's other half: **a guard that can speak but that nothing invokes is
+indistinguishable from no guard too, and it is the harder of the two to notice — because every time
+somebody does invoke it, it works.**
+
+## What was verified, cited by target name and quoted text
+
+📌 **Deliberately no line numbers**, and the reason arrived with the finding itself. The routing
+message carried `Makefile` line numbers for the `check` target, the `design` target and the rationale
+block. **Every one of them was correct at `a855e23` and wrong by 41 lines in the checkout this thread
+was holding**, which was 15 commits behind `origin/main` when it started. The numbers were accurate
+and unusable at the same time, which is the whole argument for quoting the target instead.
+
+| Claim | Read from | What the tree says |
+|---|---|---|
+| **`make check` does not reach the design check** | `Makefile`, the `check` and `check-offline` targets | `check: check-offline vuln`, help text *"THE PRE-COMMIT GATE. No Docker. Two network calls (vuln.go.dev, npm)."* — and `check-offline: fmt-check lint build-tagged modverify secrets test`. The gate's transitive closure is those seven targets. `design` is in neither list |
+| **No target depends on `design` at all** | every target line in `Makefile` | `design` appears on the right-hand side of **no** `:` anywhere in the file. Its only occurrences as a target are `.PHONY: design` and its own recipe header, whose help text says so out loud: *"Run the design check (DESIGN-DIRECTION §13). Needs Chromium. NOT part of `check`."* |
+| **`check.mjs` has exactly one entry point, and it is that recipe** | `Makefile`'s `DESIGN_CHECK ?= docs/design/check.mjs`; `web/package.json` | The `design` recipe's last line, `PLAYWRIGHT_BROWSERS_PATH=$(PW_BROWSERS_PATH) $(NODE) $(DESIGN_CHECK)`, is the only thing in the tree that executes the file. `web/package.json` runs three Node programs — `bench:list`, `test:freeze`, `probe:pointer` — and **all three are under `web/scripts/`**. There is no root `package.json`. Every other mention of `check.mjs` in the tree is a comment pointing at it |
+| **There is no CI** | `git ls-tree -r origin/main --name-only` | No `.github/`, and no `.gitlab-ci.yml`, `.circleci/`, `.drone`, Jenkins, Woodpecker, Azure or Buildkite configuration either. **Nothing on `origin/main` runs anything on push, on merge, or on any other event** |
+| **There is no hook either** | `.git/hooks/`, `git config core.hooksPath` | Every file in `.git/hooks/` is a `.sample`; `core.hooksPath` is unset. §9's *Pre-commit* says *"Wire it as a git hook if you like"* — an invitation, and nobody took it |
+| **The exclusion is stated, and argued** | `Makefile`'s honesty notice, rule 3; the comment block above `design` | Rule 3: *"`make design` is the ONLY target allowed to require a browser, and like `make docker` it is never part of `check`."* Reason (1) of three: *"It needs a Playwright Chromium. The gate's whole contract is that it runs on a machine carrying Go and pnpm and nothing else; a ~150 MB browser download is a large new prerequisite for every developer and every runner."* And the conclusion: *"So it is a target a person runs, like `make bench`."* |
+
+✅ **All six hold.** The exclusion is not an oversight and this entry does not treat it as one — it is
+a decision, taken deliberately, argued in three numbered reasons, and one of those reasons has since
+been discharged in writing without disturbing the other two.
+
+## The repo says the exclusion. The sentence it does not say anywhere is the consequence
+
+⚠️ **The framing this finding was relayed under — *"the repo does not say so"* — is too strong, and
+correcting it is what makes the finding precise rather than blunting it.** The repo says the
+exclusion in four places: `Makefile` rule 3, the `design` target's own help text, the
+`DEVELOPMENT.md` §4 target table (*"Needs a browser; **not** part of `check`."*), and §4's prose,
+which goes further than a reader might expect — *"Run it by hand when the design moves, overriding
+`PW_BROWSERS_PATH` to point at your own browser cache."*
+
+**So the mechanism is documented four times over. What is written down nowhere is what it adds up
+to.** *Not part of `check`* is a claim about one target. It becomes *nothing will ever run this
+unless a human decides to* only when it is put beside a second fact — **that `make check`, typed on a
+developer's machine, is the entire automatic gate this project has** — and those two facts do not
+appear together in any file. A reader who meets *"not part of `check`"* on its own has every reason
+to file it the way they file `make docker`: **excluded from one step, presumably covered by
+something else.** There is no something else.
+
+🚩 **That is the defect, and it is a defect of adjacency rather than of accuracy.** Every sentence in
+the repo about `make design` is true. The conclusion they jointly force is stated by none of them,
+and it is the conclusion that governs how much a green from `check.mjs` is worth.
+
+## `make check` is unenforced too, and the difference is obligation, not mechanism
+
+📎 **Recorded because the obvious repair would otherwise be wrong.** It is tempting to describe
+`make check` as *enforced* and `make design` as *not*, and that contrast does not survive the tree:
+with no CI and no hook, **`make check` also runs only when a person types it.** The two are identical
+in mechanism.
+
+They are not identical in **obligation**. `CLAUDE.md` states that `make check` *"is the pre-commit
+gate and must pass before any commit"*, `DEVELOPMENT.md` §9 gives it its own *Pre-commit* section,
+and this log is full of entries that quote its transcript because they were required to. ℹ️ **No
+document places any comparable obligation on `make design`.** The strongest thing said about running
+it is §4's *"Run it by hand when the design moves"* — a suggestion, with a trigger condition
+(*"when the design moves"*) that nothing measures and nobody is answerable for.
+
+**So the honest statement of the finding is about duty, not about automation:** the design checks are
+opt-in in the sense that **no rule anywhere obliges anyone to run them**, and in a repo with no CI
+that is the only kind of enforcement there was ever going to be.
+
+## The decision this forces, which is deliberately not taken here
+
+**The repo owes one of two answers, and this entry deliberately supplies neither.**
+
+1. **Say plainly that the design checks are manual.** One sentence, placed where the reader already
+   is — beside §4's existing paragraph, and beside the `Makefile`'s conclusion *"a target a person
+   runs"* — stating that with no CI, a design guard runs only when someone chooses to run it, and
+   that a green from `check.mjs` is therefore evidence about the last time a human asked, not about
+   the current state of `main`. Cheap, and it costs the browser argument nothing.
+2. **Put them in the gate**, and accept the ~150 MB Playwright Chromium as a prerequisite for every
+   developer.
+
+⏸️ **Option 2 reopens an argued trade and is deferred rather than dropped — stated here so it does
+not later read as forgotten.** The Makefile's reason (1) is untouched by anything in this entry, and
+this thread has no standing to overturn it in passing: the gate's contract is *"a machine carrying Go
+and pnpm and nothing else"*, and enlarging that contract is a decision about every future
+contributor's first clone. It also is not the small change it looks like — reason (2)'s history is
+that the `playwright`/`playwright-core` specifier gap left the pin *"declared but not enforced"* by
+`DEVELOPMENT.md` §4's own account, and *"a gate step that accepts whatever is installed is still not
+a gate"* is that same section's sentence, not this entry's. **Whoever takes option 2 owes its own
+case, with that pin closed first.** Note the two are not exclusive: option 1 is true regardless and
+stays true right up until option 2 lands, which is an argument for doing option 1 either way.
+
+**Nothing was changed in this commit.** The `Makefile` was not touched, no target gained a
+prerequisite, and `web/` was not opened.
+
+## Raised, not fixed — the repo names a CI as an actor, and there is no CI
+
+🔍 **Found while verifying the absence, and recorded separately because it is a different finding
+that happens to explain why this one survived.** `DEVELOPMENT.md` §8 is titled *"CI: no Docker
+daemon, no FFmpeg, two network calls"* and says *"`make docker` … is never part of `check` and **CI
+must not call it**"*; §5 has a subsection *"Performance: what CI enforces and what it does not"* and
+a comment reading *"everything CI runs"*; `CLAUDE.md` says *"Query-plan assertions (`EXPLAIN QUERY
+PLAN`) belong in CI."* **There is no CI configuration in the tree.**
+
+Some of these are defensible on a careful reading — §8's opening measures *"the CI/agent container"*,
+and the agent container is real and does fail `docker info`. Others name CI as something that
+enforces, forbids and runs. ⚠️ **The interaction with `OPTIN-01` is the reason it is written down
+here at all:** a reader who believes an enforcing CI exists reads *"not part of `check`"* as *"not in
+that one step"*, which is exactly the misreading this entry is about. **Fix shape:** decide whether
+these are aspirational or descriptive, and mark them accordingly — an instance of `SD-01`'s class,
+routed rather than swept, since `CLAUDE.md` is the owner's file and this thread does not edit it on
+another agent's instruction (`FI-14`'s precedent).
+
+## The irony, stated plainly
+
+🚩 **This is the same class of thing as the rest of the week's findings — a claim about tooling
+asserted rather than checked — and the assertion came from the thread that had been driving the
+checker all along.** `PG-04` recorded three mitigations in one night that reported success while
+doing nothing; `MEAS-02` promoted *"quote the tool; do not paraphrase it"*; `M5-18` turned an
+asserted invariant into an executed one. Each of those was about a check that did not measure what it
+claimed. **This one is about a set of checks that measure exactly what they claim and are not wired
+to anything** — and it was written by the thread with the best possible view of that fact, which had
+been reporting `check.mjs` greens as though they were gate results for two days.
+
+ℹ️ **The durable half, and it generalises past this checker:** *is it correct?* and *does it run?*
+are two questions, and this repo has spent a week getting very good at the first one. A guard earns
+belief by probing the real condition (§11 rule 1), by reporting what it measured (rule 2), by being
+fired deliberately (rule 3) and by declaring a floor (rule 4) — **and then by being invoked, which is
+not on the list.** All four rules can be satisfied in full by a check nobody is obliged to type.
+
+### On the gate for OPTIN-01
+
+`node docs/design/check.mjs` was run on the merged tree, exit 0, ~128 s.
+
+⚠️ **State plainly what that green is and is not.** `check.mjs`'s sources are the mockups under
+`docs/design/mockups/`, `docs/design/tokens.css`, and `docs/ARCHITECTURE.md` §17 for one copy-drift
+exemption. **It does not read `REVIEW-LOG.md`**, which is the only file this commit touches. So the
+green attests that nothing the checker covers was broken by a tree it never opened — a regression
+check, and **no evidence whatever about whether this entry is true**. The claims in it are carried by
+the tree reads quoted above, not by any exit code. No formatter is claimed either: prettier's root is
+`web/`, so `make fmt-check` never reaches `docs/`.
+
+🚩 **And the entry demonstrates its own subject in the act of being gated.** Running `check.mjs` at
+all was **a choice this thread made**, not something any rule required. Nothing in the repo obliged
+it, nothing would have caught its absence, and had it been skipped the commit would have looked
+exactly the same from the outside. **That is `OPTIN-01`, performed rather than described** — and it
+is the reason the disposition above is *recorded*, not *applied*: an entry that fixed this by running
+the checker one more time would have proved the opposite of its own point.
+
+---
+
 # M5-30 — the \*Arr client capped every response at 32 MB under a transport that permits 200 MB, and buffered the endpoints `ARCHITECTURE.md` §7.2 forbids buffering
 
 **Date:** 2026-08-17. **Branch:** `claude/hearth-thread-93bfq1`, reset from `origin/main` at `a855e23`.
