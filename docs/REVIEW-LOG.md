@@ -12237,3 +12237,155 @@ that document could ever have caught the `int?` change, because the document nev
 **Deliberately not touched.** `api/specs/prowlarr.json`, `api/specs/SOURCES.md`, the
 `internal/servarr` suite and anything under `web/` — the Prowlarr remedy is another thread's
 in-flight change, and duplicating it here would produce two answers to one question.
+
+# Round 5 continued — `WIRE-01`–`WIRE-05`: §16's empty-state clause, measured against the wire
+
+**Date:** 2026-08-17. **Prefix:** `WIRE-` (the wire capability the clause turns on). Verified unused
+across `docs/` and across all **21** remote heads (`git for-each-ref refs/remotes/origin`, HEAD
+excluded) before the pass started, and checked for near-collision against this thread's earlier
+prefixes — `NOCI-`, `RG-`, `ADRC-`, `MWP-`, `CORR-`, `TRIAD-`, `CH1-` — and against the log's own
+`LS-`, `LAT-`, `SD-`, `M5-`, `C-`.
+
+**The relayed finding, and it is half right.** §16.1's v0.1 entry carries, as a standing requirement
+restored by `CH1-04`, *every screen that would render a library says which source is missing rather
+than drawing an empty one*. It was reported that **nothing on the wire can know which source is
+missing**, so the clause can only ever pass vacuously, and that this is a wording defect in the
+requirement rather than a UI failure. The three supporting wire claims are true. The conclusion
+drawn from them is not, and the difference is what this pass turns on.
+
+### WIRE-01 The three wire claims hold, measured at `96227f6`, re-verified at `39b0dae`
+
+* **`GET /api/v1/library/recent` carries no per-type facet.** Its envelope is
+  `recentWorksResponse{Items, Limit, NextCursor}` (`internal/httpapi/library.go`), and the row
+  struct is a hand-copied **allowlist** pinned by `TestRecentWorksResponseKeysAreTheAllowlist`, so
+  nothing reaches that wire by accident.
+* **`GET /api/v1/services/health` carries only a coarse role.** Its row is `serviceHealthResponse`
+  (`internal/httpapi/services.go`): `kind` (`prowlarr` | `kavita`) and `role`, whose CHECK admits
+  four values — `library`, `acquisition`, `indexer`, `download_client`
+  (`internal/db/migrations/00001_initial.sql:134`). No media-kind array.
+* **No source-to-media-types mapping exists in the codebase.** `MediaKinds` occurs **zero** times in
+  Go. `web/src/lib/library.ts` holds a flat `MEDIA_TYPES` of six and `web/src/lib/api.ts` a flat
+  `SERVICE_KINDS` of two; **nothing joins them.**
+
+**Re-measured after `39b0dae` landed**, because that commit rewrote 90 lines of
+`internal/libsync/kavita.go` — the file two of these findings rest on — between the first pass and
+this commit. All three still hold: `MediaKinds` is still zero in Go, `Caps.MediaKinds` is still
+exactly the two SQL comments, the `role` CHECK is unchanged, and `mapLibraryType` still emits
+exactly two distinct `work.kind` values, `comic` and `book`. **A measurement taken against a tree
+that has since moved is not a measurement**, which is why this line exists rather than being
+assumed.
+
+### WIRE-02 §8.3's capability filter does not exist, and would answer a different question if it did
+
+The task asked specifically whether §8.3's `Caps.MediaKinds` is the mapping the finding says is
+absent. **It is not**, on two independent grounds, and the second survives even if the first is
+fixed.
+
+1. **It is unbuilt.** `Caps.MediaKinds` occurs **zero** times in Go. Its only non-prose occurrences
+   are **two SQL comments** on `library.sink_service_instance_id` —
+   `internal/db/migrations/00005_library_sync.sql:558` and the schema dump at
+   `internal/db/testdata/schema.sql:366`. `internal/servarr` *does* carry a `Capabilities` field and
+   it is a decoy: it is `IndexerCapabilityResource` (`internal/servarr/resources.go:121`) —
+   Prowlarr's per-**indexer** newznab categories, `*SearchParams` arrays and `LimitsMax` — which is
+   §8.5's search filter, not §8.3's routing filter.
+2. **It is a request-sink capability, not a catalogue-coverage one.** §8.3 defines it as the filter
+   over instances that advertise `Add` for a `(kind, format)`. §8.3's own worked example supplies
+   the counterexample — *"Navidrome is an excellent music catalogue and cannot accept a request"* —
+   so even a fully built `Caps.MediaKinds` would still not say which media types a source
+   **supplies**. Reusing it for coverage would make every read-only catalogue source look like a
+   sink, which is the error §8.3 exists to prevent.
+
+**So this does not materially change the fix** — but it does change which seam gets named, and
+naming the wrong one would have been worse than naming none.
+
+### WIRE-03 The clause conflates two questions and only one is blocked — so it is split, not lowered
+
+**The premise "it can only ever pass vacuously" does not hold for the whole clause.** Half of *which
+source is missing* is answerable today with no wire change at all, and **§17.2 already demands the
+stronger form of that half**: its per-type `unconfigured` row renders *"the type, `no catalogue
+source connected`, **the service that will populate it and the milestone it arrives in**, and a link
+to Add"*, and it explicitly declines to restate the membership — *"§16 is authoritative for which
+source that is and which types it covers, and this section does not restate it."* **§16 is the
+mapping**, and it covers all six of §1's types: `movies` and `tv` → Sonarr and Radarr at **v0.2**
+(ADR-0045); `music` → Navidrome (§16.1 #1); `audiobooks` → Audiobookshelf (§16.1 #2); `ebooks` and
+`comics` → Kavita at **v0.1**, with Komga a second comics source (§16.1 #3). That half needs a
+constant derived from §16, not a field from a server.
+
+**The genuinely unanswerable half is narrower than the one that was stated.** It is not *which
+source is missing* but ***does the connected source actually cover this type***. §16 says Kavita
+covers books, so an install whose Kavita holds only comic libraries has an `ebooks` type whose named
+source is connected and healthy with nothing behind it — and `WIRE-01` is why nothing served
+separates that from an import that has not run. This became reachable only when v0.1 gained a
+catalogue source: `mapLibraryType` (`internal/libsync/kavita.go`) emits exactly two `work.kind`
+values, `comic` and `book`, so **two of the six media types have a source and four do not**, which
+is the mixed screen `CH1-04` flagged.
+
+**Applied**, as a split rather than a rewording, at §16.1's v0.1 entry. **The alternative — rewording
+the clause down to *"say the library is empty"* — was rejected**: it would retire principle 3 at
+screen level in the guise of a wording fix, and it would have put §16 in direct contradiction with
+§17.2, which has required the stronger form all along. §16.0's weaker restatement of the same rule
+gets a one-sentence pointer to the split (see `WIRE-05`).
+
+### WIRE-04 No ADR, and the reason is the `WIRE-03` measurement rather than a preference
+
+The task flagged that an ADR is owed **if the fix closes off the alternative of weakening the
+requirement**. On the measurement above, it does not — because **§17.2 closed that alternative
+already and independently.** The per-type row's *"the service that will populate it and the
+milestone it arrives in"* is the stronger form of the same rule, it is satisfiable today with no
+wire change, it long predates this pass, and nothing here proposes to touch it. §16's clause was a
+**lossy paraphrase of a standing §17.2 requirement**, not a separate commitment that was at risk of
+being lowered, so correcting the paraphrase forecloses nothing that was open. What remains is a
+deferred capability with a seam, and this repo records those in `FUTURE.md` (§20) rather than by
+minting an ADR. `docs/DECISIONS.md` is at **ADR-0046** and this commit does not touch the counter.
+
+**Had the finding's premise held whole** — had *no* part of the clause been satisfiable — the answer
+would have gone the other way, because keeping an entirely unmeetable requirement over deleting it
+*is* a decision that closes an alternative. It is recorded here so the reasoning is inspectable
+rather than implied by an absence.
+
+### WIRE-05 Swept, and what was deliberately not touched
+
+**Counted from the artefact, not from recollection.** §16 in full — §16.0 and §16.1 — states the
+empty-state rule in **three** places, plus **one** historical quotation of it:
+
+* **§16.0's prose** (*"A screen for a media type with no configured source says so … rather than
+  rendering an empty grid"*). Not falsified — true and less specific. **Given a one-sentence pointer
+  to the split**, because it sits ~380 lines earlier in a different subsection and would otherwise
+  read as the requirement having been quietly lowered to its weaker form.
+* **The *"what six media types means"* blockquote** in §16.1 (*"A media type with no configured
+  source says so on screen rather than rendering an empty grid"*). **Left alone** — a deliberately
+  compressed summary sitting in the same subsection as the split, a few screens above it. A third
+  copy of the pointer is noise.
+* **The clause itself**, split as `WIRE-03` describes.
+* **The historical quotation** ending *"drawing an empty one"* is inside a ⚠️-marked quote of a
+  sentence recorded as **falsified** at `01969ed`. It must stay verbatim and was not touched.
+
+**Two dangling `§17.7` citations — a finding, routed rather than fixed.** `ARCHITECTURE.md` uses the
+term `unconfigured` exactly **twice** — §16.1's clause and §17.2's Block A note — and **both cite
+§17.7 for it, while §17.7 contains the string zero times**. The state is actually specified in
+§17.2. §16's citation is **left verbatim**: re-pointing one of a matched pair unilaterally creates
+the split it would be meant to fix, and §17 is another owner's section. The new §16.1 text routes
+the reader to §17.2 by describing what that section requires, without editing the old citation.
+**Routed to §17's owner.**
+
+**Not touched, and out of this thread's sections.** No change under `web/` or `internal/`, and **no
+capability built** — the array is recorded as a seam in [`FUTURE.md`](./FUTURE.md) §20 and nothing
+more.
+
+**`CH1-04`'s routed item closed itself while this pass was in flight, and re-checking it is what
+found that.** The claim drafted here was that `web/src/routes/+page.svelte`'s Block A exemplar was
+*"still open and still stale"*. **It is not**, as of `8d1b9e1`: the exemplar that read *"Comics · no
+catalogue source · Kavita · after v0.1 · Add"* is corrected in place and marked ⚠️ **false on both
+of its claims** — comics has a catalogue source, and that source is in v0.1 — with the replacement
+drawn from §16.1's slot #1, *"Music · no catalogue source connected · Navidrome · after v0.1 ·
+Add"*. Recorded because the draft was wrong for about an hour and re-measurement is the only reason
+it did not ship that way.
+
+**And that correction is independent corroboration of `WIRE-03`, reached from the opposite end.**
+The frontend side arrived at the same split without this pass: *"§17.2 has stopped naming which
+types are sourceless at all and defers to §16, so the exemplar has to come from there"* — which is
+the **answerable** half, sourced from §16 exactly as `WIRE-03` argues — and, in the same comment,
+*"no per-type count is readable yet"*, which is the **unanswerable** half. Two threads converging on
+the same two-part shape from opposite directions is the strongest available evidence that the split
+is the requirement's real structure rather than this pass's preference, and it is the reason the
+clause was split rather than either lowered or left standing whole.
