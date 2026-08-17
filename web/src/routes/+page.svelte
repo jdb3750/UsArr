@@ -111,7 +111,8 @@
 	 * `Search again` and `Open Services` are actions §17.5 puts on the Requests
 	 * block, which is the canonical record; Home shows the ten most recent as a
 	 * summary and links to it. That is a deliberate narrowing rather than an
-	 * omission — see the columns below.
+	 * omission — see the columns below, and the omitted `actions` prop on
+	 * `$lib/RecentGrabs.svelte`, which is the whole of how it is expressed.
 	 *
 	 * THE CSP FORBIDS INLINE STYLE ATTRIBUTES, so nothing here writes one. The
 	 * list primitive sets its custom properties through the CSSOM; everything
@@ -123,8 +124,8 @@
 	import { ApiError, fetchRecentGrabs, fetchServicesHealth, type RecentGrab } from '$lib/api';
 	import Icon from '$lib/Icon.svelte';
 	import List from '$lib/List.svelte';
-	import { NOTHING, type ListColumn } from '$lib/list';
-	import { prefs } from '$lib/prefs.svelte';
+	import RecentGrabs from '$lib/RecentGrabs.svelte';
+	import { type ListColumn } from '$lib/list';
 	import {
 		attention,
 		hasIndexer,
@@ -134,14 +135,7 @@
 		type AttentionRow,
 		type HomeMode
 	} from '$lib/home';
-	import {
-		GRAB_MISSING_TITLE_NOTE,
-		grabOutcome,
-		formatWhen,
-		KNOWLEDGE_STOPS_NOTE,
-		RECENT_GRAB_ROW_INTRINSIC,
-		requestsSearchHref
-	} from '$lib/requests';
+	import { KNOWLEDGE_STOPS_NOTE, requestsSearchHref } from '$lib/requests';
 	import { firstLine, rollupCount } from '$lib/services';
 
 	/**
@@ -273,7 +267,6 @@
 
 	const count = $derived(rollupCount(rows));
 	const meta = $derived(headline(mode, services, count));
-	const grabRowIntrinsic = $derived(RECENT_GRAB_ROW_INTRINSIC[prefs.density] ?? 44);
 
 	/**
 	 * The href the submit button would follow with scripting off, and the one
@@ -589,73 +582,27 @@
 		<p class="note home-grabnote">{KNOWLEDGE_STOPS_NOTE}</p>
 
 		<!--
-			`labels` below 760 px, matching the Requests block: the question a row
-			answers is "did that one get sent?", so Outcome may not be one of the
-			fields a two-line fork drops. Ten rows bounds what the labelled form
-			costs.
-		-->
-		<List
-			label="Recent grabs"
-			columns={GRAB_COLUMNS}
-			rows={grabs}
-			key={(g: RecentGrab) => g.id}
-			total={grabs.length < RECENT_LIMIT ? grabs.length : undefined}
-			rowIntrinsic={grabRowIntrinsic}
-			stack="labels"
-			cell={grabCell}
-		/>
-	</section>
-{/if}
+			THE SAME COMPONENT THE REQUESTS BLOCK DRAWS, under a narrower projection.
+			`$lib/RecentGrabs.svelte` owns the row markup — the three states, the
+			conditional sub-lines, the labelled stacking below 760 px — so the two
+			screens cannot end up wording the same row differently, which is the one
+			thing that would make this summary worse than no summary.
 
-{#snippet grabCell(grab: RecentGrab, column: ListColumn)}
-	{#if column.id === 'when'}
-		{@const when = formatWhen(grab.grabbedAt, now)}
-		{#if when.absolute}
-			<!-- Absolute AND relative, per §17.3: one identifies the moment, the
-			     other answers "how long ago" without arithmetic. -->
-			<span class="num">{when.absolute}</span>
-			<div class="cell-sub">{when.relative}</div>
-		{:else}
-			<span class="muted">{NOTHING.empty}</span>
-		{/if}
-	{:else if column.id === 'release'}
-		{#if grab.releaseTitle}
-			<span class="mono trunc" title={grab.releaseTitle}>{grab.releaseTitle}</span>
-		{:else}
-			<!-- An empty title is a FACT rather than missing data — the candidate had
-			     already been swept when the audit row was written — so it gets
-			     $lib/requests' sentence rather than an em dash that would render it
-			     as an unremarkable blank. -->
-			<span class="muted">{GRAB_MISSING_TITLE_NOTE}</span>
-		{/if}
-	{:else}
-		{@const outcome = grabOutcome(grab.outcome, {
-			errorCode: grab.errorCode,
-			hasTitle: grab.releaseTitle !== ''
-		})}
-		<!--
-			THE SAME THREE STATES AS REQUESTS, FROM THE SAME FUNCTION. `grabOutcome`
-			owns the labels, the tone and the conditional sub-lines, so the two
-			screens cannot end up wording the same row differently — which is the
-			one thing that would make this summary worse than no summary.
-
-			NO ACTION ON ANY ROW, ON ANY STATE. §17.3 states a problem canonically
-			once per screen, and the canonical place for a grab's follow-up is the
-			Requests block: `Search again` starts a fresh fan-out that only that
-			screen can run, and `Open Services` is already Block B's job when the
+			NO `actions` PROP, AND ITS ABSENCE IS THE DECISION. §17.3 states a problem
+			canonically once per screen: `Search again` starts a fresh fan-out only
+			Requests can run, and `Open Services` is Block B's job above when the
 			fault is UsArr's own configuration. `outcome.nonAction` still renders,
 			because naming the non-action is a statement about the row rather than a
 			control, and dropping it would leave a bare error chip.
 		-->
-		<span
-			class="chip"
-			class:chip--pending={outcome.tone === 'warn'}
-			class:chip--err={outcome.tone === 'err'}>{outcome.label}</span
-		>
-		{#if outcome.detail}<div class="cell-sub">{outcome.detail}</div>{/if}
-		{#if outcome.nonAction}<div class="cell-sub">{outcome.nonAction}</div>{/if}
-	{/if}
-{/snippet}
+		<RecentGrabs
+			{grabs}
+			columns={GRAB_COLUMNS}
+			{now}
+			total={grabs.length < RECENT_LIMIT ? grabs.length : undefined}
+		/>
+	</section>
+{/if}
 
 <!--
 	§17.7's `unconfigured`, and §9.6's four constraints applied literally: the
