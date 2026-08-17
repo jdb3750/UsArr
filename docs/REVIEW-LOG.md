@@ -6159,3 +6159,51 @@ this edit.** Both files changed are under `docs/`; `gofumpt` sweeps `.go` files,
 attests that a documentation-only commit broke no code, which it could not have. **The evidence that
 matters for this entry is §M5.13's execution log and the `grep` behind M5-25**, both run on
 `49dfa6c`.
+
+---
+
+# M5-27 and M5-28 — a citation that pointed at the two ADRs disclaiming it, and a probe still written as pending after it had run
+
+**Date:** 2026-08-17. **Branch:** `claude/hearth-thread-93bfq1`, cut fresh from `origin/main` at
+`33ac6f3`. **Continues the M5 series.** Both are citation corrections and neither changes a decision,
+a migration, a schema object or any executable behaviour — M5-27 edits a comment inside a Go test,
+M5-28 edits one sentence of `ARCHITECTURE.md` prose. **`M5-27` is the next free id**: checked rather
+than assumed with `grep -on "M5-[0-9]\+" docs/REVIEW-LOG.md | sed 's/.*M5-//' | sort -n | tail -1`,
+whose highest hit before this entry is **M5-26**.
+
+The pair share the shape M5-25 and M5-26 named, one step further out: not a document that outlived
+its SQL, but a **pointer that outlived the thing it pointed at**. In M5-27 the pointer names two ADRs
+that each explicitly refuse the authority being claimed from them; in M5-28 it describes as pending a
+probe whose result is already recorded twice elsewhere in the same file.
+
+## M5.14 Disposition of both
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| **M5-27** | Low | **`internal/db/migrate_test.go`'s deferred-objects comment cites the two ADRs that disclaim the decision.** It read *"The six `work_*` subtypes wait for the catalogue source that writes them (ADR-0035, ADR-0036)"* — but **ADR-0035's Consequences state *"No schema change."* and ADR-0036's state *"No schema change, and no ADR is reversed."*** (`DECISIONS.md`, both under their own *Consequences* headings). Neither authorises a schema scope change, so the test's list of six deferred tables rested on citations that refuse it — the same defect ADR-0040's own Context section records against `ARCHITECTURE.md` §16's flag paragraph | **APPLIED, citation only.** Both facts were verified in `docs/DECISIONS.md` before editing rather than taken from the relay: the two *"No schema change"* sentences sit inside ADR-0035 and ADR-0036 respectively, and **[ADR-0040](./DECISIONS.md#adr-0040) — *"The six subtype tables land with the catalogue source that writes each"*, Accepted 2026-08-17 — was written specifically to be the missing authority**, saying so in its own Context (*"the deferral was resting on citations that disclaim it. This ADR is the missing authority, written after the fact and saying so"*). The comment now cites **ADR-0040** alone. **The comment's shape, the `deferred` slice and every per-line milestone annotation are untouched** — ADR-0035 and ADR-0036 remain the authority for *which* source and *in what order*, which is what those inline `// lands with Navidrome` / `// lands with Kavita` comments say, and they are correct as they stand |
+| **M5-28** | Low | **`ARCHITECTURE.md` §7.1a closes by describing the Kavita-versus-Navidrome probe as still pending**, in the present tense — *"because the probe that decides whether Kavita or Navidrome goes first has to have its pass condition on paper before it runs"* — on a page where **§7.1a's own source table three paragraphs above already reads `✅ VERIFIED 2026-08-17 against a live instance`** and §16.1's v0.1 entry already reads *"It has since run … and it passed"*. One sentence carrying a durable rule and a stale tense | **APPLIED, one sentence, minimal.** 🚩 **The relay named the wrong file** — it reported the sentence as `RESEARCH.md` §7.1a, and `docs/RESEARCH.md` has **zero** occurrences of *"pass condition"*; §7.1a is an `ARCHITECTURE.md` section number and that is where the sentence is (§7.1a, *Channel 3b — the ordered page-walk delta*, final paragraph). It was located by grepping the whole `docs/` tree for the distinctive fragments rather than by trusting the pointer. **The durable half is kept verbatim in substance and only tensed** — the clause that a probe must have its pass condition on paper before it runs — and the result is attached: run 2026-08-17 against a live Kavita, **passed**, ordering the sequence **Kavita, then Navidrome**, pointing at [ADR-0035](./DECISIONS.md#adr-0035) §2a. A closing clause states that the rule survives the result, so the correction cannot be read as retiring it. **Judged an in-place edit, not an amendment.** §7.1a *does* carry a dated record — the per-source status table marked *"Dated 2026-08-16, amended 2026-08-17"* — and `DEVELOPMENT.md` §11's *"a citation inside a dated record is history, not staleness"* rule would forbid rewriting **that**. It was not touched. The closing paragraph is live design prose carrying no date and no tree, so it is the ordinary case: correct it where it stands |
+
+## M5.15 What was deliberately left alone
+
+* **`ARCHITECTURE.md` §16.0's near-duplicate.** The bullet at *"None of them has a changed-since
+  endpoint"* ends *"because the probe that decides which adapter is first has to have its pass
+  condition on paper before it runs"* — the same rule, differently worded, in the present tense.
+  It sits inside **§16.0, the scope-amendment record for ADR-0032/ADR-0036**, which is a narrative of
+  what that amendment argued at the time rather than a live statement of sequence, and it is one
+  sentence in a bullet whose subject is the cost of channel 3b. It is **out of this entry's scope**,
+  named here so the next reader finds it deliberately rather than as a miss. Whoever tenses it should
+  decide first whether §16.0 is a record in `DEVELOPMENT.md` §11's sense.
+* **`migrate_test.go`'s `// §16.1 position 1 or 2` annotations.** Both the music and the
+  books-and-comics groups carry it, and the probe result settles the order — Kavita first, then
+  Navidrome. Correcting them is a second edit to the same comment block with a different subject, and
+  this entry's mandate was the citation. Recorded as a follow-up.
+
+### On the gate for M5-27 and M5-28
+
+`make check` was run on this tree and is green — command, absolute tool paths, versions, SHA and the
+verbatim tail are in the commit message. ⚠️ **Unlike M5-25/M5-26, the green is partly load-bearing
+here**: M5-27 edits `internal/db/migrate_test.go`, so `gofumpt`, `golangci-lint`, `go vet` and
+`go test ./internal/db` all read the changed file and a broken comment block would fail the build.
+**M5-28's file is not covered by any step** — no gate step reads `ARCHITECTURE.md`. The
+`golangci-lint` cache was cleaned by absolute path before the run, per the standing M5-01…M5-11 gate
+note.
