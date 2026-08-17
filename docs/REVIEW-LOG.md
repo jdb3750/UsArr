@@ -4625,7 +4625,12 @@ restatement of it. **One is left for another pass and named here rather than str
 one:** `docs/design/mockups/README.md:269` presents *"UsArr screen mockups: static, invented data,
 nothing implemented"* as the **current** title in its changelog of the previous title fix, so it goes
 stale with this change. That file is being swept separately. It quotes the same two strings this
-entry corrects, in the same wording — **one sentence, not two variants**.
+entry corrects, in the same wording — **one sentence, not two variants**. ⚠️ **`SD-02r` records that
+line and verdicts it *"True — `docs/design/mockups/prototype.html:6` matches byte for byte"*; that
+was true when it was measured and is not true after this entry's `<title>` change, so `SD-02r` needs
+re-verdicting by the pass that owns it.** `SD-02` is otherwise disjoint from this sweep — no row of
+it names `tokens.css`, which is the one site here that was found by counting rather than by being
+reported.
 
 ---
 
