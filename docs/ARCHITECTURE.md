@@ -700,7 +700,8 @@ bytes).
 **`work.kind` is:** `movie, series, season, episode, artist, album, track, book, comic, comic_issue,
 person, game`.
 
-> **`person` is new in this revision, and it is migration 0001 or never (ADR-0033).** `work_credit`
+> **`person` is new in this revision, and it is the migration that creates `work` or never
+> (ADR-0033)** — read `internal/db/migrations` for which one that is. `work_credit`
 > (ADR-0031) is M:N and required for books and comics explicitly — *"it is needed for books too,
 > where role matters: author, translator, editor, illustrator"* — and its creator column pointed at a
 > `work` whose only available kind was `artist`. So a book's author and a comic's penciller were
@@ -727,8 +728,9 @@ person, game`.
 > index, and a `kind_byte` allocation that §5.3 states is unchangeable once clients cache ids. That
 > asymmetry is the whole timing argument, and it is ADR-0030's argument in a second place.
 
-> **`comic_issue` is new in this revision, and migration 0001 is the only cheap moment to add it
-> (ADR-0030).** Every other multi-level medium got its levels — TV has `series`/`season`/`episode`,
+> **`comic_issue` is new in this revision, and the migration that creates `work` is the only cheap
+> moment to add it (ADR-0030)** — read `internal/db/migrations` for which one that is, and for
+> whether that moment has passed. Every other multi-level medium got its levels — TV has `series`/`season`/`episode`,
 > music has `artist`/`album`/`track` — and comics had exactly one member, `comic`, with a
 > `work_comic` subtype whose columns (`issue_number`, `volume`) describe an *issue* while the search
 > corpus, the Tier 1 prefix index, the `kind_byte` map and the grid all treat `comic` as
@@ -813,11 +815,14 @@ and `pdf` as comic/ebook file shapes, which the DDL currently lacks.
   hung `disc_number` and `track_number` off a `work`. But the same recording is track 4 on the
   original CD and track 6 on the 2017 deluxe reissue, with a different track MBID each time:
   **position is a property of the (track-work, edition) pair.** So `work_track` carries
-  `edition_id`, keyed `(work_id, edition_id)`. Adding that column later is a backfill over the
-  largest table in the schema; adding it in migration 0001 costs eight bytes a row. **The seam ships
-  in 0001; the multi-edition UI does not.** The `NOT NULL` has a consequence that must be stated
-  rather than discovered: **every album work carries exactly one synthetic primary `edition` from
-  migration 0001**, because Lidarr and Navidrome report no release concept and the adapter has to
+  `edition_id`, keyed `(work_id, edition_id)`. Adding that column to an existing `work_track` is a
+  backfill over the largest table in the schema; creating `work_track` with it costs eight bytes a
+  row. **The seam ships with the table; the multi-edition UI does not** — and per
+  [ADR-0040](./DECISIONS.md#adr-0040) the table itself lands with the catalogue source that writes it,
+  which is why the column is free rather than urgent. The `NOT NULL` has a consequence that must be
+  stated rather than discovered: **every album work carries exactly one synthetic primary
+  `edition`**, from the moment album works exist, because Lidarr and Navidrome report no release
+  concept and the adapter has to
   synthesise one before a track row can exist. **It is resolved, never re-allocated** — the adapter
   looks up `edition WHERE work_id = ? AND is_primary = 1` and inserts only on a miss — and
   `work_track.edition_id` is `ON DELETE RESTRICT` rather than `CASCADE`, so an adapter that
@@ -919,7 +924,9 @@ closure over external ids — 0.95; (3) `normalized_title` + year ±1 + same kin
 `tmdbId`/`imdbId`/`tvdbId`, so tier 1 resolves essentially 100% of the v0.1 identity problem —
 including the dual-Radarr case, which joins on `tmdbId`. Tiers 2–5 and the `work_merge`/un-merge
 machinery land with the first provider that lacks strong ids. `normalized_title` and `norm_version`
-**columns** exist from migration 0001 (adding them later is a backfill), populated by a deliberately
+are **columns on `work` from the migration that creates it** (adding them later is a backfill over
+the largest table in the schema — `internal/db/migrations` says which migration that was), populated
+by a deliberately
 simple v1 algorithm: casefold, NFKD, strip combining marks, strip punctuation, collapse whitespace.
 The full normaliser is in the schema reference as "the v2 normaliser" and is a known source of
 locale-dependent bugs (Turkish dotless ı among them).
@@ -988,8 +995,8 @@ the state first *renders* with the first catalogue source (§16) — and per
 [ADR-0035](./DECISIONS.md#adr-0035) §1 it renders as the **ordinary** case when that source is
 Kavita, whose identifier fields are null without Kavita+. Komga supplies **no external identifiers at
 all**, so comics has no strong-identity path under either choice. The rule is v0.1's because the
-nullable column belongs in migration 0001 and the badge belongs in the first grid, not because the
-badge is common on day one. It costs one nullable column and one badge, and it is precisely what
+nullable column belongs on `work` from the migration that creates it and the badge belongs in the
+first grid, not because the badge is common on day one. It costs one nullable column and one badge, and it is precisely what
 LazyLibrarian's absence of disqualifies it as a catalogue (§6.5): a file its matcher cannot bind gets
 no row at all. The badge is never a synonym for "broken" — an unidentified book is a book you own,
 and the honest statement is that UsArr could not find an identifier for it, not that it is missing.
@@ -1028,8 +1035,10 @@ source is still a replica — it is one with an owned overlay, which §2.2 grant
 playback position **and, since that amendment, library organisation and display-identity
 corrections**.
 
-**Four tables, all in migration 0001.** Full DDL, CHECK lists, keys, `ON DELETE` behaviour and
-indexes: [`reference/schema.md`](./reference/schema.md) **§13**.
+**Four tables, and they land together or not at all** — the derivation, the materialised membership
+and the override layer are one subsystem, so a migration that creates three of them has shipped
+nothing. **Read `internal/db/migrations` for whether they exist.** Full DDL, CHECK lists, keys,
+`ON DELETE` behaviour and indexes: [`reference/schema.md`](./reference/schema.md) **§13**.
 
 | Table | What it holds |
 |---|---|
@@ -2214,15 +2223,15 @@ written rather than on day one — it decides the order of a sequence that no lo
 immediately.
 
 **What is kept, with its remaining cost stated rather than argued away.** The libraries subsystem
-(§6.5) and the auto-proposal flow stay in v0.1. Its four tables have to be in migration 0001 either
-way, its screen is one of the five `CLAUDE.md` names as essential, and **a library binding carries
+(§6.5) and the auto-proposal flow stay in v0.1. Its four tables are owed by v0.1 either way, its
+screen is one of the five `CLAUDE.md` names as essential, and **a library binding carries
 the request destination** that v0.1's one write path routes on — so it is load-bearing in v0.1 even
 with only \*Arr sources. ⚠️ **Its best demonstration is not:** the Ebooks/Audiobooks split over one
 Audiobookshelf library was the concrete improvement over upstream's own organisation, and that
 demonstration moves with Audiobookshelf. What v0.1 can show instead is narrower and honest — an
 Anime library bound to one Sonarr tag, or one Films library spanning a 1080p and a 4K Radarr — and
 the subsystem should be judged on that in v0.1, not on the split it cannot yet perform. The cost that
-remains, plainly: **four tables in migration 0001, materialised
+remains, plainly: **four tables, materialised
 membership with a 250 ms dirty-flush and a denormalised sort key, a derivation with five container
 predicates, an auto-proposal engine with join-vs-create defaults, and a second first-class settings
 screen (§17.8).** It is true that the Libraries screen *replaces* hard-coded per-type sections rather
@@ -2284,22 +2293,6 @@ its own `kind_byte`, excluded from the navigation enum, the prefix index and the
 `work_credit.creator_work_id` renamed from `artist_work_id` to match (ADR-0033)**;
 `work_track.edition_id`, `work_track.track_number TEXT` plus the derived `track_position`, the M:N
 **`work_credit`**, and `edition.narrators` / `duration_seconds` / `abridged` (ADR-0031).
-
-> ⚠️ **How the library-sync migration read that list, and where it deviated.** The clause above is
-> qualified by its own reason — *"migration 0001 **or a backfill over the largest tables in the
-> schema**"* — and `internal/db/migrations/00005_library_sync.sql` applied that reason rather than
-> the enumeration. **What it shipped:** `work.kind`'s full twelve-member `CHECK` including
-> `comic_issue` and `person`, and `edition.narrators` / `duration_seconds` / `abridged`. Both are
-> genuinely one-way: SQLite cannot `ALTER` a `CHECK`, and §5.3's `kind_byte` codec is unchangeable
-> once clients cache northbound ids. **What it deferred:** the six subtype *tables* — `work_album`,
-> `work_track`, `work_credit`, `work_book`, `work_comic`, `work_comic_issue` — to the catalogue
-> source that writes each (§16.1, ADR-0035, ADR-0036). A brand-new table with no dependants costs a
-> plain `CREATE TABLE` later, with no rebuild, no backfill and no codec change, so nothing about it
-> is a one-way door; `work_track.edition_id` in particular is free because the table it is a column
-> of does not exist yet. That is 00001's own rule — *"a migration that creates a table nothing
-> queries is a schema claim nobody has tested"* — applied to the six tables no v0.1 source writes.
-> The migration header carries the argument in full. **Read `internal/db/migrations` for what
-> exists**; this paragraph says what v0.1 owes, not what has landed.
 **Identity tier 1 only**; the
 correction *UI* deferred to v0.3. Library auto-proposal on service add, the Libraries settings screen
 (§17.8), Home's three fixed blocks (§17.2). Library grid with **"Load more" + `content-visibility`
@@ -2312,6 +2305,28 @@ the landing-page claim, since it needs two Radarr instances. **The Services heal
 whose add flow asks for four fields — kind, name, base URL, API key — plus an optional `URL base`
 for reverse-proxy sub-paths, and draws all four states of the mandatory connection test, failure
 included.**
+
+> ⚠️ **How the library-sync migration read the *Schema, enumerated* clause above, and where it
+> deviated.** That clause is qualified by its own reason — *"migration 0001 **or a backfill over the
+> largest tables in the schema**"* — and `internal/db/migrations/00005_library_sync.sql` applied the
+> reason rather than the enumeration. **What it shipped:** `work.kind`'s full twelve-member `CHECK`
+> including `comic_issue` and `person`, and `edition.narrators` / `duration_seconds` / `abridged`.
+> Both are genuinely one-way: SQLite cannot `ALTER` a `CHECK`, and §5.3's `kind_byte` codec is
+> unchangeable once clients cache northbound ids. **What it deferred:** the six subtype *tables* —
+> `work_album`, `work_track`, `work_credit`, `work_book`, `work_comic`, `work_comic_issue` — to the
+> catalogue source that writes each. **That deferral is [ADR-0040](./DECISIONS.md#adr-0040)**, which
+> is the decision authorising it; §16.1 and [ADR-0035](./DECISIONS.md#adr-0035) /
+> [ADR-0036](./DECISIONS.md#adr-0036) supply the *sequence* each table waits in, and neither of those
+> two changes any schema — both say so in their own consequences, which is why this paragraph no
+> longer cites them as the authority. A brand-new table with no dependants costs a plain
+> `CREATE TABLE` later, with no rebuild, no backfill and no codec change, so nothing about it is a
+> one-way door; `work_track.edition_id` in particular is free because the table it is a column of
+> does not exist yet. That is 00001's own rule — *"a migration that creates a table nothing queries is
+> a schema claim nobody has tested"* — applied to the six tables no v0.1 source writes. **ADR-0040
+> records that this leaves the enumeration above and the tree disagreeing, and routes the amendment of
+> the enumeration to the thread that owns §16 rather than making it there.** **Read
+> `internal/db/migrations` for what exists**; the clause above says what v0.1 owes, not what has
+> landed.
 
 **A `Recent grabs` block on the Requests screen (§17.5), and what it costs, stated plainly.** Ten
 rows, newest first: time, release name, indexer, protocol, size, resolved type, and last known state.
@@ -2524,8 +2539,10 @@ of a `book` work rather than a kind of its own. The enum, in full:
 
 Two consequences an implementer hits on the first screen. **Rows 4 and 5 need an existence query
 over `edition.format`, not the `work.kind` count every other type uses**, and `ix_edition_work` is
-`(work_id, is_primary DESC)`, which does not serve it — so migration 0001 carries
-`CREATE INDEX ix_edition_format ON edition(format, work_id)`. And **the Tier 1 client prefix index
+`(work_id, is_primary DESC)`, which does not serve it — so
+`CREATE INDEX ix_edition_format ON edition(format, work_id)` is owed alongside it. **Read
+`internal/db/migrations` for whether that index exists**; an unserved existence query is a scan on the
+first screen, which is why it is named here rather than discovered. And **the Tier 1 client prefix index
 ships `{id, title, year, kind, availability_state}` with no format**, so a *client-side* type filter
 cannot separate ebooks from audiobooks: **the Ebooks/Audiobooks split is server-side only in v0.1**,
 and the type chips in the client index resolve to five values, not six. Stated here rather than

@@ -415,9 +415,13 @@ the seam is wider than a single literal would have made it. ✅ `'awaiting_choic
 on a person is not runnable, and listing it would re-expose it to the retry sweep and the
 `verify_until` TTL. That was an open question when this paragraph was written; it is decided.
 
-Nothing implements any of it. No verb produces the state, no screen renders it, and the vocabulary
-now lives in Go, so it is enforced wherever `internal/store` grows a write-queue writer — which it
-has not. **The seam ships, the feature does not.**
+Nothing implements any of it. No verb produces the state and no screen renders it: searched
+2026-08-17 on `b8bb500` with `grep -rn "write_queue" --include=*.go internal/ cmd/ | grep -v
+_test.go`, whose only hits under those two roots are the standalone RSS-spike binary in
+`internal/db/spike/` and one comment at `internal/httpapi/grabs.go:58`. Roots searched are
+`internal/` and `cmd/`; nothing is claimed about any other. The vocabulary now lives in Go, so it is
+enforced wherever `internal/store` grows a write-queue writer — which it has not. **The seam ships,
+the feature does not.**
 
 ---
 
@@ -468,7 +472,12 @@ exactly the job it was designed for.
    it is the hot queue table that `ix_wq_runnable` scans. This costs a table later and **no seam
    now** — a queue row can carry a reference as easily as a blob, so nothing needs deciding today.
 3. **🚩 The `state` CHECK has no state for "waiting for a human", and it is in migration 0001.**
-   This is the finding.
+   This is the finding. ⚠️ **Read the correction under *"The seam that was added"* below before this
+   item's present tense.** The `CHECK` quoted here is `00001_initial.sql`'s, and it is **no longer
+   the shape on disk** — [ADR-0039](./DECISIONS.md#adr-0039) dropped it entirely instead of widening
+   it. Everything below is preserved as the finding was written, because the finding's *reasoning*
+   about the five states is what the fix acted on; only its assumption about the fix's shape is
+   stale.
 
    ```sql
    state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN (
@@ -495,11 +504,17 @@ exactly the job it was designed for.
    `work_id → work(id)` foreign key is deliberately dropped until `work` lands with library sync, and
    SQLite cannot add a foreign key to an existing column either. The migration that ships library
    sync must rebuild this table regardless, so a `CHECK` value added during that rebuild costs
-   nothing and no window is closing. See `REVIEW-LOG.md` WQ-03.
+   nothing and no window is closing. See `REVIEW-LOG.md` WQ-03 — ⚠️ **whose premise survives and
+   whose conclusion does not.** The premise (*the rebuild is already mandatory, so nothing is bought
+   by editing 0001*) is what ADR-0039 was decided on and still stands. The conclusion it was used for
+   — *add the `CHECK` value during that rebuild* — is superseded: the rebuild dropped the `CHECK`
+   rather than widening it.
 
-**The seam that was added, and how it differs from the one specified here.** This paragraph said
-`write_queue.state`'s `CHECK` would *gain* `awaiting_choice` in the library-sync migration. That
-migration instead **dropped the `CHECK`**, and both open questions above are now closed —
+**The seam that was added, and how it differs from the one specified here.** Item 3 above — and the
+paragraph that stood in this slot before this one, which said the same thing more directly —
+specified that `write_queue.state`'s `CHECK` would *gain* `awaiting_choice` in the library-sync
+migration. That migration instead **dropped the `CHECK`**, and both open questions above are now
+closed —
 [ADR-0039](./DECISIONS.md#adr-0039) carries the argument and the alternatives, `reference/schema.md`
 §10 carries the corrected four-step list, and `internal/db/migrations/00005_library_sync.sql`'s
 header carries it next to the SQL. `'awaiting_choice'` is excluded from `ix_wq_runnable`'s partial
@@ -709,8 +724,9 @@ library-shaped (`/api/Opds/{apiKey}/libraries`, `…/libraries/{libraryId}`), so
 ⚠️ Note what **not** to copy from it: Kavita carries the API key **in the URL path segment**, which
 leaks into proxy logs, browser history and referrers.
 
-**The seam.** `library` exists from migration 0001 (ADR-0026) with `include_in_search` and
-`display_order` already on it, and `user_library_access` is the multi-user half. An OPDS root of "one
+**The seam.** `library` is owed by v0.1 (ADR-0026) with `include_in_search` and `display_order`
+already on it — read `internal/db/migrations` for whether the table exists yet — and
+`user_library_access` is the multi-user half. An OPDS root of "one
 entry per library" is then a query, not a redesign — which is the same seam that makes v0.4's
 `getMusicFolders` return the user's `artist`-kind libraries.
 

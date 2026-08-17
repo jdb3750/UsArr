@@ -62,6 +62,8 @@ distinctions now matter and are used consistently below:
 | [0036](#adr-0036) | No catalogue source ships in v0.1; they arrive one at a time after it | **Accepted** — owner-decided 2026-08-16; **amends** §16; **re-sequences [ADR-0032](#adr-0032) and [ADR-0035](#adr-0035)** without rejecting any source |
 | [0037](#adr-0037) | TOFU SPKI pin enrolment is removed, not completed; enforcement stays | **Accepted** — 2026-08-16; amends no ADR; reopening conditions stated (a pin field on the update path + the change-acceptance UI) |
 | [0038](#adr-0038) | A list freezes its order while a user is aiming at it | **Accepted** — 2026-08-16; amends no ADR; the argument lives in `design/DESIGN-DIRECTION.md` §9.1a and ARCHITECTURE §17.5, this record holds the rejected alternatives |
+| [0039](#adr-0039) | `write_queue.state` loses its `CHECK`; `work_id` gets its foreign key back | **Accepted** — 2026-08-17; **supersedes** `reference/schema.md` §10 step 1 and the seam in `FUTURE.md` §11 / §11.1; closes `REVIEW-LOG.md` WQ-05; ⚠️ **amended 2026-08-17** — decision 3's ground 1 is **struck**, on a misquotation of `reference/sync.md` §4 that dropped the words *toward the \*Arr*: the decision stands on grounds 2 and 3, which are independent of it |
+| [0040](#adr-0040) | The six subtype tables land with the catalogue source that writes each | **Accepted** — 2026-08-17; records as a decision what `00005_library_sync.sql` did; **in tension with** ARCHITECTURE §16's enumerated v0.1 schema line, which is left to the thread that owns §16 |
 
 ---
 
@@ -3843,6 +3845,7 @@ lever.**
 
 ---
 
+<a id="adr-0039"></a>
 ## ADR-0039 — `write_queue.state` loses its `CHECK`; `work_id` gets its foreign key back
 
 **Status:** Accepted · **2026-08-17** · **Supersedes** the four-step instruction in
@@ -3906,14 +3909,21 @@ extends first.
 ### Why — decision 2
 
 A row waiting on a person is not runnable. This partial index is what the retry sweep walks **and**
-what `sync.md` §4's reconciliation guard tests, so a state listed in it is a state that gets claimed
-by a worker and exposed to the `verify_until` TTL — which is WQ-01's defect, reintroduced through the
-index. The `REVIEW-LOG.md` lean was to exclude; the objection was that the predicate also serves the
-reconciliation guard and the call wanted that code in view. The guard is still unwritten, but its
-specified behaviour (*"the sweep may correct an item only when there is no `write_queue` row for that
-work in `pending`, `inflight` or `verifying`"*) names the three states literally, so including a
-fourth would change the guard's meaning as well as the sweep's — which settles it in the same
-direction from the side the objection came from.
+what [`reference/sync.md`](./reference/sync.md) §4's reconciliation guard tests, so a state listed in
+it is a state that gets claimed by a worker and exposed to the `verify_until` TTL — which is WQ-01's
+defect, reintroduced through the index. The `REVIEW-LOG.md` lean was to exclude; the objection was
+that the predicate also serves the reconciliation guard and the call wanted that code in view. The
+guard is still unwritten, but its specified behaviour, quoted from `reference/sync.md` §4 in full —
+
+> **Precondition: the write-queue guard.** The sweep may correct an item **toward the \*Arr** only
+> when there is **no `write_queue` row for that work in `pending`, `inflight` or `verifying`**.
+
+— names the three states literally, so including a fourth would change the guard's meaning as well as
+the sweep's, which settles it in the same direction from the side the objection came from. ⚠️ **The
+scope words *toward the \*Arr* are load-bearing and an earlier revision of this ADR dropped them from
+the quotation.** They do not weaken decision 2 — an extra state in the predicate widens what the
+outbound guard blocks either way — but they are what makes the same sentence inapplicable to decision
+3's tombstone case, which is why that ground is struck below rather than repeated here.
 
 ### Why — decision 3
 
@@ -3925,20 +3935,42 @@ append-only, and is not history — it already carries two `ON DELETE CASCADE`s 
 and to `service_instance`. The precedent says *check*, and the check passes. Verified rather than
 argued: `TestMigrate0005WorkIDForeignKey` deletes a user who has queued a command.
 
-**The real objection is the tombstone one, and it is answered on three grounds.** A 7-day tombstone
-expiry that hard-deletes a `work` would silently take a queued command with it, where no foreign key
-would leave the command to fail loudly at the \*Arr.
+**The real objection is the tombstone one. It was first answered on three grounds; ground 1 is struck,
+and the decision stands on the two that survive.** A 7-day tombstone expiry that hard-deletes a `work`
+would silently take a queued command with it, where no foreign key would leave the command to fail
+loudly at the \*Arr.
 
-1. `sync.md` §4's write-queue guard is normative and forbids the sweep from acting on a work with a
+1. ~~`sync.md` §4's write-queue guard is normative and forbids the sweep from acting on a work with a
    row in `pending`, `inflight` or `verifying` — so the collision is one the sweep may not cause, and
-   `ix_wq_runnable` is the index that guard uses.
+   `ix_wq_runnable` is the index that guard uses.~~ 🚩 **STRUCK 2026-08-17, and struck rather than
+   deleted because the error is instructive.** The ground rested on a quotation with three words
+   removed. [`reference/sync.md`](./reference/sync.md) §4 reads *"The sweep may correct an item
+   **toward the \*Arr** only when there is no `write_queue` row …"* — the guard is scoped to
+   **outbound corrections**, writes UsArr would push at the \*Arr. The tombstone path is neither: §4
+   step 3 soft-deletes **locally** a row the \*Arr has already dropped, and the hard delete seven days
+   later is local too. So the guard does not forbid this collision, and there is no other precondition
+   in §4 that does. **The collision is one the sweep may cause**, and this ADR is decided knowing that.
 2. A work reaches hard delete only because the \*Arr itself no longer has it, so a surviving
    *"monitor this"* command can only ever fail. Keeping it produces an alarm in Home's attention
-   block that the user cannot act on and cannot distinguish from a real fault.
-3. *"Fails loudly"* is aspirational either way. Nothing in `internal/` reads `write_queue` yet, so
-   without the foreign key the dangling row simply sits there and `ix_wq_work` returns rows for a
-   `work_id` with no referent. `CASCADE` is the answer the table already gives for its other two
-   parents, and it is the one SQLite can enforce today.
+   block that the user cannot act on and cannot distinguish from a real fault. **This ground is
+   independent of ground 1 and is unaffected by its withdrawal** — it argues from what the \*Arr holds,
+   not from what the sweep is permitted to do, and it is the ground that answers the collision ground 1
+   was wrongly said to prevent.
+3. *"Fails loudly"* is aspirational either way. **Nothing outside `internal/db/spike/` reads
+   `write_queue`** — measured 2026-08-17 on `b8bb500` with
+   `grep -rn "write_queue" --include=*.go internal/ cmd/ | grep -v _test.go`, whose only hits are the
+   standalone RSS-spike binary under `internal/db/spike/` and one comment at
+   `internal/httpapi/grabs.go:58`; roots searched are `internal/` and `cmd/`, and the claim is made
+   about no others. So without the foreign key the dangling row simply sits there and `ix_wq_work`
+   returns rows for a `work_id` with no referent. `CASCADE` is the answer the table already gives for
+   its other two parents, and it is the one SQLite can enforce today.
+
+**Does the decision survive on 2 and 3 alone? Yes, and plainly:** the choice is between a queued
+command that vanishes with its target (`CASCADE`) and one that outlives it as an uninterpretable row
+pointing at nothing. Ground 2 says the outliving row could only ever have failed, and ground 3 says
+nothing would notice it either way. Neither borrows anything from the sweep's permissions. The
+rejected alternatives below — `RESTRICT`, `SET NULL`, no foreign key — are likewise argued without
+ground 1.
 
 ### Alternatives rejected
 
@@ -3987,4 +4019,104 @@ would leave the command to fail loudly at the \*Arr.
   that does not exist, and the reconciliation guard's lookup is a key with a guaranteed referent.
 * **`docs/reference/schema.md` §10's DDL block still shows the pre-rebuild shape**, deliberately: the
   reasoning under it is unchanged. `internal/db/testdata/schema.sql` is the current schema, and the
-  four-step block above it now records what was done instead of what was planned.
+  four-step instruction above it is now a pointer to this ADR and to the migration rather than a
+  second copy of what they say.
+
+---
+
+<a id="adr-0040"></a>
+## ADR-0040 — The six subtype tables land with the catalogue source that writes each
+
+**Status:** Accepted · **2026-08-17** · **Records as a decision** what
+`internal/db/migrations/00005_library_sync.sql` did and what its header argued. Depends on
+[ADR-0035](#adr-0035) and [ADR-0036](#adr-0036) for *which* source each table waits on and in what
+order, and on [ADR-0030](#adr-0030), [ADR-0031](#adr-0031) and [ADR-0033](#adr-0033) for the `work.kind`
+members and columns that did **not** wait. ⚠️ **In tension with ARCHITECTURE §16's enumerated v0.1
+schema line — see the consequences.**
+
+### Context
+
+`00005_library_sync.sql` created the schema v0.1's Sonarr/Radarr sync needs and **did not create six
+tables that ARCHITECTURE §16's *"Schema, enumerated"* clause names**: `work_album`, `work_track`,
+`work_credit`, `work_book`, `work_comic` and `work_comic_issue`. That is a scope call, and until this
+ADR it had no record of its own. The migration header carries the argument and ARCHITECTURE §16 carries
+a flag paragraph, but **the two ADRs the flag paragraph cited — 0035 and 0036 — both state *"No schema
+change"* in their own Consequences** (`DECISIONS.md` under ADR-0035 and ADR-0036). Neither of them
+authorises a schema scope change, so the deferral was resting on citations that disclaim it. This ADR
+is the missing authority, written after the fact and saying so.
+
+The deferral is not the same question as the one ADR-0030 and ADR-0033 answered. Those two put
+`comic_issue` and `person` into `work.kind`'s `CHECK` *now*, against a milestone that has no source for
+either, on an irreversibility argument. The question here is whether that argument reaches the tables.
+
+### Decision
+
+> **1. The six subtype tables — `work_album`, `work_track`, `work_credit`, `work_book`, `work_comic`,
+> `work_comic_issue` — are not created by the library-sync migration.** Each lands with the catalogue
+> source that writes it, in the §16.1 sequence ADR-0036 established: the music three with **Navidrome**,
+> the books-and-comics three with **Kavita** (ADR-0035).
+>
+> **2. What is irreversible is created anyway, and was.** `work.kind` carries its **full twelve-member
+> `CHECK`** in 00005, including the six kinds only those tables serve, and `edition.narrators` /
+> `duration_seconds` / `abridged` are on `edition` from the day it exists.
+
+### Why
+
+**00001's own rule, quoted verbatim in 00005's header:** *"a migration that creates a table nothing
+queries is a schema claim nobody has tested."* Nothing in v0.1 writes any of the six. A table created
+against no writer is DDL that has never round-tripped a row, and this project has already shipped one
+class of that defect — DB-01's `CHECK (col IN (NULL, …))`, which enforced nothing and was found twice,
+the second time in this very migration's `library_override.field_name`.
+
+**The irreversibility that forced the `CHECK` does not transfer, and the asymmetry is the whole
+argument.** Adding a `work.kind` member later costs a 12-step rebuild of the **largest table in the
+schema**, plus a `kind_byte` allocation that ARCHITECTURE §5.3 states is unchangeable once clients
+cache northbound ids — a genuine one-way door, which is why ADR-0030 and ADR-0033 paid for it up
+front. Each of the six tables is instead a **brand-new table with no dependants**: a plain later
+`CREATE TABLE`, no rebuild, no backfill, no codec change, no `ALTER`. `work_track.edition_id` is the
+sharpest case — ADR-0031's *"adding it later is a backfill over the largest table in the schema"* is
+true of a column added to an existing `work_track` and simply **does not apply** while `work_track`
+does not exist: the table will be created with the column already on it. **Nothing about deferring
+these six is a one-way door.**
+
+**Each table has an owner and a landing point, so this is a schedule and not a hole.** The music
+three land with Navidrome and their command sink (Lidarr) is in no milestone before that; the
+books-and-comics three land with Kavita. 00005's header names both, per table.
+
+### Alternatives rejected
+
+- **Create all six in 00005 as specified by §16's enumeration.** Rejected: six untested tables, six
+  sets of DDL nothing exercises, and no door closes by waiting. It would also have meant creating
+  `work_credit` with `creator_work_id` pointing at kinds no v0.1 source produces — a foreign key whose
+  referents cannot exist.
+- **Create a subset — the three that `work.kind`'s new members imply (`work_comic`,
+  `work_comic_issue`, `work_credit`).** Rejected as the worst of both: it splits the six on a line
+  (*"is a kind member new?"*) that has nothing to do with when a writer arrives, and leaves three
+  untested tables instead of six.
+- **Amend ARCHITECTURE §16's enumerated line here, so the document and the tree agree.** Rejected as
+  out of this ADR's lane rather than as wrong — §16 is authoritative for scope, `DEVELOPMENT.md` §11
+  requires an edit to a shared document outside the area you lead to be announced before it is pushed,
+  and this thread does not own §16. §16 carries a flag paragraph pointing here instead; the amendment
+  is routed to the thread that owns §16.
+- **Defer `work.kind`'s six extra members too, for symmetry with the tables.** Rejected on the
+  asymmetry above: the members are the one-way door and the tables are not.
+
+### Consequences
+
+* **⚠️ ARCHITECTURE §16's *"Schema, enumerated"* clause and the tree disagree, and the disagreement is
+  recorded rather than resolved.** §16 names `work_comic` / `work_comic_issue` and `work_track` /
+  `work_credit` in v0.1's schema; `internal/db/migrations` has none of them. §16 is authoritative for
+  **scope**, so this ADR does not overrule it — it records that the migration read the clause's own
+  qualifier (*"migration 0001 **or a backfill over the largest tables in the schema**"*) and applied
+  the reason rather than the list. **Whoever owns §16 decides whether the clause is amended or the
+  tables are pulled forward.** Until then the flag paragraph in §16 is the honest state of it.
+* **Six tables now have a named landing point instead of a milestone.** *"With Navidrome"* and *"with
+  Kavita"* are testable claims about a sequence; *"v0.1"* was a claim about a date that the migration
+  had already falsified.
+* **A future reader who finds `work_track` missing has an answer that is not the migration's header.**
+  That was the actual gap: 00005's reasoning existed only inside a SQL comment.
+* **This ADR authorises no removal from `reference/schema.md`.** The six tables keep their full DDL
+  and their invariants there, marked by milestone; the file's own header is already explicit that a
+  table given in full may be design-only.
+* **No code and no schema changed when this was written.** The decision it records shipped in
+  `00005_library_sync.sql`; what lands here is the authority the deferral did not have.

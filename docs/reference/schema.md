@@ -1123,8 +1123,13 @@ CREATE INDEX ix_wq_work ON write_queue(work_id, state);
 client-supplied key means a weak ULID source, a key reused across accounts, or a replay returns
 another user's `payload` and state. A key that exists under a different `user_id` gets `409`.
 
-`ix_wq_runnable` is also the reconciliation guard's index: the sweep skips any `work_id` with a row
-in `pending`, `inflight` **or** `verifying`.
+`ix_wq_runnable` is also the reconciliation guard's index. [`sync.md`](./sync.md) §4 states the guard,
+and the scope words are load-bearing: *"The sweep may correct an item **toward the \*Arr** only when
+there is **no `write_queue` row for that work in `pending`, `inflight` or `verifying`**."* It bounds
+**outbound** corrections — writes UsArr would push at the \*Arr — and says nothing about the sweep's
+local soft-delete and tombstone-expiry path. An earlier revision of this line dropped *toward the
+\*Arr*, and [ADR-0039](../DECISIONS.md#adr-0039) records what that omission cost when the shortened
+form was quoted back as an argument.
 
 ### ⚠️ Do this during the library-sync migration's `write_queue` rebuild
 
@@ -1142,44 +1147,30 @@ already expressible; the `state` half is not.
 **The fix is deliberately deferred to the migration that ships library sync, because that migration
 must rebuild this table anyway.** `write_queue.work_id` is `INTEGER` with **no** foreign key in
 `00001_initial.sql` — the `REFERENCES work(id) ON DELETE CASCADE` shown above is dropped there, with
-a comment naming library sync as the migration that restores it, because `work` does not exist yet.
+a comment naming library sync as the migration that restores it, because at the time `00001` was
+written there was no `work` table to reference. (**Whether there is one now, and which migration
+restored the key, is answered by `internal/db/migrations` and by nothing in this file.**)
 SQLite cannot add a foreign key to an existing column, so restoring it costs a full 12-step table
 rebuild that is **already mandatory**. Adding a `CHECK` value during a rebuild that is happening
 regardless costs nothing, and SQLite equally cannot `ALTER` a `CHECK` constraint, so doing it any
 earlier would mean either editing a merged migration or paying for a second rebuild. Neither is
 worth it while nothing is released. **`00001_initial.sql` is not to be edited for this.**
 
-**✅ DONE. The rebuild has been written, and it did not do step 1 as this section specified it.**
-Read `internal/db/migrations/00005_library_sync.sql`'s header for the reasoning; the decisions are
-recorded in [`../DECISIONS.md`](../DECISIONS.md#adr-0039). In short:
+⚠️ **The rebuild that instruction was written for has since been decided, and not as step 1
+specified.** [ADR-0039](../DECISIONS.md#adr-0039) supersedes step 1 and carries the argument, the
+rejected alternatives and the two things the list did not name;
+`internal/db/migrations/00005_library_sync.sql`'s header carries the same reasoning beside the SQL,
+and `internal/db/testdata/schema.sql` is the current shape. Read those, not a summary here — this
+file does not own what a migration did.
 
-1. ~~Add `'awaiting_choice'` to the `state` `CHECK` list.~~ **The `CHECK` was DROPPED entirely.**
-   The rebuild happens either way so both cost the same; the vocabulary is demonstrably still
-   growing; SQLite cannot `ALTER` a `CHECK`; and `audit_log.result` and 0003's
-   `provenance.acquisition_state` are the shipped precedent for `TEXT NOT NULL` with no `CHECK` and
-   the vocabulary enforced in Go. `fail_reason`'s `CHECK` is **kept** — that vocabulary is closed
-   and the column is DB-01's regression witness.
-2. ✅ All three indexes recreated, `ix_wq_runnable` with its partial predicate byte-identical to
-   0001's. `TestMigrate0005WriteQueueRebuild` reads them back out of `sqlite_master`.
-3. ✅ **`'awaiting_choice'` is EXCLUDED from `ix_wq_runnable`'s predicate**, with the reason written
-   beside it in the SQL. A row waiting on a person is not runnable: listing it exposes it to the
-   retry sweep and the `verify_until` TTL, which is the defect above reintroduced through the index.
-4. ✅ Snapshot regenerated.
-
-Plus one the list did not name: **`work_id`'s `REFERENCES work(id) ON DELETE CASCADE` is restored**,
-which is what made the rebuild mandatory in the first place. ADR-0039 carries the argument, including
-why `audit_log`'s no-foreign-key precedent does not transfer (that precedent is about a table whose
-triggers forbid implicit writes; `write_queue` has none and already carries two cascades of its own).
-
-⚠️ **Still owed, and not done here.** 0001 also drops `tag_assignment.work_id` / `.edition_id` /
+⚠️ **Still owed, and not by 0005.** 0001 also drops `tag_assignment.work_id` / `.edition_id` /
 `.media_file_id` and `release_candidate.work_id`, with comments naming "the migration that ships
-library sync". 0005 did **not** restore those — each is a further 12-step rebuild, neither table has
-a blocked reader, and nothing is closing. The comments in 0001 are pointers to a rebuild that is
-still owed.
+library sync". Each is a further 12-step rebuild, neither table has a blocked reader, and nothing is
+closing — so the comments in 0001 are pointers to a rebuild that is still owed. Whether it has been
+written is `internal/db/migrations`' answer.
 
-The DDL block above shows the **pre-0005** shape, because the reasoning under it (`ux_wq_idem`,
-`fail_reason`'s `NULL` trap) is still the reasoning. `internal/db/testdata/schema.sql` is the
-current one.
+The DDL block above shows the shape as `00001_initial.sql` created it, because the reasoning under it
+(`ux_wq_idem`, `fail_reason`'s `NULL` trap) is still the reasoning.
 
 **`fail_reason`'s `CHECK` must test `NULL` separately.** It previously read
 `CHECK (fail_reason IN (NULL,'rejected','unknown','exhausted'))`, which enforced **nothing at all**:
@@ -1611,7 +1602,12 @@ assertion over code that does not exist is a green nobody has exercised.
 
 ## Appendix — later tables
 
-Present in the design, **not in migration 0001**, added with the milestone named:
+Present in the design, and **owned by the milestone named** — which is a claim about scope, not about
+what has been created. ⚠️ This header used to pin the whole appendix to the absence of a single
+migration (*"not in migration 0001"*), which goes wrong the moment any later migration creates one of
+these tables; `sync_report` is the row that made it go wrong. **`internal/db/migrations` is the only
+answer to whether a table exists**, and `internal/db/migrate_test.go`'s `TestDeferredTablesAreAbsent`
+carries the present/absent lists in executable form.
 
 | Table | Milestone | Note |
 |---|---|---|
