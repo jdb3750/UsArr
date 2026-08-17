@@ -1,12 +1,15 @@
 # UsArr
 
-> **Status: pre-alpha. One path works; the rest is still design and its evidence base.**
+> **Status: pre-alpha. Parts of it run; the rest is still design and its evidence base.**
 > What runs today is Prowlarr Search-and-Grab: free-text indexer search, results streaming in per
 > indexer, and grab — served by a Go binary with an embedded SPA shell. There is no release and no
-> container image yet, so running it means building it (`make build`). Nothing syncs a library in
-> yet, so there is no catalogue — and the rest moves week to week, so what exists is whatever is in
-> the tree (`web/src/routes`, `internal/`) rather than whatever this paragraph last claimed. If you
-> are here to install something finished, come back later.
+> container image yet, so running it means building it (`make build`). A catalogue import exists as
+> of `c56c8e4` — for Kavita and for nothing else, and only the first-import channel: it fires once
+> when you connect a Kavita, or on demand, and there is no periodic re-sync behind it. Which
+> channels the sync core has is a question for `internal/libsync` and `cmd/usarr/import.go`, whose
+> package docs answer it channel by channel. The rest moves week to week, so what exists is
+> whatever is in the tree (`web/src/routes`, `internal/`) rather than whatever this paragraph last
+> claimed. If you are here to install something finished, come back later.
 
 **One unified, searchable catalogue over everything you own and everything you might want —
 that plugs into the players you already use.**

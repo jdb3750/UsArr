@@ -18,11 +18,18 @@
 	 * ⚠️ SO WHAT IS LEFT HERE IS A GAP, AND IT SAYS SO RATHER THAN FAKING A
 	 * SCREEN. §17.4's Search is search over YOUR OWN LIBRARY: one input, results
 	 * as a single ranked list, groups ordered by best match, owned results
-	 * rendered immediately from the local index. None of that exists yet — the
-	 * *Arr library sync is v0.1 and unbuilt, so there is no local index to search
-	 * and nothing for a group to hold. An input over it would be the invented
-	 * status CLAUDE.md forbids: a control that looks like it works, returns
-	 * nothing, and teaches the user their library is empty.
+	 * rendered immediately from the local index.
+	 *
+	 * ⚠️ THE INDEX IS NO LONGER THE MISSING HALF, AND THIS COMMENT USED TO SAY IT
+	 * WAS. `internal/libsync` imports a catalogue and Home's Block C renders real
+	 * rows from `GET /api/v1/library/recent`, so "there is no local index to
+	 * search" stopped being true the day that landed. What is missing is the
+	 * QUERY: `internal/httpapi` registers no library-search route, and
+	 * `GET /api/v1/search` is the Prowlarr indexer fan-out, a different thing
+	 * over a different corpus. So an input here would have nothing to call, and
+	 * it would be the invented status CLAUDE.md forbids: a control that looks
+	 * like it works, returns nothing, and teaches the user their library is
+	 * empty — which is now a lie the user can disprove by clicking Home.
 	 *
 	 * ⚠️ AND IT IS A SCREEN RATHER THAN A REDIRECT, deliberately. A redirect takes
 	 * a working bookmark away and gives no account of where it went. This says
@@ -58,17 +65,18 @@
 	<!--
 		§9.6's empty state, used for the one condition it is genuinely right for.
 		This is not "you own nothing" and not "a filter hid everything": it is a
-		screen whose data source does not exist yet. One paragraph for what it will
-		be, one for what it is waiting on, and the actions go to the things the
-		user can actually do today.
+		screen whose query path does not exist yet, over a catalogue that does. One
+		paragraph for what it will be, one for what it is waiting on, and the
+		actions go to the things the user can actually do today.
 	-->
 	<div class="empty">
-		<h2 class="empty__title">There is no library to search yet</h2>
+		<h2 class="empty__title">Searching your own library is not built yet</h2>
 		<p class="empty__text">
 			This screen searches what UsArr has replicated locally — every film, episode, album, book and
 			comic your services already own — and renders it from SQLite, so it never waits on an *Arr.
-			The replication that fills that index has not shipped, so there is nothing here to match
-			against, and an input over it would return nothing for reasons that are UsArr’s rather than
+			That local index exists now, and the recently-added table on Home is read straight out of it.
+			What is missing is the query over it: nothing in UsArr answers a search against your own
+			catalogue yet, so an input here would return nothing for reasons that are UsArr’s rather than
 			yours.
 		</p>
 		<p class="empty__text">

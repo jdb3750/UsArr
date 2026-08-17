@@ -20,9 +20,12 @@ misread the project.
 Owner: Joe (GitHub `jdb3750`). Repo: `github.com/jdb3750/UsArr`.
 
 **Status: pre-alpha.** The binary builds, serves an embedded SPA, and runs the Prowlarr
-Search-and-Grab path end to end on top of the §14 security floor. No sync channel runs yet, so
-there is no catalogue behind any of it. **Past that, this file deliberately does not list what has
-landed** — such a list is false within days, and this one was — so read it off the tree:
+Search-and-Grab path end to end on top of the §14 security floor. Whether there is a catalogue
+behind any of it, and how much of one, is a tree question rather than a paragraph question:
+`internal/libsync`'s package doc names channel by channel what the sync core has and has not got,
+and `cmd/usarr/import.go`'s names what triggers an import. **Past that, this file deliberately does
+not list what has landed** — such a list is false within days, and this one has been twice, most
+recently on a sentence about the sync — so read it off the tree:
 `web/src/routes` for screens, `internal/` for backend surfaces, `internal/db/migrations` for the
 schema that exists. `docs/ARCHITECTURE.md` §16 is authoritative for which milestone owns a thing,
 which is a different question from whether it is built. Read the code before describing behaviour
