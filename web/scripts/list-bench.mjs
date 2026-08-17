@@ -25,14 +25,17 @@
  *      CONTENT box so padding and border are added on top.
  *
  *   3. THE DENSITY AND THEME TOGGLES, which ADR-0029 establishes are the
- *      expensive operations rather than scrolling, and which are Tier 0 by
- *      DESIGN-DIRECTION §7.2 — hard fail at 100 ms. Measured four ways, because
- *      the ADR proposes two mitigations and does not know which one pays:
- *      containment live vs forced off, crossed with the density attribute
- *      scoped to the list container vs set on <html>.
+ *      expensive operations rather than scrolling, and which DESIGN-DIRECTION
+ *      §7.2 governs as **Controls** — target < 100 ms, hard fail at 400 ms.
+ *      (They are NOT Tier 0: that tier is for local-SQLite reads, and §7.2 grew
+ *      the Controls category at `8c62fa0` precisely because three documents had
+ *      been asserting otherwise.) Measured four ways, because the ADR proposes
+ *      two mitigations and does not know which one pays: containment live vs
+ *      forced off, crossed with the density attribute scoped to the list
+ *      container vs set on <html>.
  *
  *   4. THE DOM-ROW CEILING that sets the "Load more" page size, by sweeping row
- *      counts until the toggle crosses 100 ms.
+ *      counts until the toggle crosses the Control hard fail.
  *
  *   5. ARROW-KEY TRAVERSAL at 25,000 rows, sibling walk vs the full rescan it
  *      replaced.
@@ -52,13 +55,24 @@
  *
  * Run: PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers pnpm bench:list
  *      pnpm bench:list -- --quick     (skip the 25k sweep; ~40s instead of ~3m)
+ *      USARR_BENCH_FORCE_CEILING=5000 pnpm bench:list   (fire the ceiling guard
+ *      deliberately at that size — see the guard's own note below; the run ends
+ *      RED on purpose, because a fired ceiling is a failure)
+ *      USARR_BENCH_FORCE_TOGGLE_MS=500 pnpm bench:list -- --quick
+ *      (fire section 5's density tripwire deliberately by substituting that
+ *      figure for the measured one — same reason: a guard nobody has watched
+ *      fail is indistinguishable from no guard)
+ *      USARR_BENCH_FORCE_ATTR_PATH=1 pnpm bench:list -- --quick
+ *      (fire section 5's POSITIVE CONTROL deliberately, by measuring via the old
+ *      setAttribute site that skips the §7.4 invalidation — the drill and the
+ *      real defect are the same event)
  * =============================================================================
  */
 import { createServer } from 'node:http';
 import { rm } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { dirname, extname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -68,6 +82,23 @@ const outDir = join(tmpdir(), `usarr-list-bench-${process.pid}`);
 
 const QUICK = process.argv.includes('--quick');
 const ASSERT_ONLY = process.argv.includes('--assert-only');
+
+/* ⚠️ THE GATE'S PAGE SIZE IS IMPORTED FROM THE COMPONENT, NEVER RESTATED HERE.
+ * Section 5's gate used to open with a local `const PAGE_SIZE = 200` while its
+ * failure message named LOAD_MORE_PAGE_SIZE — so raising the real constant to
+ * 400 would have left the gate measuring 200 rows and still claiming to guard
+ * the value that had moved. A guard that cannot see its own subject is not a
+ * guard. Importing the module makes the two impossible to drift apart.
+ *
+ * The specifier is a .ts, imported by a .mjs: Node strips the types on the way
+ * in (unflagged since 22.18; DEVELOPMENT.md's floor is Node 22 LTS and the
+ * container is v22.22.2). `list.ts` is deliberately the pure, DOM-free half of
+ * the primitive — the runes live in List.svelte — so it imports here without a
+ * bundler. If that ever stops being true, take the value through the harness
+ * build rather than copying it back into this file. */
+const { LOAD_MORE_PAGE_SIZE } = await import(
+	pathToFileURL(join(webDir, 'src', 'lib', 'list.ts')).href
+);
 
 /* --- reporting ------------------------------------------------------------ */
 
@@ -273,9 +304,23 @@ async function browserRssGb() {
  * was. Dying on `Target page, context or browser has been closed` deep inside
  * an evaluate reports a Playwright message that names nothing, and reads like a
  * broken bench rather than a machine limit. An honest ceiling beats a red gate
- * whose redness means nothing. */
+ * whose redness means nothing.
+ *
+ * ⚠️ AND IT IS FIREABLE ON DEMAND, WHICH IS THE ONLY REASON TO BELIEVE IT.
+ * `USARR_BENCH_FORCE_CEILING=<rows>` navigates the renderer to `chrome://crash`
+ * at that size, so the guard is exercised by a REAL renderer death rather than
+ * by a thrown stand-in — the catch, the message, the largest-size bookkeeping
+ * and the stop-escalating behaviour all run against the thing they exist for.
+ * Without a hook like this the guard is untriggered code that is
+ * indistinguishable from no guard, which is the standard this repo sets for
+ * itself. Fire it at a size the sweep actually visits, e.g.
+ *
+ *	USARR_BENCH_FORCE_CEILING=5000 pnpm bench:list
+ *
+ * The run is EXPECTED to end red when it is set: a fired ceiling is a failure. */
 let ceilingHit = null;
 let largestCompleted = 0;
+const FORCE_CEILING_AT = Number(process.env.USARR_BENCH_FORCE_CEILING ?? 0);
 
 function rendererGone(err) {
 	return /target (page|closed)|has been closed|browser has been closed|crash/i.test(
@@ -292,6 +337,9 @@ async function atSize(n, what, body) {
 	if (ceilingHit) return null;
 	await recyclePage();
 	try {
+		// The deliberate firing. `chrome://crash` kills the renderer process for
+		// real, so what follows is the same failure a machine limit produces.
+		if (FORCE_CEILING_AT === n) await page.goto('chrome://crash');
 		await setRows(n);
 		const value = await body();
 		largestCompleted = Math.max(largestCompleted, n);
@@ -729,11 +777,145 @@ async function toggleCost(page, { attribute, values, scope, containment }) {
 	);
 }
 
+/* =============================================================================
+ * THE DENSITY TOGGLE AS A USER PERFORMS IT — and why `toggleCost` is not it.
+ * ==========================================================================
+ *
+ * 🚩 DO NOT "SIMPLIFY" THIS BACK TO `toggleCost`. It is faster, it is shorter,
+ * it needs no rAF bookkeeping, and it measures A DIFFERENT THING WEARING THIS
+ * ONE'S NAME. Measured at 200 rows, fresh renderer per arm, four changes per
+ * arm, MutationObserver on the class, x86-64 4-vCPU shared container:
+ *
+ *     setAttribute on <table>       18.8 ms    .tbl--remeasure applied: NEVER
+ *     prefs.setDensity + flushSync  64.9 ms    .tbl--remeasure applied: yes
+ *
+ * ROUGHLY 3.5×, AND THE CHEAPER ARM IS THE WRONG ONE. The mechanism: the §7.4
+ * invalidation in `List.svelte` hangs off an `$effect` reading `prefs.density`.
+ * Poking `data-density` onto the <table> changes the attribute the CSS matches
+ * on, so the rows do restyle and relayout and the number looks plausible — but
+ * no rune was written, the effect never runs, `.tbl--remeasure` is never added,
+ * and the forced re-measurement that §7.4 makes MANDATORY is skipped entirely.
+ * The attribute arm is not a cheaper approximation of the shipped toggle; it is
+ * a different operation that happens to move the same attribute.
+ *
+ * That is why `remeasured` below is returned and HARD-ASSERTED by the caller
+ * rather than logged. The positive control is what caught this in the first
+ * place, and without it the arm can silently revert to measuring the wrong path
+ * with nothing in the output to say so.
+ *
+ * ⚠️ WHAT THE RETURNED MEAN IS, AND WHAT IT IS NOT. One page, four changes: the
+ * FIRST is cold and the other three land on a renderer that has just toggled, so
+ * the mean is a blend and runs about 40–45 ms where the cold sample alone is
+ * 65–75. It is fit for the order-of-magnitude tripwire it feeds and NOTHING
+ * ELSE. The cost of a density toggle as a user experiences it is the cold
+ * figure — 75.7 ms median at 200 rows, five samples, fresh renderer per sample,
+ * in measurements/2026-08-17-density-invalidation.md §6. Do not quote this
+ * mean as that number, and do not use either for a page-size decision: both
+ * records refuse to support one on this hardware. */
+async function densityToggleCostShipped(page, values) {
+	return page.evaluate(async (vals) => {
+		const tbl = document.querySelector('table.tbl');
+		const twoFrames = () =>
+			new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
+
+		/* ⚠️ NO WARM-UP TOGGLE HERE, DELIBERATELY, AND THE FIRST DRAFT HAD ONE.
+		 * Every measured value must be a real change — setting the density that is
+		 * already current writes no rune, runs no effect, and would fail the
+		 * positive control for a reason that is not the defect it guards. The
+		 * obvious fix is to pre-toggle to a known density before measuring. That
+		 * IS WRONG, and measurably so: it pays the expensive first change outside
+		 * the measured window, so all four samples are repeat toggles on a warmed
+		 * renderer and the mean came out 32.4 ms against 64.9 ms for the same work
+		 * measured cold. A user toggling density on a page they have been reading
+		 * performs the COLD change; a bench that quietly measures the warm one
+		 * under-reports by about 2x.
+		 *
+		 * So instead: rotate the sequence so it starts somewhere other than the
+		 * current density, which guarantees four real changes without spending the
+		 * cold one first. */
+		const current = window.__harness.prefs.density;
+		const seq = vals[0] === current ? [...vals.slice(1), vals[0]] : vals;
+
+		void document.documentElement.offsetHeight;
+		const samples = [];
+		let remeasured = 0;
+		for (let i = 0; i < seq.length; i++) {
+			const t0 = performance.now();
+			window.__harness.prefs.setDensity(seq[i]);
+			window.__harness.flush();
+			// Force style recalculation AND layout, which is what the user waits
+			// for — the same reason toggleCost does it.
+			void document.documentElement.offsetHeight;
+			void tbl.scrollHeight;
+			samples.push(performance.now() - t0);
+			/* THE POSITIVE CONTROL, read INSIDE the measured window rather than
+			 * from an observer afterwards: the class is added by the effect during
+			 * flushSync and taken off two frames later, so its presence here is
+			 * evidence that this sample paid for the invalidation. */
+			if (tbl.classList.contains('tbl--remeasure')) remeasured++;
+			await twoFrames(); // let the class come off, so the next sample is a full toggle
+		}
+
+		const mean = samples.reduce((a, b) => a + b, 0) / samples.length;
+		return {
+			mean: Math.round(mean * 10) / 10,
+			samples: samples.map((s) => Math.round(s * 10) / 10),
+			remeasured,
+			toggles: seq.length,
+			sequence: seq,
+			startedAt: current
+		};
+	}, values);
+}
+
+/* The OLD measurement site, kept behind an env var for one purpose only: firing
+ * the positive control deliberately. It reproduces the real defect rather than
+ * simulating it, which is the only drill worth trusting. */
+async function densityToggleCostAttributePath(page, values) {
+	const r = await toggleCost(page, {
+		attribute: 'data-density',
+		values,
+		scope: 'container',
+		containment: true
+	});
+	return { ...r, remeasured: 0, toggles: values.length };
+}
+
+/* =============================================================================
+ * THE BUDGET THESE SECTIONS ARE MEASURED AGAINST — one source, named once.
+ * ==========================================================================
+ *
+ * ⚠️ THIS USED TO SAY `TIER0_HARD_FAIL_MS = 100`, AND BOTH HALVES WERE WRONG.
+ * DESIGN-DIRECTION §7.2 gained a **Controls** category at `8c62fa0`: "a
+ * user-initiated change to presentation, which fetches nothing… Target < 100 ms;
+ * hard fail at 400 ms", derived from §6's Nielsen 0.1 s and Doherty–Thadani
+ * 400 ms anchors. The density and theme toggles are its named members.
+ *
+ * Tier 0 is "the data is in local SQLite. Nearly every read", and it remains
+ * 100 ms — for reads. A toggle that fetches nothing was never in it, and the
+ * old name asserted on every run the exact claim §7.2's change removes. A
+ * CONSTANT NAME IS A CLAIM, so this one is renamed rather than re-valued. */
+const CONTROL_HARD_FAIL_MS = 400; // DESIGN-DIRECTION §7.2, Controls: hard fail.
+const CONTROL_TARGET_MS = 100; // §7.2, Controls: target. Reported, never asserted.
+
+/* ⚠️ A DESIGN FLOOR ABOUT HARDWARE NOBODY HERE RUNS — §13'S CAVEAT, KEPT.
+ * ADR-0029's pessimistic end of "conservatively 3–5× slower". Dividing the
+ * budget by it to obtain a desktop-equivalent floor is legitimate arithmetic;
+ * presenting the result as what any hardware DOES is not, and §13 names this
+ * density-toggle argument specifically. So the quotient below is PRINTED with
+ * its provenance and is NOT asserted against — see section 5's gate for why the
+ * instrument cannot carry it. Nothing in this file compares a measured x86
+ * figure to a Pi-derived one as though they were like for like. */
+const PI5_FACTOR = 5;
+const PI5_DERIVED_DESKTOP_FLOOR_MS = CONTROL_HARD_FAIL_MS / PI5_FACTOR;
+
 const SIZES = QUICK ? [1000, 5000] : [1000, 5000, 25000];
 const DENSITY_VALUES = ['standard', 'relaxed', 'compact', 'standard'];
 const THEME_VALUES = ['dark', 'light', 'dark', 'light'];
 
-head('3. Density toggle (Tier 0 by §7.2 — hard fail 100 ms), mean of four changes');
+head(
+	`3. Density toggle (a §7.2 Control — hard fail ${CONTROL_HARD_FAIL_MS} ms), mean of four changes`
+);
 note('columns: containment live / containment forced off, x  list-scoped / root-scoped');
 const densityTable = [];
 for (const n of SIZES) {
@@ -765,7 +947,11 @@ for (const n of SIZES) {
 			`cv+root ${String(row.cv_root).padStart(7)} ms   ` +
 			`nocv+list ${String(row.nocv_container).padStart(7)} ms   ` +
 			`nocv+root ${String(row.nocv_root).padStart(7)} ms` +
-			(row.cv_container > 100 ? '   <-- above the 100 ms Tier-0 hard fail' : '')
+			(row.cv_container > CONTROL_HARD_FAIL_MS
+				? `   <-- above the ${CONTROL_HARD_FAIL_MS} ms Control hard fail`
+				: row.cv_container > CONTROL_TARGET_MS
+					? `   <-- above the ${CONTROL_TARGET_MS} ms Control target`
+					: '')
 	);
 }
 const rssAfter3 = await browserRssGb();
@@ -796,18 +982,46 @@ for (const n of SIZES) {
 	note(
 		`${String(n).padStart(6)} rows   containment live ${String(themed.live.mean).padStart(7)} ms   ` +
 			`containment off ${String(themed.off.mean).padStart(7)} ms` +
-			(themed.live.mean > 100 ? '   <-- above the 100 ms Tier-0 hard fail' : '')
+			(themed.live.mean > CONTROL_HARD_FAIL_MS
+				? `   <-- above the ${CONTROL_HARD_FAIL_MS} ms Control hard fail`
+				: themed.live.mean > CONTROL_TARGET_MS
+					? `   <-- above the ${CONTROL_TARGET_MS} ms Control target`
+					: '')
 	);
 }
-await page.evaluate(() => {
-	document.documentElement.removeAttribute('data-theme');
-});
+
+/* ⚠️ THERE IS DELIBERATELY NO `removeAttribute('data-theme')` CLEANUP HERE, AND
+ * ITS REMOVAL IS WHY THIS RUN REACHES SECTION 6 AT ALL.
+ *
+ * The line that used to sit here restyled the 25,000-row page section 4 had just
+ * finished with, and it was dead work three times over:
+ *
+ *   · `toggleCost` in root scope ALREADY restores `data-theme` to whatever it
+ *     found (`restoreRoot`) on its way out, so there was nothing left to undo
+ *     except the harness's own opening stamp from `prefs`;
+ *   · section 5's first act is `atSize(100)`, whose `recyclePage()` closes that
+ *     page outright — so the page being restyled was discarded seconds later,
+ *     and every section after this one runs on a FRESH page that carries the
+ *     harness's normal theme regardless of what was done here;
+ *   · and it sat OUTSIDE `atSize`, so the ceiling guard did not cover it. A
+ *     renderer death on this line reports a bare Playwright message naming no
+ *     size, which is the exact failure mode the guard exists to replace.
+ *
+ * MEASURED, on the run that first got past it: ~5 minutes of wall clock for one
+ * attribute removal — a full re-style of 25,000 laid-out rows on the heaviest
+ * page in the run, straight after the theme sweep that had already forced every
+ * one of them to lay out, pinning a core at ~110% with RSS climbing from 5.6 to
+ * 6.4 GB and printing NOTHING the whole time. That is what a bench that "never
+ * reaches section 6" looks like from the outside: not a crash, a silent stall
+ * between two section headers that nobody waits out. Deleting it is a pure
+ * subtraction — no measurement anywhere in this file depended on it.
+ */
 
 /* =============================================================================
  * 5. The DOM-row ceiling that sets the "Load more" page size
  * ========================================================================== */
 
-head('5. The DOM-row ceiling, swept against the 100 ms Tier-0 hard fail');
+head(`5. The DOM-row ceiling, swept against the ${CONTROL_HARD_FAIL_MS} ms §7.2 Control hard fail`);
 const SWEEP = QUICK ? [200, 800, 3200] : [100, 200, 400, 800, 1600, 3200, 6400, 12800, 25000];
 const sweep = [];
 for (const n of SWEEP) {
@@ -842,18 +1056,42 @@ for (const n of SWEEP) {
  * and it is wrong here: the cost is close to linear up to a few thousand rows
  * and then bends sharply upward, so a global fit is dragged by the 25,000-row
  * point and reports a crossing that no measured pair supports. Bracketing takes
- * the last size measured UNDER 100 ms and the first measured OVER it and
+ * the last size measured UNDER the hard fail and the first measured OVER it and
  * interpolates between those two points only — which is a statement about
  * measured data rather than about a model of it.
+ *
+ * The threshold is `CONTROL_HARD_FAIL_MS`, read from the one place that holds
+ * it. It was a bare literal `100` in four spots in this function, which is how a
+ * §7.2 change moved the budget everywhere except here.
  */
 function crossing(points, field) {
 	const sorted = [...points].sort((a, b) => a.n - b.n);
+	/* ⚠️ FEWER THAN TWO POINTS IS A REAL STATE, NOT AN IMPOSSIBLE ONE, AND IT
+	 * USED TO CRASH HERE. Once the ceiling fires, `atSize` returns null for every
+	 * remaining size, so `sweep` can hold one point or none — and the
+	 * extrapolation below then read `sorted[-1]` and threw
+	 * `TypeError: Cannot read properties of undefined (reading 'shipped')`.
+	 *
+	 * That TypeError landed AFTER the guard had already printed its ceiling
+	 * message and BEFORE the run could print its own closing CEILING summary, so
+	 * the honest report the guard exists to produce was buried under a stack
+	 * trace — the exact "this reads like a broken bench" failure the guard was
+	 * written to replace, one level up from where it was fixed. Found by firing
+	 * the guard on purpose (USARR_BENCH_FORCE_CEILING); nothing else would have
+	 * reached this branch. */
+	if (sorted.length < 2)
+		return {
+			atHardFail: NaN,
+			bracket: [sorted[0] ?? null, null],
+			linear: false,
+			unmeasured: true
+		};
 	let under = null;
 	for (const p of sorted) {
-		if (p[field] > 100) {
-			if (!under) return { at100: sorted[0].n, bracket: [null, p], linear: false };
-			const t = (100 - under[field]) / (p[field] - under[field]);
-			return { at100: under.n + t * (p.n - under.n), bracket: [under, p], linear: false };
+		if (p[field] > CONTROL_HARD_FAIL_MS) {
+			if (!under) return { atHardFail: sorted[0].n, bracket: [null, p], linear: false };
+			const t = (CONTROL_HARD_FAIL_MS - under[field]) / (p[field] - under[field]);
+			return { atHardFail: under.n + t * (p.n - under.n), bracket: [under, p], linear: false };
 		}
 		under = p;
 	}
@@ -862,7 +1100,7 @@ function crossing(points, field) {
 	const b = sorted[sorted.length - 1];
 	const slope = (b[field] - a[field]) / (b.n - a.n);
 	return {
-		at100: slope > 0 ? b.n + (100 - b[field]) / slope : Infinity,
+		atHardFail: slope > 0 ? b.n + (CONTROL_HARD_FAIL_MS - b[field]) / slope : Infinity,
 		bracket: [a, b],
 		linear: true
 	};
@@ -903,42 +1141,235 @@ for (const [name, fit] of [
 	['worst case', fitWorst]
 ]) {
 	const [a, b] = fit.bracket;
+	// UNOBTAINED, said in those words. A crossing needs two measured points, and
+	// after a fired ceiling there may be one or none — printing "~NaN rows" would
+	// be a number-shaped hole where the reader expects a measurement.
+	if (fit.unmeasured) {
+		note(
+			`${name.padEnd(11)} crossing UNOBTAINED: the sweep completed ` +
+				`${a ? `only ${a.n.toLocaleString()} rows` : 'no sizes at all'} before the ceiling fired, ` +
+				`and a bracket needs two measured points.`
+		);
+		continue;
+	}
 	note(
-		`${name.padEnd(11)} crosses 100 ms at ~${Math.round(fit.at100).toLocaleString()} rows on this ` +
-			`desktop` +
+		`${name.padEnd(11)} crosses ${CONTROL_HARD_FAIL_MS} ms at ~${Math.round(fit.atHardFail).toLocaleString()} rows on ` +
+			`this desktop` +
 			(a && b
 				? ` (bracketed by ${a.n.toLocaleString()} rows and ${b.n.toLocaleString()} rows` +
 					(fit.linear ? ', EXTRAPOLATED — the sweep never crossed' : ', measured on both sides') +
 					')'
 				: ' (the smallest size measured was already over)')
 	);
+	/* INFERRED, NOT MEASURED — §13. Nothing on this runner is a Pi, and this line
+	 * divides an x86 measurement by a design multiplier. It is printed so the
+	 * design floor is visible next to the measurement, NOT so the two can be read
+	 * as one number. No assertion reads it. */
 	note(
-		`            Pi 5 at ADR-0029's 3–5×: ${Math.round(fit.at100 / 5).toLocaleString()}–` +
-			`${Math.round(fit.at100 / 3).toLocaleString()} rows`
+		`            Pi 5 at ADR-0029's 3–5× (INFERRED from the x86 figure, not measured): ` +
+			`${Math.round(fit.atHardFail / 5).toLocaleString()}–${Math.round(fit.atHardFail / 3).toLocaleString()} rows`
 	);
 }
 
-/* THE ASSERTION THIS WHOLE SECTION EXISTS FOR. The tables above are
- * measurements; this is the gate. LOAD_MORE_PAGE_SIZE is what a caller gets by
- * default, so the cost at that many rows must leave enough headroom under the
- * 100 ms Tier-0 hard fail to survive the Pi-5 multiplier the ADR uses. 5x is
- * the pessimistic end of that multiplier, so the desktop budget is 20 ms. */
-const PAGE_SIZE = 200;
-await setRows(PAGE_SIZE);
-const atPageSize = await toggleCost(page, {
-	attribute: 'data-density',
-	values: DENSITY_VALUES,
-	scope: 'container',
-	containment: true
-});
-assert(
-	atPageSize.mean <= 20,
-	`one page (${PAGE_SIZE} rows): density toggle ${atPageSize.mean} ms on this desktop, which is ` +
-		`${(100 / atPageSize.mean).toFixed(0)}x under the 100 ms Tier-0 hard fail — enough headroom for ` +
-		`ADR-0029's 3–5x Pi 5 multiplier`,
-	`one page (${PAGE_SIZE} rows): density toggle ${atPageSize.mean} ms, which leaves less than the 5x ` +
-		`headroom the Pi-5 multiplier needs. LOAD_MORE_PAGE_SIZE in src/lib/list.ts is too large.`
+/* =============================================================================
+ * THE ASSERTION THIS WHOLE SECTION EXISTS FOR — AND WHAT IT DELIBERATELY IS NOT.
+ * ==========================================================================
+ *
+ * This gate used to assert `mean <= 20 ms`, from the old Tier-0 100 ms divided
+ * by ADR-0029's 5× Pi factor. §7.2's Controls category moved the hard fail to
+ * 400 ms, so the same arithmetic now yields 80 ms. THAT ASSERTION WAS NOT
+ * RE-DERIVED, IT WAS REMOVED, and the two reasons are independent — either
+ * alone is sufficient.
+ *
+ * ── 1. THE MARGIN IS SMALLER THAN THE INSTRUMENT'S OWN SPREAD ──────────────
+ * On the shipped product path the density toggle costs 75.7 ms median at 200
+ * rows (measurements/2026-08-17-density-invalidation.md §6, at `dff20fd`,
+ * x86-64 4-vCPU shared container). Against an 80 ms derived floor that is
+ * 4.3 ms of margin — 5.4%. The same record's five raw samples at 200 rows are
+ * 65.2, 77.1, 69.9, 75.7, 87.2: sd 8.30 ms, range 22.0 ms. So:
+ *
+ *     margin / sd    = 0.52          margin / range = 0.20
+ *     and 87.2 ms — one of the five recorded samples — is ALREADY over 80.
+ *
+ * A guard whose margin is a fifth of its instrument's spread does not measure
+ * the code, it measures the neighbours on the shared host. It goes red at
+ * random, everyone learns to re-run it, and a guard people re-run until it
+ * passes is indistinguishable from no guard at all. That failure mode is the
+ * whole reason this branch was parked rather than merged.
+ *
+ * Three shapes were costed against those raw samples before choosing:
+ *
+ *   (a) PER-ROW, NAIVE (total / N). Fixes the "needs a new literal every time
+ *       the page size moves" problem and NOTHING ELSE: 0.3785 against 0.4000
+ *       ms/row is the same 5.4%, the same 0.52, the same 0.20. N divides out of
+ *       both sides. The fixed overhead is still in the numerator.
+ *
+ *   (b) PER-ROW, SLOPE — (cost(N₂) − cost(N₁)) / (N₂ − N₁), which does cancel
+ *       fixed overhead. It fails for three separate reasons. The central slope
+ *       100→200 is 0.4128 ms/row against a most-generous 0.4000 ceiling (80/200,
+ *       crediting zero fixed cost), so THE MARGIN IS ALREADY NEGATIVE. Its
+ *       propagated sd is 0.097 ms/row — 23.5% relative, against the total's
+ *       11.1% — because differencing two noisy quantities adds their variances
+ *       while shrinking the signal. And the curve is convex, not linear: the
+ *       bracket slopes are 0.265, 0.298 and 0.660 ms/row across 100→120→160→200
+ *       (implied intercept −7.5 ms), so there is no single slope to assert and
+ *       picking a bracket would decide the verdict.
+ *
+ *   (c) A SPREAD-STABLE STATISTIC — median of k, fresh renderer per sample.
+ *       This is the only one that improves with effort, and not enough: se of
+ *       the median is 1.2533·sd/√k, so k=5 gives 0.92, k=25 gives 2.07, and
+ *       margin/se ≥ 3 needs k = 53 fresh-renderer samples at ~76 ms plus a page
+ *       recycle each. Worse, it treats the wrong noise. The branch's own record
+ *       measured the SAME quantity on the SAME tree minutes apart at 19.8 ms
+ *       (§4) and 14.2 ms (§5) — 39% of BETWEEN-RUN drift, which no within-run k
+ *       reduces, because it is host load rather than sampling error.
+ *
+ * ── 2. AND THE OLD GATE WAS NOT MEASURING THE SHIPPED PATH AT ALL ──────────
+ * ⚠️ Found by probing rather than by reading, and it was the larger defect.
+ * FIXED HERE — the gate now drives `prefs.setDensity`, and the fix is recorded
+ * because the numbers it moves are the ones the argument above rests on.
+ * `toggleCost` sets `data-density` on the <table> with `setAttribute`, while
+ * `List.svelte`'s §7.4 invalidation hangs off an `$effect` on `prefs.density`,
+ * so the raw attribute write NEVER FIRED IT. Measured at 200 rows, fresh
+ * renderer per arm, four changes per arm, MutationObserver on the class:
+ *
+ *     old gate  (setAttribute on <table>)     18.8 ms   .tbl--remeasure: NEVER
+ *     shipped   (prefs.setDensity + flush)    64.9 ms   .tbl--remeasure: yes
+ *
+ * ROUGHLY 3.5×, and the gate was reporting the cheaper wrong one. This was a
+ * CORRECTNESS FIX, not an optimisation of the bench: the old arm was not a
+ * cheaper approximation of the density toggle, it was a different operation
+ * wearing its name, and it skipped exactly the work §7.4 makes mandatory. A
+ * budget assertion there would have passed at 18 ms against 80 with a
+ * comfortable margin while guarding a configuration the spec forbids shipping —
+ * and a wide margin around the wrong quantity is worse than a thin one around
+ * the right quantity, because it never goes red and so is never questioned.
+ *
+ * 🚩 AND THE CONSEQUENCE THAT WOULD OTHERWISE HAVE BITTEN SILENTLY: a tripwire
+ * calibrated against 18 ms sits ~5× clear of it, but the SAME threshold against
+ * the honest ~65 ms is only ~1.5× clear — straight back into the flapping this
+ * section exists to prevent. The tripwire below is therefore calibrated against
+ * the honest quantity, where §7.2's 400 ms leaves about 6× of margin. Correcting
+ * the measurement did not cost the guard its headroom; it is the reason the
+ * guard has any defensible headroom at all.
+ *
+ * The positive control on `.tbl--remeasure` is asserted, not logged, so this
+ * cannot silently regress. See `densityToggleCostShipped`.
+ *
+ * ── WHAT IS ASSERTED INSTEAD ───────────────────────────────────────────────
+ * A REGRESSION TRIPWIRE, and it is named that rather than called a budget.
+ * The measured x86 figure is checked against §7.2's own 400 ms Control hard
+ * fail DIRECTLY — no Pi divisor, so this is like for like: a ThinkCentre-class
+ * proxy measured against a budget that is a claim about the user's patience,
+ * not about anyone's hardware. §13 is satisfied because no Pi-derived number
+ * enters the comparison. Margin/sd is 39 and margin/range is 15 on the same
+ * raw samples, which is the only wall-clock threshold on this runner where the
+ * margin exceeds the spread by more than an order of magnitude.
+ *
+ * 🚩 AND ITS LIMITS, STATED SO NOBODY OVER-READS A GREEN. It trips on roughly a
+ * 5× regression, or on LOAD_MORE_PAGE_SIZE rising past about 700 rows. It does
+ * NOT police the shipped 200-row page against a Pi-class floor, and it does not
+ * claim to: this instrument cannot do that, and both measurement records
+ * already say so in their own words — "no single adjacent pair on it supports a
+ * page-size decision on this instrument", "a decision that needs to separate
+ * 100 from 120 needs a quieter machine, not more samples here". A page-size
+ * decision is exactly what the old gate re-ran on every invocation. */
+/* ⚠️ ON A FRESH PAGE, VIA `atSize`, NOT `setRows` ON WHATEVER THE SWEEP LEFT.
+ * This used to be a bare `setRows(200)`, which ran on the page the sweep's LAST
+ * point left behind — 25,000 rows — so the gate's number was taken on a renderer
+ * that had just torn 25,000 keyed components down through one `flushSync`, on
+ * the dirtiest heap in the run. Two things wrong with that and only one of them
+ * is speed: the teardown itself cost minutes of silent wall clock (the same
+ * shape as the theme-cleanup note above), and a gate measured on a page with
+ * that allocation history is not measuring the 200-row page a user gets.
+ * `atSize` gives it a fresh renderer and brings it under the ceiling guard. */
+/* ⚠️ TWO DELIBERATE-FIRING SWITCHES, because both assertions below must be
+ * watched going red before either is trusted:
+ *
+ *   USARR_BENCH_FORCE_TOGGLE_MS=<ms>  substitutes that figure for the measured
+ *       one, firing the TRIPWIRE without waiting for a real regression.
+ *   USARR_BENCH_FORCE_ATTR_PATH=1     measures via the old setAttribute site,
+ *       firing the POSITIVE CONTROL. This reproduces the actual defect rather
+ *       than simulating it — it is the exact wrong-path measurement that shipped
+ *       here until now — so the drill and the bug are the same event. */
+const FORCED_TOGGLE_MS = Number(process.env.USARR_BENCH_FORCE_TOGGLE_MS ?? 0);
+const FORCE_ATTR_PATH = process.env.USARR_BENCH_FORCE_ATTR_PATH === '1';
+
+const PAGE_SIZE = LOAD_MORE_PAGE_SIZE;
+const atPageSize = await atSize(PAGE_SIZE, 'section 5 page-size tripwire', () =>
+	FORCE_ATTR_PATH
+		? densityToggleCostAttributePath(page, DENSITY_VALUES)
+		: densityToggleCostShipped(page, DENSITY_VALUES)
 );
+if (!atPageSize)
+	note(
+		`the ${PAGE_SIZE}-row page-size tripwire was SKIPPED: the ceiling was already hit, and atSize ` +
+			`stops escalating once it is. The run is red on the ceiling regardless.`
+	);
+else {
+	if (FORCE_ATTR_PATH)
+		note(
+			`⚠️ USARR_BENCH_FORCE_ATTR_PATH=1 — measuring via the OLD setAttribute site on purpose. The ` +
+				`positive control below must go RED. This run's verdict is a drill.`
+		);
+	const siteName = FORCE_ATTR_PATH ? 'OLD setAttribute site (drill)' : 'shipped path';
+	note(
+		`density toggle at ${PAGE_SIZE} rows, ${siteName}: ${atPageSize.mean} ms mean of ` +
+			`${atPageSize.toggles} (samples ${atPageSize.samples.join(', ')}), x86-64 4-vCPU shared container`
+	);
+
+	/* ── THE POSITIVE CONTROL, ASSERTED RATHER THAN LOGGED ──────────────────
+	 * §7.4 makes the invalidation mandatory, so a measurement that did not pay
+	 * for it is not a measurement of the shipped toggle. This assertion is what
+	 * stops the arm silently reverting to the cheaper wrong path: the cost
+	 * assertion below would happily stay green on an 18 ms number forever, and
+	 * a green with no way to fail is what this whole section exists to remove. */
+	assert(
+		atPageSize.remeasured === atPageSize.toggles,
+		`positive control: \`.tbl--remeasure\` was applied inside all ${atPageSize.toggles} measured ` +
+			`windows, so every sample above paid for §7.4's forced re-measurement — this is the density ` +
+			`toggle a user performs, not a setAttribute that skips it`,
+		`positive control FAILED: \`.tbl--remeasure\` was applied in only ${atPageSize.remeasured} of ` +
+			`${atPageSize.toggles} measured windows. The measurement is NOT going through the shipped ` +
+			`density path, so the ${atPageSize.mean} ms above is not the toggle a user performs and the ` +
+			`tripwire below is judging the wrong quantity. Cause, in order of likelihood: the gate was ` +
+			`changed back to poking \`data-density\` with setAttribute (which never runs the \`$effect\` on ` +
+			`\`prefs.density\`, so the invalidation never fires — measured 18.8 ms that way against ` +
+			`64.9 ms on the shipped path); or List.svelte's invalidation effect was removed or renamed.`
+	);
+
+	const measured = FORCED_TOGGLE_MS > 0 ? FORCED_TOGGLE_MS : atPageSize.mean;
+	if (FORCED_TOGGLE_MS > 0)
+		note(
+			`⚠️ USARR_BENCH_FORCE_TOGGLE_MS=${FORCED_TOGGLE_MS} — the tripwire below is judging that ` +
+				`figure instead of the measured ${atPageSize.mean} ms. This run's verdict is a drill.`
+		);
+	/* ── THE TRIPWIRE. NOT A BUDGET, AND NOT A PAGE-SIZE GATE ───────────────
+	 * See the long block above for why the Pi-derived 80 ms floor is not
+	 * assertable on this runner: against the shipped path's 75.7 ms recorded
+	 * median it leaves 4.3 ms, which is a fifth of this instrument's own range.
+	 * What IS assertable is §7.2's own 400 ms Control hard fail compared like
+	 * for like — an x86 measurement against a budget about the user's patience,
+	 * with no Pi multiplier anywhere in the comparison, so §13 is satisfied.
+	 * Calibrated against the HONEST ~65 ms quantity, not the old 18 ms one: a
+	 * tripwire tuned to the wrong number would have tightened from ~5x to ~1.5x
+	 * the moment the measurement was corrected, and flapped for that reason. */
+	assert(
+		measured <= CONTROL_HARD_FAIL_MS,
+		`one page (LOAD_MORE_PAGE_SIZE = ${PAGE_SIZE} rows): density toggle ${measured} ms on the ` +
+			`${siteName}, x86-64, ${(CONTROL_HARD_FAIL_MS / measured).toFixed(1)}x under §7.2's ` +
+			`${CONTROL_HARD_FAIL_MS} ms Control hard fail. TRIPWIRE ONLY — it catches an order-of-magnitude ` +
+			`regression, NOT a page-size decision, which neither measurement record will support on this ` +
+			`hardware. The ${PI5_DERIVED_DESKTOP_FLOOR_MS} ms figure some documents quote is ` +
+			`${CONTROL_HARD_FAIL_MS} ÷ ADR-0029's ${PI5_FACTOR}x Pi multiplier — a design floor, INFERRED, ` +
+			`deliberately not asserted here`,
+		`one page (LOAD_MORE_PAGE_SIZE = ${PAGE_SIZE} rows): density toggle ${measured} ms on the ` +
+			`${siteName}, OVER §7.2's ${CONTROL_HARD_FAIL_MS} ms Control hard fail on x86-64. This is not a ` +
+			`thin-margin flap: the tripwire sits about 6x above the ~65 ms this path measures, so reaching ` +
+			`it means either a genuine order-of-magnitude regression in the density path or ` +
+			`LOAD_MORE_PAGE_SIZE in src/lib/list.ts raised past roughly 700 rows.`
+	);
+}
 
 /* =============================================================================
  * 6. Arrow-key traversal: sibling walk vs the rescan it replaced
@@ -1599,9 +2030,13 @@ if (!ASSERT_ONLY) {
 	}
 	note('');
 	note(
-		`DOM-row ceiling at the 100 ms Tier-0 hard fail: ~${Math.round(fitShipped.at100).toLocaleString()} rows ` +
-			`on this desktop as shipped, ~${Math.round(fitShipped.at100 / 5).toLocaleString()}–` +
-			`${Math.round(fitShipped.at100 / 3).toLocaleString()} on a Pi 5 at ADR-0029's 3–5×.`
+		fitShipped.unmeasured
+			? `DOM-row ceiling at the ${CONTROL_HARD_FAIL_MS} ms Control hard fail: UNOBTAINED — the ceiling fired before the ` +
+					`sweep had two measured points to bracket between.`
+			: `DOM-row ceiling at the ${CONTROL_HARD_FAIL_MS} ms Control hard fail: ` +
+					`~${Math.round(fitShipped.atHardFail).toLocaleString()} rows on this x86-64 desktop as shipped; ` +
+					`~${Math.round(fitShipped.atHardFail / 5).toLocaleString()}–` +
+					`${Math.round(fitShipped.atHardFail / 3).toLocaleString()} on a Pi 5 at ADR-0029's 3–5×, INFERRED not measured (§13).`
 	);
 }
 
