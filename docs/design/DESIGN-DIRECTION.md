@@ -1756,7 +1756,7 @@ treatment by media type.** Same slots, same positions, different values.
     deferred — Home's `Items`, 16 cells — and the reason is a measured cost, not an unfinished
     opinion.** A reserved unit box costs column width, and that track cannot pay it. Measured over
     the render sweep — 5 widths × 3 densities × 2 installs × every state — a correctly-sized `5ch`
-    reserve takes `Items` from **48 wrapped cells to 96**. ⚠️ **The failing width is 1280 px, and
+    reserve takes the mockups' `Items` from **48 wrapped cells to 96**. ⚠️ **The failing width is 1280 px, and
     the deferral has never named it, because `Items` is a FRACTIONAL track and the number the
     deferral quotes is a resolution rather than a width.** `minmax(0, 1.15fr)` is 107.375 px at
     1440 px and **87.80 px at 1280 px**, the narrowest desktop width the design check sweeps —
@@ -1776,7 +1776,7 @@ treatment by media type.** Same slots, same positions, different values.
     measured twice: 960 cells per arm before anything was edited, by rewriting the cells in the
     rendered page, and **1,920 cells and 1,920 `.unit--age` spans afterwards against the shipped
     class**. `1095 d` — four digits at 32 px under `tabular-nums`, plus a 3 px gap, plus an 8 px
-    box — is **43 px in the 56 px content box, 13 px of slack**, identical with the box and without
+    box — is **43 px in the mockups' 56 px content box, 13 px of slack**, identical with the box and without
     it, and **0 cells on more than one line either way**. `d`'s ink is 8 px in an 8 px box, so **0
     of 1,920 spans spill**, which is the test `2.5ch` failed for `MiB`. ⚠️ **What the box buys on this column is 1.00 px, and that is the number to quote, not
     size's 14.00 px.** Forced onto the widest and narrowest unit the family has, the figures' right
