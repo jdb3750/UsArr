@@ -17,17 +17,31 @@
 //
 // Kavita's OpenAPI document declares exactly one securityScheme —
 // `AuthKey` = {type: apiKey, in: header, name: x-api-key} — applied as a GLOBAL
-// security requirement with ZERO per-operation overrides (verified against
-// api/specs/kavita.json, 488 paths, 0 operation-level `security` keys). So:
+// security requirement with ZERO per-operation overrides — verified against BOTH
+// vendored specs (ADR-0046): api/specs/kavita-v0.9.0.2.json, the release the
+// owner runs, 462 paths; and api/specs/kavita-develop.json, 488 paths. Zero
+// operation-level `security` keys in either. So:
 //
 //   - Every authenticated call is the same header on every endpoint.
+//
 //   - There is NO JWT to exchange and NO token to cache or refresh.
 //     POST /api/Plugin/authenticate exists and returns a JWT; it is optional, it
 //     is not the documented path, and this package deliberately does not use it.
-//   - `?apiKey=` is NOT general authentication. It appears on exactly 9
-//     operations, plus the OPDS routes where it is a PATH SEGMENT. It is not
-//     generalised into this client, and the one method that sends it
-//     (PluginVersion) says why in its own doc comment.
+//
+//   - `?apiKey=` is NOT general authentication. It is a small special case, plus
+//     the OPDS routes where it is a PATH SEGMENT. It is not generalised into this
+//     client, and the one method that sends it (PluginVersion) says why in its
+//     own doc comment.
+//
+//     ⚠️ THE SIZE OF THAT SPECIAL CASE DIFFERS BETWEEN THE TWO LINES, which is
+//     why this bullet no longer names one number. On develop it is 9 operations;
+//     on stable v0.9.0.2 — the release the owner runs — it is 20, because every
+//     `/api/Image/*` cover route still accepts the key in the query string there
+//     and develop has since dropped it. An earlier draft of this comment stated
+//     develop's 9 as if it were Kavita's, which is precisely the error ADR-0046
+//     exists to stop. TestAPIKeyQueryIsNotGeneralAuth asserts the property that
+//     is true on both — that it is a small set, not the whole API — rather than
+//     either count.
 //
 // The Auth Key is a user-scoped credential and, for the admin account UsArr will
 // normally be given, a full-admin one. Same rules as an *Arr key: encrypted at

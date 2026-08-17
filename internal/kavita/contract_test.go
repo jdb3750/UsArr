@@ -14,24 +14,50 @@ import (
 	"github.com/jdb3750/UsArr/internal/ssrf"
 )
 
-// Contract tests against the VENDORED OpenAPI document (api/specs/kavita.json,
+// Contract tests against the TWO VENDORED OpenAPI documents (ADR-0046;
 // provenance in api/specs/SOURCES.md).
+//
+// # READ THIS BEFORE TRUSTING A GREEN
+//
+// There is no such thing as "the" Kavita spec, and pinning one was how this
+// package spent its first day claiming more than it had measured. Every
+// spec-reading test below runs TWICE, once per file, and the subtest name says
+// which:
+//
+//	api/specs/kavita-v0.9.0.2.json — the FLOOR. The stable release the owner
+//	  runs. A green here means the endpoint, enum member or property UsArr
+//	  depends on exists on a server somebody actually runs.
+//	api/specs/kavita-develop.json — the CEILING. The branch where the API is
+//	  defined. A green here means nothing upstream has added or renamed has gone
+//	  unmodelled.
+//
+// Neither file alone answers both questions, which is the whole of ADR-0046. A
+// green against the ceiling alone is evidence about a branch nobody deploys; a
+// green against the floor alone goes blind the day upstream renames a field.
+//
+// ⚠️ AND THE FLOOR IS NOT THE OWNER'S SERVER EITHER. `openapi.json` at tag
+// `v0.9.0.2` declares `info.version` **0.9.0.0** — upstream did not regenerate it
+// for the last two patch releases on that line. It is the nearest checked-in
+// artefact to the deployment, not the deployment. A real instance remains the
+// only evidence about a real instance.
 //
 // Vendored rather than fetched because CI has no network. Kavita differs from the
 // *Arrs in one way worth knowing: its spec is a CHECKED-IN file at the repository
-// root, not a debug-only endpoint, so the drift job for this one is cheap.
+// root, not a debug-only endpoint, so both files are fetchable without a running
+// instance and the drift job for them is cheap.
 //
 // What these assert is narrow and on purpose: that the Go structs cover every
-// property the spec declares for the shapes UsArr consumes, that the integer
-// enums carry every documented member, that the endpoints UsArr calls exist, and
-// that the ONE body UsArr sends can only marshal to something the endpoint binds.
+// property either spec declares for the shapes UsArr consumes, that the integer
+// enums carry every documented member, that the endpoints UsArr calls exist on
+// BOTH lines, and that the ONE body UsArr sends can only marshal to something the
+// endpoint binds.
 //
-// They do NOT assert the spec is correct. It is not, always — and the divergences
-// this package is built around were read out of Kavita's controllers, not this
-// file: HealthController's [AllowAnonymous], ServerController's class-level admin
-// policy, GetAllSeriesV2's unconditional `Statements.Add`, UserParams' int.MaxValue
-// PageSize default, and the `Pagination` response header, which is middleware and
-// appears nowhere in this document.
+// They do NOT assert either spec is correct. Neither is, always — and the
+// divergences this package is built around were read out of Kavita's controllers,
+// not these files: HealthController's [AllowAnonymous], ServerController's
+// class-level admin policy, GetAllSeriesV2's unconditional `Statements.Add`,
+// UserParams' int.MaxValue PageSize default, and the `Pagination` response
+// header, which is middleware and appears in neither document.
 
 type openAPI struct {
 	Paths      map[string]map[string]openAPIOperation `json:"paths"`
@@ -70,18 +96,97 @@ type openAPISchema struct {
 	Format     string                   `json:"format"`
 }
 
-func loadSpec(t *testing.T) openAPI {
+// The two roles, spelled out in the words the failure messages use. They are
+// strings rather than a bool because every failure that names one has to be
+// readable by somebody who has not read ADR-0046.
+const (
+	roleFloor   = "FLOOR (stable v0.9.0.2 — the release the owner runs)"
+	roleCeiling = "CEILING (develop — where the API is defined)"
+)
+
+// pinnedSpec is one vendored document and what a green against it attests.
+type pinnedSpec struct {
+	file string
+	role string
+	// version is `info.version` inside the file. For the floor it is NOT the tag
+	// name — see the ⚠️ in this file's header comment.
+	version string
+	// filterFields is the SeriesFilterField member count observed at vendoring
+	// time. It is a recorded measurement, not a requirement.
+	filterFields int
+}
+
+func (ps pinnedSpec) path() string {
+	return filepath.Join("..", "..", "api", "specs", ps.file)
+}
+
+// pinnedSpecs is the list every spec-reading test iterates. Adding a third
+// vendored spec here is all it takes to bring the whole suite to bear on it.
+var pinnedSpecs = []pinnedSpec{
+	{file: "kavita-v0.9.0.2.json", role: roleFloor, version: "0.9.0.0", filterFields: 34},
+	{file: "kavita-develop.json", role: roleCeiling, version: "0.9.0.20", filterFields: 35},
+}
+
+func rawSpec(t *testing.T, ps pinnedSpec) []byte {
 	t.Helper()
-	path := filepath.Join("..", "..", "api", "specs", "kavita.json")
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(ps.path())
 	if err != nil {
-		t.Fatalf("reading vendored spec (see api/specs/SOURCES.md): %v", err)
+		t.Fatalf("reading vendored spec %s (see api/specs/SOURCES.md): %v", ps.file, err)
 	}
+	return raw
+}
+
+func loadSpecFile(t *testing.T, ps pinnedSpec) openAPI {
+	t.Helper()
 	var spec openAPI
-	if err := json.Unmarshal(raw, &spec); err != nil {
-		t.Fatalf("parsing vendored spec: %v", err)
+	if err := json.Unmarshal(rawSpec(t, ps), &spec); err != nil {
+		t.Fatalf("parsing vendored spec %s: %v", ps.file, err)
 	}
 	return spec
+}
+
+// eachSpec runs fn once per vendored spec, in a subtest named after the file, so
+// a failure reads `TestX/kavita-v0.9.0.2.json` and the reader knows immediately
+// whether the problem is on the release or only on the branch.
+func eachSpec(t *testing.T, fn func(t *testing.T, ps pinnedSpec, spec openAPI)) {
+	t.Helper()
+	for _, ps := range pinnedSpecs {
+		t.Run(ps.file, func(t *testing.T) {
+			fn(t, ps, loadSpecFile(t, ps))
+		})
+	}
+}
+
+// TestBothSpecsAreTheDocumentsSOURCESSays is the cheapest guard here and the one
+// that stops every other test in this file becoming a tautology: if somebody
+// copies one spec over the other, the suite would still be green and would still
+// print two subtest names. This asserts the two files are distinct documents and
+// that each declares the version api/specs/SOURCES.md says it does.
+func TestBothSpecsAreTheDocumentsSOURCESSays(t *testing.T) {
+	seen := map[string]string{}
+	for _, ps := range pinnedSpecs {
+		raw := rawSpec(t, ps)
+		var doc struct {
+			Info struct {
+				Version string `json:"version"`
+			} `json:"info"`
+		}
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			t.Fatalf("%s: %v", ps.file, err)
+		}
+		if doc.Info.Version != ps.version {
+			t.Errorf("%s declares info.version %q, this suite is pinned to %q. Either the file was "+
+				"re-vendored without updating pinnedSpecs, or the wrong file is in api/specs — "+
+				"update both, and api/specs/SOURCES.md's row with it",
+				ps.file, doc.Info.Version, ps.version)
+		}
+		if other, dup := seen[doc.Info.Version]; dup {
+			t.Errorf("%s and %s are the same document (info.version %q). The floor/ceiling split is "+
+				"the point: two copies of one spec prove exactly what one copy proved",
+				ps.file, other, doc.Info.Version)
+		}
+		seen[doc.Info.Version] = ps.file
+	}
 }
 
 // resolve follows a $ref into components/schemas, once. The spec nests no deeper
@@ -132,55 +237,126 @@ func jsonFieldNames(typ reflect.Type) map[string]bool {
 	return out
 }
 
-// TestStructsCoverSpecProperties asserts every property the spec declares has a
-// field on the corresponding Go struct. A field UsArr does not read is still
+// coveredSchemas is every spec schema with a Go struct behind it. Two tests read
+// it: TestStructsCoverSpecProperties, and TestCeilingOnlyPropertiesAreDeclared.
+var coveredSchemas = []struct {
+	schema string
+	typ    reflect.Type
+	skip   map[string]string
+}{
+	{schema: "SeriesDto", typ: reflect.TypeOf(SeriesDto{})},
+	{schema: "ServerInfoSlimDto", typ: reflect.TypeOf(ServerInfoSlimDto{})},
+	{schema: "LibraryDto", typ: reflect.TypeOf(LibraryDto{})},
+	{schema: "SeriesFilterV2Dto", typ: reflect.TypeOf(SeriesFilter{})},
+	{schema: "SeriesFilterStatementDto", typ: reflect.TypeOf(SeriesFilterStatement{})},
+	{schema: "SeriesSortOptionDto", typ: reflect.TypeOf(SeriesSortOption{})},
+	// The credit path (ADR-0044). SeriesMetadataDto is the only endpoint
+	// that reports a creator, and its THIRTEEN person arrays are all
+	// declared even though UsArr maps eight of them: an array that is in the
+	// spec and absent from the struct is an upstream change nobody sees.
+	{schema: "SeriesMetadataDto", typ: reflect.TypeOf(SeriesMetadataDto{})},
+	{schema: "PersonDto", typ: reflect.TypeOf(PersonDto{})},
+	{schema: "GenreTagDto", typ: reflect.TypeOf(GenreTagDto{})},
+	{schema: "TagDto", typ: reflect.TypeOf(TagDto{})},
+}
+
+// TestStructsCoverSpecProperties asserts every property EITHER spec declares has
+// a field on the corresponding Go struct. A field UsArr does not read is still
 // worth declaring: its absence is how a renamed-or-added upstream field goes
 // unnoticed. SeriesDto gaining mangaBakaId on the develop line is the live
 // example.
+//
+// Running it against the floor as well is not redundant. The floor's properties
+// are a subset of the ceiling's TODAY; the day upstream REMOVES one on develop,
+// the floor arm is the only thing that still requires UsArr to model a field the
+// owner's server is still sending.
 func TestStructsCoverSpecProperties(t *testing.T) {
-	spec := loadSpec(t)
+	eachSpec(t, func(t *testing.T, ps pinnedSpec, spec openAPI) {
+		for _, tc := range coveredSchemas {
+			t.Run(tc.schema, func(t *testing.T) {
+				schema, ok := spec.Components.Schemas[tc.schema]
+				if !ok {
+					t.Fatalf("%s is not in %s — the %s", tc.schema, ps.file, ps.role)
+				}
+				have := jsonFieldNames(tc.typ)
+				var missing []string
+				for prop := range schema.Properties {
+					if have[prop] {
+						continue
+					}
+					if _, skipped := tc.skip[prop]; skipped {
+						continue
+					}
+					missing = append(missing, prop)
+				}
+				sort.Strings(missing)
+				if len(missing) > 0 {
+					t.Errorf("%s: %s — the %s — declares properties the Go struct does not model: %v",
+						tc.schema, ps.file, ps.role, missing)
+				}
+			})
+		}
+	})
+}
 
-	cases := []struct {
-		schema string
-		typ    reflect.Type
-		skip   map[string]string
-	}{
-		{schema: "SeriesDto", typ: reflect.TypeOf(SeriesDto{})},
-		{schema: "ServerInfoSlimDto", typ: reflect.TypeOf(ServerInfoSlimDto{})},
-		{schema: "LibraryDto", typ: reflect.TypeOf(LibraryDto{})},
-		{schema: "SeriesFilterV2Dto", typ: reflect.TypeOf(SeriesFilter{})},
-		{schema: "SeriesFilterStatementDto", typ: reflect.TypeOf(SeriesFilterStatement{})},
-		{schema: "SeriesSortOptionDto", typ: reflect.TypeOf(SeriesSortOption{})},
-		// The credit path (ADR-0044). SeriesMetadataDto is the only endpoint
-		// that reports a creator, and its THIRTEEN person arrays are all
-		// declared even though UsArr maps eight of them: an array that is in the
-		// spec and absent from the struct is an upstream change nobody sees.
-		{schema: "SeriesMetadataDto", typ: reflect.TypeOf(SeriesMetadataDto{})},
-		{schema: "PersonDto", typ: reflect.TypeOf(PersonDto{})},
-		{schema: "GenreTagDto", typ: reflect.TypeOf(GenreTagDto{})},
-		{schema: "TagDto", typ: reflect.TypeOf(TagDto{})},
+// ceilingOnlyProperties names, per schema, every property the CEILING declares
+// and the FLOOR does not.
+//
+// THIS IS THE LIST OF FIELDS THAT DECODE TO NOTHING ON THE OWNER'S SERVER. They
+// are absent from the v0.9.0.2 response body, so encoding/json leaves the Go
+// field at its zero value — no error, no warning, and any code branching on one
+// takes the zero branch forever on the stable line. `cbrId` is the live example:
+// internal/libsync's kavitaExternalIDs writes a `cbr` external_id from it, and
+// that row is UNREACHABLE until the owner upgrades past the stable line.
+//
+// It is written out by hand so that the next develop-only field is a DECISION
+// rather than a silent addition — TestCeilingOnlyPropertiesAreDeclared computes
+// the same set from the two files and refuses any difference in either
+// direction. A field leaving this list (because a release caught up) is as
+// interesting as one joining it.
+var ceilingOnlyProperties = map[string][]string{
+	"SeriesDto":  {"cbrId", "isStandAlone", "mangaBakaEditionId", "nameLocked"},
+	"LibraryDto": {"metadataProvider"},
+}
+
+// TestCeilingOnlyPropertiesAreDeclared is ADR-0046's guard: it computes
+// ceiling-minus-floor for every schema UsArr models and requires the answer to
+// equal ceilingOnlyProperties exactly.
+//
+// Without it, the two vendored specs would be two files that happen to sit next
+// to each other, and the fact that four SeriesDto fields do not exist on the
+// release the owner runs would live in a comment nobody re-reads.
+func TestCeilingOnlyPropertiesAreDeclared(t *testing.T) {
+	var floor, ceiling openAPI
+	for _, ps := range pinnedSpecs {
+		switch ps.role {
+		case roleFloor:
+			floor = loadSpecFile(t, ps)
+		case roleCeiling:
+			ceiling = loadSpecFile(t, ps)
+		}
+	}
+	if len(floor.Components.Schemas) == 0 || len(ceiling.Components.Schemas) == 0 {
+		t.Fatal("one of the two roles has no spec behind it; this test would pass vacuously")
 	}
 
-	for _, tc := range cases {
+	for _, tc := range coveredSchemas {
 		t.Run(tc.schema, func(t *testing.T) {
-			schema, ok := spec.Components.Schemas[tc.schema]
-			if !ok {
-				t.Fatalf("%s is not in the vendored spec", tc.schema)
-			}
-			have := jsonFieldNames(tc.typ)
-			var missing []string
-			for prop := range schema.Properties {
-				if have[prop] {
-					continue
+			floorProps := floor.Components.Schemas[tc.schema].Properties
+			var delta []string
+			for prop := range ceiling.Components.Schemas[tc.schema].Properties {
+				if _, onFloor := floorProps[prop]; !onFloor {
+					delta = append(delta, prop)
 				}
-				if _, skipped := tc.skip[prop]; skipped {
-					continue
-				}
-				missing = append(missing, prop)
 			}
-			sort.Strings(missing)
-			if len(missing) > 0 {
-				t.Errorf("%s: spec declares properties the Go struct does not model: %v", tc.schema, missing)
+			sort.Strings(delta)
+			want := slices.Clone(ceilingOnlyProperties[tc.schema])
+			sort.Strings(want)
+			if !slices.Equal(delta, want) {
+				t.Errorf("%s: develop declares %v that stable v0.9.0.2 does not; ceilingOnlyProperties "+
+					"says %v. These fields DECODE TO NOTHING on the owner's server, so the list is a "+
+					"decision, not documentation: update it, and check whether anything reads a field "+
+					"that just joined or left it", tc.schema, delta, want)
 			}
 		})
 	}
@@ -191,9 +367,17 @@ func TestStructsCoverSpecProperties(t *testing.T) {
 // A silently added member matters more here than for a string enum: a Go constant
 // block that stops one short does not fail to compile, it just mislabels whatever
 // upstream added.
+//
+// THE TWO ROLES ASSERT DIFFERENT THINGS HERE, and the asymmetry is deliberate:
+//
+//   - Against the CEILING, Go must match EXACTLY. Anything upstream adds or
+//     removes on develop is a decision somebody has to make.
+//   - Against the FLOOR, the spec's members must be a SUBSET of Go's. Go is
+//     allowed to know about members the release does not have yet — that is what
+//     tracking develop buys. Requiring equality here would go red the moment Go
+//     was updated for a develop addition, which would train the next reader to
+//     weaken the test.
 func TestEnumsCoverSpecValues(t *testing.T) {
-	spec := loadSpec(t)
-
 	cases := []struct {
 		schema string
 		have   []int64
@@ -236,21 +420,38 @@ func TestEnumsCoverSpecValues(t *testing.T) {
 		}},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.schema, func(t *testing.T) {
-			schema, ok := spec.Components.Schemas[tc.schema]
-			if !ok {
-				t.Fatalf("%s is not in the vendored spec", tc.schema)
-			}
-			want := intEnum(t, tc.schema, schema)
-			got := slices.Clone(tc.have)
-			slices.Sort(want)
-			slices.Sort(got)
-			if !slices.Equal(want, got) {
-				t.Errorf("%s: spec has %v, Go has %v", tc.schema, want, got)
-			}
-		})
-	}
+	eachSpec(t, func(t *testing.T, ps pinnedSpec, spec openAPI) {
+		for _, tc := range cases {
+			t.Run(tc.schema, func(t *testing.T) {
+				schema, ok := spec.Components.Schemas[tc.schema]
+				if !ok {
+					t.Fatalf("%s is not in %s — the %s", tc.schema, ps.file, ps.role)
+				}
+				want := intEnum(t, tc.schema, schema)
+				got := slices.Clone(tc.have)
+				slices.Sort(want)
+				slices.Sort(got)
+
+				if ps.role == roleCeiling {
+					if !slices.Equal(want, got) {
+						t.Errorf("%s: %s — the %s — has %v, Go has %v", tc.schema, ps.file, ps.role, want, got)
+					}
+					return
+				}
+				var unmodelled []int64
+				for _, m := range want {
+					if !slices.Contains(got, m) {
+						unmodelled = append(unmodelled, m)
+					}
+				}
+				if len(unmodelled) > 0 {
+					t.Errorf("%s: %s — the %s — declares %v, which Go does not model. A value from the "+
+						"server the owner actually runs would be mislabelled (spec %v, Go %v)",
+						tc.schema, ps.file, ps.role, unmodelled, want, got)
+				}
+			})
+		}
+	})
 }
 
 // TestAuthIsOneGlobalHeaderScheme pins the fact the whole client is built on:
@@ -261,36 +462,37 @@ func TestEnumsCoverSpecValues(t *testing.T) {
 // second scheme — this client's "same header on every endpoint" assumption stops
 // being true and something has to change. This is where that shows up.
 func TestAuthIsOneGlobalHeaderScheme(t *testing.T) {
-	spec := loadSpec(t)
+	eachSpec(t, func(t *testing.T, ps pinnedSpec, spec openAPI) {
+		if n := len(spec.Components.SecuritySchemes); n != 1 {
+			t.Fatalf("%s: expected exactly one securityScheme, got %d: %v",
+				ps.file, n, spec.Components.SecuritySchemes)
+		}
+		sch, ok := spec.Components.SecuritySchemes["AuthKey"]
+		if !ok {
+			t.Fatalf("%s: the AuthKey securityScheme is gone: %v", ps.file, spec.Components.SecuritySchemes)
+		}
+		if sch.Type != "apiKey" || sch.In != "header" || sch.Name != authHeader {
+			t.Errorf("%s: AuthKey is {type:%q in:%q name:%q}; this client sends %q as a header and nothing else",
+				ps.file, sch.Type, sch.In, sch.Name, authHeader)
+		}
+		if len(spec.Security) != 1 {
+			t.Errorf("%s: expected one global security requirement, got %v", ps.file, spec.Security)
+		}
 
-	if n := len(spec.Components.SecuritySchemes); n != 1 {
-		t.Fatalf("expected exactly one securityScheme, got %d: %v", n, spec.Components.SecuritySchemes)
-	}
-	sch, ok := spec.Components.SecuritySchemes["AuthKey"]
-	if !ok {
-		t.Fatalf("the AuthKey securityScheme is gone: %v", spec.Components.SecuritySchemes)
-	}
-	if sch.Type != "apiKey" || sch.In != "header" || sch.Name != authHeader {
-		t.Errorf("AuthKey is now {type:%q in:%q name:%q}; this client sends %q as a header and nothing else",
-			sch.Type, sch.In, sch.Name, authHeader)
-	}
-	if len(spec.Security) != 1 {
-		t.Errorf("expected one global security requirement, got %v", spec.Security)
-	}
-
-	var overrides []string
-	for path, ops := range spec.Paths {
-		for method, op := range ops {
-			if len(op.Security) > 0 {
-				overrides = append(overrides, strings.ToUpper(method)+" "+path)
+		var overrides []string
+		for path, ops := range spec.Paths {
+			for method, op := range ops {
+				if len(op.Security) > 0 {
+					overrides = append(overrides, strings.ToUpper(method)+" "+path)
+				}
 			}
 		}
-	}
-	sort.Strings(overrides)
-	if len(overrides) > 0 {
-		t.Errorf("operations now override the global security requirement, so one header is no longer "+
-			"the whole auth story: %v", overrides)
-	}
+		sort.Strings(overrides)
+		if len(overrides) > 0 {
+			t.Errorf("%s — the %s — has operations overriding the global security requirement, so one "+
+				"header is no longer the whole auth story: %v", ps.file, ps.role, overrides)
+		}
+	})
 }
 
 // TestAPIKeyQueryIsNotGeneralAuth pins the OTHER half of the auth fact: `?apiKey=`
@@ -302,33 +504,36 @@ func TestAuthIsOneGlobalHeaderScheme(t *testing.T) {
 // What is pinned exactly is the client's own behaviour: exactly ONE method sends
 // it, and it is the documented non-admin version fallback.
 func TestAPIKeyQueryIsNotGeneralAuth(t *testing.T) {
-	spec := loadSpec(t)
-
-	var withQueryKey []string
-	for path, ops := range spec.Paths {
-		for method, op := range ops {
-			for _, p := range op.Parameters {
-				if strings.EqualFold(p.Name, "apiKey") && p.In == "query" {
-					withQueryKey = append(withQueryKey, strings.ToUpper(method)+" "+path)
+	eachSpec(t, func(t *testing.T, ps pinnedSpec, spec openAPI) {
+		var withQueryKey []string
+		for path, ops := range spec.Paths {
+			for method, op := range ops {
+				for _, p := range op.Parameters {
+					if strings.EqualFold(p.Name, "apiKey") && p.In == "query" {
+						withQueryKey = append(withQueryKey, strings.ToUpper(method)+" "+path)
+					}
 				}
 			}
 		}
-	}
-	total := 0
-	for _, ops := range spec.Paths {
-		total += len(ops)
-	}
-	if len(withQueryKey) == 0 {
-		t.Fatal("no operation takes ?apiKey= any more; PluginVersion is built on one that does")
-	}
-	if len(withQueryKey) > total/10 {
-		t.Errorf("?apiKey= now appears on %d of %d operations — it has stopped being a special case, "+
-			"and the client's header-only rule needs revisiting: %v", len(withQueryKey), total, withQueryKey)
-	}
-	if !slices.Contains(withQueryKey, "GET /api/Plugin/version") {
-		t.Errorf("GET /api/Plugin/version no longer takes ?apiKey=; PluginVersion sends it: %v", withQueryKey)
-	}
+		total := 0
+		for _, ops := range spec.Paths {
+			total += len(ops)
+		}
+		if len(withQueryKey) == 0 {
+			t.Fatalf("%s: no operation takes ?apiKey= any more; PluginVersion is built on one that does", ps.file)
+		}
+		if len(withQueryKey) > total/10 {
+			t.Errorf("%s — the %s — has ?apiKey= on %d of %d operations; it has stopped being a special "+
+				"case, and the client's header-only rule needs revisiting: %v",
+				ps.file, ps.role, len(withQueryKey), total, withQueryKey)
+		}
+		if !slices.Contains(withQueryKey, "GET /api/Plugin/version") {
+			t.Errorf("%s: GET /api/Plugin/version no longer takes ?apiKey=; PluginVersion sends it: %v",
+				ps.file, withQueryKey)
+		}
+	})
 
+	// The client-side half depends on no spec, so it runs once.
 	src, err := os.ReadFile("client.go")
 	if err != nil {
 		t.Fatalf("reading client.go: %v", err)
@@ -340,10 +545,14 @@ func TestAPIKeyQueryIsNotGeneralAuth(t *testing.T) {
 }
 
 // TestEndpointsExistInSpec pins the paths and query parameters the client sends.
+//
+// This is the test ADR-0046 was written for. Before the floor was vendored it
+// checked develop only, so a green said "these endpoints exist on a branch" and
+// said nothing at all about the server the owner points UsArr at. It now runs
+// against both, and the FLOOR arm is the one that matters when a call 404s in
+// production.
 func TestEndpointsExistInSpec(t *testing.T) {
-	spec := loadSpec(t)
-
-	for _, tc := range []struct {
+	cases := []struct {
 		path, method string
 		params       []string
 	}{
@@ -362,41 +571,49 @@ func TestEndpointsExistInSpec(t *testing.T) {
 		// ASP.NET's binder matches what the controller declares, and the two
 		// controllers declare different things.
 		{path: "/api/Series/metadata", method: "get", params: []string{"seriesId"}},
-	} {
-		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
-			ops, ok := spec.Paths[tc.path]
-			if !ok {
-				t.Fatalf("%s is not in the vendored spec", tc.path)
-			}
-			op, ok := ops[tc.method]
-			if !ok {
-				t.Fatalf("%s %s is not in the vendored spec", tc.method, tc.path)
-			}
-			have := map[string]bool{}
-			for _, p := range op.Parameters {
-				have[p.Name] = true
-			}
-			for _, want := range tc.params {
-				if !have[want] {
-					t.Errorf("%s %s no longer accepts %q", tc.method, tc.path, want)
-				}
-			}
-		})
 	}
+
+	eachSpec(t, func(t *testing.T, ps pinnedSpec, spec openAPI) {
+		for _, tc := range cases {
+			t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+				ops, ok := spec.Paths[tc.path]
+				if !ok {
+					t.Fatalf("%s is not in %s — the %s", tc.path, ps.file, ps.role)
+				}
+				op, ok := ops[tc.method]
+				if !ok {
+					t.Fatalf("%s %s is not in %s — the %s", tc.method, tc.path, ps.file, ps.role)
+				}
+				have := map[string]bool{}
+				for _, p := range op.Parameters {
+					have[p.Name] = true
+				}
+				for _, want := range tc.params {
+					if !have[want] {
+						t.Errorf("%s %s does not accept %q in %s — the %s",
+							tc.method, tc.path, want, ps.file, ps.role)
+					}
+				}
+			})
+		}
+	})
 }
 
 // TestThereIsNoServerInfoEndpoint pins a name that is easy to get wrong from
 // memory, and that this project got wrong in an early draft: the endpoint is
 // server-info-SLIM. A plain /api/Server/server-info does not exist.
 func TestThereIsNoServerInfoEndpoint(t *testing.T) {
-	spec := loadSpec(t)
-	if _, ok := spec.Paths["/api/Server/server-info"]; ok {
-		t.Error("/api/Server/server-info now exists; ServerInfo() deliberately calls server-info-slim, " +
-			"and if upstream added a fatter sibling somebody should decide which one UsArr wants")
-	}
-	if _, ok := spec.Paths["/api/Server/server-info-slim"]; !ok {
-		t.Fatal("/api/Server/server-info-slim is gone; ServerInfo() has nothing to call")
-	}
+	eachSpec(t, func(t *testing.T, ps pinnedSpec, spec openAPI) {
+		if _, ok := spec.Paths["/api/Server/server-info"]; ok {
+			t.Errorf("%s — the %s — has /api/Server/server-info; ServerInfo() deliberately calls "+
+				"server-info-slim, and if upstream added a fatter sibling somebody should decide "+
+				"which one UsArr wants", ps.file, ps.role)
+		}
+		if _, ok := spec.Paths["/api/Server/server-info-slim"]; !ok {
+			t.Fatalf("%s — the %s — has no /api/Server/server-info-slim; ServerInfo() has nothing to call",
+				ps.file, ps.role)
+		}
+	})
 }
 
 // TestNoTimestampFilterFieldExists is the guard behind channel 3b's whole shape.
@@ -407,51 +624,51 @@ func TestThereIsNoServerInfoEndpoint(t *testing.T) {
 // adds one, that design choice is worth revisiting — and this is the test that
 // says so, rather than a comment nobody re-reads.
 func TestNoTimestampFilterFieldExists(t *testing.T) {
-	spec := loadSpec(t)
-	sch, ok := spec.Components.Schemas["SeriesFilterField"]
-	if !ok {
-		t.Fatal("SeriesFilterField is not in the vendored spec")
-	}
-	members := intEnum(t, "SeriesFilterField", sch)
-	if len(members) != 35 {
-		t.Logf("SeriesFilterField now has %d members (was 35 at the pinned commit)", len(members))
-	}
+	eachSpec(t, func(t *testing.T, ps pinnedSpec, spec openAPI) {
+		sch, ok := spec.Components.Schemas["SeriesFilterField"]
+		if !ok {
+			t.Fatalf("SeriesFilterField is not in %s — the %s", ps.file, ps.role)
+		}
+		members := intEnum(t, "SeriesFilterField", sch)
+		if len(members) != ps.filterFields {
+			t.Logf("%s: SeriesFilterField now has %d members (was %d when this file was vendored)",
+				ps.file, len(members), ps.filterFields)
+		}
 
-	// The member NAMES live in the x-enum-varnames extension, which the narrow
-	// struct above does not model, so re-read the raw description — Swashbuckle
-	// writes every member name into it.
-	raw, err := os.ReadFile(filepath.Join("..", "..", "api", "specs", "kavita.json"))
-	if err != nil {
-		t.Fatalf("reading vendored spec: %v", err)
-	}
-	var doc struct {
-		Components struct {
-			Schemas map[string]struct {
-				EnumVarNames []string `json:"x-enum-varnames"`
-			} `json:"schemas"`
-		} `json:"components"`
-	}
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		t.Fatalf("parsing vendored spec: %v", err)
-	}
-	names := doc.Components.Schemas["SeriesFilterField"].EnumVarNames
-	if len(names) == 0 {
-		t.Fatal("SeriesFilterField no longer carries x-enum-varnames; the member names cannot be checked")
-	}
-	// ReadingDate is a READ-PROGRESS date, not a content-change timestamp, and is
-	// the one name that would otherwise trip this. It is named rather than
-	// pattern-excluded so the exception is a decision on the record.
-	for _, n := range names {
-		if n == "ReadingDate" {
-			continue
+		// The member NAMES live in the x-enum-varnames extension, which the narrow
+		// struct above does not model, so re-read the raw document — Swashbuckle
+		// writes every member name into it.
+		var doc struct {
+			Components struct {
+				Schemas map[string]struct {
+					EnumVarNames []string `json:"x-enum-varnames"`
+				} `json:"schemas"`
+			} `json:"components"`
 		}
-		l := strings.ToLower(n)
-		if strings.Contains(l, "modified") || strings.Contains(l, "updated") ||
-			strings.Contains(l, "changed") || strings.Contains(l, "since") {
-			t.Errorf("SeriesFilterField now has %q — a server-side since-filter may be expressible, "+
-				"and ARCHITECTURE.md §7.1a's client-side stop was chosen because it was not", n)
+		if err := json.Unmarshal(rawSpec(t, ps), &doc); err != nil {
+			t.Fatalf("parsing %s: %v", ps.file, err)
 		}
-	}
+		names := doc.Components.Schemas["SeriesFilterField"].EnumVarNames
+		if len(names) == 0 {
+			t.Fatalf("%s: SeriesFilterField no longer carries x-enum-varnames; the member names "+
+				"cannot be checked", ps.file)
+		}
+		// ReadingDate is a READ-PROGRESS date, not a content-change timestamp, and is
+		// the one name that would otherwise trip this. It is named rather than
+		// pattern-excluded so the exception is a decision on the record.
+		for _, n := range names {
+			if n == "ReadingDate" {
+				continue
+			}
+			l := strings.ToLower(n)
+			if strings.Contains(l, "modified") || strings.Contains(l, "updated") ||
+				strings.Contains(l, "changed") || strings.Contains(l, "since") {
+				t.Errorf("%s — the %s — has SeriesFilterField.%s: a server-side since-filter may be "+
+					"expressible, and ARCHITECTURE.md §7.1a's client-side stop was chosen because it "+
+					"was not", ps.file, ps.role, n)
+			}
+		}
+	})
 }
 
 // TestRecentlyUpdatedSeriesIsNotWired documents a deliberate omission, and it is
@@ -463,9 +680,14 @@ func TestNoTimestampFilterFieldExists(t *testing.T) {
 // 3b uses the ordered walk instead. If someone wires this up, this test is where
 // they should have to argue with a comment first.
 func TestRecentlyUpdatedSeriesIsNotWired(t *testing.T) {
-	spec := loadSpec(t)
-	if _, ok := spec.Paths["/api/Series/recently-updated-series"]; !ok {
-		t.Skip("upstream removed the endpoint; nothing to guard")
+	var present int
+	for _, ps := range pinnedSpecs {
+		if _, ok := loadSpecFile(t, ps).Paths["/api/Series/recently-updated-series"]; ok {
+			present++
+		}
+	}
+	if present == 0 {
+		t.Skip("both vendored specs have dropped the endpoint; nothing to guard")
 	}
 	for _, f := range []string{"client.go", "stream.go", "resources.go"} {
 		src, err := os.ReadFile(f)
@@ -493,14 +715,12 @@ func TestRecentlyUpdatedSeriesIsNotWired(t *testing.T) {
 // slice marshals as exactly that. Assert on the MARSHALLED BYTES; a zero-valued
 // struct field is invisible until encoding/json has had it.
 func TestOutboundBodiesAreSpecLegal(t *testing.T) {
-	spec := loadSpec(t)
-
 	built, err := NewSeriesFilter(SeriesSortFieldLastChapterAdded, false)
 	if err != nil {
 		t.Fatalf("building the filter: %v", err)
 	}
 
-	for _, tc := range []struct {
+	cases := []struct {
 		name, endpoint, schema string
 		body                   any
 	}{
@@ -516,36 +736,41 @@ func TestOutboundBodiesAreSpecLegal(t *testing.T) {
 			name: "series-list/zero-valued", endpoint: "POST /api/Series/all-v2", schema: "SeriesFilterV2Dto",
 			body: SeriesFilter{SortOptions: SeriesSortOption{SortField: SeriesSortFieldSortName}},
 		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			schema, ok := spec.Components.Schemas[tc.schema]
-			if !ok {
-				t.Fatalf("%s is not in the vendored spec", tc.schema)
-			}
-			raw, err := json.Marshal(tc.body)
-			if err != nil {
-				t.Fatalf("marshalling the %s body: %v", tc.name, err)
-			}
-			var got map[string]any
-			if err := json.Unmarshal(raw, &got); err != nil {
-				t.Fatalf("re-decoding the %s body: %v", tc.name, err)
-			}
-
-			// (1) statements must be present and must be an ARRAY, never null.
-			stmts, present := got["statements"]
-			if !present {
-				t.Errorf("%s omits `statements` (body: %s)", tc.endpoint, raw)
-			} else if _, isArray := stmts.([]any); !isArray {
-				t.Errorf("%s sends statements=%#v. GetAllSeriesV2's first act is "+
-					"`seriesFilterDto.Statements.Add(stmt)`, so null nil-derefs into a 500. "+
-					"It must be a JSON array (body: %s)", tc.endpoint, stmts, raw)
-			}
-
-			// (2) every property must be declared, and every enum-valued one must
-			// carry a member.
-			assertSpecLegal(t, spec, schema, tc.endpoint, tc.schema, got, raw)
-		})
 	}
+
+	eachSpec(t, func(t *testing.T, ps pinnedSpec, spec openAPI) {
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				schema, ok := spec.Components.Schemas[tc.schema]
+				if !ok {
+					t.Fatalf("%s is not in %s — the %s", tc.schema, ps.file, ps.role)
+				}
+				raw, err := json.Marshal(tc.body)
+				if err != nil {
+					t.Fatalf("marshalling the %s body: %v", tc.name, err)
+				}
+				var got map[string]any
+				if err := json.Unmarshal(raw, &got); err != nil {
+					t.Fatalf("re-decoding the %s body: %v", tc.name, err)
+				}
+
+				// (1) statements must be present and must be an ARRAY, never null.
+				stmts, present := got["statements"]
+				if !present {
+					t.Errorf("%s omits `statements` (body: %s)", tc.endpoint, raw)
+				} else if _, isArray := stmts.([]any); !isArray {
+					t.Errorf("%s sends statements=%#v. GetAllSeriesV2's first act is "+
+						"`seriesFilterDto.Statements.Add(stmt)`, so null nil-derefs into a 500. "+
+						"It must be a JSON array (body: %s)", tc.endpoint, stmts, raw)
+				}
+
+				// (2) every property must be declared, and every enum-valued one must
+				// carry a member — on BOTH lines. A property develop declares and the
+				// release does not is a property the owner's binder ignores.
+				assertSpecLegal(t, spec, schema, tc.endpoint+" ["+ps.file+"]", tc.schema, got, raw)
+			})
+		}
+	})
 }
 
 // assertSpecLegal walks a marshalled body against a schema, one level deep into
@@ -596,8 +821,6 @@ func assertSpecLegal(t *testing.T, spec openAPI, schema openAPISchema, endpoint,
 // zero value against the spec, statically, whether or not anything sends it
 // today.
 func TestEnumFieldsCannotMarshalAsEmpty(t *testing.T) {
-	spec := loadSpec(t)
-
 	// The Go type of each enum, and the spec schema that defines its members.
 	enumSchemas := map[reflect.Type]string{
 		reflect.TypeOf(QueryContext(0)):      "QueryContext",
@@ -621,41 +844,43 @@ func TestEnumFieldsCannotMarshalAsEmpty(t *testing.T) {
 	// whose enum has no zero member must be impossible to leave at zero — which
 	// for this package means it can only be built through a constructor that
 	// refuses one.
-	for _, typ := range outbound {
-		t.Run(typ.Name(), func(t *testing.T) {
-			for i := range typ.NumField() {
-				f := typ.Field(i)
-				schemaName, isEnum := enumSchemas[f.Type]
-				if !isEnum {
-					continue
-				}
-				tag := f.Tag.Get("json")
-				if tag == "-" {
-					continue
-				}
-				if slices.Contains(strings.Split(tag, ",")[1:], "omitempty") {
-					t.Errorf("%s.%s is an integer enum with `json:%q`. omitempty is the *Arr fix and it is "+
-						"WRONG here: 0 is a real member of some of these enums, so omitempty silently "+
-						"drops a value the caller chose.", typ.Name(), f.Name, tag)
-				}
+	eachSpec(t, func(t *testing.T, ps pinnedSpec, spec openAPI) {
+		for _, typ := range outbound {
+			t.Run(typ.Name(), func(t *testing.T) {
+				for i := range typ.NumField() {
+					f := typ.Field(i)
+					schemaName, isEnum := enumSchemas[f.Type]
+					if !isEnum {
+						continue
+					}
+					tag := f.Tag.Get("json")
+					if tag == "-" {
+						continue
+					}
+					if slices.Contains(strings.Split(tag, ",")[1:], "omitempty") {
+						t.Errorf("%s.%s is an integer enum with `json:%q`. omitempty is the *Arr fix and it is "+
+							"WRONG here: 0 is a real member of some of these enums, so omitempty silently "+
+							"drops a value the caller chose.", typ.Name(), f.Name, tag)
+					}
 
-				sch, ok := spec.Components.Schemas[schemaName]
-				if !ok {
-					t.Fatalf("%s is not in the vendored spec", schemaName)
+					sch, ok := spec.Components.Schemas[schemaName]
+					if !ok {
+						t.Fatalf("%s is not in %s — the %s", schemaName, ps.file, ps.role)
+					}
+					members := intEnum(t, schemaName, sch)
+					if slices.Contains(members, 0) {
+						continue // a zero value is legal; nothing to guard
+					}
+					// 0 is NOT a member. The zero value of this field is unsendable, so
+					// there must be a constructor that cannot produce one.
+					if err := zeroValueIsRefused(typ, f.Name); err != nil {
+						t.Errorf("%s.%s is a %s, whose members in %s are %v — 0 is not one, so a zero value "+
+							"is a 400 on every call. %v", typ.Name(), f.Name, schemaName, ps.file, members, err)
+					}
 				}
-				members := intEnum(t, schemaName, sch)
-				if slices.Contains(members, 0) {
-					continue // a zero value is legal; nothing to guard
-				}
-				// 0 is NOT a member. The zero value of this field is unsendable, so
-				// there must be a constructor that cannot produce one.
-				if err := zeroValueIsRefused(typ, f.Name); err != nil {
-					t.Errorf("%s.%s is a %s, whose members are %v — 0 is not one, so a zero value is a 400 "+
-						"on every call. %v", typ.Name(), f.Name, schemaName, members, err)
-				}
-			}
-		})
-	}
+			})
+		}
+	})
 }
 
 // zeroValueIsRefused checks that the constructor guarding a zero-less enum field
@@ -680,11 +905,12 @@ func zeroValueIsRefused(typ reflect.Type, field string) error {
 // `context` is a QueryContext and QueryContext has no zero member, so a zeroed
 // SeriesListOptions must resolve to a real one rather than sending 0.
 func TestQueryContextZeroIsNotSendable(t *testing.T) {
-	spec := loadSpec(t)
-	sch := spec.Components.Schemas["QueryContext"]
-	members := intEnum(t, "QueryContext", sch)
-	if slices.Contains(members, 0) {
-		t.Skip("QueryContext gained a zero member; this guard is moot")
+	for _, ps := range pinnedSpecs {
+		sch := loadSpecFile(t, ps).Components.Schemas["QueryContext"]
+		members := intEnum(t, "QueryContext", sch)
+		if slices.Contains(members, 0) {
+			t.Skipf("%s: QueryContext gained a zero member; this guard is moot", ps.file)
+		}
 	}
 
 	resolved, err := SeriesListOptions{}.resolve()

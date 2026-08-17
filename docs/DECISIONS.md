@@ -97,6 +97,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0043](#adr-0043) | A **minimal** match-correction UI moves earlier than v0.3; the full correction surface stays there | **Accepted** — owner-decided 2026-08-17; **answers the scope call ARCHITECTURE §6.4 flagged and routed**; **amends [ADR-0026](#adr-0026)**'s correction-UI consequence and **amends** ARCHITECTURE §16.0, §16.1's v0.1 and v0.3 entries; **re-sequences, rejects nothing** — ADR-0026's model, verbs, tables and scoping are untouched and `library_override` is already in the tree; **source-independent** — it turns on v0.1 having a weak-identity catalogue source, not on that source being Kavita; **assigns no milestone**, which is carried as an open question; ⚠️ **amended 2026-08-17 by [ADR-0045](#adr-0045)** — that open question is **closed**: the owner delegated the call and the minimal case lands in **v0.2**, chosen **by elimination** (the only slot both earlier than v0.3 and not v0.1) with its cost recorded — v0.1 ships the *"not identified"* badge without its remedy for one milestone. The *"minimal"* boundary, the source-independence and the v0.3 cap on the full surface are all untouched |
 | [0044](#adr-0044) | Author and creator credits ship in v0.1; `work_credit` lands with **Kavita**, not Navidrome | **Accepted** — owner-decided 2026-08-17; **applies [ADR-0040](#adr-0040)'s rule rather than overriding it** — the landing point is the source that writes the table, and Kavita writes credits; **amends [ADR-0040](#adr-0040)** for `work_credit` **only** — `work_album` and `work_track` still wait for Navidrome; **confirms [ADR-0033](#adr-0033)**, whose `person` kind finally gets a writer; **costs a ROW, not a column** — an author is a `work` of kind `person`, which nothing in v0.1 created before; leaves [ADR-0035](#adr-0035), [ADR-0041](#adr-0041) and [ADR-0042](#adr-0042) untouched; raises one open question it does not close (nothing collects an uncredited person) |
 | [0045](#adr-0045) | The three unslotted commitments land in **v0.2**: Sonarr and Radarr, the minimal write path, and the minimal match-correction UI | **Accepted** — **owner-delegated 2026-08-17** (*"whatever you think is best"*); **closes the open questions [ADR-0042](#adr-0042) and [ADR-0043](#adr-0043) each raised and refused**; **amends** ARCHITECTURE §16 (§16.0, §16.1, and the v0.1, **v0.2** and v0.3 entries) and **amends [ADR-0042](#adr-0042)** and **[ADR-0043](#adr-0043)** at their no-milestone clauses; **assigns milestones and nothing else** — no scope moves, no design reopens, no ADR is reversed; for the two \*Arr items this **writes down a dependency v0.2 already had** (§8.3's `Add` capability filter), for the correction UI it is **by elimination** and the cost is recorded rather than argued away; raises one open question it does not close (whether v0.2 should be split) |
+| [0046](#adr-0046) | Kavita's contract tests pin **TWO** specs: the release the owner runs is the **floor**, `develop` is the **ceiling** | **Accepted** — 2026-08-17; **implements a policy `api/specs/SOURCES.md` already stated and the tree had not acted on** (*"a green contract test here is evidence about `develop`"*); **changes what a green means, not what the code does** — no adapter field, request or migration changes; **renames** `api/specs/kavita.json` → `kavita-develop.json` and **adds** `kavita-v0.9.0.2.json`; every spec-reading test runs against **both**, named per file, with enum coverage **equal** to the ceiling and a **superset** of the floor; `ceilingOnlyProperties` machine-checks the five modelled properties that **decode to nothing on the owner's server**; the `cbr` external_id is **unreachable** on the stable line and now says so; raises three open questions it does not close (Prowlarr has the same gap, `'cbr'` is an unenumerated `external_id.source`, and the floor's re-pin cadence) |
 
 ---
 
@@ -5471,3 +5472,170 @@ anything the owner asked for"*. **This ADR does not split it**, because a split 
 with an owner's name on it and nothing here was measured against a real \*Arr instance the owner does
 not run. The seam is named in §16's v0.2 entry so that the split, if it is taken, is taken
 deliberately rather than discovered halfway through.
+
+---
+
+<a id="adr-0046"></a>
+## ADR-0046 — Kavita's contract tests pin TWO specs: the release the owner runs is the floor, `develop` is the ceiling
+
+**Status:** Accepted · 2026-08-17 · **Corrects a claim `api/specs/SOURCES.md` had already made and
+the tree had not acted on** · **Changes what a green means; changes no runtime behaviour** — no
+adapter field is added or removed, no request changes, no migration · **Renames the vendored file**
+`api/specs/kavita.json` → `api/specs/kavita-develop.json` and adds `api/specs/kavita-v0.9.0.2.json` ·
+**Leaves [ADR-0035](#adr-0035) and [ADR-0041](#adr-0041) untouched.**
+
+### Context
+
+**`api/specs/kavita.json` was byte-identical to Kavita's `develop` `openapi.json`, `info.version`
+`0.9.0.20`. The owner's instance runs stable v0.9.0.2** (observed 2026-08-17,
+[ADR-0035](#adr-0035) §2a). Every contract test in `internal/kavita` read that one file, so **a green
+was evidence about a branch nobody deploys** — including the test whose entire job is to say the
+endpoints UsArr calls exist.
+
+**SOURCES.md already said this, in terms, and nothing acted on it.** Its Kavita section carried the
+sentence *"A green contract test here is evidence about `develop`, and the owner's server is two
+steps away from it"*, and even recorded the measurement — the tag's copy declares `info.version`
+0.9.0.0 and has 462 paths against develop's 488. **The policy existed; the tree did not implement
+it.** That is the finding this ADR answers, and it is why the answer is a file rather than another
+paragraph: a warning that has been read and not acted on twice is not going to work the third time.
+
+**This is the third instance of one failure class in one day: the artefact checked is not the
+artefact that ships.** Kavita's `main` branch frozen at v0.7.8 was the first; a spec declaring a
+field without saying which code path fills it was the second. Each was caught by hand. Nothing in
+the repo made any of them fail a test.
+
+#### What was measured, and what it changed
+
+Everything below was measured on 2026-08-17 against the two documents and, where it mattered,
+against Kavita's own source at tag `v0.9.0.2` (`6bcd568`) — because the tag's checked-in spec
+declares `0.9.0.0` and could itself have been stale.
+
+| Question | Answer |
+| --- | --- |
+| Do the six endpoints the client calls exist at v0.9.0.2? | **Yes**, all six, with the same parameter names and casing |
+| Do the seven enums the client pins have the same members? | **Yes** for all seven. `SeriesFilterField`, which no enum test pins, has 34 members at the tag against 35 on develop |
+| Is the auth story the same? | **Yes** — one `AuthKey` apiKey-in-header scheme, one global requirement, zero per-operation overrides, on both |
+| Does the whole existing suite pass unmodified against the tag's spec? | **Yes** — verified by swapping the file and running `go test ./internal/kavita/... ./internal/libsync/...` before writing a line of this ADR |
+| Do `cbrId` and `mangaBakaEditionId` exist on `SeriesDto` at v0.9.0.2? | **No.** Neither is on `SeriesDto`, `ChapterDto` or `VolumeDto` at the tag. At that tag `cbrId` appears on `ExternalSeriesDetailDto` alone, fed by the Kavita+ side table `ExternalSeriesMetadata`; `mangaBakaEditionId` appears nowhere. Confirmed in source: `Kavita.Models/DTOs/SeriesDto.cs` and `Kavita.Models/Entities/Series.cs` declare `MangaBakaId` and neither of the two, and `ExternalMetadataIdHelper.SetExternalMetadataIds` writes six ids of which `CbrId` is not one |
+| So which modelled properties are develop-only? | `SeriesDto.{cbrId, mangaBakaEditionId, isStandAlone, nameLocked}` and `LibraryDto.metadataProvider` |
+| Does any UsArr code read them? | **Yes, one.** `libsync.kavitaExternalIDs` writes a `cbr` external_id from `SeriesDto.CbrID`. `MangaBakaEditionID` is modelled and deliberately never written (that function's decision 3). Nothing reads `isStandAlone`, `nameLocked` or `metadataProvider` outside the DTO |
+| Is that a live defect? | **No, and this ADR says so plainly rather than inflating it.** An absent JSON property leaves the Go field at zero, `intID(0)` returns `""`, and `add` skips it. The row is **unreachable**, not wrong. Nothing is mis-written on the owner's box; a code path is simply dead there and did not say so |
+| Was anything else stated as Kavita's that is only develop's? | **Yes.** `internal/kavita/doc.go` said `?apiKey=` appears on *"exactly 9 operations"*. True on develop. **On v0.9.0.2 it is 20**, because all twelve `/api/Image/*` cover routes still accept the key in the query string there and develop has since dropped it. Corrected in this change |
+
+### Decision
+
+**Vendor both, run the whole suite against each, and give each file a role in its name.**
+
+1. **`api/specs/kavita-v0.9.0.2.json` is the FLOOR** — the release the owner runs. A green against it
+   means the endpoint, enum member or property UsArr depends on exists on a server somebody actually
+   runs.
+2. **`api/specs/kavita-develop.json` is the CEILING** — where the API is defined. A green against it
+   means nothing upstream has added or renamed has gone unmodelled. This is the old `kavita.json`,
+   unchanged byte for byte and renamed.
+3. **Every spec-reading test runs against both**, in a subtest named for the file, and every failure
+   message names the file *and* its role in words. `TestEndpointsExistInSpec/kavita-v0.9.0.2.json` is
+   a sentence; `TestEndpointsExistInSpec` was not.
+4. **Two assertions are asymmetric, deliberately.** Enum coverage requires **equality** against the
+   ceiling (anything upstream adds or drops is somebody's decision) and **subset** against the floor
+   (Go may know members the release lacks — that is what tracking develop buys). Requiring equality
+   on both would go red the moment Go was updated for a develop addition, which trains the next
+   reader to weaken the test.
+5. **`ceilingOnlyProperties` is written out by hand and machine-checked.**
+   `TestCeilingOnlyPropertiesAreDeclared` recomputes ceiling-minus-floor from the two files and
+   refuses any difference in either direction. It is the list of fields that **decode to nothing on
+   the owner's server**, and the next one is a decision rather than a silent addition.
+6. **`TestBothSpecsAreTheDocumentsSOURCESSays`** asserts the two files are distinct documents
+   declaring the versions SOURCES.md claims — so copying one over the other cannot leave a suite that
+   is green and prints two subtest names.
+7. **On upgrade, the floor row is re-vendored at the new tag**, per SOURCES.md's own recipe. The
+   ceiling row keeps tracking `develop`. The drift job now has two rows, checked differently: a diff
+   on the branch tip is routine, a diff on an immutable tag is a supply-chain signal.
+
+**No runtime behaviour changes.** `add("cbr", …)` stays: it is correct for anyone on develop or a
+later release, and it degrades to nothing rather than to something wrong. What changes is that the
+code now says it is unreachable on the stable line instead of implying it works everywhere.
+
+### The deciding question
+
+**What a green means to a reader who has not read this ADR.** Every clause above was chosen against
+that test, and it is what settles the naming: symmetric filenames. A bare `kavita.json` sitting next
+to `kavita-v0.9.0.2.json` reads as *the* Kavita spec, and it was the develop one — which is the exact
+misreading this ADR exists to end. Neither file may be *the* spec. The rename costs a `git mv` and a
+`sed` over comment references; it buys a directory listing that cannot be misread.
+
+### Alternatives considered
+
+**(a) Vendor only the tag the owner runs.** Rejected, and it is closer than it looks. It answers the
+question that actually bit — *"is this on the server we talk to?"* — and it makes the vendored file
+match the deployment. **But it goes blind exactly where SOURCES.md's stated purpose lies:** the
+project deliberately tracks `develop` so a renamed or added field is heard from a bot rather than a
+user's bug report, and pinning only a tag means an upstream rename lands unnoticed until the owner
+upgrades. It also **buys less than it appears to**: the tag's `openapi.json` declares `info.version`
+0.9.0.0, so it is not the deployed artefact either — it is the nearest checked-in thing to it.
+Trading a spec that is honestly ahead for one that is quietly behind is not an improvement.
+
+**(b) Vendor both, and test against each.** Chosen. Its real cost is honest and worth stating: **818
+KB of vendored JSON, a second drift row, and a permanent maintenance obligation on upgrade.** Against
+CLAUDE.md's *"cut before you add"* this is a file and a loop, not a subsystem, and the loop replaced
+per-test bodies rather than duplicating them — the suite got one helper longer, not twice as long.
+The decisive evidence was measured before the decision: **the existing suite passes unmodified
+against the tag's spec**, so the second arm cost parameterisation and no new assertions to satisfy.
+Had the tag arm failed, this alternative would have been a much bigger change and (a) or (c) would
+have deserved another look.
+
+**(c) Keep `develop` and state plainly in SOURCES.md and the tests what a green does and does not
+attest.** Rejected — **because it is what the repo already did, and it did not work.** SOURCES.md
+carried exactly that warning, in bold, with the measurement, and the tests still asserted against one
+file while a struct grew four fields the owner's server has never sent. A warning nobody acts on is
+indistinguishable from no warning. This is the same reasoning `DEVELOPMENT.md` §11 applies to guards:
+one that has never fired is indistinguishable from no guard.
+
+**(d) Generate a skew manifest instead of vendoring a second file.** Considered and rejected: a
+derived list of "properties develop has and the release does not" is smaller than 818 KB, but it is
+derived data that goes stale silently and answers only the questions someone thought to derive. It
+cannot answer *"does this endpoint exist at v0.9.0.2"* for an endpoint added next month.
+`ceilingOnlyProperties` is that manifest for the one question worth pinning by hand — and it is
+**recomputed from the two files on every run** rather than trusted, which is only possible because
+both files are present.
+
+**(e) Test against a live instance.** Not available and not wanted. CI has no network and there is no
+public Kavita demo with API access. The owner's own instance is the only real evidence there is, and
+[ADR-0035](#adr-0035) §2a's live observations remain the record of it. Nothing in this ADR replaces
+them.
+
+### Consequences
+
+* **A green now says something true about the owner's server**, for the first time in this package.
+  It says it in the subtest name, so it survives being read by someone who never opens this file.
+* **`api/specs/` grows to 1.86 MB** across three specs. Vendored JSON is not free, and this is the
+  first time the directory has held two copies of one upstream.
+* **An upgrade is now a small chore rather than nothing** — re-vendor the floor at the new tag,
+  update `pinnedSpecs` and `kavitaSpecFiles`. `TestBothSpecsAreTheDocumentsSOURCESSays` fails loudly
+  if the file and the table disagree, so the chore cannot be half-done.
+* **Two pins are two points, not a line.** A user on v0.8 gets coverage from neither file. This ADR
+  narrows the gap between *"what we test"* and *"what he runs"*; it does not close the gap between
+  that and *"what everyone runs"*, and SOURCES.md now says so under its own heading.
+* **The `cbr` external_id is documented as unreachable on the stable line**, in
+  `internal/kavita/resources.go` and in `internal/libsync/kavita.go`, rather than being removed. If
+  it is ever removed, this is the note that says what removing it costs someone on develop.
+* **The naming discrepancy list in SOURCES.md gets longer, not shorter.** `ARCHITECTURE.md` §6.4 and
+  §7.1a, `RESEARCH.md`, `SETUP-CHECKLIST.md`, ADR-0035, ADR-0044 and every REVIEW-LOG entry before
+  this one name `kavita.json` or `kavita-openapi.json`. The pointer is recorded in SOURCES.md rather
+  than by back-editing those documents — and REVIEW-LOG in particular is a historical record that
+  must not be rewritten.
+
+### 🚩 Open questions this ADR raises and does not answer
+
+1. **`prowlarr.json` has the same shape of gap and is not fixed here.** It tracks `develop` at v2.6.2
+   while the only known deployment runs stable 2.5.2.5491, and SOURCES.md's Prowlarr warning is
+   word-for-word the one that failed to work for Kavita. Applying this ADR's pattern there is a
+   separate change against a different suite, and doing it inside a Kavita commit would make neither
+   reviewable. **Nothing here should be read as evidence that the Prowlarr contract tests attest
+   anything about 2.5.2.**
+2. **`external_id.source` = `'cbr'` is not enumerated anywhere as a legal source.** The column is
+   free `TEXT` with a comment listing sources, and `cbr` is not in the comment — the `cbr` that does
+   appear in `00005_library_sync.sql` is `edition.format`'s `CHECK`, a different thing entirely.
+   Unreachable on the owner's install today, so it is recorded rather than fixed.
+3. **Whether the floor should be re-pinned on every upstream patch release or only when the owner
+   upgrades.** This change pins what he runs. Chasing every stable tag would make the floor a second
+   moving target and lose the property that makes a tag diff meaningful.
