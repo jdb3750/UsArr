@@ -10562,3 +10562,106 @@ credit test that inserted a `work` row directly would take the `ItemsUnresolved`
 nothing about the write path at all.
 
 What it does not attest is everything in `LS.12`.
+
+---
+
+# TRIAD — the three unslotted commitments get a milestone (2026-08-17)
+
+Scope: assign a milestone to the three commitments left unslotted by [ADR-0042](./DECISIONS.md#adr-0042)
+and [ADR-0043](./DECISIONS.md#adr-0043), after the owner delegated the call — *"idk lets just slot
+them in somewhere i reckon? i don't really care, whatever you think is best"*, 2026-08-17. Base
+`2c7709a`. Prefix `TRIAD-`, checked unused across `docs/` and all **21** remote heads
+(`git ls-remote --heads origin`) before the first entry was written.
+
+## TRIAD.1 The proposed argument was checked against §16 rather than adopted, and two thirds of it hold
+
+The brief proposed v0.2 for all three and asked for the argument to be verified rather than accepted.
+It was, clause by clause.
+
+| # | Entry | Severity | Finding | Disposition |
+|---|---|---|---|---|
+| `TRIAD-01` | §16 v0.2 / §8.3 | **Confirmed** | **v0.2's headline *is* the \*Arr-backed request flow, and it cannot ship without Sonarr or Radarr.** §16's v0.2 entry reads *"Request model, routing rules, approval workflow, quotas … One Add that routes; availability states; per-season TV."* §8.3's routing can only choose an instance whose probed capabilities *"advertise `Add`"*; §16.0 and §17.8 both already record that **no service v0.1 connects passes that filter** — Prowlarr posts a release to its own download client (§8.5). Every other roadmap sink is later than v0.2: LazyLibrarian v0.3, Lidarr/Mylar3/Kapowarr v1.0. *"Per-season TV"* names Sonarr outright. | **Applied.** §16's v0.2 entry names Sonarr and Radarr and states that this **writes down a dependency rather than adding one**, so *"cut before you add"* has no payment to demand. |
+| `TRIAD-02` | §16 v0.2 / §7.6 | **Confirmed** | **The minimal write path follows for the same reason, not as a second decision.** ADR-0042 slotted it *relatively* — *"lands with the first \*Arr adapter"* — and an Add that routes to Radarr **is** a `write_queue` row, a worker and a `verifying` state (§7.6). | **Applied.** v0.2, and §16 now names v0.2 as the milestone that first writes `write_queue`. |
+| `TRIAD-03` | §16.0 / ADR-0043 | **Confirmed, with the argument restated** | **The correction UI is v0.2 by elimination, and the brief was right to insist that be said out loud.** The owner's constraint is *"earlier than v0.3"*; the only other candidate is v0.1; v0.1 has no *"cut before you add"* payment to name after ADR-0041 (Kavita) and ADR-0044 (`work_credit`). | **Applied**, with `TRIAD-04`'s cost attached. |
+| `TRIAD-04` | §16.0, §16 v0.2 | 🔴 **Cost the recommendation did not price** | **v0.1 ships the *"not identified"* badge without its remedy for a whole milestone.** ADR-0035 §1 makes that state the **majority path** on free Kavita, and ADR-0043's alternative (a) rejected *"the badge alone"* as *"a screen that is honest about a defect it forbids you to fix"*. v0.2 is a shorter version of the same defect, not the absence of it. §16.0's own sentence — *"a user has something to correct on **day one** and now has somewhere to do it"* — quietly assumed the two were the same milestone. | **Applied, not rebutted.** §16.0's sentence carries a ⚠️ saying the two halves are one milestone apart; §16's v0.2 entry states the cost; ADR-0045 clause 4 records it as accepted rather than solved, with the one real mitigation — **nothing in v0.2 gates the correction UI, so it can and should land first**. |
+| `TRIAD-05` | §16.1 | 🟡 **Alternative the brief asked to be checked** | **Is there a milestone between v0.1 and v0.2 that the recommendation missed?** §16.1's catalogue sequence is numbered separately and *"expected to interleave with v0.2"* — so yes, in the sense that Navidrome (#1) may land first. But it is the **read-only catalogue** sequence: four Tier 0 adapters on channel 3b, gated by a per-source watermark probe. Sonarr and Radarr are library sources **and** command sinks on channel 3 with a write path; neither the `Gate` column nor the success criterion fits them, and slot #4 sits after Komga, which §16.1 pins last — so it would leave v0.2 with no sink anyway. | **Checked and rejected**, recorded as ADR-0045 alternative (a). §16.1 gains a note saying the two \*Arrs are not slots in that table **and no longer need to be**. |
+
+## TRIAD.2 The §16 sweep found more than the brief named, again
+
+The brief warned that every §16 pass that day had found more sites than it was sent for. It held. Nine
+sites were amended, of which the brief named three.
+
+* **Named:** the v0.2 entry, ADR-0042's and ADR-0043's no-milestone clauses.
+* **Found by sweep, all in §16 and all now carrying a ⚠️ with the text they used to hold:**
+  §16.0's *"Sonarr and Radarr arrive too"* (no version attached); §16.0's *"re-sequenced, not cut"*
+  paragraph; §16.0's libraries paragraph, whose *"the column and the routing return with the first
+  service that can be a destination"* is the **same dependency as `TRIAD-01` read from the other end**;
+  §16.0's *"a user has something to correct on day one"* (`TRIAD-04`); §16.0's ***"Three things that
+  decision does not say"*** heading, one of whose three has now been said; §16.1's table note;
+  the v0.1 entry's channel-3 clause, its write-path clause, its `write_queue`-seam clause, its
+  correction-UI clause and its *"1080p ✓ / 4K ✗"* badge clause; the `Recent grabs` block's
+  *"post-v0.1 addition"*; and the v0.3 entry's *"its milestone is not assigned"*.
+
+`TRIAD-06` · 🟡 · **The heading *"Three things that decision does not say"* was itself falsified by
+the first of its three bullets.** A list that counts its own members goes stale when a member moves,
+and the count is easy to miss when only the bullet is edited. Flagged in place rather than renumbered
+to two, because renumbering would erase what the bullet used to claim. **Applied.**
+
+## TRIAD.3 Sites outside this pass's remit, found and routed rather than fixed
+
+`TRIAD-07` · 🔴 · **`ARCHITECTURE.md` §6.4 now contains a sentence this pass falsified, and §6 was
+out of remit.** Its correction-UI paragraph ends *"⚠️ **The ADR deliberately assigns no milestone** …
+so the slot is still unassigned, and that gap is ADR-0043's own open question rather than a hole in
+this section."* **The slot is assigned — v0.2** ([ADR-0045](./DECISIONS.md#adr-0045)). This is a
+**different** staleness from the §6.4 flag `LS.13` discharged, and it was created by this pass rather
+than inherited. **Routed to §6's owner, not fixed here.**
+
+`TRIAD-08` · 🟢 · **Two sites that name the relative slot are *not* falsified and were deliberately
+left alone.** §7.1's channel table (`| 3 | Delta poll (/history/since) | … | **with the first \*Arr
+adapter** |`, and the ⚠️ note under it) and `README.md`'s v0.1 sync-channel row both say channel 3
+*"lands with the first \*Arr adapter"*. That stays true; it is now also nameable as v0.2. **Offered as
+a follow-up, not taken** — a true sentence is not a finding, and `CLAUDE.md`'s scope rule says so.
+
+## TRIAD.4 How big v0.2 got, stated because the owner delegated rather than because he asked
+
+`TRIAD-09` · 🟡 · **Naming the three makes v0.2 the third-largest milestone in the plan** — behind
+v0.1 and v1.0, **ahead of v0.3**. It now holds two hand-written \*Arr adapters (`/api/v3` for both),
+sync channel 3, the first `write_queue` writer with its worker and settlement loop, one correction
+screen, **and** the request model, routing, approval, quotas and unified search box it already
+carried. **Most of that was already true and merely unwritten**, since `TRIAD-01` and `TRIAD-02` show
+the two \*Arr items are v0.2's own prerequisites — but *"already true"* is not *"already visible"*.
+**Applied**: §16's v0.2 entry states the size, states the ordering inside the milestone (adapters and
+write path before the request flow; correction UI independent), and **names the seam a split would
+use**. Whether to split is ADR-0045's open question and is **not** taken here — it is a scope
+decision with the owner's name on it.
+
+## TRIAD.5 Whether this needed its own ADR — argued, then written
+
+`TRIAD-10` · 🟡 · **It did, and the reasoning is worth recording because §16 alone was a defensible
+answer.** Against an ADR: §16 is authoritative for milestone membership, so a scheduling call the
+owner delegated could have lived there with the two existing ADRs merely annotated to point at it.
+**For an ADR, three grounds, and the third is decisive:** (a) `CLAUDE.md` says *"add one for any
+decision that closes off an alternative"*, and this closes v0.1 for the correction UI — a candidate
+ADR-0043's own open question named as **not equivalent** to v0.2; (b) it adopts an alternative two
+ADRs had explicitly **rejected** (ADR-0042 (e), ADR-0043 (c)), and adopting a rejected alternative on
+new information is the ADR-shaped event this log exists for; (c) `DECISIONS.md`'s preamble states that
+***"the decision lives in the superseding ADR; the amendment note points at it and does not re-argue
+it"*** — with no ADR, both amendment blocks would have had to point at a document section and carry
+the argument themselves, inverting the file's own convention. **One ADR for all three**, not three,
+because they are one call. **Applied as [ADR-0045](./DECISIONS.md#adr-0045)**; the number was re-read
+against every remote head immediately before the push, per `DEVELOPMENT.md` §11.
+
+## TRIAD.6 On the gate
+
+`make check` from a lint cache cleaned first with `/root/go/bin/golangci-lint cache clean` by absolute
+path. Binaries, versions and the commit are in the commit message.
+
+**What a green covers on this diff, stated plainly: almost nothing about it.** The diff is three
+markdown files. `make check` compiles no changed Go, runs no changed test, and **this repo has no
+markdown linter and no link checker** — so the anchors this pass introduced are verified by eye and by
+`grep`, not by a tool: **one `<a id="adr-0045"></a>`, 15 `./DECISIONS.md#adr-0045` links from §16, 15
+`(#adr-0045)` links inside `DECISIONS.md` and 3 from this file**, counted with `grep -c` on the tree
+that was pushed. What the
+green actually attests is that **the tree still builds, lints, tests and scans clean around a
+docs-only change** — i.e. that nothing was broken, not that anything here is right. The claims in
+this pass are checkable by reading §16, §8.3 and `DECISIONS.md`, and that is the only check they have.
