@@ -375,6 +375,16 @@ export function indexerFacts(indexer: CatalogIndexer): string {
  *
  * Sorted by id, which is the standard's own order and therefore stable: the
  * picker must not reshuffle when a second indexer's categories merge in.
+ *
+ * ⚠️ IT IS A UNION, AND THE UNION FORGETS WHOSE WORDING IT KEPT. Where two
+ * indexers name 2000 differently the first non-empty name wins — first in the
+ * order the indexers arrive in — and the rest are discarded, with nothing left
+ * recording which indexer supplied the survivor. So a PER-INDEXER label must
+ * never be resolved from this tree: a release row's category tooltip joined
+ * against it would populate on every row and look entirely right, while showing
+ * one indexer's wording for ANOTHER indexer's category — silently destroying the
+ * divergence that is the whole reason that tooltip carries the raw category path
+ * at all. It has to join against that row's own indexer's subtree.
  */
 export function categoryTree(
 	indexers: readonly CatalogIndexer[],

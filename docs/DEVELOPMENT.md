@@ -253,7 +253,7 @@ closes `FI-12` in `docs/REVIEW-LOG.md` as coded rather than as documented.
 | `make modverify` | `go mod verify` against `go.sum`. |
 | `make vuln` | `govulncheck` + `pnpm audit`. **Gating.** The only step that touches the network. |
 | `make migrate`, `migrate-new name=…` | Migration authoring against the dev DB. |
-| `make docker` | Build the image. Digest-pinned base enforced; `--provenance` + `--sbom`. Needs a daemon — §8. |
+| `make docker` | ⚠️ **Cannot succeed today: it builds `-f deploy/Dockerfile`, and that file is not in the tree.** Intended shape: digest-pinned base enforced, `--provenance` + `--sbom`. Also needs a daemon — §8. To deploy, build and install the binary instead: §12. |
 | `make design` | `docs/design/check.mjs` — DESIGN-DIRECTION §13 made runnable: bans, token drift, contrast, overflow, row heights, roving tabindex, the webfont. Needs a browser; **not** part of `check`. |
 | `make check-offline` | `fmt-check` + `lint` + `modverify` + `secrets` + `test`. Fully hermetic. |
 | `make check` | **The pre-commit gate**: `check-offline` + `vuln`. |
@@ -1031,3 +1031,105 @@ Who leads which area, roughly:
 `README.md`, `CLAUDE.md` and `ARCHITECTURE.md` are shared documents; a §17 change routinely lands
 §8.x amendments alongside it; and `docs/reference/` follows whichever change drove it. The map says
 who to talk to, not who is permitted to type.
+
+---
+
+## 12. Deploying to a server — build, install, restart
+
+**This is the only install path that works today, and until now it was the one path nobody had
+written down.** No image is published; there is no `deploy/` directory and no `deploy/Dockerfile`
+in the tree; no systemd unit file ships in this repo; there is no installer script. What UsArr
+produces is a single static binary, so deploying it is exactly three moves: build it, copy it onto
+`PATH`, restart the service that runs it.
+
+The README's Compose block is flagged **illustrative only** for that reason (`README.md`,
+*Quickstart*). Do not read it as a working Docker path.
+
+**Known-good target**, from the owner's own deployment rather than from a template: **Debian 13 LXC
+on Proxmox**, checkout at `/opt/UsArr`, binary at `/usr/local/bin/usarr`, systemd unit named
+`usarr`. Nothing below is specific to Proxmox — any Linux host with the §1 toolchain and a service
+manager works — but that is the shape it has actually been run on.
+
+### 12.1 The update path, from an existing checkout
+
+```bash
+cd /opt/UsArr && git pull && make build
+install -m755 usarr /usr/local/bin/usarr
+systemctl restart usarr
+```
+
+**No `sudo`, deliberately.** The documented target is an LXC administered as root directly, where
+`sudo` is not installed at all — prefixing these commands with it fails outright, which is a real
+failure that has happened rather than a hypothetical. Because the binary is absent rather than the
+rights, the shell answers `sudo: command not found` and not a permission refusal, and it answers it
+on the **second and third lines**, after the `make build` above them has already succeeded — so the
+transcript reads like a build failure and is not one. **On a host where you are not root**, add
+`sudo` to the **last two lines only**: `git pull` and `make build` should run as the user that owns
+the checkout, because building as root leaves root-owned objects in `/opt/UsArr` and
+`web/node_modules` that the next unprivileged build cannot overwrite.
+
+Two details worth knowing rather than rediscovering:
+
+* `make build` writes the binary to **`./usarr` inside the checkout** (`Makefile`'s `BINARY`), and
+  stops there. Nothing in the Makefile installs, and no target knows about `/usr/local/bin` — the
+  `install -m755` line is the step that puts the new build on `PATH`, and it is not optional.
+* `install` replaces the destination by creating and renaming, so a **running** process keeps the
+  old inode it already has open. The new binary is not live until `systemctl restart usarr`. Do not
+  infer from `usarr --version` that the service is running that version.
+
+There is no first-install variant of this to document, because there is no first-install artifact to
+document it against: the very first deployment was this same sequence preceded by a `git clone` into
+`/opt/UsArr` and a unit file written by hand on the host (see §12.4).
+
+### 12.2 What the server needs before its first `make build`
+
+`make build` is a real build, not a download. The server needs the **Go, Node and pnpm floors from
+§1** — the target runs `web-build` → `web-deps` → `pnpm install --frozen-lockfile`, builds the SPA,
+then compiles the Go binary with the SPA embedded.
+
+It does **not** need `make tools`. The five pinned binaries (`gofumpt`, `golangci-lint`, `goose`,
+`govulncheck`, `gitleaks`) are prerequisites of `make check`, not of `build`; a deployment host that
+only ever builds does not need them. It needs no Docker daemon either (§8), and no network beyond
+what `git pull` and `pnpm install` fetch.
+
+**Three build traps a fresh operator will hit.** Each is documented in exactly one place already;
+read it there rather than trusting a paraphrase, because a second copy is a copy that drifts:
+
+| Trap | Where it is documented |
+|---|---|
+| **`go build ./cmd/usarr` by hand produces a binary that 404s on `/`.** The SPA is embedded only by `make build`, which runs `web-build` first; a hand-rolled `go build` bypasses that dependency and silently ships an empty frontend. The underlying `//go:embed all:` rule — plain `//go:embed dist` drops the whole application and embeds the favicon — is the same trap one layer down | §3, *Two-process dev loop*, and §3's `USARR_REQUIRE_WEB_BUILD` guard. Mechanism: `docs/DECISIONS.md` ADR-0025 point 6 |
+| **corepack's interactive download prompt**, which stalls an unattended build until someone answers it | §9, *Frontend*. The `Makefile` exports `COREPACK_ENABLE_DOWNLOAD_PROMPT := 0` so its own builds cannot hang; a build you drive by hand from `web/` will not have that unless you export it too |
+| **The pnpm pin.** `web/package.json` pins `packageManager: pnpm@10.33.0`; the repo root has no `package.json`, so `pnpm -C web …` resolves the launcher against a directory with no pin, falls back to a default version, and then hard-fails on the mismatch. Run from **inside `web/`** | §9, *Frontend*, and the comment block above `web-deps` in the `Makefile` |
+
+### 12.3 Back up before you upgrade — both artifacts, or neither is any use
+
+`docs/CONFIGURATION.md` §6.1 is authoritative and states the split; the one thing to carry into a
+deploy checklist is that **there are two artifacts, not one**. As of `9eec372`, `kek.salt` sits
+**beside `usarr.db`** in the config directory (it used to live under `keys/`), and `keys/secret.key`
+is the master key. `KEK = HKDF-SHA256(secret.key, salt=kek.salt, …)`, so an archive that misses
+**either** one leaves every stored service credential permanently unopenable — the database still
+opens, and every *Arr API key in it is noise.
+
+They belong in **different** places: the database archive includes `kek.salt` and excludes `keys/`;
+the master key goes to a password manager, once. If you are upgrading across `9eec372`, take a fresh
+database archive after the first restart — older archives taken with `--exclude='keys'` do not
+contain the salt, because it was inside the excluded directory. §6.1 has the exact commands.
+
+### 12.4 What this repo does not ship, stated plainly
+
+Nothing in this section is a gap someone forgot to fill in; each is a real absence you will notice
+when you look for it.
+
+* **No systemd unit file.** The unit named `usarr` on the owner's host was written by hand there and
+  exists nowhere in this tree. `systemctl restart usarr` above assumes you have written one.
+* **No install script, and no `deploy/` directory.**
+* **`make docker` cannot succeed on any checkout, because the file it builds from is absent.** The
+  recipe passes `-f deploy/Dockerfile`, and that path does not exist in the repo. The `Makefile`'s
+  own header says so; §4's target table now says so too. The daemon requirement (§8) is the second
+  obstacle, not the first.
+
+**A recommendation, deliberately left unwritten.** A checked-in `deploy/usarr.service` — with the
+`User=`, `WorkingDirectory=`, `Environment=USARR_CONFIG_DIR=…` and `Restart=on-failure` settings the
+owner's host already encodes somewhere — would be genuinely useful, and would turn §12.1 into a
+sequence a second operator could follow end to end. It would also be a new shipping artifact, which
+is a code change and not a documentation one. It is noted here rather than invented.

@@ -314,41 +314,100 @@ button, input, select, textarea { font: inherit; color: inherit; }
    muted, and `tabular-nums` stays on the CELL rather than moving here — §9.1
    requires that, so composite values inherit it.
    THE UNIT BOX IS A FIXED WIDTH, which is the part that does the work. In a
-   right-aligned cell the string's last character is what aligns, so "4.8 GB"
-   over "820 MB" aligns the B and starts the digits at two different
+   right-aligned cell the string's last character is what aligns, so "4.8 GiB"
+   over "820 MiB" aligns the B and starts the digits at two different
    x-positions — right-alignment plus tabular-nums buys nothing there, because
    what is being aligned is the word. A fixed unit box puts the alignment back
    on the last digit.
    The width is a property of the UNIT FAMILY, never of the value present: a
    size column must reserve room for the widest unit it can ever print, or the
-   digits jump the first time a row crosses from GB to MB. Widths are MEASURED
-   in the cell font (13px IBM Plex Sans, 1ch = 8px), rounded up to the next
-   half-ch: MB 19px is the widest size unit, months 43px the widest duration,
-   episodes 52px the widest item noun.
+   digits jump the first time a row crosses from GiB to MiB. Widths are
+   MEASURED in the cell font (13px IBM Plex Sans, 1ch = 8px), rounded up to the
+   next half-ch — AND THE FAMILY IS THE ONE THAT COLUMN PRINTS, which is the
+   half this comment got wrong twice, so each family below names where its
+   members come from. Size, from `sizeParts`: MiB 22px is the widest, so 3ch.
+   Duration, from `formatAge`: `h` 7px and `d` 8px, so 1ch. Home's `Items`,
+   from that table's own six rows: films 28px, series 34px, books 35px,
+   artists 37px — widest `artists`, so 5ch. NOT `episodes` at 52px, which this
+   comment used to give as the item-noun reserve: `episodes` is a word the
+   `Have` column prints one column along, and `Items` counts a comic library in
+   series rather than in issues.
+   ⚠️ THE SIZE FAMILY IS THE BINARY ONE — B · KiB · MiB · GiB · TiB — because
+   that is what the application prints and what every indexer and every *Arr
+   reports. This reserve was first derived at 2.5ch from the DECIMAL family
+   these mockups still draw (widest MB, 19px), and 2.5ch does not hold MiB:
+   measured as the control, the figures still align at 2.5ch but MiB's ink is
+   22px in a 20px box and spills 2px into the cell's right padding. A reserve
+   that does not hold the widest unit in its family is not a reserve. The rule
+   above is unchanged; only the family it was applied to was wrong. THAT THESE
+   MOCKUPS PRINT DECIMAL UNITS AT ALL IS A DEFECT, tracked in REVIEW-LOG as
+   SU-05: a mockup is a measuring instrument, so sample data the product cannot
+   emit is a calibration error rather than a cosmetic one.
    TO REVERSE THIS TREATMENT, delete this block: `.unit` is a bare span, so the
    markup falls back to rendering the unit inline at full contrast, which is
    what it says. The alternative that was NOT taken — the unit in the column
    header and bare numbers in the cells — is recorded in §9.1 with its
    reason.
-   ⚠️ ONLY THE SIZE FAMILY SHIPS SO FAR, AND THE REASON IS MEASURED RATHER THAN
-   a matter of taste: A RESERVED UNIT BOX COSTS COLUMN WIDTH, and two tracks are
-   already too narrow to pay it. `Age` in the release tables is a 68px track —
-   24px of padding leaves 44px, and `months` alone is 43px, so the figure has
-   nothing left and the cell wraps to two lines. Home's `Items` is 107.375px:
-   52px of reserve for `episodes` plus 24px of padding leaves 31px, and
-   `1,842` is 36px. Both were measured wrapping, at +18px per cell over 224
-   cells across the sweep. The rule is right and the tracks are wrong; widening
-   a declared track is its own decision, on the two densest tables in the
-   product, and it is not folded in here. §9.1 names the columns still
-   carrying the old treatment so a reader can tell an unfinished job from a
-   decision. */
+   ⚠️ SIZE AND AGE SHIP; HOME'S `Items` DOES NOT, AND THE REASON IS MEASURED
+   RATHER THAN a matter of taste: A RESERVED UNIT BOX COSTS COLUMN WIDTH, and
+   that one track cannot pay it. A 5ch reserve takes `Items` from 48 wrapped
+   cells to 96 over the whole sweep — 5 widths x 3 densities x 2 installs x
+   every state. The failure is at 1280px, the narrowest desktop width the design
+   check sweeps: `minmax(0,1.15fr)` resolves to 87.80px there and leaves 63.80px
+   of content, three of the six rows already wrap in it with no reserve at all
+   (`1,204 films` 67px, `612 artists` 64px, `1,842 books` 74px), and the reserve
+   takes the full install's three of six to six of six. At 1440px and above it fits, with 9.38px to spare.
+   ⚠️ THE 107.375px THIS COMMENT USED TO QUOTE FOR `Items` IS THAT TRACK'S
+   RESOLUTION AT 1440px, NOT ITS WIDTH. A fractional track has no single number,
+   and quoting one hides the width at which it actually fails. Widening it is
+   its own decision on Home and is not folded in here; §9.1 names the column
+   still carrying the one-string treatment so a reader can tell an unfinished
+   job from a decision.
+   `Age` WAS DEFERRED HERE TOO, ON A COST THAT WAS NEVER REAL, AND NOW SHIPS.
+   This comment said `months` alone is 43px; `months` is a word `formatAge`
+   cannot emit, the sample data has since been converted, and the real family is
+   `h` 7px and `d` 8px. Re-measured, the reserve costs exactly nothing: `1095 d`
+   is 43px in the same 56px content box with the box as without it, 0 of 1920
+   cells sit on more than one line either way, and `d`'s 8px ink in the 8px box
+   spills in 0 of 1920 spans.
+   ⚠️ AND WHAT THE `Age` BOX BUYS IS 1.00px, NOT 14.00px. The control that
+   justified the size reserve forces rows onto the widest and the narrowest unit
+   and reads the figures' right edges: for size the spread goes 14.00px -> 0.00px,
+   for `Age` it goes 1.00px -> 0.00px, because `h` and `d` differ by one pixel.
+   The reserve is still right — a two-member family is a family, and the box is
+   what stops the digits moving when a row crosses from days to hours — but on
+   this column the larger half of the treatment is the muting, not the box, and
+   nobody should quote size's number for it.
+   ⚠️ THE `Age` TRACK IS 80px HERE AND 68px IN THE APPLICATION, and that is a
+   real divergence rather than anyone's miscount. `.cols-requests-releases`
+   below has read `60px 88px 80px ... 80px 68px 84px` since it was written;
+   `COLUMNS` in web/src/routes/requests/+page.svelte has read Age 68px since
+   cd94779. Both trees hold both numbers on different columns — 68px is `Grabs`
+   here and `Age` there, 80px is `Age` here and `Protocol` there — which is how
+   one came to be quoted for the other. NINE of the ten columns the two trees
+   share carry different widths; only `Category` still agrees, `Category`
+   sits in a different position, and the `Select` column here has no counterpart
+   there. ⚠️ That count was EIGHT when it was walked at 03:21Z: `Actions` agreed
+   at `minmax(max-content,auto)` in both trees until `7fc932e` gave the app a
+   `198px` reserve, because ADR-0029 makes every row its own grid and a
+   content-sized track has no cross-row agreement to appeal to. That commit
+   reached main at 03:27Z, six minutes after the walk — so the count widened
+   while the finding that names it was being gated, which is the finding. A
+   count of divergent columns is perishable and dates itself. That belongs in
+   REVIEW-LOG rather than in a stylesheet comment. See SU-10 and SU-10d. */
 .unit {
   color: var(--fg-muted);
   display: inline-block;
+  /* The fallback is for a `.unit` carrying NO family modifier, of which there
+     are none. It is not the size reserve and it is not a leftover of the
+     decimal 2.5ch: an undeclared family has no widest member to measure, so
+     this is an arbitrary floor that keeps the box from collapsing, and the
+     family class below is what carries a measured number. */
   width: var(--unit-w, 2.5ch);
   text-align: left;
 }
-.unit--size { --unit-w: 2.5ch; }  /* B · KB · MB · GB · TB — widest is MB at 19px */
+.unit--size { --unit-w: 3ch; }  /* B · KiB · MiB · GiB · TiB — widest is MiB at 22px */
+.unit--age  { --unit-w: 1ch; }  /* h · d — widest is d at 8px, and `d` fills the box exactly */
 .sr {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip-path: inset(50%); white-space: nowrap;

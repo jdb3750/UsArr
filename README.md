@@ -123,8 +123,14 @@ HTTP `Range` handling and **no transcoding, ever**.
 
 ## Quickstart
 
-> ⚠️ **Placeholder — this does not work yet.** No image is published. Shown so the intended shape is
-> reviewable.
+> ⚠️ **There is no working container path.** No image is published, and `deploy/Dockerfile` is not in
+> the tree either, so `make docker` cannot build one. The Compose file below is shown so the intended
+> shape is reviewable — it is not something you can run.
+>
+> **The path that works today is building from source**: `make build` produces a single static binary
+> with the SPA embedded, which you install onto `PATH` and run under systemd.
+> [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) §12 has the sequence, the toolchain the build host
+> needs, the three build traps, and the backup to take first.
 
 ```yaml
 # docker-compose.yml — illustrative only

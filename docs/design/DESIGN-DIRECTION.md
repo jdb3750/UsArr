@@ -1675,39 +1675,157 @@ treatment by media type.** Same slots, same positions, different values.
   - **The treatment: the figure at full contrast, the unit muted, `tabular-nums` retained on the
     cell, and the unit box given a fixed width.** The figure is the value and the unit is only its
     scale, so the unit is `--fg-muted` and the figure is not. **The fixed width is the half that does
-    the work**, and it is what makes right-alignment mean anything: right-aligning `4.8 GB` over
-    `820 MB` aligns the `B`, so the digits — the one thing being compared down the column — land at
+    the work**, and it is what makes right-alignment mean anything: right-aligning `4.8 GiB` over
+    `820 MiB` aligns the `B`, so the digits — the one thing being compared down the column — land at
     two different x-positions, and `tabular-nums` cannot help because the misalignment is caused by
-    the word. Measured on the Requests release table with one row moved onto each of two other size
-    units: **with the fixed unit box the last digit of `68.4 GB` and of `4 B` both sit at
-    x = 928.06 px, a spread of 0.00 px; with the box switched off they sit at 931.06 and 940.06, a
-    spread of 9.00 px.**
+    the word. Measured on the Requests release table with rows moved onto the widest unit in the
+    family, one narrower, and the narrowest: **with the fixed unit box the last digit of
+    `68.4 GiB`, of `820 MiB` and of `4 B` all sits at x = 924.06 px, a spread of 0.00 px; with the
+    box switched off they sit at 928.06, 926.06 and 940.06, a spread of 14.00 px.** The sample has
+    to contain the widest unit or the spread is understated: a two-row `68.4 GiB` / `4 B` set
+    reports 9.00 px, and it is `MiB` — the widest — that makes the real figure 14.
   - **The width belongs to the unit FAMILY, not to the value in front of you**, or the digits jump
-    the first time a row crosses from GB to MB. Reserve the widest unit the column can ever print,
+    the first time a row crosses from GiB to MiB. Reserve the widest unit the column can ever print,
     measured in the cell font (13 px IBM Plex Sans, `1ch` = 8 px) and rounded up to the next half-ch:
-    **size** `B · KB · MB · GB · TB`, widest `MB` at 19 px → `2.5ch`; **duration** `days · weeks ·
-    months · years · hours`, widest `months` at 43 px → `5.5ch`; **item nouns** `films · series ·
-    books · artists · issues · episodes`, widest `episodes` at 52 px → `6.5ch`.
+    **size** `B · KiB · MiB · GiB · TiB`, widest `MiB` at 22 px → `3ch`; **duration** `h · d`,
+    widest `d` at 8 px → `1ch`; **Home's item nouns** `films · series · artists · books`, widest
+    `artists` at 37 px → `5ch`. ⚠️ **The duration family read `days · weeks · months · years ·
+    hours`, widest `months` at 43 px → `5.5ch`, and that was a family the mockups invented.**
+    `formatAge` emits `h` below a day and `d` above it and nothing else, so five of the seven
+    members were never printable — the same calibration error as the size family, one column along.
+    Re-measured on the real family the reserve is `1ch`, and `Age` now takes it.
+    ⚠️ **The item-noun family read `films · series · books · artists · issues · episodes`, widest
+    `episodes` at 52 px → `6.5ch`, and it is the same error a third time — a family assembled from
+    the words the table uses SOMEWHERE rather than the words that column prints.** Home's `Items`
+    holds one noun per media type and there are six types: `films`, `series`, `artists`, `books`,
+    `books`, `series`. `episodes` and `issues` belong to `Have`, one column along — `13,204 /
+    14,061 episodes`, `7,891 issues · 34 with gaps` — and Items counts a comic library in series,
+    not in issues. Measured on the four nouns that column can print: `films` 28 px, `series` 34 px,
+    `books` 35 px, `artists` 37 px, so the reserve is **`5ch`, not `6.5ch`**. ℹ️ **The family here
+    is the DESIGN's, not the product's, and that is stated rather than glossed**: Home's Block A is
+    `NOT DRAWN` in the app — `web/src/routes/+page.svelte` says so and gives the reason — so unlike
+    `formatAge` there is no shipping function to read the nouns off. §17.2's six rows are the
+    source, and the day Block A is built the family is re-derived from whatever the builder emits.
+  - ⚠️ **The size family is the BINARY one, and mistaking it for the decimal one is how this
+    reserve was first mis-measured.** The rule shipped at `2.5ch`, derived from
+    `B · KB · MB · GB · TB` whose widest member `MB` is 19 px — the family **the mockups drew at the
+    time**, not the family **the application prints**. (The mockups' size sample data has since been
+    converted, so both trees now draw the binary family; the figures were converted with it, not
+    relabelled — `14.2 GB` became `13.2 GiB`.) Every indexer and every \*Arr reports binary units and so
+    does UsArr (`sizeParts` in `web/src/lib/format.ts`), and the binary family is wider: measured in
+    the same cell font, `KiB` 19 px, `MiB` 22 px, `GiB` 20 px, `TiB` 18 px. `2.5ch` was then run as
+    a control rather than assumed to fail, and the control is the interesting half — the figures
+    still align at 0.00 px, but `MiB`'s ink is 22 px inside a 20 px box and **spills 2 px into the
+    cell's right padding at every density**. A reserve that does not hold the widest unit in its
+    family is not a reserve. **So `3ch` is this bullet's own rule applied to the real family, not a
+    departure from it**: the rule is unchanged and only its input was wrong. The defect underneath —
+    mockups drawing data the product cannot emit — is recorded separately in `docs/REVIEW-LOG.md` as
+    **SU-05**, because until the sample data is corrected it will keep producing measurements that
+    are right about the mockup and wrong about the product. **All three of SU-05's columns are
+    closed** — size in `SU-07`, `Age` in `SU-08`, `Category` in `SU-09` — and the class of defect
+    it names is not: `SU-10` is the same error twice more, in the item-noun family and in the two
+    trees' column widths.
+  - **An absent value gets no unit box, and the reserve is the only thing this rule governs.** A
+    `3ch` box held open around an em dash reserves width for a unit that is not there, so the
+    absent-value branch emits `—` and no `.unit` span. ⚠️ **Whether the em dash is reachable is a
+    property of the wire contract, not of the markup, and the two cases look identical in the
+    code.** On the release tables `size_bytes` is a plain `int64` with no `omitempty`, so the server
+    always sends it and the branch is **defensive and unreachable**. On Recent grabs the field is
+    `*int64` with `omitempty` and `toNotSentGrabResponse` **never assigns it at all**, so a not-sent
+    row **structurally cannot carry a size** — the branch is guaranteed reachable, and that is the
+    reason the Recent-grabs Size column was worth the split and the release table's was not. Keep
+    the distinction in writing wherever both appear, because a defensive arm nobody can reach and a
+    guaranteed one are different objects wearing the same three lines.
+  - **The rule constrains the unit box. The surrounding table's own conventions govern everything
+    else about an absent value.** Recent grabs wraps its em dash in `<span class="muted">` because
+    every other absent value in that table already mutes — `when`, `indexer`, `protocol` — and that
+    is correct: this rule's requirement is *no `.unit` box on an absent value*, and the wrapper does
+    not violate it. **Stated explicitly so the question stops recurring**: every new table that
+    meets this rule otherwise re-litigates its own local conventions against it, and a design rule
+    that reaches past what it is about turns every local convention into a conflict.
   - 🚩 **The alternative was the unit in the column header with bare numbers in the cells, and it is
     rejected: it only works where every row of the column shares one unit, which rules out size.**
-    A `Size` column holding `68.4 GB` beside `820 MB` beside `4.2 KB` has no unit to put in its
+    A `Size` column holding `68.4 GiB` beside `820 MiB` beside `4.2 KiB` has no unit to put in its
     header, and the moment one exists the header is lying about some rows. The same disqualifies it
-    for `Age` (`3 years` beside `11 months`) and for Home's `Items`, whose six rows count films,
+    for `Age` (`7 h` beside `31 d`) and for Home's `Items`, whose six rows count films,
     series, artists and books. A rule that fails on the three columns it was proposed for is not a
     rule. The header form remains right for a column whose unit is genuinely constant — but that
     column is covered already, by the rule four bullets above: a value identical for every row is
     not data and is not rendered.
-  - ⚠️ **Applied so far to the size columns only — 98 cells — and the reason is a measured cost, not
-    an unfinished opinion.** A reserved unit box costs column width, and two declared tracks cannot
-    pay it. `Age` in the release tables is a 68 px track: 24 px of padding leaves 44 px and `months`
-    alone is 43 px, so the figure has nothing left and the cell wraps to two lines. Home's `Items`
-    is 107.375 px: 52 px of reserve plus 24 px of padding leaves 31 px against a 36 px `1,842`.
-    Both were measured wrapping at **+18 px per cell over 224 cells** across the render sweep.
-    **Still carrying the old one-string treatment, named so that a reader can tell an unfinished job
-    from a decision:** `Age` on *Release results* and *Audiobook release results* (36 cells), and
-    `Items` on Home's *Library by media type* (16 cells). Widening a declared track is its own
-    decision on the two densest tables in the product, and §9.1's own overflow bullet is the reason
-    it is not folded in casually.
+  - ✅ **Applied to the size columns (98 cells) and to `Age` (36 cells). One column is still
+    deferred — Home's `Items`, 16 cells — and the reason is a measured cost, not an unfinished
+    opinion.** A reserved unit box costs column width, and that track cannot pay it. Measured over
+    the render sweep — 5 widths × 3 densities × 2 installs × every state — a correctly-sized `5ch`
+    reserve takes the mockups' `Items` from **48 wrapped cells to 96**. ⚠️ **The failing width is 1280 px, and
+    the deferral has never named it, because `Items` is a FRACTIONAL track and the number the
+    deferral quotes is a resolution rather than a width.** `minmax(0, 1.15fr)` is 107.375 px at
+    1440 px and **87.80 px at 1280 px**, the narrowest desktop width the design check sweeps —
+    63.80 px of content, in which `1,204 films` (67 px), `612 artists` (64 px) and `1,842 books`
+    (74 px) **already wrap today with no reserve at all**, and the reserve takes the full install's
+    three wrapped rows of six to six of six. At 1440 px and above the reserve fits, with 9.38 px to spare. Widening a
+    fractional track on Home is its own decision, and §9.1's own overflow bullet is the reason it is
+    not folded in casually. ⚠️ **The deferral's stated premise was wrong twice over and the verdict
+    survives both corrections**, which is worth saying plainly because a verdict that survives is
+    not thereby vindicated: the reserve was costed at **52 px for `episodes`**, a word this column
+    never prints (see the family bullet above — the real reserve is `5ch`, 40 px), and the track was
+    costed at its 1440 px resolution, where it does not fail. **Corrected, re-measured, and still
+    deferred.**
+    ✅ **`Age` is no longer deferred, and both numbers the deferral rested on are gone.** `months`
+    at 43 px is a word `formatAge` cannot emit; the mockups' sample data has been converted, and the
+    real family is `h` 7 px and `d` 8 px, so the reserve is `1ch`. **The cost is exactly nothing**,
+    measured twice: 960 cells per arm before anything was edited, by rewriting the cells in the
+    rendered page, and **1,920 cells and 1,920 `.unit--age` spans afterwards against the shipped
+    class**. `1095 d` — four digits at 32 px under `tabular-nums`, plus a 3 px gap, plus an 8 px
+    box — is **43 px in the mockups' 56 px content box, 13 px of slack**, identical with the box and without
+    it, and **0 cells on more than one line either way**. `d`'s ink is 8 px in an 8 px box, so **0
+    of 1,920 spans spill**, which is the test `2.5ch` failed for `MiB`. ⚠️ **What the box buys on this column is 1.00 px, and that is the number to quote, not
+    size's 14.00 px.** Forced onto the widest and narrowest unit the family has, the figures' right
+    edges sit at **416.00 px and 416.00 px with the box — spread 0.00 px — and at 416.00 px and
+    417.00 px without it, spread 1.00 px**, because `h` and `d` differ by one pixel. The reserve is
+    still correct: a two-member family is a family, and the box is what stops the digits moving the
+    first time a row crosses from days to hours. But on `Age` the treatment's larger half is the
+    **muting** — the figure is the value, `d` is only its scale — and a reader who expects size's
+    payoff here will not find it. ℹ️ **A one-member family would earn no box at all**, and that test
+    was run rather than assumed.
+  - ⚠️ **The `Age` track is 80 px in the mockups and 68 px in the application, and neither reading is
+    a miscount.** `.cols-requests-releases` in `docs/design/mockups/usarr.css` has read `60px 88px
+    80px … 80px 68px 84px` since it was written; `COLUMNS` in
+    `web/src/routes/requests/+page.svelte` has read `Age` 68 px since `cd94779`. **Both trees hold
+    both numbers, on different columns** — 68 px is `Grabs` in the mockups and `Age` in the app,
+    80 px is `Age` in the mockups and `Protocol` in the app — which is exactly how one came to be
+    quoted for the other. So **every width in this section names the file it came from**, and the
+    divergence itself is the finding: of the ten columns the two trees share, **nine carry
+    different widths** — only `Category` (`0.9fr`) still agrees — `Category` is column 9 in the
+    mockups and column 5 in the app, and the mockups carry a `Select` column the app does not have
+    at all. ⚠️ **That count was eight when it was walked at 03:21 Z, and nine six minutes later.**
+    `Actions` agreed at `minmax(max-content, auto)` in both trees until **`7fc932e`** gave the app a
+    `198px` reserve — because ADR-0029 makes every row its own grid and a content-sized track has no
+    cross-row agreement to appeal to — and that commit reached `main` at 03:27 Z, while this
+    section's gates were still running. **The divergence widened during the round that documents
+    it**, which is the most direct evidence this bullet could have that it describes a live drift
+    rather than a one-off. **So a count of divergent columns is perishable and dates itself**, the
+    same discipline this bullet imposes on widths, applied to the count. Recorded in
+    `docs/REVIEW-LOG.md`
+    as **SU-10**, in the same family as SU-05 — a mockup is a measuring instrument, so a mockup that
+    disagrees with the product keeps generating numbers that are right about one tree and wrong
+    about the other.
+  - **`Category` prints UsArr's derived tags; the indexer's own Newznab path goes in `title`.** The
+    same release found on two indexers comes back with two different paths, so the raw value renders
+    one fact two ways depending on who answered. UsArr's tags are stable across indexers, so they are
+    what the column says — `movie`, `book · audiobook` — and the raw path carries detail ours drops,
+    `Movies/UHD` against `movie`, so it goes in the tooltip rather than in the bin. Same pattern as
+    the poster titles, and tier 1 above is why the detail is kept at all.
+  - ⚠️ **That tooltip's content is RECONSTRUCTED, not transmitted, and looking for a `raw_category`
+    field will not find one.** `ReleaseResource.CategoryIDs()` flattens `Categories` to ids and drops
+    `Name` at the first hop, so what reaches the browser is integers all the way down. The name is
+    recovered by joining the row's `indexerId` and `categories[]` against the **indexer catalogue**,
+    which ships each indexer's own tree. **Not against `categoryTree()`** — that is a deliberate
+    union across indexers, *"first non-empty name wins"*, which is right for the picker and destroys
+    the per-indexer divergence this tooltip exists to show. Two consequences: the catalogue is a
+    probed replica, so an id newer than the last probe shows the bare number (`Category 2045`) and
+    never a guessed name; and a surface that does not already load the catalogue **does not fetch it
+    for a tooltip** — it shows the tag with no tooltip, which is §2's first principle and this
+    section's own rule that an absent value is not decorated.
 - **A composite numeric cell says what its parts are.** `41 / 9` in a `Peers` column announces as
   *"Peers, 41 slash 9"* and nothing on the screen says which number is seeders — while prose four
   hundred pixels below calls the same column "seeders". Keep the ecosystem-verbatim header (`Peers`
