@@ -11181,6 +11181,161 @@ the `Recent grabs` *"post-v0.1"* clause, and *"all three now have a milestone"*)
 a dated record and the failure is more instructive than a tidy number would be. **Three of those
 sites were named in the brief; the other fourteen came from the sweep** — which is the claim
 `TRIAD.2` was actually making, and it is stronger at 14 than it was at nine.
+# VN9-04 — §13 argued with itself about the em dash, the centring exemption loses `toast`, a bare `—` is a glyph, and §17.7's exemplars move to the install v0.1 ships
+
+## VN9.20 §13 endorsed a construction and banned its punctuation — the defect is the shape, not the incident
+
+**The relay was verified before anything moved**, because the finding was a claim about this
+thread's own document, and the report was second-hand. It holds, and in a sharper shape than
+reported: §13 does not merely fail to name the punctuation, **it prescribes the banned one, in a UI
+string of its own, three bullets above the rule that bans it.**
+
+The ban, in §13's **Copy** block:
+
+> - `[grep]` No `—` (U+2014) in any string under 15 words, **except where
+>   [`ARCHITECTURE.md`](../ARCHITECTURE.md) §17.7 fixes the wording** …
+
+The endorsement, in §13's **Controls and links** block, three bullets above it — `[review]` **No raw
+schema identifier in running copy**, whose prescribed replacement read:
+
+> `sort_title` → "sort title", `no work identity` → "matched by title", `breaker open` → "paused —
+> 7 failed attempts, retrying 14:19".
+
+Seven words, an em dash, and a UI string the checklist instructs an author to write. **An author
+reading §13 alone obeys the nearer bullet and violates the farther one, and nothing on the page tells
+them.** A second endorsement sits in §13.0 and points *out* of §13 — *"Four are the head-and-detail
+error form this section prescribes two paragraphs above (`Grab failed — HTTP 502`)"* — where two
+paragraphs above is the fifteen-word floor, which prescribes nothing. The form is prescribed by
+**§1.4**, whose worked example read *"Sonarr unreachable — connection refused at 10.0.0.4:8989"*, and
+that sentence is what `check.mjs` cites as *"the construction §13's own worked example endorses"* to
+justify its four §17 exemptions. So the endorsement was already load-bearing two files away.
+
+**Resolved in favour of the colon, at the endorsement rather than at the ban** — a statement and its
+**reason** take a colon; a statement and an **instruction** takes a full stop and two sentences,
+because an instruction is a second thing to do, not a subordinate clause. §1.4's worked example is
+re-punctuated and states the rule in place; §13's Copy block gains the positive form; the
+`breaker open` replacement becomes `paused: 7 failed attempts, retrying 14:19`; §13.0's mislocated
+pointer is corrected to §1.4.
+
+⚠️ **The point is the shape, and it is why no reviewer of either half would have found it. A section
+that endorses a construction and bans its punctuation will produce correct-looking violations
+forever, and every author will hit it independently.** Three did, without contact: the frontend in
+five live strings, §13 in its own prescribed replacement, and `check.mjs` by inheriting the
+endorsement as a rationale. Neither half was wrong on its own. **The general form is worth carrying
+past this incident — whenever a document both prescribes a construction and constrains how it is
+written, the constraint belongs at the prescription, not only at the rule.**
+
+One false collision was disarmed while there: §1.4's own anti-goal list rejects
+*"bolded-label-plus-colon bullets"*, which is a **document mannerism**, not a colon inside a
+sentence. Said explicitly, because the next reader will otherwise read the ruling as contradicting
+the list two paragraphs up.
+
+## VN9.21 The centring exemption drops `toast`, and the reason generalises
+
+`check.mjs` exempted `/dialog|modal|toast/i` from §13's *"No `text-align: center` outside dialog
+components"*. §13 names **one** component. `modal` is that component under another word and stays;
+**`toast` is a different component that entered by regex convenience**, and §9.4 specifies toasts
+without asking for centring anywhere in it.
+
+**The exemption was inert, which is the argument for narrowing it now rather than the argument
+against.** An unused exemption grants everything on the day someone builds the component, and it
+grants it *silently* — the rule it disables never fired while the component did not exist, so nothing
+in the log ever mentioned it. **An exemption is a claim about a component that has been argued; this
+one had not been.** The reasoning is in the comment beside the change, not only in the commit, since
+the comment is what the next reader has.
+
+## VN9.22 A bare `—` is a glyph, not a sentence
+
+`NOTHING.empty` in the shipped app is a single `—` used as a cell value meaning *"no value here"*.
+That is a typographic convention; §13's rule is about **prose**, and there is no sentence in a
+one-character string to carry a beat. Exempted **by shape** — `t.trim() === '—'` — never by name,
+file or token, so nothing can launder through it: **no sentence fits in one character.** The contrast
+with the exemption beside it is the useful part: the §17 exemption is a claim about a *document* and
+can go stale, this is a claim about the *string* and cannot.
+
+**The mockups do use the convention** — 28 bare dashes, every one inside a `<td>`, which the corpus
+already excludes as data. So the exemption fires **zero** times on today's tree, and it is
+deliberately **not floored**: the file's floors exist because a rule that matches nothing reads like
+a rule that passed, and that argument is about rules, not about exemptions of shape. The count is
+printed either way, so the day it stops being zero is visible. §13 gains the line that documents the
+convention, because a tacit convention is what a later author "fixes" into a word.
+
+## VN9.23 §17.7's exemplars, retargeted — and the one that keeps its \*Arr
+
+§17.7 illustrated first run with *"1,240 of 10,000 movies"* and the degraded banner with
+*"Radarr 4K is unreachable"*, in a v0.1 whose services are Kavita and Prowlarr. **Neither was false**
+— ADR-0041 re-sequenced the \*Arrs rather than cutting them — so this is a judgement about
+recognisability, recorded as one rather than as a correction: an exemplar naming a service the reader
+cannot have teaches the screen with furniture that is not in the room. Both retargeted; the three
+sites in `DESIGN-DIRECTION.md` that quote §17.7 went with them, including §13's, which claims to
+quote *verbatim* and now does.
+
+**The queued-write label keeps `Radarr 4K`, with a clause saying why**: writes to a media backend do
+not exist — §7.6's writes are request, toggle monitored and delete, which only an acquisition app
+accepts — so converting that one would describe a write UsArr cannot make. ⚠️ **Where an \*Arr is
+specifically the point, the clause has to be written down**, or the next reader converts it
+helpfully. Raised and not fixed: §8.4's sketch still names `Radarr 4K` on its re-identification line,
+and §17.3–§17.5 use it as a sample instance name — a sample **name** in a table is not an exemplar
+teaching a screen, and the ruling was scoped to §17.7.
+
+## VN9.24 Three statements of one rule, and no mechanism holding them together
+
+The em-dash rule now exists in three places in one tree, and **it is worth being exact about what
+that does and does not buy.**
+
+| Where | What it says | Over which files |
+|---|---|---|
+| §1.4 + §13 (prose) | The head-and-detail construction is prescribed; its beat is a **colon** for statement-plus-reason, a full stop and two sentences for statement-plus-instruction; the em dash stays legal in prose; a lone `—` is a glyph | — |
+| `docs/design/check.mjs` | Bans U+2014 in a rendered string under 15 words; §17's wording exempts by run-time window; §17's own spans checked with that exemption **withheld**; lone `—` exempt by shape | `docs/design/tokens.css`, `docs/design/mockups/**` |
+| `web/src/lib/designrules.test.ts` (frontend's, not ours) | Same ban, same fifteen-word floor, same run-time §17 exemption, `if (s.text === '—') continue;` as the same structural glyph rule | `web/src/**` |
+
+⚠️ **The two checkers have no file overlap at all.** `check.mjs` reads `tokens.css` and the mockups;
+the vitest port reads `web/src`. So "the two checkers agree" must not be read as one corroborating
+the other — **they are two disjoint coverages of one rule, and neither can catch the other drifting,
+because they never inspect the same input.** Coherence between all three is maintained **by writing,
+and by nothing else.** That is the honest state, and it is stated here so the next reader verifies it
+by reading rather than by re-deriving the ruling.
+
+**Deliberately not closed with a shared module.** A rule definition imported across the
+`docs/design` ↔ `web/` boundary is the same coupling refused for the tokens, for the same reason: it
+trades a visible duplication for an invisible dependency. **What would close it, if the divergence
+ever bites:** a single data file of rule literals — the banned family list, the word floor, the
+centring exemption regex, the glyph test — vendored into both trees by a generator rather than
+imported at run time, so the duplication stays visible and a stale copy is a diff rather than a
+silent behaviour change. Recorded as the seam, not built.
+
+**One pattern from the frontend's side is worth naming here because it generalises.** Their
+`.th__arrow` removal was drilled **twice** — once on a fresh violation, and once by restoring the
+exact deleted declaration. The second drill is the one that matters: it proves the rule is green
+because **the tree is clean**, not because deleting the exception moved the goalposts. **Every
+exception we retire should be drilled that way**, since a retired exception and a broken rule look
+identical from the outside.
+
+## VN9.25 On the gate
+
+Every rule touched was **fired deliberately**, each plant reverted afterwards, and every message is
+quoted verbatim in its own commit rather than summarised here. In short:
+
+* **The centring rule** — three planted selectors in one run. `.vn9probe-plain` and `.vn9probe-toast`
+  both failed and were named with file and line; `.dialog__vn9probe` was absorbed, visible as
+  *"(1 exempt: §9.6 allows centring inside a dialog)"*. The `toast` selector is the one that would
+  have passed an hour earlier.
+* **The glyph exemption** — fired on **both** corpora, a bare `—` planted outside a `<td>` in the
+  mockup and a `*"—"*` span planted in §17.7, both passing and both printing their count. Then the
+  negative half: `— Show it` and `Sync paused — five failures` both still fail, on every combo.
+  ⚠️ **A first attempt used `Grab failed — HTTP 502` as the mid-sentence probe and it passed —
+  correctly, because §17 fixes that wording and a *different* exemption granted it.** A probe another
+  exemption absorbs proves nothing about the one under test. Recorded because the first run looked
+  like evidence.
+* **The §17 retarget** — the risk was silent revocation of the mockup banner's exemption, which is
+  granted on a window of §17's text. Measured rather than assumed: every count identical across the
+  change.
+
+**Counts before and after, so a change in what the checker inspects cannot pass unnoticed:** §17
+spans **57 → 57**, recorded §17 em-dash exemptions **4 → 4** (all four matched, both runs), rendered
+corpus **6978 → 6978** strings against a floor of 6750, short em-dash strings exempted by §17
+**24 → 24**, bare-glyph exemptions **0 → 0** on the clean tree. The planted runs moved exactly what
+was planted and nothing else — 6982 and 58.
 
 ---
 

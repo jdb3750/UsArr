@@ -3808,7 +3808,7 @@ Each is a named screen, not an accident.
   live connection test that must pass before Save is enabled, **whose four result states are
   specified in §17.3 rather than left to the implementer**. On
   save the import starts, the wizard hands off to home, and a progress affordance shows real counts
-  ("1,240 of 10,000 movies") fed by SSE. **Sections populate live as import phase A commits** — it is
+  ("1,240 of 10,000 comics") fed by SSE. **Sections populate live as import phase A commits** — it is
   not a spinner in front of an empty screen. If the only configured instance advertises no
   `LibrarySync`, the wizard lands on Search-and-Grab mode with the line quoted in §8.5.
 - **No services configured** → the wizard. Never an empty home page.
@@ -3816,10 +3816,20 @@ Each is a named screen, not an accident.
   because an empty library with a healthy service means the import has not run and the user should
   see that, not a blank grid.
 - **Import in progress** → the populated-so-far sections plus the progress affordance.
-- **Instance degraded / backend offline** → a non-modal banner naming it ("Radarr 4K is unreachable —
+- **Instance degraded / backend offline** → a non-modal banner naming it ("Kavita is unreachable —
   showing cached data from 14:02") linking to the Services screen. **The catalogue does not grey
-  out**; browse, search, sort and filter keep working from the replica. Writes to that instance are
-  accepted with the label "queued — Radarr 4K is unreachable" (§7.5).
+  out**; browse, search, sort and filter keep working from the replica. The banner names the
+  **instance**, by the name the user gave it (§17.3), never the kind — which is what makes it
+  legible on a stack running two of the same thing. ⚠️ **The write half of this state keeps an \*Arr
+  deliberately, and it is not an oversight**: writes to a media backend do not exist — §7.6's writes
+  are request, toggle monitored and delete, which only an acquisition app accepts — so the queued
+  label is "queued — Radarr 4K is unreachable" (§7.5), and the two-Radarr instance name is the whole
+  point of the example. Do not convert this one to a v0.1 service. ⚠️ The banner and the count above
+  read `Radarr 4K` and `movies` until 2026-08-17; they were retargeted because **v0.1's reader has
+  Kavita and Prowlarr** (§16, ADR-0041), and an exemplar naming a service that reader cannot have
+  teaches the screen with furniture that is not in the room. Neither was false — [ADR-0041](./DECISIONS.md#adr-0041)
+  re-sequenced the \*Arrs rather than cutting them — so this is a judgement about recognisability,
+  not a correction.
   **The timestamp in a degraded banner is that instance's own last successful sync, never the global
   delta time.** It looks like a detail and it is the whole job of the banner: the number tells the
   user how stale the data is, and quoting the global time on an instance that has been failing for
