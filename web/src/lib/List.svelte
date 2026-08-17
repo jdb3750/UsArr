@@ -298,11 +298,77 @@
 	 * which is the kind of failure that survives review because the attribute is
 	 * still visible in the DOM inspector.
 	 */
+	/**
+	 * The density this list last rendered at. `undefined` until the table has a
+	 * box, so the first render seeds it rather than counting as a change — a
+	 * freshly mounted row has nothing remembered and needs no invalidation.
+	 */
+	let renderedDensity: string | undefined;
+
 	$effect(() => {
 		const el = tableEl;
+		// `density` is read unconditionally so this effect depends on it even on
+		// the pass where the table is not mounted. Reading it after an early
+		// return would make the subscription conditional, and the invalidation
+		// would silently stop happening for any list that starts empty.
+		const nextDensity = density;
 		if (!el) return;
 		el.style.setProperty('--cols', cols);
 		el.style.setProperty('--row-ci', `${intrinsic}px`);
+
+		/*
+		 * §7.4's INVALIDATION RULE, WHICH IS REQUIRED RATHER THAN ADVISORY.
+		 *
+		 * The rule and the three mechanisms that do NOT satisfy it are written
+		 * out at `.tbl--remeasure` in app.css. In short: `contain-intrinsic-size:
+		 * auto` remembers each row's last real height, the keyed `{#each}` below
+		 * reuses row nodes across a density change, and the two together leave
+		 * every off-screen row placeheld at the PREVIOUS density until the user
+		 * scrolls it back into view. §7.4 permits rebuilding the rows or forcing
+		 * re-measurement; this is the second, and the measurement that chose it
+		 * is in scripts/measurements/2026-08-17-density-invalidation.md.
+		 *
+		 * ⚠️ THE ORDER OF THE THREE LINES BELOW IS THE WHOLE MECHANISM.
+		 *
+		 *   1. add the class, so every row stops skipping its contents;
+		 *   2. force style and layout SYNCHRONOUSLY, here, in this task, so the
+		 *      rows lay out at the density that was just applied. This is also
+		 *      why `--row-ci` is set above rather than in an effect of its own —
+		 *      an effect ordering that put the forced layout before the new value
+		 *      would measure the old one;
+		 *   3. take the class off after TWO animation frames.
+		 *
+		 * ⚠️ TWO FRAMES, NOT ONE, AND THE DIFFERENCE IS A FIX THAT MEASURES AS NO
+		 * FIX. A rAF callback scheduled from inside an event handler runs in the
+		 * SAME frame's rendering steps, BEFORE style and layout, so a single rAF
+		 * can take the class off before the frame that was supposed to do the
+		 * recording ever renders. Measured on the shipped primitive, 5,000 rich
+		 * rows, compact -> relaxed: with one frame, the document's scrollHeight
+		 * was already correct at 271,870 px synchronously after step (2) and had
+		 * fallen back to 232,198 px two frames later — 14.59% error, which is the
+		 * 14.57% of doing nothing at all. The forced layout in (2) gives correct
+		 * GEOMETRY immediately; it does not reliably cause the browser to RECORD
+		 * that geometry as the row's last remembered size, and only a completed
+		 * rendering opportunity does. Two frames guarantee one.
+		 *
+		 * The second frame is nearly free: the rows laid out in the first one and
+		 * the layout is cached, so it costs a style pass rather than a relayout.
+		 */
+		if (renderedDensity !== undefined && renderedDensity !== nextDensity) {
+			el.classList.add('tbl--remeasure');
+			void el.offsetHeight;
+			let inner = 0;
+			const frame = requestAnimationFrame(() => {
+				inner = requestAnimationFrame(() => el.classList.remove('tbl--remeasure'));
+			});
+			renderedDensity = nextDensity;
+			return () => {
+				cancelAnimationFrame(frame);
+				cancelAnimationFrame(inner);
+				el.classList.remove('tbl--remeasure');
+			};
+		}
+		renderedDensity = nextDensity;
 	});
 
 	const rovingParams = $derived({
