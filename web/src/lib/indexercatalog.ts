@@ -458,7 +458,10 @@ export function categoryLabelFor(category: { id: number; name: string }): string
  * names a different tracker in each configured service. The caller passes the
  * instance the SEARCH was resolved to — the server's own `instance_id` off the
  * accepted body — and not whatever the picker happens to be showing now, which
- * the user may have switched since the results landed.
+ * the user may have switched since the results landed. Neither wrong key fails
+ * loudly, which is the trap: ids are small and dense per install, so the other
+ * instance almost certainly HAS an indexer 3, and the lookup finds it and prints
+ * that tracker's wording rather than falling through to the empty string below.
  *
  * ⚠️ IT DEGRADES TO THE EMPTY STRING, AND THE CALLER RENDERS NO TOOLTIP RATHER
  * THAN AN EMPTY ONE. Four absences reach it and none is an error: no instance
