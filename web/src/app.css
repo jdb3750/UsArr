@@ -1973,11 +1973,25 @@ select[multiple] {
 }
 
 /* A fixed box, so the header does not reflow by one glyph's width when the
- * sorted column changes. */
+ * sorted column changes.
+ *
+ * ⚠️ NO `text-align: center`, AND IT IS NOT AN OVERSIGHT — it was here, §13 bans
+ * centring outside a dialog, and design ruled on 2026-08-17 that the
+ * declaration goes rather than the rule gaining a carve-out. Measured in
+ * Chromium against the real build before the ruling: the box is 7.000 px, `▴`
+ * and `▾` both render 5.531 px, so centring moved the glyph 0.734 px — half of
+ * 1.469 px of slack, and below anything a reader can perceive. The property
+ * this box exists for survives without it, because the two arrows measure
+ * IDENTICALLY: the header cannot shift when the sort flips under any alignment,
+ * so the centring was never doing the job it looked like it was doing.
+ *
+ * And do not reinstate it as `display: inline-flex; justify-content: center`.
+ * That is the same 0.734 px spelled so the checker cannot see it, which is
+ * worse than the declaration was. `web/src/lib/designrules.test.ts` carries the
+ * rule and the reasoning. */
 .th__arrow {
 	flex: none;
 	width: 1ch;
-	text-align: center;
 }
 
 .tbl td {
