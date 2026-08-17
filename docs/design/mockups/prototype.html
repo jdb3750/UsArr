@@ -393,17 +393,28 @@ button, input, select, textarea { font: inherit; color: inherit; }
    muted, and `tabular-nums` stays on the CELL rather than moving here — §9.1
    requires that, so composite values inherit it.
    THE UNIT BOX IS A FIXED WIDTH, which is the part that does the work. In a
-   right-aligned cell the string's last character is what aligns, so "4.8 GB"
-   over "820 MB" aligns the B and starts the digits at two different
+   right-aligned cell the string's last character is what aligns, so "4.8 GiB"
+   over "820 MiB" aligns the B and starts the digits at two different
    x-positions — right-alignment plus tabular-nums buys nothing there, because
    what is being aligned is the word. A fixed unit box puts the alignment back
    on the last digit.
    The width is a property of the UNIT FAMILY, never of the value present: a
    size column must reserve room for the widest unit it can ever print, or the
-   digits jump the first time a row crosses from GB to MB. Widths are MEASURED
-   in the cell font (13px IBM Plex Sans, 1ch = 8px), rounded up to the next
-   half-ch: MB 19px is the widest size unit, months 43px the widest duration,
-   episodes 52px the widest item noun.
+   digits jump the first time a row crosses from GiB to MiB. Widths are
+   MEASURED in the cell font (13px IBM Plex Sans, 1ch = 8px), rounded up to the
+   next half-ch: MiB 22px is the widest size unit, months 43px the widest
+   duration, episodes 52px the widest item noun.
+   ⚠️ THE SIZE FAMILY IS THE BINARY ONE — B · KiB · MiB · GiB · TiB — because
+   that is what the application prints and what every indexer and every *Arr
+   reports. This reserve was first derived at 2.5ch from the DECIMAL family
+   these mockups still draw (widest MB, 19px), and 2.5ch does not hold MiB:
+   measured as the control, the figures still align at 2.5ch but MiB's ink is
+   22px in a 20px box and spills 2px into the cell's right padding. A reserve
+   that does not hold the widest unit in its family is not a reserve. The rule
+   above is unchanged; only the family it was applied to was wrong. THAT THESE
+   MOCKUPS PRINT DECIMAL UNITS AT ALL IS A DEFECT, tracked in REVIEW-LOG as
+   SU-05: a mockup is a measuring instrument, so sample data the product cannot
+   emit is a calibration error rather than a cosmetic one.
    TO REVERSE THIS TREATMENT, delete this block: `.unit` is a bare span, so the
    markup falls back to rendering the unit inline at full contrast, which is
    what it says. The alternative that was NOT taken — the unit in the column
@@ -424,10 +435,15 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .unit {
   color: var(--fg-muted);
   display: inline-block;
+  /* The fallback is for a `.unit` carrying NO family modifier, of which there
+     are none. It is not the size reserve and it is not a leftover of the
+     decimal 2.5ch: an undeclared family has no widest member to measure, so
+     this is an arbitrary floor that keeps the box from collapsing, and the
+     family class below is what carries a measured number. */
   width: var(--unit-w, 2.5ch);
   text-align: left;
 }
-.unit--size { --unit-w: 2.5ch; }  /* B · KB · MB · GB · TB — widest is MB at 19px */
+.unit--size { --unit-w: 3ch; }  /* B · KiB · MiB · GiB · TiB — widest is MiB at 22px */
 .sr {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip-path: inset(50%); white-space: nowrap;

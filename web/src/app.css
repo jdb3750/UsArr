@@ -646,14 +646,21 @@ textarea {
  * at the CELL, so composite values inherit them.
  *
  * ⚠️ THE WIDTH BELONGS TO THE UNIT FAMILY, NOT TO THE VALUE IN FRONT OF YOU, or
- * the digits jump the first time a row crosses from GiB to MiB. §9.1 derives
- * 2.5ch from the DECIMAL family `B · KB · MB · GB · TB`, widest `MB` at 19px.
- * This app prints BINARY units, because that is what every indexer and every
- * *Arr reports, and the binary family is wider — see `sizeParts` in
- * src/lib/format.ts. The reserve below is measured on the binary family in the
- * real cell font, which is what §9.1's own rule instructs; carrying the decimal
- * 2.5ch over would under-reserve and reintroduce the misalignment it exists to
- * remove.
+ * the digits jump the first time a row crosses from GiB to MiB. §9.1's rule is
+ * to reserve the widest unit the column can ever print, measured in the cell
+ * font and rounded up to the next half-ch, and the family here is the BINARY
+ * one — `B · KiB · MiB · GiB · TiB` — because that is what every indexer and
+ * every *Arr reports and what `sizeParts` in src/lib/format.ts emits. Measured
+ * at 13px IBM Plex Sans, 1ch = 8px: KiB 19px, MiB 22px, GiB 20px, TiB 18px, so
+ * the widest is MiB at 2.75ch and the reserve is 3ch.
+ *
+ * The reserve shipped at 2.5ch first, because it was derived from the DECIMAL
+ * family the design mockups draw (widest `MB`, 19px). 2.5ch was re-run as a
+ * control rather than assumed wrong, and the control is the useful half: the
+ * figures still align at 0.00px, but MiB's ink is 22px in a 20px box and spills
+ * 2px into the cell's right padding. A reserve that does not hold the widest
+ * unit in its family is not a reserve. §9.1 carries the correction and
+ * REVIEW-LOG SU-05 carries the reason it happened.
  *
  * ⚠️ SIZE COLUMNS ONLY. A reserved unit box costs column width and two declared
  * tracks cannot pay it: `Age` in the release tables is a 68px track and Home's
@@ -666,6 +673,12 @@ textarea {
 .unit {
 	color: var(--fg-muted);
 	display: inline-block;
+	/* The fallback is for a `.unit` carrying NO family modifier, of which there
+	 * are none — every one is `.unit--size`. It is not the size reserve and it
+	 * is not a leftover of the decimal 2.5ch: a family nobody declared has no
+	 * widest member to measure, so this is an arbitrary floor that keeps the box
+	 * from collapsing, and the family classes below are what carry a measured
+	 * number. */
 	width: var(--unit-w, 2.5ch);
 	text-align: left;
 }
