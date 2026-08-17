@@ -2428,23 +2428,7 @@ func TestMigrate0007WorkCreditShape(t *testing.T) {
 		{"position", "INTEGER"},
 		{"credited_as", "TEXT"},
 	}
-	rows, err := d.Read().QueryContext(ctx,
-		`SELECT name, type FROM pragma_table_info('work_credit') ORDER BY cid`)
-	if err != nil {
-		t.Fatalf("work_credit does not exist: %v", err)
-	}
-	var gotCols [][2]string
-	for rows.Next() {
-		var name, typ string
-		if err := rows.Scan(&name, &typ); err != nil {
-			t.Fatal(err)
-		}
-		gotCols = append(gotCols, [2]string{name, typ})
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatal(err)
-	}
-	_ = rows.Close()
+	gotCols := tableInfo(t, d, "work_credit")
 	if fmt.Sprint(gotCols) != fmt.Sprint(wantCols) {
 		t.Errorf("work_credit columns = %v\nwant %v\n"+
 			"docs/reference/schema.md §1.1 is authoritative for this table's shape. "+
@@ -2479,10 +2463,43 @@ func TestMigrate0007WorkCreditShape(t *testing.T) {
 
 	// WITHOUT ROWID, asserted by executing the thing it forbids rather than by
 	// reading the DDL text: a WITHOUT ROWID table has no rowid column.
-	if _, err := d.Read().QueryContext(ctx, `SELECT rowid FROM work_credit LIMIT 1`); err == nil {
-		t.Error("work_credit has a rowid, so it is not WITHOUT ROWID — " +
-			"the PK is then a secondary index and the covered range scan it exists for is gone")
+	var ignored int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT rowid FROM work_credit LIMIT 1`).Scan(&ignored); !errorMentions(err, "no such column") {
+		t.Errorf("SELECT rowid FROM work_credit gave %v, want a \"no such column: rowid\" error. "+
+			"work_credit must be WITHOUT ROWID: with a rowid the PRIMARY KEY becomes a secondary "+
+			"index and the covered range scan it exists for is gone.", err)
 	}
+}
+
+// errorMentions is true when err is non-nil and its message contains want. It
+// exists because SQLite reports "no such column" as a plain error string and
+// there is no sentinel to compare against.
+func errorMentions(err error, want string) bool {
+	return err != nil && strings.Contains(err.Error(), want)
+}
+
+// tableInfo reads a table's (name, declared type) pairs in declaration order.
+func tableInfo(t *testing.T, d *DB, table string) [][2]string {
+	t.Helper()
+	rows, err := d.Read().QueryContext(t.Context(),
+		`SELECT name, type FROM pragma_table_info(?) ORDER BY cid`, table)
+	if err != nil {
+		t.Fatalf("%s does not exist: %v", table, err)
+	}
+	defer func() { _ = rows.Close() }()
+	var out [][2]string
+	for rows.Next() {
+		var name, typ string
+		if err := rows.Scan(&name, &typ); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, [2]string{name, typ})
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
 }
 
 // TestMigrate0007RoleCheckIsEnforced fires the CHECK.
@@ -2579,8 +2596,8 @@ func TestMigrate0007CoCreditsAndBillingOrder(t *testing.T) {
 			{2, "writer", 0},
 			{2, "letterer", 0}, // the same person, a second role
 			{3, "cover_artist", 0},
-			{4, "letterer", 1},  // a second letterer, later in the billing
-			{3, "writer", 0},    // a CO-credit: same work, same role, same position
+			{4, "letterer", 1}, // a second letterer, later in the billing
+			{3, "writer", 0},   // a CO-credit: same work, same role, same position
 		} {
 			if _, err := tx.ExecContext(ctx, `
 				INSERT INTO work_credit (work_id, creator_work_id, role, position)

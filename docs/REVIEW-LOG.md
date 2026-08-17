@@ -10122,7 +10122,7 @@ act on a note the previous pass had left for it.
 
 ---
 
-## LS.9 The five guards fired, with verbatim output
+## LS.9 The seven guards fired, with verbatim output
 
 `DEVELOPMENT.md` §11's rule: a guard that has never been triggered is indistinguishable from no
 guard. Each break below was made, run, and reverted; the reverts are proven by the final green.
@@ -10222,7 +10222,18 @@ covered range scan the key exists for. This is why the query-plan case carries a
               SCAN work_credit
 ```
 
-**Guard 6 — the whole table removed**, which is the deferred-tables list from the other side:
+**Guard 6 — `WITHOUT ROWID` dropped**, leaving the same five columns, the same primary key and the
+same constraints — and turning the key from the table's storage order into a secondary index. Note
+what the first version of this assertion did: it ran `QueryContext` and checked for a nil error,
+which `rowserrcheck` flagged and which would have passed anyway, because the *query* succeeds and it
+is the *scan* that reports the missing column. The rewritten form is what actually fires:
+
+```
+--- FAIL: TestMigrate0007WorkCreditShape (0.04s)
+    migrate_test.go:2469: SELECT rowid FROM work_credit gave sql: no rows in result set, want a "no such column: rowid" error. work_credit must be WITHOUT ROWID: with a rowid the PRIMARY KEY becomes a secondary index and the covered range scan it exists for is gone.
+```
+
+**Guard 7 — the whole table removed**, which is the deferred-tables list from the other side:
 
 ```
 --- FAIL: TestDeferredTablesAreAbsent (0.05s)
