@@ -16,7 +16,7 @@ const SIZE_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
  *
  * Returns `null` rather than an empty pair for an absent or nonsensical byte
  * count, so a caller cannot render an empty unit box where the design calls for
- * §9.1's `—`. A pair with `value: ''` would still reserve 2.5ch of nothing.
+ * §9.1's `—`. A pair with `value: ''` would still reserve 3ch of nothing.
  */
 export function sizeParts(bytes: number | undefined): Measure | null {
 	if (bytes === undefined || !Number.isFinite(bytes) || bytes < 0) return null;
@@ -34,8 +34,10 @@ export function sizeParts(bytes: number | undefined): Measure | null {
  * The one-string form, kept because it is what a `title`, an `aria-label` or a
  * plain-text export wants — nothing there has two slots to emit into. Rendering
  * a size column through this instead of through `sizeParts` is the thing §9.1
- * measured and rejected: the last digit of `68.4 GiB` and of `4 B` land 9.00 px
- * apart, against 0.00 px with the reserved unit box.
+ * measured and rejected. Re-measured here on this app's own binary units rather
+ * than quoted: over `68.4 GiB` / `820 MiB` / `4 B`, the figures' right edges
+ * spread 14.00 px through this function and 0.00 px through `sizeParts` into a
+ * reserved unit box.
  */
 export function formatSize(bytes: number | undefined): string {
 	const parts = sizeParts(bytes);
