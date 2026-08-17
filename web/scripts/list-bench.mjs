@@ -892,6 +892,21 @@ for (const n of SWEEP) {
  */
 function crossing(points, field) {
 	const sorted = [...points].sort((a, b) => a.n - b.n);
+	/* ⚠️ FEWER THAN TWO POINTS IS A REAL STATE, NOT AN IMPOSSIBLE ONE, AND IT
+	 * USED TO CRASH HERE. Once the ceiling fires, `atSize` returns null for every
+	 * remaining size, so `sweep` can hold one point or none — and the
+	 * extrapolation below then read `sorted[-1]` and threw
+	 * `TypeError: Cannot read properties of undefined (reading 'shipped')`.
+	 *
+	 * That TypeError landed AFTER the guard had already printed its ceiling
+	 * message and BEFORE the run could print its own closing CEILING summary, so
+	 * the honest report the guard exists to produce was buried under a stack
+	 * trace — the exact "this reads like a broken bench" failure the guard was
+	 * written to replace, one level up from where it was fixed. Found by firing
+	 * the guard on purpose (USARR_BENCH_FORCE_CEILING); nothing else would have
+	 * reached this branch. */
+	if (sorted.length < 2)
+		return { at100: NaN, bracket: [sorted[0] ?? null, null], linear: false, unmeasured: true };
 	let under = null;
 	for (const p of sorted) {
 		if (p[field] > 100) {
@@ -947,6 +962,17 @@ for (const [name, fit] of [
 	['worst case', fitWorst]
 ]) {
 	const [a, b] = fit.bracket;
+	// UNOBTAINED, said in those words. A crossing needs two measured points, and
+	// after a fired ceiling there may be one or none — printing "~NaN rows" would
+	// be a number-shaped hole where the reader expects a measurement.
+	if (fit.unmeasured) {
+		note(
+			`${name.padEnd(11)} crossing UNOBTAINED: the sweep completed ` +
+				`${a ? `only ${a.n.toLocaleString()} rows` : 'no sizes at all'} before the ceiling fired, ` +
+				`and a bracket needs two measured points.`
+		);
+		continue;
+	}
 	note(
 		`${name.padEnd(11)} crosses 100 ms at ~${Math.round(fit.at100).toLocaleString()} rows on this ` +
 			`desktop` +
@@ -1659,9 +1685,12 @@ if (!ASSERT_ONLY) {
 	}
 	note('');
 	note(
-		`DOM-row ceiling at the 100 ms Tier-0 hard fail: ~${Math.round(fitShipped.at100).toLocaleString()} rows ` +
-			`on this desktop as shipped, ~${Math.round(fitShipped.at100 / 5).toLocaleString()}–` +
-			`${Math.round(fitShipped.at100 / 3).toLocaleString()} on a Pi 5 at ADR-0029's 3–5×.`
+		fitShipped.unmeasured
+			? `DOM-row ceiling at the 100 ms Tier-0 hard fail: UNOBTAINED — the ceiling fired before the ` +
+					`sweep had two measured points to bracket between.`
+			: `DOM-row ceiling at the 100 ms Tier-0 hard fail: ~${Math.round(fitShipped.at100).toLocaleString()} rows ` +
+					`on this desktop as shipped, ~${Math.round(fitShipped.at100 / 5).toLocaleString()}–` +
+					`${Math.round(fitShipped.at100 / 3).toLocaleString()} on a Pi 5 at ADR-0029's 3–5×.`
 	);
 }
 
