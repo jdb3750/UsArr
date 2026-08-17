@@ -22,6 +22,9 @@
 #      drops both and is the target to use on a plane. Everything else is
 #      hermetic. This said ONE for the life of the project while the `vuln`
 #      target ran two commands — count the calls, do not count the sentences.
+#      `make spec-drift` (upstream OpenAPI drift) also needs the network, which is
+#      exactly why it is a separate opt-in target and NEVER part of `check`: a
+#      GitHub outage must not redden a commit that touched no spec. ADR-0047.
 #   2. `make docker` is the ONLY target allowed to require a Docker daemon, and
 #      it is never part of `check`.
 #   3. `make design` is the ONLY target allowed to require a browser, and like
@@ -422,6 +425,32 @@ test-integration: ## Tests behind the `integration` tag. Needs a live stack. NEV
 		echo "see docs/DEVELOPMENT.md §7.1"; exit 1; }
 	$(GO) test -tags=integration $(GOTESTFLAGS) ./...
 
+# ─── Spec drift ──────────────────────────────────────────────────────────────
+# The concrete form of the "scheduled job, not the PR gate" that DEVELOPMENT.md
+# §7.2 and api/specs/SOURCES.md have both described since the specs were vendored.
+#
+# WHY IT IS NOT IN `check`, decided rather than assumed. Rule 1 at the top of this
+# file says the gate makes exactly TWO network calls, both to vulnerability
+# databases, and `check-offline` is defined as `check` minus them. This target
+# talks to github.com, so putting it in the gate would break that contract AND
+# make an upstream outage, a rate limit or an aeroplane fail somebody's unrelated
+# commit. Upstream regenerating an OpenAPI document is news; it is not a reason to
+# fail a commit that has nothing to do with it.
+#
+# The offline half of the same guard IS in the gate:
+# TestVendoredSpecIsThePinnedBlob hashes the vendored bytes against a pinned git
+# blob name, which is deterministic and needs nothing. See ADR-0047.
+.PHONY: spec-drift
+spec-drift: export CGO_ENABLED := 1
+spec-drift: ## Tests behind the `upstream` tag: are the vendored specs still what upstream serves? NEEDS NETWORK. Never in CI.
+	@test "$${USARR_SPEC_DRIFT:-}" = "1" || { \
+		echo "refusing: set USARR_SPEC_DRIFT=1 — this target talks to github.com"; \
+		echo "see docs/DEVELOPMENT.md §7.2"; exit 1; }
+	$(GO) test -tags=upstream $(GOTESTFLAGS) -run Upstream ./internal/...
+	@echo ""
+	@echo "a failure here is NEWS, not a broken build: it means upstream moved. Read the message,"
+	@echo "re-vendor deliberately, and revisit the ADR whose premise just changed."
+
 .PHONY: bench
 bench: ## Wall-clock performance harness. A RELEASE gate on named hardware, never a merge gate.
 	@echo "bench: generating the reference fixture (10k movies / 2k series / ~400k episodes)"
@@ -535,11 +564,22 @@ fmt-check: web-deps ## Verify formatting without modifying files (used by `make 
 # build with the tag on is the smallest thing that makes a type error fail. It
 # writes no binary — `go build` only emits an executable when it is given a
 # SINGLE main package, and `./...` is many.
+#
+# The `upstream` tag needs a SECOND command, and the difference is the whole
+# reason this is spelled out. Everything behind `upstream` is a _test.go file,
+# and `go build` does not compile test files — so `go build -tags=upstream ./...`
+# would report success over a file no compiler had opened, which is the exact
+# hole the paragraph above describes, one layer along. `go vet` does type-check
+# test files, so it is what closes it. The gate must be able to compile
+# `make spec-drift`'s tests without being allowed to RUN them (they need the
+# network); vet gives precisely that.
 .PHONY: build-tagged
-build-tagged: ## Compile packages hidden behind build tags (internal/db/spike, `bench`)
+build-tagged: ## Compile packages hidden behind build tags (`bench`: internal/db/spike; `upstream`: the spec-drift tests)
 	@n=$$($(GO) list -tags=bench ./... | wc -l); \
 	echo "build-tagged: compiling $$n Go packages with -tags=bench"
 	$(GO) build -tags=bench ./...
+	@echo "build-tagged: type-checking the -tags=upstream test files (go vet; go build cannot see them)"
+	$(GO) vet -tags=upstream ./...
 
 # ─── Design ──────────────────────────────────────────────────────────────────
 # docs/design/check.mjs is the runnable form of DESIGN-DIRECTION.md §13: the ban

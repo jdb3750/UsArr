@@ -12389,3 +12389,102 @@ the **answerable** half, sourced from §16 exactly as `WIRE-03` argues — and, 
 the same two-part shape from opposite directions is the strongest available evidence that the split
 is the requirement's real structure rather than this pass's preference, and it is the reason the
 clause was split rather than either lowered or left standing whole.
+
+---
+
+# EXPL-02 — Prowlarr's spec-skew guard, and why the two-spec split ([ADR-0046](./DECISIONS.md#adr-0046)) does not port
+
+**Prefix note.** `EXPL-` = *explainer*, this thread's prefix, already carrying [`EXPL-01`](#expl-01);
+this is `EXPL-02`. The ADR counter was re-scanned against `origin/main` immediately before writing —
+and again immediately before the merge below, after `origin/main` advanced past `cf5fab5`: ADR-0046
+is still its highest and `cf5fab5` **amends** it rather than adding one, so this work is **ADR-0047**,
+verified free (`grep -c adr-0047 docs/DECISIONS.md` → 0 before the write).
+
+**What this entry is.** The task was to build the honest remedy for Prowlarr's spec-skew after
+[ADR-0046](./DECISIONS.md#adr-0046) left it as an open question — and to do it *without* copying
+Kavita's floor/ceiling split, which turns out to be impossible here. A previous run wrote the code,
+the Makefile target and the three docs edits but died before the ADR and this log entry. This entry
+records the salvage, the independent re-verification of every Prowlarr claim, and each new guard fired
+deliberately against the reason it exists.
+
+**Corroboration, and a reference closed.** While this was in flight the library thread amended
+ADR-0046 (`cf5fab5`, `LS-53`) to record that it stands for Kavita and is **not a template**,
+deferring the Prowlarr remedy to *"its own ADR from the thread that took it"* — a pointer that
+dangled until ADR-0047 landed. ADR-0047 now names `cf5fab5`/`LS-53` in its Status line, and the
+amendment names ADR-0047, so the reference runs both ways. That the two threads measured the same
+blob identity by two independent methods (`git ls-tree` there, `git hash-object` on a raw fetch here)
+is corroboration of the fact, not a shared assumption inherited from one place.
+
+## EXPL2.1 — Every Prowlarr claim re-verified against a primary source, not the dead run's word
+
+Nothing was carried over on trust. Each figure below was re-measured before the work was committed.
+
+| Claim | How re-verified | Result |
+|---|---|---|
+| `openapi.json` is one blob at both refs and vendored | `git hash-object api/specs/prowlarr.json`; raw fetch of the file at `v2.5.2.5491` and `develop` through the proxy, each piped to `git hash-object` | all three = `134d31d7df5e80714c454a6224e7449df512c55e` |
+| `develop` tip | `git ls-remote … refs/heads/develop` | `1f7db1e` |
+| `info.version` | parsed the vendored JSON | `1.0.0` (Swashbuckle placeholder); `openapi` = `3.0.4` |
+| `Limit`/`Offset` non-nullable in the spec | parsed `GET /api/v1/search` params | both `{type: integer, format: int32}`, no `nullable` |
+| `Limit`/`Offset` became `int?` | GitHub PR #2654 | title *"Fixed: Don't send limit=0 to Newznab indexers"*, merge `c687bdb1f`, `int`→`int?`, `NewznabRequestGenerator` guards `Limit is > 0`, offset kept `HasValue` |
+| First release with the fix | `git ls-remote --tags … v2.3.6.5351` | the tag sits **directly on** `c687bdb1f` — so `v2.3.6.5351` is the first release, and it is nullable on the owner's `v2.5.2.5491` and on `develop` |
+| Last regenerated | GitHub file history + `git log -1 60740fa` | `2025-06-07`, `60740fa259a…`, *"Automated API Docs update"* |
+| Releases since | `git tag --contains 60740fa` (shallow-since fetch) | **33**, none pointing at it |
+| Highest released tag | `git ls-remote --tags` | `v2.6.1.5509` |
+| UsArr code is independently correct | read `internal/servarr/search.go` | `SearchRequest.{Limit,Offset}` are `*int32`; `Values()` omits when nil; `<= 0` guard on limit — a documented divergence, **not a live bug** |
+
+**One correction to ADR-0046's framing, applied in ADR-0047.** ADR-0046's open question 1 called
+`prowlarr.json` *"develop at v2.6.2 … a minor version behind"* the deployment. Measured, it tracks
+neither by version: it is byte-identical at the owner's tag and at `develop`, and stale by 33
+releases against both. ADR-0047 records the corrected premise.
+
+## EXPL2.2 — The guard, split across the network line
+
+The whole design turns on one constraint from the top of the `Makefile`: `make check` makes exactly
+two network calls, both to vulnerability databases, and `check-offline` is those two removed. A third
+would let a GitHub outage redden an unrelated commit. So the guard is split, following the shape
+`integration` and `bench` already use:
+
+| Guard | File | In `make check`? | Network | Catches |
+|---|---|---|---|---|
+| `TestVendoredSpecIsThePinnedBlob` | `internal/servarr/contract_test.go` | **yes** | no | the vendored bytes changing under the suite |
+| `TestKnownSpecDivergencesStillHold` | `internal/servarr/contract_test.go` | **yes** | no | the `Limit`/`Offset` `int?` gap silently closing (spec regenerated) or UsArr's pointers being "corrected" to match the stale spec |
+| `TestUpstreamRefsStillShareThePinnedBlob` | `internal/servarr/specdrift_upstream_test.go` (`//go:build upstream`) | **no** — `make spec-drift`, opt-in on `USARR_SPEC_DRIFT=1` | **yes** | the day either ref stops carrying the pinned blob |
+
+`build-tagged` gained `go vet -tags=upstream ./...`, because `go build` does not compile `_test.go`
+files and the `upstream` test is one — so the gate can *type-check* the network test without being
+allowed to *run* it.
+
+## EXPL2.3 — Each new guard fired before it was trusted, against the reason it exists
+
+A planted violation absorbed by a different exemption is indistinguishable from a working rule, so
+each guard was made to fail for its intended reason and the message judged against the 2am bar. The
+verbatim output is in the thread; the summary:
+
+* **Blob pin** — pointed `vendoredSpecBlob` at a wrong SHA: `TestVendoredSpecIsThePinnedBlob` failed
+  naming the computed blob, the pinned blob, and the two different actions (re-vendored → update the
+  constant and re-read `knownSpecDivergences`; not re-vendored → `git checkout -- api/specs/prowlarr.json`).
+* **Nullability persistence** — set the spec's `limit` param to `nullable: true`:
+  `TestKnownSpecDivergencesStillHold/SearchResource.Limit` failed calling it *the GOOD failure*,
+  telling the reader the spec was regenerated for the first time since 2025-06-07 and to delete the
+  entry, re-read the whole document, and update ADR-0047.
+* **Pointer** — changed `SearchRequest.Limit` to a plain `int32`: the same test failed telling the
+  reader *the spec is the stale one*, that `limit=0` would go back on the wire, and to restore the pointer.
+* **Three-outcome skew message** — deleted a modelled schema so `specSkewAdvice` printed: the message
+  laid out all three of *their Prowlarr is too old / our expectation is too new / the document is
+  simply stale*, each with a different fix.
+* **Drift check** — ran `make spec-drift` with `vendoredSpecBlob` set to a wrong value:
+  `TestUpstreamRefsStillShareThePinnedBlob` failed against the network naming its three readings
+  (local mistake first, upstream regenerated, one ref moved) and stating a failure there is news, not
+  a gate.
+* **Opt-in refusal** — `make spec-drift` without `USARR_SPEC_DRIFT=1` refused with the pointer to §7.2,
+  and the `upstream` test skipped rather than hanging on the network.
+
+## EXPL2.4 — What this pass did NOT do
+
+* **No `web/` change**, and no change to any vendored spec file — `api/specs/prowlarr.json` is
+  byte-for-byte what upstream serves (`134d31d7…`); the guard pins it, it does not edit it.
+* **No third network call in `make check`.** The drift check is opt-in behind a build tag and its own
+  target; the gate's two-call contract is intact and `check-offline` still drops to zero.
+* **No runtime behaviour change.** `SearchRequest`'s pointers, `Values()`'s omit-when-nil and the
+  `Limit is > 0` guard are exactly as they were; only what a green *means* changed, plus a proof that
+  the divergence is still live.
