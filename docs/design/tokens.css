@@ -301,7 +301,20 @@
  * --------------------------------------------------------------------------- */
 
 :root {
-  --spacing: 4px;   /* Tailwind's base unit: p-3 == 12px, gap-2 == 8px         */
+  /* `--spacing: 4px` was declared here, commented "Tailwind's base unit: p-3 ==
+   * 12px, gap-2 == 8px", and is REMOVED. It was never a token of this scale:
+   * Tailwind read it to derive those utilities, and nothing else in the
+   * repository ever read it. Established rather than assumed — the only other
+   * match across web/, internal/ and the mockups is the parity test's own
+   * allowlist entry, which exists to record that app.css deliberately does NOT
+   * port it. That is a reader of its absence, not a consumer of its value.
+   *
+   * With the Tailwind path retired (§0, ADR-0025's 2026-08-16 amendment) it had
+   * no reader left, and a token with no reader is not a seam, it is a leftover.
+   * The 4px base unit is not lost: it is the scale below, which is what every
+   * padding, margin, gap and offset actually resolves to. A future Tailwind
+   * adoption re-declares it, and §10 says so rather than leaving it to be
+   * rediscovered. */
 
   --space-0: 0;
   --space-1: 2px;   /* hairline gap: icon-to-label inside a chip               */
