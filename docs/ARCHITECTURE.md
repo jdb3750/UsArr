@@ -3246,8 +3246,15 @@ carries eleven groups in a `SearchResultGroup`.
    consequence was unaddressed: a user who types `dune`, clicks **Movies 3** — the most natural
    action for someone looking for the film — gets *Dune: Part Two*, *Dune* (1984) and
    *Jodorowsky's Dune*, and **not** *Dune* (2021), which is filed under Ebooks on a linked row, with
-   nothing on screen explaining the absence. So: *"1 more film is on a linked row in the **Ebooks**
-   group: Dune (2021). — [Show it]"*. The data is already there; it is what renders the
+   nothing on screen explaining the absence. So the group's foot carries **a sentence and, beside
+   it, a link** — *"1 more film is on a linked row in the **Ebooks** group: Dune (2021)."* and
+   *"Show it"*. **Two elements, written here as two.** The earlier form of this line ran them
+   together inside one pair of quotes as `… Dune (2021). — [Show it]`, where the em dash was §17
+   notation for the join between a sentence and a control and the brackets were notation for the
+   control; quoted like that it reads as one string a user is shown, and `check.mjs`'s §13 sweep
+   read it as exactly that. It is notation, so the notation is unambiguous instead: one
+   italic-quoted span per element the user actually sees, and notation kept outside the quotes.
+   The data is already there; it is what renders the
    `also film, 2021` chip.
 
 5. **The library column renders only when it varies *within the group it is in*.** The earlier rule
@@ -3766,9 +3773,16 @@ not restate it** (ADR-0035). Two proposals are decisions rather than defaults:
   inline note** — *"Joining Kavita Manga into Comics as a second source."* **The merge key is stated
   rather than left to be discovered: case-insensitive, whitespace-trimmed, per user.**
   **And the one-way door is marked per row.** *"Editing any proposal marks that library
-  user-managed, after which a later connect can only offer to add sources — never reshape it"* is a
-  permanent decision delivered as helper text beside the Accept button, with no indicator of which
-  rows have crossed it. Each edited row carries the mark, in the row.
+  user-managed. After that, a later connect can only offer to add sources. It can never reshape the
+  library."* is a permanent decision delivered as helper text beside the Accept button, with no
+  indicator of which rows have crossed it. Each edited row carries the mark, in the row.
+  🔍 The wording is three plain sentences because §13 bans the mid-sentence em-dash beat in UI
+  microcopy, and the earlier form was a 22-word sentence built on one, ending
+  `… can only offer to add sources — never reshape it`. The meaning is unchanged; only the beat is
+  gone — and that quotation is in backticks rather than the italic-quoted copy form on purpose,
+  because a retired string quoted as shipping copy is still shipping copy to the sweep. It is the
+  construction §13 bans on its own stated ground, and no word floor was ever going to catch it,
+  which is why `check.mjs` now reads §17's own shipping copy rather than trusting it.
 - ⚠️ **From the milestone Audiobookshelf lands in, not v0.1: Audiobookshelf is offered as *two*
   libraries — Ebooks and Audiobooks — over its one
   `mediaType=book` library**, which ABS itself cannot do: it distinguishes the two only at item
