@@ -8659,3 +8659,359 @@ not touch. **What the green attests is that no credential-shaped string is in th
 merge which brought `00006_kavita_subtypes.sql` and its 425 lines of migration tests in did not break
 them.** It says nothing about whether the prose above is true — that was established by reading each
 site against §16, the ADRs and `reference/providers.md`, and VN9.5 records those checks.
+
+---
+
+## M5.60 The deploy scripts, adversarially reviewed — one false green reproduced, one predicted bug rebutted
+
+Review of `83ec9e0`, `61291e4`, `e77c4ad` on `claude/hearth-thread-70gy9v` (`usarr --version`,
+`deploy/update.sh`, `deploy/status.sh`, the `make deploy` wrappers, `DEVELOPMENT.md` §12). Everything
+below was **executed**, not reasoned about: a fixture host — bare origin + clone, fake `systemctl`
+and `journalctl` backed by state files, a `make build` stand-in that stamps the real short `HEAD`
+into a `--version`-answering binary — let every branch of both scripts be fired deliberately. Bash
+5.2.21, git 2.43.0, shellcheck 0.9.0, GNU coreutils `install`.
+
+### Rebutted — the predicted mid-run self-rewrite does not happen
+
+The review brief predicted the sharpest bug in the change: `deploy/update.sh` lives inside the
+checkout it updates, so `git merge --ff-only` rewrites the file bash is executing, and bash reads a
+script lazily by byte offset. It does not reproduce, and the reason is specific.
+
+**Measured.** A fixture whose script printed markers, slept, and fast-forwarded a commit that grew
+`deploy/update.sh` by 2 471 bytes — shifting every subsequent offset — ran to completion on the old
+content, exit 0. `strace` gives the mechanism: git does `unlink("deploy/probe.sh")` then
+`openat(..., O_WRONLY|O_CREAT|O_EXCL)`. It never truncates in place. The running shell keeps its
+descriptor on the now-orphaned inode and reads the file it started with.
+
+🚩 **A negative from a test that cannot detect anything is worth nothing**, so the detector was fired
+against the case git *doesn't* do — an in-place truncating rewrite of the same path. Same inode
+before and after, and bash resumed at the stale offset and executed a fragment of a padding line:
+`./p.sh: line 7: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA: command not found`, exit 127. The fixture
+detects the bug; git's checkout does not commit it. `status.sh`'s `git fetch` was checked separately
+and leaves the worktree byte-identical (inode, size and mtime unchanged; zero worktree-path syscalls
+in its `strace`). **No change made.**
+
+### Applied — `update.sh` reported `update: OK` over a dead service
+
+The one real false green, and it is the exact failure the script exists to remove. `cmd/usarr/main.go`
+logs `starting UsArr` at **:98**, but `buildApp` — database open, migrations — is at **:114** and the
+listener at **:155**. A port clash, a failed migration or an unreadable master key therefore emits a
+perfectly good startup line carrying the *new* commit and then exits. The script's final check read
+that line and stopped.
+
+**Measured.** A fixture service that logged the new commit and died two seconds later:
+`update: OK — usarr is running d0b54e7`, exit 0, with the unit `failed` a second afterwards. A unit
+with `Restart=always` is worse, because it flaps back to `active` between crashes and `is-active`
+alone reads healthy mid-loop.
+
+Fixed by re-reading **both** `is-active` and `MainPID` after a three-second settle: a state that is
+no longer `active` means it started and died; a `MainPID` that has moved means systemd is restarting
+it as fast as it dies. Both branches were then fired and both now stop the script with a message
+naming which shape it is. The happy path stays green.
+
+### Applied — `status.sh` reported `UNVERIFIED` on healthy long-running hosts
+
+`journalctl -u "$SERVICE" -n 2000` windowed the search for a line that is emitted **once, at start**.
+Any host that has logged past the window loses it. **Measured**: a fully current fixture — checkout,
+binary and process all at the same commit — reported `VERDICT: UNVERIFIED`, exit 2, with 2 100 lines
+in the journal. That is the steady state on a box that has been up a while, not an edge case.
+
+The first fix was wrong in the same way and is recorded because it was: raising the window to `-n
+5000` and pinning it to `_PID` still dropped the line at 6 000 lines. Windowing is the defect;
+raising the number moves the threshold. It now reads **forwards** from the process's own journal
+(`journalctl _PID=… | grep -m1`), unbounded, because the startup line is among the first things that
+process logs — verified green at 20 000 lines. A windowed `-u` fallback remains for a unit whose
+logging PID is not `MainPID`.
+
+### Applied — three smaller ones, each fired before being trusted
+
+- **A failed `systemctl restart` did not name the state it left.** It is the *only* failure in the
+  script that genuinely half-updates the host — `install` already succeeded, so the new binary is on
+  disk and the next restart from any source picks it up — yet its message was the one that said least,
+  while the `systemctl`-absent and unit-unknown paths above it both spelled it out. §12.1's claim that
+  "each failure names what state the host was left in" was false at exactly this point; it is now
+  true.
+- **"Found the line, could not parse a commit from it" was reported as "could not read a line".** A
+  binary built with `go build` instead of `make build` stamps `commit=unknown`, which is not hex, so
+  the extraction yields nothing while the line sits right there in the journal. Two causes, two fixes,
+  now two messages.
+- **A unit that is not `active` exited 2 (`UNVERIFIED`) rather than 1 (`STALE`)**, because a dead
+  service leaves no `MainPID` and so no journal reading. A service that is down is an answer, not a
+  missing reading.
+
+### Applied — the `--version` sample in §12.1.2 was invented
+
+The block showed `usarr v0.1.0-12-gf722054`. **`git tag` on this repo is empty**, so
+`git describe --tags --always --dirty` falls through to `--always` and yields a bare short SHA. The
+sample implied a `v0.1.0` release that has not been cut — invented status, and the kind a reader
+would copy. Replaced with a real capture from a binary built at `e77c4ad`, plus what the line becomes
+once someone does tag, and why the scripts are unaffected either way (they read `commit:`, which stays
+a bare short SHA).
+
+### Checked and found sound — recorded so the next pass does not re-derive it
+
+- **The commit assertion is not vacuous.** `Makefile:78-79` stamps `COMMIT` from
+  `git rev-parse --short HEAD`; `update.sh` compares against the same command in the same repo at the
+  same moment, so the abbreviation length cannot disagree. `-dirty` lands on `VERSION` only, never on
+  `COMMIT`, so `USARR_ALLOW_DIRTY=1` still gets a real comparison. A `COMMIT=` overridden in the
+  environment (`?=`) makes the assertion *fail loudly*, which is the correct direction. Detached HEAD
+  is caught earlier by the branch check.
+- **The journal regex survives both real log formats.** Not asserted — the actual binary was run
+  under `USARR_LOG_FORMAT=json` and `=text` with a `url_base` set, and the `sed` lifted `e77c4ad` from
+  both. `auto`, `text`, `json` are the only values `config.go:416` admits.
+- **Nothing either script runs is destructive.** No `git clean`, no `reset --hard`, no `checkout --`,
+  no `cp`/`mv` onto a busy path. `install -m755` was straced over a *running* binary: `unlinkat` then
+  `openat(O_CREAT|O_EXCL)`, inode replaced, the running process unharmed — which is what makes the
+  `(deleted)` check in both scripts mean what it claims.
+- **`ErrVersionRequested` cannot be swallowed or mistaken.** `config.Load` is called from exactly two
+  places — `LoadOS` (`main.go:77`) and tests that pass explicit `Args` — so the nil `Config` returned
+  alongside the sentinel is unreachable by any other caller. It is returned unwrapped and matched with
+  `errors.Is`.
+- **Nothing assumes `sudo`, a TTY or `/config`.** `sudo` appears in `update.sh` only in a comment
+  explaining its absence. The corepack download prompt is already disabled in the `Makefile`, so
+  `make build` under the script does not block on stdin.
+- **`shellcheck -S style` is clean on both scripts**, before and after these changes.
+
+### Raised, not fixed
+
+- **`usarr --help` exits 1**, printing `usarr: parse flags: flag: help requested` to stderr before the
+  usage block. `flag.ErrHelp` is wrapped by `parseFlags` like any parse failure. Pre-existing, not
+  touched by this change, and `--version` did not make it worse — but the two flags are now a pair an
+  operator will reach for together, and one of them answers on stderr with a failure status.
+- **A shallow clone is not handled.** `BEHIND="$(git rev-list --count …)"` on a grafted history can
+  fail, and under `set -e` the assignment aborts the script with no message of its own. The documented
+  target is a full clone, so this is a real gap in an undocumented configuration rather than a defect
+  in the one that ships.
+- **§12's "`install` replaces the destination by creating and renaming"** is right about the effect and
+  wrong about the mechanism — it is unlink-then-create, per the `strace` above, with no rename. The
+  sentence predates this change and the conclusion drawn from it holds, so it was left alone.
+
+---
+
+<a id="mwp-01"></a>
+# MWP-01 — the write path ADR-0041 refused to decide, decided; and the four §16 sentences that had quietly gone with it
+
+**Prefix note.** `MWP-` = *minimal write path*. The generic `M5-` prefix is **retired** after four
+collisions, and `ADRC-` was taken by the previous pass on this thread. `MWP-` was verified unused
+across `docs/` and **every remote head** — a `git grep -c 'MWP-' origin/$b -- docs/` per head from
+`git ls-remote --heads origin` returned nothing on all eighteen — before it was committed to.
+
+🚩 **It is the second prefix this entry chose, and the first one is worth recording because
+[`DEVELOPMENT.md`](./DEVELOPMENT.md) §11's new rule is what rejected it.** This entry was drafted as
+`WPQ-` (*write-path question*), which is unused and passes §11's two hard rules — multi-letter, and
+not `SYNC-`. **It fails the reasoning underneath them.** `WQ-` is a live prefix in this file and it is
+*the write-queue prefix* — `WQ-05` is the entry ADR-0039 closed about `write_queue.state`. `WPQ-`
+differs from it by a single inserted letter **in the same subject area**, which is a sharper form of
+the hazard §11 names for `SYNC-` beside `SW-`: there the risk is a reader mistaking the topic, here it
+is a reader mistaking the *entry*, with both prefixes pointing at the same table. Renamed before
+landing, at no cost since nothing had been pushed. **The general rule, stated for the next thread: a
+prefix must be unused *and* not a near-miss of a live prefix in its own subject area.**
+
+## MWP.1 — What was decided, and by whom
+
+**[ADR-0042](./DECISIONS.md#adr-0042) — *v0.1's minimal write path re-sequences with the \*Arr
+adapters; Sonarr and Radarr stay on the roadmap*, Accepted, owner-decided 2026-08-17.**
+
+[ADR-0041](./DECISIONS.md#adr-0041) moved Kavita into v0.1 and took Sonarr and Radarr out, which left
+§16.1's *"minimal write path (`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue"*
+addressing nothing — all four verbs are Servarr operations and Kavita is a read-only catalogue source
+with no command sink. ADR-0041 flagged it as *"NOT decided here"* and routed it to §16's owner.
+
+**✅ [M5-32](#m5-32)'s open question is now answered.** That entry applied ADR-0041 to §16 and left
+this one standing; `M5-34`'s *Raised, not fixed* list carried it forward as *"v0.1's minimal write
+path still has no target, unchanged since `M5-32` raised it."* **Neither entry is edited** — both are
+dated records and correct as written; this entry is the answer they were waiting for.
+
+**The owner's words, verbatim, 2026-08-17:**
+
+> *"sure that's fine. we should add them though or at least the capability to add them as they're very
+> popular services."*
+
+He approved the re-sequencing and attached a condition. **The condition is written into ADR-0042's
+Decision as clause 5, in his terms, rather than left to §16's sequencing to imply** — that is the
+thing he would be upset to find quietly dropped later, and an implication is not what he asked for.
+**Equally, it is not overstated**: he named no milestone, §16.1's table holds three slots and none is
+theirs, so ADR-0042 says the capability is preserved and points at §16 for *when*. The gap is recorded
+as an **open question ADR-0042 raises and does not close**, not papered over with an invented number.
+
+## MWP.2 — The `write_queue` claims, measured against the tree rather than taken from the brief
+
+Every claim ADR-0042 makes about the queue was read off `internal/db/migrations` and `internal/` on
+`111371d`. **All four held.**
+
+| Claim | How it was checked | Result |
+|---|---|---|
+| `write_queue` ships as a table with **no writer** | `grep -rn "write_queue" --include='*.go' internal/ cmd/ \| grep -v _test.go` | ✅ Only `internal/db/spike/` (behind `//go:build bench`, and it **reads**: `SELECT id, kind FROM write_queue`) and a comment at `internal/httpapi/grabs.go:58` — *"Nothing writes `write_queue` yet."* Migration 0005's rebuild-guard `RAISE(ABORT, …)` message says the same |
+| [ADR-0039](./DECISIONS.md#adr-0039) left `state` **unconstrained**, so a writer needs **no migration** | `00005_library_sync.sql`, the `write_queue_new` DDL | ✅ The column is `state TEXT NOT NULL DEFAULT 'pending'` under an explicit **`-- NO CHECK`** comment giving the reason. **And a fact the brief did not claim, which strengthens it: `kind` has never had a `CHECK` either** — 00005's header says so at `:139`, and the DDL comment already lists `add\|delete\|monitor\|unmonitor\|grab\|tag_add\|refresh`. So neither the verbs nor the states need widening, and all three indexes (`ux_wq_idem`, `ix_wq_work`, `ix_wq_runnable`) already exist. **No migration at all**, as stated |
+| `handleGrab` dispatches **synchronously** | `internal/httpapi/grab.go:72`ff | ✅ Reads the candidate in scope, resolves a searcher, calls `searcher.Grab(ctx, rscope, candidateID)` inline under `grabTimeout`, then writes `audit_log` and `provenance`. No enqueue, no `202 {command_id}`, no worker |
+| `grab` is **max one attempt** | `ARCHITECTURE.md` §7.6 | ✅ *"`grab` is max one attempt plus a manual button, because a blind retry is a double download"*, restated as decision 4 of [ADR-0012a](./DECISIONS.md#adr-0012a) |
+
+🚩 **One correction to the brief's own file reference, recorded because it changes nothing but should
+not propagate.** The brief cites `internal/httpapi/grab.go`'s comment; the *"Nothing writes
+`write_queue` yet"* comment is in **`grabs.go`** (the read side), not `grab.go` (the write side). Both
+files exist. `handleGrab` is in `grab.go` as the brief says.
+
+**What the measurement changed about the decision, rather than merely confirming it.** ADR-0041 framed
+the two options as symmetric — re-sequence, or *"stay and be exercised only by Prowlarr's grab path"*.
+They are not. Because the grab path has never touched the queue, "stays" would not have preserved an
+existing user; it would have committed v0.1 to **building** its first queue writer, worker and
+verification loop for a path that completes inside one HTTP handler and may not retry. ADR-0042 says
+so in its Context and rejects that alternative on the measurement, not on preference.
+
+## MWP.3 — §16, swept rather than spot-fixed
+
+The previous two passes each found more falsified sentences than expected, so §16 was read end to end
+and grepped for `write path`, `write_queue`, `command sink`, `monitor`, `unmonitor`, `optimistic`,
+`durable` and `act on it` within its own line range. **Four sentences beyond the open question itself
+had gone false or misleading.** Each is amended in place, quoting what it used to claim, per
+`DEVELOPMENT.md` §11's rule that design documents are corrected in place while ADRs are annotated.
+
+| Site | Was | Now |
+|---|---|---|
+| §16.1, v0.1 entry — **the open question** | *"⚠️ **The minimal write path** … **had only \*Arr targets and now has none** — whether it re-sequences with them or stays for Prowlarr's grab path alone is this section's call to make"* | The call, made: **re-sequences with the first \*Arr adapter, specified not built** — with the measurement that killed the second option, the note that **v0.1 still has a write path and Search-and-Grab is now the only one**, the **no-migration seam**, and the owner's Sonarr/Radarr condition |
+| §16.1, v0.1 entry — **command sinks** | *"**No command sinks** — no Lidarr, no LazyLibrarian, no Mylar3, no Kapowarr."* | *"**No command sinks — none at all**"*, with the ⚠️ explaining that the four-item list enumerated only [ADR-0032](./DECISIONS.md#adr-0032)'s deferrals **because Sonarr and Radarr were then v0.1's kept sinks**. After ADR-0041 + ADR-0042 the honest statement is **zero sinks and no command path to one** |
+| §16.1, **the v0.1 label** | *"It reads your library, it is fast, and **you can act on it**."* — unqualified | Label **kept**, with a ⚠️ narrowing what *"act on it"* buys: it was funded by grab **and** the four \*Arr verbs; the second re-sequences out, so acting in v0.1 is **search-and-grab, one verb rather than five**. Still a real action on the world outside UsArr, which is what the label claims |
+| §16.0, **the libraries justification** | *"a library binding carries the request destination **that v0.1's one write path routes on** — so it is load-bearing in v0.1"* | The write-path clause is **withdrawn from the ground list outright**: nothing in v0.1 *routes* on a destination now. **The subsystem stays on the two grounds that never depended on it** — four tables owed either way, one of the five essential screens. See MWP.7: §17.8 landed mid-pass and took this ground further than this decision alone would have |
+| §16.1, **the `Recent grabs` cost estimate** | *"…because nothing writes `write_queue` **yet**"* | ⚠️ **The *yet* is what changed**: no v0.1 work will write it, so the queue-state column is a **post-v0.1 addition, not a gap v0.1 still owes**. The estimate is left standing unretrofitted, for the reason §16 already gives |
+
+**One sentence was checked and deliberately left alone.** §16.1's *"v0.1's only write path produces a
+multi-gigabyte download that UsArr forgets on the next navigation"* was loose when written — v0.1 then
+had two write paths — and this decision makes it **exactly true**. Amending a sentence that has just
+become correct would be noise.
+
+## MWP.4 — ADRs annotated, never rewritten
+
+`DECISIONS.md`'s new *How an ADR is amended when the world moves under it* section was applied
+literally: **index row · `Status:` line · dated block under it · inline flag on the falsified
+sentence.** Three ADRs qualify.
+
+- **[ADR-0041](./DECISIONS.md#adr-0041)** — index row, Status line, a dated `> ⚠️ AMENDED` blockquote,
+  a ✅ **ANSWERED** inline flag on its *"NOT decided here"* consequence bullet, and a note after its
+  **📋 Proposed replacement** code block recording that the block has been applied and its own closing
+  ⚠️ clause superseded in §16. **The fenced block itself is left byte-unchanged** — it is a dated
+  record of what was proposed, not a description of §16 today, and the note says so.
+- **[ADR-0036](./DECISIONS.md#adr-0036)** — its libraries consequence bullet justified the subsystem
+  partly on *"the request destination v0.1's write path routes on"*. Index row, Status line, a second
+  dated blockquote (its ADR-0041 one is untouched) and an inline flag. **Its conclusion stands**; one
+  of three grounds is gone. The blockquote also records that the bullet's closing examples — an Anime
+  library on a Sonarr tag, a Films library spanning two Radarrs — were **already dead by ADR-0041**.
+- **[ADR-0012a](./DECISIONS.md#adr-0012a)** — **nothing it decided is altered**, and it is flagged
+  anyway because one supporting sentence says *"every **v0.1** write is reverted by the next sweep"*,
+  which now names writes no longer in v0.1. Index row, Status line, dated blockquote listing what
+  survives (the whole state machine, `verifying` + TTL, the idempotency rule, the guard, `grab` at max
+  one attempt), inline flag on the sentence. **The guard's reasoning is unaffected; it first bites a
+  milestone later.**
+
+**[ADR-0039](./DECISIONS.md#adr-0039) was checked and needs no flag.** Its 2026-08-17 correction
+already says the Go `state` vocabulary is *"owed by whoever writes the first `write_queue` writer"* and
+that nothing validates it today. ADR-0042 **narrows** that obligation to a known milestone rather than
+falsifying it, and records the narrowing as a consequence of its own.
+
+## MWP.5 — `CLAUDE.md`
+
+Its roadmap bullet still asserted ADR-0041's two casualties. **Before:**
+
+> *"**v0.1** — the \*Arr library sync (Sonarr, Radarr) + search, on a six-type schema, plus the Prowlarr
+> search-and-grab request path. Prove the replica thesis on real data. **No catalogue source ships in
+> v0.1**; Navidrome, Audiobookshelf, Kavita and Komga follow one at a time (§16.1)."*
+
+**After**, and the shape of the fix is the point: the standing rule is *status is read off the tree,
+not off a document*, and the same logic applies to a **scope** line that has now moved twice. Naming
+the current adapter would just go stale a third time, so the bullet **names the invariant and points
+at §16** instead — *"the sync core behind **one** catalogue adapter"*, *"**read §16.1, not this
+line**"*, and the rule that has survived every move: **one source proven on real data before a second
+adapter, and everything displaced is re-sequenced, not cut.** A ⚠️ records both falsified claims
+verbatim so the correction is legible rather than silent. `M5-34`'s *Raised, not fixed* named this
+line as owed and said *"it should not survive another sweep"*. **It did not.**
+
+## MWP.6 — Raised, not fixed — routed to other threads
+
+**Found while sweeping; deliberately not touched.** Two are in `ARCHITECTURE.md` §17, which this
+thread is barred from, and one is a §16 status claim falsified by a *different* thread's commit rather
+than by this decision.
+
+- 🚩 **§16's *"none of the three exists in the tree today"* is now FALSE, and it is a status claim in
+  this thread's own section.** It refers to `work_book` / `work_comic` / `work_comic_issue`, and
+  **`internal/db/migrations/00006_kavita_subtypes.sql` creates all three** (`:129`, `:153`, `:180`;
+  commit `d0a02aa`, *"feat: migration 0006 — the three subtype tables Kavita writes — M5-37"*). **Not
+  fixed here on purpose:** it is falsified by M5-37's migration, not by this decision, and that thread
+  may already be amending it — two threads editing the same sentence is exactly the collision
+  `DEVELOPMENT.md` §11 exists to prevent. **It is a live false claim in a design document and should
+  be routed, not left.** The surrounding blockquote's *"Read `internal/db/migrations` for what
+  exists"* is the correct instruction and now contradicts the sentence above it.
+- 🚩 **§8.5's Search-and-Grab explainer table is stale in two places, and it is §8 — not §16 and not
+  §17.** ⚠️ **Its section number is corrected here:** an earlier draft of this entry called it
+  *"§17.5's"*, which is wrong — §17.5 is *Requests*, and the three-shape explainer is in **§8.5**,
+  *Search-and-Grab mode*. Both defects are ADR-0041's residue, not this decision's. **(i)** Its second
+  row reads *"An \*Arr owns the type but did not request this release (Sonarr, Radarr — **the v0.1
+  case for every grab**)"*; ADR-0041 removed both services from v0.1, so that parenthesis is false and
+  the third row (*"No connected service accepts the type at all"*) is now v0.1's actual case for every
+  grab. **(ii)** Its closing *"Every input is already computed"* paragraph says *"the library's request
+  destination is `none` for four types and an \*Arr for two (§6.5, §17.8)"* — **§17.8 now says no v0.1
+  service can be a destination at all**, so the count is wrong and the §17.8 citation points at text
+  that contradicts it.
+- ✅ **§8.3's blockquote is already fixed and needs no routing.** It asserted *"music, audiobooks,
+  ebooks and comics have **no catalogue source in v0.1**"*, which ADR-0041 falsified. `VN9-01` amended
+  it in `d8130d2` to *"deferred alike for every type v0.1's one catalogue source does not cover"*.
+  Listed here only because an earlier draft of this entry routed it; it was re-checked against the
+  tree before landing rather than relayed.
+- 🚩 **Sonarr and Radarr have no milestone**, which ADR-0042 raises as its own open question rather
+  than closing. §16.1's table numbers three sources and holds no slot for either, and §16's prose says
+  only that they *"arrive too"*. **This decision hangs a second commitment — the write path — off that
+  unnumbered arrival.** Two commitments pointing at a milestone that does not exist is thinner than
+  one, and the owner's *"we should add them"* is a reason to close the gap. **It needs his input, not
+  an agent's guess.**
+- **Nothing was found in `docs/design/` or `docs/PROJECT-INSTRUCTIONS.md`** requiring routing; neither
+  was edited.
+
+## MWP.7 — `VN9-01` landed mid-pass, and it moved one of this entry's own claims
+
+**This pass was drafted on `111371d`, rebased once onto `ddaada9`, and again onto `d8130d2` — which
+carries [`VN9-01`](#vn9-01).** The second rebase conflicted in this file only (both entries append at
+the end) and was resolved by keeping **both**, `VN9-01` then `MWP-01`, with no existing text altered.
+**`VN9-01` was then read rather than assumed**, because it touches the same subject from the other
+side, and it did move something:
+
+- ⚠️ **It falsified a claim this entry had already written.** The §16.0 amendment originally said the
+  request destination *"keeps a live v0.1 use"* as the input the Search-and-Grab explainer picks its
+  wording from. **`VN9-01`'s §17.8 rewrite makes that false**: *"The `Request destination` column does
+  not render in v0.1"*, because **no service v0.1 connects can be a library's request sink at all** —
+  a sink must advertise `Add` under §8.3's capability filter and the Prowlarr path does not, since it
+  posts to Prowlarr's own download client. So the destination cannot be *set* in v0.1, and an
+  explainer that branches on it cannot branch. **The §16.0 amendment was rewritten before landing**:
+  the third ground is **withdrawn outright**, not narrowed, and §16.0 now cites §17.8 for why it is
+  gone further than this decision alone would have taken it.
+- ✅ **Two threads, opposite directions, same conclusion, same day.** This one removed the *routing*
+  that made a destination load-bearing in v0.1; `VN9-01` removed the *column* on the ground that no
+  v0.1 service can be one. Neither knew of the other. **They agree, and §16.0 records the convergence
+  rather than either half alone** — which is the outcome the ownership convention is supposed to
+  produce: §17.8's thread decided §17.8's column, §16's thread decided §16's scope, and the two are
+  consistent without either having edited the other's section.
+- ✅ **`VN9-01` fixed §8.3**, which an earlier draft of this entry had routed. Re-checked, dropped.
+- ⚠️ **It did not fix §8.5**, which is still stale in two places — see MWP.6, including the correction
+  of this entry's own mis-citation of that table as *"§17.5's"*.
+
+**`DEVELOPMENT.md` §11's amended entry-id bullet arrived in the same commit and is what renamed this
+entry's prefix.** See the Prefix note at the top: `WPQ-` → `MWP-`, before landing.
+
+### On the gate for MWP-01
+
+`make check` from a **cleaned lint cache** — `/root/go/bin/golangci-lint cache clean` by absolute path
+first, per `DEVELOPMENT.md` §11's rule that a cached green is a rumour. Binaries, versions and the tail
+are in the commit message.
+
+🚩 **State the green at its real size, because on this diff it proves almost nothing about the work.**
+The diff is **four Markdown files** — `docs/DECISIONS.md`, `docs/ARCHITECTURE.md`, `CLAUDE.md`,
+`docs/REVIEW-LOG.md` — and **not one line of Go, TypeScript, Svelte, SQL or `go.mod`**. Of the gate's
+steps, exactly one reads any of them: `secrets` runs `gitleaks dir .` from the repo root over the whole
+working tree, so the green attests **that these four files leak no credential**. `fmt-check` lists
+`.go` files and runs `pnpm format:check` scoped to `web/`; `lint`, `modverify`, `test` and `vuln` do
+not read `docs/` or `CLAUDE.md` at all. **This repo has no markdown linter and no link checker in
+`make check`**, so nothing mechanical verified a single claim, cross-reference or anchor in this entry.
+What the green really attests is the **negative** — that the tree these edits sit on was not broken by
+them, which for a docs-only diff was never in doubt.
+
+**The load-bearing verification here is manual and is the MWP.2 table**: `grep` over `internal/` and
+`cmd/`, and reading `00005_library_sync.sql`'s DDL, `internal/httpapi/grab.go` and §7.6 directly. The
+`state`-has-no-`CHECK` and `kind`-never-had-one facts in particular were read out of the migration
+rather than taken from the brief, and the `kind` half is a fact the brief did not supply.

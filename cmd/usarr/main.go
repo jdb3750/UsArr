@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -33,6 +34,23 @@ var (
 	commit    = "unknown"
 	buildDate = "unknown"
 )
+
+// printVersion writes the build identity that --version reports.
+//
+// The shape is a contract, not a cosmetic choice: deploy/update.sh compares the
+// commit it prints against the checkout's short HEAD to catch a binary that was
+// never rebuilt, and deploy/status.sh greps the same line. Each field is on its
+// own line with a fixed `key: value` prefix so a one-line `sed`/`awk` can lift
+// the raw SHA out without parsing prose. Changing a key here breaks those
+// scripts silently — they would read an empty commit and could no longer tell
+// stale from current.
+func printVersion(w io.Writer) {
+	// One call, and the write error is discarded on purpose: the only caller
+	// writes to stdout and is about to exit 0. A closed stdout is the caller's
+	// problem to notice, and there is nothing useful this could do about it.
+	_, _ = fmt.Fprintf(w, "usarr %s\ncommit: %s\nbuilt:  %s\ngo:     %s\n",
+		version, commit, buildDate, goVersion())
+}
 
 // drainDeadline bounds graceful shutdown.
 //
@@ -57,7 +75,13 @@ func main() {
 
 func run() error {
 	cfg, err := config.LoadOS(version)
-	if err != nil {
+	switch {
+	case errors.Is(err, config.ErrVersionRequested):
+		// stdout, not stderr, and exit 0: this is the answer to a question, so
+		// it has to be pipeable into grep by deploy/status.sh.
+		printVersion(os.Stdout)
+		return nil
+	case err != nil:
 		return err
 	}
 	log := newLogger(cfg)

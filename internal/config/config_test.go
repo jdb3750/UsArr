@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -387,4 +388,50 @@ func slogLine(t *testing.T, v any) string {
 	h := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
 	slog.New(h).Debug("startup", "config", v)
 	return buf.String()
+}
+
+// TestVersionFlagShortCircuitsLoad pins the two properties --version needs to be
+// usable as "what is installed on this host?": it answers before Load can touch
+// anything privileged, and it does not weaken argument validation.
+func TestVersionFlagShortCircuitsLoad(t *testing.T) {
+	// Go's flag package accepts one and two dashes for the same flag; both are
+	// documented to operators, so both are pinned.
+	for _, arg := range []string{"--version", "-version"} {
+		t.Run(arg, func(t *testing.T) {
+			c, err := Load(Options{
+				Args: []string{arg, "--env-file", "/nonexistent/usarr.env"},
+				Env:  map[string]string{"USARR_PORT": "not-a-number"},
+				ReadFile: func(string) ([]byte, error) {
+					t.Fatal("--version must return before --env-file is read")
+					return nil, nil
+				},
+			})
+			if !errors.Is(err, ErrVersionRequested) {
+				t.Fatalf("Load = %v, want ErrVersionRequested", err)
+			}
+			// A nil Config is the point: there is nothing resolved to use, and
+			// an invalid USARR_PORT alongside it never had to be validated.
+			if c != nil {
+				t.Errorf("Load returned a Config = %+v, want nil", c)
+			}
+		})
+	}
+
+	// The short-circuit must not have turned the FlagSet into a permissive one.
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{args: []string{"--nope"}, want: "parse flags"},
+		{args: []string{"serve"}, want: "unexpected argument"},
+		{args: []string{"--version", "extra"}, want: "unexpected argument"},
+	} {
+		_, err := Load(Options{Args: tc.args})
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("Load(%v) = %v, want an error naming %q", tc.args, err, tc.want)
+		}
+		if errors.Is(err, ErrVersionRequested) {
+			t.Errorf("Load(%v) short-circuited to --version", tc.args)
+		}
+	}
 }
