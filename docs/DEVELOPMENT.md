@@ -1018,14 +1018,19 @@ paragraph describing a repo that no longer exists.
   life; a symbol name is one that does not decay. Cite the symbol; if you give a line too, date it to
   the commit you read it at.
 
-Who leads which area, roughly:
+Who leads which area, roughly. **The map is keyed by area of the repo, not by thread name**, and
+deliberately so: thread names churn — the three this table first named are now five, spread across
+the sixteen branches now on the remote — while the areas outlive all of them. Find your row by the
+paths you are about to touch, not by what your thread is called.
 
-| Area | Led by |
+| Area | Led by the work that |
 |---|---|
-| Go and Svelte source: `internal/`, `cmd/`, `web/` | the implementation work |
-| implementation-status wording in `CLAUDE.md`, `README.md` and `ARCHITECTURE.md` §16 | the implementation work |
-| `ARCHITECTURE.md` §17 and `docs/design/` | the design work |
-| `docs/PROJECT-INSTRUCTIONS.md` | the instructions gatekeeper |
+| `internal/` and `cmd/` — the Go backend | lands backend features and their tests |
+| `web/` — the SvelteKit SPA and its browser checks | lands screens and frontend behaviour |
+| implementation-status wording in `CLAUDE.md`, `README.md` and `ARCHITECTURE.md` §16 | landed the code being described |
+| `ARCHITECTURE.md` §17 and `docs/design/` | owns the screens and the visual system |
+| `docs/PROJECT-INSTRUCTIONS.md` | maintains the project-settings text |
+| `docs/REVIEW-LOG.md` | ran the adversarial review that produced the finding |
 
 **These are leads, not exclusive ownership**, because in practice edits cross the lines routinely.
 `README.md`, `CLAUDE.md` and `ARCHITECTURE.md` are shared documents; a §17 change routinely lands
