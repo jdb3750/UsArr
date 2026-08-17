@@ -4616,3 +4616,187 @@ promise is that findings are never silently dropped — that promise is about th
 tree, and DS-07 is what the gap between the two looks like from the inside. Stated here rather than
 turned into a process: a rule nobody applies at four in the morning would be a third record of
 knowing better.
+
+---
+
+# The status-claim inventory — one rule, twenty-one remaining sites, and two that closed while it was being written
+
+**Date:** 2026-08-17. **Compiled by the instructions gatekeeper from a drift check, not by a
+reviewer, and the gatekeeper is applying none of it.** Every site was re-read against
+**`0656bd9`**, the tip of `origin/main` when the sites were read, because the candidate list came
+out of an earlier check and this repo moves fast enough that part of such a list is routinely
+already fixed. **Three sites were**, between the first read at `0e7839e` and this one, and they are
+recorded as fixed rather than carried. ℹ️ **`main` then moved to `b62eeb3` before this was
+pushed**, and `git diff --stat 0656bd9..b62eeb3` touches `docs/PROJECT-INSTRUCTIONS.md` alone —
+**every site cited below is byte-identical at both**, which is why the reads were not repeated and
+why the pair is named rather than the later SHA alone. The entry exists so the inventory has a durable home and a
+named owner instead of living in cross-session messages, which is the one place a finding reliably
+dies.
+
+## SD-02 — twenty-one sites restate an implementation status they do not own. **Instances of `SD-01`. Queued, not applied.**
+
+**`SD-01` is the governing rule and this is not a second one.** It reads: *A document that is not
+authoritative for a fact should not restate it — it should name the document that is. A restated
+fact has no mechanism holding it in step with the original; it is correct only until the original
+moves, and nothing signals when that happens.* `SD-01` applied it to `DESIGN-DIRECTION.md`'s header
+and recorded that this was already **the second correction of that line's class**; `SD-01a` then
+turned it into a `check.mjs` assertion for the mockup notice. 🚩 **What follows is one missing rule
+applied twenty-one times, not twenty-one findings** — and that distinction is the whole value of
+writing it down. A list of stale lines invites a round of one-off corrections and teaches nothing;
+the rule is what prevents the twenty-second.
+
+ℹ️ **`SD-01`, not `SD-01a`, is the parent, and the choice was made rather than defaulted to.**
+`SD-01a` is the sharper rule — *a guard should assert a **property**, not a **fact*** — but it
+governs sites that have a guard, and its own finding records that the notice it fixed *"was not
+pinned; it was **unguarded**."* **Every site below is unguarded prose.** `SD-01a` is therefore the
+*better fix* wherever a site has somewhere to put an assertion — `check.mjs` for the design tree, a
+test for `Makefile` targets — and it is named as such in the rows where that applies; it is not the
+rule the sites violate. **Both are quoted from the current text at `0656bd9`, not from an earlier
+read**, because `SD-01`'s trailing paragraph was rewritten and `SD-01a` added while this was being
+compiled.
+
+**Placement follows §6.1 rather than inventing one.** That section's convention is *"Nothing above
+is renumbered, reworded or deleted"*, new findings *"take the next free id in their own prefix … so
+nothing existing is renumbered and nothing collides"*, and every claim names the commit it was
+measured on. This entry is a pure append; `SD-02` is the next free id after `SD-01` and `SD-01a`; no
+earlier round's table row is amended, because none of these sites is an earlier finding — the three
+that closed are recorded as closed below rather than as amendments to rows that never existed.
+
+**The fix at every site is one move, and `d11a1ca` is the worked example to copy.** So no row below
+proposes corrected wording — each names **what is actually authoritative for the fact**, and the
+edit is to route the reader there and assert no status locally. `SD-01`'s reason applies unchanged:
+it was *"applied as wording that asserts no status at all rather than as a hedged or dated one,
+because a carefully hedged status claim decays on the same schedule as a careless one."* A refreshed
+count buys only the interval until the next migration lands.
+
+🚩 **THE SCOPE LINE, AND AN OWNER WHO MISREADS IT WILL DESTROY CORRECT HISTORY. Only claims about
+what CURRENTLY EXISTS are in scope. A claim about which migration created a thing is PROVENANCE, it
+does not decay, and it must not be swept.** `docs/reference/schema.md` carries **15** `migration
+000N` mentions and **13 of them are provenance** — *"`user_id` on these two tables arrived in
+migration 0002, not 0001"* (`:768`), *"`acquisition_state` … arrived in migration 0003"* (`:750`),
+*"`ix_audit_actor_action` (migration 0002) serves …"* (`:1047`), *"Inserted by migration 0001"*
+(`:1297`), the `### 5.1 … · **v0.1, migration 0004**` heading, and the rest. **Every one of those is
+a historical fact that is true forever, and deleting them would be a worse outcome than the drift
+this entry logs.** Exactly two of the fifteen — `SD-02e` and `SD-02f` below — say something about
+*how much exists*, and only those two are in scope. **This entry is not "remove migration references
+from `schema.md`."**
+
+### Three states, and two of them are not "open"
+
+⚠️ **A queued work list that marks a site open while somebody is mid-fix invites duplicate work or a
+collision on the same line — the same class of problem the entry exists to prevent.** So every site
+carries one of:
+
+- ✅ **Fixed** — verified gone at `0656bd9`. Recorded below with its commit and left out of the
+  table.
+- 🔶 **Claimed** — another area has said it is running this file as its own pass. Not open; talk to
+  that area before touching it.
+- ⏭️ **Open** — nobody has it.
+
+✅ **Fixed while this was being compiled, all three verified gone at `0656bd9`:**
+
+1. **`docs/reference/schema.md:3-6` — fixed by `d11a1ca`, the derived way.** It had read *"Migration
+   0001 exists and creates `user`, `session`, … `tag_assignment`"* against **four** migrations on
+   disk. 🚩 **It was worse than stale, and this is the part worth carrying: the roster read as
+   COMPLETE while omitting `indexer_catalog`, which `00004_indexer_catalog.sql` creates and which
+   the same file documents at §5.1 — so line 3 contradicted its own document.** A reader had no
+   signal, because a complete-looking list does not advertise its gap. ✅ **The replacement divides
+   authority rather than refreshing the roster**: the file owns the *shape*, `internal/db/migrations`
+   owns *what exists*, and — the clause that makes it hold — *"A table given in full below may still
+   be design-only."* **That is the template for every remaining row.**
+2. and 3. **`docs/design/mockups/README.md:6-8` and `:15-16` — fixed by `2e357a5`, merged as
+   `a19df1a`, and logged as `SD-01a`.** The permanent mockup notice and the README's *"none of this
+   design has been implemented"* both went. ℹ️ **Reported to this compilation as "6 files, 12+
+   occurrences" still outstanding; re-verified, that is no longer the tree.** `grep -rn "none of
+   these screens is implemented" docs/` at `0656bd9` returns **one hit, and it is this log quoting
+   the old string at `:4546`** — the five source pages and the generated `prototype.html` were all
+   regenerated through `build_prototype.py`. The count was true before `a19df1a` and is 0 now, and
+   it is recorded that way because a stale count inside an entry about stale claims would be the
+   joke telling itself.
+
+⚠️ **"Currently true" is not a defence, and 20 of the 21 remaining rows are — 15 true outright and 5 coarse-but-true, against exactly one that is false.** That is
+the finding rather than a mitigation of it: a true restatement is indistinguishable, at the moment
+you read it, from one that went false last night. The verdicts mean only *what the tree said at
+`0656bd9`* — **true**, **false**, or **coarse-but-true** (defensible as written, but reading as a
+narrower or wider claim than the tree supports).
+
+| # | Site | The claim, quoted | At `0656bd9` | Authoritative for that fact | State |
+|---|---|---|---|---|---|
+| **SD-02a** | `docs/reference/crossmedia.md:3` | *"**Status:** designed, not implemented. **Scope:** **v0.3.**"* | **True** — no Wikidata or link-resolution code under `internal/` or `cmd/` | `ARCHITECTURE.md` §16 for scope; the tree for existence | ⏭️ Open |
+| **SD-02b** | `docs/reference/gateway.md:3-4` | *"designed, not implemented … the OpenSubsonic read-only subset is **v0.4**"* | **True** — no OpenSubsonic or OPDS route in `internal/httpapi/server.go`'s mux | `ARCHITECTURE.md` §16; the mux in `internal/httpapi/server.go` | ⏭️ Open |
+| **SD-02c** | `docs/reference/search.md:3` | *"designed, not implemented. **Scope:** tiers 1 and 2 are **v0.1**."* | **Coarse-but-true** — no `search_doc` / `search_fts` / `search_trgm` in any migration, so both tiers are genuinely absent; but `internal/httpapi/search.go` **does** ship a Prowlarr indexer search over SSE, and a reader who knows that reads this header as false | `ARCHITECTURE.md` §16; `internal/db/migrations/` for whether the FTS tables exist | ⏭️ Open |
+| **SD-02d** | `docs/reference/sync.md:3-4` | *"designed, not implemented. **Scope:** channels 1, 3 and 4 plus the write queue are **v0.1**"* | **True** — no sync package; `write_queue` has a table and no writer (`grep -rl write_queue internal/ --include=*.go` returns the migrations, tests, the spike, and one comment in `internal/httpapi/grabs.go`) | `ARCHITECTURE.md` §16; the tree | ⏭️ Open |
+| **SD-02e** | `docs/reference/schema.md:1125` | *"the `REFERENCES work(id) ON DELETE CASCADE` shown above is dropped there … **because `work` does not exist yet**"* | **True**, and 🚩 **it flips the day library sync lands** — the same pin `d11a1ca` just removed from line 3, surviving in the body of the file it was removed from. *(The surrounding sentences about which migration drops the FK are provenance and stay.)* | **`internal/db/migrations/`** | ⏭️ Open |
+| **SD-02f** | `docs/reference/schema.md:1517` | *"Present in the design, **not in migration 0001**, added with the milestone named:"* — the *later tables* appendix header | **True**, and 🚩 **the same pin again**: absence is asserted against migration **0001** specifically, so the header goes wrong the moment a later migration creates any row of its own table. ℹ️ It is the second half of the sentence `d11a1ca` corrected — line 7's *"everything else is in the 'later tables' appendix"* now points here, and here still pins | **`internal/db/migrations/`** for existence; this appendix owns the *milestone* column | ⏭️ Open |
+| **SD-02g** | `docs/reference/providers.md:3-5` | *"There is a Prowlarr client and a working connection test (§4); the registry seam (§1) and the Go provider interface (§2) are designed, not implemented, and **no code has been written for Sonarr or Radarr**"* | **True** — the only Sonarr/Radarr occurrences under `internal/` are comments asserting field-shape equivalence (`internal/servarr/resources.go:21,61,267,285`; `internal/releases/tags.go:38-39,60`) | `ARCHITECTURE.md` §16; `internal/servarr/` and `api/specs/` | ⏭️ Open |
+| **SD-02h** | `docs/reference/security.md:3-4` | *"§1's envelope, AAD binding and `kek_id` column are built (the `usarr key rotate` command is not), and §2 and §5 are built."* | **True** — and it is the most granular status claim in the set, which is exactly what makes it the most expensive to keep true | `internal/crypto/`, `internal/ssrf/`, `internal/db/migrations/`; `ARCHITECTURE.md` §16 for scope | ⏭️ Open |
+| **SD-02i** | `docs/reference/tags.md:3-5` | *"`source:`, `type:`, `format:` and `indexer:` are derived from Prowlarr search results today … `quality:`, persistence into the `tag` tables and any filtering by tag are designed, not implemented."* | **True** — `internal/releases/tags.go` derives them onto the response; no `INSERT` into `tag` or `tag_assignment` exists anywhere in `internal/store/` | `internal/releases/tags.go` and `internal/store/`; `ARCHITECTURE.md` §16 | ⏭️ Open |
+| **SD-02j** | `docs/CONFIGURATION.md:3-8` | *"A first group of keys is now read by shipped code — the listener, the URL base, the data and config directories, logging, trusted proxies, the metadata User-Agent and the secret key (including `_FILE`)."* | **Coarse-but-true** — that enumerates 11 of the 13 `USARR_*` names `internal/config` reads; the two omitted, `USARR_INTEGRATION` and `USARR_RECORD`, are test-harness switches, so the omission is defensible and undeclared. ⚠️ **Same failure mode as `SD-02e`'s predecessor: a roster that reads complete** | **`internal/config`** — `DEVELOPMENT.md` §11 already binds the §2 table, `.env.example` and `internal/config` to land in one commit, so this header restates a fact that trio owns | ⏭️ Open |
+| **SD-02k** | `docs/CONFIGURATION.md:126-132` | *"`USARR_LOG_LEVEL` and `USARR_LOG_FORMAT` are both live … **file logging is not implemented.** `$USARR_DATA_DIR/logs/` is created at startup and stays empty"* | **True** — nothing under `internal/` writes into `logs/` | `internal/config` and the logging setup in `cmd/usarr`; `ARCHITECTURE.md` §16 for the milestone | ⏭️ Open |
+| **SD-02l** | `docs/CONFIGURATION.md:296-299`, restated at `:444` | *"There is no `usarr key rotate`, no `usarr keygen`, and no CLI subcommand of any kind — the binary takes flags only and **exits 1 on any positional argument**. `keys/secret.key.new` is never written: the path is defined in `internal/config` and has no caller anywhere in the tree."* | **True** — `internal/config/flags.go:67` rejects `fs.NArg() > 0`, and `Config.NewSecretKeyPath` (`internal/config/config.go:195`) is referenced only from `config_test.go`. ⚠️ **Stated twice in one file**, which is the restatement defect nested inside itself: two copies now decay independently | `internal/config/flags.go` and `cmd/usarr/` | ⏭️ Open |
+| **SD-02m** | `docs/CONFIGURATION.md:432-434` | *"**It is the target layout, not an inventory of a running install.** Entries marked `[planned]` belong to subsystems that have not shipped … Everything unmarked is created or written by the code on `main`."* | **True**, and ℹ️ **the best-shaped claim in the set** — it declares its own genre and confines the perishable half to a marker instead of to prose. It is still a hand-maintained per-entry status inventory | `internal/config` for what the binary creates. **§5 of this same file is authoritative for the *layout*** — which is the half it does own, and which the rewrite must keep | ⏭️ Open |
+| **SD-02n** | `docs/CONFIGURATION.md:220-224`, restated at `:788` | *"**`USARR_TSNET_*`** — later milestone (§9); documented, not shipped, not in `.env.example`."* / *"**Not in v0.1. Not implemented. Not in `.env.example`.**"* | **True** — no `tsnet` reference in `internal/`, `cmd/` or `go.mod`. **Stated twice** | `go.mod` and `ARCHITECTURE.md` §16 | ⏭️ Open |
+| **SD-02o** | `docs/DEVELOPMENT.md:3-6` | *"**Status: pre-alpha. The first code has landed** … Most of the *layout* is still contract rather than description: commands referencing files that do not exist yet are marked **(not yet)**."* | **Coarse-but-true** as a header; ⚠️ it is also the sentence that **licenses** the markers in `SD-02p` and `SD-02q`, so it is the root of that half of the inventory rather than one more instance of it. Fixing the markers without fixing this leaves the mechanism in place | `Makefile` for what a target does; `ARCHITECTURE.md` §16 for the milestone | ⏭️ Open |
+| **SD-02p** | `docs/DEVELOPMENT.md:168` | 🚩 *"`make dev                   # backend on :8484                  **(not yet)**`"* | 🚩 **FALSE.** `Makefile:284` declares `.PHONY: dev` and `dev:` runs `$(GO) run $(MAIN_PKG) --env-file .env`. ⚠️ **And this file already knows.** `:48` records *"An earlier revision of this line marked the target **(not yet)**, which was stale"* — about a different target, in the same document, **120 lines above a marker carrying the identical defect**. A correction that does not sweep its own file is `SD-01`'s *"second correction of this line's class"* arriving early | **`Makefile`** — the target list is the only thing that can answer whether a target exists | ⏭️ Open |
+| **SD-02q** | `docs/DEVELOPMENT.md:615`, `:628` | *"`deploy/compose/dev-stack.yml` **(not yet)**"* / *"Instead, `make seed` **(not yet)** drives each app's own API after startup"* | **True** — `deploy/compose/` does not exist and the `Makefile` has no `seed` target. ℹ️ **Both are correct today by the same mechanism that made `SD-02p` wrong**: nobody re-walks them, and two of the three happen still to hold | **`Makefile`** and the tree | ⏭️ Open |
+| **SD-02r** | `docs/design/mockups/README.md:269` | *"`prototype.html`'s `<title>` read … It is now *"UsArr screen mockups: static, invented data, nothing implemented"*"* | **True** — `docs/design/mockups/prototype.html:6` matches byte for byte. ℹ️ **The weakest row in the table, and included partly to say plainly that it is NOT the same defect**: this is a dated record of an edit, a genre that is allowed to restate, and its only exposure is that it quotes a live string that `SD-01a`'s third property may yet reword. **Do not sweep it reflexively** | **`prototype.html`** itself | 🔶 **Claimed by the design area**, which is running this README as its own pass — `SD-01a` already landed here |
+| **SD-02s** | `docs/ARCHITECTURE.md` §17.5, the *"Specified above \| Shipped in v0.1 \| Why they differ"* table (~`:3049-3063`) | *"**Six columns** — When · Release · Indexer · Protocol · Size · Outcome"*; *"on the wire as `sent \| sent_outcome_unknown \| unknown`"* | **Coarse-but-true.** Six columns confirmed in `grabColumns` (`web/src/routes/requests/+page.svelte`), though the first header renders `Time`, not `When` — the same file's comment explains why. The wire vocabulary in `internal/httpapi/grabs.go` is **four** values, not three: `wireOutcomeNotSent = "not_sent"` sits beside the three quoted, and the section's own prose does describe it. 📌 **NOT a request to delete the table**, which exists *because* `RG-01.1` found §17.5 describing something that never shipped; the rule asks only that the shipped column cite its two sources rather than assert independently | `internal/httpapi/grabs.go` and `web/src/routes/requests/+page.svelte` for what shipped; `ARCHITECTURE.md` §16 for what was funded | ⏭️ Open |
+| **SD-02t** | `docs/ARCHITECTURE.md:2296-2301` | *"⚠️ **The cost estimate held; the shape it costed did not ship whole.** What landed is `GET /api/v1/grabs/recent` — **six columns, no join, no keyset cursor, a server-clamped `LIMIT`**"* | **True**, and ✅ **deliberately left standing** — `RG-01.1` records the reason: *a cost estimate edited after the fact stops being evidence about estimating*. ℹ️ **Listed as a legitimate exception rather than as an instance**: it is a dated estimate plus an amendment, and it already names §17.5 as authoritative for the difference, which is the move this entry asks for everywhere else | `ARCHITECTURE.md` §17.5, which this passage already names | ⏭️ Open, **as an exception to leave alone** |
+| **SD-02u** | `api/specs/SOURCES.md:69` | *"They are absent because **no code consumes them yet**, and a vendored spec with no contract test behind it is a file that silently goes stale."* | **True** — `api/specs/` holds `prowlarr.json` and this file; `internal/servarr/contract_test.go` is the only consumer. ℹ️ **The claim is also its own rule** (*"Add each one with the client that reads it"*), which is the healthiest form on the list: it is falsified by the same commit that fixes it | **`api/specs/`** — a directory listing beside `internal/servarr/` | ⏭️ Open |
+
+## Owners, taken from `docs/DEVELOPMENT.md` §11 rather than from the routing message
+
+⚠️ **The owner split was re-derived from §11's own map, because assigning it from a recollection
+would be this entry's own defect committed inside the entry that logs it.** §11's map is *"keyed by
+area of the repo, not by thread name"*, and its rows are leads rather than exclusive ownership —
+*"The map says who to talk to, not who is permitted to type."*
+
+| Sites | Owner, in §11's own words | Which part of §11 |
+|---|---|---|
+| `SD-02r` — `docs/design/mockups/README.md` | the work that **"owns the screens and the visual system"** — and it is **already there**, so this row is a hand-off note, not an assignment | `ARCHITECTURE.md` §17 and `docs/design/` |
+| `SD-02s` — `ARCHITECTURE.md` §17.5 | the same row: §17 is design-owned. ✅ **Precedent inside this file**: `RG-01.1` routed §17.5 to the design area on this convention, gave the reason — *"a code thread editing another thread's section is how two threads produce one conflict"* — and the design area applied it | `ARCHITECTURE.md` §17 and `docs/design/` |
+| `SD-02t` — `ARCHITECTURE.md` §16's cost note | the work that **"landed the code being described"** | implementation-status wording in `CLAUDE.md`, `README.md` and `ARCHITECTURE.md` §16 |
+| `SD-02a`–`SD-02i` — `docs/reference/*` | §11 gives no table row; its closing paragraph gives the rule instead: **"`docs/reference/` follows whichever change drove it."** So each file goes to the work that lands the code it describes — the backend work for all nine, with `SD-02e` and `SD-02f` specifically to whoever lands the next migration, which is the commit that falsifies them | closing paragraph, not a table row |
+| `SD-02j`–`SD-02n` — `docs/CONFIGURATION.md` | §11 gives no ownership row; its onboarding bullet binds the file to the backend instead — **"A new setting goes in the §2 table, in `.env.example`, and in `internal/config` in the same commit — one that exists in two of the three is a bug."** So: the work that lands **`internal/` and `cmd/`** | onboarding bullet, plus the `internal/`/`cmd/` row |
+| `SD-02o`–`SD-02q` — `docs/DEVELOPMENT.md` | §11 gives no row for its own file. The facts at issue are `Makefile` targets and `deploy/` paths, so: the work that lands **`internal/` and `cmd/`** and the build | `internal/` and `cmd/` row, reached by the fact rather than by the file |
+| `SD-02u` — `api/specs/SOURCES.md` | §11 gives no row; the fact is which spec `internal/servarr` consumes, so: the work that lands **`internal/` and `cmd/`** | `internal/` and `cmd/` row, reached by the fact |
+
+🚩 **The gap is itself worth reporting. §11's map has rows for `internal/`+`cmd/`, `web/`,
+implementation-status wording in `CLAUDE.md`/`README.md`/§16, §17 + `docs/design/`,
+`PROJECT-INSTRUCTIONS.md` and this file — and none for `docs/reference/`, `docs/CONFIGURATION.md`,
+`docs/DEVELOPMENT.md` or `api/specs/`.** Four of the seven assignments above are therefore derived
+from prose or from the fact at issue rather than read off the table. That is a defensible derivation
+and it is not the same thing as a stated owner. **Offered as the follow-up: either §11 grows four
+rows, or its closing "follows whichever change drove it" rule is restated as covering them.**
+Deciding which is not this entry's to make.
+
+⏭️ **Queued, not applied. No file in the repository was edited for this entry except this one.** The
+gatekeeper compiled and verified the inventory; it owns none of the twenty-one sites, and applying
+another area's wording is precisely what §11's *"announce before pushing an edit to a shared
+document outside the area you lead"* exists to prevent.
+
+**Two things the owners should not have to rediscover.** ℹ️ **`SD-01`'s reason for asserting no
+status at all** — the twenty non-false rows above are its evidence: they are correct, and they are not
+safe. 🚩 **And `RG-01.1`'s observation, which is why a one-directional sweep is not enough** — §17.5
+was *"wrong in BOTH DIRECTIONS AT ONCE"*, doc-behind-tree in one paragraph and tree-behind-doc four
+hundred words later, and the conclusion drawn there holds for every row here: *"nothing checks tense
+against the tree at all."* A sweep that only hunts for *doc is stale* will write the other direction
+back in. `SD-01a` is the one shape that escapes both — a guard asserting a **property** — and where
+a site has a guard that can carry it, that beats prose.
+
+**What was actually done, stated as the method rather than as a verdict.** Each site was read in the
+file at **`0656bd9`**, reached by `git fetch origin && git checkout -B main origin/main` immediately
+before the read; each existence claim was answered by `ls`, `grep -rl` or `git log` over
+`internal/`, `cmd/`, `web/src/routes/`, `api/specs/`, `internal/db/migrations/`, `Makefile` and
+`go.mod` — **not from any other document**. 🚩 **No `make check` result is cited here, and its
+absence is deliberate rather than an omission: `make check` does not read `docs/` at all** —
+`fmt-check` globs `*.go` and prettier runs with its cwd in `web/` — so a green on a docs-only commit
+attests nothing whatever about this prose. Quoting one would be `DEVELOPMENT.md` §11's *"probe the
+condition, not a proxy for it"* violated in an entry about documents claiming things they cannot
+back. ⚠️ **Line numbers are a claim with a shelf life** — §11 says so in as many words — so each is
+dated to `0656bd9` and the quoted string is the durable half of every citation; `docs/reference/schema.md`
+and `docs/design/mockups/README.md` both moved during compilation and their rows were
+re-read after the move. ✅ **Nothing was carried over unverified from the routing messages that
+prompted this**, which is the reason `SD-02p` is in the table (reported as one of ~5 markers, and
+the only false one), the reason `schema.md:3` is recorded as **fixed** rather than open, and the
+reason the mockup banner count reads 0 rather than the 12+ it was handed.
