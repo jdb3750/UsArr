@@ -4537,9 +4537,28 @@ leaving it would have made the paragraph cite two different sections for one rul
 are **not** touched: that is a citation sweep, not a status one, and it is recorded here rather than
 folded in.
 
+ℹ️ **The follow-up has since run, and "three" was an undercount — the sweep found six live sites,
+not four.** The three named above are corrected. Three more carried the same misattribution in code
+comments the grep for markdown never reached: `docs/design/check.mjs`'s §1d CSSOM carve-out
+(*"`--dc-fg` went with §9.7's move of the poster title off the fill"*),
+`docs/design/mockups/usarr.css`'s `.card__t` comment (*"this is §9.7's rule rather than a
+preference"*) and `docs/design/mockups/usarr.js`'s `constrainDominant` deletion note (*"DESIGN-DIRECTION
+9.7 had already ruled that the title and year sit BELOW the tile"*). The last two are copied into
+`prototype.html` by `build_prototype.py`, so it was **regenerated rather than hand-edited**, and its
+two copies moved with them. **The undercount is the reportable part**, and its cause is that the
+citation was counted over `*.md` while three of the six sites are `.mjs`, `.css` and `.js` — a
+corpus chosen by file type rather than by where the rule is actually cited. 🚩 **Two further
+mentions in this log are deliberately left standing**: `D-50` (*"which §9.7 had already ruled
+against"*) and `PG-01` (*"the exact construction §9.2 and §9.7 ban"*). Both are dated records of
+what a commit claimed at its own time, and §6.1's convention is that *"nothing above is renumbered,
+reworded or deleted"*; correcting them would rewrite the evidence rather than the rule. §11's
+superseded *"as of §9.7 no such pair ships"*
+is quoted twice above for the same reason and is not a live citation — that sentence no longer
+exists in the tree.
+
 ---
 
-## SD-01a — a guard that asserts a fact pins the fact. **Applied.**
+## SD-01a — the notice was unguarded, not pinned, and the guard gains the properties it was missing. **Applied.**
 
 **Found.** The mockups' permanent notice — the label `DESIGN-DIRECTION` §13's fabricated-data ban
 grants as its one exception — read *"Static design mockup of UsArr, which is pre-alpha software:
@@ -4549,22 +4568,28 @@ pages and in the published `prototype.html`. **The first half went false when th
 for the same reason). The second half is true, and it is the entire reason the exception exists:
 the data really is invented.
 
-**The finding is the shape, not the sentence.** A guard that asserts a string **verbatim** pins
-whatever that string says. While the claim was wrong such a guard would have been green, and it
-would have **failed the first person to correct it** — which inverts what a guard is for: it stops
-being a check on drift and becomes the drift's enforcement mechanism. *A guard should assert a
-**property**, not a **fact**.* "The footer names its data as invented" is a property and survives
-any honest rewording; the sentence itself is a fact, and pinning a fact makes the guard an obstacle
-to fixing it.
+**The finding is that nothing asserted this sentence at all, and that is the whole of it.**
+`grep -rn "none of these screens"` over the tree returns the five source pages, the generated
+`prototype.html` and `mockups/README.md` — **no check at all**. `check.mjs`'s existing notice sweep
+tested one property already (`/every catalogue source/`, that the notice describes the selected
+install) and simply had no opinion about the rest of the sentence, and `build_prototype.py` asserts
+only that `class="mocknote"` is present. So the string was not pinned; it was **unguarded**, which
+is how it went stale in the first place. 🚩 **A sentence with no assertion over it has nothing
+keeping it true, and will drift silently.** The guard here was **property-based from the start** —
+it asserted one property where three were needed — so the fix below is *the missing properties*,
+not the conversion of a literal into one.
 
-**Recorded precisely, because the near-miss is the instructive part: nothing actually asserted this
-sentence.** `grep -rn "none of these screens"` over the tree returns the five source pages, the
-generated `prototype.html` and `mockups/README.md` — **no check at all**. `check.mjs`'s existing
-notice sweep tested one property already (`/every catalogue source/`, that the notice describes the
-selected install) and simply had no opinion about the rest of the sentence, and `build_prototype.py`
-asserts only that `class="mocknote"` is present. So the string was not pinned; it was **unguarded**,
-which is how it went stale in the first place. The rule holds from either direction, and it is what
-the replacement is built on rather than a literal.
+**The general rule survives; it is the diagnosis of this incident that it is not, and an entry that
+confused the two would misteach the next reader.** The rule: a guard that asserts a string
+**verbatim** pins whatever that string says. Had such a guard existed here it would have been green
+while the claim was wrong, and it would have **failed the first person to correct it** — which
+inverts what a guard is for: it stops being a check on drift and becomes the drift's enforcement
+mechanism. *A guard should assert a **property**, not a **fact**.* "The footer names its data as
+invented" is a property and survives any honest rewording; the sentence itself is a fact, and
+pinning a fact makes the guard an obstacle to fixing it. **Worth stating in that direction, because
+it is the direction the fix took: a literal assertion over this notice would have been the defect,
+not the safeguard.** The rule is why the replacement is three properties rather than one longer
+string — it is not what went wrong here, because here there was nothing at all.
 
 **Applied, three properties instead of one.** `check.mjs` now asserts, for **each** install: the
 notice describes the selected install (unchanged); **it names its data as invented**, the half rule
@@ -4631,6 +4656,18 @@ was true when it was measured and is not true after this entry's `<title>` chang
 re-verdicting by the pass that owns it.** `SD-02` is otherwise disjoint from this sweep — no row of
 it names `tokens.css`, which is the one site here that was found by counting rather than by being
 reported.
+
+⚠️ **This entry's own headline and opening argument were corrected after it landed, and the change
+is recorded rather than made silently, because §6.1's convention is that nothing above is
+reworded.** It was first written as *"a guard that asserts a fact pins the fact"*, with the
+verbatim-pinning argument leading and the *"nothing actually asserted this sentence"* finding
+arriving a paragraph later — so the headline asserted a diagnosis the entry's own investigation had
+already ruled out. The two are now in evidence order: the notice was **unguarded**, the guard was
+property-based from the start and gained the properties it lacked, and the pinning rule is kept as
+the counterfactual it always was. **Nothing measured changed** — not a count, not a quoted `FAIL`
+line, not the `check.mjs` behaviour; only the framing over them. Logged here because an entry whose
+headline contradicts its evidence teaches the wrong rule to whoever reads it next, which is a
+sharper failure than a stale sentence.
 
 ---
 
