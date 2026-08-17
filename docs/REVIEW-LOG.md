@@ -4678,6 +4678,18 @@ the strongest evidence this entry has and hiding the flip would waste it. The en
 inventory has a durable home and a named owner instead of living in cross-session messages, which is
 the one place a finding reliably dies.
 
+🚩 **SCOPE, AND IT IS THE FIRST THING TO READ: every verdict in this entry was measured against
+`0656bd9` and means nothing about any later tree. Re-verify your own row against the current tree
+before you act on it.** An inventory published without the SHA it was taken at silently reads as
+*now* to every reader, forever — which is `SD-01`'s own defect committed by the document that logs
+it, and the reason each verdict below carries a commit rather than a date alone. ⚠️ **This is not a
+hypothetical hedge. Two rows needed correcting within about an hour of the entry being written**:
+`SD-02r` went from **true** to **false** under `c2cefa3`, and `docs/design/tokens.css` turned out to
+be **missing from the inventory entirely** — one decay and one gap, found by re-walking the tree and
+recorded below as amendments. ✅ **That is the argument for the caveat, not against the inventory.**
+Both defects were caught by exactly the re-verification this line asks of every reader; an inventory
+that says which commit it saw is falsifiable, and one that does not is merely old.
+
 ## SD-02 — twenty-one sites restate an implementation status they do not own. **Instances of `SD-01`. Queued, not applied.**
 
 **`SD-01` is the governing rule and this is not a second one.** It reads: *A document that is not
@@ -4872,3 +4884,31 @@ stimulus, and it fails just as silently. **Recorded rather than fixed**: nothing
 changing — gitleaks is right to allowlist a documentation example, and `.gitleaks.toml` is
 untouched — what needed writing down is that the next person verifying this step must not reach for
 the most famous fake key on the internet.
+
+### SD-02 — amended dispositions, same day
+
+**Three rows moved within hours of the entry landing, and the mechanism is `§6.1`'s: nothing above
+is renumbered, reworded or deleted, and each amendment names what changed and how it was checked.**
+Verified at **`98916fe`**.
+
+| # | Original | Amended, and what settles it |
+|---|---|---|
+| **SD-02p** | ⏭️ Open — the one **false** row: `make dev` marked **(not yet)** | ✅ **Closed by `8756d02`.** `docs/DEVELOPMENT.md:168` now reads `make dev                   # backend on :8484` with the marker gone. Confirmed on disk at `98916fe` |
+| **SD-02q** | ⏭️ Open — `deploy/compose/dev-stack.yml` and `make seed`, both **true** | ⏭️ **Still open, and now dated in the file itself by `98916fe`**, which is the better outcome: rather than delete two correct markers, it re-derived them (`deploy/` is absent from disk **and** from `git ls-files`; `seed` does not occur in the `Makefile` at all) and wrote the result down with its SHA. 🚩 **That is the shape this entry was asking for and did not think to ask for — a true claim made *checkable* rather than removed.** The same note records `SD-02p`'s marker as false and removed, so the file now carries the distinction between its three markers instead of one blanket licence |
+| **SD-02r** | ⏭️ Open, verdicted **true** | ⚠️ **Amended in place in the table above: FALSE at `a29a07f`.** Cross-referenced here so the two amendments are found together |
+
+✅ **The `§11` ownership gap is closed, by `8756d02`, and it is closed in the direction this entry
+could not choose.** The map gained four rows — `api/specs/`, `docs/CONFIGURATION.md`,
+`docs/DEVELOPMENT.md` and `docs/reference/` — and the last of them answers the open question rather
+than dodging it: *"**has no fixed lead, and that is the answer rather than a gap in this table** — it
+follows whichever change drove it … where a note pins itself to the migration state, it goes to
+whoever lands the next migration, because that is the commit that falsifies it."* ℹ️ **So the
+follow-up's two options were not chosen between; the table grew rows AND one of them states the
+rule.** Every owner assignment in the section above is now readable off `§11` directly instead of
+derived from prose — which retires the 🚩 that section carries, and the 🚩 is left standing as the
+record of why the rows exist.
+
+⏭️ **Still open after all of it: SD-02a–SD-02o, SD-02q, SD-02s–SD-02u — eighteen of the
+twenty-one.** The three that moved are the two the routing message happened to name and the one that
+decayed on its own. **That distribution is worth noticing**: attention went where a message pointed,
+which is exactly the dynamic that put twenty-one sites in one table.
