@@ -6875,9 +6875,8 @@ why they are one finding rather than four.
 ⚠️ **`NOCI-02` already spends the word "fourth" on a different mechanism, and the two must not be
 merged.** Its §NOCI-02.2 numbers the same three forms §NOCI.6 does, then adds *"a fourth, adjacent
 and already logged, is **a guard that cannot see the file it is guarding**"* — the `SW-05`
-correction, where `check.mjs`'s `const SOURCES` (line 454 on `556a029`) omits `web/src/app.css` and a
-`#ff00ff` planted there leaves the checker green at exit 0 (line 454 on `d862526`). **That one hides
-an absence too**: an
+correction, where `check.mjs`'s `const SOURCES` (line 454 on `d862526`) omits `web/src/app.css` and a
+`#ff00ff` planted there leaves the checker green at exit 0. **That one hides an absence too**: an
 unscanned file looks scanned. So the §9.1 mechanism is not `NOCI-02`'s fourth — it is a **fifth** in
 the union of the two entries, and so far the only one pointing the other way. `NOCI-02`'s closing
 line survives the renumber and gets stronger for it: *"in this repo, 'there is a check for that' has
