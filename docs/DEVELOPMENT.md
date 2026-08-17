@@ -1069,6 +1069,15 @@ theory about a filename gitleaks had never printed, because the actual output, `
 with no path in it at all, had been summarised rather than quoted. A summary silently adds detail
 the tool did not give you and drops the detail it did. Paste the line.
 
+**8. A count is a measurement — compute it from the artefact, never from recollection.** Three of
+these landed in one day, across three threads and three files: a total stated over a list that
+contradicted it, twice low and once high, one of them contradicted by its own commit message as
+well. Nobody was careless — each figure was true when it was formed, and then the list moved under
+it and the number did not. The list is the instrument, so **`wc`/`grep` the landed diff or the list
+itself at the moment you write the figure**, not when you first arrived at it. This has ridden along
+as per-brief boilerplate for a while; it is written down here so it stops depending on whoever wrote
+the brief remembering to include it.
+
 **The pattern worth carrying: two of the first three were introduced by the fixes for the other
 two.** That is not bad luck. A fix is written under the assumption that the failure mode is now
 understood, and that is precisely the moment people stop checking for it. Treat a guard you just
