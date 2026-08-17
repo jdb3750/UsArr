@@ -71,7 +71,7 @@ type kindDecision struct {
 // ["Manga","Comic","Book","Image","LightNovel","ComicVine"]. Both cannot be
 // true of the same tree. This code maps what the pinned artefact says, because
 // that is the artefact CI can check; the §17.8 note is recorded in
-// docs/REVIEW-LOG.md as LS-02 and is NOT resolved here — resolving it needs a
+// docs/REVIEW-LOG.md as LS-04 and is NOT resolved here — resolving it needs a
 // fresh read of Kavita's source, which is a network fact this pass could not
 // verify.
 //
@@ -314,7 +314,7 @@ func mapSeries(dto kavita.SeriesDto, d kindDecision) store.CatalogueItem {
 //     every row carrying it comes from a manga/book source, which is true of
 //     Kavita and will stop being true the day an anime source lands. It is
 //     recorded here rather than pre-solved with a namespaced source string the
-//     schema does not list; docs/REVIEW-LOG.md LS-03 carries it.
+//     schema does not list; docs/REVIEW-LOG.md LS-10 carries it.
 func kavitaExternalIDs(dto kavita.SeriesDto) []store.ExternalIdentifier {
 	var out []store.ExternalIdentifier
 	add := func(source, value string) {

@@ -29,7 +29,7 @@ import (
 // assumed, because `library` is a user-scoped table (§1.3 rule 1) and v0.1's
 // single owner is a caller's fact, not this layer's.
 
-// TombstoneUnfiledLibraryID is migration 0005's reserved library 0, "Unfiled".
+// UnfiledLibraryID is migration 0005's reserved library 0, "Unfiled".
 //
 // It is where a work that belongs to no other library is filed, so that §7
 // invariant 5 — every search_doc has at least one search_doc_library row — can
@@ -187,8 +187,16 @@ type BatchResult struct {
 	// not an error (ARCHITECTURE.md §6.4, ADR-0035 §1).
 	Unidentified int
 
+	// SearchDocs counts search-document REBUILDS, not distinct documents. Two
+	// remote items that tier 1 resolves onto one work rebuild that work's single
+	// document twice, so this can exceed the number of rows in search_doc — which
+	// is the honest reading of "work done", and the reason the invariant
+	// assertions count the TABLE rather than this field.
 	SearchDocs int
-	Members    int
+
+	// Members counts library_member writes, one per applied item, on the same
+	// terms as SearchDocs.
+	Members int
 }
 
 func (r *BatchResult) add(o BatchResult) {
@@ -259,7 +267,16 @@ func slugify(name string) string {
 // 'instance' binding would file books into a comic library. 'remote_library' is
 // equality on an id the upstream itself reported (§6.5 rule 3), it is held in
 // service_item_link.remote_library_id, and ix_sil_container exists for precisely
-// this join. See ADR-0042.
+// this join. ARCHITECTURE.md §17.8 is the source; the reasoning above is the
+// whole of it.
+//
+// ⚠️ THIS DECISION IS OWED AN ADR AND DOES NOT HAVE ONE. An earlier draft of
+// this file cited "ADR-0042" for it; ADR-0042 has since landed as *v0.1's
+// minimal write path re-sequences with the \*Arr adapters*, which is a different
+// decision entirely, so the citation was removed rather than repointed. ADR
+// numbers are a shared counter that cannot be allocated safely by reading
+// (DEVELOPMENT.md §11), and writing one here would race the next thread; it is
+// recorded as LS-06 instead.
 //
 // Declined containers (Kind == "") get no library and no source row. They are
 // returned to the caller in neither the map nor an error: the caller already
@@ -345,11 +362,9 @@ func bindOneContainer(
 	// deterministically rather than by a random suffix.
 	base := name
 	for n := 2; ; n++ {
-		got, taken := existing[libraryNameKey(name)]
-		if !taken {
+		if _, taken := existing[libraryNameKey(name)]; !taken {
 			break
 		}
-		_ = got
 		name = fmt.Sprintf("%s (%d)", base, n)
 	}
 
@@ -499,11 +514,16 @@ func (s *Store) ApplyCatalogueBatch(
 	return res, err
 }
 
-//nolint:gocyclo,maintidx // One replicated item is one linear sequence of ten
-// dependent writes; splitting it into ten helpers that each take the same eight
-// values and the same *sql.Tx would move the order into call sites and make the
-// ordering constraints (membership BEFORE the search doc, tier 1 BEFORE the
-// external_id write) invisible. The order is the algorithm.
+// applyOneItem writes one replicated item.
+//
+// It is one linear sequence of ten dependent writes, and it is deliberately not
+// split: ten helpers that each take the same eight values and the same *sql.Tx
+// would move the order into call sites and make the ordering constraints
+// (membership BEFORE the search doc, tier 1 BEFORE the external_id write)
+// invisible. The order is the algorithm, which is why the complexity linters are
+// answered rather than obeyed here.
+//
+//nolint:gocyclo,maintidx // see above: the order is the algorithm
 func applyOneItem(
 	ctx context.Context, tx *sql.Tx, instanceID int64,
 	b CatalogueBinding, it CatalogueItem, now time.Time,
@@ -634,7 +654,7 @@ func applyOneItem(
 		}
 		// The conflict is the merge signal. Undo just this row and carry on.
 		if _, err := tx.ExecContext(ctx, "ROLLBACK TO SAVEPOINT "+sp); err != nil {
-			return res, fmt.Errorf("rollback to savepoint %s after %v: %w", sp, insErr, err)
+			return res, fmt.Errorf("rollback to savepoint %s after %w: %w", sp, insErr, err)
 		}
 		if _, err := tx.ExecContext(ctx, "RELEASE SAVEPOINT "+sp); err != nil {
 			return res, fmt.Errorf("release savepoint %s: %w", sp, err)
@@ -730,25 +750,9 @@ func applyOneItem(
 //  5. file the doc under every library the work is a member of, and under
 //     library 0 if that set is empty — invariant 5.
 func rebuildSearchDoc(ctx context.Context, tx *sql.Tx, workID int64, it CatalogueItem) error {
-	rows, err := tx.QueryContext(ctx, `SELECT rowid FROM search_doc WHERE work_id = ?`, workID)
+	old, err := existingDocRowIDs(ctx, tx, workID)
 	if err != nil {
-		return fmt.Errorf("read search docs for work %d: %w", workID, err)
-	}
-	var old []int64
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			_ = rows.Close()
-			return fmt.Errorf("read search docs for work %d: scan: %w", workID, err)
-		}
-		old = append(old, id)
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return fmt.Errorf("read search docs for work %d: %w", workID, err)
-	}
-	if err := rows.Close(); err != nil {
-		return fmt.Errorf("read search docs for work %d: close: %w", workID, err)
+		return err
 	}
 	for _, id := range old {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM search_fts WHERE rowid = ?`, id); err != nil {
@@ -809,6 +813,34 @@ func rebuildSearchDoc(ctx context.Context, tx *sql.Tx, workID int64, it Catalogu
 		}
 	}
 	return nil
+}
+
+// existingDocRowIDs reads the search_doc rowids a work already has.
+//
+// It is its own function so the *sql.Rows is CLOSED BEFORE the caller issues its
+// next statement on the same transaction. A cursor left open across the deletes
+// below is a read and a write interleaved on one connection, which is the shape
+// that makes SQLite return SQLITE_BUSY on a statement that should never have
+// contended with anything.
+func existingDocRowIDs(ctx context.Context, tx *sql.Tx, workID int64) ([]int64, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT rowid FROM search_doc WHERE work_id = ?`, workID)
+	if err != nil {
+		return nil, fmt.Errorf("read search docs for work %d: %w", workID, err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("read search docs for work %d: scan: %w", workID, err)
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read search docs for work %d: %w", workID, err)
+	}
+	return out, nil
 }
 
 // altTitleBlob is what goes into the FTS tables' alt_titles column: this work's

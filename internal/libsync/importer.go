@@ -294,7 +294,7 @@ func (im *Importer) streamAndApply(
 		if err != nil {
 			return err
 		}
-		rep.BatchResult.Add(res)
+		rep.Add(res)
 		rep.ItemsApplied += len(batch)
 		rep.Batches++
 		batch = batch[:0]

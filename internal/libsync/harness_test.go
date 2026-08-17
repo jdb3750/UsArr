@@ -105,7 +105,7 @@ func chainedDoer(t *testing.T, names []string) *chained {
 
 func (c *chained) Do(req *http.Request) (*http.Response, error) {
 	var lastErr error
-	for i, d := range c.doers {
+	for _, d := range c.doers {
 		// Each attempt needs its own body: a replayed POST consumes it.
 		clone := req.Clone(req.Context())
 		if req.GetBody != nil {
@@ -120,7 +120,6 @@ func (c *chained) Do(req *http.Request) (*http.Response, error) {
 			return resp, nil
 		}
 		lastErr = err
-		_ = i
 	}
 	return nil, lastErr
 }

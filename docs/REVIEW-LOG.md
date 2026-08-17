@@ -9015,3 +9015,292 @@ them, which for a docs-only diff was never in doubt.
 `cmd/`, and reading `00005_library_sync.sql`'s DDL, `internal/httpapi/grab.go` and §7.6 directly. The
 `state`-has-no-`CHECK` and `kind`-never-had-one facts in particular were read out of the migration
 rather than taken from the brief, and the `kind` half is a fact the brief did not supply.
+
+---
+
+# Round 5 continued — `LS-01`: the catalogue full import (channel 1), salvaged and finished
+
+**Date:** 2026-08-17. **Prefix:** `LS-` (library sync), claimed by this thread; no roster exists and
+the first landed entry is the claim (`DEVELOPMENT.md` §11).
+**Target:** `internal/libsync`, `internal/store/catalogue.go`, `cmd/usarr`'s import wiring and
+`internal/httpapi`'s event hub.
+
+**This pass began as a salvage.** ~3.6k lines existed only as untracked and unstaged files in one
+worktree, written by an agent that crashed before it ran anything: no build, no test, no gate. The
+first action was to commit them verbatim as `01969ed` (`wip: salvaged unverified snapshot of a
+crashed run`) and push the branch, before touching anything else — a failed build must not be able to
+cost the work. **Everything below was measured against that snapshot afterwards.**
+
+The headline is not that the snapshot was broken. It compiled on the first try and its own tests
+passed. The headline is that **four of its guards did not guard anything**, and neither the crashed
+agent nor a green test run could have told anyone that. Firing each one deliberately is what found
+them.
+
+---
+
+## Counts
+
+| # | Finding, in one line | Severity | Disposition |
+|---|---|---|---|
+| **LS-01** | Four guards over the two `search_doc` invariants and the kind rule stayed **green while the thing they protect was broken** | **High** | **Applied.** All four rewritten until each fires; the verbatim red is in LS.3 |
+| **LS-02** | Progress over SSE was published to `store.SystemUserID`, which the hub matched **exactly**, so every `import.progress` frame reached **nobody** | **High** | **Applied.** `visibleTo` in `internal/httpapi/events.go`; the sentinel now means "shared" on the stream as it already did in the database |
+| **LS-03** | The whole `cmd/usarr` import wiring had **zero test coverage** — `FullImport`, `bootstrapImport` and `importProgress` all at 0.0% | **High** | **Applied.** `cmd/usarr/import_e2e_test.go` drives the real `buildApp`, prober, service-creation endpoint and SSE stream |
+| **LS-04** | `ARCHITECTURE.md` §17.8 withdraws Kavita's `LibraryType 3 (Image)`; the **vendored spec declares it**, with six members | Medium | **Raised, not fixed** — see LS.5 |
+| **LS-05** | `EventImportProgress` is a seventh event name with a producer and **no SPA listener**; the Go and TypeScript name lists are two hardcoded copies that cannot see each other | Medium | **Raised, not fixed** — `web/` is out of this pass's scope. See LS.6 |
+| **LS-06** | The code cited **`ADR-0042`** for the `container_kind='remote_library'` decision. `ADR-0042` has since landed as a **different decision** | Low | **Applied.** The citation is removed, not repointed; the decision is still owed an ADR |
+| **LS-07** | A work merged across two containers of different reading conventions gets **last-writer-wins** `work_comic.reading_direction` | Low | **Recorded as a deliberate consequence**, asserted in a test rather than left to be rediscovered |
+| **LS-08** | `go.mod` carried `golang.org/x/text` as **`// indirect`** for a direct import; `modverify` catches it, the crashed agent never ran it | Nit | **Applied.** `go mod tidy` |
+| **LS-09** | `gofumpt` and three linters were unrun and red on the snapshot | Nit | **Applied.** See LS.2 |
+| **LS-10** | `external_id.source` `'mal'` is written as a **bare** namespace; MyAnimeList numbers anime and manga separately, so it is unambiguous only while every row carrying it comes from a manga/book source | Low | **Raised, not fixed.** Recorded in `kavita.go` rather than pre-solved with a source string the schema does not list — see LS.8 |
+
+---
+
+## LS.1 What the snapshot actually was, measured rather than assumed
+
+`go build ./...` succeeded unmodified. `go test ./internal/libsync/... ./internal/store/...` passed
+unmodified. There were **no `TODO`s, no `FIXME`s, no stubs and no `panic("not implemented")`** in any
+new file. `git merge origin/main` was clean — **the REVIEW-LOG EOF conflict this pass was warned to
+expect did not occur**, because the snapshot had not touched that file yet; the collision it did hit
+was `ADR-0042` (LS-06), which is the same shared-counter hazard wearing different clothes.
+
+Three of the brief's requirements were already met and were **verified rather than taken on trust**:
+
+* **Streaming, not buffering.** `KavitaSource.StreamItems` goes through `internal/kavita`'s
+  `StreamSeries`, which is a `json.Decoder` walking the array element by element (`stream.go:150`),
+  reads the closing `]` rather than assuming it, and returns a **partial-delivery count** on failure.
+  Memory is bounded at `BatchRows` items.
+* **`work.kind` from the library, never the payload.** `mapLibraryType` takes `LibraryDto.type` and
+  nothing else; `SeriesDto.format` reaches `remote_subtype` verbatim and no further.
+* **Degraded identity as the ordinary case.** A free Kavita writes none of the Kavita+ id fields, and
+  the ordinary cassette carries exactly that shape. The work is written, filed, indexed and
+  searchable with no `external_id` row at all.
+
+## LS.2 The gate, run for the first time on this code
+
+`make check` failed three times before it passed, on faults the snapshot could not have known about:
+
+1. `gofumpt` — a `//nolint` directive placed at the **top** of a doc comment rather than the bottom.
+2. `golangci-lint` — `errorlint` (a second error formatted `%v` beside a `%w`), `sqlclosecheck`
+   (`rows.Close()` not deferred), `staticcheck` `QF1008` (a redundant embedded-field selector).
+3. `modverify` — `go mod tidy -diff` showing `golang.org/x/text` marked `// indirect` for a **direct**
+   import. It is BSD-3-Clause, which is AGPL-compatible; the licence check `CLAUDE.md` requires was
+   done, the dependency stands, only the marking was wrong.
+
+`sqlclosecheck`'s finding was worth more than a lint fix. The cursor over `search_doc` was closed by
+hand between statements on the same transaction; it is now `existingDocRowIDs`, a function whose
+`defer rows.Close()` **cannot** be skipped by an early return, so a read and a write can no longer
+interleave on one connection.
+
+## LS.3 🚩 Four guards fired green. This is the finding
+
+`CLAUDE.md` requires firing a guard deliberately before trusting it, because one that has never been
+triggered is indistinguishable from no guard. **Ten were fired: broken, run, reverted.** Six went red
+on the first attempt. **Four did not**, and each was green for a different and instructive reason.
+
+**G1 — §7 invariant 5, the `Unfiled` fallback.** Deleting the fallback outright left
+`TestUnfiledCatchesADocWithNoOtherLibrary` green. The reason is an ordering fact: `applyOneItem`
+writes the `library_member` row **before** it builds the document, so the
+`SELECT … FROM library_member` always finds a library and the fallback branch **is unreachable from
+`ApplyCatalogueBatch`**. The test's own comment claimed to cover it. Rewritten as
+`TestRebuildSearchDocFilesAStrandedDocAsUnfiled`, which calls the builder directly for a work that
+belongs to nothing — the shape migration 0005 names as the debt ("any OTHER library's deletion can
+still strand a doc whose only scope was that library"). The old test kept its real subject and its
+comment now says what it does **not** cover. Firing it now:
+
+```
+--- FAIL: TestRebuildSearchDocFilesAStrandedDocAsUnfiled (0.04s)
+    catalogue_test.go:800: 1 docs came out of the builder with no scope at all. §7 invariant 5 says
+    there must be none: such a doc matches no scope and vanishes from search for every user including
+    its owner
+```
+
+**G2 — §7 invariant 2, the FTS delete.** Removing `DELETE FROM search_fts WHERE rowid = ?` left
+`TestApplyCatalogueBatchIsIdempotent` green, and its comment said this was "where invariant 2
+breaks". With **one** work the doc being rebuilt is always the max rowid, so deleting and reinserting
+it hands back the same number and the orphaned FTS row is silently overwritten. The test now imports
+**two** works, which makes the rebuilt one a non-max rowid:
+
+```
+--- FAIL: TestApplyCatalogueBatchIsIdempotent (0.03s)
+    catalogue_test.go:413: §7 invariant 2 broken: search_doc=2 search_fts=4 search_trgm=2
+    catalogue_test.go:413: §7 invariant 2 broken where COUNTING CANNOT SEE IT: 2 rowids appear in one
+    of the three tables and not the others.
+```
+
+**G3 — the explicit rowid, and this is the worst of the four.** `search_doc.rowid` being *the*
+allocator is the single most emphasised rule in migration 0005 and in the brief. Replacing the
+explicit `INSERT INTO search_fts (rowid, …)` with an implicit one **passed three separate tests** —
+including the one whose comment reads "THE EXPLICIT-ROWID RULE, PROVED BY A MATCH RATHER THAN BY A
+SELECT" — and passed the whole-binary end-to-end test as well. **Counting is a proxy and it was
+measured failing.** Two independent rowid sequences advance in lockstep as long as inserts and
+deletes are symmetric; the counts agree while saying nothing about the sequences being the same. A
+direct probe confirmed it: after `DELETE`ing the max rowid from both tables and reinserting, both
+still reported `max=3`.
+
+So the guard had to **manufacture the asymmetry**. `TestTheFTSRowidIsTheSearchDocRowidWhenTheTablesHaveDrifted`
+plants exactly the drift migration 0005 says nothing in SQLite can prevent — an FTS row missing under
+its doc — and then requires the next rebuild to land back on the doc's own rowid. `misalignedRowids`
+replaces the count with the real predicate: **the same rowid SET across all three tables**, and it is
+now asserted at every `assertCorpusInvariants` call site. Firing it produces the failure that
+matters, which was never a count:
+
+```
+--- FAIL: TestTheFTSRowidIsTheSearchDocRowidWhenTheTablesHaveDrifted (0.04s)
+    catalogue_test.go:517: search_fts MATCH "Beyond" resolved through its rowid to "Vagabond",
+    want "Frieren: Beyond Journey's End" — the FTS rowid is not the search_doc rowid, and RRF fuses
+    on rowid
+```
+
+**G5 — `work.kind` from the library.** The first break mapped the kind off `SeriesDto.format`, and
+the test stayed green **because on that fixture the payload happened to agree with the library**. A
+break has to disagree to prove anything. Inverted:
+
+```
+--- FAIL: TestContainersAndItemsFromTheOrdinaryCassettes (0.00s)
+    kavita_test.go:160: Frieren kind = "book", want comic — the kind comes from the LIBRARY, and
+    library 1 is Manga
+    kavita_test.go:208: The Hobbit kind = "comic", want book (library 2 is LibraryType Book)
+```
+
+**The six that fired first time**, verbatim:
+
+```
+G4  the per-row SAVEPOINT around the external_id write
+    catalogue_test.go:664: first import: apply series 101 from service_instance 1: release savepoint
+    extid_0: sqlite3: SQL logic error: no such savepoint: extid_0
+
+G6  every LibraryType member is accounted for
+    kavita_test.go:70: mapLibraryType(4) kind = "", want "book"
+
+G7  last_full_sync_at is written on SUCCESS ONLY
+    importer_test.go:325: a PARTIAL import wrote last_full_sync_at, which claims a freshness the
+    replica does not have
+
+G8  ANALYZE runs after a bulk import
+    importer_test.go:164: ANALYZE did not run after the bulk import
+
+G9  the system sentinel reaches every stream
+    events_test.go:88: alice received no shared frame: a system-owned event reached nobody, which is
+    what an import progress bar that never moves looks like
+    events_test.go:88: bob received no shared frame: …
+    events_test.go:97: replay = [], want the shared frame
+
+G10 the wiring: progress reaches a real browser's SSE connection
+    import_e2e_test.go:263: no terminal import.progress frame arrived (last applied = 0).
+```
+
+⚠️ **G9 and G10 initially "fired" as a compile error** — removing the sentinel comparison left the
+`store` import unused — which is not the assertion firing and does not count. Both were re-run with a
+break that keeps the import live.
+
+## LS.4 The bug the wiring test found, and why nothing else could have
+
+`cmd/usarr/import.go` was written, complete and plausible, and **`go tool cover` reported
+`FullImport 0.0%`, `importProgress 0.0%`, `bootstrapImport 0.0%`**. Every unit in
+`internal/libsync` and `internal/store` was well tested; the three hand-offs that make them run in a
+real process were tested by nothing.
+
+Writing `TestAddingAKavitaProducesACatalogue` — real `buildApp`, real prober goroutine, real
+`POST /api/v1/services`, real SSE connection — surfaced **LS-02** immediately: no `import.progress`
+frame ever arrived.
+
+`Hub.Publish` matched the owner **exactly** (`sub.userID != userID`). The import has no acting user,
+so it publishes under `store.SystemUserID`, the same id the libraries it writes are owned by. In the
+database that sentinel means **shared** — `store.Scope` resolves user-scoped reads as
+`user_id IN (SystemUserID, UserID)` — but on the stream it meant **nobody**. Every progress frame was
+published into a void, and no test in either package could see it, because the producer was in
+`cmd/usarr` and the consumer was in `internal/httpapi`.
+
+The fix is `visibleTo(sub, owner)`, used by **both** the live path and the replay path so a reconnect
+cannot lose exactly the frames a live stream had been delivering. It is deliberately **one-way**: a
+frame owned by a real user still reaches that user alone, and
+`TestHubDeliversTheSystemSentinelToEveryStream` asserts both directions — the fix and the scope leak
+it must not become.
+
+## LS.5 Raised, not fixed — the `LibraryType` contradiction
+
+`ARCHITECTURE.md` §17.8 carries a withdrawal: *"re-checked against Kavita `main` on 2026-08-16,
+`API/Entities/Enums/LibraryType.cs` declares exactly `Manga = 0`, `Comic = 1`, `Book = 2` and no
+`Image` member at all"*. The vendored `api/specs/kavita.json` (develop @ `9c3e540`) declares **six**
+members with `x-enum-varnames` `["Manga","Comic","Book","Image","LightNovel","ComicVine"]`. Both
+cannot be true of the same tree.
+
+**The code maps what the pinned artefact says**, because that is the artefact CI can check, and
+`TestEveryLibraryTypeMemberIsMapped` reads the spec at runtime so a seventh member fails the build
+rather than falling into a default. **This pass did not resolve the contradiction**: doing so needs a
+fresh read of Kavita's source, which is a network fact it could not verify. Neither side was edited.
+
+## LS.6 Raised, not fixed — the event-name contract cannot see itself
+
+`EventImportProgress` is the **seventh** server event name. `web/src/lib/api.ts`'s
+`STREAM_EVENT_NAMES` carries six, so today's SPA registers no listener and drops the frame. **`web/`
+is out of this pass's scope**, so the listener is not added here.
+
+Worse than the gap is that **nothing detected it**. `TestEventNamesAreTheWireContract`'s comment says
+the set exists "so an ADDED name is caught too", and its check is `len(names) != 6` over a
+**hand-written map literal** — a number that can only ever be the count of keys someone typed. It
+cannot observe a constant added to `events.go`, and it did not. The TypeScript side pins its list
+against another hardcoded list **in the same file**, so it cannot see the Go side either. The two
+copies drift in silence. The Go test now carries the seventh name and says plainly that this block is
+a reminder rather than a detector. **A real cross-language guard — the Go list read against
+`web/src/lib/api.ts` — is the fix, and it belongs in the commit that adds the SPA listener**, because
+written today it would land red.
+
+## LS.7 What is deliberately not here
+
+Out of scope by instruction and absent from the diff: **channel 3b**, the **channel-4 reconciliation
+sweep**, any **`write_queue` writer** (`ADR-0042`, which landed mid-pass, settles that the write path
+leaves v0.1), and anything under **`web/`**. `remote_hash` and `remote_identity_hash` are **written**
+so the sweep has something to compare and are read by nothing yet.
+
+Two more, absent because they are the next commit rather than an omission: **phase B** (Kavita's
+series list carries no overview, no release year and no per-file facts, so `work_comic_issue` and
+`media_file` get no rows and nothing is faked), and **every user-facing read** — the library grid, the
+item page, search. Every function in `catalogue.go` is a **replication write driven by a background
+worker with no acting user and takes no `Scope`**, on the shipped `ReplaceIndexers` precedent; the
+reads that render any of it take one, and they are not in this diff. `LastFullSyncAt` is the single
+read here and it takes none deliberately: it reads **one named instance's** control-plane column for
+the replication worker, not an aggregate across instances, which is where an existence oracle would
+live.
+
+## LS.8 What could NOT be verified
+
+* **Every cassette in this diff is SYNTHETIC**, and each says so in its own header with the Kavita
+  version it claims. None was captured off a wire. A synthetic cassette proves the mapping, **not the
+  server's behaviour** — it cannot discover that a field is always null in practice, that a
+  controller enforces something the schema does not, or that a middleware header arrives in a
+  different case. `kavita_libraries_all_types.yaml` in particular carries one library of every
+  `LibraryType`, and **no real instance is known to look like that**.
+* **The `LibraryType` contradiction (LS-04)** — needs Kavita's source, a network fact.
+* **The `LightNovel → book` mapping** is 🔍 inference and the weakest decision in the file. Kavita
+  ships light novels as a separate library type and this pass could not read `LibraryType.cs` to
+  learn what that separation buys. The cost of being wrong is one **editable** library kind (§6.5
+  rule 4).
+* **The id namespaces are not verified to be global.** MyAnimeList numbers anime and manga
+  separately, so a bare `mal` source is unambiguous only while every row carrying it comes from a
+  manga/book source. True of Kavita; false the day an anime source lands.
+* **`reading_direction` is 🔍 inference** — `SeriesDto` reports none, and a webtoon filed in a Manga
+  library is the case it gets wrong.
+* **No live Kavita was contacted.** The one live measurement this project has is ADR-0035 §2a's
+  channel-3b probe against the owner's Kavita 0.9.0.2, which covers ordering and resumability — not
+  these mappings.
+* **Shutdown is not proven clean.** A bootstrap import in flight is cancelled with the prober's
+  context and is **not waited for**, unlike the candidate sweeper which is. It follows the prober's
+  precedent rather than the sweeper's; committed batches stand and `last_full_sync_at` is unwritten,
+  which is the designed partial-import outcome, but the race between the goroutine finishing and
+  `a.Close()` was **not** exercised.
+
+### On the gate for `LS-01`
+
+`make check` from a **cleaned lint cache** — `/root/go/bin/golangci-lint cache clean` by absolute path
+first. Binaries, versions, the commit and the verbatim tail are in the commit message.
+
+**This green is worth more than the last one**, and the reason is the shape of the diff: it is Go and
+SQL, not Markdown. `lint`, `test`, `build-tagged`, `modverify` and `vuln` all read the changed files,
+and `test` runs the whole suite including the ten guards above and the three new end-to-end tests
+against a **real migrated database** populated before it asserts.
+
+What it still does not attest: that the mappings match a real Kavita (LS.8), that the SPA renders the
+progress frames (LS-05 — it does not), or that any prose in this entry is true. The prose was
+established by reading `00005_library_sync.sql`, `api/specs/kavita.json`, `internal/kavita/stream.go`
+and §17.8 directly, and by `go tool cover` for the coverage numbers in LS.4.

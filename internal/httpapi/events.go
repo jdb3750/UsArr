@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/jdb3750/UsArr/internal/store"
 )
 
 // There is ONE SSE stream (ARCHITECTURE.md §4.1): plain HTTP, so it survives
@@ -106,8 +108,28 @@ func NewHub(size int, now func() time.Time) *Hub {
 	return &Hub{now: now, subs: map[*subscriber]struct{}{}, ring: make([]Event, 0, size), ringN: size}
 }
 
+// visibleTo reports whether a frame published for owner should reach a stream
+// belonging to sub.
+//
+// store.SystemUserID MEANS "SHARED", HERE AS EVERYWHERE ELSE IN THIS CODEBASE,
+// and this function is the only reason the import's progress reaches a browser
+// at all. Every other producer on this hub publishes under the acting user's id;
+// the catalogue import has no acting user, so it publishes under the sentinel —
+// the same id the libraries it writes are owned by, which store.Scope already
+// resolves as `user_id IN (SystemUserID, UserID)`. An exact-match hub would have
+// made the sentinel mean "nobody" on this one surface and "everybody" on every
+// other, and a progress event nothing can receive is a feature that does not
+// exist. It is deliberately ONE-WAY: a frame published under a real user's id
+// still reaches that user alone.
+func visibleTo(sub, owner int64) bool {
+	return sub == owner || owner == store.SystemUserID
+}
+
 // Publish delivers an event to userID's subscribers and records it for replay.
 // It never blocks: a subscriber whose queue is full is dropped.
+//
+// userID is the OWNER of the event. store.SystemUserID publishes to every
+// stream — see visibleTo.
 func (h *Hub) Publish(userID int64, name string, data any) uint64 {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -126,7 +148,7 @@ func (h *Hub) Publish(userID int64, name string, data any) uint64 {
 	}
 
 	for sub := range h.subs {
-		if sub.userID != userID || sub.closed {
+		if sub.closed || !visibleTo(sub.userID, userID) {
 			continue
 		}
 		select {
@@ -172,7 +194,10 @@ func (h *Hub) subscribe(userID int64, lastID uint64) (sub *subscriber, replay []
 			missed = true
 		}
 		for _, ev := range h.ring {
-			if ev.ID > lastID && ev.UserID == userID {
+			// The SAME predicate as the live path. A replay that filtered
+			// differently would make a reconnect lose exactly the shared frames
+			// a live stream had been receiving.
+			if ev.ID > lastID && visibleTo(userID, ev.UserID) {
 				replay = append(replay, ev)
 			}
 		}

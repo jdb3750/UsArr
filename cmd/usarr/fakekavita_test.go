@@ -32,8 +32,15 @@ type fakeKavita struct {
 
 	// admin decides whether server-info-slim answers or 403s.
 	admin bool
-	// libraries is how many libraries this account can see.
+	// libraries is how many libraries this account can see. Library i+1 gets
+	// LibraryType i, so `libraries = 3` yields one Manga, one Comic and one Book
+	// — the shape the catalogue import's kind mapping is exercised on.
 	libraries int
+	// series is what POST /api/Series/all-v2 answers. It is nil by default,
+	// which serves the EMPTY ARRAY the connection-test tests expect; a test that
+	// wants a catalogue sets it before the instance is added. It is written only
+	// during setup, before the server can be reached.
+	series []map[string]any
 
 	mu sync.Mutex
 	// keySeen records every x-api-key header value received, so a test can
@@ -90,8 +97,16 @@ func newFakeKavita(t *testing.T, authKey string) *fakeKavita {
 	}))
 
 	mux.HandleFunc("POST /api/Series/all-v2", k.authed(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Pagination", `{"currentPage":1,"itemsPerPage":2147483647,"totalItems":0,"totalPages":0}`)
-		writeJSONBody(w, []map[string]any{})
+		// A JSON ARRAY, never `null`. An empty `series` slice would encode as
+		// `null` and the streaming decoder would reject the body as "expected a
+		// JSON array" — a fixture failure that reads exactly like a client bug.
+		out := k.series
+		if out == nil {
+			out = []map[string]any{}
+		}
+		w.Header().Set("Pagination", fmt.Sprintf(
+			`{"currentPage":1,"itemsPerPage":2147483647,"totalItems":%d,"totalPages":1}`, len(out)))
+		writeJSONBody(w, out)
 	}))
 
 	k.srv = httptest.NewServer(mux)

@@ -77,6 +77,31 @@ func corpusCounts(t *testing.T, s *Store) (docs, fts, trgm int) {
 		count(t, s, `SELECT COUNT(*) FROM search_trgm`)
 }
 
+// misalignedRowids is the invariant-2 predicate stated as what it actually
+// means rather than as a count.
+//
+// ⚠️ COUNTING IS A PROXY AND IT WAS MEASURED FAILING. This file used to check
+// invariant 2 with three COUNT(*)s, and replacing the explicit
+// `INSERT INTO search_fts (rowid, …)` with an implicit one left every one of
+// those counts equal — so the guard for the rule migration 0005 calls out by
+// name ("a single implicit rowid fuses unrelated documents, because RRF fuses on
+// rowid") never fired. The counts agree because symmetric inserts and deletes
+// make two independent rowid sequences advance in lockstep; they say nothing
+// about the sequences being the SAME. The real condition is that the three
+// tables hold the same rowid SET, and this asks it directly.
+func misalignedRowids(t *testing.T, s *Store) int {
+	t.Helper()
+	return count(t, s, `
+		SELECT (SELECT COUNT(*) FROM search_doc d
+		         WHERE NOT EXISTS (SELECT 1 FROM search_fts f WHERE f.rowid = d.rowid))
+		     + (SELECT COUNT(*) FROM search_doc d
+		         WHERE NOT EXISTS (SELECT 1 FROM search_trgm g WHERE g.rowid = d.rowid))
+		     + (SELECT COUNT(*) FROM search_fts f
+		         WHERE NOT EXISTS (SELECT 1 FROM search_doc d WHERE d.rowid = f.rowid))
+		     + (SELECT COUNT(*) FROM search_trgm g
+		         WHERE NOT EXISTS (SELECT 1 FROM search_doc d WHERE d.rowid = g.rowid))`)
+}
+
 func assertCorpusInvariants(t *testing.T, s *Store, wantDocs int) {
 	t.Helper()
 	docs, fts, trgm := corpusCounts(t, s)
@@ -89,6 +114,11 @@ func assertCorpusInvariants(t *testing.T, s *Store, wantDocs int) {
 	if docs != fts || docs != trgm {
 		t.Errorf("§7 invariant 2 broken: search_doc=%d search_fts=%d search_trgm=%d "+
 			"(they are three tables SQLite cannot hold equal; the builder must)", docs, fts, trgm)
+	}
+	if n := misalignedRowids(t, s); n != 0 {
+		t.Errorf("§7 invariant 2 broken where COUNTING CANNOT SEE IT: %d rowids appear in one "+
+			"of the three tables and not the others. search_doc.rowid is THE allocator and both "+
+			"FTS inserts must name it explicitly", n)
 	}
 	if n := docsWithNoScope(t, s); n != 0 {
 		t.Errorf("§7 invariant 5 broken: %d search_doc rows have no search_doc_library row. "+
@@ -350,7 +380,15 @@ func TestApplyCatalogueBatchWritesTheWholeShape(t *testing.T) {
 func TestApplyCatalogueBatchIsIdempotent(t *testing.T) {
 	// The same import run twice must leave exactly one of everything. Without
 	// the delete-then-insert in rebuildSearchDoc this is where invariant 2
-	// breaks: the second run would add a doc and leave the first one's FTS rows.
+	// breaks: the second run adds a doc and leaves the first one's FTS rows.
+	//
+	// ⚠️ TWO ITEMS, NOT ONE, AND THAT IS THE WHOLE POINT. With a single work this
+	// test PASSED with the FTS delete removed: the one search_doc row is always
+	// the max rowid, so deleting and reinserting it hands back the same number
+	// and the orphaned FTS row is silently overwritten. A second work makes the
+	// rebuilt one a NON-max rowid, the reinsert allocates a fresh number, and the
+	// orphan survives — which is the real failure. Measured: with the delete
+	// removed this now reports search_fts = 3 against search_doc = 2.
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
 	binds, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
@@ -358,19 +396,21 @@ func TestApplyCatalogueBatchIsIdempotent(t *testing.T) {
 		t.Fatalf("BindContainers: %v", err)
 	}
 	it := item("41", "1", "comic", "Frieren")
+	other := item("42", "1", "comic", "Vagabond")
 
 	for run := 1; run <= 2; run++ {
-		if _, err := s.ApplyCatalogueBatch(t.Context(), inst, binds, []CatalogueItem{it}, testNow); err != nil {
+		if _, err := s.ApplyCatalogueBatch(t.Context(), inst, binds,
+			[]CatalogueItem{it, other}, testNow); err != nil {
 			t.Fatalf("run %d: %v", run, err)
 		}
 	}
-	if n := count(t, s, `SELECT COUNT(*) FROM work`); n != 1 {
-		t.Errorf("work rows = %d, want 1", n)
+	if n := count(t, s, `SELECT COUNT(*) FROM work`); n != 2 {
+		t.Errorf("work rows = %d, want 2", n)
 	}
-	if n := count(t, s, `SELECT COUNT(*) FROM library_member`); n != 1 {
-		t.Errorf("library_member rows = %d, want 1", n)
+	if n := count(t, s, `SELECT COUNT(*) FROM library_member`); n != 2 {
+		t.Errorf("library_member rows = %d, want 2", n)
 	}
-	assertCorpusInvariants(t, s, 1)
+	assertCorpusInvariants(t, s, 2)
 
 	// A RETITLE must move the member row rather than leave a second one under
 	// the old sort key — sort_title leads library_member's primary key.
@@ -378,18 +418,114 @@ func TestApplyCatalogueBatchIsIdempotent(t *testing.T) {
 	if _, err := s.ApplyCatalogueBatch(t.Context(), inst, binds, []CatalogueItem{it}, testNow); err != nil {
 		t.Fatalf("retitle: %v", err)
 	}
-	if n := count(t, s, `SELECT COUNT(*) FROM library_member`); n != 1 {
-		t.Errorf("after a retitle there are %d member rows, want 1", n)
+	if n := count(t, s, `SELECT COUNT(*) FROM library_member`); n != 2 {
+		t.Errorf("after a retitle there are %d member rows, want 2", n)
 	}
 	var sortTitle string
-	if err := s.db.Read().QueryRowContext(t.Context(),
-		`SELECT sort_title FROM library_member`).Scan(&sortTitle); err != nil {
+	if err := s.db.Read().QueryRowContext(t.Context(), `
+		SELECT m.sort_title FROM library_member m
+		  JOIN work w ON w.id = m.work_id WHERE w.title LIKE 'Frieren%'`).Scan(&sortTitle); err != nil {
 		t.Fatalf("read member: %v", err)
 	}
 	if sortTitle != "Frieren Beyond" {
 		t.Errorf("member sort_title = %q, want the new one", sortTitle)
 	}
-	assertCorpusInvariants(t, s, 1)
+	assertCorpusInvariants(t, s, 2)
+}
+
+// TestTheFTSRowidIsTheSearchDocRowidWhenTheTablesHaveDRIFTED is the guard for
+// the rule migration 0005 states and nothing was checking.
+//
+// ⚠️ THE OBVIOUS TEST DOES NOT WORK, AND THAT IS WHY THIS ONE IS SHAPED LIKE
+// THIS. Replacing the explicit `INSERT INTO search_fts (rowid, …)` with an
+// implicit one leaves EVERY count equal and EVERY rowid identical, so a
+// straightforward import test passes with the rule broken — measured against
+// three separate tests before this was written. Two independent rowid sequences
+// only diverge once the tables have drifted apart, so this test PLANTS exactly
+// the drift migration 0005 says can happen (an FTS row missing under its doc)
+// and then requires the next rebuild to land back on the doc's own rowid.
+//
+// The failure being guarded is not "a count is wrong". It is that
+// `search_fts MATCH` resolves through the rowid to a DIFFERENT work than the one
+// that contains the term — §8.2's two retrievers fusing on rowid, fused onto the
+// wrong row.
+func TestTheFTSRowidIsTheSearchDocRowidWhenTheTablesHaveDrifted(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s, "kavita")
+	binds, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
+	if err != nil {
+		t.Fatalf("BindContainers: %v", err)
+	}
+	keep := item("41", "1", "comic", "Vagabond")
+	rebuilt := item("42", "1", "comic", "Frieren")
+	if _, err := s.ApplyCatalogueBatch(t.Context(), inst, binds,
+		[]CatalogueItem{keep, rebuilt}, testNow); err != nil {
+		t.Fatalf("first import: %v", err)
+	}
+
+	// The drift: `keep`'s FTS rows vanish while its search_doc row stays. This is
+	// invariant 2 already broken — the state the migration says nothing in SQLite
+	// can prevent — and the question is what the BUILDER does next.
+	var keepDoc int64
+	if err := s.db.Read().QueryRowContext(t.Context(), `
+		SELECT d.rowid FROM search_doc d JOIN work w ON w.id = d.work_id
+		 WHERE w.title = 'Vagabond'`).Scan(&keepDoc); err != nil {
+		t.Fatalf("read the doc rowid: %v", err)
+	}
+	if err := s.db.Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		for _, q := range []string{
+			`DELETE FROM search_fts WHERE rowid = ?`,
+			`DELETE FROM search_trgm WHERE rowid = ?`,
+		} {
+			if _, err := tx.ExecContext(ctx, q, keepDoc); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("planting the drift: %v", err)
+	}
+	if misalignedRowids(t, s) == 0 {
+		t.Fatal("the planted drift was not detected, so this test would prove nothing")
+	}
+
+	// Now rebuild the OTHER work. Its doc is deleted and reinserted, and the new
+	// doc rowid is one the FTS tables' own sequence would never have chosen.
+	rebuilt.Title = "Frieren: Beyond Journey's End"
+	rebuilt.NormalizedTitle = "frieren beyond journey s end"
+	if _, err := s.ApplyCatalogueBatch(t.Context(), inst, binds,
+		[]CatalogueItem{rebuilt}, testNow); err != nil {
+		t.Fatalf("rebuild: %v", err)
+	}
+
+	// THE ASSERTION: the term resolves through the rowid to ITS OWN work.
+	for _, tc := range []struct{ table, query string }{
+		{"search_fts", "Beyond"},
+		{"search_trgm", "Journey"},
+	} {
+		var got string
+		q := fmt.Sprintf(`
+			SELECT w.title FROM %s f
+			  JOIN search_doc d ON d.rowid = f.rowid
+			  JOIN work w ON w.id = d.work_id
+			 WHERE f.%s MATCH ?`, tc.table, tc.table)
+		if err := s.db.Read().QueryRowContext(t.Context(), q, tc.query).Scan(&got); err != nil {
+			t.Fatalf("%s MATCH %q found no document at all — the FTS row was written under a "+
+				"rowid no search_doc row carries: %v", tc.table, tc.query, err)
+		}
+		if got != rebuilt.Title {
+			t.Errorf("%s MATCH %q resolved through its rowid to %q, want %q — the FTS rowid is "+
+				"not the search_doc rowid, and RRF fuses on rowid",
+				tc.table, tc.query, got, rebuilt.Title)
+		}
+	}
+
+	// And the rebuilt doc is aligned again: the ONLY misalignment left is the
+	// planted one, which nothing in this commit repairs.
+	if n := misalignedRowids(t, s); n != 2 {
+		t.Errorf("misaligned rowids = %d, want exactly the 2 planted holes (fts and trgm) — "+
+			"the rebuild introduced new drift of its own", n)
+	}
 }
 
 func TestTierOneReusesTheWorkThatAlreadyHoldsTheIdentifier(t *testing.T) {
@@ -569,10 +705,16 @@ func TestExternalIDConflictIsRecordedAndTheBatchSurvives(t *testing.T) {
 	assertCorpusInvariants(t, s, 3)
 }
 
-func TestUnfiledCatchesADocWithNoOtherLibrary(t *testing.T) {
-	// Invariant 5's landing place. Membership is removed the way an `exclude`
-	// correction would remove it, the document is rebuilt, and the doc must be
-	// filed into library 0 rather than left with no scope at all.
+// TestUnfiledIsWhereAWorkBoundToNoOtherLibraryLands covers the case where the
+// BINDING itself points at library 0.
+//
+// ⚠️ IT DOES NOT EXERCISE rebuildSearchDoc's FALLBACK, and it used to claim it
+// did. Measured: deleting that fallback outright left this test green, because
+// applyOneItem writes the library_member row BEFORE it builds the document, so
+// the `SELECT … FROM library_member` always finds library 0 and the fallback
+// branch is never entered. The fallback's own guard is
+// TestRebuildSearchDocFilesAStrandedDocAsUnfiled below.
+func TestUnfiledIsWhereAWorkBoundToNoOtherLibraryLands(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
 	binds, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
@@ -604,6 +746,68 @@ func TestUnfiledCatchesADocWithNoOtherLibrary(t *testing.T) {
 	}
 	if libID != UnfiledLibraryID {
 		t.Errorf("the doc's only scope is library %d, want the reserved Unfiled library 0", libID)
+	}
+	assertCorpusInvariants(t, s, 1)
+}
+
+// TestRebuildSearchDocFilesAStrandedDocAsUnfiled fires invariant 5's ACTUAL
+// landing place.
+//
+// The fallback is unreachable through ApplyCatalogueBatch — membership is always
+// written first — so it is reached the only way it ever will be: by calling the
+// builder directly for a work that belongs to no library. That is not a
+// contrived shape. Migration 0005 names exactly this case as the debt this code
+// owes: "any OTHER library's deletion can still strand a doc whose only scope
+// was that library … the search-document builder … must re-file a stranded doc
+// into library 0 in the same transaction".
+//
+// Testing it directly rather than through the batch is the honest option. The
+// alternative — deleting the branch because no shipped caller reaches it — would
+// remove the one piece of code the migration says owes this invariant, and the
+// caller that needs it (the library-delete path) is a later commit.
+func TestRebuildSearchDocFilesAStrandedDocAsUnfiled(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s, "kavita")
+	binds, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
+	if err != nil {
+		t.Fatalf("BindContainers: %v", err)
+	}
+	it := item("41", "1", "comic", "Frieren")
+	if _, err := s.ApplyCatalogueBatch(t.Context(), inst, binds, []CatalogueItem{it}, testNow); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	var workID int64
+	if err := s.db.Read().QueryRowContext(t.Context(), `SELECT id FROM work`).Scan(&workID); err != nil {
+		t.Fatalf("read work: %v", err)
+	}
+
+	// Strand it: the work is now a member of nothing at all, which is what a
+	// library delete leaves behind.
+	if err := s.db.Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `DELETE FROM library_member WHERE work_id = ?`, workID)
+		return err
+	}); err != nil {
+		t.Fatalf("stranding the work: %v", err)
+	}
+
+	if err := s.db.Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		return rebuildSearchDoc(ctx, tx, workID, it)
+	}); err != nil {
+		t.Fatalf("rebuildSearchDoc on a stranded work: %v", err)
+	}
+
+	if n := docsWithNoScope(t, s); n != 0 {
+		t.Fatalf("%d docs came out of the builder with no scope at all. §7 invariant 5 says "+
+			"there must be none: such a doc matches no scope and vanishes from search for "+
+			"every user including its owner", n)
+	}
+	var libID int64
+	if err := s.db.Read().QueryRowContext(t.Context(),
+		`SELECT library_id FROM search_doc_library`).Scan(&libID); err != nil {
+		t.Fatalf("read scope: %v", err)
+	}
+	if libID != UnfiledLibraryID {
+		t.Errorf("the stranded doc was filed into library %d, want the reserved Unfiled library 0", libID)
 	}
 	assertCorpusInvariants(t, s, 1)
 }
