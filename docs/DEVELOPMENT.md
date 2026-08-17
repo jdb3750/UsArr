@@ -617,6 +617,13 @@ values and an untyped envelope, so it gets hand-written fixtures and a hand-writ
 internal port mappings were not verified in this pass — check each project's own compose example
 before committing the file.
 
+✅ **Both `(not yet)` markers in this section were re-verified against the tree on 2026-08-17 at
+`8756d02`, and both still hold.** `deploy/` does not exist on disk or in `git ls-files`, and the
+`Makefile` has no `seed` target — the string does not occur in it at all. They mark real absences,
+so leave them until the files land; the marker is doing its job. Stated here so the next pass reads
+a dated result instead of re-deriving one. The third marker this file carried, on `make dev`, was
+**false** — `Makefile:284` defines the target — and was removed in the same pass.
+
 The awkward part is **seeding**: a fresh *Arr has an empty library and a random API key.
 
 **Seed with a script, never with committed config volumes.** An earlier draft proposed committing
