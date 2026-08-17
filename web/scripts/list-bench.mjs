@@ -43,6 +43,13 @@
  * src/lib/list.ts are tested there and everything that needs a DOM is asserted
  * here. This script exits non-zero on any failed assertion.
  *
+ * ⚠️ EVERY SIZED SECTION GETS A FRESH RENDERER, and that is load-bearing rather
+ * than hygienic — see `recyclePage` below. Rebuilding the corpus in place leaks
+ * monotonically and the full run dies in section 5 before section 6 is ever
+ * reached, which is why the 25,000-row traversal figure went unobtained for so
+ * long. If a size defeats the machine anyway, the run names THAT SIZE and the
+ * largest one it did complete, rather than surfacing an OOM as a mystery.
+ *
  * Run: PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers pnpm bench:list
  *      pnpm bench:list -- --quick     (skip the 25k sweep; ~40s instead of ~3m)
  * =============================================================================
@@ -143,7 +150,7 @@ if (!process.env.PLAYWRIGHT_BROWSERS_PATH)
 const { chromium } = await import('playwright-core');
 const browser = await chromium.launch();
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-const page = await context.newPage();
+let page = await context.newPage();
 await page.goto(URL_BASE);
 await page.waitForSelector('table.tbl tbody tr');
 
@@ -212,6 +219,99 @@ async function setRows(n) {
 		window.__harness.flush();
 	}, n);
 	await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r(null))));
+}
+
+/* --- the renderer's lifetime, which is what makes a full run finish --------- */
+
+/* ⚠️ A FRESH PAGE PER SIZE. NOT TIDINESS — WITHOUT IT THE RUN DOES NOT FINISH.
+ * Rebuilding the corpus in place with setRows() does not give the renderer's
+ * memory back. RSS climbs monotonically across the entire run and never
+ * returns: measured on this machine at 3.1 GB by section 2b and 8.5 GB by
+ * section 4, after which section 5's 25,000-row sweep dies as `page.evaluate:
+ * Target page, context or browser has been closed`.
+ *
+ * THE LEVER IS THE RENDERER'S LIFETIME, NOT THE ROW SHAPE. A cheaper row only
+ * moves the size at which the same monotone climb runs out of room, so it buys
+ * one more section and hides the cause. Closing the page between sizes returns
+ * the memory, and peak RSS becomes one size's worth instead of the running sum
+ * of every size measured so far.
+ *
+ * The context and the browser are kept: only the page is recycled, so the
+ * measurements stay inside one browser process tree and stay comparable. */
+async function recyclePage() {
+	await page.close();
+	page = await context.newPage();
+	await page.goto(URL_BASE);
+	await page.waitForSelector('table.tbl tbody tr');
+	await page.evaluate(() => document.fonts.ready);
+}
+
+/** Total RSS of the browser's processes, in GB, or null off Linux. */
+async function browserRssGb() {
+	try {
+		const { readdir, readFile } = await import('node:fs/promises');
+		let pages = 0;
+		for (const pid of await readdir('/proc')) {
+			if (!/^\d+$/.test(pid)) continue;
+			try {
+				const comm = await readFile(`/proc/${pid}/comm`, 'utf8');
+				if (!/headless_shell|chrome/i.test(comm)) continue;
+				pages += Number((await readFile(`/proc/${pid}/statm`, 'utf8')).split(' ')[1]);
+			} catch {
+				/* the process exited mid-scan; it is not holding memory either way */
+			}
+		}
+		return pages === 0 ? null : (pages * 4096) / 1024 ** 3;
+	} catch {
+		return null;
+	}
+}
+
+/* ⚠️ AN EXPLICIT, STATED CEILING RATHER THAN AN OOM. If the renderer dies at a
+ * size anyway — a smaller machine, a heavier row, a future section — the run
+ * must say WHICH size defeated it and what the largest size it did complete
+ * was. Dying on `Target page, context or browser has been closed` deep inside
+ * an evaluate reports a Playwright message that names nothing, and reads like a
+ * broken bench rather than a machine limit. An honest ceiling beats a red gate
+ * whose redness means nothing. */
+let ceilingHit = null;
+let largestCompleted = 0;
+
+function rendererGone(err) {
+	return /target (page|closed)|has been closed|browser has been closed|crash/i.test(
+		String(err?.message ?? err)
+	);
+}
+
+/**
+ * Run `body` at `n` rows on a FRESH renderer. Returns `body`'s value, or null
+ * if the renderer died — in which case the ceiling is recorded and reported,
+ * and the caller stops escalating rather than retrying into the same wall.
+ */
+async function atSize(n, what, body) {
+	if (ceilingHit) return null;
+	await recyclePage();
+	try {
+		await setRows(n);
+		const value = await body();
+		largestCompleted = Math.max(largestCompleted, n);
+		return value;
+	} catch (err) {
+		if (!rendererGone(err)) throw err;
+		ceilingHit = { n, what };
+		fail(
+			`${what}: the renderer died at ${n.toLocaleString()} rows. This is this machine's ` +
+				`bench ceiling, not a regression in the primitive — the largest size completed in ` +
+				`this run was ${largestCompleted.toLocaleString()} rows. Every figure at or above ` +
+				`${n.toLocaleString()} rows in the sections below is UNOBTAINED, not passing.`
+		);
+		try {
+			await recyclePage();
+		} catch {
+			/* the browser itself is gone; the summary still reports the ceiling */
+		}
+		return null;
+	}
 }
 
 /* =============================================================================
@@ -637,19 +737,22 @@ head('3. Density toggle (Tier 0 by §7.2 — hard fail 100 ms), mean of four cha
 note('columns: containment live / containment forced off, x  list-scoped / root-scoped');
 const densityTable = [];
 for (const n of SIZES) {
-	await setRows(n);
-	const row = { n };
-	for (const cont of [true, false]) {
-		for (const scope of ['container', 'root']) {
-			const r = await toggleCost(page, {
-				attribute: 'data-density',
-				values: DENSITY_VALUES,
-				scope,
-				containment: cont
-			});
-			row[`${cont ? 'cv' : 'nocv'}_${scope}`] = r.mean;
+	const row = await atSize(n, 'section 3 density toggle', async () => {
+		const row = { n };
+		for (const cont of [true, false]) {
+			for (const scope of ['container', 'root']) {
+				const r = await toggleCost(page, {
+					attribute: 'data-density',
+					values: DENSITY_VALUES,
+					scope,
+					containment: cont
+				});
+				row[`${cont ? 'cv' : 'nocv'}_${scope}`] = r.mean;
+			}
 		}
-	}
+		return row;
+	});
+	if (!row) break;
 	densityTable.push(row);
 	/* A MEASUREMENT, NOT AN ASSERTION, and the distinction is the point of the
 	 * whole exercise. 25,000 rows in the DOM is ABOVE the ceiling this section
@@ -665,26 +768,35 @@ for (const n of SIZES) {
 			(row.cv_container > 100 ? '   <-- above the 100 ms Tier-0 hard fail' : '')
 	);
 }
+const rssAfter3 = await browserRssGb();
+if (rssAfter3 !== null)
+	note(
+		`browser RSS after section 3: ${rssAfter3.toFixed(2)} GB — reported, not asserted, ` +
+			`because the fresh-page-per-size recycling is the only reason this run reaches section 5`
+	);
 
 head('4. Theme toggle, mean of four changes');
 for (const n of SIZES) {
-	await setRows(n);
-	const live = await toggleCost(page, {
-		attribute: 'data-theme',
-		values: THEME_VALUES,
-		scope: 'root',
-		containment: true
+	const themed = await atSize(n, 'section 4 theme toggle', async () => {
+		const live = await toggleCost(page, {
+			attribute: 'data-theme',
+			values: THEME_VALUES,
+			scope: 'root',
+			containment: true
+		});
+		const off = await toggleCost(page, {
+			attribute: 'data-theme',
+			values: THEME_VALUES,
+			scope: 'root',
+			containment: false
+		});
+		return { live, off };
 	});
-	const off = await toggleCost(page, {
-		attribute: 'data-theme',
-		values: THEME_VALUES,
-		scope: 'root',
-		containment: false
-	});
+	if (!themed) break;
 	note(
-		`${String(n).padStart(6)} rows   containment live ${String(live.mean).padStart(7)} ms   ` +
-			`containment off ${String(off.mean).padStart(7)} ms` +
-			(live.mean > 100 ? '   <-- above the 100 ms Tier-0 hard fail' : '')
+		`${String(n).padStart(6)} rows   containment live ${String(themed.live.mean).padStart(7)} ms   ` +
+			`containment off ${String(themed.off.mean).padStart(7)} ms` +
+			(themed.live.mean > 100 ? '   <-- above the 100 ms Tier-0 hard fail' : '')
 	);
 }
 await page.evaluate(() => {
@@ -699,24 +811,27 @@ head('5. The DOM-row ceiling, swept against the 100 ms Tier-0 hard fail');
 const SWEEP = QUICK ? [200, 800, 3200] : [100, 200, 400, 800, 1600, 3200, 6400, 12800, 25000];
 const sweep = [];
 for (const n of SWEEP) {
-	await setRows(n);
-	const shipped = await toggleCost(page, {
-		attribute: 'data-density',
-		values: DENSITY_VALUES,
-		scope: 'container',
-		containment: true
+	const point = await atSize(n, 'section 5 ceiling sweep', async () => {
+		const shipped = await toggleCost(page, {
+			attribute: 'data-density',
+			values: DENSITY_VALUES,
+			scope: 'container',
+			containment: true
+		});
+		const worst = await toggleCost(page, {
+			attribute: 'data-density',
+			values: DENSITY_VALUES,
+			scope: 'root',
+			containment: false
+		});
+		return { n, shipped: shipped.mean, worst: worst.mean };
 	});
-	const worst = await toggleCost(page, {
-		attribute: 'data-density',
-		values: DENSITY_VALUES,
-		scope: 'root',
-		containment: false
-	});
-	sweep.push({ n, shipped: shipped.mean, worst: worst.mean });
+	if (!point) break;
+	sweep.push(point);
 	note(
-		`${String(n).padStart(6)} rows   as shipped ${String(shipped.mean).padStart(7)} ms ` +
-			`(${(shipped.mean / n).toFixed(4)} ms/row)   worst case ${String(worst.mean).padStart(7)} ms ` +
-			`(${(worst.mean / n).toFixed(4)} ms/row)`
+		`${String(n).padStart(6)} rows   as shipped ${String(point.shipped).padStart(7)} ms ` +
+			`(${(point.shipped / n).toFixed(4)} ms/row)   worst case ${String(point.worst).padStart(7)} ms ` +
+			`(${(point.worst / n).toFixed(4)} ms/row)`
 	);
 }
 
@@ -831,52 +946,55 @@ assert(
 
 head('6. Arrow-key traversal at 25,000 rows');
 if (!QUICK) {
-	await setRows(25000);
-	const traversal = await page.evaluate(() => {
-		const tbl = document.querySelector('table.tbl');
-		const SEL = '[role="row"][data-key]';
-		const first = tbl.querySelector('tbody tr');
-		first.focus();
+	const traversal = await atSize(25000, 'section 6 arrow-key traversal', () =>
+		page.evaluate(() => {
+			const tbl = document.querySelector('table.tbl');
+			const SEL = '[role="row"][data-key]';
+			const first = tbl.querySelector('tbody tr');
+			first.focus();
 
-		// THE SHIPPED PATH: a real keydown through the roving action, which walks
-		// nextElementSibling. 200 presses, which is about a second of key repeat.
-		const t0 = performance.now();
-		for (let i = 0; i < 200; i++) {
-			document.activeElement.dispatchEvent(
-				new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })
-			);
-		}
-		const walk = (performance.now() - t0) / 200;
+			// THE SHIPPED PATH: a real keydown through the roving action, which walks
+			// nextElementSibling. 200 presses, which is about a second of key repeat.
+			const t0 = performance.now();
+			for (let i = 0; i < 200; i++) {
+				document.activeElement.dispatchEvent(
+					new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })
+				);
+			}
+			const walk = (performance.now() - t0) / 200;
 
-		// THE PATH IT REPLACED: querySelectorAll plus indexOf, per keypress.
-		let cursor = tbl.querySelector('tbody tr');
-		const t1 = performance.now();
-		for (let i = 0; i < 200; i++) {
-			const all = [...tbl.querySelectorAll(SEL)].filter((r) => !r.hidden);
-			const at = all.indexOf(cursor);
-			cursor = all[at + 1] ?? all[0];
-		}
-		const rescan = (performance.now() - t1) / 200;
+			// THE PATH IT REPLACED: querySelectorAll plus indexOf, per keypress.
+			let cursor = tbl.querySelector('tbody tr');
+			const t1 = performance.now();
+			for (let i = 0; i < 200; i++) {
+				const all = [...tbl.querySelectorAll(SEL)].filter((r) => !r.hidden);
+				const at = all.indexOf(cursor);
+				cursor = all[at + 1] ?? all[0];
+			}
+			const rescan = (performance.now() - t1) / 200;
 
-		return {
-			rows: tbl.querySelectorAll('tbody tr').length,
-			walk: Math.round(walk * 100) / 100,
-			rescan: Math.round(rescan * 100) / 100,
-			landedOn: document.activeElement.dataset.key
-		};
-	});
-	assert(
-		traversal.walk < traversal.rescan,
-		`${traversal.rows.toLocaleString()} rows: sibling walk ${traversal.walk} ms/keypress vs ` +
-			`rescan ${traversal.rescan} ms/keypress (${(traversal.rescan / traversal.walk).toFixed(0)}×), ` +
-			`200 presses landed on ${traversal.landedOn}`,
-		`the sibling walk (${traversal.walk} ms) is not faster than the rescan (${traversal.rescan} ms) — ` +
-			`either the walk regressed or this is not measuring what it thinks`
+			return {
+				rows: tbl.querySelectorAll('tbody tr').length,
+				walk: Math.round(walk * 100) / 100,
+				rescan: Math.round(rescan * 100) / 100,
+				landedOn: document.activeElement.dataset.key
+			};
+		})
 	);
-	note(
-		`one second of held ArrowDown: ${(traversal.walk * 60).toFixed(1)} ms of main thread on the ` +
-			`walk, ${(traversal.rescan * 60).toFixed(0)} ms on the rescan`
-	);
+	if (traversal) {
+		assert(
+			traversal.walk < traversal.rescan,
+			`${traversal.rows.toLocaleString()} rows: sibling walk ${traversal.walk} ms/keypress vs ` +
+				`rescan ${traversal.rescan} ms/keypress (${(traversal.rescan / traversal.walk).toFixed(0)}×), ` +
+				`200 presses landed on ${traversal.landedOn}`,
+			`the sibling walk (${traversal.walk} ms) is not faster than the rescan (${traversal.rescan} ms) — ` +
+				`either the walk regressed or this is not measuring what it thinks`
+		);
+		note(
+			`one second of held ArrowDown: ${(traversal.walk * 60).toFixed(1)} ms of main thread on the ` +
+				`walk, ${(traversal.rescan * 60).toFixed(0)} ms on the rescan`
+		);
+	}
 } else {
 	note('skipped under --quick');
 }
@@ -887,20 +1005,22 @@ if (!QUICK) {
 
 head('7. "Load more" append cost, including the roving reassignment');
 for (const n of QUICK ? [1000] : [1000, 5000, 25000]) {
-	await setRows(n);
-	const append = await page.evaluate(() => {
-		const before = document.querySelectorAll('.tbl tbody tr').length;
-		const t0 = performance.now();
-		window.__harness.harness.loadMore(200);
-		window.__harness.flush();
-		void document.documentElement.offsetHeight;
-		const elapsed = performance.now() - t0;
-		return {
-			elapsed: Math.round(elapsed * 10) / 10,
-			before,
-			after: document.querySelectorAll('.tbl tbody tr').length
-		};
-	});
+	const append = await atSize(n, 'section 7 append cost', () =>
+		page.evaluate(() => {
+			const before = document.querySelectorAll('.tbl tbody tr').length;
+			const t0 = performance.now();
+			window.__harness.harness.loadMore(200);
+			window.__harness.flush();
+			void document.documentElement.offsetHeight;
+			const elapsed = performance.now() - t0;
+			return {
+				elapsed: Math.round(elapsed * 10) / 10,
+				before,
+				after: document.querySelectorAll('.tbl tbody tr').length
+			};
+		})
+	);
+	if (!append) break;
 	ok(
 		`${String(n).padStart(6)} rows → +200: ${append.elapsed} ms (${append.before} → ${append.after} rows)`
 	);
@@ -1460,9 +1580,26 @@ if (!ASSERT_ONLY) {
 	);
 }
 
+const rssFinal = await browserRssGb();
+if (rssFinal !== null)
+	note(
+		`browser RSS at the end of the run: ${rssFinal.toFixed(2)} GB — a fresh page per size holds ` +
+			`this flat; rebuilding in place reached 8.5 GB by section 4 and died in section 5`
+	);
+
 await browser.close();
 server.close();
 await rm(outDir, { recursive: true, force: true });
+
+/* The ceiling is reported LAST as well as at the point it was hit, because the
+ * sections after it print numbers at the sizes that did fit, and a reader
+ * skimming the tail would otherwise take a short run for a complete one. */
+if (ceilingHit)
+	process.stdout.write(
+		`\n\x1b[31mCEILING: this machine could not carry ${ceilingHit.n.toLocaleString()} rows ` +
+			`(${ceilingHit.what}). Largest size completed: ${largestCompleted.toLocaleString()} rows. ` +
+			`Figures at or above ${ceilingHit.n.toLocaleString()} rows were NOT obtained.\x1b[0m\n`
+	);
 
 process.stdout.write(
 	failures === 0
