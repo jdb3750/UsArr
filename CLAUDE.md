@@ -19,12 +19,14 @@ misread the project.
 
 Owner: Joe (GitHub `jdb3750`). Repo: `github.com/jdb3750/UsArr`.
 
-**Status: pre-alpha. The first slice of code has landed.** What works end to end is the Prowlarr
-Search-and-Grab path: configuration, encrypted credential storage, SQLite with migration 0001, the
-SSRF egress policy, the Prowlarr client, search streamed over SSE, grab, the health endpoints, and
-an embedded SPA shell. **Everything else is still design.** The *Arr library sync, the library grid
-and local search, requests, cross-media and the gateway surfaces are unimplemented. Read the code
-before describing behaviour — "no invented status" cuts both ways.
+**Status: pre-alpha.** The binary builds, serves an embedded SPA, and runs the Prowlarr
+Search-and-Grab path end to end on top of the §14 security floor. No sync channel runs yet, so
+there is no catalogue behind any of it. **Past that, this file deliberately does not list what has
+landed** — such a list is false within days, and this one was — so read it off the tree:
+`web/src/routes` for screens, `internal/` for backend surfaces, `internal/db/migrations` for the
+schema that exists. `docs/ARCHITECTURE.md` §16 is authoritative for which milestone owns a thing,
+which is a different question from whether it is built. Read the code before describing behaviour
+— "no invented status" cuts both ways.
 
 ## The four principles
 
