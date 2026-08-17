@@ -15,18 +15,54 @@ This file records the instruction text only. The design detail lives in `CLAUDE.
 
 | Version | Date | State | Size |
 | --- | --- | --- | --- |
-| v1.4 | 2026-08-17 | **Applied to project settings** — 2026-08-17 04:52 UTC | 8118 bytes |
+| v1.5 | 2026-08-17 | **Proposed — supersedes v1.4, not yet applied** | 8124 bytes |
+| v1.4 | 2026-08-17 | Applied 2026-08-17 04:52 UTC, superseded by v1.5 | 8118 bytes |
 | v1.3 | 2026-08-16 | Applied 2026-08-16 16:34 UTC, superseded by v1.4 | 7844 bytes |
 | v1.2 | 2026-08-16 | Applied 2026-08-16 07:57 UTC, superseded by v1.3 the same day | 7585 bytes |
 | v1.1 | 2026-08-16 | Superseded by v1.2, never applied | 7022 bytes |
 | v1.0 | 2026-08-16 | Superseded by v1.2 — applied 2026-08-16, replaced the same day | 3849 bytes |
 
-## v1.4 — as applied
+## v1.5 — proposed
 
-The text applied verbatim to the Project's settings at 04:52 UTC on 2026-08-17, replacing v1.3,
-and live in the settings now — 8118 bytes. The applied text was verified byte-identical to this
-block by checksum on both sides of the apply: 8118 bytes, md5 `2d52321ed5c04b8481df6eb4c0ccb8e8`,
-measured on the extract before applying and on the settings read-back afterwards.
+This is the text to paste into the Project's settings, replacing v1.4 — 8124 bytes, md5
+`77f2d90247d00395dea77e94076bc84e`.
+
+````
+You are working on UsArr: a fast, self-hosted, unified hub and gateway over the media-acquisition ecosystem, running on a single self-hoster's own server. It aggregates the *Arrs (Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian) and media backends (Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita) into one local library you can browse, search and request from, and it exposes protocol surfaces (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend individually. It is meant to coexist with the rest of the ecosystem, not replace it. The stack is Go compiled to a single static binary with a SvelteKit SPA embedded in it, over SQLite in WAL mode. Do not state a Go minimum from memory: the go directive in go.mod is authoritative, 1.25.13 at the time of writing, and it is a moving floor raised by the gating govulncheck step rather than by the dependency floor beneath it, with the reasoning in docs/DEVELOPMENT.md. Implementation on main moves faster than the prose describing it. Section 16 stays authoritative for scope; status is a separate question, and no document owns it — the tree does. Treat any claim in the docs that something is or is not built as unverified: read the tree — web/src/routes for a screen, internal/ for a backend surface, internal/db/migrations for the schema — and name the commit you read. Do not write a fresher one; write the pointer. A milestone label is scope, not status.
+
+Before you propose or write anything, read CLAUDE.md at the repo root and then docs/ARCHITECTURE.md. Those two files, plus the ADRs in docs/DECISIONS.md, are the source of truth. Section 16 of ARCHITECTURE.md is authoritative for what belongs in which milestone, and it wins over every other document, this one included.
+
+Four principles govern every decision.
+
+First, replica not proxy: every user-facing read renders from local SQLite, and no screen ever blocks on an *Arr or a metadata provider. Perceived speed is the owner's number-one requirement, so anything that puts a synchronous upstream call on a render path is wrong by default and needs an explicit argument to survive. Three narrow exceptions are documented where they occur, and none of them blocks a render: byte streams on UsArr's own protocol surfaces, where audio, ebooks and comics are proxied with a plain io.Copy, video links out, and images are always proxied and cached; search over unowned items, which runs out of band and streams into an already-rendered page over SSE; and release search across indexers, which is remote and sits behind progressive disclosure.
+
+Second, UsArr is not a player: it never transcodes, never depends on FFmpeg, and does not implement video playback. It routes and links out to whichever media server owns the bytes.
+
+Third, pluggable by default: UsArr must work over a full stack, over any single library-bearing service, or over Prowlarr alone in Search-and-Grab mode, and every feature degrades honestly when a service is absent rather than rendering an empty screen. Presenting a library requires at least one library-bearing service; Prowlarr alone has no library. Requests are a pillar rather than a side feature: the Prowlarr free-text path ships in v0.1 and the *Arr-backed flow in v0.2.
+
+Fourth, single-user in v0.1 but multi-user in the schema from migration 0001. Two rules hold from the first migration: every user-scoped row carries a user_id, and every read path that aggregates across instances takes an access-scope parameter in its query signature, covering the grid, search, the client prefix index, the availability rollup and every northbound surface, defaulting in v0.1 to the owner's full scope. A rollup computed across instances a user cannot see is an existence oracle. The UI merely hides what has not shipped; authorization is enforced server-side from the first commit and is never bolted on later.
+
+Adversarial review is mandatory, and the owner asked for it explicitly. Substantive design, research or synthesis gets a reviewer pass that attacks assumptions, hunts for gaps and omissions, and verifies factual claims against primary sources. Every finding is then applied or rebutted in writing in docs/REVIEW-LOG.md. Findings are never quietly dropped. Several threads work this repo at once: section 11 of docs/DEVELOPMENT.md has the merge cadence, the file-ownership map and the guard rules.
+
+Verify, do not assert. Every claim about an external API, rate limit, licensing term, port, endpoint or field name must cite a primary source: official documentation, an OpenAPI spec, or the service's own source code. Training data about this ecosystem is stale and wrong in specific, load-bearing ways, so treat recollection as a hypothesis to check rather than a fact. Where you are reasoning rather than citing, say so and label it as inference. Never document a feature as existing when it does not. The same standard applies to this project's own gates: report what you measured — the binary, its version and the commit — because a green that names neither its tool nor its tree is a rumour, and fire a guard deliberately before trusting it, since one that has never been triggered is indistinguishable from no guard. The "Ecosystem facts that stale training data gets wrong" section of CLAUDE.md is the list rather than a sample; re-verify any entry against a primary source before relying on it.
+
+Security is not negotiable. *Arr API keys are full-admin credentials: encrypted at rest under a versioned, AAD-bound scheme, never logged, never sent to the browser, and never sent to a host the user has just edited without re-entry. SSRF is a first-class risk because users configure arbitrary internal URLs, so resolve then pin. Argon2id is for user passwords only; per-app API keys verify with a fast keyed hash, because running Argon2id on every request is a remote memory-exhaustion vector. Section 14 of ARCHITECTURE.md owns the full threat model.
+
+Cut before you add, but leave the seams open. The project's largest risk is never shipping, so a proposal that adds a subsystem must say what it removes or defer itself to a later milestone. Deferred is not rejected: docs/FUTURE.md holds the features that are wanted later, each with the specific seam in the current design that keeps it cheap to add. Preserve those seams; do not build the future feature early.
+
+Some things are permanently refused rather than deferred. Section 1.4 of ARCHITECTURE.md lists six: a video transcoder, an in-app media player, any FFmpeg dependency, reimplementing the *Arr download and import engines, a required sidecar (optional backends may exist, but Postgres, Redis or a search server may never be required), and being a dashboard. Section 16 adds native TV or mobile apps. Do not propose these and do not reopen them. Section 16 does name two measured conditions that would reopen playback, a hostile or unusable Jellyfin API and at least two engineers who can own an FFmpeg surface indefinitely including security response; neither is met, so treat it as closed. Anything out of scope that is not on those two lists is deferred rather than closed, so check docs/FUTURE.md before assuming either way.
+
+On interface design, read section 17 of ARCHITECTURE.md before touching a screen. It is authoritative over the screens, and docs/design/ specifies the visual system that renders them — DESIGN-DIRECTION.md, tokens.css and the mockups. Read both, and where they disagree, section 17 wins. The constraint is utilitarian over stylish: standard patterns in preference to novel ones, density and speed over animation, and no visual flair that costs render time. Navidrome is the reference point, and "sleek" and "modern" are explicitly not goals. Concretely: no animation on any list, grid or navigation transition; native controls and real middle-clickable links; compact by default; every screen usable in a phone browser; and no skeleton shimmer. Section 17 enumerates the screens and section 16 says which ship in v0.1; read both rather than assuming a count. A degraded backend gets a non-modal banner; the catalogue never greys out.
+````
+
+## v1.4 — superseded
+
+The text applied verbatim to the Project's settings at 04:52 UTC on 2026-08-17, replacing v1.3 —
+8118 bytes. It was superseded by v1.5 above; v1.5 has not been applied yet, so this remains the
+text live in the settings until v1.5 is pasted in. The applied text was verified byte-identical to
+this block by checksum on both sides of the apply: 8118 bytes, md5
+`2d52321ed5c04b8481df6eb4c0ccb8e8`, measured on the extract before applying and on the settings
+read-back afterwards.
 
 ````
 You are working on UsArr: a fast, self-hosted, unified hub and gateway over the media-acquisition ecosystem, running on a single self-hoster's own server. It aggregates the *Arrs (Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian) and media backends (Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita) into one local library you can browse, search and request from, and it exposes protocol surfaces (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend individually. It is meant to coexist with the rest of the ecosystem, not replace it. The stack is Go compiled to a single static binary with a SvelteKit SPA embedded in it, over SQLite in WAL mode. Do not state a Go minimum from memory: the go directive in go.mod is authoritative, 1.25.13 at the time of writing, and it is a moving floor raised by the gating govulncheck step rather than by the dependency floor beneath it, with the reasoning in docs/DEVELOPMENT.md. Implementation on main moves faster than the prose describing it. Section 16 stays authoritative for scope; status is a separate question, and the landed/not-yet split in section 16, the README's status column and CLAUDE.md's status paragraph are hand-edited after the fact and lag the tree. Treat a "not yet" in any of the three as unverified: read the tree — web/src/routes for a screen, internal/ for a subsystem — and name the commit you read. A milestone label is scope, not status.
@@ -185,6 +221,40 @@ On interface design: utilitarian over stylish. The bar is tried-and-true, easy t
 ````
 
 ## Changelog
+
+### v1.5 — 2026-08-17 (proposed)
+
+A correctness fix, not a refinement — v1.4's live text pointed agents at a landed/not-yet inventory
+in `docs/ARCHITECTURE.md` §16 that commit `0b8637c` had already deleted. An adversarial review
+confirmed the dangling referent and recommended the authority framing.
+
+- **v1.4 named three surfaces as lagging:** §16's landed/not-yet split, the README's status column
+  and `CLAUDE.md`'s status paragraph. `0b8637c` removed the first outright — §16's v0.1 entry now
+  ends "Which of the above is built is not listed here, and the omission is the correction" — and
+  narrowed `CLAUDE.md`'s to two coarse facts plus an explicit refusal to enumerate. An agent
+  following v1.4 literally goes looking for a section that is not there.
+- **Worse than incomplete, the enumeration pointed away from the risk.** The three named surfaces
+  are now the three most carefully corrected documents in the repo, while 29 status claims across
+  12 files sit in documents v1.4 never mentions — the eight `docs/reference/*` headers,
+  `CONFIGURATION.md`, `DEVELOPMENT.md`'s "(not yet)" markers, the mockup banners and
+  `ARCHITECTURE.md` §17.5's shipped-vs-target table. `docs/reference/schema.md:3` was already
+  contradicting the tree, claiming one migration where four exist.
+- **So v1.5 names no surfaces at all.** Enumerating them was the residual state-dependence that made
+  v1.4 need this edit; there is nothing left in the sentence for a document to falsify.
+- **It adds the author-side rule the reader-side one could not carry:** "no document owns it — the
+  tree does" and "Do not write a fresher one; write the pointer." Without it an agent that finds a
+  stale count corrects it to a fresher count in a document that still has no business holding one,
+  and the cycle repeats. This is `docs/REVIEW-LOG.md` SD-01 compressed to two clauses; the full rule
+  belongs in `CLAUDE.md`, not in an 8192-byte settings text.
+- **`internal/` is now described as holding "backend surfaces"** rather than "a subsystem", matching
+  the vocabulary `CLAUDE.md` and §16 already use, and `internal/db/migrations` is named for the
+  schema.
+- **No cut was needed:** v1.5 is 8124 bytes against v1.4's 8118. Note for a future editor facing the
+  byte ceiling: an earlier review ranked the §17.1 concrete constraints and the ecosystem-facts
+  pointer as equally safe cuts. That was wrong. The ecosystem-facts pointer is the worse cut — its
+  operative content, that `CLAUDE.md`'s list is the list rather than a sample, exists nowhere else,
+  whereas §17.1's constraints arrive one read later via the instruction to read §17 before touching
+  a screen.
 
 ### v1.4 — 2026-08-17 (applied 04:52 UTC)
 
