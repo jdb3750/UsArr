@@ -19,8 +19,10 @@
  * WHAT THE GAP COST. It drifted in BOTH directions at once. --status-warn sat
  * stale here for a day after the owner closed the value (app.css kept #8a5300 /
  * #e0a33a against tokens.css's #a44c00 / #fb9349, fixed at 6bac810), while
- * --inset / --hover ran AHEAD of tokens.css, which still records them as raised
- * but not adopted. One direction is not enough; this file checks both.
+ * --inset / --hover ran AHEAD of tokens.css, which recorded them as raised by
+ * the mockup but not adopted. One direction is not enough; this file checks
+ * both. (tokens.css has since adopted the pair, so that second example is
+ * history rather than current state — the allowlists it needed are gone.)
  *
  * The two files are read with node:fs and parsed as text. Importing them is not
  * an option — app.css is a stylesheet, not a module, and importing it would
@@ -46,7 +48,8 @@ const APP_CSS = resolve(REPO, 'web/src/app.css');
  * swallow the next genuine drift, which is the exact failure mode this file
  * exists to close, so nothing here is a category-wide exemption: each is one
  * named token, and the divergence list pins BOTH values so it cannot go stale
- * quietly either.
+ * quietly either. Every list is asserted against the files in both directions —
+ * an entry whose drift is gone fails, naming itself, rather than lingering.
  *
  * A token declared only in app.css is not automatically wrong — app.css is
  * where a role gets proven before the design thread adopts it. Such entries are
@@ -60,18 +63,6 @@ const APP_CSS = resolve(REPO, 'web/src/app.css');
 
 /** Declared in app.css, absent from tokens.css. Reason + what retires it. */
 const APP_ONLY_ALLOWED: Record<string, string> = {
-	'--inset':
-		'Ahead of tokens.css deliberately. tokens.css:260-284 records the role and ' +
-		'this exact value (#fdfcfb / #100f0e) as raised by the mockup, and says the ' +
-		'pass that writes app.css is the one that decides — this is that pass. ' +
-		'RETIRED BY: tokens.css declaring --inset in its own ramp.',
-	'--hover':
-		'Ahead of tokens.css deliberately, same note (#eceae5 / #26241f). A hover ' +
-		'fill distinct from --bg-selected, which the §4 mapping cannot express. ' +
-		'RETIRED BY: tokens.css declaring --hover in its own ramp.',
-	'--bg-inset':
-		'The §4 semantic alias for --inset (var(--inset)). It exists here only ' +
-		'because --inset does. RETIRED BY: the same adoption that retires --inset.',
 	'--scrim':
 		'Modal scrim, color-mix over --n-8. A component-layer need that arrived ' +
 		'with the mockup port; tokens.css describes roles, and never named this ' +
@@ -90,45 +81,45 @@ const APP_ONLY_ALLOWED: Record<string, string> = {
 
 /**
  * Declared in BOTH, deliberately at different values. Both values are pinned,
- * so this is not "stop checking this token": if either file moves, the entry
- * stops matching and the drift is reported as usual. That is the difference
- * between a recorded exception and a hole.
+ * so this is not "stop checking this token": if either file moves to a THIRD
+ * value the entry stops matching and the drift is reported as usual.
+ *
+ * That covers one of the two ways an entry dies, and the other one bit. If the
+ * files move INTO AGREEMENT the exception is simply never consulted — there is
+ * no drift left for it to suppress — so it sits dead and passing, which is what
+ * --bg-hover did once tokens.css adopted --hover and both files came to read
+ * var(--hover). An allowlist that cannot say when one of its exceptions has
+ * become unnecessary accumulates them silently, so the staleness of a pin is
+ * asserted directly, below, the way the other two lists already assert theirs.
+ *
+ * Currently empty: the two files agree on every token they both declare.
  */
-const DIVERGENT_ALLOWED: Record<string, { tokens: string; app: string; reason: string }> = {
-	'--bg-hover': {
-		tokens: 'var(--n-1)',
-		app: 'var(--hover)',
-		reason:
-			'The consequence of adopting --hover early. tokens.css §4 maps hover and ' +
-			'raised both to --n-1, which is the mapping it says leaves hover-over-a-' +
-			'selected-row with nothing to say; app.css points the alias at the ' +
-			'interstitial instead. Same divergence as --hover, one level up. ' +
-			'RETIRED BY: the same adoption that retires --hover.'
-	}
-};
+const DIVERGENT_ALLOWED: Record<string, { tokens: string; app: string; reason: string }> = {};
 
-/** Declared in tokens.css, absent from app.css. Reason + what retires it. */
-const TOKENS_ONLY_ALLOWED: Record<string, string> = {
-	'--spacing':
-		"Tailwind v4's base unit, read by Tailwind itself to derive p-3 / gap-2. " +
-		'web/ ships no Tailwind — app.css is plain CSS with no @import "tailwindcss" ' +
-		'— so porting it would add a token nothing reads. The --space-N scale it ' +
-		'anchors IS ported, value for value. RETIRED BY: web/ adopting Tailwind.'
-};
+/**
+ * Declared in tokens.css, absent from app.css. Reason + what retires it.
+ *
+ * Currently empty, and that is the healthy state: it means app.css ports every
+ * token tokens.css declares. The last entry was --spacing, Tailwind v4's base
+ * unit, which tokens.css §5 cut once the retired Tailwind path left it with no
+ * reader — so the exception went with the token rather than being carried.
+ */
+const TOKENS_ONLY_ALLOWED: Record<string, string> = {};
 
 /**
  * tokens.css blocks that declare custom properties which are not tokens of the
  * palette. Excluded by prelude, never by token name, so a new block cannot slip
  * past unnoticed — the coverage test below fails on any prelude not listed here
  * and not reachable from a STATE.
+ *
+ * Currently empty. The one entry was `@theme inline`, Tailwind's theme bridge,
+ * which tokens.css §10 deleted along with the Tailwind path ADR-0025 retired;
+ * §10 is now prose describing what a future adoption would restore, and prose
+ * is stripped before parsing, so no such prelude reaches this list any more.
+ * Note that an entry here is only ever consulted when the block exists, so a
+ * dead one cannot fail — it has to be removed with the block it named.
  */
-const TOKENS_CSS_NON_TOKEN_BLOCKS: Record<string, string> = {
-	'@theme inline':
-		"Tailwind's theme bridge (--color-bg: var(--bg), --text-xs--line-height, " +
-		"…). It re-exports the tokens under Tailwind's namespace rather than " +
-		'declaring values, and web/ ships no Tailwind for it to feed. RETIRED BY: ' +
-		'web/ adopting Tailwind.'
-};
+const TOKENS_CSS_NON_TOKEN_BLOCKS: Record<string, string> = {};
 
 /* -----------------------------------------------------------------------------
  * Parsing
@@ -428,8 +419,9 @@ describe('web/src/app.css is a faithful hand-port of docs/design/tokens.css', ()
 			).toBe(false);
 		}
 		for (const name of Object.keys(DIVERGENT_ALLOWED)) {
-			// The pinned pair already fails the comparison if either side moves; this
-			// catches the entry that outlived the token itself.
+			// This catches the entry that outlived the token itself. It does NOT catch
+			// the entry that outlived the divergence — a pin the files have stopped
+			// matching still finds the token declared in both. That is the next test.
 			expect(
 				anywhere(TOKENS_DECLS, name),
 				`${name} is allowlisted but tokens.css no longer declares it`
@@ -438,6 +430,63 @@ describe('web/src/app.css is a faithful hand-port of docs/design/tokens.css', ()
 				anywhere(APP_DECLS, name),
 				`${name} is allowlisted but app.css no longer declares it`
 			).toBe(true);
+		}
+	});
+
+	/*
+	 * The hole the --bg-hover entry fell through, closed.
+	 *
+	 * The other two lists fail LOUDLY when their exception dies: the token turns
+	 * up on the side it was supposed to be absent from, and the test above says
+	 * so by name. A DIVERGENT_ALLOWED entry had no equivalent. Its pin only ever
+	 * gets consulted when the two files disagree, so when they stop disagreeing
+	 * the entry is never reached at all — no drift to suppress, nothing to
+	 * mismatch, and a green suite carrying a dead exception. That is what
+	 * happened: tokens.css adopted --hover, --bg-hover became var(--hover) in
+	 * both files, and the pin sat here describing a divergence that was gone.
+	 *
+	 * So require every entry to be LOAD-BEARING — in at least one state, the two
+	 * files must actually disagree AND the pin must be the thing suppressing it.
+	 * An entry that suppresses nothing is an entry to delete.
+	 */
+	it('leaves no DIVERGENT_ALLOWED entry standing after the divergence it pins is gone', () => {
+		const byState = STATES.map((state) => ({
+			state,
+			tokens: effective(TOKENS_DECLS, state),
+			app: effective(APP_DECLS, state)
+		}));
+
+		const stale: string[] = [];
+		for (const [name, pin] of Object.entries(DIVERGENT_ALLOWED)) {
+			const observed: string[] = [];
+			let loadBearing = false;
+
+			for (const { state, tokens, app } of byState) {
+				const inTokens = tokens.get(name);
+				const inApp = app.get(name);
+				if (!inTokens || !inApp) continue;
+				observed.push(`${state.label} — ${describeDrift(name, inTokens, inApp)}`);
+				if (inTokens.value !== inApp.value && isRecordedDivergence(name, inTokens, inApp)) {
+					loadBearing = true;
+				}
+			}
+
+			if (!loadBearing) {
+				stale.push(
+					`${name} pins tokens.css ${pin.tokens} / app.css ${pin.app}, but that pair ` +
+						'no longer describes the files in any state, so the entry suppresses ' +
+						'nothing. Delete it. What the files actually hold:\n' +
+						observed.map((line) => `      ${line}`).join('\n')
+				);
+			}
+		}
+
+		if (stale.length > 0) {
+			expect.fail(
+				`${stale.length} DIVERGENT_ALLOWED entry(s) no longer describe a live divergence\n` +
+					`${AUTHORITY}\n\n` +
+					stale.map((line) => `  ${line}`).join('\n\n')
+			);
 		}
 	});
 
