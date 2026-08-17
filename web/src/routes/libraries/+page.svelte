@@ -27,11 +27,31 @@
 	 * derivation happens on every sync and that seeing or changing the result is
 	 * what is absent, both of which are about behaviour rather than storage.
 	 *
-	 * Nor does it promise §17.8's Accept step. Auto-derivation is not the code
-	 * falling short of that design: `managed_by = 'auto'` is §17.8's OWN marker
-	 * for a library the user has not touched, so the column that would record an
-	 * accepted proposal is already carrying the pre-proposal state correctly. The
-	 * wizard step is unbuilt, not contradicted.
+	 * Nor does it promise §17.8's Accept step. That conclusion stands; the
+	 * reasoning that used to sit under it does not. It read: "`managed_by =
+	 * 'auto'` is §17.8's OWN marker for a library the user has not touched, so
+	 * the column that would record an accepted proposal is already carrying the
+	 * pre-proposal state correctly." ⚠️ FALSIFIED BY THE SCHEMA — that column
+	 * records no such thing, and cannot.
+	 * `internal/db/migrations/00005_library_sync.sql:565` reads
+	 * `managed_by TEXT NOT NULL DEFAULT 'auto' CHECK (managed_by IN ('auto','user'))`:
+	 * exactly TWO values, and NEITHER means "proposed". Its own comment defines
+	 * 'auto' as created by the proposal flow and still tracking its source, and
+	 * 'user' as the user edited it. A library the user accepted and one they have
+	 * never been shown are therefore the same row, indistinguishable.
+	 *
+	 * ⚠️ AND THE ROW EXISTS THE MOMENT IT IS PROPOSED, which inverts §17.8's
+	 * safety. If a proposal is already a row, then Accept is a no-op and Decline
+	 * is a DELETE — backwards from what a pre-checked confirmation screen
+	 * implies, where saying no is supposed to be the cheap direction.
+	 *
+	 * THIS IS AN OPEN DECISION, NOT A BUG TO FIX HERE. Design wants it made
+	 * before anyone builds the wizard, and the three candidates are: a proposal
+	 * stops being a row until it is accepted; or a third `managed_by` state; or
+	 * §17.8 is renamed to a review of what has already been created. Until one is
+	 * picked, the Accept step is not buildable on this schema. The wizard step is
+	 * still unbuilt rather than contradicted — but it is unbuilt on a column that
+	 * cannot yet express what it needs.
 	 */
 	import { resolve } from '$app/paths';
 </script>
