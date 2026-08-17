@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>UsArr freeze-while-aimed — negative control (fabricated data)</title>
+	</head>
+	<body>
+		<!--
+			THIS PAGE IS NOT PART OF THE APPLICATION AND NEVER SHIPS.
+
+			Same reasoning as scripts/harness/index.html: every row is fabricated,
+			DESIGN-DIRECTION §9.6 forbids fabricated data in a shipped product
+			surface, and a route would be a product surface whether or not anything
+			linked to it. `pnpm build` never sees this directory —
+			`scripts/freeze-check.mjs` builds it into a temp dir, drives it with a
+			real Chromium and a real pointer, and deletes it.
+
+			It exists because ADR-0038's freeze arms from RAW DOM LISTENERS reacting
+			to events the browser dispatches out of a DOM mutation. There is no DOM
+			mutation, no hit testing and no pointer in `environment: 'node'`, so the
+			unit-test run cannot exercise the one window where the rule fails.
+		-->
+		<div id="freeze-harness"></div>
+		<script type="module" src="./main.ts"></script>
+	</body>
+</html>

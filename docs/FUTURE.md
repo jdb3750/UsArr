@@ -765,10 +765,21 @@ wanted rather than an archaeology problem.
 **Trigger — either of these, whichever comes first.**
 
 * **A second indexer service becomes a configuration UsArr expects rather than tolerates.** Two
-  Prowlarrs are *creatable* today (nothing enforces uniqueness on `kind`) and each is searched
-  separately, so the ambiguity is live, not hypothetical — but it is a configuration nobody has been
-  pointed at. The trigger fires when the Libraries screen (§17.8) binds more than one indexer, or
-  when a user reports a Recent-grabs row they cannot attribute.
+  Prowlarrs are *creatable* today — `service_instance`'s only uniqueness is `name UNIQUE`
+  (migration 0001, `internal/db/migrations/00001_initial.sql:136`), nothing constrains `kind`, and
+  both `POST /api/v1/services` calls return 201 — so a different name is the only thing in the way.
+  ⚠️ **This entry used to say that each is then "searched separately". That is false, and the
+  correction makes the gap larger rather than smaller.** `resolveIndexerInstance`
+  (`internal/httpapi/search.go:364`) picks **exactly one** instance — `candidates[0]`, ordered by
+  priority then name — and the second service is **never contacted**. Measured against two fake
+  Prowlarrs: `P1 searchCounts=map[1:1 2:1]`, `P2 searchCounts=map[]`. So the live problem is not that
+  a grab cannot be attributed to one of two *searched* services; it is that one whole service is
+  **silently skipped** and no report names it. **That is a live gap in a supported configuration,
+  and it is not this entry's to fix** — a `provenance` column records which instance a grab *went
+  to*, never which instance the search *declined to ask*. It is tracked as **INST-01** in
+  `docs/REVIEW-LOG.md`, and it is open with owners named. This trigger still fires on its own terms:
+  when the Libraries screen (§17.8) binds more than one indexer, or when a user reports a
+  Recent-grabs row they cannot attribute.
 * **Library sync lands and the import join needs the source service.** Reattaching an imported file
   to the grab that produced it goes through `provenance.download_id`; if that join ever has to
   disambiguate by *service* rather than by download id, the column stops being cosmetic and this

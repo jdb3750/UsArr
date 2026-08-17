@@ -341,6 +341,37 @@ gates on shared CI are flake generators — the predictable outcome is that they
 two, but only after blocking real work first. Record `make bench` output in `docs/BENCHMARKS.md`
 with the hardware and commit named, and treat regressions as a release conversation.
 
+### Browser-driven frontend checks: `pnpm bench:list` and `pnpm test:freeze`
+
+```bash
+cd web
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers pnpm bench:list   # the List primitive (ADR-0029)
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers pnpm bench:list -- --quick
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers pnpm test:freeze  # freeze-while-aimed (ADR-0038)
+```
+
+`vitest.config.ts` is `environment: 'node'`, so **the unit run cannot import a rune component and
+has no DOM at all**. Anything whose behaviour is decided by layout, hit testing, a physical pointer
+coordinate or the instant at which the browser dispatches an event lives in one of these two
+scripts instead. Each builds its own dev-only Vite root under `web/scripts/` — never part of
+`pnpm build`, and never a route, because a route would be a product surface and every row on these
+pages is fabricated — serves it, drives it with Playwright, and exits non-zero on a failed
+assertion.
+
+* **`pnpm bench:list`** — `web/scripts/list-bench.mjs` over `web/scripts/harness/`. Measurement plus
+  the ARIA and roving invariants for `$lib/List.svelte`. Its own header says which parts are
+  load-bearing; the containment **control run** and the **frame-per-step** drift loop both look like
+  removable overhead and are the reason the numbers mean anything.
+* **`pnpm test:freeze`** — `web/scripts/freeze-check.mjs` over `web/scripts/freeze-harness/`. The
+  negative control for ADR-0038: real pointer, real focus, real appends inside a real Svelte flush,
+  and **every assertion on the order of the rendered rows rather than on an aim flag**. That
+  distinction is the whole point — the rule shipped broken past a set of checks that asserted the
+  flag. Its header carries the measured browser behaviour the scenarios depend on, and says how to
+  fire it deliberately against the pre-fix code.
+
+**Neither is in `make check`**, both need a Chromium, and both are one-command reproducible from a
+clone with the browsers path set.
+
 ### Memory: `make bench-rss`
 
 ```bash
