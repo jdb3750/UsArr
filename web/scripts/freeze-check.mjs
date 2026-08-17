@@ -31,13 +31,19 @@
  *     reordering all twenty, collapsing the region out from under a parked
  *     pointer — none of them dispatch anything during the mutation, with or
  *     without a forced layout read (offsetHeight / getBoundingClientRect /
- *     elementFromPoint) in the same task. Blink recomputes the hover chain in
- *     the frame's post-lifecycle step, so every pointerenter and pointerleave
- *     arrives in a task of its own, where writing `$state` is legal. Six
- *     mutation shapes crossed with four forced-layout variants, all measured.
- *     Note what this means for the file header of frozenorder.svelte.ts: the
- *     deferral is right, but pointerenter is not the event that demonstrates
- *     it.
+ *     elementFromPoint) in the same task. Every pointerenter and pointerleave
+ *     arrives in a task of its own, where writing `$state` is legal. FIVE
+ *     mutation shapes — the five just named — crossed with four forced-layout
+ *     variants, being those three reads plus a no-read control: twenty cells,
+ *     all measured, all async-only. (INFERENCE, not measured: the mechanism is
+ *     presumably Blink recomputing the hover chain in the frame's
+ *     post-lifecycle step. The probe times the dispatch; it does not attribute
+ *     it.)
+ *     The probe is `scripts/pointer-dispatch-probe.mjs` — `pnpm probe:pointer`
+ *     reprints the matrix, and carries its own positive control, because a
+ *     number nobody can re-derive is a number on nobody's authority. Note what
+ *     this means for the file header of frozenorder.svelte.ts: the deferral is
+ *     right, but pointerenter is not the event that demonstrates it.
  *   · `focusout` IS SYNCHRONOUS. Removing the focused element — or MOVING it,
  *     which is a remove plus an insert, and which is what a keyed `{#each}`
  *     does to every row on a re-sort — dispatches `focusout` from inside the
@@ -53,11 +59,15 @@
  *
  * So the write a browser can really throw away here is a focus write, and it is
  * thrown away in the direction that LATCHES THE FREEZE ON: the flag that fails
- * to clear is `focusWithin`. A list whose freeze never releases stops
- * re-sorting for the rest of the session and withholds every later arrival from
- * a user who is not there, behind a control they have no reason to press —
- * which is the failure mode that looks like nothing being wrong. Scenario 5 is
- * that case, and it is the scenario that goes red against the pre-fix code.
+ * to clear is `focusWithin`. Scenario 5 is that case, and it is the scenario
+ * that goes red against the pre-fix code — that much is measured.
+ *
+ * WHY THAT DIRECTION IS THE BAD ONE IS REASONING, NOT MEASUREMENT, and is
+ * recorded as the rationale for spending a scenario on it: a list whose freeze
+ * never releases stops re-sorting for the rest of the session and withholds
+ * every later arrival from a user who is not there, behind a control they have
+ * no reason to press — the failure mode that looks like nothing being wrong.
+ * No test here asserts that severity; it is an argument about consequences.
  *
  * The pointer scenarios stay, and they are not decoration: they assert the
  * ARMING direction on observable order, which is the check the original
