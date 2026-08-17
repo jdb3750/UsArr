@@ -3,6 +3,10 @@
 Two rounds so far. **Round 1** reviewed the design documents; **Round 2** reviewed the first code
 drop. Round 2 is below; Round 1 begins at [§R1](#round-1--the-design-documents).
 
+**Before you append an entry, read `docs/DEVELOPMENT.md` §11 on entry ids.** New entries carry the
+prefix of the thread that wrote them; `M5-` is retired for new ones and the existing `M5-` ids stand
+as dated records. §11 owns the rule and this line does not restate it.
+
 ---
 
 # Round 2 — the first code drop

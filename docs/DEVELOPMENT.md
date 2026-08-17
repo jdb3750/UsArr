@@ -1199,6 +1199,56 @@ paragraph describing a repo that no longer exists.
   `git ls-remote` and a `grep` per head. Renumbering your own section before you push is cheap;
   renumbering it after it has landed is a cascade through every cross-reference in the file, and
   §6.1's invariant means the entry's id, text and severity may not move with it.
+* **A `docs/REVIEW-LOG.md` entry id carries the prefix of the thread that wrote it, and the generic
+  `M5-` prefix is retired for new entries.** This is the amendment to the bullet above, and it is
+  narrow: `M5.N` subsection numbers, `docs/DECISIONS.md` ADR numbers and migration numbers are still
+  shared counters and still want the re-read-before-you-push discipline. Entry ids no longer do.
+  **The reason is the measured one**: `M5-` is a shared counter with no lock — three threads collided
+  on it in one evening, one pass colliding twice (`M5-33`→`M5-35`→`M5-36` in a single pass) — while
+  **no per-thread prefix has ever collided**. **An id should be a fact about its author, not a claim
+  on a global sequence.**
+
+  🚩 **The rule caught a live collision while it was being written, and that case is sharper than the
+  historical ones.** A second thread had drafted `M5-36` for its own entry at the same moment this
+  thread's `M5-36` landed as `10e7b00`. **Both had read `M5-35` and both were right when they looked**
+  — the collision happened entirely inside the uncommitted window, so no re-read by either party could
+  have found it. That is the whole argument in one line: **reading the file is not enough, because a
+  shared counter's true value includes what nobody has pushed yet.** A monotonic id cannot be
+  allocated safely by reading; it can only be won by racing. A per-thread prefix needs no global read
+  to be *correct* — only a cheap one to be *unused* — which is why the prefixes have never collided
+  where the counter has three times. The second thread renumbered to `ADRC-`. Three rules make it
+  hold:
+  * **The prefix is multi-letter.** A one-letter namespace is too small to be a fact about anybody,
+    and it has already failed: **`C-01` names two different findings in this file** — round 1's
+    *"Typo tolerance does not exist"* and round 4's *"The four library tables and `work_credit` have
+    no DDL anywhere"* — because the single-letter prefixes are round-scoped and got reused across
+    rounds.
+  * **`SYNC-` is reserved and may not be claimed.** `SYNC` is already a Mermaid node id in
+    `ARCHITECTURE.md` (*"Sync engine<br/>import · delta · reconcile · write queue"*), and the S
+    neighbourhood already carries ten prefixes — `S-`, `SD-`, `SR-`, `SU-`, `SW-`, `SALT-`, `SNAP-`,
+    `SSRF-`, `SCOPE-`, `SEC-`. `SW-` is a 28-entry batch a reader would reasonably read as "sync" and
+    it is the **frontend bench**, so `SYNC-01` beside `SW-01` is a scanning hazard rather than a
+    collision. Pick elsewhere in the alphabet.
+  * **Check `main`, then land your first entry promptly.** Measured 2026-08-17 on `10e7b00`:
+    **52 live entry-id prefixes on `main`** (51 under `grep -oE '\b[A-Z][A-Z0-9]*-[0-9]{2}\b'`, plus
+    `OQ-`, whose ids are single-digit), and **the union across all seventeen remote heads equals
+    `main`'s set exactly** — no head carries a prefix `main` does not. So checking `main` alone is
+    sufficient **today**, and the condition is worth more than the conclusion: it holds *because
+    prefixes are allocated by landing*. A thread that claims a prefix on a branch and sits on it has
+    made the check unsound for everyone else with nothing anyone can observe. Landing promptly is the
+    half of the rule that keeps the cheap check honest.
+    ⚠️ **Do not answer this with a declared registry of who holds which prefix.** A roster is a shared
+    mutable list — the same defect one level up, needing an edit from every thread that claims a
+    prefix and certain to drift from the log it describes. **The log is the registry, derived rather
+    than declared**: a grep over the entries themselves cannot go stale against the entries, and a
+    hand-maintained list of claimants can and eventually will.
+
+  ⚠️ **Existing `M5-` ids stand as dated records, and history is not renumbered.** This retires the
+  prefix for **new** entries only; every `M5-NN` already in the file keeps its id, its text and its
+  severity, which is `docs/REVIEW-LOG.md` §6.1's own invariant (*"No existing entry's id, text or
+  severity changed"*) and the same rule as *a citation inside a dated record is history, not
+  staleness* two bullets above. A sweep renumbering them into per-thread prefixes would destroy the
+  cross-references and the evidence at once.
 * **Give a throwaway branch a name nobody else will pick.** Reusing something generic like
   `main-merge` can move a ref another worktree is standing on, and git's protection against that is
   uneven — reproduced 2026-08-17 on `git version 2.43.0` in a scratch repo: with `shared` checked
