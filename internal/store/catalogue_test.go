@@ -379,7 +379,7 @@ func TestApplyCatalogueBatchWritesTheWholeShape(t *testing.T) {
 
 func TestApplyCatalogueBatchIsIdempotent(t *testing.T) {
 	// The same import run twice must leave exactly one of everything. Without
-	// the delete-then-insert in rebuildSearchDoc this is where invariant 2
+	// the delete-then-insert in writeSearchDoc this is where invariant 2
 	// breaks: the second run adds a doc and leaves the first one's FTS rows.
 	//
 	// ⚠️ TWO ITEMS, NOT ONE, AND THAT IS THE WHOLE POINT. With a single work this
@@ -708,7 +708,7 @@ func TestExternalIDConflictIsRecordedAndTheBatchSurvives(t *testing.T) {
 // TestUnfiledIsWhereAWorkBoundToNoOtherLibraryLands covers the case where the
 // BINDING itself points at library 0.
 //
-// ⚠️ IT DOES NOT EXERCISE rebuildSearchDoc's FALLBACK, and it used to claim it
+// ⚠️ IT DOES NOT EXERCISE writeSearchDoc's FALLBACK, and it used to claim it
 // did. Measured: deleting that fallback outright left this test green, because
 // applyOneItem writes the library_member row BEFORE it builds the document, so
 // the `SELECT … FROM library_member` always finds library 0 and the fallback
@@ -727,7 +727,7 @@ func TestUnfiledIsWhereAWorkBoundToNoOtherLibraryLands(t *testing.T) {
 	}
 
 	// Rebind the same container to library 0 so the next apply files the work
-	// nowhere else, then re-apply. rebuildSearchDoc must reach for Unfiled.
+	// nowhere else, then re-apply. writeSearchDoc must reach for Unfiled.
 	if err := s.db.Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `DELETE FROM library_member`)
 		return err
@@ -790,10 +790,17 @@ func TestRebuildSearchDocFilesAStrandedDocAsUnfiled(t *testing.T) {
 		t.Fatalf("stranding the work: %v", err)
 	}
 
+	// Re-derived from the replica rather than rebuilt from `it`, because that is
+	// the shape the caller this branch exists for has: the library-delete path
+	// holds a work id and no CatalogueItem.
 	if err := s.db.Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
-		return rebuildSearchDoc(ctx, tx, workID, it)
+		d, err := readSearchDocText(ctx, tx, workID)
+		if err != nil {
+			return err
+		}
+		return writeSearchDoc(ctx, tx, workID, d)
 	}); err != nil {
-		t.Fatalf("rebuildSearchDoc on a stranded work: %v", err)
+		t.Fatalf("writeSearchDoc on a stranded work: %v", err)
 	}
 
 	if n := docsWithNoScope(t, s); n != 0 {

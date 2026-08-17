@@ -341,20 +341,40 @@ loss, and it is smaller than filing every novelist under Music.
 
 **`person` is excluded from the media-type navigation enum, the Tier 1 prefix index and the FTS
 corpus**, because there is no person screen in any milestone and a person hit would be a search result
-with nowhere to land. It is reachable as a credit link on an item (ARCHITECTURE §17.6). ⚠️ The
-consequence is carried rather than tidied: **"find everything by this author" is unanswered in v0.1**,
-and the cheap candidate — folding credited names into the FTS `alt_titles` of the works they are
-credited on, so the query returns the books — belongs to whoever writes the document builder and is
-not specified here.
+with nowhere to land. It is reachable as a credit link on an item (ARCHITECTURE §17.6). **The
+exclusion still holds and is still enforced** — `TestPeopleNeverEnterTheSearchCorpus` asserts it over
+`search_doc`, `search_fts`/`search_trgm` and `search_doc_library`, and
+`internal/store/catalogue.go`'s `writeSearchDoc` now also **refuses** any of search.md §2's five
+excluded kinds at the writer rather than only reporting them afterwards (nothing shipped reaches that
+branch: Kavita's adapter maps containers to `comic` and `book` only).
 
-⚠️ **The document builder now exists and did NOT take that candidate**
-([ADR-0044](../DECISIONS.md#adr-0044)). `internal/store/catalogue.go`'s `rebuildSearchDoc` writes
-`search_fts.people` as the empty string, and the credit path does not go back and rewrite it: the
-credits are written in a **phase-B pass after** the item pass, so folding names in would mean
-re-running the whole document build for every credited work — a second FTS write per item, in the
-transaction the 100 ms batch window exists to keep short. The exclusion itself is enforced and
-asserted (`TestPeopleNeverEnterTheSearchCorpus`); the *enrichment* is still owed, and the seam is the
-`people` column, which exists and is empty.
+**What no longer holds is the consequence.** This paragraph used to carry ⚠️ *"find everything by this
+author" is unanswered in v0.1*, and the paragraph after it recorded that the document builder wrote
+`search_fts.people` as the empty string. **Both are false as of `internal/store`'s `creditedNames`.**
+The column is filled from `work_credit` — the person work's title UNIONed with `credited_as` where
+they differ, newline-joined, **every role in the vocabulary and not an authorship-ish subset** — so a
+search for a creator returns the *works* they are credited on. A person hit is still impossible; a
+book found by its author is not.
+
+**It fills `people`, not the `alt_titles` candidate this section used to name**, and the difference is
+not cosmetic: a name in `alt_titles` is indistinguishable from a title at query time and could never
+be weighted, filtered or explained apart from one, whereas `people` is its own fts5 column and
+search.md §4's fusion query can take a per-column bm25 weight for it when retrieval lands.
+
+**Two writers keep it current, and the second one is conditional.** The item pass reads `work_credit`
+rather than writing `""`, so a re-import does not blank the column in the window before phase B runs.
+The credit pass then compares the *rendered name list* before and after its wholesale credit replace
+and rebuilds the document only when a name actually entered or left — which is the answer to the cost
+this section weighed (*"a second FTS write per item, in the transaction the 100 ms batch window exists
+to keep short"*): it is a second write per item **whose credits changed**, and a steady-state
+re-import rebuilds nothing. `CreditResult.DocsRebuilt` reports the count, and it has to, because
+`search_fts` is contentless — its rows are replaced in place and no query outside the store can tell a
+rebuild from no rebuild.
+
+⚠️ **Nothing queries either FTS table yet**, so this is an indexing change with no reader. The
+retrieval path is a later commit, and it is what will decide the per-column weights. The guards are
+`internal/store/searchdoc_people_test.go`; REVIEW-LOG `LS-100` carries the argument and the
+alternatives refused.
 
 **Doing this in the migration that creates `work` costs one CHECK member and one byte allocation. Doing it later costs a
 CHECK-constraint change (a SQLite table rebuild), an FTS re-index, a rebuild of every client prefix

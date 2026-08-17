@@ -97,7 +97,8 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0043](#adr-0043) | A **minimal** match-correction UI moves earlier than v0.3; the full correction surface stays there | **Accepted** — owner-decided 2026-08-17; **answers the scope call ARCHITECTURE §6.4 flagged and routed**; **amends [ADR-0026](#adr-0026)**'s correction-UI consequence and **amends** ARCHITECTURE §16.0, §16.1's v0.1 and v0.3 entries; **re-sequences, rejects nothing** — ADR-0026's model, verbs, tables and scoping are untouched and `library_override` is already in the tree; **source-independent** — it turns on v0.1 having a weak-identity catalogue source, not on that source being Kavita; **assigns no milestone**, which is carried as an open question; ⚠️ **amended 2026-08-17 by [ADR-0045](#adr-0045)** — that open question is **closed**: the owner delegated the call and the minimal case lands in **v0.2**, chosen **by elimination** (the only slot both earlier than v0.3 and not v0.1) with its cost recorded — v0.1 ships the *"not identified"* badge without its remedy for one milestone. The *"minimal"* boundary, the source-independence and the v0.3 cap on the full surface are all untouched |
 | [0044](#adr-0044) | Author and creator credits ship in v0.1; `work_credit` lands with **Kavita**, not Navidrome | **Accepted** — owner-decided 2026-08-17; **applies [ADR-0040](#adr-0040)'s rule rather than overriding it** — the landing point is the source that writes the table, and Kavita writes credits; **amends [ADR-0040](#adr-0040)** for `work_credit` **only** — `work_album` and `work_track` still wait for Navidrome; **confirms [ADR-0033](#adr-0033)**, whose `person` kind finally gets a writer; **costs a ROW, not a column** — an author is a `work` of kind `person`, which nothing in v0.1 created before; leaves [ADR-0035](#adr-0035), [ADR-0041](#adr-0041) and [ADR-0042](#adr-0042) untouched; raises one open question it does not close (nothing collects an uncredited person) |
 | [0045](#adr-0045) | The three unslotted commitments land in **v0.2**: Sonarr and Radarr, the minimal write path, and the minimal match-correction UI | **Accepted** — **owner-delegated 2026-08-17** (*"whatever you think is best"*); **closes the open questions [ADR-0042](#adr-0042) and [ADR-0043](#adr-0043) each raised and refused**; **amends** ARCHITECTURE §16 (§16.0, §16.1, and the v0.1, **v0.2** and v0.3 entries) and **amends [ADR-0042](#adr-0042)** and **[ADR-0043](#adr-0043)** at their no-milestone clauses; **assigns milestones and nothing else** — no scope moves, no design reopens, no ADR is reversed; for the two \*Arr items this **writes down a dependency v0.2 already had** (§8.3's `Add` capability filter), for the correction UI it is **by elimination** and the cost is recorded rather than argued away; raises one open question it does not close (whether v0.2 should be split) |
-| [0046](#adr-0046) | Kavita's contract tests pin **TWO** specs: the release the owner runs is the **floor**, `develop` is the **ceiling** | **Accepted** — 2026-08-17; **implements a policy `api/specs/SOURCES.md` already stated and the tree had not acted on** (*"a green contract test here is evidence about `develop`"*); **changes what a green means, not what the code does** — no adapter field, request or migration changes; **renames** `api/specs/kavita.json` → `kavita-develop.json` and **adds** `kavita-v0.9.0.2.json`; every spec-reading test runs against **both**, named per file, with enum coverage **equal** to the ceiling and a **superset** of the floor; `ceilingOnlyProperties` machine-checks the five modelled properties that **decode to nothing on the owner's server**; the `cbr` external_id is **unreachable** on the stable line and now says so; raises three open questions it does not close (Prowlarr has the same gap, `'cbr'` is an unenumerated `external_id.source`, and the floor's re-pin cadence) — **question 2 settled 2026-08-17** by the rename to `comicbookroundup` (`LS-73`); ⚠️ **amended 2026-08-17** — the decision stands unchanged **for Kavita**, but it is **not a template**: it rests on the unstated assumption that **upstream regenerates its spec per release**, which Prowlarr does not — its `openapi.json` is the **same git blob** at tag `v2.5.2.5491` and at `develop`, so open question 1's *"the same shape of gap"* is wrong about the shape and the two-spec structure there would manufacture the false green this ADR abolishes. The remedy is chosen **per upstream**; and where a spec self-reports a placeholder `info.version`, identity is by **blob SHA** |
+| [0046](#adr-0046) | Kavita's contract tests pin **TWO** specs: the release the owner runs is the **floor**, `develop` is the **ceiling** | **Accepted** — 2026-08-17; **implements a policy `api/specs/SOURCES.md` already stated and the tree had not acted on** (*"a green contract test here is evidence about `develop`"*); **changes what a green means, not what the code does** — no adapter field, request or migration changes; **renames** `api/specs/kavita.json` → `kavita-develop.json` and **adds** `kavita-v0.9.0.2.json`; every spec-reading test runs against **both**, named per file, with enum coverage **equal** to the ceiling and a **superset** of the floor; `ceilingOnlyProperties` machine-checks the five modelled properties that **decode to nothing on the owner's server**; the `cbr` external_id is **unreachable** on the stable line and now says so; raises three open questions it does not close (Prowlarr has the same gap, `'cbr'` is an unenumerated `external_id.source`, and the floor's re-pin cadence) — **question 2 settled 2026-08-17** by the rename to `comicbookroundup` (`LS-73`); ⚠️ **amended 2026-08-17** — the decision stands unchanged **for Kavita**, but it is **not a template**: it rests on the unstated assumption that **upstream regenerates its spec per release**, which Prowlarr does not — its `openapi.json` is the **same git blob** at tag `v2.5.2.5491` and at `develop`, so open question 1's *"the same shape of gap"* is wrong about the shape and the two-spec structure there would manufacture the false green this ADR abolishes. The remedy is chosen **per upstream** and is [ADR-0047](#adr-0047); and where a spec self-reports a placeholder `info.version`, identity is by **blob SHA** |
+| [0047](#adr-0047) | Prowlarr pins **ONE** spec — floor and ceiling are the same git blob — guarded by an offline blob-identity pin in `check` plus a network drift check outside it | **Accepted** — 2026-08-17; **is the per-upstream remedy [ADR-0046](#adr-0046)'s 2026-08-17 amendment (`LS-53`, `cf5fab5`) points at**, and **answers [ADR-0046](#adr-0046)'s open question 1** (*"`prowlarr.json` has the same shape of gap"*) by **correcting its premise** — measured independently by both threads, `src/Prowlarr.Api.V1/openapi.json` is the **same blob `134d31d7…`** at `v2.5.2.5491` and `develop`, not *"develop, a minor version ahead"*; **the two-spec split is impossible here**, there being no second document; **changes what a green means, not what the code does** — no adapter field, request or migration changes, no file added or renamed; the one file is stale (last regenerated **2025-06-07**, 33 releases ago) and describes **neither ref reliably**; `TestVendoredSpecIsThePinnedBlob` pins the blob **offline, in `check`**, `TestUpstreamRefsStillShareThePinnedBlob` catches upstream regenerating **on the network, in `make spec-drift`, never in `check`**, and `knownSpecDivergences` machine-checks the `Limit`/`Offset` `int?` gap (PR #2654, `v2.3.6.5351`) as **still live**; `info.version` **`1.0.0`** is Swashbuckle's placeholder and is pinned to by nothing; leaves [ADR-0035](#adr-0035), [ADR-0041](#adr-0041) and [ADR-0046](#adr-0046) untouched; the floor `v2.5.2.5491` is **owner-confirmed 2026-08-17**; raises two open questions it does not close (the floor drifts when the owner's auto-updating box does, and `make spec-drift` is unautomated) |
 
 ---
 
@@ -5688,3 +5689,139 @@ them.
 3. **Whether the floor should be re-pinned on every upstream patch release or only when the owner
    upgrades.** This change pins what he runs. Chasing every stable tag would make the floor a second
    moving target and lose the property that makes a tag diff meaningful.
+
+<a id="adr-0047"></a>
+## ADR-0047 — Prowlarr's contract tests pin ONE spec, because floor and ceiling are the same git blob; the guard is an offline blob-identity pin plus a network drift check
+
+**Status:** Accepted · 2026-08-17 · **Is the per-upstream remedy [ADR-0046](#adr-0046)'s own
+2026-08-17 amendment points at** — that amendment (`cf5fab5`, review-log `LS-53`) records that
+ADR-0046 stands for Kavita and is **not a template**, and defers the Prowlarr remedy to *"its own ADR
+from the thread that took it"*; this is that ADR, and the reference runs both ways · **Answers the
+first open question [ADR-0046](#adr-0046) raised and refused** (*"`prowlarr.json` has the same shape
+of gap and is not fixed here"*) · **Corrects that question's own premise** — ADR-0046 described
+`prowlarr.json` as *"tracks `develop` at v2.6.2 while the only known deployment runs stable
+2.5.2.5491, a minor version behind"*; measured, it tracks neither by version and is byte-identical at
+both refs, which the amendment now flags inline · **Changes what a green means; changes no runtime
+behaviour** — no adapter field is added or removed, no request changes, no migration · **Adds no
+vendored file** and renames none · **Leaves [ADR-0035](#adr-0035), [ADR-0041](#adr-0041) and
+[ADR-0046](#adr-0046) untouched.**
+
+### Context
+
+**[ADR-0046](#adr-0046) gave Kavita a floor and a ceiling because Kavita regenerates its checked-in
+`openapi.json` most releases, so the tag's copy and `develop`'s copy are genuinely different
+documents.** The obvious next step was to port that two-spec split to Prowlarr, which ADR-0046's own
+open question 1 flagged as owed. **It does not port, and the reason is measured, not assumed.**
+
+Everything below was measured on 2026-08-17 against Prowlarr's git objects — via `git hash-object` on
+the vendored file and a raw fetch of each ref through the proxy, hashed with `git hash-object` — and,
+where the spec is silent, against Prowlarr's own C# source at a tag. No running instance was
+required for any of it.
+
+| Question | Answer, measured 2026-08-17 |
+| --- | --- |
+| Blob of `src/Prowlarr.Api.V1/openapi.json` at tag `v2.5.2.5491`? | `134d31d7df5e80714c454a6224e7449df512c55e` |
+| …at `develop` (`1f7db1e`)? | `134d31d7df5e80714c454a6224e7449df512c55e` — **the same git blob** |
+| …and `api/specs/prowlarr.json`? | the same blob a third time |
+| When was it last regenerated upstream? | **2025-06-07**, commit `60740fa25` (*"Automated API Docs update"*) |
+| Release tags shipped since (`git tag --contains 60740fa25`)? | **33**, none pointing at it |
+| Highest released tag as of today? | `v2.6.1.5509` |
+| What does the file say its version is? | `info.version` **`1.0.0`** — **Swashbuckle's placeholder, carrying no release information whatsoever, so nobody pins to it** |
+
+**Floor and ceiling are one file. Splitting it would vendor 145 KB twice and produce a green that
+proves exactly what one copy already proves.** So Prowlarr is vendored ONCE — and that is a decision,
+not the omission ADR-0046's open question read it as.
+
+**The honest consequence is worse than "one file, not two": the one file describes NEITHER ref
+reliably.** Regenerated ten months and 33 releases ago, it is evidence about the API's *shape*, and
+**Prowlarr's source at a tag is the evidence about a release**. This is not hypothetical — a grab
+failure came from exactly this gap in another form, where a test fake was written from the spec and
+inherited the spec's silence, validating nothing.
+
+**It already misdescribes both refs, and the divergence is machine-checked rather than trusted to a
+comment.** `SearchResource.Limit` and `.Offset` were `int` and became `int?` in `c687bdb1f` (*"Fixed:
+Don't send limit=0 to Newznab indexers"*, PR #2654), a commit that tag `v2.3.6.5351` sits directly
+on — so nullable on the owner's `v2.5.2.5491` and on `develop` alike. The vendored spec, regenerated
+before that commit, still declares them non-nullable `int32`. UsArr's own code is **independently
+correct** — `SearchRequest.{Limit,Offset}` are `*int32` and `Values()` omits them when nil, matching
+upstream's `Limit is > 0` guard — so this is a documented divergence, not a live bug.
+
+**The floor version, `v2.5.2.5491`, is owner-confirmed 2026-08-17** — the owner stated it directly,
+in his own words, of his actual install, so the floor is checked against a human's box rather than
+inferred from a changelog. That distinction is worth keeping visible: the next person to touch this
+pin should know it was confirmed against a real deployment. It is still not the same thing as UsArr
+reading `/api/v1/system/status` itself, so it bounds what a green proves — a green here is evidence
+about a document, and a real instance is the only evidence about a real instance. The floor is
+labelled everywhere it appears (SOURCES.md, `contract_test.go`, `specdrift_upstream_test.go`), and
+because the owner's Prowlarr auto-updates it is kept as a one-line pin so re-confirming it later is a
+one-line change.
+
+### Decision
+
+**Vendor one spec, and split the guard across the network line into a deterministic offline pin in
+the gate and a network drift check outside it.**
+
+1. **One vendored `api/specs/prowlarr.json`.** SOURCES.md and `contract_test.go` say, in words, that
+   it describes neither the owner's release nor `develop`, and why (Prowlarr regenerates rarely). It
+   is treated as evidence about the API's shape; the source at a tag is the evidence about a release.
+2. **`TestVendoredSpecIsThePinnedBlob` — offline, IN `make check`.** It pins the git blob name
+   `134d31d7…` as a constant and asserts the vendored bytes hash to it, reimplementing git's
+   `blob <len>\0` + SHA-1 so it needs no git checkout and no network. It catches the vendored file
+   changing under the suite — a re-vendor, a hand-edit, a bad merge — deterministically. **No third
+   network call is added to the gate**, which makes exactly two (both vulnerability databases) and
+   whose `check-offline` is defined as those two removed.
+3. **`TestUpstreamRefsStillShareThePinnedBlob` — network, OUTSIDE `make check`.** Behind the
+   `//go:build upstream` tag and `make spec-drift`, refusing without `USARR_SPEC_DRIFT=1`, exactly as
+   `make test-integration` refuses without `USARR_INTEGRATION=1`. It resolves both refs to their blob
+   name with a blobless `git fetch` (trees, no file contents) and fails the day upstream regenerates.
+   A failure there is **news, not a broken build**: an upstream outage, a rate limit or a plane must
+   never redden a commit that touched no spec, which is precisely why it is not in the gate.
+4. **`knownSpecDivergences` + `TestKnownSpecDivergencesStillHold` — offline, IN `make check`.** The
+   `Limit`/`Offset` nullability gap is written out by hand against upstream source and machine-checked
+   in the only direction a single stale file can be: the divergence must **still be there**. An entry
+   that stops holding means upstream finally regenerated, which is news — and news is what a comment
+   cannot deliver, because a comment that has gone false looks exactly like one that has not.
+5. **Every failure message clears the 2am bar with three named outcomes.** A reader must be able to
+   tell from the message alone whether **their Prowlarr is too old**, **our expectation is too new**,
+   or **the vendored document is simply stale** — three different fixes. `specSkewAdvice` names all
+   three; the drift check's message names its own three (local mistake, upstream regenerated, one ref
+   moved). Shortening either to one line restores the problem it exists to solve.
+
+**No runtime behaviour changes.** `SearchRequest`'s pointers, `Values()`'s omit-when-nil and the
+`Limit is > 0` guard all stay exactly as they were; what changes is that the tree now *says* the
+vendored spec is stale and *proves* the divergence is still live, instead of implying the contract
+tests attest something about the server the owner runs.
+
+### Why ADR-0046's pattern does not port
+
+ADR-0046 turned on a property Prowlarr lacks: **that the tag and `develop` carry different
+documents.** Kavita regenerates its spec most releases; Prowlarr has not regenerated its since
+2025-06-07. Where Kavita's `ceilingOnlyProperties` can be *recomputed* from two files, Prowlarr's
+delta cannot — there is only one file — so it is written against source and checked for persistence
+instead. The floor/ceiling split is not merely unnecessary here; it is **impossible**, because there
+is no second document to be the other end of it. When `make spec-drift` fires, that premise has
+changed and the split becomes worth revisiting — which is the whole reason that check exists.
+
+**Two threads reached this independently, which is corroboration rather than a shared assumption.**
+The library thread that owns ADR-0046 measured the same blob identity from its own side (`git ls-tree`
+at both refs) and amended ADR-0046 to say the pattern is not a template (`cf5fab5`, `LS-53`); this
+thread measured it with `git hash-object` on a raw fetch of each ref and pins the result in code. The
+same fact arrived twice by two methods, and each ADR points at the other so neither reference dangles.
+
+### The deciding question
+
+**What a green means to a reader who has not read this ADR.** One vendored spec, a blob pinned in the
+gate, a drift check kept out of it, and three-outcome failure messages are all chosen against the
+same test ADR-0046 set: a green must not be mistaken for evidence it does not carry, and a red must
+tell its reader which of three different things to do.
+
+### Open questions this ADR does not close
+
+1. **The floor drifts when the owner's box does.** `v2.5.2.5491` is owner-confirmed 2026-08-17, but
+   his Prowlarr auto-updates, so the confirmation has a shelf life. Nothing here re-confirms it; the
+   pin is deliberately one line so doing so later is one line. (What this ADR does *not* claim is that
+   UsArr read the version off `/api/v1/system/status` — it did not; the floor is a human's word about
+   a real install, which is stronger than a changelog and weaker than a live read.)
+2. **`make spec-drift` is unautomated.** It is a target a person or an agent must type; this repo has
+   no CI to run it on a schedule, and SOURCES.md says as much. The seam is a build tag and a target,
+   which is all a future CI would need.

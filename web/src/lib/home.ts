@@ -52,9 +52,31 @@
  * §17.2's hard rule points the same way and is worth restating because it is
  * the one an implementer breaks first: a media type the user does not have is
  * not shown AT ALL, not in Block A, not in the sidebar, not as a search group.
- * With no catalogue there are no types the user has, so the honest count of
- * media-type rows anywhere on this screen is zero. The sidebar already does
- * this (see `routes/+layout.svelte`); Home now matches it.
+ * ⚠️ THE REASON GIVEN FOR ZERO ROWS WAS **"with no catalogue there are no types
+ * the user has"**, AND THAT PREMISE IS DEAD WITH THE TWO ABOVE: a connected
+ * Kavita HAS a catalogue, and `mapLibraryType` (`internal/libsync/kavita.go`)
+ * writes `comic` and `book` works into it, so two of §17.2's six types can be
+ * genuinely present on a real install. **Zero is still the honest count, on the
+ * reason the first block already gives**: what would decide which rows to draw
+ * is a read of which media types are PRESENT IN `work` — split by
+ * `edition.format` for the Ebooks/Audiobooks pair, since §17.2 makes those two
+ * a `(kind, formats)` pair rather than a kind of their own — and that read does
+ * not exist at any layer. No store method (`internal/store` ships
+ * `ListRecentWorks` and nothing that aggregates), no route
+ * (`internal/httpapi/server.go` registers `GET /api/v1/library/recent` and no
+ * per-type read), no aggregate wire type (`recentWorksResponse` is
+ * `{items, limit, next_cursor}`, `internal/httpapi/library.go`), and not even
+ * the `ix_edition_format` index §17.2 says is owed for exactly those two rows —
+ * read `internal/db/migrations` rather than this comment for whether it has
+ * since landed. So the rows would still be INVENTED, which is what
+ * DESIGN-DIRECTION §9.6 closes off by name, and a shortage of catalogue is no
+ * longer any part of it. The sidebar draws none either (`routes/+layout.svelte`,
+ * whose `NAV_GROUPS` is the six fixed entries and no media types); Home matches
+ * it. ⚠️ THAT IS ONE TASK RATHER THAN TWO, and it is worth saying because the
+ * two rows live in different files: both are blocked on the same missing read,
+ * so whoever builds the rollup unblocks Block A and the sidebar together. And
+ * neither is built from this side first — inventing the counts while the read
+ * is written is the thing §9.6 forbids, not a shortcut to it.
  *
  * WHAT MODE THE SCREEN IS IN IS DERIVED FROM THE API AND NEVER FROM A
  * CONSTANT. §8.5 defines Search-and-Grab mode as "activated when no configured
@@ -89,10 +111,22 @@ import {
  * derived rather than assumed away precisely so that this day needed no change
  * here, and it did not.
  *
- * What the arm renders is still one honest sentence and NO catalogue, and that
- * is still what is true of it: a Kavita can be added and probed, and nothing
- * imports from it yet. Read `internal/db/migrations` and `web/src/routes` for
- * what exists, never this comment.
+ * ⚠️ IT WENT ON TO SAY **"what the arm renders is still one honest sentence and
+ * NO catalogue: a Kavita can be added and probed, and nothing imports from it
+ * yet"**, AND BOTH HALVES OF THAT ARE DEAD. Something imports from it —
+ * `internal/libsync`'s Kavita source, run by `cmd/usarr`'s `bootstrapImport`
+ * from the `kavita` arm of the client build (`cmd/usarr/services.go`) — and the
+ * arm draws Block C's table off `GET /api/v1/library/recent`, not a sentence.
+ *
+ * The SHAPE of that import is what is still worth stating, because the dead
+ * sentence undershot and a bare "the library sync is built" would overshoot by
+ * as much: ONE adapter, Kavita and nothing else (`cmd/usarr/import.go` refuses
+ * any other kind); ON CONNECT, gated on `last_full_sync_at` being unset, so it
+ * runs at most once per instance per database; NO timer and NO periodic
+ * re-sync; and the manual `FullImport` has no HTTP route and no CLI flag in
+ * front of it, so nothing a user can reach asks for a second import. Read
+ * `internal/db/migrations`, `cmd/usarr/import.go` and `web/src/routes` for what
+ * exists, never this comment.
  */
 export type HomeMode = 'unconfigured' | 'search-and-grab' | 'library';
 

@@ -250,6 +250,7 @@ closes `FI-12` in `docs/REVIEW-LOG.md` as coded rather than as documented.
 | `make build` | `web-build`, then a static `CGO_ENABLED=0` binary at `./usarr` with the SPA embedded. |
 | `make test` | `go test ./... -race -shuffle=on` plus `pnpm test`. No network, no Docker. |
 | `make test-integration` | Behind the `integration` build tag. Needs a live stack; **never in CI**. |
+| `make spec-drift` | Behind the `upstream` build tag. Are the vendored OpenAPI specs still what upstream serves? **Needs network; never in `check`.** §7.2. |
 | `make bench` | Wall-clock performance harness. A **release** gate on named hardware, never a merge gate. |
 | `make bench-rss` | Memory harness: idle and peak process RSS over a 500k-row database, sweeping `cache_size`. §5. |
 | `make lint` | `golangci-lint run`, `svelte-check`, `eslint`. |
@@ -322,6 +323,7 @@ The **In `make test`** column is also the answer to "would a CI run this" — th
 | Migration round-trip | `internal/db` | No | Yes |
 | Frontend unit | `web/src/**/*.test.ts` (Vitest) | No | Yes |
 | Integration (live services) | `//go:build integration` | Yes | **No** |
+| Upstream spec drift | `//go:build upstream`, `make spec-drift` | Network only | **No — news, not a gate** |
 | Wall-clock benchmarks | `//go:build bench`, `make bench` | No | **No — release gate only** |
 
 ```bash
@@ -643,13 +645,30 @@ Three uses, all offline:
    the resources UsArr consumes, and that enum-typed fields accept every documented value.
    `DownloadProtocol` (`unknown|usenet|torrent`) is identical across Sonarr, Radarr and Prowlarr and
    is the backbone of source tagging — pin it.
-3. **Drift detection.** A scheduled job — *not* the PR gate, it needs network — re-downloads the
-   specs, diffs them against `api/specs/`, and opens an issue on change. Upstream `develop` moves;
-   UsArr should hear about a renamed field from a bot, not from a user's bug report.
+3. **Drift detection.** *Not* the PR gate — it needs network. Upstream `develop` moves; UsArr should
+   hear about a renamed field from a bot, not from a user's bug report. **`make spec-drift` is the
+   runnable form of this and exists now** (ADR-0047): behind the `upstream` build tag, refusing
+   without `USARR_SPEC_DRIFT=1`, resolving upstream refs to the blob name of their checked-in spec
+   with a blobless `git fetch` so it downloads trees and no file contents. It is **never** part of
+   `make check` — the gate makes exactly two network calls, both to vulnerability databases, and a
+   GitHub outage must not redden a commit that touched no spec. A failure there is **news**.
+
+   The offline half lives in the gate and answers a different question: `TestVendoredSpecIsThePinnedBlob`
+   hashes `api/specs/prowlarr.json` to the git blob name it is pinned to, so a re-vendor, a hand-edit
+   or a bad merge fails deterministically with no network at all.
 
 ⚠️ **The spec is not always right** (see `/api/v3/episode` in §5). Where a controller enforces
 something the schema does not express, the contract test encodes the controller's behaviour and a
 comment says why.
+
+⚠️ **And it is not always CURRENT, which is a different failure.** Prowlarr's `openapi.json` was last
+regenerated on 2025-06-07 and 33 releases have shipped since, so it describes neither the release the
+owner runs nor `develop` (ADR-0047). Where the vendored document is *known* to contradict upstream
+source, the gap goes in `knownSpecDivergences` in `internal/servarr/contract_test.go`, which asserts
+the divergence is **still there** — a comment cannot do that, because a comment that has gone false
+looks exactly like one that has not. `SearchResource.{Limit,Offset}` are the worked example: `int?`
+upstream since `c687bdb1f`, still plain `int32` in the vendored spec, and "correcting" UsArr to match
+the spec would resurrect the `&limit=0` bug upstream fixed.
 
 Caveats: Jellyfin publishes an OpenAPI spec, but the 10.11 schema was reported invalid (malformed 503
 response headers), which breaks naive codegen — generate *types* if useful, but hand-write the ~25
