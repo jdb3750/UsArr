@@ -42,6 +42,11 @@ import (
 //     add/monitor/delete commands — Kavita is read-only and has no command sink
 //     (ADR-0032), so filing it under acquisition would promise a write path that
 //     does not exist. ADR-0041 puts it in v0.1 as the sync core's first adapter.
+//
+// The browser's add-form picker (SERVICE_KINDS in web/src/lib/api.ts) must
+// carry the same set, in an order that keeps prowlarr first. That is not left
+// to this comment: service_kinds_web_test.go parses the TypeScript literal and
+// fails the build on either direction of drift.
 var serviceKinds = map[string]string{
 	"prowlarr": "indexer",
 	"kavita":   "library",

@@ -7432,3 +7432,98 @@ matters most: **no byte of this has touched a real Kavita.** The evidence behind
 spec, the controller source at the pinned commit, and one live run
 ([ADR-0035](./DECISIONS.md#adr-0035) §2a) that measured ordering and ids on Kavita **0.9.0.2** — two
 steps from the `develop` line vendored here.
+
+---
+
+# M5-35 — the kind picker and the handler were held in step by a comment, and a comment does not fail a build
+
+**Date:** 2026-08-17. **Worktree:** `svckinds-guard-1786994968`, cut from `origin/main` at `80db988`.
+**The id was renumbered once, and that is worth recording rather than tidying away.** The standing
+method — `grep -oE '^# M5-[0-9]+'` over `docs/REVIEW-LOG.md` on `origin/main` **and on every remote
+head** — returned `33` when this worktree was cut, so the entry was drafted as `M5-34`. The
+re-check immediately before commit returned `34` on `origin/main`: a concurrent thread had taken it
+while this one was firing its guard. **Renumbered to `M5-35` rather than merged into a collision**,
+which is why the first check's number is quoted here instead of being silently overwritten.
+
+**The finding is the frontend thread's**, raised while reading the services screen: `serviceKinds`
+(`internal/httpapi/services.go`) is authoritative for which kinds the handler accepts, `SERVICE_KINDS`
+(`web/src/lib/api.ts`) drives the add form's kind picker, and **nothing but a comment on each side
+kept them equal**. A kind offered in the browser and refused by the handler is a picker that 400s;
+a kind the handler accepts and the picker never offers is a service nobody can add.
+
+| # | Finding | Disposition |
+| --- | --- | --- |
+| **M5-35a** | **The guard belongs on the Go side, not in vitest.** Go owns the answer, so the cross-language read should live with the truth rather than with the follower — a vitest copy would be the picker checking itself against a list it cannot see | **APPLIED.** `internal/httpapi/service_kinds_web_test.go` parses the TypeScript literal from Go. `test-go` runs inside `make check` exactly as vitest does, so the placement costs no coverage. `web/` is **not** touched by this commit — the frontend thread said it would not duplicate the guard there, and `routes/services/+page.svelte` is being edited concurrently |
+| **M5-35b** | **Both directions, or it finds half the bugs.** Go-minus-TS and TS-minus-Go are different failures with different fixes | **APPLIED.** `TestServiceKindsMatchWebPicker` loops both ways, and **the message names the kind and the side that lacks it** — a reader learns which kind and which file without opening either. Fired in both directions; the verbatim output is below |
+| **M5-35c** | **`prowlarr` must stay at index 0.** `SERVICE_KINDS[0]` is the add form's default at `web/src/routes/services/+page.svelte:177` (`let fKind = $state<string>(SERVICE_KINDS[0]);`) and `:405` (`fKind = SERVICE_KINDS[0];`, the reset when the form opens as `add`) — **both line references verified on this tree**. A set comparison passes a reorder clean | **APPLIED as a SEPARATE test.** `TestServiceKindsPickerDefault` pins index 0 on its own. That the separation is load-bearing is not an argument here, it is a measurement: under a `['kavita', 'prowlarr']` reorder the membership test **PASSED** and only the index test failed |
+| **M5-35d** | ⚠️ **A parser that silently returns an empty list turns this guard into a permanent pass**, because an empty TS list agrees with every possible Go map | **APPLIED as the parser's central constraint.** `parseServiceKindsTS` returns `([]string, error)` and never a short list quietly: a missing file, a renamed or reformatted declaration, an empty literal, or any element that is not a plain quoted kind (a spread, an identifier, a template string) is a **hard error** carrying the file path and what to do. All three reachable failure branches were fired — see below |
+
+### The guard being watched to fail
+
+Per `DEVELOPMENT.md` §11 rule 3, every branch was triggered deliberately before the test was
+trusted. Each edit below was made in this private worktree and reverted immediately; `git status`
+was clean afterwards, and **no firing edit is in any commit** — including the two that touch
+`web/src/lib/api.ts`, which this commit does not modify.
+
+**Direction 1 — a kind in Go only** (`"lidarr": "acquisition"` added to `serviceKinds`):
+
+```
+--- FAIL: TestServiceKindsMatchWebPicker (0.00s)
+    service_kinds_web_test.go:89: kind "lidarr" is in serviceKinds (internal/httpapi/services.go) but MISSING from SERVICE_KINDS (../../web/src/lib/api.ts): the handler accepts it and the add form never offers it. Add "lidarr" to SERVICE_KINDS.
+```
+
+**Direction 2 — a kind in `api.ts` only** (`'sonarr'` appended to `SERVICE_KINDS`):
+
+```
+--- FAIL: TestServiceKindsMatchWebPicker (0.00s)
+    service_kinds_web_test.go:98: kind "sonarr" is in SERVICE_KINDS (../../web/src/lib/api.ts) but MISSING from serviceKinds (internal/httpapi/services.go): the add form offers it and the handler would refuse it with 400. Add "sonarr" to serviceKinds with its role, or drop it from SERVICE_KINDS.
+```
+
+**Index 0 — a reorder to `['kavita', 'prowlarr']`.** Membership is unchanged, so this is exactly the
+case a set comparison waves through:
+
+```
+=== RUN   TestServiceKindsMatchWebPicker
+--- PASS: TestServiceKindsMatchWebPicker (0.00s)
+=== RUN   TestServiceKindsPickerDefault
+    service_kinds_web_test.go:121: SERVICE_KINDS[0] is "kavita", want "prowlarr" (../../web/src/lib/api.ts). Index 0 is the add form's default kind at web/src/routes/services/+page.svelte:177 and :405, so this reorder changes what the form pre-selects. Full order: [kavita prowlarr]
+--- FAIL: TestServiceKindsPickerDefault (0.00s)
+```
+
+**Parse failure, branch 1 — the declaration renamed** to `SERVICE_KIND_LIST`. It reports the rename
+rather than passing on an empty list, and it fails **both** tests:
+
+```
+=== RUN   TestServiceKindsMatchWebPicker
+    service_kinds_web_test.go:80: cannot read the browser's kind list: ../../web/src/lib/api.ts: no `export const SERVICE_KINDS = [...] as const;` declaration found. If it was renamed, moved or reformatted, update serviceKindsDecl in internal/httpapi/service_kinds_web_test.go — do not delete this test, it is the only thing keeping the browser's kind picker in step with serviceKinds
+--- FAIL: TestServiceKindsMatchWebPicker (0.00s)
+=== RUN   TestServiceKindsPickerDefault
+    service_kinds_web_test.go:118: cannot read the browser's kind list: ../../web/src/lib/api.ts: no `export const SERVICE_KINDS = [...] as const;` declaration found. If it was renamed, moved or reformatted, update serviceKindsDecl in internal/httpapi/service_kinds_web_test.go — do not delete this test, it is the only thing keeping the browser's kind picker in step with serviceKinds
+--- FAIL: TestServiceKindsPickerDefault (0.00s)
+```
+
+**Parse failure, branch 2 — an element that is not a literal** (`['prowlarr', ...EXTRA_KINDS]`).
+This is the branch that would otherwise drop a kind silently:
+
+```
+--- FAIL: TestServiceKindsMatchWebPicker (0.00s)
+    service_kinds_web_test.go:80: cannot read the browser's kind list: ../../web/src/lib/api.ts: SERVICE_KINDS element "...EXTRA_KINDS" is not a plain quoted kind. This test can only compare literals; a spread, identifier or template string would be read as no kind at all
+```
+
+**Parse failure, branch 3 — the file moved** (`serviceKindsTSPath` pointed at `api-moved.ts`):
+
+```
+--- FAIL: TestServiceKindsPickerDefault (0.00s)
+    service_kinds_web_test.go:118: cannot read the browser's kind list: read ../../web/src/lib/api-moved.ts: open ../../web/src/lib/api-moved.ts: no such file or directory
+```
+
+After every revert, `go test ./internal/httpapi/ -run TestServiceKinds -v` returned both tests
+`PASS`.
+
+### What this guard does NOT cover
+
+Stated rather than left to be discovered. It compares the **kind names and their order**, nothing
+else. The **role** each kind maps to in `serviceKinds` has no browser counterpart to check against,
+so a wrong role is invisible here. And `web/src/lib/services.ts:219` deliberately renders rows whose
+`kind` is outside `SERVICE_KINDS` — a row written by a later build — which is a separate,
+intentional tolerance this test neither enforces nor breaks.
