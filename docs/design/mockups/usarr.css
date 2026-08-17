@@ -307,6 +307,48 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .mono { font-family: var(--font-mono); }
 .num  { font-variant-numeric: tabular-nums; }
 .muted { color: var(--fg-muted); }
+
+/* A figure and its unit are two slots, not one string (§9.1).
+   THE FIGURE IS THE VALUE AND THE UNIT IS THE SCALE, and only the figure is
+   compared down a column. So the figure keeps full contrast, the unit is
+   muted, and `tabular-nums` stays on the CELL rather than moving here — §9.1
+   requires that, so composite values inherit it.
+   THE UNIT BOX IS A FIXED WIDTH, which is the part that does the work. In a
+   right-aligned cell the string's last character is what aligns, so "4.8 GB"
+   over "820 MB" aligns the B and starts the digits at two different
+   x-positions — right-alignment plus tabular-nums buys nothing there, because
+   what is being aligned is the word. A fixed unit box puts the alignment back
+   on the last digit.
+   The width is a property of the UNIT FAMILY, never of the value present: a
+   size column must reserve room for the widest unit it can ever print, or the
+   digits jump the first time a row crosses from GB to MB. Widths are MEASURED
+   in the cell font (13px IBM Plex Sans, 1ch = 8px), rounded up to the next
+   half-ch: MB 19px is the widest size unit, months 43px the widest duration,
+   episodes 52px the widest item noun.
+   TO REVERSE THIS TREATMENT, delete this block: `.unit` is a bare span, so the
+   markup falls back to rendering the unit inline at full contrast, which is
+   what it says. The alternative that was NOT taken — the unit in the column
+   header and bare numbers in the cells — is recorded in §9.1 with its
+   reason.
+   ⚠️ ONLY THE SIZE FAMILY SHIPS SO FAR, AND THE REASON IS MEASURED RATHER THAN
+   a matter of taste: A RESERVED UNIT BOX COSTS COLUMN WIDTH, and two tracks are
+   already too narrow to pay it. `Age` in the release tables is a 68px track —
+   24px of padding leaves 44px, and `months` alone is 43px, so the figure has
+   nothing left and the cell wraps to two lines. Home's `Items` is 107.375px:
+   52px of reserve for `episodes` plus 24px of padding leaves 31px, and
+   `1,842` is 36px. Both were measured wrapping, at +18px per cell over 224
+   cells across the sweep. The rule is right and the tracks are wrong; widening
+   a declared track is its own decision, on the two densest tables in the
+   product, and it is not folded in here. §9.1 names the columns still
+   carrying the old treatment so a reader can tell an unfinished job from a
+   decision. */
+.unit {
+  color: var(--fg-muted);
+  display: inline-block;
+  width: var(--unit-w, 2.5ch);
+  text-align: left;
+}
+.unit--size { --unit-w: 2.5ch; }  /* B · KB · MB · GB · TB — widest is MB at 19px */
 .sr {
   position: absolute; width: 1px; height: 1px; overflow: hidden;
   clip-path: inset(50%); white-space: nowrap;
