@@ -4,6 +4,13 @@
 for how much of that shape has been created — **`internal/db/migrations` answers that**, and
 reading the files there is the only form of the answer that does not go stale. A table given in
 full below may still be design-only.
+
+⚠️ **Where this file states which migration creates a thing, it has been wrong before.** §13 said
+"All four tables are in migration 0001" when none of them existed anywhere. Those claims are
+removed rather than refreshed: the per-section **v0.x** markers below say which *milestone* owns a
+table, which is a different question, and `internal/db/migrations` is the only answer to the other
+one. `internal/db/migrate_test.go`'s `TestDeferredTablesAreAbsent` carries the exhaustive
+present/absent lists in executable form.
 **Scope:** tables marked **v0.1** ship in the first milestone; everything else is in the "later
 tables" appendix at the bottom.
 **Parent document:** [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §6 carries the design and the
@@ -191,8 +198,8 @@ CREATE TABLE work_album (
 
 -- ADR-0031: position is a property of the (track-work, edition) pair, NOT of the track work.
 -- The same recording is track 4 on the original CD and track 6 on the 2017 reissue, with a
--- different track MBID each. edition_id in migration 0001 costs 8 bytes a row; adding it later
--- is a backfill over the largest table in the schema.
+-- different track MBID each. edition_id costs 8 bytes a row on the day work_track is created;
+-- adding it later is a backfill over the largest table in the schema.
 CREATE TABLE work_track (
   work_id        INTEGER NOT NULL REFERENCES work(id) ON DELETE CASCADE,
   edition_id     INTEGER NOT NULL REFERENCES edition(id) ON DELETE RESTRICT,
@@ -222,7 +229,7 @@ CREATE UNIQUE INDEX ux_track_pos ON work_track(edition_id, disc_number, track_po
 > requirement is stated here rather than left to be discovered.** Three rules, all normative, all
 > consequences of the NOT NULL:
 >
-> 1. **Every album work has exactly one synthetic primary `edition` from migration 0001**, created
+> 1. **Every album work has exactly one synthetic primary `edition`**, created
 >    in the same transaction as the album, `is_primary = 1`, `label = NULL`. Lidarr and Navidrome
 >    report no release concept, so the adapter synthesises it; v0.x models only the active edition,
 >    which is what Lidarr does (ADR-0031).
@@ -283,8 +290,8 @@ album's credits in billing order"*, which is then a single covered range scan. `
 trails it to make the row unique when two creators share a role and a position (a co-credit).
 `ix_credit_creator` serves the reverse — a creator page listing everything they are credited on.
 
-**`creator_work_id` points at a `work` of kind `artist` or of kind `person`, and `person` is new in
-migration 0001 (ADR-0033).** The previous shape had no `person` member at all, so a book's author and
+**`creator_work_id` points at a `work` of kind `artist` or of kind `person`, and `person` is a
+member of `work.kind`'s CHECK from the migration that creates `work` (ADR-0033).** The previous shape had no `person` member at all, so a book's author and
 a comic's penciller were stored as `artist`-kind works — which put every author into the **Music**
 navigation type (ARCHITECTURE §17.2 maps `artist` → Music) and counted every credit against the Tier 1
 prefix index's 25,000-item cap (§4.5), which §13 already shows is tripped by the reference library.
@@ -305,7 +312,7 @@ and the cheap candidate — folding credited names into the FTS `alt_titles` of 
 credited on, so the query returns the books — belongs to whoever writes the document builder and is
 not specified here.
 
-**Doing this in migration 0001 costs one CHECK member and one byte allocation. Doing it later costs a
+**Doing this in the migration that creates `work` costs one CHECK member and one byte allocation. Doing it later costs a
 CHECK-constraint change (a SQLite table rebuild), an FTS re-index, a rebuild of every client prefix
 index, and a change to the `kind_byte` codec that ARCHITECTURE §5.3 states is unchangeable once
 clients cache ids** — which is ADR-0030's argument, in a second place, for the same reason.
@@ -617,7 +624,7 @@ corresponding `container_kind` is not offered for it.
 | Navidrome | `libraryId` on the album/artist row (ND's native API) | — | — | — |
 | Audiobookshelf | `LibraryItem.libraryId` | — | `Library.mediaType` (`book\|podcast`) | `LibraryItem.folderId` ⚠️ a folder **id**, not a path — never prefix-compared |
 | Komga | `SeriesDto.libraryId` | — | — | — |
-| Kavita (v0.2) | `Series.libraryId` | — | `Library.type` (`LibraryType` enum) | — |
+| Kavita | `Series.libraryId` | — | `Library.type` (`LibraryType` enum) | — |
 
 ⚠️ **Audiobookshelf's `folderId` is an opaque id, not a filesystem path.** It is stored in
 `remote_library_id`-adjacent form only as an id and is **never** used with the `root_folder`
@@ -898,9 +905,22 @@ CREATE INDEX ix_sdl_doc ON search_doc_library(doc_rowid);
    some instance. The invariant is upheld by reserved `library.id = 0`, *Unfiled* (§13).
    `SELECT COUNT(*) FROM search_doc sd WHERE NOT EXISTS (SELECT 1 FROM search_doc_library sdl
    WHERE sdl.doc_rowid = sd.rowid)` must be **0**.
-6. **The scoped search plan is a seek, not a scan.** `EXPLAIN QUERY PLAN` on the scoped fusion
-   query must contain `SEARCH sdl USING PRIMARY KEY (library_id=? AND doc_rowid=?)` and must not
-   contain `SCAN search_doc_library`.
+6. **The scoped search plan is a seek, not a scan.** `EXPLAIN QUERY PLAN` on the scoped query must
+   contain `SEARCH sdl …` and must not contain `SCAN sdl` / `SCAN search_doc_library`.
+
+   ⚠️ **This invariant used to name one exact plan —
+   `SEARCH sdl USING PRIMARY KEY (library_id=? AND doc_rowid=?)` — and no query produces that
+   string.** Measured against the real schema (SQLite 3.53.4): which of the junction's two indexes
+   the planner reaches for depends on which side drives the join, and there are two real shapes.
+
+   | Query shape | Measured plan |
+   |---|---|
+   | doc set known — the RRF fusion, candidates from `search_fts`, scope applied per candidate | `SEARCH sdl USING COVERING INDEX ix_sdl_doc (doc_rowid=? AND library_id=?)` |
+   | scope leading — browse a scope with no query text | `SEARCH sdl USING PRIMARY KEY (library_id=?)` |
+
+   Both are seeks and neither is a scan, which is the invariant's substance: permission filtering
+   happens **in** the index join. `TestScopedSearchIsASeekNotAScan` asserts it in both directions,
+   plus the full FTS arm.
 
 ---
 
@@ -1129,22 +1149,37 @@ regardless costs nothing, and SQLite equally cannot `ALTER` a `CHECK` constraint
 earlier would mean either editing a merged migration or paying for a second rebuild. Neither is
 worth it while nothing is released. **`00001_initial.sql` is not to be edited for this.**
 
-When that rebuild is written, do all four:
+**✅ DONE. The rebuild has been written, and it did not do step 1 as this section specified it.**
+Read `internal/db/migrations/00005_library_sync.sql`'s header for the reasoning; the decisions are
+recorded in [`../DECISIONS.md`](../DECISIONS.md#adr-0039). In short:
 
-1. Add `'awaiting_choice'` to the `state` `CHECK` list.
-2. Recreate **all three** indexes on the rebuilt table — `ux_wq_idem`, `ix_wq_work`, and
-   `ix_wq_runnable` **including its partial `WHERE` predicate**. A rebuilt table does not inherit
-   indexes, and a partial index silently rebuilt as a full one changes which rows the sweep sees.
-3. Decide whether `'awaiting_choice'` joins `ix_wq_runnable`'s predicate — see below.
-4. Regenerate the schema snapshot: `go test ./internal/db -run TestMigrationRoundTrip -update-schema`.
+1. ~~Add `'awaiting_choice'` to the `state` `CHECK` list.~~ **The `CHECK` was DROPPED entirely.**
+   The rebuild happens either way so both cost the same; the vocabulary is demonstrably still
+   growing; SQLite cannot `ALTER` a `CHECK`; and `audit_log.result` and 0003's
+   `provenance.acquisition_state` are the shipped precedent for `TEXT NOT NULL` with no `CHECK` and
+   the vocabulary enforced in Go. `fail_reason`'s `CHECK` is **kept** — that vocabulary is closed
+   and the column is DB-01's regression witness.
+2. ✅ All three indexes recreated, `ix_wq_runnable` with its partial predicate byte-identical to
+   0001's. `TestMigrate0005WriteQueueRebuild` reads them back out of `sqlite_master`.
+3. ✅ **`'awaiting_choice'` is EXCLUDED from `ix_wq_runnable`'s predicate**, with the reason written
+   beside it in the SQL. A row waiting on a person is not runnable: listing it exposes it to the
+   retry sweep and the `verify_until` TTL, which is the defect above reintroduced through the index.
+4. ✅ Snapshot regenerated.
 
-**Whether `'awaiting_choice'` belongs in `ix_wq_runnable`'s predicate is open, and is the owner's
-call at rebuild time.** ⚠️ Recorded as a **lean, not a decision**: it should probably be **excluded**,
-because a row waiting on a person is not runnable — leaving it in exposes it to the retry sweep and
-to the `verify_until` TTL, which is the whole defect above, reintroduced through the index. It is not
-settled here because that predicate also serves the reconciliation guard, and that call wants the
-reconciliation code in front of it rather than an argument from the schema alone. Whichever way it
-goes, write the reason next to the predicate: an exclusion looks like an oversight otherwise.
+Plus one the list did not name: **`work_id`'s `REFERENCES work(id) ON DELETE CASCADE` is restored**,
+which is what made the rebuild mandatory in the first place. ADR-0039 carries the argument, including
+why `audit_log`'s no-foreign-key precedent does not transfer (that precedent is about a table whose
+triggers forbid implicit writes; `write_queue` has none and already carries two cascades of its own).
+
+⚠️ **Still owed, and not done here.** 0001 also drops `tag_assignment.work_id` / `.edition_id` /
+`.media_file_id` and `release_candidate.work_id`, with comments naming "the migration that ships
+library sync". 0005 did **not** restore those — each is a further 12-step rebuild, neither table has
+a blocked reader, and nothing is closing. The comments in 0001 are pointers to a rebuild that is
+still owed.
+
+The DDL block above shows the **pre-0005** shape, because the reasoning under it (`ux_wq_idem`,
+`fail_reason`'s `NULL` trap) is still the reasoning. `internal/db/testdata/schema.sql` is the
+current one.
 
 **`fail_reason`'s `CHECK` must test `NULL` separately.** It previously read
 `CHECK (fail_reason IN (NULL,'rejected','unknown','exhausted'))`, which enforced **nothing at all**:
@@ -1215,14 +1250,54 @@ the **row** rather than from the URL string, which is the fix for the derived-UR
 body_hash, fetched_at, expires_at)`, the job queue, unowned-search result caching, and image-cache
 metadata. Deleting it costs a re-sync, not data.
 
+### 12.1 `sync_report` — what the sweep found · **v0.1**
+
+🔍 **Inference, and marked as such.** This table was named in the appendix as v0.1 with *no DDL
+anywhere in this document*, so the shape below was derived when it was created, from its only two
+specified call sites: [`sync.md`](./sync.md) §4 step 5 (*"emit a `sync_report` row"* per sweep) and
+§4 guard 1's `sync_report{kind: "id_reused", instance, remote_kind, remote_id}`. It is not prior
+art and nothing has exercised it — nothing writes this table yet.
+
+```sql
+CREATE TABLE sync_report (
+  id                  INTEGER PRIMARY KEY,
+  service_instance_id INTEGER REFERENCES service_instance(id) ON DELETE CASCADE,
+  kind                TEXT NOT NULL,   -- no CHECK; see below
+  remote_kind         TEXT,
+  remote_id           TEXT,
+  work_id             INTEGER,         -- no foreign key; see below
+  detail              TEXT,            -- JSON, REDACTED on the way in
+  created_at          TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+CREATE INDEX ix_sync_report_instance ON sync_report(service_instance_id, created_at DESC);
+```
+
+**No `CHECK` on `kind`**, for ADR-0039's reason: this is the newest and least settled vocabulary in
+the schema — `sync.md` names one value and the sweep will add its own as channels 3b and 4 are
+built — and SQLite cannot `ALTER` a `CHECK`.
+
+**No foreign key on `work_id`**, for `provenance.user_id`'s reason (§6): it is a *historical* id.
+*"Work 4412's link was rebound because Sonarr reused id 842"* must survive work 4412 being deleted,
+and `CASCADE` would erase the report of exactly the event most worth reporting.
+
+**Append-only by convention, not by trigger.** `audit_log`'s triggers exist because it is a
+tamper-evidence chain; this is an operational log, and a trigger here would recreate `audit_log`'s
+foreign-key problem (§9) for no security benefit.
+
+⚠️ **`detail` holds upstream response text, so it is redacted on the way in** — `security.md` §5 and
+REVIEW-LOG R-08: Mylar3 returns configured indexer API keys in a response *body*, and Kavita carries
+its key in a URL *path* segment, so a query-parameter deny-list is not sufficient.
+
 ---
 
-## 13. Libraries — the user's organisation · **v0.1, migration 0001**
+## 13. Libraries — the user's organisation · **v0.1**
 
-Design and reasoning: [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §6.5 and ADR-0026. **All four
-tables are in migration 0001**, which `CLAUDE.md` says can never be edited, so everything an
+Design and reasoning: [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §6.5 and ADR-0026. Everything an
 implementer needs is here rather than in prose: types, CHECK lists with their real allowed values,
 keys, `ON DELETE` behaviour, indexes, and the `user_id` principle 4 requires.
+
+⚠️ **This section used to open "All four tables are in migration 0001".** That was false — none of
+them existed in any migration when it was written. Read `internal/db/migrations` for what exists.
 
 ### 13.1 `library`
 
@@ -1294,7 +1369,7 @@ scope is driven by the `?lib=` chip. ADR-0028 separately pre-wires a per-type `s
 boolean, which is the flag that has a consumer. Two overlapping flags where one has no reader is
 how a schema accumulates dead columns in the one migration that can never be edited.
 
-**Reserved row: `library.id = 0`, *Unfiled*.** Inserted by migration 0001, `user_id 0`,
+**Reserved row: `library.id = 0`, *Unfiled*.** Inserted alongside the table, `user_id 0`,
 `managed_by 'auto'`, `kind` irrelevant (the CHECK is satisfied with `'movie'` and the row is never
 rendered). It exists to uphold §7 invariant 5: a work that the derivation would otherwise place in
 **no** library is a member of Unfiled, which keeps it visible in search to its owner and nobody
@@ -1421,11 +1496,20 @@ EXPLAIN QUERY PLAN
 SELECT m.work_id FROM library_member m
  WHERE m.library_id = ? AND (m.sort_title, m.work_id) > (?, ?)
  ORDER BY m.sort_title, m.work_id LIMIT 100;
---  → SEARCH m USING PRIMARY KEY (library_id=? AND sort_title>?)
+--  MEASURED, SQLite 3.53.4:
+--  → SEARCH m USING PRIMARY KEY (library_id=? AND (sort_title,work_id)>(?,?))
+--  (this section previously wrote it as `(library_id=? AND sort_title>?)`; the row-value
+--   comparison is reported in full. Same seek. TestLibraryScopedKeysetIsASeek asserts the
+--   two halves separately so a leading-column-only scan still fails.)
 ```
 
 **CI asserts that plan for both topologies — one library per kind *and* two libraries over one
-kind — because only the second is the interesting one.** The write cost is one extra column on a
+kind — because only the second is the interesting one.** ⚠️ Both are built with real rows in
+`TestLibraryScopedKeysetIsASeek` and **both produce the same plan**, which is recorded rather than
+dressed up: `EXPLAIN QUERY PLAN` chooses from the schema, not the data, so with no `ANALYZE`
+statistics the topology changes selectivity and not the plan. What CI pins is that the seek is on
+the primary key in both shapes; the row-count difference this paragraph is really worried about
+belongs to `make bench`, which is never a merge gate. The write cost is one extra column on a
 table that is already materialised and already flushed on the 250 ms batch, plus one rule: **a title
 or sort-title change rewrites the member rows for that work**, since the sort key is now duplicated.
 A `field` override on `sort_title` dirties them the same way. That is the price of the seek and it
@@ -1445,7 +1529,13 @@ CREATE TABLE library_override (
   link_id     INTEGER,
   target_identity_hash TEXT NOT NULL,
   -- field verb only
-  field_name  TEXT CHECK (field_name IN (NULL,'title','sort_title','year','cover')),
+  field_name  TEXT CHECK (field_name IS NULL
+                          OR field_name IN ('title','sort_title','year','cover')),
+              -- `IS NULL OR … IN (…)`, NOT `IN (NULL, …)`. This column carried the second
+              -- instance of DB-01 until migration 0005: one NULL inside an IN list makes the
+              -- comparison NULL for every non-matching value, and a CHECK passes on NULL, so
+              -- the constraint accepted 'TOTAL-GARBAGE'. Pinned by
+              -- TestNullableCheckConstraintsActuallyConstrain.
   field_value TEXT,
   -- relink verb only
   relink_to_work_id INTEGER,
@@ -1510,6 +1600,13 @@ Allowing both would give two mechanisms for one fact.
 --    (declarative: the CHECK) — asserted anyway, because it is the C-16 regression guard.
 ```
 
+**Which of the six are live** is answered by `internal/db/queryplan_test.go` and
+`internal/db/migrate_test.go`, not here. Assertions 2, 3, 4 and 5 have tests as of migration 0005
+(`TestUnfiledLibraryExists`, `TestLibraryScopedKeysetIsASeek`,
+`TestLibraryMemberEditionsBelongToTheirWork`, and `ux_libsrc_authority` declaratively). 1 and 6 wait
+for the code they constrain — there is no identity cascade and no correction applier yet, and an
+assertion over code that does not exist is a green nobody has exercised.
+
 ---
 
 ## Appendix — later tables
@@ -1524,7 +1621,7 @@ Present in the design, **not in migration 0001**, added with the milestone named
 | `role`, `role_permission`, `user_role`, `user_permission`, `user_library_access` | v1.0 | RBAC tables. The `user_id` columns and the access-scope parameter land in 0001; these do not |
 | `playback_state`, `play_history` | v1.0 | Northbound write-back. **Both keys are edition-scoped — see below** |
 | `playlist`, `playlist_item` | v1.0 | See the note below |
-| `sync_report` | v0.1 | Emitted by the sweep; a plain append-only log |
+| `sync_report` | v0.1 | Emitted by the sweep; a plain append-only log. **DDL is now in §12.1** |
 
 **`playback_state` is keyed `(user_id, work_id, edition_id)` and `play_history` is
 `UNIQUE (user_id, work_id, edition_id, started_at)` — a correction ADR-0031 forced and nobody

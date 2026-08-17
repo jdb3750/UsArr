@@ -3840,3 +3840,151 @@ lever.**
   need it and should not pay for it.
 * **No code, no schema and no mockup changed** when this was settled. The rule lands ahead of the
   screen it governs, which is the cheapest moment at which an ordering contract can be fixed.
+
+---
+
+## ADR-0039 — `write_queue.state` loses its `CHECK`; `work_id` gets its foreign key back
+
+**Status:** Accepted · **2026-08-17** · **Supersedes** the four-step instruction in
+[`reference/schema.md`](./reference/schema.md) §10 (step 1) and the seam described in
+[`FUTURE.md`](./FUTURE.md) §11 and §11.1, all three of which said the `CHECK` would *gain*
+`'awaiting_choice'`. **Closes** `REVIEW-LOG.md` **WQ-05**, recorded there as "a lean, not a
+decision". Both decisions landed in `internal/db/migrations/00005_library_sync.sql`, whose header
+carries the same reasoning next to the SQL.
+
+### Context
+
+`write_queue` had to be rebuilt by the library-sync migration regardless of anything decided here.
+`00001_initial.sql` created `work_id` as a bare `INTEGER` with the `REFERENCES work(id) ON DELETE
+CASCADE` clause **dropped**, because `work` did not exist yet, and with a comment naming library sync
+as the migration that restores it. SQLite can add neither a foreign key nor a `CHECK` to an existing
+column, so restoring the reference costs a full 12-step table rebuild — one that is mandatory, not
+optional. That is the fact that makes both questions below free to answer: **every option costs the
+same rebuild**, so nothing here is being bought with migration effort.
+
+Two questions arrived attached to it. `REVIEW-LOG.md` **WQ-01** established that `state` has no legal
+value meaning *"waiting for a human"*: `pending` gets claimed by a worker, `inflight` asserts an
+outstanding upstream request that does not exist while a person is deciding, and `verifying` carries
+a 15-minute `verify_until` TTL that would settle a sleeping user's request as
+`fail_reason = 'unknown'`. **WQ-05** left open whether such a state, once it existed, belonged in
+`ix_wq_runnable`'s partial predicate.
+
+### Decision
+
+> **1. `write_queue.state`'s `CHECK` is dropped entirely, not widened.** The column is
+> `TEXT NOT NULL DEFAULT 'pending'` with no constraint. The vocabulary — `pending` · `inflight` ·
+> `verifying` · `awaiting_choice` · `done` · `failed` — moves to Go and is documented and validated
+> there.
+>
+> **2. `'awaiting_choice'` is excluded from `ix_wq_runnable`'s partial predicate**, which stays
+> byte-identical to `00001`'s `WHERE state IN ('pending','inflight','verifying')`, with the reason
+> written beside it in the SQL.
+>
+> **3. `write_queue.work_id` regains `REFERENCES work(id) ON DELETE CASCADE`.**
+>
+> **4. `fail_reason`'s `CHECK` is kept**, in its `IS NULL OR … IN (…)` form.
+
+### Why — decision 1
+
+**The vocabulary is demonstrably still growing.** It has already been widened once in the design
+(WQ-01 → `'awaiting_choice'`), and v0.2's request path has a live candidate: a request-layer
+`'pending'` is not this table's `'pending'`. A `CHECK` that must be renegotiated per string literal
+is a 12-step rebuild per string literal, and this one has been renegotiated once before shipping a
+single row.
+
+**There is shipped precedent, twice, for exactly this reason.** `audit_log.result` carries no
+`CHECK` (`00001`). Migration `0003`'s `provenance.acquisition_state` is `TEXT NOT NULL` with no
+`CHECK`, and its own header says why: *"SQLite cannot `ALTER` one and 0001's `audit_log` foreign key
+is what that costs — so the vocabulary lives in `internal/store` and is enforced there."*
+`write_queue.state` is the same class of column, and treating it differently was inconsistency
+rather than rigour.
+
+**`write_queue.kind` — the verb half of the same row — has never had a `CHECK`.** A constrained
+lifecycle beside an unconstrained verb was already asymmetric, and it is the verb that a new sink
+extends first.
+
+### Why — decision 2
+
+A row waiting on a person is not runnable. This partial index is what the retry sweep walks **and**
+what `sync.md` §4's reconciliation guard tests, so a state listed in it is a state that gets claimed
+by a worker and exposed to the `verify_until` TTL — which is WQ-01's defect, reintroduced through the
+index. The `REVIEW-LOG.md` lean was to exclude; the objection was that the predicate also serves the
+reconciliation guard and the call wanted that code in view. The guard is still unwritten, but its
+specified behaviour (*"the sweep may correct an item only when there is no `write_queue` row for that
+work in `pending`, `inflight` or `verifying`"*) names the three states literally, so including a
+fourth would change the guard's meaning as well as the sweep's — which settles it in the same
+direction from the side the objection came from.
+
+### Why — decision 3
+
+**`audit_log`'s precedent was considered and does not transfer.** That precedent is not *"foreign
+keys are risky"*; it is *"an `ON DELETE` action is an implicit write, so a table that **forbids**
+implicit writes cannot carry one."* `audit_log` has `trg_audit_no_update` and `trg_audit_no_delete`,
+which is what turned its foreign key into an undeletable user. `write_queue` has no triggers, is not
+append-only, and is not history — it already carries two `ON DELETE CASCADE`s of its own, to `user`
+and to `service_instance`. The precedent says *check*, and the check passes. Verified rather than
+argued: `TestMigrate0005WorkIDForeignKey` deletes a user who has queued a command.
+
+**The real objection is the tombstone one, and it is answered on three grounds.** A 7-day tombstone
+expiry that hard-deletes a `work` would silently take a queued command with it, where no foreign key
+would leave the command to fail loudly at the \*Arr.
+
+1. `sync.md` §4's write-queue guard is normative and forbids the sweep from acting on a work with a
+   row in `pending`, `inflight` or `verifying` — so the collision is one the sweep may not cause, and
+   `ix_wq_runnable` is the index that guard uses.
+2. A work reaches hard delete only because the \*Arr itself no longer has it, so a surviving
+   *"monitor this"* command can only ever fail. Keeping it produces an alarm in Home's attention
+   block that the user cannot act on and cannot distinguish from a real fault.
+3. *"Fails loudly"* is aspirational either way. Nothing in `internal/` reads `write_queue` yet, so
+   without the foreign key the dangling row simply sits there and `ix_wq_work` returns rows for a
+   `work_id` with no referent. `CASCADE` is the answer the table already gives for its other two
+   parents, and it is the one SQLite can enforce today.
+
+### Alternatives rejected
+
+- **Widen the `CHECK` to add `'awaiting_choice'`** — what §10, `FUTURE.md` §11 and §11.1 all
+  specified. Rejected because it buys one literal and leaves the next one costing a full rebuild,
+  against a vocabulary that has already moved once. It also leaves the schema inconsistent with the
+  two shipped columns of the same class. **What it would have bought is real and is given up
+  knowingly:** SQLite will now accept a misspelt state, and a bug that writes `'pendign'` reaches
+  disk. The mitigation is that the vocabulary is validated in Go on the way in and that
+  `ix_wq_runnable`'s predicate is the operational filter — a misspelt state is simply never runnable,
+  which is a visible stall rather than silent wrong behaviour.
+- **Drop `fail_reason`'s `CHECK` too, for symmetry.** Rejected. That vocabulary is *closed* — it is
+  the terminal taxonomy (`rejected` · `unknown` · `exhausted`), not the lifecycle one — and the
+  column is DB-01's regression witness: it is the one place in the schema that proves
+  `CHECK (col IS NULL OR col IN (…))` behaves differently from `CHECK (col IN (NULL, …))`. Deleting
+  it would delete the test's subject.
+- **`ON DELETE RESTRICT` / `NO ACTION` on `work_id`**, so a pending command blocks the delete rather
+  than dying with it. Rejected: it makes a tombstone expiry fail, which stalls the reconciliation
+  sweep for that work indefinitely and turns a queue bug into a sync outage.
+- **`ON DELETE SET NULL` on `work_id`.** Rejected: it keeps the row and destroys the only thing that
+  says what the row was *about*, leaving a command nobody can interpret. A queued verb with no target
+  is worse than no row.
+- **Leave `work_id` without a foreign key, as `00001` has it.** Rejected: it is the status quo only
+  because `work` did not exist, `00001`'s own comment schedules the restoration, and the rebuild
+  needed for it is happening anyway. Declining now would mean paying for a second rebuild later to
+  get what this one could have had for nothing.
+- **Restore the other four dropped foreign keys in the same migration** —
+  `tag_assignment.work_id` / `.edition_id` / `.media_file_id` and `release_candidate.work_id`, whose
+  `00001` comments also name library sync. Deferred, not refused: each is a further 12-step rebuild,
+  neither table has a reader blocked on it (`release_candidate.work_id` is `NULL` for the whole
+  Search-and-Grab path and nothing writes `tag_assignment` yet), and a rebuild is no cheaper today
+  than in the migration that first writes those columns. `CLAUDE.md`'s *"cut before you add"* applies
+  to migrations too.
+
+### Consequences
+
+* **The `state` vocabulary now has exactly one home, and it is Go.** Whoever writes the write-queue
+  worker owns declaring and validating it; there is no second copy in a migration to drift from.
+  Until that code exists, the vocabulary is documented in `00005`'s header and nowhere else, which is
+  a real gap and is why this bullet exists.
+* **`'awaiting_choice'` costs no further migration.** `FUTURE.md` §11's seam is wider than the one it
+  described — and correspondingly less self-policing.
+* **Deleting a `work` now deletes its queued commands.** That is new behaviour, it is silent by
+  design, and `TestMigrate0005WorkIDForeignKey` is where it is written down as intended.
+* **A dangling `work_id` is now impossible**, so `ix_wq_work` can no longer return rows for a work
+  that does not exist, and the reconciliation guard's lookup is a key with a guaranteed referent.
+* **`docs/reference/schema.md` §10's DDL block still shows the pre-rebuild shape**, deliberately: the
+  reasoning under it is unchanged. `internal/db/testdata/schema.sql` is the current schema, and the
+  four-step block above it now records what was done instead of what was planned.

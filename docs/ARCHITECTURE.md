@@ -2284,6 +2284,22 @@ its own `kind_byte`, excluded from the navigation enum, the prefix index and the
 `work_credit.creator_work_id` renamed from `artist_work_id` to match (ADR-0033)**;
 `work_track.edition_id`, `work_track.track_number TEXT` plus the derived `track_position`, the M:N
 **`work_credit`**, and `edition.narrators` / `duration_seconds` / `abridged` (ADR-0031).
+
+> ⚠️ **How the library-sync migration read that list, and where it deviated.** The clause above is
+> qualified by its own reason — *"migration 0001 **or a backfill over the largest tables in the
+> schema**"* — and `internal/db/migrations/00005_library_sync.sql` applied that reason rather than
+> the enumeration. **What it shipped:** `work.kind`'s full twelve-member `CHECK` including
+> `comic_issue` and `person`, and `edition.narrators` / `duration_seconds` / `abridged`. Both are
+> genuinely one-way: SQLite cannot `ALTER` a `CHECK`, and §5.3's `kind_byte` codec is unchangeable
+> once clients cache northbound ids. **What it deferred:** the six subtype *tables* — `work_album`,
+> `work_track`, `work_credit`, `work_book`, `work_comic`, `work_comic_issue` — to the catalogue
+> source that writes each (§16.1, ADR-0035, ADR-0036). A brand-new table with no dependants costs a
+> plain `CREATE TABLE` later, with no rebuild, no backfill and no codec change, so nothing about it
+> is a one-way door; `work_track.edition_id` in particular is free because the table it is a column
+> of does not exist yet. That is 00001's own rule — *"a migration that creates a table nothing
+> queries is a schema claim nobody has tested"* — applied to the six tables no v0.1 source writes.
+> The migration header carries the argument in full. **Read `internal/db/migrations` for what
+> exists**; this paragraph says what v0.1 owes, not what has landed.
 **Identity tier 1 only**; the
 correction *UI* deferred to v0.3. Library auto-proposal on service add, the Libraries settings screen
 (§17.8), Home's three fixed blocks (§17.2). Library grid with **"Load more" + `content-visibility`

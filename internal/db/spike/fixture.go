@@ -15,10 +15,22 @@ import (
 
 // The fixture is 500,000 rows across the tables migration 0001 actually
 // creates. ARCHITECTURE §13 asks for "a 500k-row fixture"; it does not say which
-// tables, and it cannot, because the spike is a PREREQUISITE to the schema work
-// — work / edition / media_file / search_doc / search_fts do not exist yet
-// (migration 0001's header lists them as deliberately absent). Building them
-// here would mean measuring a schema nobody has committed to.
+// tables, and it cannot, because the spike is a PREREQUISITE to the schema work.
+//
+// ⚠️ MIGRATION 0005 HAS SINCE LANDED, and this fixture has NOT been rebuilt for
+// it. work / edition / media_file / search_doc / search_fts / search_trgm all
+// exist now, and the composition below still ignores them, so what this harness
+// measures is a subset of the real schema. Rebuilding it is owed to whoever
+// next runs `make bench-rss` against a claim about the library tables.
+//
+// One change was forced rather than chosen: migration 0005 restores
+// `write_queue.work_id REFERENCES work(id) ON DELETE CASCADE`, so the 8,000
+// queue rows below need real `work` rows to point at or the fixture build fails
+// on the foreign key. seedDimensions creates exactly that many, narrow and
+// title-only. They are DIMENSION rows, not part of the 500k plan — the same
+// treatment tags and service instances already get — because inventing a
+// work-table share of the budget would silently change what every previously
+// recorded RSS number means.
 //
 // So the composition below is chosen for page-and-index pressure comparable to
 // the reference library (10k movies / 2k series / ~400k episodes), using rows
@@ -50,6 +62,12 @@ const (
 
 	// Service instances. A homelab has single digits (schema.md §5).
 	fixtureInstances = 4
+
+	// `work` rows seeded so write_queue.work_id has something to reference
+	// (migration 0005 restored that foreign key). The queue is 1.6% of the
+	// plan, so this covers every work_id it generates at the default 500k and
+	// is checked at run time rather than assumed — see buildFixture.
+	seedWorks = 8000
 
 	// §7.7 rule 3: import batches commit at min(2000 rows, 100 ms). Row count
 	// is the deterministic half, and it is what the fixture uses.
@@ -116,6 +134,14 @@ func countRows(ctx context.Context, q *sql.DB) (fixtureCounts, error) {
 // and BEGIN IMMEDIATE, in batches of importBatch — the import path §7.7
 // describes. Nothing here bypasses the real open path.
 func buildFixture(ctx context.Context, d *db.DB, c fixtureCounts) error {
+	// Checked, not assumed: write_queue.work_id is a foreign key since 0005, so
+	// a plan that outgrows the seeded work rows fails halfway through the
+	// slowest step with a bare "FOREIGN KEY constraint failed".
+	if c.WriteQueue > seedWorks {
+		return fmt.Errorf("fixture plans %d write_queue rows but only %d work rows are seeded; "+
+			"raise seedWorks (write_queue.work_id references work(id) since migration 0005)",
+			c.WriteQueue, seedWorks)
+	}
 	if err := seedDimensions(ctx, d); err != nil {
 		return err
 	}
@@ -309,6 +335,21 @@ func seedDimensions(ctx context.Context, d *db.DB) error {
 				fmt.Sprintf("http://127.0.0.1:%d", 7878+i),
 				key, "v3"); err != nil {
 				return fmt.Errorf("seed instance: %w", err)
+			}
+		}
+		// `work` rows for write_queue.work_id to reference. Migration 0005
+		// restored that foreign key; without these the write_queue insert below
+		// fails on every row. Narrow and title-only: this is not an attempt to
+		// model the work table's real page pressure, which is what the ⚠️ note
+		// at the top of this file says is still owed.
+		for i := 1; i <= seedWorks; i++ {
+			title := fmt.Sprintf("Spike Work %06d", i)
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO work (id, kind, title, sort_title, normalized_title)
+				 VALUES (?, ?, ?, ?, ?)`,
+				i, []string{"movie", "series", "episode", "album"}[i%4],
+				title, strings.ToLower(title), strings.ToLower(title)); err != nil {
+				return fmt.Errorf("seed work: %w", err)
 			}
 		}
 		return nil

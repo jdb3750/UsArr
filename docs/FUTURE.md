@@ -404,18 +404,20 @@ is deciding; and `verifying` carries a 15-minute `verify_until` TTL that ends in
 `fail_reason = 'unknown'`. This document previously listed the queue as the seam without qualifying
 it. It was overclaiming: the queue protects the verb, not the wait.
 
-**The fix is one `CHECK` value, `'awaiting_choice'`, and it is scheduled rather than done.** It lands
-in the migration that ships library sync, which has to rebuild `write_queue` anyway to restore the
-`work_id → work(id)` foreign key that `00001_initial.sql` drops — SQLite can neither add a foreign
-key nor alter a `CHECK` in place, so both changes ride the same already-mandatory 12-step rebuild and
-the second one is free. `00001_initial.sql` is **not** edited for it. The full instruction, including
-recreating `ix_wq_runnable`'s partial predicate and regenerating the schema snapshot, sits next to
-the DDL in [`reference/schema.md`](./reference/schema.md) §10, where whoever writes that rebuild will
-be reading. ⚠️ Whether `'awaiting_choice'` joins `ix_wq_runnable`'s predicate is **undecided** — the
-owner's lean is to exclude it, since a row waiting on a person is not runnable and must not be swept
-or TTL'd, but that predicate also serves the reconciliation guard and the call is being made with the
-reconciliation code in view. Until then this seam is **identified and scheduled, not protected**, and
-nothing about it should be read as shipped.
+**✅ The seam exists, and it is not the `CHECK` value this section used to promise.** The
+library-sync migration **dropped `write_queue.state`'s `CHECK` entirely** rather than widening it to
+add `'awaiting_choice'` ([ADR-0039](./DECISIONS.md#adr-0039)): the rebuild happened either way so both
+cost the same, the vocabulary is demonstrably still growing, SQLite cannot `ALTER` a `CHECK`, and
+`audit_log.result` and `provenance.acquisition_state` are the shipped precedent for enforcing that
+class of vocabulary in Go instead. So the state is expressible today with no further migration, and
+the seam is wider than a single literal would have made it. ✅ `'awaiting_choice'` is **excluded from
+`ix_wq_runnable`'s partial predicate**, with the reason written beside it in the SQL — a row waiting
+on a person is not runnable, and listing it would re-expose it to the retry sweep and the
+`verify_until` TTL. That was an open question when this paragraph was written; it is decided.
+
+Nothing implements any of it. No verb produces the state, no screen renders it, and the vocabulary
+now lives in Go, so it is enforced wherever `internal/store` grows a write-queue writer — which it
+has not. **The seam ships, the feature does not.**
 
 ---
 
@@ -495,18 +497,17 @@ exactly the job it was designed for.
    sync must rebuild this table regardless, so a `CHECK` value added during that rebuild costs
    nothing and no window is closing. See `REVIEW-LOG.md` WQ-03.
 
-**The seam to add, and when.** `write_queue.state`'s `CHECK` gains **`awaiting_choice`** — not in
-migration 0001, which is not edited, but in the **library-sync migration**, riding the 12-step
-rebuild that table already requires. ⚠️ Whether `awaiting_choice` also joins `ix_wq_runnable`'s
-partial predicate is an **open question with a lean, not a decision**: the lean is to exclude it,
-since a row waiting on a person is not runnable and must not be swept or TTL'd, but the same
-predicate serves the reconciliation guard and that call is deliberately being made with the
-reconciliation code in view. Nothing implements any of this in v0.1, no verb produces the state, and
-the Requests screen has no rendering for it — so the seam here is **identified and scheduled, not
-protected**, and nothing about it should be read as shipped. The full instruction — the `CHECK`
-value, recreating all three indexes including `ix_wq_runnable`'s partial predicate, and regenerating
-the schema snapshot — sits next to the DDL in [`reference/schema.md`](./reference/schema.md) §10,
-where whoever writes that rebuild will be reading. See `REVIEW-LOG.md` WQ-04 and WQ-05.
+**The seam that was added, and how it differs from the one specified here.** This paragraph said
+`write_queue.state`'s `CHECK` would *gain* `awaiting_choice` in the library-sync migration. That
+migration instead **dropped the `CHECK`**, and both open questions above are now closed —
+[ADR-0039](./DECISIONS.md#adr-0039) carries the argument and the alternatives, `reference/schema.md`
+§10 carries the corrected four-step list, and `internal/db/migrations/00005_library_sync.sql`'s
+header carries it next to the SQL. `'awaiting_choice'` is excluded from `ix_wq_runnable`'s partial
+predicate, as the lean here said it should be. The consequence for this section: the state is
+expressible with no further migration at all, but it is enforced nowhere but Go — so the seam is
+**wider and less self-policing** than the `CHECK` would have been, which is the trade ADR-0039 makes
+explicitly. Nothing in v0.1 implements it, no verb produces the state, and the Requests screen has
+no rendering for it. See `REVIEW-LOG.md` WQ-04 and WQ-05, both now dispositioned.
 
 **The seam.** The provider registry, `Grabber`'s two-phase pair, and
 `library.sink_service_instance_id`'s indifference to service shape — three parts that genuinely hold
