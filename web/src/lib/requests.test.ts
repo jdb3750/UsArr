@@ -28,6 +28,8 @@ import SCREEN_SOURCE from '../routes/requests/+page.svelte?raw';
 // it protects leaves its scope, which is the one failure a copy guard cannot
 // survive.
 import GRABS_SOURCE from './RecentGrabs.svelte?raw';
+// The stripping itself, shared with Home's guard so the two cannot drift.
+import { userFacingMarkup } from './copyguard';
 import {
 	PRIORITY_NOTE,
 	clearScopeLabel,
@@ -821,7 +823,10 @@ describe('the banned vocabulary', () => {
  * `<script>`, `<style>` and HTML comments — none of which reaches a user — and
  * hold the remainder against the list. Attributes stay in, deliberately:
  * `emptyTitle`, `emptyText` and `loadingNote` are user-facing strings that live
- * in attributes.
+ * in attributes. That stripping is `$lib/copyguard`'s `userFacingMarkup` rather
+ * than a local function, because Home now runs the same ban over its own
+ * Recent-grabs chrome and two guards that strip differently disagree about what
+ * a user can see while both stay green.
  *
  * TWO REGIONS, TWO RULE SETS, AND THE DISTINCTION IS THE POINT.
  *
@@ -846,13 +851,6 @@ describe('the banned vocabulary', () => {
  * from EACH half so that neither can go quiet on its own. If the component is
  * renamed or split again, this import moves with it.
  */
-function userFacingMarkup(source: string): string {
-	return source
-		.replace(/<script[\s\S]*?<\/script>/gi, ' ')
-		.replace(/<style[\s\S]*?<\/style>/gi, ' ')
-		.replace(/<!--[\s\S]*?-->/g, ' ');
-}
-
 const SCREEN_MARKUP = userFacingMarkup(SCREEN_SOURCE);
 
 /** The row markup itself, which both the Requests block and Home's narrower

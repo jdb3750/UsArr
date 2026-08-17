@@ -1045,7 +1045,7 @@
 			id="req-query"
 			name="query"
 			type="search"
-			class="searchbar__input"
+			class="searchfield searchbar__input"
 			autocomplete="off"
 			placeholder="Release name, or part of one"
 			bind:value={query}
@@ -2034,6 +2034,10 @@
 	 * never animated anywhere, because an animation widens the window in which
 	 * the row under the pointer is neither where it was nor where it is going.
 	 */
+	/* The search ROW — placement only. The field's appearance is app.css's
+	 * `.searchfield`, which the input carries as its first class; these four
+	 * lines and the two below are flex participation, which no shared class may
+	 * own. See `.searchfield`'s own note for the line-by-line call. */
 	.searchbar {
 		display: flex;
 		flex-wrap: wrap;
@@ -2041,16 +2045,11 @@
 		gap: var(--space-3);
 	}
 
+	/* 20rem, not Home's 24rem: this row also carries a label, a select and two
+	 * more buttons. `min-width: 0` overrides the flex automatic minimum size. */
 	.searchbar__input {
 		flex: 1 1 20rem;
 		min-width: 0;
-		min-height: var(--control-h);
-		padding: 0 var(--space-4);
-		background: var(--bg-inset);
-		color: var(--fg);
-		border: 1px solid var(--border-strong);
-		border-radius: var(--radius-sm);
-		font-size: var(--text-md);
 	}
 
 	.scopeline {

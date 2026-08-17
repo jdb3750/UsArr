@@ -1130,6 +1130,74 @@ textarea {
 	color: var(--fg-muted);
 }
 
+/* ── The search field ──────────────────────────────────────────────────────
+ *
+ * The one control a screen is BUILT AROUND, as opposed to `.input`, which is a
+ * field inside a form. Requests and Home each grew their own page-scoped copy
+ * of it — `.searchbar__input` and `.homesearch__input`, seven identical
+ * declarations apiece — and two page-scoped copies of one component are one
+ * component implemented twice, so it is promoted here rather than waiting for a
+ * third caller to make the point a third time.
+ *
+ * IT IS NOT `.input` AND IT IS NOT A MODIFIER OF IT. `.input` above is eight
+ * declarations; four of them — background, colour, border and radius — are
+ * identical here, and the other four are all differences that were already
+ * shipping. The floor is --control-h (32px) and not --control-h-sm (28px), the
+ * inset is --space-4 and not the --space-2/--space-3 pair, the type is
+ * --text-md and not --text-base (§6 names --text-md for form inputs), and
+ * `max-width: 100%` is absent because width is not this class's business. So a
+ * `.input .input--search` pair would carry four lines forward and override the
+ * other four, which is a modifier that disagrees with its base as often as it
+ * agrees. Two classes on every caller, to save four declarations here, is not
+ * the cheaper arrangement.
+ *
+ * ⚠️ APPEARANCE ONLY, AND THE OMISSIONS ARE THE DESIGN. There is no width, no
+ * max-width, no margin, no flex or grid participation and no placement here.
+ * The test each line was held against is: WOULD A SECOND CALLER IN A DIFFERENT
+ * CONTAINER HAVE TO UNDO IT? Three lines failed it and stayed with their
+ * screens:
+ *
+ *   flex          the two copies already disagree — `1 1 20rem` on the
+ *                 Requests toolbar, which shares its row with a label, a
+ *                 select and two buttons, against `1 1 24rem` on Home, whose
+ *                 row holds the field and one button. A shared basis would be
+ *                 wrong for one of them on the day it was written.
+ *   max-width     Home caps at 42rem so the field does not become the
+ *                 hero-search bar §1.5 sends back to the landing page.
+ *                 Requests takes the toolbar's width and wants no cap.
+ *   min-width: 0  reads like a decorative zero and is not. It overrides the
+ *                 flex automatic minimum size, which for an <input> is its
+ *                 `size`-derived intrinsic width — measured at 177px in
+ *                 Chromium with --text-md. Set to `auto` at a 160px viewport
+ *                 the field held 177px and the document's scrollWidth went
+ *                 160 → 193, i.e. the page scrolled sideways. It binds below
+ *                 roughly a 209px viewport and is inert above it, so it is a
+ *                 floor rather than a look — and a caller that WANTED the
+ *                 field to hold its intrinsic width in a row would undo it.
+ *
+ * The focus ring is not here either, and that is not an omission: §2.1's one
+ * `:focus-visible` rule already reaches every control in the application, and a
+ * second treatment on this one would be the second copy of a decision.
+ *
+ * WHAT IS NOT WRITTEN YET, said plainly so the next author does not read the
+ * gap as a rule. A ::placeholder colour, a :disabled surface, an
+ * [aria-invalid] border and an icon slot all belong to this component and
+ * NEITHER page-scoped copy had one — the placeholders on both screens render on
+ * the UA default today. Adding them here would have been a restyle wearing a
+ * promotion's clothes, so they are left for the change that decides what they
+ * should be. `.input` above already carries two of them — a ::placeholder
+ * colour and an [aria-invalid] border, plus a [readonly] treatment this control
+ * has no state for — and is the precedent to copy when they land. */
+.searchfield {
+	min-height: var(--control-h);
+	padding: 0 var(--space-4);
+	background: var(--bg-inset);
+	color: var(--fg);
+	border: 1px solid var(--border-strong);
+	border-radius: var(--radius-sm);
+	font-size: var(--text-md);
+}
+
 select[multiple] {
 	min-height: 88px;
 	padding: var(--space-2);
