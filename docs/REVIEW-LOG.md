@@ -7772,3 +7772,162 @@ brought in [M5-34](#m5-34) and forced the id renumber recorded at the top. `orig
 so every line reference cited above (`api.ts:954`, `+page.svelte:177` and `:405`, `services.ts:219`)
 was re-confirmed on the merged tree rather than carried over. The merged tree was re-gated from a
 cleaned cache before the push.
+
+---
+
+<a id="adrc-01"></a>
+
+# ADRC-01 — the ADR amendment convention, settled from the file's own history rather than asserted, and the README lag M5-34 measured and routed
+
+Two tasks, one thread. [M5-34](#m5-34) §M5.47 raised ADR-0035 §1's stale rider and refused to fix it
+*"pending a convention"*; §M5.46 measured the README's lag and routed it here under §11's area map
+(*"implementation-status wording in `CLAUDE.md`, `README.md` and `ARCHITECTURE.md` §16"*). Both are
+discharged here.
+
+ℹ️ **On the prefix, because it is new.** This entry was drafted as `M5-36` and renumbered before
+commit: the generic `M5-` prefix is retired after **three numbering collisions on this file in one
+evening** (`952a472`, `d64b8fc` and `e7c3b0a`, all recorded in `DEVELOPMENT.md` §11), while
+per-thread prefixes have never collided. `ADRC-` was checked as unused **in `docs/REVIEW-LOG.md`, in
+every file under `docs/`, and on all eighteen remote heads** before it was taken. **No existing `M5-`
+id is renumbered by this entry** — they are dated records, and §6.1's invariant holds. Cross-references
+to `M5-32`, `M5-34`, `M5.44`, `M5.46` and `M5.47` below point at other threads' entries and are left
+exactly as they are.
+
+## ADRC.1 The convention was already in the file, and the file's history contradicts the obvious reading of it
+
+The proposal put to this thread was *"ADR bodies are immutable; supersession is announced in the
+Status line and the index row"*, on the precedent of ADR-0036's flag. **That reading is right about
+the rule and wrong about the evidence for it**, and the difference matters, so the history was read
+rather than the current text alone.
+
+**What was checked, and with what.** `git log -p -- docs/DECISIONS.md`, `git log -S` for the offending
+sentence, and a `grep` for every amendment marker in the file (`Amendment`, `AMENDED`, `STRUCK`,
+`Correction`).
+
+| Question | Measured answer |
+|---|---|
+| Does ADR-0036 carry a Status-line + index-row flag from ADR-0041? | **Yes.** `d64b8fc` — and its `docs/DECISIONS.md` diff **removes exactly two lines**, the index row and the Status line's tail. ADR-0036's body is untouched, with a `> ⚠️ **AMENDED …**` blockquote *added* under the Status line naming the two superseded consequences |
+| Is that the only shape in the file? | **No.** ADR-0002, ADR-0025, ADR-0029 and ADR-0039 all carry a dated `### ⚠️ Amendment, <date>` **section** under the Status line; ADR-0029 additionally flags the two falsified paragraphs **at their own sites**; ADR-0039 `~~`-strikes a ground and writes *"struck rather than deleted because the error is instructive"* |
+| Has any ADR body been rewritten in place? | **Yes — once, and it is the origin of this very finding.** `162dca5` rewrote ADR-0035's **title**, its §1 **heading** and its §1 **prose**, and *introduced* the rider *"Not in v0.1, which draws no comics or books library at all"* |
+| Does the file already state the convention anywhere? | **In an ADR body, as a justification, not as process**: ADR-0036's rejected alternatives read *"The file's convention is a new entry plus a flag on the amended ADR's Status line, which is what ADR-0035 itself did to ADR-0032."* Nothing in the preamble, `CLAUDE.md` or `DEVELOPMENT.md` §11 said it about ADRs |
+
+**The `162dca5` finding is what settles it, and it argues for the annotating rule rather than against
+it.** The one time an ADR body was rewritten in place, the rewrite manufactured a claim that (a) no
+ADR had ever decided, (b) was falsified within a day by ADR-0041, and (c) was untraceable to any
+decision when the next sweep found it — which is exactly why M5-34 could flag it but not fix it.
+🔍 **Inference, marked as such:** had `162dca5` annotated instead, ADR-0041's amendment would have
+landed on the annotation and §1 would never have needed a second pass.
+
+**Settled, and recorded in [`DECISIONS.md`](./DECISIONS.md)'s preamble** under *How an ADR is amended
+when the world moves under it* — chosen over `CLAUDE.md` and `DEVELOPMENT.md` §11 because it is the
+file an ADR author already has open, and **stated in one place only**: §11's existing
+`REVIEW-LOG.md` rule is *cited* from it, not restated. The rule: bodies are **annotated, never
+rewritten**; three marks always owed (index row, `Status:` line, dated block under it) plus a fourth
+inline flag where a reader could take the sentence as live; **the decision lives in the superseding
+ADR, the note only points**. The preamble also draws the distinction that was doing the real work
+unstated — **dated records are annotated, design documents are corrected in place** — which is the
+same line `M5.44` drew when it edited `ARCHITECTURE.md` §7.1a's prose but left the dated status cells
+beneath it alone.
+
+## ADRC.2 ADR-0035, and why the sentence itself was not edited
+
+Applying the convention to itself: **§1's rider was not rewritten and not deleted.** Three marks
+added, one site struck.
+
+* **Index row** — gains `⚠️ amended 2026-08-17 by ADR-0041`, naming both falsified sites.
+* **`Status:` line** — gains the same flag.
+* **A `> ⚠️ **AMENDED 2026-08-17**` blockquote under it**, in ADR-0036's shape, naming *which* claims
+  fall: the **2026-08-16 amendment's** framing (*"v0.1 has no catalogue sources at all"*, and its
+  clause 1 instruction to read every "v0.1" below as *"the milestone Kavita lands in"* — Kavita's
+  milestone now **is** v0.1) and **§1's rider**. It states what survives: §1's identity finding,
+  §2/§2a's probe, §3's confirmation of ADR-0030.
+* **§1's rider itself** — `~~`-struck with a dated `🚩 STRUCK 2026-08-17 by ADR-0041` note, per
+  ADR-0039's precedent, because a reader arriving at the `#adr-0035` anchor lands mid-document.
+
+⚠️ **The 2026-08-16 amendment block is deliberately left standing and unedited**, and now says so.
+It is a dated record of the call taken that day; rewriting it would destroy the evidence that the
+milestone moved twice, which is the fact ADR-0041's reasoning turns on.
+
+**One thing the task's framing got wrong and is corrected here:** the defect was *not* only that
+ADR-0041's list of amended sites was incomplete. ADR-0041 amends **ADR-0036**, and ADR-0035's staleness
+is inherited through ADR-0035's own 2026-08-16 amendment — so the mark was owed on ADR-0035
+regardless of ADR-0041's list, and the convention is what makes that obligation legible.
+
+## ADRC.3 The README: seven lines measured, four more found, and one false claim about the file itself
+
+**`README.md`'s tables are NOT generated.** Checked: no `scripts/`, no `tools/`, no `Makefile` target,
+and `grep -rl README` across `*.go`, `*.mjs`, `*.js`, `*.ts`, `Makefile` and `*.y*ml` (excluding
+`node_modules`) returns **nothing**. The line *"This table is generated from `ARCHITECTURE.md` §16"*
+was itself a false status claim — and a load-bearing one, because `M5-32` and `M5.46` both cited it
+as the **reason** the README could be left to move on its own (*"generated from §16, so they move
+after §16 does"*). It is now *"maintained by hand against §16 — nothing in the repo generates it, so
+it lags §16 and has."*
+
+**All seven of M5-34's measured lines were stale; none was a false positive.** Line numbers held —
+`git diff f722054 f716210 -- README.md` is empty — but each was relocated by content, per §11.
+
+| Was | Now |
+|---|---|
+| *"**v0.1 aggregates Sonarr, Radarr and Prowlarr** — the \*Arr library sync plus…"* | *"**v0.1 aggregates Kavita and Prowlarr** — one catalogue source in front of the sync core, plus…"* |
+| *"Navidrome and Kavita (whichever the delta probe favours), then Audiobookshelf, then Komga"* | *"Navidrome, then Audiobookshelf, then Komga"*, plus *"**Sonarr and Radarr are re-sequenced out of v0.1 rather than cut**"* |
+| *"**\*Arr library sync — Sonarr and Radarr** … \| 📋 Planned — v0.1"* | Split in two: a **sync core / Kavita** row at v0.1, and an **\*Arr** row at *"📋 Planned — §16 has not yet named the milestone"* |
+| *"Navidrome, Audiobookshelf, Kavita, then Komga … Order set by a delta-watermark probe"* | *"Navidrome, then Audiobookshelf, then Komga … ✅ the probe **ran 2026-08-17 and passed**, which is what moved Kavita into v0.1 ahead of them"* |
+| *"full import + `/history/since` delta (Sonarr/Radarr) … page-walk delta … specified now and built with the first of them"* | *"Sync channels **1, 3b and 4** … channel 3b … v0.1 work and **built** for Kavita … `/history/since` (channel 3) does not apply to Kavita"* |
+| *"**\"1080p ✓ / 4K ✗\"** — one poster across two Radarr instances \| 📋 Planned — v0.1"* | same claim + *"⚠️ **unexercised in v0.1**, because it needs two Radarrs and Radarr re-sequenced out"*; status split into the link (v0.1) and the demonstration |
+| *"Navidrome and Kavita first (order set by the delta-watermark probe), then Audiobookshelf, then Komga"* | *"**Navidrome (#1), then Audiobookshelf (#2), then Komga (#3)**. Kavita left this sequence for v0.1 and is not a fourth entry"* |
+
+⚠️ **M5-34's list of seven was short by four**, which is worth recording because the next sweep should
+not treat it as complete:
+
+1. *"**the v0.1 catalogue itself is film and TV**, because the library servers arrive after v0.1"* —
+   flatly contradicted by §16.1's own blockquote (*"the catalogue is books and comics/manga"*). Now says so.
+2. *"migration 0001 **or never**"* — §16's enumeration reads *"migration 0001 **or a backfill over the
+   largest tables**"*, and the three subtype tables Kavita writes are owed in a **new** migration
+   (ADR-0040 + ADR-0041). Corrected to *"or a backfill"*, with the ADR-0040 rule named.
+3. The **minimal write path** row asserted `v0.1` flatly; §16 says its \*Arr targets left with ADR-0041
+   and *"whether it re-sequences with them or stays for Prowlarr's grab path alone"* is open. Now
+   *"📋 Planned — v0.1, scope open"*, pointing at §16 rather than resolving it — that call is §16's.
+4. The *"generated from §16"* claim above.
+
+**The standing rule was applied where a fresher claim would just go stale again.** The \*Arr row
+says *"§16 has not yet named the milestone"* rather than inventing one — checked: §16 nowhere assigns
+Sonarr or Radarr a milestone, and §16.1's table has three numbered slots, none of them theirs. The
+write-path row points at §16's open question instead of answering it.
+
+## ADRC.4 Raised, not fixed
+
+- **`ARCHITECTURE.md` §17's install-switcher table is stale and is NOT this thread's** (constraint:
+  §17 and `docs/design/` belong to the design thread). Its **v0.1** row reads
+  *"Sonarr, Radarr, Prowlarr | Movies and TV catalogued; music, audiobooks, ebooks and comics present
+  as media types with **no catalogue source**"* — falsified by ADR-0041 on both halves: v0.1's
+  services are **Kavita and Prowlarr**, and the catalogued types are **books and comics/manga**. The
+  **Full stack** row's caption *"§16 … sequences the catalogue sources one at a time after v0.1"* is
+  also now wrong for Kavita. **Routed to the design thread**, with the mockups' milestone-labelled
+  switcher likely needing the same pass.
+- **`CLAUDE.md` carries the same lag and was left alone** — its roadmap line reads *"v0.1 — the \*Arr
+  library sync (Sonarr, Radarr) + search … **No catalogue source ships in v0.1**"*. It is in §11's
+  area map beside `README.md`, so it is arguably this thread's, but `CLAUDE.md` is agent-facing
+  project instruction rather than status prose and a coordinator may want it batched with
+  `docs/PROJECT-INSTRUCTIONS.md`. **Named here rather than edited; it should not survive another sweep.**
+- **ADR-0035's 2026-08-16 amendment clause 2** (*"It is no longer a day-one spike"*) is now doubly
+  overtaken — the spike ran, and its result is load-bearing inside v0.1. Covered by the blanket flag
+  rather than site-flagged, because §2a already records the run.
+
+### On the gate for ADRC-01
+
+`make check` from a **cleaned lint cache** — `/root/go/bin/golangci-lint cache clean` by absolute
+path first, per `DEVELOPMENT.md` §11's rule that a cached green is a rumour. Binaries, versions and
+tail are in the commit message.
+
+🚩 **State the green at its real size, because on this diff it is nearly worthless as evidence.**
+The diff is **three Markdown files** — `docs/DECISIONS.md`, `README.md`, `docs/REVIEW-LOG.md` — and
+**not one line of Go, TypeScript, Svelte, SQL or `go.mod`**. Of the gate's steps, exactly one reads
+any of them: `secrets` runs `gitleaks dir .` from the repo root over the whole working tree, so the
+green attests **that these three files leak no credential**. `fmt-check` lists `.go` files and runs
+`pnpm format:check` scoped to `web/`; `lint`, `build-tagged`, `modverify`, `test` and `vuln` do not
+read `docs/` or `README.md` at all. **Markdown prose is not checked by any tool in this repo** — there
+is no markdown linter and no link checker in `make check`, so nothing mechanical verified a single
+claim, cross-reference or anchor in this entry. What the green really attests is the **negative**:
+that the tree these edits sit on was not broken by them, which for a docs-only diff was never in
+doubt. The load-bearing verification here is the `git log -p` / `git show` / `grep` work recorded in
+§ADRC.1 and §ADRC.3, and it is manual.
