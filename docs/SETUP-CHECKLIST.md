@@ -16,8 +16,15 @@ What credentials buy is the ability to **record** a cassette. Once one is commit
 is testable forever by anyone with no stack at all — including you, today.
 
 **Your actual starting position:** you run **no Sonarr, no Radarr, no Lidarr**, and you run
-**Navidrome**. That is an unusual starting point for this project and this checklist is written for
-it rather than for the imaginary user who already has a full stack.
+**Kavita and Navidrome**. That is an unusual starting point for this project and this checklist is
+written for it rather than for the imaginary user who already has a full stack.
+
+⚠️ **The milestone labels below were re-cut on 2026-08-17 by
+[ADR-0041](./DECISIONS.md#adr-0041)**, and the change is exactly that starting position taken
+seriously: **v0.1's catalogue source is Kavita — which you already run — and Sonarr and Radarr
+re-sequence out of v0.1.** They are not cut, and `ARCHITECTURE.md` §16 does not yet name the milestone
+they land in. §16 stays authoritative for scope; the labels here point at it and are not a second
+roadmap.
 
 ---
 
@@ -36,17 +43,38 @@ master key.
 
 ---
 
-## 2. The one thing v0.1 needs from your homelab
+## 2. What v0.1 needs from your homelab — and you already run most of it
 
 v0.1 renders a unified library. **A library needs a library-bearing service**, and Prowlarr is not
 one — it indexes indexers, it holds no movies or series. Running UsArr against Prowlarr alone
-produces a working install with nothing in it, which is the worst possible first impression. So:
+produces a working install with nothing in it, which is the worst possible first impression.
 
-### 2.1 Stand up Prowlarr first — 9696
+⚠️ **This section used to answer that with *"stand up one \*Arr — Radarr is easiest"*, and
+[ADR-0041](./DECISIONS.md#adr-0041) replaced the answer.** The library-bearing service v0.1 renders is
+**your Kavita** (§2.0), because it is the one you actually run and the only one whose delta channel
+has been verified against a live instance. Prowlarr stays exactly where it was — it is v0.1's request
+path (Search-and-Grab, `ARCHITECTURE.md` §8.5), which covers all six media types. **Standing up an
+\*Arr is no longer a v0.1 prerequisite**; it moves to §4 with the milestone it now belongs to.
 
-Not because UsArr needs it first, but because **you** do. Every *Arr you add afterwards gets its
-indexers from Prowlarr in one place instead of being configured five times, and Prowlarr is the
-smallest, fastest container in the stack to get right. It is also the only source of the
+### 2.0 Kavita — 5000 — which you already have
+
+**This is the thing that makes v0.1 render.** Nothing to stand up; what UsArr needs is the same line
+as every other service (§2.3) — `kavita | url | api key`. ✅ The key travels in the **`x-api-key`**
+header, confirmed from the vendored spec (`api/specs/kavita.json`, `RESEARCH.md` Track 06). 🔍 Where
+Kavita's UI puts that key is **not asserted here** — no primary source for the menu path has been
+checked — so read it off your own install.
+
+⚠️ **On a free instance the external-identifier fields are null** — they are a **Kavita+** feature —
+so most of your series will carry the *"not identified"* badge. That is the ordinary case rather than
+a fault, UsArr says so on screen, and it is a stated consequence of this choice
+([ADR-0035](./DECISIONS.md#adr-0035) §1), not a surprise.
+
+### 2.1 Prowlarr — 9696
+
+**Still v0.1, and unchanged by ADR-0041** — it is the request path, not the library. Every *Arr you
+add later gets its indexers from Prowlarr in one place instead of being configured five times, and
+Prowlarr is the smallest, fastest container in the stack to get right. It is also the only source of
+the
 `usenet` vs `torrent` protocol tag and of indexer/category metadata, which is a genuine UsArr
 differentiator.
 
@@ -56,14 +84,20 @@ Key: Settings → General → Security → API Key. 32 hex characters, **full ad
 (`indexerQuery`, `indexerRss`, `indexerAuth`), not library changes, and its `HistoryResource` has no
 `movieId`/`seriesId`. UsArr uses Prowlarr for search and provenance, never as a delta-sync source.
 
-### 2.2 Then one *Arr — Radarr (7878) or Sonarr (8989)
+### 2.2 An *Arr — Radarr (7878) or Sonarr (8989) — **no longer a v0.1 prerequisite**
 
-This is the thing that makes v0.1 render. One is enough to build and demo against; two of the same
-kind at different quality profiles is what makes the "1080p ✓ / 4K ✗" per-instance view interesting,
-but that is a bonus, not a requirement.
+⚠️ This subsection read *"Then one \*Arr … this is the thing that makes v0.1 render"*, and
+[ADR-0041](./DECISIONS.md#adr-0041) moved it out of v0.1: the criterion was *"a real Sonarr and a real
+Radarr, imported"*, which cannot be met where you run neither, and the source that makes v0.1 render
+is now §2.0's Kavita. **Nothing is refused** — you have said you want films and TV eventually, the
+adapters are re-sequenced rather than cut, and `ARCHITECTURE.md` §16 does not yet name the milestone
+they land in. See the §4 row.
 
-**Radarr is the easier one to seed** — movies are single rows, whereas 2 000 series means ~400 000
-episode rows and one `/api/v3/episode?seriesId=N` call per series on first import.
+Kept here because it is still the right advice for the day you do stand one up: **Radarr is the
+easier one to seed** — movies are single rows, whereas 2 000 series means ~400 000 episode rows and
+one `/api/v3/episode?seriesId=N` call per series on first import. Two of the same kind at different
+quality profiles is what makes the "1080p ✓ / 4K ✗" per-instance view interesting, and that view is
+re-sequenced with them.
 
 Key: Settings → General → Security → API Key, same shape as Prowlarr's.
 
@@ -102,9 +136,12 @@ ordinary backup already contains it — nothing extra to do.
 
 You have it; it is worth knowing where it lands.
 
-* **As a library source** (music appearing in your unified library): **one of the first two catalogue
-  milestones after v0.1** — it is either first or second depending on the delta-watermark probe in
-  `ARCHITECTURE.md` §16.1, and it has to land before v0.4 either way.
+* **As a library source** (music appearing in your unified library): **the first catalogue milestone
+  after v0.1** — §16.1 slot #1. ⚠️ This read *"one of the first two … either first or second depending
+  on the delta-watermark probe"*; the probe has since run (2026-08-17, against a live Kavita,
+  [ADR-0035](./DECISIONS.md#adr-0035) §2a), Kavita passed and was lifted into v0.1
+  ([ADR-0041](./DECISIONS.md#adr-0041)), and Navidrome moved up to #1 without reordering. It still has
+  to land before v0.4 either way.
 * **As a client target** (UsArr speaking OpenSubsonic *to* Symfonium and friends): **v0.4**, which
   needs the library source above to be populated first.
 * Neither blocks anything now.
@@ -136,18 +173,21 @@ the password. Details in `docs/CONFIGURATION.md` §7.3.
 
 ## 4. Later, by milestone — nothing here is blocking
 
-Supply these when the milestone that uses them is being built, not before.
+Supply these when the milestone that uses them is being built, not before. **The `Needed at` column
+points at `ARCHITECTURE.md` §16, which is authoritative for scope** — where a label moved on
+2026-08-17, the row says what it used to read.
 
 | Item | Needed at | Cost | Notes |
 |---|---|---|---|
+| **Radarr** (7878) / **Sonarr** (8989) | **re-sequenced out of v0.1; §16 does not yet name their milestone** | free | ⚠️ Both were **v0.1** until [ADR-0041](./DECISIONS.md#adr-0041). *"A real Sonarr and a real Radarr, imported"* was v0.1's success criterion and it is unmeetable where you run neither, so they are re-sequenced onto a sync core already proven on real data. **Re-sequenced, not cut** — nothing about them is refused, and `internal/servarr` is not discarded: Prowlarr Search-and-Grab runs on it today. Setup advice is kept at §2.2. |
 | **Lidarr** (8686, `/api/v1`) | v1.0 | free | Only if you want music from the acquisition side rather than from Navidrome. |
 | **LazyLibrarian** (5299) | v1.0 | free | Books/magazines/comics. Key must be **exactly 32 characters** or it returns `503 Invalid API key`. Prefer its read-only key. |
 | **Jellyfin** (8096) | v1.0 | free | Video library aggregation and the "open in Jellyfin" handoff. **Not blocking, and never was** — v0.1 sources 100% of its metadata and poster URLs from the *Arrs. When it lands, give the wizard admin credentials once and let UsArr mint its own key via `/Auth/Keys` rather than storing a password; tell me the server version, since 10.11 changed which auth header the server accepts. |
-| **Kavita** (5000) | the first catalogue milestone after v0.1, or the second | free | Books, comics and manga — the one you already run. Which of Kavita and Navidrome is built first is decided by the delta-watermark probe in `ARCHITECTURE.md` §16.1. ✅ Auth is `x-api-key`, confirmed from the OpenAPI spec (RESEARCH.md Track 06); the earlier "unconfirmed" note is cleared. ⚠️ The external-identifier fields are a **Kavita+** feature — on a free instance they are null and UsArr will say so. |
-| **Audiobookshelf** (13378) | the third catalogue milestone after v0.1 | free | Audiobooks; ABS stays the source of truth for listening position, UsArr mirrors it. |
-| **Komga** (25600) | the last catalogue milestone | free | A second comics source. Last deliberately — you do not run it, so nothing on this project can test the adapter against a real library. Only needed if you adopt it. |
+| **Kavita** (5000) | **v0.1 — see §2.0** | free | ⚠️ Moved here from *"the first catalogue milestone after v0.1, or the second"* by [ADR-0041](./DECISIONS.md#adr-0041): the probe that was going to decide the order ran, Kavita passed, and it became v0.1's one catalogue source rather than the first thing after it. Books, comics and manga — the one you already run. It is the only row in this table that is **not** "later"; it is listed for completeness. |
+| **Audiobookshelf** (13378) | **§16.1 #2** — the second catalogue milestone after v0.1 | free | ⚠️ Read *"the third"* while Kavita held a slot in that sequence; Kavita moved into v0.1 and the three below it shifted up by one **without reordering** (ADR-0041). Audiobooks; ABS stays the source of truth for listening position, UsArr mirrors it. |
+| **Komga** (25600) | **§16.1 #3** — the last catalogue milestone | free | A second comics source, and still last — the position is unchanged, only its number moved (see the row above). Last deliberately: you do not run it, so nothing on this project can test the adapter against a real library. Only needed if you adopt it. |
 | **Bazarr** (6767) | v1.0 | free | Subtitle status. Joins via the *Arr instance's local IDs, not external IDs. |
-| **TMDB key** | v0.2 | free, non-commercial | **Not blocking, and never was.** Radarr's `MovieResource` and Sonarr's `SeriesResource` already carry title, overview, year, runtime, genres, certification, ratings, `tmdbId`, `imdbId` and `images[].remoteUrl` — every field v0.1 renders. TMDB enters only with discovery search for things you don't own. When it does, you accept: mandatory in-UI attribution with the TMDB logo less prominent than UsArr's; a **6-month cache cap**; and no sublicensing, which is why every user brings their own key. |
+| **TMDB key** | v0.2 | free, non-commercial | **Not blocking, and never was.** ⚠️ Its *justification* moved with the source, though, and is not restated: this read *"Radarr's `MovieResource` and Sonarr's `SeriesResource` already carry title, overview, year, runtime, genres, certification, ratings, `tmdbId`, `imdbId` and `images[].remoteUrl` — every field v0.1 renders"*, which was true of the \*Arrs. **The equivalent claim for Kavita's series and volume payloads has not been checked against Kavita's API and is deliberately not written here** (`ARCHITECTURE.md` §16.1 records the same gap as owed). The **requirement** is unchanged — v0.1 ships zero external metadata providers. TMDB enters only with discovery search for things you don't own. When it does, you accept: mandatory in-UI attribution with the TMDB logo less prominent than UsArr's; a **6-month cache cap**; and no sublicensing, which is why every user brings their own key. |
 | **Metadata contact string** | v0.3 | free | The value of `USARR_METADATA_USER_AGENT`, e.g. `UsArr/0.1 (+https://github.com/joe/UsArr)`. MusicBrainz **requires** an identifying UA (1 req/s, 503 above); Open Library raises you 1 → 3 req/s for one. A project URL is fine; it does not have to be your email, and ⚠️ whatever you put is transmitted to those providers. |
 | **Metron account** (comics) | v1.0 | free | Preferred over Comic Vine — friendlier limits, `If-Modified-Since` and incremental sync. |
 | **Fanart.tv / Trakt / OMDb / Google Books / Hardcover / AniList keys** | v1.0 | free tiers | Enrichment only. Skip until something visibly lacks artwork or ratings. |
@@ -191,15 +231,18 @@ but are on no milestone and need nothing from you now (`docs/FUTURE.md`).
 
 ## 6. The short version
 
-**Three things and development is unblocked:**
+**Three things and development is unblocked — and you have to stand up none of them:**
 
 1. **Decide the module path and the port** (§1). Costs ten minutes, blocks the first commit. The
    licence is already settled — AGPL-3.0, confirmed 2026-08-16, `LICENSE` is in the repo.
-2. **Stand up Prowlarr** (§2.1) and send me `kind | url | api key` through a secret channel.
-3. **Stand up one *Arr — Radarr is easiest** (§2.2) and send the same. This is the thing that makes
-   v0.1 have anything to show.
+2. **Send me your Kavita** (§2.0) as `kind | url | api key` through a secret channel. **This is the
+   thing that makes v0.1 have anything to show**, and it is already running.
+3. **Stand up Prowlarr** (§2.1) and send the same. That is v0.1's request path.
 
-That is it. No TMDB account, no Jellyfin, no tailnet, no master key.
+⚠️ Item 3 read *"stand up one \*Arr — Radarr is easiest … this is the thing that makes v0.1 have
+anything to show"* until [ADR-0041](./DECISIONS.md#adr-0041). It is re-sequenced, not cut (§4).
+
+That is it. No \*Arr, no TMDB account, no Jellyfin, no tailnet, no master key.
 
 Everything in §4 arrives per-milestone as those integrations get built. Everything in §5 needs
 nothing from you — permanently for the non-goals, and for now for the deferred items.

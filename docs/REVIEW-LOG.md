@@ -6176,14 +6176,14 @@ its SQL, but a **pointer that outlived the thing it pointed at**. In M5-27 the p
 that each explicitly refuse the authority being claimed from them; in M5-28 it describes as pending a
 probe whose result is already recorded twice elsewhere in the same file.
 
-## M5.14 Disposition of both
+## M5.16 Disposition of both
 
 | # | Severity | Finding | Disposition |
 |---|---|---|---|
 | **M5-27** | Low | **`internal/db/migrate_test.go`'s deferred-objects comment cites the two ADRs that disclaim the decision.** It read *"The six `work_*` subtypes wait for the catalogue source that writes them (ADR-0035, ADR-0036)"* — but **ADR-0035's Consequences state *"No schema change."* and ADR-0036's state *"No schema change, and no ADR is reversed."*** (`DECISIONS.md`, both under their own *Consequences* headings). Neither authorises a schema scope change, so the test's list of six deferred tables rested on citations that refuse it — the same defect ADR-0040's own Context section records against `ARCHITECTURE.md` §16's flag paragraph | **APPLIED, citation only.** Both facts were verified in `docs/DECISIONS.md` before editing rather than taken from the relay: the two *"No schema change"* sentences sit inside ADR-0035 and ADR-0036 respectively, and **[ADR-0040](./DECISIONS.md#adr-0040) — *"The six subtype tables land with the catalogue source that writes each"*, Accepted 2026-08-17 — was written specifically to be the missing authority**, saying so in its own Context (*"the deferral was resting on citations that disclaim it. This ADR is the missing authority, written after the fact and saying so"*). The comment now cites **ADR-0040** alone. **The comment's shape, the `deferred` slice and every per-line milestone annotation are untouched** — ADR-0035 and ADR-0036 remain the authority for *which* source and *in what order*, which is what those inline `// lands with Navidrome` / `// lands with Kavita` comments say, and they are correct as they stand |
 | **M5-28** | Low | **`ARCHITECTURE.md` §7.1a closes by describing the Kavita-versus-Navidrome probe as still pending**, in the present tense — *"because the probe that decides whether Kavita or Navidrome goes first has to have its pass condition on paper before it runs"* — on a page where **§7.1a's own source table three paragraphs above already reads `✅ VERIFIED 2026-08-17 against a live instance`** and §16.1's v0.1 entry already reads *"It has since run … and it passed"*. One sentence carrying a durable rule and a stale tense | **APPLIED, one sentence, minimal.** 🚩 **The relay named the wrong file** — it reported the sentence as `RESEARCH.md` §7.1a, and `docs/RESEARCH.md` has **zero** occurrences of *"pass condition"*; §7.1a is an `ARCHITECTURE.md` section number and that is where the sentence is (§7.1a, *Channel 3b — the ordered page-walk delta*, final paragraph). It was located by grepping the whole `docs/` tree for the distinctive fragments rather than by trusting the pointer. **The durable half is kept verbatim in substance and only tensed** — the clause that a probe must have its pass condition on paper before it runs — and the result is attached: run 2026-08-17 against a live Kavita, **passed**, ordering the sequence **Kavita, then Navidrome**, pointing at [ADR-0035](./DECISIONS.md#adr-0035) §2a. A closing clause states that the rule survives the result, so the correction cannot be read as retiring it. **Judged an in-place edit, not an amendment.** §7.1a *does* carry a dated record — the per-source status table marked *"Dated 2026-08-16, amended 2026-08-17"* — and `DEVELOPMENT.md` §11's *"a citation inside a dated record is history, not staleness"* rule would forbid rewriting **that**. It was not touched. The closing paragraph is live design prose carrying no date and no tree, so it is the ordinary case: correct it where it stands |
 
-## M5.15 What was deliberately left alone
+## M5.17 What was deliberately left alone
 
 * **`ARCHITECTURE.md` §16.0's near-duplicate.** The bullet at *"None of them has a changed-since
   endpoint"* ends *"because the probe that decides which adapter is first has to have its pass
@@ -6213,14 +6213,14 @@ note.
 # M5-29 — §16.0's near-duplicate of the probe sentence: is a section headed "the scope amendment" a dated record?
 
 **Date:** 2026-08-17. **Branch:** detached worktree cut from `origin/main` at `a1da450`. **Picks up
-the hand-off M5-28 left in M5.15**, which named §16.0's differently-worded copy of the same sentence,
+the hand-off M5-28 left in M5.17**, which named §16.0's differently-worded copy of the same sentence,
 declined to touch it, and said *"whoever tenses it should decide first whether §16.0 is a record in
 `DEVELOPMENT.md` §11's sense."* That question is the whole finding; the tense fix is downstream of
 it. **`M5-29` is the next free id**, checked rather than assumed with
 `grep -on "M5-[0-9]\+" docs/REVIEW-LOG.md | sed 's/.*M5-//' | sort -n | tail -1`, whose highest hit
 before this entry is **M5-28**.
 
-## M5.16 The check that was run, and what it decided
+## M5.18 The check that was run, and what it decided
 
 The rule at issue is `DEVELOPMENT.md` §11's *"a citation inside a dated record is history, not
 staleness"* — an entry that already carries **a date and a tree** describes the tree it was taken on
@@ -6245,13 +6245,13 @@ But the narration is not stamped to a moment, and the bullet in question does no
 true on a date — it states, in the present, what channel 3b's schedule **is**. **Verdict: live design
 prose, and the ordinary correction applies.**
 
-## M5.17 Disposition
+## M5.19 Disposition
 
 | # | Severity | Finding | Disposition |
 |---|---|---|---|
-| **M5-29** | Low | **`ARCHITECTURE.md` §16.0's channel-3b cost bullet still describes the Kavita-versus-Navidrome probe as pending**, three paragraphs above the same section's own ordering paragraph recording that it ran and passed: *"It is specified ahead of its milestone and built with the first adapter, because the probe that decides which adapter is first has to have its pass condition on paper before it runs."* (the italics on *specified* and *built* are in the source and are unchanged) | **APPLIED, one sentence.** §16.0 judged live design prose, not a dated record — the check is §M5.16 above. The clause now reads *"…because the probe that decided which adapter is first had to have its pass condition on paper before it ran — as the next one will too. **That probe has since run**, and the ordering paragraph below records the branch it settled."* Three choices inside that: (a) **the durable rule is kept**, carried by *"as the next one will too"*, so past tense cannot be read as retiring it; (b) **the result is pointed at, not restated** — `34383c9` already put the run, the pass, ADR-0035 §2a and the Kavita-then-Navidrome branch in §16.0's ordering paragraph, and a second copy in the same section is the drift this log keeps catching; (c) **the two present-tense claims in the same sentence are left alone**, because *specified ahead of its milestone* and *built with the first adapter* are both still true — §16's own v0.1 entry reads *"Channel 3b is specified (§7.1a) and not built here"*. A bare tense flip would have left the bullet asserting a forward-looking reason for a decision already taken, which is why the pointer went in with it |
+| **M5-29** | Low | **`ARCHITECTURE.md` §16.0's channel-3b cost bullet still describes the Kavita-versus-Navidrome probe as pending**, three paragraphs above the same section's own ordering paragraph recording that it ran and passed: *"It is specified ahead of its milestone and built with the first adapter, because the probe that decides which adapter is first has to have its pass condition on paper before it runs."* (the italics on *specified* and *built* are in the source and are unchanged) | **APPLIED, one sentence.** §16.0 judged live design prose, not a dated record — the check is §M5.18 above. The clause now reads *"…because the probe that decided which adapter is first had to have its pass condition on paper before it ran — as the next one will too. **That probe has since run**, and the ordering paragraph below records the branch it settled."* Three choices inside that: (a) **the durable rule is kept**, carried by *"as the next one will too"*, so past tense cannot be read as retiring it; (b) **the result is pointed at, not restated** — `34383c9` already put the run, the pass, ADR-0035 §2a and the Kavita-then-Navidrome branch in §16.0's ordering paragraph, and a second copy in the same section is the drift this log keeps catching; (c) **the two present-tense claims in the same sentence are left alone**, because *specified ahead of its milestone* and *built with the first adapter* are both still true — §16's own v0.1 entry reads *"Channel 3b is specified (§7.1a) and not built here"*. A bare tense flip would have left the bullet asserting a forward-looking reason for a decision already taken, which is why the pointer went in with it |
 
-## M5.18 Raised, not fixed
+## M5.20 Raised, not fixed
 
 * **`DECISIONS.md` carries the same claim twice, both in ADR-0036**, and both are left standing:
   Decision §5 (*"with its three-clause pass condition unchanged and still written down in advance"*)
@@ -6470,7 +6470,7 @@ and then failed as malformed JSON**. That is the failure mode `internal/ssrf`'s 
 truncated \*Arr list looks like content that was deleted upstream and would drive a destructive
 sweep."*
 
-## M5.19 Disposition
+## M5.21 Disposition
 
 | # | Severity | Finding | Disposition |
 |---|---|---|---|
@@ -6478,7 +6478,7 @@ sweep."*
 | **M5-30b** | High | **The bound truncated instead of failing.** `io.LimitReader` returns `io.EOF` at its limit, so an over-cap body was diagnosed as bad JSON | **APPLIED.** `limitedBody` replaces `io.LimitReader` on both paths and returns a typed failure at the bound; new sentinel **`ErrResponseTooLarge`**, deliberately distinct from `ErrDecode`. Fired deliberately by reinstating the `io.LimitReader`: the test then printed `decoding response: unexpected end of JSON input` — the misdiagnosis, verbatim |
 | **M5-30c** | High | **Buffering the list endpoints is forbidden, not merely discouraged.** `sync.md` §2, under *Mandatory implementation rules*: *"**Stream the JSON.** `json.Decoder.Token()` consuming the array element by element. Buffering *and* unmarshalling a 60 MB payload peaks at ~200-400 MB on a 1 GB Pi; streaming holds it near constant."* `ARCHITECTURE.md` §7.2 carries the same rule as *"never `io.ReadAll`"* | **APPLIED, and measured rather than asserted.** New `StreamList[T]` + unexported `Client.stream`, `do`'s sibling: one `*json.Decoder` over the live body, elements handed to a callback one at a time. On a 24 MB payload — the largest the 32 MB buffered cap can carry at all, so both arms are the **real** code paths on the **same** body — peak heap above baseline was **63.75 MB buffered against 3.54 MB streaming, an 18× reduction**, with churn 162.4 MB/op against 22.3 MB/op (`BenchmarkListRead`, `-benchtime 5x`, Intel Xeon @ 2.10 GHz, linux/amd64). The buffered figure is **2.7× the payload**, which is what `sync.md`'s 200-400 MB-for-60 MB estimate looks like from underneath |
 
-## M5.20 The contract the review asked for, and where it is pinned
+## M5.22 The contract the review asked for, and where it is pinned
 
 A streamed read can fail **after** the callback has already been given part of the payload, and a
 half-applied import that reports success is worse than one that fails. So `StreamList` returns
@@ -6493,7 +6493,7 @@ closing bracket rather than assuming it**. Fired deliberately by deleting that r
 test then failed with *"a truncated array must not be reported as a complete list"* — i.e. it had
 returned `(137, nil)`, a half payload reported as a whole one.
 
-## M5.21 What the new path had to preserve, and how that was checked
+## M5.23 What the new path had to preserve, and how that was checked
 
 `stream` is `do`'s sibling, so every behaviour `do` carries had to survive on it. Each was pinned by
 a test **and then fired by breaking the code it protects** (nine mutations, each reverted; the
@@ -6513,7 +6513,7 @@ own function returns comes back unwrapped**, so `errors.Is` against the caller's
 without its envelope it arrived as `decoding response: writing chunk to sqlite`, blaming the
 upstream for a SQLite failure.
 
-## M5.22 Raised, not fixed
+## M5.24 Raised, not fixed
 
 * **`Timeouts.List` defaults to 10 minutes, and that number is an inference, not a measurement.**
   It is derived from `sync.md` §2's 30-80 MB against an ordinary home link; the `Default` 10 s would
@@ -6564,7 +6564,7 @@ created the exact defect M5-25 through M5-28 exist to catch, a document that out
 that precaution turned out to be unnecessary, because M5-30's own author committed it first. Recorded
 rather than deleted, because the precaution was right on the information available.
 
-## M5.23 How it was found, and why nothing before it could have
+## M5.25 How it was found, and why nothing before it could have
 
 The finding came out of a **scoping pass over §16, not a review of §16's prose.** Every M5 entry
 before it compared a document against another document or against the tree; this one compared a
@@ -6595,13 +6595,13 @@ success criterion is a factual claim about the world, and it needs verifying lik
 endpoints and field names. **It does not name the operator's own environment**, and this is the case
 that argues it should.
 
-## M5.24 Disposition
+## M5.26 Disposition
 
 | # | Severity | Finding | Disposition |
 |---|---|---|---|
 | **M5-31** | **High** | **v0.1's success criterion cannot be met on the machine v0.1 targets.** [ADR-0036](./DECISIONS.md#adr-0036)'s decision and `ARCHITECTURE.md` §16.1's v0.1 entry both scope the milestone to **Sonarr and Radarr** and both state the criterion as proving the replica thesis **on real data** — *"a real Sonarr and a real Radarr, imported"*. **The owner runs neither service** and has said collecting film and TV is *"gonna have to be future"*. What remains reachable is verification against **recorded fixtures and the vendored specs**, which is a method this repository has already documented failing in this exact subsystem: `ARCHITECTURE.md` §7.2 and `reference/sync.md` §2 record that `GET /api/v3/episode` is not a bare-array endpoint although **the OpenAPI spec marks its parameters `required: false`** — *"the constraint lives in the controller, not the schema"* | **APPLIED as a decision, not as an edit — [ADR-0041](./DECISIONS.md#adr-0041), owner-approved 2026-08-17.** ⚠️ **The criterion is kept and the source is changed**, which is the opposite of the tempting fix: **Kavita becomes the sync core's first adapter in v0.1**, because it is the source the owner runs and the only one whose delta has been verified against a live instance (ADR-0035 §2a — Kavita 0.9.0.2, 151 series, run 2026-08-17, passed clause by clause). **Sonarr and Radarr are re-sequenced, not cut**; they land on a core already proven on real data. ADR-0036's *rule* — one source, proven on real data, before a second adapter — survives untouched; only its membership moves, and the count stays at one. **§16 is NOT edited by this thread**: the replacement text for §16.1's v0.1 entry is drafted inside ADR-0041 as a marked block, with the current text quoted verbatim above it, and routed to the thread that owns §16 per `DEVELOPMENT.md` §11 — the same route [ADR-0040](./DECISIONS.md#adr-0040) took |
 
-## M5.25 What the fix costs, stated here rather than only in the ADR
+## M5.27 What the fix costs, stated here rather than only in the ADR
 
 **One consequence is a genuine addition to v0.1 and must not be read as free.** Channel 3
 (`/history/since`) **does not apply to Kavita** — `ARCHITECTURE.md` §7.1a says so in its opening
@@ -6615,7 +6615,7 @@ been** — a page walk cannot observe a deletion (§7.1a), and Kavita's watermar
 *add* only (ADR-0035 §2a clause (c)) — so reconciliation carries more weight in v0.1 than it would
 have. All of that is priced in the ADR rather than glossed.
 
-## M5.26 Raised, not fixed
+## M5.28 Raised, not fixed
 
 * **v0.1's minimal write path now has no target, and this entry does not decide it.** §16.1 names
   *"minimal write path (`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue"*, and
@@ -6845,7 +6845,7 @@ amendment per `DEVELOPMENT.md` §11. This entry is the thread that owns §16 tak
 `docs/ARCHITECTURE.md` §16 is touched** — §17, `docs/design/`, `PROJECT-INSTRUCTIONS.md`, `CLAUDE.md`
 and `DEVELOPMENT.md` are all other threads' and were left alone.
 
-## M5.27 The scope claim arrived by relay, and was treated as a hypothesis until the tree agreed
+## M5.29 The scope claim arrived by relay, and was treated as a hypothesis until the tree agreed
 
 **A milestone move that reaches you as a message is not yet a fact about the repository.** Before any
 edit, five checks, each with its result rather than a verdict:
@@ -6871,7 +6871,7 @@ edit, five checks, each with its result rather than a verdict:
    cleanly and **what landed is what was reviewed** — the replacement was inserted by an exact-match
    substitution asserting a single occurrence, not retyped.
 
-## M5.28 The renumber was safe; the prose around it was not
+## M5.30 The renumber was safe; the prose around it was not
 
 §16.1's table was re-sequenced earlier today at `34383c9` on the probe's result. Dropping Kavita from
 #1 and shifting Navidrome / Audiobookshelf / Komga to #1–#3 **without reordering** is mechanical.
@@ -6900,7 +6900,7 @@ appending a contradicting sentence beside it. That is the rule the *Schema, enum
 explicitly held to — it now carries **one** scope statement covering all six tables, three in and
 three out, not two statements disagreeing.
 
-## M5.29 Verified against the tree, not against the ADR: which of the three tables exist
+## M5.31 Verified against the tree, not against the ADR: which of the three tables exist
 
 ADR-0041 says `work_book`, `work_comic` and `work_comic_issue` *"are now due with THIS work"*. **Due
 is not the same as present**, and the amendment was written so it cannot be misread as a status
@@ -6918,7 +6918,7 @@ migration is never edited. It also records that **00005's original deferral was 
 declined to create tables nothing queried, which was correct for the tree it shipped into, and what
 changed is the source, not the judgement.
 
-## M5.30 Two claims deliberately NOT asserted, because no primary source was checked
+## M5.32 Two claims deliberately NOT asserted, because no primary source was checked
 
 **A source swap invalidates evidence as well as conclusions, and the tempting move is to re-point the
 evidence at the new source and carry on.** Two places in §16.1's v0.1 entry justified a v0.1 property
@@ -6934,7 +6934,7 @@ by citing an \*Arr API. Both are now flagged as **owed** rather than restated fo
   Whether the cap survives is flagged as a live question; **§6.4 owns that claim and this pass did
   not touch §6.4.**
 
-## M5.31 Raised, not fixed
+## M5.33 Raised, not fixed
 
 * **v0.1's minimal write path still has no target.** ADR-0041 flagged it and called it *"this
   section's call to make"*. The ADR's replacement text — applied verbatim — carries that ⚠️ open
@@ -6961,9 +6961,9 @@ diff is **two files, both under `docs/`**, and **`gitleaks dir .` is the only ga
 read Go, TypeScript and `go.mod`, none of which changed. **So the green attests exactly one thing: no
 credential-shaped string appears anywhere in the tree.** It says **nothing** about whether the §16
 prose is true, whether the ADR block was transcribed faithfully, or whether the eleven amended
-sentences are now correct. Those were established by the mechanical `diff` in M5.27 check 5, the
-`CREATE TABLE` enumeration in M5.29, and reading each amended paragraph against ADR-0041 — and where
-no source was checked, M5.30 records that nothing was claimed.
+sentences are now correct. Those were established by the mechanical `diff` in M5.29 check 5, the
+`CREATE TABLE` enumeration in M5.31, and reading each amended paragraph against ADR-0041 — and where
+no source was checked, M5.32 records that nothing was claimed.
 
 ⚠️ **The gate was measured twice, because §11's own rule says the first result had expired.** *"A
 gate result without a commit sha attached is not a result — several threads push to `main` within the
@@ -7103,7 +7103,7 @@ import, no schema writes, no migration. Channels 1, 3b and 4 are the commits aft
 `grep -on "M5-[0-9]\+" docs/REVIEW-LOG.md | sed 's/.*M5-//' | sort -n | tail -1` — which returned
 `31` before the merge and `32` after it, `M5-32` having landed on `main` in between.
 
-## M5.29 The finding this commit exists to record: the spec says `date-time`, and half of them are not
+## M5.34 The finding this commit exists to record: the spec says `date-time`, and half of them are not
 
 **Every date-time field in Kavita's OpenAPI document is declared `format: date-time`. Go's
 `encoding/json` unmarshals a `time.Time` with `time.RFC3339` and nothing else. System.Text.Json
@@ -7128,7 +7128,7 @@ ENTIRE series list undecodable**. A client that had shipped with `time.Time` her
 | **M5-33b** | **This is `DEVELOPMENT.md` §5's rule in a new subsystem.** §5 and §7.2 record `GET /api/v3/episode` rejecting a parameterless call although the spec marks its parameters `required: false` — *"the constraint lives in the controller, not the schema"*. [ADR-0041](./DECISIONS.md#adr-0041) quotes that as its reason for distrusting a spec-derived design | **APPLIED as method.** Every behavioural fact this client is built on was read from Kavita's **controller source** at the pinned commit, not from the schema, and each is cited in the code beside the thing it justifies: `HealthController`'s class-level `[AllowAnonymous]`; `ServerController`'s class-level `[Authorize(PolicyGroups.AdminPolicy)]`; `GetAllSeriesV2`'s unconditional `seriesFilterDto.Statements.Add(stmt)`; `UserParams`' `int.MaxValue` PageSize default **and its coercion of an explicit `0` to the same**; and `HttpExtensions.AddPaginationHeader`, whose `Pagination` header is middleware and appears **nowhere** in the OpenAPI document |
 | **M5-33c** | ⚠️ **NOT VERIFIED, and stated as such rather than assumed away: WHICH fields carry a zone on a real Kavita.** This project's one live Kavita run ([ADR-0035](./DECISIONS.md#adr-0035) §2a) recorded ordering and ids, not raw timestamp bytes, so whether `lastChapterAddedUtc` — the field channel 3b's watermark is built on — arrives with a `Z` is **unknown** | **ACCEPTED as a bound.** `Timestamp` accepts both forms rather than guessing per field, and an unparseable value degrades to "no time here" while keeping the raw bytes instead of failing the read. That asymmetry with every other bound in the package is deliberate and documented: a byte bound FAILS because a truncated list is indistinguishable from a deletion, and one unreadable timestamp is one unusable field |
 
-## M5.30 What was vendored, and what a green contract test here is worth
+## M5.35 What was vendored, and what a green contract test here is worth
 
 `api/specs/kavita.json`, 900763 bytes, `openapi: 3.0.4`, `info.version` **0.9.0.20**, 488 paths.
 `develop` @ `9c3e5400007f8a0282f7d883f2ad5e71716e514d`, SHA-256
@@ -7156,7 +7156,7 @@ commands and the skew warning are in `api/specs/SOURCES.md`, following that file
   is named `kavita.json` to match the directory's own convention (`prowlarr.json`); the discrepancy
   is recorded in `SOURCES.md` and here rather than by editing two documents this thread does not own.
 
-## M5.31 The outbound body: the same class of bug as the Prowlarr grab, with the polarity inverted
+## M5.36 The outbound body: the same class of bug as the Prowlarr grab, with the polarity inverted
 
 `docs/reference/arr-apis.md` §7.1 — *"build it from a type that can only express what the endpoint
 reads"* — applies unchanged, and its **fix does not**.
@@ -7179,7 +7179,7 @@ that call nil-derefs into a **500** — and a nil Go slice marshals as exactly `
 therefore implements `MarshalJSON` to substitute `[]`, making the fatal value **unrepresentable**
 rather than merely unlikely, for every caller including one writing a struct literal by hand.
 
-## M5.32 Three gates unblocked, and none of them simply deleted
+## M5.37 Three gates unblocked, and none of them simply deleted
 
 `ADR-0041` needs a Kavita to be addable. Three places refused everything but Prowlarr. Each was
 **verified against the tree** first, and each was replaced by a narrower refusal rather than removed:
@@ -7212,7 +7212,7 @@ has an `ErrForbidden` the \*Arr client does not need.
 in the **query string** because the controller offers no header path, and a version number does not
 justify writing a credential into every access log between here and there.
 
-## M5.33 Every new guard was fired
+## M5.38 Every new guard was fired
 
 Each was broken deliberately, the failure observed, and the break reverted. Verbatim output is in the
 commit message; what each one caught, in one line:
@@ -7222,7 +7222,7 @@ commit message; what each one caught, in one line:
 | `TestOutboundBodiesAreSpecLegal`, `TestSeriesFilterNeverMarshalsNullStatements` | `MarshalJSON` stops substituting `[]` | *"sends statements=&lt;nil&gt; … null nil-derefs into a 500"* |
 | `TestEnumFieldsCannotMarshalAsEmpty` | `NewSeriesFilter` stops refusing a non-member | *"members are [1 2 … 11] — 0 is not one, so a zero value is a 400 on every call"* |
 | `TestQueryContextZeroIsNotSendable`, `TestSeriesListSendsTheVerifiedBody` | `resolve()` stops defaulting `Context` | *"context=\"0\"; a zeroed SeriesListOptions must send QueryContext.None (1), never 0"* |
-| the `Timestamp` guards | one field back to `time.Time` | the `cannot parse "" as "Z07:00"` failure quoted in M5.29 |
+| the `Timestamp` guards | one field back to `time.Time` | the `cannot parse "" as "Z07:00"` failure quoted in M5.34 |
 | `TestStreamSeriesCutOnAnElementBoundaryStillFails` | closing bracket assumed, not read | *"returned (2, nil): the closing bracket must be read, not assumed"* |
 | both byte bounds | `limitedBody` → `io.LimitReader` | *"invalid character 'x'"* and *"stream ended mid-array after 6 elements"* — the two misdiagnoses the typed bound exists to prevent |
 | `TestBreakerIgnores4xxAndTripsOn5xx` | `recordStatus` trips on `>= 400` | *"after 5×403 the breaker is open, want closed"* |
@@ -7243,7 +7243,7 @@ only the background prober does. The e2e test was extended to wait for a real he
 break then printed the line above. A guard that cannot be made to fail is indistinguishable from no
 guard (`DEVELOPMENT.md` §11).
 
-## M5.34 The cassettes are synthetic, and the file says so
+## M5.39 The cassettes are synthetic, and the file says so
 
 `testdata/cassettes/kavita_*.yaml` were hand-authored from the vendored spec and the controller
 source. **A synthetic cassette proves this client's parsing, not the server's behaviour** — the
@@ -7266,7 +7266,7 @@ list"* — so the fixture became the repository's existing sequential-hex value,
 allowlist already covers. **No waiver was added.** The cost is recorded in the code: the fixture is
 deliberately not GUID-shaped although a real Auth Key is.
 
-## M5.35 Deliberate costs, stated rather than buried
+## M5.40 Deliberate costs, stated rather than buried
 
 - **`internal/kavita/breaker.go` is a near-verbatim copy of `internal/servarr/breaker.go`.** Importing
   the \*Arr package would put `servarr: circuit breaker open` inside a Kavita error, and that
@@ -7279,7 +7279,7 @@ deliberately not GUID-shaped although a real Auth Key is.
   reason `internal/servarr` duplicates it — this package must not be able to reach around the
   injected policy client. `TestMaxStreamBytesTracksTheSSRFCeiling` pins the two together.
 
-## M5.36 Raised, not fixed
+## M5.41 Raised, not fixed
 
 - **`ARCHITECTURE.md` §7.1a still closes with *"This channel is specified here but built with the
   first catalogue adapter, not in v0.1"*, and its ⚠️ per-source note still reads *"No source in this
@@ -7311,3 +7311,222 @@ matters most: **no byte of this has touched a real Kavita.** The evidence behind
 spec, the controller source at the pinned commit, and one live run
 ([ADR-0035](./DECISIONS.md#adr-0035) §2a) that measured ordering and ids on Kavita **0.9.0.2** — two
 steps from the `develop` line vendored here.
+
+---
+
+# M5-34 — six documentation sites that ADR-0041 falsified or that two concurrent agents corrupted, and one scope question deliberately left open
+
+**Date:** 2026-08-17. **Branch:** `claude/hearth-thread-93bfq1`, reset from `origin/main` at
+`d862526`, then merged with `origin/main` at `80db988` before the gate. **Documentation only** — no
+`.go`, no `.svelte`, no migration, no `Makefile`. Every item is a **pointer or a correction, never a
+fresher status claim**: `CLAUDE.md`'s rule is that no document owns what is built, so where a
+sentence had gone false it is amended in place **with what it used to say quoted**, in the style
+[M5-32](#m5-32) set.
+
+`M5-34` is the next free id, **checked across every remote head rather than assumed** — the standing
+`grep -oE "M5-[0-9]+" | sed 's/M5-//' | sort -n | tail -1` run against
+`git show origin/<branch>:docs/REVIEW-LOG.md` for all **18** heads `git ls-remote --heads origin`
+returned. `main` tops out at `33`, `claude/hearth-thread-vn9w7u` at `32`, this branch's pushed tip at
+`31`, and the remaining fifteen carry no `M5-` id at all. That check is not ceremony here: it is the
+subject of §M5.42 below.
+
+## M5.42 The concurrency hazards §11 did not cover, and the commit pair that proves both
+
+`DEVELOPMENT.md` §11's *Working alongside other threads* covered threads sharing a branch and keyed
+the worktree decision to the operation. **Neither rule reaches the two failures that produced today's
+duplicate headings**, and both are now bullets there.
+
+**(a) The launch decision, which belongs to the orchestrator and not to either agent.** §11's
+worktree bullet tells one agent how to operate; nothing said whether two committing agents should be
+started at once. **The measured evidence is still in `main`:**
+
+| Check | Result |
+|---|---|
+| Same subject and author timestamp | ✅ both `d64b8fc` and `547a604` read *"docs: ADR-0041 — the sync core ships with Kavita as its first adapter, not Radarr — M5-31"*, both at `Mon Aug 17 18:23:39 2026 +0000` |
+| Same parent | ✅ `git log -1 --format=%p` returns `afe17fb` for both |
+| `docs/DECISIONS.md` diff | ✅ **byte-identical** — `diff` of the two `git show -- docs/DECISIONS.md` outputs is empty |
+| `docs/REVIEW-LOG.md` diff | ⚠️ differs in **four heading numbers and nothing else**: `M5.19`–`M5.22` in `d64b8fc`, `M5.23`–`M5.26` in `547a604` |
+| Both on `main` | ✅ `git merge-base --is-ancestor` returns 0 for each |
+
+So `547a604` is the amend and `d64b8fc` is the version that was pushed before the amend finished; the
+ADR-0041 commit is in `main`'s history **twice**. ⚠️ **Two further failures from that launch are
+relayed by the orchestrating session and are NOT measured here** — one worker's `git add` sweeping
+the other's files into its commit, and both appending at EOF and colliding on merge. They are written
+into §11 marked as relayed, because a claim about what another agent's index held is exactly the kind
+§11's own *"a negative claim about other workers has to have visited each one"* rule refuses to take
+on trust.
+
+**(b) A sequential id read out of a file is a race, not a lookup.** Three collisions in this file, all
+from agents that were **each correct when they looked**:
+
+* `952a472` restarted at `M5.14`/`M5.15` after `be95357` had already used both.
+* `d64b8fc` wrote `M5.19`–`M5.22` into a tree — `afe17fb` — that **already contained** `M5.19`–`M5.22`
+  from `6f33464`. Verified rather than inferred: `git show afe17fb:docs/REVIEW-LOG.md | grep -o
+  "^## M5\.[0-9]*" | tail -1` returns `## M5.22`, while the same command on `6f33464`'s own parent
+  `a855e23` returns `## M5.18`. The number was free at read time and taken by the time it was written.
+* `e7c3b0a` restarted at `M5.29`–`M5.31` over `b2dc092`'s.
+
+The rule added to §11 is to **re-read the highest id immediately before committing, after the last
+fetch or merge**, and to check every remote head for ids that are also filenames or cross-file
+references (ADR numbers, migration numbers).
+
+## M5.43 The renumber, and the premise of it that did not survive checking
+
+The task named **one** duplicate pair — `## M5.14` and `## M5.15` — and stated that the file's
+numbering was *"otherwise globally sequential"*. 🚩 **It was not, and the instruction to verify is
+what caught it.** `grep -o "^## M5\.[0-9]*" docs/REVIEW-LOG.md | sort | uniq -d` returned **five**
+duplicated headings, in two clusters: `M5.14`/`M5.15` from `952a472`, and `M5.29`/`M5.30`/`M5.31`
+where `e7c3b0a` restarted over `b2dc092`. A uniform `+2` cascade, which is what the single-cluster
+premise implies, would have left the second cluster duplicated and the sequence still non-unique. The
+stated goal — *unique and monotonic* — governed, so both clusters were fixed:
+
+| Block | Written by | Before | After | Shift |
+|---|---|---|---|---|
+| `M5-27`/`M5-28` | `952a472` | M5.14–M5.15 | **M5.16–M5.17** | +2 |
+| `M5-29` | `a855e23` | M5.16–M5.18 | **M5.18–M5.20** | +2 |
+| `M5-30` | `6f33464` | M5.19–M5.22 | **M5.21–M5.24** | +2 |
+| `M5-31` | `547a604` | M5.23–M5.26 | **M5.25–M5.28** | +2 |
+| `M5-32` | `b2dc092` | M5.27–M5.31 | **M5.29–M5.33** | +2 |
+| `M5-33` | `e7c3b0a` | M5.29–M5.36 | **M5.34–M5.41** | **+5** |
+
+**Applied by an exact-match script that asserts the old heading text at each line and aborts on any
+mismatch**, not by a blanket regex — it fired once, on a cross-reference whose line number was off by
+one, and refused to write the file. `## M5.1` through `## M5.13` are untouched. Result:
+`grep -o "^## M5\.[0-9]*" | sed 's/## M5\.//' | tr '\n' ' '` reads `1 2 3 … 41` with `uniq -d` empty.
+
+**Cross-references were enumerated before the move, not after.** Nineteen `M5.N` mentions exist
+outside the headings; thirteen point into `M5.2`–`M5.13` and are unaffected, and **six needed
+updating** — all six were, and all six were re-verified afterwards:
+
+| Site | Before | After |
+|---|---|---|
+| `docs/REVIEW-LOG.md` `M5-29`'s header ¶ | *"the hand-off M5-28 left in **M5.15**"* | **M5.17** |
+| `M5-29`'s disposition table | *"the check is §**M5.16** above"* | **§M5.18** |
+| `M5-32`'s gate note | *"the mechanical `diff` in **M5.27** check 5"* | **M5.29** |
+| `M5-32`'s gate note | *"`CREATE TABLE` enumeration in **M5.29**"* | **M5.31** |
+| `M5-32`'s gate note | *"no source was checked, **M5.30** records"* | **M5.32** |
+| `M5-33`'s guard table | *"the failure quoted in **M5.29**"* | **M5.34** |
+
+`docs/DEVELOPMENT.md:541`'s `§M5.7` was checked and left alone. **§6.1's invariant is intact: no
+entry's id, text or severity changed** — only `##` subsection numbers and the six references to them.
+
+😬 **And this entry made §M5.42(b)'s mistake while writing §M5.42(b).** Its own subsections were
+drafted as `M5.35`–`M5.40`, which is where the sequence ended when the draft was started and **six
+numbers behind where it ended after the cascade above landed in the same working tree**. `uniq -d`
+caught it before the commit and they are `M5.42`–`M5.47`. **The rule and the failure are the same
+shape**: a number read at the start of the work and written at the end of it, with the tree moving in
+between — and the mover here was the author, not another agent. §11's *"a fix is written under the
+assumption that the failure mode is now understood, and that is precisely the moment people stop
+checking for it"* gets one more instance, on the smallest possible timescale.
+
+## M5.44 ADR-0041's four remaining documentation sites, each amended with what it used to say
+
+[M5-32](#m5-32)'s *Raised, not fixed* routed §7.1a away from itself (*"§16 does not own §7"*) and
+[M5-33](#m5-33)'s did the same (*"this is an implementation commit and §7.1a belongs to the design
+thread"*). This is that route being taken.
+
+| Site | The sentence that had gone false | Now |
+|---|---|---|
+| §7.1's channel table, row **3b** | *"specified now, built with the first catalogue adapter (§16.1)"* | **v0.1, built, for Kavita**; the other three with their own milestones |
+| §7.1's channel table, row **3** | **v0.1** | *"with the first \*Arr adapter"* — ADR-0041 clause 4 sets v0.1's channels to **1, 3b and 4**, and Kavita has no `/history/since` at all. Corrected because the two rows sit on one screen and would otherwise contradict each other |
+| §7.1a closing ¶ | *"This channel is specified here but built with the first catalogue adapter, not in v0.1 — v0.1's services are Sonarr, Radarr and Prowlarr, for which channels 1, 3 and 4 are the whole story"* | Channel 3b is **v0.1 work and built**. ⚠️ **The durable rule is kept and not retired with the framing**: the section was still written ahead of the adapter that consumes it, and the reason — a probe's pass condition goes on paper before it runs — is carried into its own paragraph, exactly as `M5-29` insisted when it tensed §16.0's copy |
+| §7.1a per-source note | *"No source in this table ships in v0.1"* | **Kavita ships in v0.1 and the other three do not.** 🚩 **The dated status cells beneath it were NOT edited** — §11's *"a citation inside a dated record is history, not staleness"* — and the note now says so explicitly, so the next reader does not mistake the omission for an oversight |
+| §11.2's manifest-tier blockquote | *"**None of the four is in v0.1**: ADR-0036 moved them into the §16.1 sequence"* | **One of the four is** — v0.1 pays for one hand-written Go adapter and one auth scheme with no lifecycle, and the roadmap carries three |
+| `docs/SETUP-CHECKLIST.md` | per-service milestone labels — see §M5.46 | |
+
+## M5.45 §6.4's "essentially 100%" was load-bearing, and it is restated rather than deleted
+
+[M5-32](#m5-32) §M5.32 flagged this and refused to touch it: *"§6.4 owns that claim and this pass did
+not touch §6.4."* §16.0 carries the same hand-off in the document itself — *"§6.4 owns the tier-1
+claim and has not been restated against Kavita."* Restated here.
+
+**The claim was true of the providers it named.** §6.4 read: *"Its providers are Sonarr and Radarr and
+every row from both carries `tmdbId`/`imdbId`/`tvdbId`, so tier 1 resolves essentially 100% of the
+v0.1 identity problem."* ADR-0041 replaced those providers with Kavita.
+
+**Verified against the vendored spec rather than from memory.** `SeriesDto` in `api/specs/kavita.json`
+carries, by name and type: `aniListId` (int32), `malId` (int64), `hardcoverId` (int32), `metronId`
+(int64), `mangaBakaId` (int64) and `cbrId` (int32), plus `comicVineId` and `mangaBakaEditionId` as
+**nullable strings**. All are written only by the Kavita+ match path, so a free instance returns `0`,
+`null` or `""` for every one — which is [ADR-0035](./DECISIONS.md#adr-0035) §1's *"what an ordinary
+user sees once Kavita lands"*, and which §6.4 itself already says three paragraphs further down.
+
+**So the honest statement is not a percentage.** How much of v0.1's identity problem tier 1 resolves is
+**a property of the instance, not of the design**. Two consequences written alongside it: tiers 2–5
+still do not land in v0.1 (**failing to identify is honest; merging comics on title similarity across
+a catalogue with no ids is the disaster the 0.65 floor exists to prevent**), and the *"not identified"*
+badge's own paragraph — which argued the badge was written *"not because v0.1 renders it often"* — is
+corrected, because v0.1 now renders it constantly.
+
+🚩 **The v0.3 cap on the correction UI is FLAGGED, NOT DECIDED, and that is deliberate.** The
+restatement **withdraws the support the cap was resting on**: §16.0 calls the cap *"a scheduling
+detail"* on the strength of the correction UI having no work to do in v0.1, and a v0.1 whose only
+source may carry no external ids at all is one where a user has something to correct on day one.
+Whether the cap survives is a **scope** question; scope is owned by the ADRs with §16 authoritative
+(`DEVELOPMENT.md` §11), so it needs an ADR and an owner decision. **A pass that was asked to correct a
+stale claim does not get to make an undecided scope call under cover of correcting it** — the same
+line `M5-32` drew on v0.1's minimal write path.
+
+## M5.46 The ownership call on `SETUP-CHECKLIST.md`, and why the README was left alone
+
+Two documents carry per-service milestone labels. **They were sorted differently, and the map decided
+it rather than the file names being similar.**
+
+* **`docs/SETUP-CHECKLIST.md` — EDITED.** It appears in **no** row of §11's area map. What lags in it
+  is *scope* — which milestone a service arrives at — and §11 is explicit that *"scope is owned by the
+  ADRs, and §16 is authoritative for it"*, so the labels follow ADR-0041 by pointing at §16 rather than
+  by asserting a second roadmap. `M5-32`'s *Raised, not fixed* also names this file as **open**, not as
+  routed elsewhere.
+* **`README.md` — NOT EDITED, routed.** It is named explicitly in the map row *"implementation-status
+  wording in `CLAUDE.md`, `README.md` and `ARCHITECTURE.md` §16 → landed the code being described"*,
+  and `M5-32` routed it in the same words: *"The README's status tables are generated from §16, so
+  they move after §16 does. Untouched here."* Its lag is measured and reported rather than fixed —
+  **lines 19, 21, 65, 66, 74, 78 and 86** still say v0.1 aggregates Sonarr and Radarr, that Kavita is
+  a milestone *after* v0.1, that the catalogue order awaits a probe that has already run, and that the
+  page-walk delta is *"specified now and built with the first of them"*.
+
+What changed in `SETUP-CHECKLIST.md`: the owner's starting position now names **Kavita** alongside
+Navidrome; §2 gained a **§2.0 Kavita** subsection as the thing that makes v0.1 render; §2.2's \*Arr is
+marked *"no longer a v0.1 prerequisite"* with its seeding advice kept for the day it lands; §3's
+Navidrome bullet moves from *"first or second depending on the probe"* to **§16.1 #1**, because the
+probe ran; §4 gains a **Radarr/Sonarr** row and re-labels **Kavita → v0.1**, **Audiobookshelf →
+§16.1 #2**, **Komga → §16.1 #3**; and §6's short version no longer asks the owner to stand up an \*Arr.
+
+ℹ️ **Two claims were deliberately not asserted.** The **TMDB** row's justification rested on *"Radarr's
+`MovieResource` and Sonarr's `SeriesResource` already carry … every field v0.1 renders"* — the
+equivalent claim for Kavita's payloads **has not been checked against Kavita's API**, so the row now
+records the requirement as unchanged and the justification as **owed**, mirroring `M5-32` §M5.32
+rather than re-pointing the old evidence at the new source. And **where Kavita's UI exposes its API
+key is marked 🔍 unverified** — the `x-api-key` *header* is confirmed from the vendored spec; the menu
+path is not, and no primary source for it was read.
+
+## M5.47 Raised, not fixed
+
+- **`docs/DECISIONS.md` ADR-0035 §1 carries its own stale rider.** Its bullet on rendering the
+  null-identifier case reads *"⚠️ Not in v0.1, which draws no comics or books library at all, because
+  it has no catalogue source for either"* — falsified by ADR-0041, which ADR-0035 predates. **Not
+  edited here**: it is inside an Accepted ADR's body, ADR-0041 does not name it among the sites it
+  amends, and this pass corrects documents rather than rewriting ADRs. The pointer, not a fresher
+  claim.
+- **The correction UI's v0.3 cap needs an ADR**, per §M5.45. Flagged in two documents now and decided
+  in neither.
+- **v0.1's minimal write path still has no target**, unchanged since `M5-32` raised it.
+- **§11.2's *"auth here is four schemes, and one has a lifecycle"* blockquote** is still a statement
+  about all four sources collectively. It is not false, but the *"this key expired"* Services state it
+  predicts is Audiobookshelf's, and Audiobookshelf is not in v0.1. Left alone as a forward-looking
+  design note rather than a v0.1 cost.
+
+### On the gate for M5-34
+
+`make check` was run on this tree and is green — the command, the absolute tool paths, the versions,
+the SHA and the verbatim tail are in the commit message. 🚩 **State the green at its real size: this
+diff is four Markdown files and nothing else, so exactly one step of the gate reads any of it.**
+`secrets` runs `gitleaks dir .` from the repo root over the whole working tree; `fmt-check` runs
+prettier inside `web/` and gofumpt over `*.go`, so **no Markdown in `docs/` is formatter-gated at
+all**, and `lint`, `test`, `modverify` and `vuln` read Go packages and `web/`. **The green therefore
+attests one thing — no credential-shaped string anywhere in the tree — and nothing whatever about
+whether any sentence in this commit is true, current or well formed.** `DEVELOPMENT.md` §11 says this
+in its own words and the measured version is under *"What a `make check` green on a docs-only commit
+does and does not attest"*. What the prose rests on instead is named per claim above: `git` output for
+§M5.42, `grep`/`uniq` over this file for §M5.43, `api/specs/kavita.json` for §M5.45, and §11's own
+area map for §M5.46.

@@ -1170,6 +1170,35 @@ paragraph describing a repo that no longer exists.
   much you personally edited: `ec4298d` is a one-file edit whose diff carries a second hunk — a
   scope caveat on a different entry — that its own commit message never mentions, because the
   sweep took whatever the tree was holding.
+* **Never run two committing agents in one checkout — give each a detached worktree on a branch
+  suffixed with its own id, or serialise them.** The bullet above governs how *one* agent should
+  operate; nothing governed whether *two* should be launched at once, and that is a decision the
+  launching session makes before either agent can protect itself. On 2026-08-17 one session ran two of
+  its own committing subagents concurrently in the same working tree on the same branch, and the
+  measured consequence is still in `main`: **`d64b8fc` and `547a604` are the same commit twice** —
+  identical subject, identical author timestamp (`18:23:39`), the same parent `afe17fb`, a
+  **byte-identical `docs/DECISIONS.md` diff**, and a `docs/REVIEW-LOG.md` diff differing in **nothing
+  but four heading numbers** (`M5.19`–`M5.22` against `M5.23`–`M5.26`). The second is the amend; the
+  first had already been pushed, so both are ancestors of `main` and the ADR-0041 commit appears twice
+  in the history. Two further failures from the same launch are **relayed by that session and not
+  measured here**: one worker's `git add` swept the other's files into its commit, and both appended
+  to `docs/REVIEW-LOG.md` at EOF and collided on merge. **Read-only agents are safe alongside
+  anything** — the hazard is writers, and specifically writers sharing an index and a branch ref.
+* **A sequential id read out of a file is a race, not a lookup.** `M5-NN` entry ids, `M5.N` subsection
+  numbers, ADR numbers and migration numbers are all allocated by reading the highest one already
+  present, and **two agents that read at the same moment both get the right answer and both are wrong
+  by the time they write.** One day produced three collisions in `docs/REVIEW-LOG.md` alone:
+  `952a472` restarted at `M5.14`/`M5.15` after `be95357` had already used both; `d64b8fc` wrote
+  `M5.19`–`M5.22` into a tree (`afe17fb`) that **already contained** `M5.19`–`M5.22` from `6f33464`,
+  because it had read the number before its own branch point moved under it; and `e7c3b0a` restarted
+  at `M5.29`–`M5.31` over `b2dc092`'s. **Neither party was wrong when it looked.** So: **re-read the
+  highest id immediately before you commit rather than when you start** — after your last fetch or
+  merge, against the tree you are actually about to push — and for ids that are also filenames or
+  cross-file references (`docs/DECISIONS.md` ADR numbers, `internal/db/migrations`) check **every
+  remote head**, not just your own, the way the `0040` check in `docs/REVIEW-LOG.md` did with
+  `git ls-remote` and a `grep` per head. Renumbering your own section before you push is cheap;
+  renumbering it after it has landed is a cascade through every cross-reference in the file, and
+  §6.1's invariant means the entry's id, text and severity may not move with it.
 * **Give a throwaway branch a name nobody else will pick.** Reusing something generic like
   `main-merge` can move a ref another worktree is standing on, and git's protection against that is
   uneven — reproduced 2026-08-17 on `git version 2.43.0` in a scratch repo: with `shared` checked
