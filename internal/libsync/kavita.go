@@ -84,7 +84,7 @@ type kindDecision struct {
 // are packaged (Archive, Epub, Pdf), and a PDF in a comic library is a comic.
 //
 // EVERY MEMBER OF LibraryType IS ACCOUNTED FOR BELOW, including the ones that do
-// not map. The enum is read from the vendored api/specs/kavita.json (develop @
+// not map. The enum is read from the vendored api/specs/kavita-develop.json (develop @
 // 9c3e540): {0 Manga, 1 Comic (Flexible), 2 Book, 3 Image, 4 Light Novel,
 // 5 Comic (ComicVine)}, and TestEveryLibraryTypeMemberIsMapped fails if the
 // vendored spec grows a seventh.
@@ -168,7 +168,7 @@ func mapLibraryType(t kavita.LibraryType) kindDecision {
 		// ever merging with the right ones.
 		return kindDecision{Reason: fmt.Sprintf(
 			"Kavita reported LibraryType %d, which is not a member of the vendored "+
-				"api/specs/kavita.json enum (0-5). UsArr declines a container whose kind it "+
+				"api/specs/kavita-develop.json enum (0-5). UsArr declines a container whose kind it "+
 				"cannot derive rather than guessing one", int32(t))}
 	}
 }
@@ -187,7 +187,7 @@ func (s *KavitaSource) Containers(ctx context.Context) ([]store.CatalogueContain
 		d := mapLibraryType(l.Type)
 		// The flag is read HERE, from the library list this call already makes,
 		// so knowing it costs no extra request. It is exposed by the vendored
-		// spec (LibraryDto.inheritWebLinksFromFirstChapter, api/specs/kavita.json)
+		// spec (LibraryDto.inheritWebLinksFromFirstChapter, api/specs/kavita-develop.json)
 		// and modelled in internal/kavita/resources.go.
 		d.InheritsWebLinks = l.InheritWebLinksFromFirstChapter
 		ref := strconv.FormatInt(int64(l.ID), 10)
@@ -436,6 +436,17 @@ func kavitaExternalIDs(dto kavita.SeriesDto, d kindDecision) []store.ExternalIde
 	// "hardcover_book" as one of exactly three work-strong book sources.
 	add("hardcover_book", intID(int64(dto.HardcoverID)))
 	add("metron", intID(dto.MetronID))
+	// ⚠️ UNREACHABLE ON THE RELEASE THE OWNER RUNS, and kept anyway. `cbrId` is
+	// not a property of SeriesDto at stable v0.9.0.2 — it is declared only by
+	// develop (ADR-0046; contract_test.go's ceilingOnlyProperties is the
+	// machine-checked list, and Kavita.Models/DTOs/SeriesDto.cs at tag v0.9.0.2
+	// confirms it in source). So on that server the field is absent from the
+	// body, CbrID stays 0, intID returns "" and add() skips: no row, ever.
+	// It stays because it is CORRECT for anyone on develop or a later release
+	// and it degrades to nothing rather than to something wrong — but nobody
+	// should read this line as evidence that a `cbr` external_id exists in the
+	// owner's database, and no test may be written expecting one from a
+	// v0.9.0.2 fixture.
 	add("cbr", intID(int64(dto.CbrID)))
 
 	// The weblink-parsed three do NOT go through add(): add() hard-codes

@@ -19,7 +19,7 @@ import (
 // SeriesDto — what POST /api/Series/all-v2 streams — carries NO creator field.
 // The only endpoint that reports one is GET /api/Series/metadata?seriesId=N, one
 // series at a time, and the three bulk-shaped alternatives were checked against
-// the vendored api/specs/kavita.json and none of them can rebuild the
+// the vendored api/specs/kavita-develop.json and none of them can rebuild the
 // series→creator mapping:
 //
 //   - POST /api/Person/all returns BrowsePersonDto with no series linkage;

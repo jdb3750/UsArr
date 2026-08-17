@@ -11336,3 +11336,96 @@ spans **57 → 57**, recorded §17 em-dash exemptions **4 → 4** (all four matc
 corpus **6978 → 6978** strings against a floor of 6750, short em-dash strings exempted by §17
 **24 → 24**, bare-glyph exemptions **0 → 0** on the clean tree. The planted runs moved exactly what
 was planted and nothing else — 6982 and 58.
+
+---
+
+# Round 5 continued — `LS-47`–`LS-52`: which Kavita spec the contract tests pin, settled with ADR-0046
+
+**Date:** 2026-08-17. **Prefix:** `LS-` (library sync), continuing from **`LS-46`**, which is the
+finding this pass was commissioned to settle — **re-read at merge time**, as this file's own
+discipline requires: `LS-38`–`LS-46` landed on `origin/main` while this pass was in flight and these
+entries were drafted as `LS-38`+ before the merge. Fifth recorded instance of that collision
+(`EXPL-01`, `LS-01`, `LS-17`, `LS-30`). **The ADR number collided too** — see `LS-52`.
+
+**What this pass was handed, and what it did with it.** `LS-46` measured the skew and deliberately
+declined to act: *"Re-vendoring the spec is deliberately NOT attempted here; it is a separate
+decision with its own owner."* This is that decision. Every fact in `LS-46` was **re-established
+independently before being built on**, and one of them was extended.
+
+| # | Finding | Severity | Disposition |
+| --- | --- | --- | --- |
+| **LS-47** | 🚩 **`api/specs/SOURCES.md` ALREADY CARRIED THE POLICY, IN BOLD, AND THE TREE HAD NOT IMPLEMENTED IT.** Its Kavita section read *"A green contract test here is evidence about `develop`, and the owner's server is two steps away from it"*, and it even recorded the 462-vs-488 path measurement. The contract tests still read one file | **High** | **Applied — and it is the reason alternative (c), *"keep develop and state it plainly"*, was rejected rather than chosen for being cheapest.** (c) is what the repo already did. A warning that has been read and not acted on is indistinguishable from no warning, which is `DEVELOPMENT.md` §11's own argument about guards that have never fired. [ADR-0046](./DECISIONS.md#adr-0046) vendors the floor instead |
+| **LS-48** | **`LS-46`'s claim re-verified, and it is right in the spec AND in the source.** `cbrId` and `mangaBakaEditionId` are absent from `SeriesDto`, `ChapterDto` and `VolumeDto` at tag `v0.9.0.2`. Checking the tag's *spec* alone would not have settled it — that file declares `info.version` **0.9.0.0**, so it could itself have been stale | **High** | **Confirmed at source, which is the check that matters.** `Kavita.Models/DTOs/SeriesDto.cs` and `Kavita.Models/Entities/Series.cs` at `6bcd568` declare `MangaBakaId` and neither of the two; at that tag `CbrId` lives on the Kavita+ side table `ExternalSeriesMetadata` and surfaces on `ExternalSeriesDetailDto` alone; `ExternalMetadataIdHelper.SetExternalMetadataIds` writes six ids and `CbrId` is not one. **Two more develop-only `SeriesDto` properties `LS-46` did not name — `isStandAlone` and `nameLocked` — plus `LibraryDto.metadataProvider`** |
+| **LS-49** | **Does any UsArr code read the two fields? Yes, one — and the honest answer is that it is NOT a live defect, which is worth stating as plainly as a defect would be.** `libsync.kavitaExternalIDs` writes a `cbr` external_id from `SeriesDto.CbrID` | Medium | **Documented as UNREACHABLE, not removed.** An absent JSON property leaves the Go field at zero, `intID(0)` returns `""`, `add` skips it: the row is unreachable on the owner's box, not wrong. `MangaBakaEditionID` is modelled and deliberately never written. Nothing reads `isStandAlone`, `nameLocked` or `metadataProvider` outside the DTO. The line stays because it is correct for anyone on develop or a later release; what changes is that `internal/kavita/resources.go` now says where it is dead. **Inflating this into a bug would have been the easier report and a false one** |
+| **LS-50** | 🚩 **A SECOND CLAIM WAS DEVELOP'S AND WAS WRITTEN AS KAVITA'S, and nobody had asked about it.** `internal/kavita/doc.go` stated `?apiKey=` appears on *"exactly 9 operations"* | Medium | **Applied.** True on develop; **on v0.9.0.2 it is 20**, because all twelve `/api/Image/*` cover routes still accept the key in the query string there and develop has since dropped it. The bullet now names both counts and the reason, and `TestAPIKeyQueryIsNotGeneralAuth` was already asserting the property true on both — *"a small set, not the whole API"* — rather than either number. **Found by running the suite against the tag's spec rather than by reading the comment**, which is the argument for alternative (b) in one line |
+| **LS-51** | **The decision hinged on a measurement taken BEFORE the decision: does the existing suite pass unmodified against the tag's spec?** If it did not, (b) would have been a far larger change and (a) or (c) would have deserved another look | **High** | **Measured first, then decided.** The floor spec was swapped in over `kavita.json` and `go test ./internal/kavita/... ./internal/libsync/...` ran green — all six pinned endpoints present with identical parameter casing, all seven pinned enums identical, auth identical. So the second arm cost **parameterisation and no new assertions to satisfy**. Recorded because a design chosen on an assumption about test cost, with the test never run, is exactly this project's stated failure mode |
+| **LS-52** | ⚠️ **ADR-0046 WAS DRAFTED AS ADR-0045 AND THE NUMBER WAS TAKEN MID-PASS.** All remote heads were scanned before drafting; the maximum was `0044`. `ADR-0045` (the three unslotted commitments → v0.2) landed on `origin/main` while this pass was in flight | Nit | **Caught by re-scanning before writing, not after.** Renumbered to `0046` across the ADR, five source comments and this file. **The mitigation is the scan's timing, not the scan**: an up-front scan of a shared counter is a snapshot, and the only safe read is the one taken immediately before the write. Same class as this file's own entry-id collisions, and now recorded for ADR numbers too |
+
+## LS.18 The four guards fired, with verbatim output
+
+Every guard below was broken on purpose, run red, and reverted. `TestEndpointsExistInSpec` is the
+one that carries the ADR: it must go red on the **floor** arm and stay green on the **ceiling** arm,
+because if both arms always agree the second file proves nothing.
+
+**1. `TestCeilingOnlyPropertiesAreDeclared`** — dropped `"cbrId"` from the hand-written
+`ceilingOnlyProperties`:
+
+```
+--- FAIL: TestCeilingOnlyPropertiesAreDeclared (0.02s)
+    --- FAIL: TestCeilingOnlyPropertiesAreDeclared/SeriesDto (0.00s)
+        contract_test.go:356: SeriesDto: develop declares [cbrId isStandAlone mangaBakaEditionId nameLocked] that stable v0.9.0.2 does not; ceilingOnlyProperties says [isStandAlone mangaBakaEditionId nameLocked]. These fields DECODE TO NOTHING on the owner's server, so the list is a decision, not documentation: update it, and check whether anything reads a field that just joined or left it
+```
+
+**2. `TestBothSpecsAreTheDocumentsSOURCESSays`** — copied the ceiling over the floor, the exact
+mistake that would leave a suite green while printing two subtest names. Both halves fired, and
+`TestCeilingOnlyPropertiesAreDeclared` independently caught the same sabotage:
+
+```
+--- FAIL: TestBothSpecsAreTheDocumentsSOURCESSays (0.01s)
+    contract_test.go:178: kavita-v0.9.0.2.json declares info.version "0.9.0.20", this suite is pinned to "0.9.0.0". Either the file was re-vendored without updating pinnedSpecs, or the wrong file is in api/specs — update both, and api/specs/SOURCES.md's row with it
+    contract_test.go:184: kavita-develop.json and kavita-v0.9.0.2.json are the same document (info.version "0.9.0.20"). The floor/ceiling split is the point: two copies of one spec prove exactly what one copy proved
+--- FAIL: TestCeilingOnlyPropertiesAreDeclared (0.02s)
+    --- FAIL: TestCeilingOnlyPropertiesAreDeclared/SeriesDto (0.00s)
+        contract_test.go:356: SeriesDto: develop declares [] that stable v0.9.0.2 does not; ceilingOnlyProperties says [cbrId isStandAlone mangaBakaEditionId nameLocked]. ...
+```
+
+**3. `TestEndpointsExistInSpec` — the load-bearing one.** Added `GET /api/Library/metadata-providers`
+to the pinned list; it is one of the 32 paths develop has and v0.9.0.2 does not. **The floor arm
+failed and the ceiling arm passed**, which is the whole of ADR-0046 demonstrated in four lines:
+
+```
+--- FAIL: TestEndpointsExistInSpec (0.02s)
+    --- FAIL: TestEndpointsExistInSpec/kavita-v0.9.0.2.json (0.01s)
+        --- FAIL: TestEndpointsExistInSpec/kavita-v0.9.0.2.json/get_/api/Library/metadata-providers (0.00s)
+        --- PASS: TestEndpointsExistInSpec/kavita-develop.json/get_/api/Library/metadata-providers (0.00s)
+        contract_test.go:582: /api/Library/metadata-providers is not in kavita-v0.9.0.2.json — the FLOOR (stable v0.9.0.2 — the release the owner runs)
+```
+
+**4. `TestEnumsCoverSpecValues`** — dropped `LibraryTypeComicVine` from the Go list, to check the two
+arms fail **differently** rather than the asymmetric rule being decorative:
+
+```
+    --- FAIL: TestEnumsCoverSpecValues/kavita-v0.9.0.2.json/LibraryType (0.00s)
+        contract_test.go:448: LibraryType: kavita-v0.9.0.2.json — the FLOOR (stable v0.9.0.2 — the release the owner runs) — declares [5], which Go does not model. A value from the server the owner actually runs would be mislabelled (spec [0 1 2 3 4 5], Go [0 1 2 3 4])
+    --- FAIL: TestEnumsCoverSpecValues/kavita-develop.json/LibraryType (0.00s)
+        contract_test.go:437: LibraryType: kavita-develop.json — the CEILING (develop — where the API is defined) — has [0 1 2 3 4 5], Go has [0 1 2 3 4]
+```
+
+## LS.19 What this pass did NOT do
+
+* **`prowlarr.json` is untouched, and it has the same gap.** It tracks `develop` at v2.6.2 while the
+  only known deployment runs stable 2.5.2.5491, under a SOURCES.md warning that is word-for-word
+  the one that failed to work for Kavita. Carried as ADR-0046's first open question. **Nothing here
+  is evidence that the Prowlarr contract tests attest anything about 2.5.2.**
+* **`external_id.source = 'cbr'` is not enumerated as a legal source anywhere** — the column is free
+  `TEXT` and `cbr` is not in its comment. Unreachable on the owner's install today, so it is
+  recorded (ADR-0046 open question 2) rather than fixed inside a spec-pinning change.
+* **No back-editing of stale file names.** `ARCHITECTURE.md` §6.4 and §7.1a, `RESEARCH.md`,
+  `SETUP-CHECKLIST.md`, ADR-0035, ADR-0044 and every entry in this file above name `kavita.json` or
+  `kavita-openapi.json`. The pointer is written once in `api/specs/SOURCES.md`; this file is a
+  historical record and is not rewritten.
+* **`ARCHITECTURE.md` §6.4's one stale sentence was fixed, and it is unrelated to the spec pin.**
+  Routed in mid-pass: the *"the slot is still unassigned"* clause was falsified by ADR-0045. It now
+  points at ADR-0045. **Verified against `DECISIONS.md` rather than taken on the routing** — and one
+  detail differed from how it was relayed: ADR-0045 is **owner-DELEGATED** (*"whatever you think is
+  best"*), not owner-chosen, and the amended sentence says so.

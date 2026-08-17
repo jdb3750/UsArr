@@ -26,7 +26,7 @@ import (
 //     answers 403 while /api/Library/libraries still answers 200 — the case
 //     where a perfectly valid key must NOT be reported as a bad credential.
 //
-// Payload shapes are taken from api/specs/kavita.json.
+// Payload shapes are taken from api/specs/kavita-develop.json.
 type fakeKavita struct {
 	t       *testing.T
 	authKey string

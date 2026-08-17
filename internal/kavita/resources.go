@@ -153,7 +153,7 @@ type LibraryDto struct {
 
 // SeriesDto is one element of POST /api/Series/all-v2's array.
 //
-// Two things to know before writing anything that reads it:
+// Three things to know before writing anything that reads it:
 //
 //  1. THERE IS NO lastModified. The spec declares LastChapterAdded and
 //     LastChapterAddedUtc and nothing else time-of-change shaped. Use the Utc
@@ -183,6 +183,28 @@ type LibraryDto struct {
 //
 //     Degraded identity is still the ORDINARY case here, and still not an error
 //     (ARCHITECTURE.md §6.4, ADR-0035 §1).
+//
+//  3. ⚠️ FOUR OF THESE FIELDS DO NOT EXIST AT ALL ON THE RELEASE THE OWNER RUNS,
+//     AND TWO OF THEM ARE IN NOTE 2's LIST. `cbrId`, `mangaBakaEditionId`,
+//     `isStandAlone` and `nameLocked` are declared by develop and NOT by stable
+//     v0.9.0.2 — measured across the two vendored specs (ADR-0046) and confirmed
+//     against the tag's own source, which is the check that matters because the
+//     tag's checked-in `openapi.json` declares 0.9.0.0 and could have been stale:
+//     `Kavita.Models/DTOs/SeriesDto.cs` and `Kavita.Models/Entities/Series.cs` at
+//     tag `v0.9.0.2` (`6bcd568`) declare `MangaBakaId` and neither `CbrId` nor
+//     `MangaBakaEditionId`. At that tag `CbrId` lives on the Kavita+ side table
+//     `ExternalSeriesMetadata` and surfaces on `ExternalSeriesDetailDto` only,
+//     and `ExternalMetadataIdHelper.SetExternalMetadataIds` writes six ids of
+//     which `CbrId` is not one.
+//
+//     They are modelled anyway, deliberately: that is what tracking develop
+//     buys, and an absent JSON property simply leaves the Go field at its zero
+//     value — no error, no warning. But NOTHING MAY TREAT A ZERO HERE AS A FACT
+//     ABOUT THE UPSTREAM ITEM, because on the stable line it is the ABSENCE of
+//     the field rather than a value the server chose. The consequence that is
+//     already live: libsync.kavitaExternalIDs writes a `cbr` external_id from
+//     CbrID, and that row is unreachable on the owner's install.
+//     contract_test.go's ceilingOnlyProperties is the machine-checked list.
 type SeriesDto struct {
 	ID            int32  `json:"id"`
 	Name          string `json:"name"`
@@ -235,6 +257,9 @@ type SeriesDto struct {
 	SecondaryColor string `json:"secondaryColor"`
 
 	// Kavita+ identifiers. Zero / "" on a free instance — see the type comment.
+	// ⚠️ MangaBakaEditionID and CbrID are DEVELOP-ONLY: they are absent from the
+	// v0.9.0.2 response body entirely, so they are permanently zero on the
+	// owner's server (note 3 on the type).
 	AniListID          int32  `json:"aniListId"`
 	MalID              int64  `json:"malId"`
 	HardcoverID        int32  `json:"hardcoverId"`
