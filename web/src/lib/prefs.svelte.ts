@@ -103,13 +103,28 @@ function applyDensity(value: Density): void {
 	document.documentElement.setAttribute('data-density', value);
 }
 
-let theme = $state<Theme>(readTheme());
-let density = $state<Density>(readDensity());
+/**
+ * The stored values are read into plain consts FIRST, and the import-time apply
+ * below consumes those rather than the `$state` variables. Both spellings put
+ * the same string on `document.documentElement` — this bootstrap is a one-shot
+ * that runs synchronously on the line after the state is created, and every
+ * later change routes through setTheme/setDensity, which apply the new value
+ * themselves. But reading a `$state` variable at module scope captures it by
+ * value, so the compiler cannot tell a deliberate snapshot from the bug where
+ * someone expects the call to re-run; it warns `state_referenced_locally` on
+ * both. Taking the value from the const says which one this is, in the code
+ * rather than in a suppression comment.
+ */
+const initialTheme = readTheme();
+const initialDensity = readDensity();
+
+let theme = $state<Theme>(initialTheme);
+let density = $state<Density>(initialDensity);
 let shortcuts = $state<boolean>(readShortcuts());
 
 // Applied at import time, before the root layout renders. See the header.
-applyTheme(theme);
-applyDensity(density);
+applyTheme(initialTheme);
+applyDensity(initialDensity);
 
 export const prefs = {
 	get theme(): Theme {
