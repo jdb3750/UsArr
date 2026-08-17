@@ -61,7 +61,7 @@ import { createServer } from 'node:http';
 import { rm } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { dirname, extname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -71,6 +71,23 @@ const outDir = join(tmpdir(), `usarr-list-bench-${process.pid}`);
 
 const QUICK = process.argv.includes('--quick');
 const ASSERT_ONLY = process.argv.includes('--assert-only');
+
+/* ⚠️ THE GATE'S PAGE SIZE IS IMPORTED FROM THE COMPONENT, NEVER RESTATED HERE.
+ * Section 5's gate used to open with a local `const PAGE_SIZE = 200` while its
+ * failure message named LOAD_MORE_PAGE_SIZE — so raising the real constant to
+ * 400 would have left the gate measuring 200 rows and still claiming to guard
+ * the value that had moved. A guard that cannot see its own subject is not a
+ * guard. Importing the module makes the two impossible to drift apart.
+ *
+ * The specifier is a .ts, imported by a .mjs: Node strips the types on the way
+ * in (unflagged since 22.18; DEVELOPMENT.md's floor is Node 22 LTS and the
+ * container is v22.22.2). `list.ts` is deliberately the pure, DOM-free half of
+ * the primitive — the runes live in List.svelte — so it imports here without a
+ * bundler. If that ever stops being true, take the value through the harness
+ * build rather than copying it back into this file. */
+const { LOAD_MORE_PAGE_SIZE } = await import(
+	pathToFileURL(join(webDir, 'src', 'lib', 'list.ts')).href
+);
 
 /* --- reporting ------------------------------------------------------------ */
 
@@ -992,7 +1009,18 @@ for (const [name, fit] of [
  * measurements; this is the gate. LOAD_MORE_PAGE_SIZE is what a caller gets by
  * default, so the cost at that many rows must leave enough headroom under the
  * 100 ms Tier-0 hard fail to survive the Pi-5 multiplier the ADR uses. 5x is
- * the pessimistic end of that multiplier, so the desktop budget is 20 ms. */
+ * the pessimistic end of that multiplier, so the desktop budget is 20 ms.
+ *
+ * ⚠️ AND ALL THREE OF THOSE NUMBERS ARE NAMED, because the budget is DERIVED
+ * and a bare `20` hides both of its inputs. Written as a literal, the threshold
+ * looks like a preference someone can nudge; written as this division it is
+ * visibly two quoted figures, each with a document behind it, and neither of
+ * them this bench's to choose. The pass message used to re-derive its headroom
+ * from its own second copy of `100`, so a change to §7.2 would have moved the
+ * verdict and left the sentence explaining it stale. One source each now. */
+const TIER0_HARD_FAIL_MS = 100; // DESIGN-DIRECTION §7.2, Tier 0: hard fail.
+const PI5_FACTOR = 5; // ADR-0029, pessimistic end of "conservatively 3–5× slower".
+const DESKTOP_BUDGET_MS = TIER0_HARD_FAIL_MS / PI5_FACTOR;
 /* ⚠️ ON A FRESH PAGE, VIA `atSize`, NOT `setRows` ON WHATEVER THE SWEEP LEFT.
  * This used to be a bare `setRows(200)`, which ran on the page the sweep's LAST
  * point left behind — 25,000 rows — so the gate's number was taken on a renderer
@@ -1002,7 +1030,7 @@ for (const [name, fit] of [
  * shape as the theme-cleanup note above), and a Tier-0 gate measured on a page
  * with that allocation history is not measuring the 200-row page a user gets.
  * `atSize` gives it a fresh renderer and brings it under the ceiling guard. */
-const PAGE_SIZE = 200;
+const PAGE_SIZE = LOAD_MORE_PAGE_SIZE;
 const atPageSize = await atSize(PAGE_SIZE, 'section 5 page-size gate', () =>
 	toggleCost(page, {
 		attribute: 'data-density',
@@ -1018,12 +1046,15 @@ if (!atPageSize)
 	);
 else
 	assert(
-		atPageSize.mean <= 20,
-		`one page (${PAGE_SIZE} rows): density toggle ${atPageSize.mean} ms on this desktop, which is ` +
-			`${(100 / atPageSize.mean).toFixed(0)}x under the 100 ms Tier-0 hard fail — enough headroom for ` +
-			`ADR-0029's 3–5x Pi 5 multiplier`,
-		`one page (${PAGE_SIZE} rows): density toggle ${atPageSize.mean} ms, which leaves less than the 5x ` +
-			`headroom the Pi-5 multiplier needs. LOAD_MORE_PAGE_SIZE in src/lib/list.ts is too large.`
+		atPageSize.mean <= DESKTOP_BUDGET_MS,
+		`one page (LOAD_MORE_PAGE_SIZE = ${PAGE_SIZE} rows): density toggle ${atPageSize.mean} ms on this ` +
+			`desktop, inside the ${DESKTOP_BUDGET_MS} ms budget (${TIER0_HARD_FAIL_MS} ms Tier-0 hard fail ÷ ` +
+			`ADR-0029's ${PI5_FACTOR}x Pi 5 multiplier) and ` +
+			`${(TIER0_HARD_FAIL_MS / atPageSize.mean).toFixed(0)}x under the hard fail itself`,
+		`one page (LOAD_MORE_PAGE_SIZE = ${PAGE_SIZE} rows): density toggle ${atPageSize.mean} ms, over the ` +
+			`${DESKTOP_BUDGET_MS} ms desktop budget (${TIER0_HARD_FAIL_MS} ms Tier-0 hard fail ÷ ` +
+			`${PI5_FACTOR}x), so it leaves less than the ${PI5_FACTOR}x headroom the Pi-5 multiplier needs. ` +
+			`LOAD_MORE_PAGE_SIZE in src/lib/list.ts is too large.`
 	);
 
 /* =============================================================================
