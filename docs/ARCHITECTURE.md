@@ -3436,6 +3436,28 @@ carries eleven groups in a `SearchResultGroup`.
    correctly and prominently, that they do not have the thing they searched for. That is the
    difference between a catalogue and a hub, and it is one link.
 
+7. **Search's own copy never enumerates media types, and the corpus it names is *your services*.**
+   The set of types behind that phrase is whatever the connected services supply, which is a
+   different set on a Prowlarr-only install than on a full stack, so any fixed list is a promise the
+   install may not keep. **A shorter list is the same defect with fewer words** — the failure is
+   enumeration, not arity. The standing wording is
+   *"This screen searches the library UsArr has replicated from your services. It covers what those
+   services supply and nothing else."* ⚠️ This is the rule's origin rather than an illustration of
+   it: the shipped screen read `every film, episode, album, book and comic your services already
+   own` until 2026-08-17. That is in backticks and not in this section's italic-quoted form, because
+   the italic-quoted form marks copy that ships and this string is retired. On the install v0.1
+   actually draws it named four types nothing can
+   supply. §16.1 gives v0.1 **one** catalogue source, Kavita, and `internal/libsync/kavita.go` maps
+   its series onto `work.kind` `'comic'` and `'book'` and onto nothing else; Prowlarr carries no
+   catalogue at all. Measured on the built SPA against a healthy Kavita and a healthy Prowlarr, rows
+   appeared under two of the six media types.
+   **And the silence for the rest is correct, so this rule does not license copy that explains it.**
+   Rule 1 stands: a group with zero hits does not render. A media type no service supplies is not an
+   empty region the user is owed a sentence about, and — decisively — **nothing in the schema or on
+   the wire today separates *no rows matched* from *no source can supply this type***, so no string
+   may claim to. 🔍 That separation is a seam, not a feature: it wants a per-type source capability
+   the catalogue adapters do not report yet, and it is out of scope here.
+
 **Every result row is one template *within its group*, and the claim needs that qualifier.** Type
 chip, title, secondary metadata, availability, library — varying only in data. But the six groups
 genuinely carry six different column sets (`Title/Author/Year/Formats/Size` versus
