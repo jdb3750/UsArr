@@ -10,9 +10,11 @@ Two reasons, both hard constraints:
    (searched 2026-08-16 — none official, none community-run).
 2. CI has no network. The contract tests in `internal/servarr` and `internal/kavita` read these files directly.
 
-Drift detection is a **scheduled job, not the PR gate**: it needs network, re-downloads each
-spec, diffs it against this directory, and opens an issue on change. Upstream `develop` moves;
-UsArr should hear about a renamed field from a bot, not from a user's bug report.
+Drift detection is **not the PR gate**: it needs network. Upstream `develop` moves; UsArr should
+hear about a renamed field from a bot, not from a user's bug report. **`make spec-drift` is the
+runnable half of that, and it exists now** — opt-in on `USARR_SPEC_DRIFT=1`, behind the `upstream`
+build tag, never part of `make check`. It currently covers the Prowlarr row (see below); the Kavita
+rows are still checked by hand with the recipes in this file.
 
 ## Files
 
@@ -22,7 +24,11 @@ UsArr should hear about a renamed field from a bot, not from a user's bug report
 | `kavita-develop.json` | `https://raw.githubusercontent.com/Kareadita/Kavita/develop/openapi.json` | `develop` | `9c3e540` | 2026-08-17 | `3bd8363f0a4e847bf159127dbd9f9972725a5a0efb8d69831d2513ed3bab946d` |
 | `kavita-v0.9.0.2.json` | `https://raw.githubusercontent.com/Kareadita/Kavita/v0.9.0.2/openapi.json` | tag `v0.9.0.2` | `6bcd568` | 2026-08-17 | `6d06c0a7081888cab6a1eadc06a5cb8158af9d6a138d6878284fae38c56c2f1a` |
 
-Prowlarr version at that commit: **v2.6.2** (2026-08-12).
+Prowlarr version at that commit: **v2.6.2** — the in-development line, read from `azure-pipelines.yml`
+(`majorVersion: '2.6.2'`) at `1f7db1e`, not from the spec, which self-reports a placeholder. The
+highest RELEASED tag as of 2026-08-17 is `v2.6.1.5509`. ⚠️ **`prowlarr.json` is byte-identical at
+`develop` and at tag `v2.5.2.5491` and is ten months older than either** — see the Prowlarr section
+below before drawing any conclusion from this row.
 
 **Kavita is vendored TWICE, on purpose ([ADR-0046](../../docs/DECISIONS.md#adr-0046)).** Neither file
 alone answers both of the questions a contract test is asked, so the suite runs against both and the
@@ -117,15 +123,60 @@ curl -sS https://raw.githubusercontent.com/Kareadita/Kavita/v0.9.0.2/openapi.jso
   | sha256sum                                                 # -> kavita-v0.9.0.2.json's row
 ```
 
-## ⚠️ The vendored spec is a branch ahead of the deployment
+## ⚠️ The Prowlarr spec describes NEITHER the deployment nor `develop`
 
-`prowlarr.json` tracks **`develop`**, because `develop` is where the API is defined and it is the
-right thing to pin. The only known real deployment runs **stable 2.5.2.5491** (observed 2026-08-16)
-— a minor version behind. Nothing here is wrong, but it bounds what the contract tests prove: **a
-green contract test is evidence about `develop`, not evidence about the server the owner is actually
-talking to.** A real instance is the only evidence about a real instance. This is not hypothetical —
-a grab failure came from exactly this gap in another form, where the test fake was written from the
-spec and so inherited the spec's silence, validating nothing.
+**Prowlarr is vendored ONCE, and that is a decision rather than an omission
+([ADR-0047](../../docs/DECISIONS.md#adr-0047)).** [ADR-0046](../../docs/DECISIONS.md#adr-0046) gave
+Kavita a floor and a ceiling; the pattern does not port here, and the reason is measured:
+
+| Question | Answer, measured 2026-08-17 |
+| --- | --- |
+| Blob of `src/Prowlarr.Api.V1/openapi.json` at tag `v2.5.2.5491`? | `134d31d7df5e80714c454a6224e7449df512c55e` |
+| …at `develop` (`1f7db1e`)? | `134d31d7df5e80714c454a6224e7449df512c55e` — **the same git blob** |
+| …and `api/specs/prowlarr.json`? | the same blob again (`git hash-object api/specs/prowlarr.json`) |
+| When was it last regenerated upstream? | **2025-06-07**, commit `60740fa25` ("Automated API Docs update") |
+| Releases tagged since? | **33** (`git tag --contains 60740fa25 \| wc -l`) |
+| What does the file say its version is? | `info.version` **`1.0.0`** — Swashbuckle's placeholder, **not a Prowlarr version**. Never pin to it |
+
+**Floor and ceiling are one file, so splitting it would vendor 145 KB twice and produce a green that
+proves exactly what one copy proved.** The honest consequence is worse than "one file instead of
+two": **Prowlarr does not regenerate this document per release, so the one file describes neither ref
+reliably.** It is evidence about the API's *shape*, and **Prowlarr's source at a tag is the evidence
+about a release** — `git show v2.5.2.5491:src/Prowlarr.Api.V1/…`, no running instance required.
+
+**It already misdescribes both refs, and the divergence is machine-checked rather than described
+here.** `SearchResource.Limit` and `.Offset` became `int?` in `c687bdb1f` (PR #2654, first released
+in **v2.3.6.5351**, so present on the owner's release *and* on `develop`); the spec, regenerated ten
+months earlier, still declares them non-nullable `int32`. `knownSpecDivergences` in
+`internal/servarr/contract_test.go` pins that, and asserts the divergence is **still there** — an
+entry that stops being true means upstream finally regenerated, which is news.
+
+**The only known real deployment runs stable `v2.5.2.5491`** — **owner-confirmed 2026-08-17**, stated
+by the owner of his actual install (checked against a human's box, not inferred from a changelog). It
+still bounds what a contract test proves: **a green here is evidence about a document, not about the
+server the owner is actually talking to.** A real instance is the only evidence about a real instance. This is not
+hypothetical — a grab failure came from exactly this gap in another form, where the test fake was
+written from the spec and so inherited the spec's silence, validating nothing.
+
+### Two guards, split across the network line
+
+`make check` makes exactly two network calls, both to vulnerability databases, and `make
+check-offline` is defined as `check` minus those two. Adding a third would make a GitHub outage
+redden somebody's unrelated commit, so the guard is split:
+
+| Guard | Where | Network | Catches |
+| --- | --- | --- | --- |
+| `TestVendoredSpecIsThePinnedBlob` | `internal/servarr`, **in `make check`** | no | the vendored file changing under the suite — a re-vendor, a hand-edit, a bad merge |
+| `TestUpstreamRefsStillShareThePinnedBlob` | `//go:build upstream`, **`make spec-drift`** | **yes** | the day upstream regenerates and the one-file premise dies |
+
+`make spec-drift` refuses without `USARR_SPEC_DRIFT=1`, exactly as `make test-integration` refuses
+without `USARR_INTEGRATION=1`. **A failure there is news, not a broken build.** It resolves both refs
+with a blobless fetch, so it costs trees and no file contents:
+
+```bash
+git ls-remote https://github.com/Prowlarr/Prowlarr develop refs/tags/v2.5.2.5491
+USARR_SPEC_DRIFT=1 make spec-drift
+```
 
 **Record the Prowlarr version on every cassette.** A wire capture from 2.5.2 and one from 2.6.2 are
 different evidence and must not be indistinguishable in the fixtures directory. There is no excuse
