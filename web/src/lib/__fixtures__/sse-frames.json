@@ -17,7 +17,7 @@
 				"count": 0,
 				"indexer_id": 2,
 				"name": "Broken Tracker",
-				"reason": "Prowlarr has this indexer blocked until 2026-08-17T02:46:36Z",
+				"reason": "Prowlarr has this indexer blocked until 2026-08-16T00:00:00Z",
 				"status": "blocked"
 			},
 			"phase": "indexer_done",
@@ -121,7 +121,7 @@
 						"count": 0,
 						"indexer_id": 2,
 						"name": "Broken Tracker",
-						"reason": "Prowlarr has this indexer blocked until 2026-08-17T02:46:36Z",
+						"reason": "Prowlarr has this indexer blocked until 2026-08-16T00:00:00Z",
 						"status": "blocked"
 					},
 					{

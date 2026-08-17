@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -46,22 +47,56 @@ var volatileFields = map[string]bool{
 	"finished_at":   true,
 	"blocked_until": true,
 	"duration_ms":   true,
-	// age_days is derived from wall-clock now, and reason embeds a wall-clock
-	// deadline ("blocked until 2026-…"). Both keep their real recorded values in
-	// the fixture, because the SPA's own test reads them, but neither can be
+	// age_days is derived from wall-clock now. It keeps its real recorded value
+	// in the fixture, because the SPA's own test reads it, but it cannot be
 	// compared against a later run.
 	"age_days": true,
-	"reason":   true,
 }
 
-// timestampFields are rewritten to a fixed value when the recording is
-// regenerated, so the checked-in file does not churn.
+// timestampFields hold a timestamp and NOTHING else, so the whole value is
+// replaced by a fixed placeholder when the recording is regenerated and the
+// checked-in file does not churn.
 var timestampFields = map[string]bool{
 	"expires_at":    true,
 	"published_at":  true,
 	"started_at":    true,
 	"finished_at":   true,
 	"blocked_until": true,
+}
+
+// embeddedTimestampFields hold PROSE with a wall-clock timestamp inside it —
+// releases.blockedReason emits "Prowlarr has this indexer blocked until
+// 2026-08-17T02:46:36Z". Blanking the whole value the way timestampFields are
+// blanked would throw away the sentence, and the sentence is the signal: it is
+// what tells "blocked until a deadline" apart from "blocked after repeated
+// failures" and from "indexer is disabled in Prowlarr", all three of which the
+// SPA renders verbatim into the degraded banner (web/src/lib/api.ts,
+// indexerProblems). So only the timestamp inside the string is normalised, both
+// when the fixture is written and again on both sides before it is compared —
+// the prose keeps being checked, and only the part that cannot be reproduced
+// stops being checked.
+var embeddedTimestampFields = map[string]bool{
+	"reason": true,
+}
+
+// rfc3339InText matches an RFC 3339 instant anywhere inside a string.
+// time.RFC3339 is what blockedReason formats with; the optional fractional
+// seconds and numeric offset are there so a later caller that formats with
+// RFC3339Nano or in a non-UTC zone is normalised too rather than silently
+// reintroducing the churn.
+var rfc3339InText = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})`)
+
+// normaliseEmbeddedTimestamps rewrites every RFC 3339 instant inside a string
+// value to placeholderTime and leaves every other byte alone. Non-strings pass
+// through untouched. It is idempotent: placeholderTime is itself RFC 3339, so
+// running it over an already-normalised fixture value is a no-op, which is what
+// lets covers() run it over the recorded and the live value alike.
+func normaliseEmbeddedTimestamps(v any) any {
+	s, ok := v.(string)
+	if !ok {
+		return v
+	}
+	return rfc3339InText.ReplaceAllLiteralString(s, placeholderTime)
 }
 
 const (
@@ -256,6 +291,12 @@ func covers(path string, want, got any) []string {
 			if volatileFields[key] {
 				continue // presence only: the value changes every run
 			}
+			if embeddedTimestampFields[key] {
+				// Compare the prose, not the deadline buried in it. The
+				// recorded side is already normalised by stabilise(), and
+				// normalising it again is a no-op.
+				wv, gv = normaliseEmbeddedTimestamps(wv), normaliseEmbeddedTimestamps(gv)
+			}
 			problems = append(problems, covers(path+"."+key, wv, gv)...)
 		}
 		return problems
@@ -374,6 +415,8 @@ func stabilise(v any) any {
 				out[k] = placeholderDurationMS
 			case timestampFields[k]:
 				out[k] = placeholderTime
+			case embeddedTimestampFields[k]:
+				out[k] = normaliseEmbeddedTimestamps(val)
 			default:
 				out[k] = stabilise(val)
 			}
