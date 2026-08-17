@@ -2385,6 +2385,111 @@ empty states beyond the one sentence §9.6 specifies.
 
 ---
 
+### 9.8 Promoting a page-scoped style into a shared class
+
+§9.7 says which components exist. This says what may go *inside* one when a page-scoped style is
+promoted into it — the split that has to be made line by line, and that had no written home until
+now.
+
+> **The rule.** A promoted component class owns **what the thing looks like**. The caller owns
+> **where it sits and how big it is**.
+
+**The acceptance test is the operative half, because "appearance versus layout" is not a distinction
+anybody applies consistently by feel:**
+
+> ⚠️ **If a second caller in a different container would have to undo a declaration, that
+> declaration is not appearance and does not go in the shared class.**
+
+Run it on every line, one at a time, and let it decide. It is not a summary of a judgement made some
+other way.
+
+**The worked example, because the hard cases do not look like layout — `min-width: 0`.** It reads as
+housekeeping: a zero, no visible effect, the sort of line that gets swept into a shared class
+without anybody stopping on it. It is layout, and it is the example that teaches the test.
+
+It overrides the **flex automatic minimum size**, which for an `<input>` is its `size`-derived
+intrinsic width. Set to `auto`, the field refuses to shrink below that intrinsic width and pushes
+the row wider than its container.
+
+📌 **Measured by the frontend thread at `07f89b0`, in Chromium, against the real `pnpm build` output
+of `web/src/routes/+page.svelte`'s search input at `--text-md` (14 px)** — not read off the
+specification and not inferred:
+
+* The input's intrinsic width is **177 px**.
+* With `min-width: auto` at a **160 px viewport**, the field held **177 px** and the document's
+  `scrollWidth` went **160 → 193** — the page scrolled sideways.
+* It **binds below roughly a 209 px viewport and is inert above it.**
+
+So it is a floor, not a look, and a caller that *wanted* the field to hold its intrinsic width in a
+row would have to undo it. It correctly stayed page-side on **both** callers — `.homesearch__input`
+in `web/src/routes/+page.svelte` and `.searchbar__input` in `web/src/routes/requests/+page.svelte`
+each still declare `min-width: 0` themselves.
+
+🚩 **This is the case worth remembering, because someone applying "appearance versus layout" by
+intuition puts `min-width: 0` in the shared class every time.** A property that is invisible, that
+does nothing at any viewport you happen to be looking at, and that has no colour, no size and no
+type in it, is still layout if a container can be built that has to override it.
+
+**The second test, and it is free at promotion time.**
+
+> **A property the existing copies already disagree on is proven to belong to the caller.**
+
+You are promoting because two or more page-scoped copies exist. **Diff them before you promote.**
+Every property they already disagree on is *evidence*, not an inconsistency to reconcile — the
+disagreement is the two containers reporting, in advance, that a shared value would be wrong for one
+of them.
+
+The instance: the two search bars' flex `basis` differed — **`1 1 20rem`** on the Requests toolbar,
+whose row carries a label, a select and two buttons, against **`1 1 24rem`** on Home, whose row
+holds the field and one button. The rows carry different sibling sets, so the numbers disagreed
+**from the day they were written**. A shared basis would have been wrong for one caller on the day
+it landed. Both stayed page-side.
+
+Home's `max-width: 42rem` is the same shape without needing the diff: it is the §1.5 fix that stops
+the field reading as a hero-search bar, Requests wants no cap, and it survives untouched in Home's
+own `.homesearch__input`.
+
+**A promotion must not add behaviour.**
+
+> ⚠️ **A promotion moves what exists. Anything else is a new design decision, and it should be made
+> on its own terms rather than smuggled in behind a refactor.**
+
+The shipped `.searchfield` in `app.css` §2.3 carries **exactly seven declarations** — `min-height`,
+`padding`, `background`, `color`, `border`, `border-radius`, `font-size` — which is the intersection
+of the two page-scoped copies and nothing more.
+
+§10's state set names a `::placeholder` treatment, a disabled surface, an invalid border and an icon
+slot as belonging to this component, and **neither copy had any of them**; both screens render the
+placeholder on the UA default today. The promotion **named that gap in the class comment as a seam
+and authored none of the four.** The frontend thread's phrase for the alternative is the one to
+quote: **"a restyle wearing a promotion's clothes"**. Four states nobody had shipped, arriving in a
+commit whose subject is a refactor, is a change to two screens that no reviewer was asked to look
+at.
+
+ℹ️ **This is not §10 being waived.** §10 says a component ships with a demonstrated state set; the
+promotion commit is not what ships that set. The seam is written down so the next author reads the
+gap as a gap rather than as a rule — and `.input` above it, which already carries a `::placeholder`
+colour and an `[aria-invalid]` border, is named there as the precedent to copy when they land.
+
+**And it was deliberately not a modifier.** `.searchfield` is **not** `.input--search`. `.input` is
+eight declarations: **four are identical** here — background, colour, border, radius — and **four
+are differences that were already shipping**.
+The floor is `--control-h` (32 px) and not `--control-h-sm` (28 px); the inset is `--space-4` and
+not the `--space-2`/`--space-3` pair; the type is `--text-md` and not `--text-base` (§4.3 names
+`--text-md` for form inputs); and `max-width: 100%` is absent because width is not this class's
+business.
+
+> **A modifier that disagrees with its base as often as it agrees is not a modifier.** It carries
+> four lines forward and overrides the other four, and costs two classes on every caller to save
+> four declarations in one place.
+
+**The counterpart to §9.7's review test:** a shared class earns a *declaration* by passing the undo
+test; a second class earns its *existence* when a modifier would spend as many lines undoing its
+base as inheriting it. Both answers go in the class's own comment, next to the code, because the
+next author to touch it is reading the CSS and not this section.
+
+---
+
 ## 10. The required state set per component
 
 **This is the strongest positive signal in the whole anti-goal corpus, and it is the one that maps
