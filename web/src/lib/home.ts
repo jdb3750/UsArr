@@ -89,10 +89,22 @@ import {
  * derived rather than assumed away precisely so that this day needed no change
  * here, and it did not.
  *
- * What the arm renders is still one honest sentence and NO catalogue, and that
- * is still what is true of it: a Kavita can be added and probed, and nothing
- * imports from it yet. Read `internal/db/migrations` and `web/src/routes` for
- * what exists, never this comment.
+ * ⚠️ IT WENT ON TO SAY **"what the arm renders is still one honest sentence and
+ * NO catalogue: a Kavita can be added and probed, and nothing imports from it
+ * yet"**, AND BOTH HALVES OF THAT ARE DEAD. Something imports from it —
+ * `internal/libsync`'s Kavita source, run by `cmd/usarr`'s `bootstrapImport`
+ * from the `kavita` arm of the client build (`cmd/usarr/services.go`) — and the
+ * arm draws Block C's table off `GET /api/v1/library/recent`, not a sentence.
+ *
+ * The SHAPE of that import is what is still worth stating, because the dead
+ * sentence undershot and a bare "the library sync is built" would overshoot by
+ * as much: ONE adapter, Kavita and nothing else (`cmd/usarr/import.go` refuses
+ * any other kind); ON CONNECT, gated on `last_full_sync_at` being unset, so it
+ * runs at most once per instance per database; NO timer and NO periodic
+ * re-sync; and the manual `FullImport` has no HTTP route and no CLI flag in
+ * front of it, so nothing a user can reach asks for a second import. Read
+ * `internal/db/migrations`, `cmd/usarr/import.go` and `web/src/routes` for what
+ * exists, never this comment.
  */
 export type HomeMode = 'unconfigured' | 'search-and-grab' | 'library';
 
