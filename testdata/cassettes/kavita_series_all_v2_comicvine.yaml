@@ -1,46 +1,65 @@
 ---
 # SYNTHETIC — hand-authored from api/specs/kavita.json (develop @ 9c3e540,
-# SeriesDto) and Kavita.Server/Controllers/SeriesController.cs at the same
-# commit. NOT a wire capture. Claimed Kavita version: 0.9.0.20.
+# SeriesDto) and from Kavita's own source at tag v0.9.0.2. NOT a wire capture.
+# Claimed Kavita version: 0.9.0.2 — the OWNER'S version (ADR-0035 §2a).
 #
-# WHY THIS FIXTURE EXISTS ALONGSIDE kavita_series_all_v2.yaml: that one is the
-# ORDINARY case — every Kavita+ identifier 0, null or "" — which is what a free
-# instance returns and what ARCHITECTURE.md §6.4 calls the ordinary case. This
-# one is the OPPOSITE and constructed to fire four paths that a free instance
-# never reaches:
+# WHY THIS FIXTURE EXISTS: every OTHER series cassette here was authored on the
+# premise that SeriesDto's identifier fields "are written only by the Kavita+
+# match path". THAT PREMISE IS FALSE FOR TAGGED COMICS. A whole-tree grep of
+# Kavita v0.9.0.2 for `ComicVineId` finds exactly three writers of
+# Series.ComicVineId, and none of them is behind a licence check:
 #
-#   1. TWO SERIES CLAIMING THE SAME aniListId (30013). That is a
-#      ux_extid_work_strong violation, which migration 0005 calls "the merge
-#      signal, not an error". v0.1 has no work_merge table.
-#   2. mangaBakaEditionId SET on series 103. It is an EDITION identifier and
-#      must not be written as a work identity (§6.4 amendment 4).
-#   3. A series in a DECLINED library (id 4, LibraryType 3 Image). No work row
-#      may exist for it.
-#   4. A LIGHT NOVEL library (id 5, LibraryType 4) and a COMIC VINE library
-#      (id 6, LibraryType 5), which the two-library fixture does not carry.
+#   Kavita.Services/Scanner/ProcessSeries.cs:162          the plain scanner
+#   Kavita.Services/Scanner/ProcessSeries.cs:365          the plain scanner, inherit branch
+#   Kavita.Server/Helpers/ExternalMetadataIdHelper.cs:38  the Edit Series dialog
 #
-# ⚠️ CORRECTED 2026-08-17 — series 104's comicVineId was "4050-42563", A VALUE
-# KAVITA CANNOT PRODUCE. Kavita.Common/Helpers/WeblinkParser.cs:55-61 at
-# v0.9.0.2 returns `extractedId.Split('-')[1]`, i.e. the id with its 4050/4000
-# PREFIX ALREADY STRIPPED, and Kavita's own unit test pins that
-# (Kavita.Common.Tests/Helpers/WeblinkParserTests.cs:24 expects
-# ".../4000-159233/" -> "159233"). The field now carries "42563", the bare shape
-# the scanner really writes.
+# So a FREE Kavita over a ComicTagger- or Mylar-tagged library populates this
+# field, and every value in it was parsed out of ComicInfo.xml's free-text <Web>
+# element or typed by a user.
 #
-# ⚠️ AND THE PREMISE IN THE LINE ABOVE IS WRONG FOR THIS FIELD. comicVineId is
-# NOT a Kavita+ field: a whole-tree grep of v0.9.0.2 finds three writers of
-# Series.ComicVineId — ProcessSeries.cs:162, ProcessSeries.cs:365 and
-# ExternalMetadataIdHelper.cs:38 — and none is behind a licence check. All three
-# are free text. The dedicated fixtures for that are
-# kavita_libraries_comicvine.yaml + kavita_series_all_v2_comicvine.yaml.
+# ⚠️ THE VALUE SHAPES BELOW ARE THE POINT, and each is justified from source:
 #
-# ⚠️ NO REAL INSTANCE IS KNOWN TO LOOK LIKE THIS. It pairs with
-# kavita_libraries_all_types.yaml and is a constructed shape, not evidence about
-# any install. Only a live capture could be that.
+#   201  "112794"                      A BARE ID in a library with the inherit flag
+#                                      OFF. This is what Kavita's scanner leaves:
+#                                      WeblinkParser.cs:55-61 returns
+#                                      `extractedId.Split('-')[1]`, i.e. the id with
+#                                      its 4050/4000 PREFIX STRIPPED. Kavita's own
+#                                      test pins it — WeblinkParserTests.cs:24 expects
+#                                      ".../4000-159233/" -> "159233". With the flag
+#                                      off the only scanner path that can have written
+#                                      it is ProcessSeries.cs:162, fed by
+#                                      DefaultParser.cs:169-172's 4050-ONLY branch, so
+#                                      this is a VOLUME id.
 #
-# It carries NO Pagination header, deliberately: the header is middleware, it is
-# not in the OpenAPI document, and a reverse proxy that strips unknown headers
-# must degrade to "total unknown" rather than fail the read.
+#   202  a full 4050 ComicVine URL     A user pasted the link into Edit Series.
+#                                      ExternalMetadataIdHelper.cs:36-38 stores the
+#                                      string VERBATIM after a whitespace check and
+#                                      nothing else, so a URL really does survive into
+#                                      this field. The 4050 discriminator is intact.
+#
+#   203  a full 4000 ComicVine URL     The same route with an ISSUE link. This is the
+#                                      shape ComicTagger writes into <Web> for a single
+#                                      issue. An issue is one level BELOW the work.
+#
+#   204  "159233", inherit flag ON     🚩 THE TRAP. Library 11 has
+#                                      inheritWebLinksFromFirstChapter enabled, so
+#                                      ProcessSeries.cs:365 overwrote
+#                                      series.ComicVineId with
+#                                      `GetComicVineId(firstChapter.WebLinks).Item1`
+#                                      and DISCARDED Item2 — the only surviving
+#                                      volume/issue discriminator. The value here IS
+#                                      the first chapter's issue id and the DTO cannot
+#                                      say so. 159233 is Kavita's own test's issue id.
+#
+#   205  every id null                 The control: a plain untagged EPUB in a Book
+#                                      library. Degraded identity, the ordinary case,
+#                                      and it must stay that way.
+#
+# ⚠️ NO REAL INSTANCE IS KNOWN TO LOOK LIKE THIS. It is constructed to fire code
+# paths and pairs with kavita_libraries_comicvine.yaml. Only a live capture is
+# evidence about a live server.
+#
+# It carries NO Pagination header, deliberately — see the sibling cassettes.
 version: 2
 interactions:
     - id: 0
@@ -74,12 +93,12 @@ interactions:
         body: |-
             [
               {
-                "id": 101,
-                "name": "Berserk",
+                "id": 201,
+                "name": "Batman: The Caped Crusader",
                 "originalName": "",
                 "localizedName": "",
-                "sortName": "Berserk",
-                "pages": 4000,
+                "sortName": "Batman: The Caped Crusader",
+                "pages": 220,
                 "coverImageLocked": false,
                 "lastChapterAdded": "2026-08-17T03:00:30.118",
                 "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
@@ -94,124 +113,80 @@ interactions:
                 "localizedNameLocked": false,
                 "nameLocked": false,
                 "wordCount": 0,
-                "libraryId": 1,
-                "libraryName": "L1",
+                "libraryId": 10,
+                "libraryName": "L10",
                 "minHoursToRead": 1,
                 "maxHoursToRead": 2,
                 "avgHoursToRead": 1.5,
-                "folderPath": "/mnt/user/media/101",
-                "lowestFolderPath": "/mnt/user/media/101",
+                "folderPath": "/mnt/user/media/201",
+                "lowestFolderPath": "/mnt/user/media/201",
                 "lastFolderScanned": "2026-08-17T07:00:30.118Z",
                 "dontMatch": false,
                 "isBlacklisted": false,
                 "isStandAlone": false,
-                "coverImage": "series101",
-                "primaryColor": "#000000",
-                "secondaryColor": "#111111",
-                "aniListId": 30013,
-                "malId": 2,
-                "hardcoverId": 0,
-                "metronId": 0,
-                "comicVineId": null,
-                "mangaBakaId": 0,
-                "mangaBakaEditionId": null,
-                "cbrId": 0
-              },
-              {
-                "id": 102,
-                "name": "Berserk (Deluxe)",
-                "originalName": "",
-                "localizedName": "",
-                "sortName": "Berserk (Deluxe)",
-                "pages": 4000,
-                "coverImageLocked": false,
-                "lastChapterAdded": "2026-08-17T03:00:30.118",
-                "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
-                "userRating": 0,
-                "hasUserRated": false,
-                "totalReads": 0,
-                "pagesRead": 0,
-                "latestReadDate": "0001-01-01T00:00:00",
-                "format": 1,
-                "created": "2026-02-11T18:22:04.771Z",
-                "sortNameLocked": false,
-                "localizedNameLocked": false,
-                "nameLocked": false,
-                "wordCount": 0,
-                "libraryId": 1,
-                "libraryName": "L1",
-                "minHoursToRead": 1,
-                "maxHoursToRead": 2,
-                "avgHoursToRead": 1.5,
-                "folderPath": "/mnt/user/media/102",
-                "lowestFolderPath": "/mnt/user/media/102",
-                "lastFolderScanned": "2026-08-17T07:00:30.118Z",
-                "dontMatch": false,
-                "isBlacklisted": false,
-                "isStandAlone": false,
-                "coverImage": "series102",
-                "primaryColor": "#000000",
-                "secondaryColor": "#111111",
-                "aniListId": 30013,
-                "malId": 0,
-                "hardcoverId": 0,
-                "metronId": 0,
-                "comicVineId": null,
-                "mangaBakaId": 0,
-                "mangaBakaEditionId": null,
-                "cbrId": 0
-              },
-              {
-                "id": 103,
-                "name": "Piranesi",
-                "originalName": "",
-                "localizedName": "",
-                "sortName": "Piranesi",
-                "pages": 272,
-                "coverImageLocked": false,
-                "lastChapterAdded": "2026-08-17T03:00:30.118",
-                "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
-                "userRating": 0,
-                "hasUserRated": false,
-                "totalReads": 0,
-                "pagesRead": 0,
-                "latestReadDate": "0001-01-01T00:00:00",
-                "format": 3,
-                "created": "2026-02-11T18:22:04.771Z",
-                "sortNameLocked": false,
-                "localizedNameLocked": false,
-                "nameLocked": false,
-                "wordCount": 0,
-                "libraryId": 3,
-                "libraryName": "L3",
-                "minHoursToRead": 1,
-                "maxHoursToRead": 2,
-                "avgHoursToRead": 1.5,
-                "folderPath": "/mnt/user/media/103",
-                "lowestFolderPath": "/mnt/user/media/103",
-                "lastFolderScanned": "2026-08-17T07:00:30.118Z",
-                "dontMatch": false,
-                "isBlacklisted": false,
-                "isStandAlone": false,
-                "coverImage": "series103",
+                "coverImage": "series201",
                 "primaryColor": "#000000",
                 "secondaryColor": "#111111",
                 "aniListId": 0,
                 "malId": 0,
-                "hardcoverId": 445,
+                "hardcoverId": 0,
                 "metronId": 0,
-                "comicVineId": null,
+                "comicVineId": "112794",
                 "mangaBakaId": 0,
-                "mangaBakaEditionId": "edition-99",
+                "mangaBakaEditionId": null,
                 "cbrId": 0
               },
               {
-                "id": 104,
+                "id": 202,
+                "name": "Chew",
+                "originalName": "",
+                "localizedName": "",
+                "sortName": "Chew",
+                "pages": 220,
+                "coverImageLocked": false,
+                "lastChapterAdded": "2026-08-17T03:00:30.118",
+                "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
+                "userRating": 0,
+                "hasUserRated": false,
+                "totalReads": 0,
+                "pagesRead": 0,
+                "latestReadDate": "0001-01-01T00:00:00",
+                "format": 1,
+                "created": "2026-02-11T18:22:04.771Z",
+                "sortNameLocked": false,
+                "localizedNameLocked": false,
+                "nameLocked": false,
+                "wordCount": 0,
+                "libraryId": 10,
+                "libraryName": "L10",
+                "minHoursToRead": 1,
+                "maxHoursToRead": 2,
+                "avgHoursToRead": 1.5,
+                "folderPath": "/mnt/user/media/202",
+                "lowestFolderPath": "/mnt/user/media/202",
+                "lastFolderScanned": "2026-08-17T07:00:30.118Z",
+                "dontMatch": false,
+                "isBlacklisted": false,
+                "isStandAlone": false,
+                "coverImage": "series202",
+                "primaryColor": "#000000",
+                "secondaryColor": "#111111",
+                "aniListId": 0,
+                "malId": 0,
+                "hardcoverId": 0,
+                "metronId": 0,
+                "comicVineId": "https://comicvine.gamespot.com/chew/4050-38442/",
+                "mangaBakaId": 0,
+                "mangaBakaEditionId": null,
+                "cbrId": 0
+              },
+              {
+                "id": 203,
                 "name": "Saga",
                 "originalName": "",
                 "localizedName": "",
                 "sortName": "Saga",
-                "pages": 900,
+                "pages": 220,
                 "coverImageLocked": false,
                 "lastChapterAdded": "2026-08-17T03:00:30.118",
                 "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
@@ -226,36 +201,36 @@ interactions:
                 "localizedNameLocked": false,
                 "nameLocked": false,
                 "wordCount": 0,
-                "libraryId": 6,
-                "libraryName": "L6",
+                "libraryId": 10,
+                "libraryName": "L10",
                 "minHoursToRead": 1,
                 "maxHoursToRead": 2,
                 "avgHoursToRead": 1.5,
-                "folderPath": "/mnt/user/media/104",
-                "lowestFolderPath": "/mnt/user/media/104",
+                "folderPath": "/mnt/user/media/203",
+                "lowestFolderPath": "/mnt/user/media/203",
                 "lastFolderScanned": "2026-08-17T07:00:30.118Z",
                 "dontMatch": false,
                 "isBlacklisted": false,
                 "isStandAlone": false,
-                "coverImage": "series104",
+                "coverImage": "series203",
                 "primaryColor": "#000000",
                 "secondaryColor": "#111111",
                 "aniListId": 0,
                 "malId": 0,
                 "hardcoverId": 0,
                 "metronId": 0,
-                "comicVineId": "42563",
+                "comicVineId": "https://comicvine.gamespot.com/chew-1-taster-s-choice-part-1-of-5/4000-159233/",
                 "mangaBakaId": 0,
                 "mangaBakaEditionId": null,
-                "cbrId": 7
+                "cbrId": 0
               },
               {
-                "id": 105,
-                "name": "Desktop dump",
+                "id": 204,
+                "name": "Invincible",
                 "originalName": "",
                 "localizedName": "",
-                "sortName": "Desktop dump",
-                "pages": 12,
+                "sortName": "Invincible",
+                "pages": 220,
                 "coverImageLocked": false,
                 "lastChapterAdded": "2026-08-17T03:00:30.118",
                 "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
@@ -264,42 +239,42 @@ interactions:
                 "totalReads": 0,
                 "pagesRead": 0,
                 "latestReadDate": "0001-01-01T00:00:00",
-                "format": 0,
+                "format": 1,
                 "created": "2026-02-11T18:22:04.771Z",
                 "sortNameLocked": false,
                 "localizedNameLocked": false,
                 "nameLocked": false,
                 "wordCount": 0,
-                "libraryId": 4,
-                "libraryName": "L4",
+                "libraryId": 11,
+                "libraryName": "L11",
                 "minHoursToRead": 1,
                 "maxHoursToRead": 2,
                 "avgHoursToRead": 1.5,
-                "folderPath": "/mnt/user/media/105",
-                "lowestFolderPath": "/mnt/user/media/105",
+                "folderPath": "/mnt/user/media/204",
+                "lowestFolderPath": "/mnt/user/media/204",
                 "lastFolderScanned": "2026-08-17T07:00:30.118Z",
                 "dontMatch": false,
                 "isBlacklisted": false,
                 "isStandAlone": false,
-                "coverImage": "series105",
+                "coverImage": "series204",
                 "primaryColor": "#000000",
                 "secondaryColor": "#111111",
                 "aniListId": 0,
                 "malId": 0,
                 "hardcoverId": 0,
                 "metronId": 0,
-                "comicVineId": null,
+                "comicVineId": "159233",
                 "mangaBakaId": 0,
                 "mangaBakaEditionId": null,
                 "cbrId": 0
               },
               {
-                "id": 106,
-                "name": "Spice and Wolf",
+                "id": 205,
+                "name": "Piranesi",
                 "originalName": "",
                 "localizedName": "",
-                "sortName": "Spice and Wolf",
-                "pages": 300,
+                "sortName": "Piranesi",
+                "pages": 245,
                 "coverImageLocked": false,
                 "lastChapterAdded": "2026-08-17T03:00:30.118",
                 "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
@@ -314,22 +289,22 @@ interactions:
                 "localizedNameLocked": false,
                 "nameLocked": false,
                 "wordCount": 0,
-                "libraryId": 5,
-                "libraryName": "L5",
+                "libraryId": 12,
+                "libraryName": "L12",
                 "minHoursToRead": 1,
                 "maxHoursToRead": 2,
                 "avgHoursToRead": 1.5,
-                "folderPath": "/mnt/user/media/106",
-                "lowestFolderPath": "/mnt/user/media/106",
+                "folderPath": "/mnt/user/media/205",
+                "lowestFolderPath": "/mnt/user/media/205",
                 "lastFolderScanned": "2026-08-17T07:00:30.118Z",
                 "dontMatch": false,
                 "isBlacklisted": false,
                 "isStandAlone": false,
-                "coverImage": "series106",
+                "coverImage": "series205",
                 "primaryColor": "#000000",
                 "secondaryColor": "#111111",
                 "aniListId": 0,
-                "malId": 9115,
+                "malId": 0,
                 "hardcoverId": 0,
                 "metronId": 0,
                 "comicVineId": null,

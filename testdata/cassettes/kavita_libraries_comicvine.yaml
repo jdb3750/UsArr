@@ -1,0 +1,57 @@
+---
+# SYNTHETIC — hand-authored from api/specs/kavita.json (develop @ 9c3e540,
+# LibraryDto) and from Kavita's source at tag v0.9.0.2. NOT a wire capture.
+# Claimed Kavita version: 0.9.0.2 — the OWNER'S version (ADR-0035 §2a), not
+# develop, because the behaviour this fixture is built to exercise was verified
+# there.
+#
+# WHY THIS FIXTURE EXISTS: it is the smallest library list that carries BOTH
+# settings of LibraryDto.inheritWebLinksFromFirstChapter over the same library
+# type, which is the discriminator comicVineIdentity turns on. No other
+# cassette in this directory sets the flag at all — they omit it, so Go's zero
+# value makes every existing library a false one, which is the safe side but
+# tests nothing.
+#
+# ⚠️ WHAT THE FLAG DOES, and why one library differing from another by nothing
+# else matters: Kavita.Services/Scanner/ProcessSeries.cs:359-366 at v0.9.0.2
+# runs inside UpdateSeriesMetadata, which ProcessSeries.cs:165 calls AFTER the
+# line-162 assignment of series.ComicVineId. With the flag ON it OVERWRITES that
+# value with `WeblinkParser.GetComicVineId(firstChapter.WebLinks).Item1`, and
+# Item1 is the id with its 4050/4000 prefix stripped — so a correct volume id is
+# replaced by the first chapter's ISSUE id, with nothing on the DTO to say so.
+#
+# Library 12 is the untagged-book control: LibraryType 2 (Book), where degraded
+# identity is the ordinary case and stays that way.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Library/libraries
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            [
+              {"id": 10, "name": "Comics",            "type": 1, "folders": ["/m/comics"],   "coverImage": "", "lastScanned": "2026-08-17T07:00:30.118Z", "inheritWebLinksFromFirstChapter": false},
+              {"id": 11, "name": "Comics (inherited)","type": 1, "folders": ["/m/comics2"],  "coverImage": "", "lastScanned": "2026-08-17T07:00:30.118Z", "inheritWebLinksFromFirstChapter": true},
+              {"id": 12, "name": "Ebooks",            "type": 2, "folders": ["/m/books"],    "coverImage": "", "lastScanned": "2026-08-17T07:00:30.118Z", "inheritWebLinksFromFirstChapter": false}
+            ]

@@ -49,10 +49,17 @@ func (g *registry) FullImport(ctx context.Context, instanceID int64) (libsync.Re
 			entry.instance.Name, entry.instance.Kind)
 	}
 
+	log := g.log.With("instance_id", instanceID, "instance", entry.instance.Name)
+	// The adapter gets its OWN logger because it is where a refused identity
+	// claim is reported, and the importer never sees one — the mapping has
+	// already dropped it by the time a CatalogueItem exists.
+	src := libsync.NewKavitaSource(entry.kavita)
+	src.Log = log
+
 	im := &libsync.Importer{
 		Store:  g.st,
-		Source: libsync.NewKavitaSource(entry.kavita),
-		Log:    g.log.With("instance_id", instanceID, "instance", entry.instance.Name),
+		Source: src,
+		Log:    log,
 		// v0.1's single owner. The parameter exists so multi-user is a
 		// behaviour change rather than a redesign (§1.3 rule 1).
 		UserID:   store.SystemUserID,

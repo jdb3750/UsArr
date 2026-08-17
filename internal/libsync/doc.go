@@ -41,6 +41,19 @@
 // episodes — and that is where work_comic_issue and media_file get their rows.
 // Neither is written here, and neither is faked: see kavita.go.
 //
+// # Before you trust a field on an upstream DTO
+//
+// A SPEC TELLS YOU A FIELD EXISTS. IT DOES NOT TELL YOU WHICH CODE PATH
+// POPULATES IT, OR WHETHER ANY DOES. That gap is exactly the error this
+// package's ComicVine path was first built on: `SeriesDto.comicVineId` was read
+// as a matcher-written identifier because the schema declares it as a typed
+// field, when Kavita's PLAIN scanner in fact fills it out of ComicInfo.xml's
+// free-text <Web> element — and a per-library flag can silently replace it with
+// a value of the wrong kind. Read the upstream's WRITERS, not only its schema:
+// grep its source for assignments to the field, and read the version the OWNER
+// runs rather than the branch the spec was vendored from. comicvine.go and
+// kavita.go's kavitaExternalIDs carry the worked example.
+//
 // # The seam this keeps
 //
 // Source is the adapter boundary. It is one interface with two methods and it
