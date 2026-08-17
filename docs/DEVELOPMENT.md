@@ -944,6 +944,31 @@ have exited 0 while scanning nothing, which is the most convincing green there i
 roughly how much a check ought to see, encode that — "found nothing" and "looked at nothing" must
 never produce the same exit code.
 
+**5. Name the surface, not just the value.** Rule 2 names the *instrument*; this names what the
+instrument was pointed at, and it is the half that has been broken three times here — each time by
+someone who had written or read the rule the same night. **A measurement is meaningless without the
+artifact it was taken on, and two correct numbers taken on different surfaces cannot be compared,
+subtracted, or checked against one another's budget.**
+
+* **Two trees declare the same column.** *"The `Age` track is 68 px"* is not a complete claim in a
+  repo holding two declarations of it: `.cols-requests-releases` in `docs/design/mockups/usarr.css`
+  reads 80 px, `COLUMNS` in `web/src/routes/requests/+page.svelte` reads 68 px, and **both are
+  correct**. Nine of the ten columns the two trees share carry different widths.
+* **A row-height result measured on the mockups' 80 px `Age` track was applied to the product's
+  68 px one.** Right about the tree it came from, wrong about the tree it was quoted for.
+* **The sharpest of the three, because nothing about either number was wrong.** A shipped-path
+  density toggle — **~75.7 ms** at 200 rows, `prefs.setDensity` → Svelte flush → forced layout — was
+  compared against a budget being applied at the bench's own measurement site, **~18 ms**, which in
+  `web/scripts/list-bench.mjs` is a bare `setAttribute` plus a forced layout and skips the
+  invalidation the shipped path is required to perform. Both figures were individually correct and
+  independently verified. Nothing was wrong except the assumption that they were about the same
+  thing, and the conclusion drawn from subtracting them was.
+
+So: **every figure carries the artifact it was measured on** — which file, which tree, which code
+path, which instrument — and **a comparison between two figures is valid only once you have checked
+that they describe the same surface.** Rule 2's *"a gate result without a commit sha attached is not
+a result"* is this rule applied to gate output; the same standard governs every other number.
+
 **The pattern worth carrying: two of the first three were introduced by the fixes for the other
 two.** That is not bad luck. A fix is written under the assumption that the failure mode is now
 understood, and that is precisely the moment people stop checking for it. Treat a guard you just
