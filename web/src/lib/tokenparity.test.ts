@@ -123,6 +123,23 @@ const TOKENS_ONLY_ALLOWED: Record<string, string> = {};
  */
 const TOKENS_CSS_NON_TOKEN_BLOCKS: Record<string, string> = {};
 
+/**
+ * STATES that deliberately resolve to exactly what `:root` resolves to, keyed
+ * by state label. A state normally exists because some block answers only to
+ * it; one that reaches nothing `:root` does not reach has stopped testing
+ * anything, and its `it()` re-runs the `:root` comparison under another name.
+ * The test below fails on that, and this is the escape hatch for the case where
+ * it is intended — a density or theme the design has deliberately made
+ * identical to the default, kept in STATES so that the day it stops being
+ * identical is the day it is compared again.
+ *
+ * Currently empty, and that is the expected state: all six STATES reach a block
+ * of their own in both files. An entry here needs the same two facts every
+ * other list carries, a reason and a RETIRED BY, and it dies the moment the
+ * state gains a block again — asserted, not left to a reader.
+ */
+const STATES_MATCHING_ROOT: Record<string, string> = {};
+
 /* -----------------------------------------------------------------------------
  * Parsing
  *
@@ -313,6 +330,28 @@ function declApplies(decl: Decl, state: State): boolean {
 }
 
 /**
+ * The baseline every other state is measured against: nothing stamped on the
+ * root, no media query matching. Synthesised rather than read out of STATES, so
+ * that reordering or relabelling the list cannot move the baseline underneath
+ * the guard that uses it.
+ */
+const ROOT_STATE: State = {
+	label: ':root',
+	attrs: {},
+	prefersDark: false,
+	reducedMotion: false
+};
+
+/** True for the state that IS the baseline, which cannot differ from itself. */
+function isRootState(state: State): boolean {
+	return (
+		Object.values(state.attrs).every((value) => value === undefined) &&
+		!state.prefersDark &&
+		!state.reducedMotion
+	);
+}
+
+/**
  * The value each token resolves to in `state`. Source order decides, which
  * matches the cascade here because no later block in either file is less
  * specific than an earlier one it overlaps; that is asserted by the density
@@ -324,8 +363,26 @@ function effective(decls: readonly Decl[], state: State): Map<string, Decl> {
 	return out;
 }
 
-const TOKENS_DECLS = parse(stripComments(readFileSync(TOKENS_CSS, 'utf8')));
-const APP_DECLS = parse(stripComments(readFileSync(APP_CSS, 'utf8')));
+/** Kept alongside the parsed form: the parser guard at the bottom reads it. */
+const TOKENS_TEXT = readFileSync(TOKENS_CSS, 'utf8');
+const APP_TEXT = readFileSync(APP_CSS, 'utf8');
+
+const TOKENS_DECLS = parse(stripComments(TOKENS_TEXT));
+const APP_DECLS = parse(stripComments(APP_TEXT));
+
+const FILES = [
+	{ name: 'docs/design/tokens.css', text: TOKENS_TEXT, decls: TOKENS_DECLS },
+	{ name: 'web/src/app.css', text: APP_TEXT, decls: APP_DECLS }
+] as const;
+
+/**
+ * The superseded --status-warn, closed by the owner on 2026-08-16 in favour of
+ * #a44c00 and kept in BOTH files as prose beside the live value. The parser
+ * guard at the bottom is written against exactly this string, so its presence
+ * is asserted there rather than assumed — a bait nobody checks for is a bait
+ * that can be edited away, leaving the guard true of every possible parser.
+ */
+const SUPERSEDED_STATUS_WARN = '#8a5300';
 
 const AUTHORITY = [
 	'docs/design/tokens.css is AUTHORITATIVE. web/src/app.css hand-ports it, so',
@@ -384,17 +441,31 @@ describe('web/src/app.css is a faithful hand-port of docs/design/tokens.css', ()
 		});
 	}
 
-	it('has a written reason, and a retirement condition, for every allowlisted token', () => {
-		const divergent = Object.fromEntries(
-			Object.entries(DIVERGENT_ALLOWED).map(([name, entry]) => [name, entry.reason])
-		);
-		for (const [name, reason] of Object.entries({
-			...APP_ONLY_ALLOWED,
-			...TOKENS_ONLY_ALLOWED,
-			...divergent
-		})) {
-			expect(reason.length, `${name} needs a reason`).toBeGreaterThan(40);
-			expect(reason, `${name} must say what retires it`).toContain('RETIRED BY:');
+	// Every list, not just the three keyed by token name: an exclusion keyed by
+	// prelude or by state label owes the reader the same two facts, and the one
+	// list this test used to skip was TOKENS_CSS_NON_TOKEN_BLOCKS. The lists are
+	// walked by name rather than merged into one object, so a failure says which
+	// list the entry is in — and so two lists cannot collide on a shared key and
+	// quietly drop one of the entries from the check.
+	it('has a written reason, and a retirement condition, for every allowlist entry', () => {
+		const lists: ReadonlyArray<readonly [string, Readonly<Record<string, string>>]> = [
+			['APP_ONLY_ALLOWED', APP_ONLY_ALLOWED],
+			['TOKENS_ONLY_ALLOWED', TOKENS_ONLY_ALLOWED],
+			[
+				'DIVERGENT_ALLOWED',
+				Object.fromEntries(
+					Object.entries(DIVERGENT_ALLOWED).map(([name, entry]) => [name, entry.reason])
+				)
+			],
+			['TOKENS_CSS_NON_TOKEN_BLOCKS', TOKENS_CSS_NON_TOKEN_BLOCKS],
+			['STATES_MATCHING_ROOT', STATES_MATCHING_ROOT]
+		];
+
+		for (const [list, entries] of lists) {
+			for (const [key, reason] of Object.entries(entries)) {
+				expect(reason.length, `${list}[${key}] needs a reason`).toBeGreaterThan(40);
+				expect(reason, `${list}[${key}] must say what retires it`).toContain('RETIRED BY:');
+			}
 		}
 	});
 
@@ -562,16 +633,118 @@ describe('web/src/app.css is a faithful hand-port of docs/design/tokens.css', ()
 		}
 	});
 
+	/*
+	 * The same silent death one level up: a STATE that stops testing anything.
+	 *
+	 * The coverage test above enforces one half of the STATES story — every
+	 * tokens.css block is reached by some state. The other half was unguarded.
+	 * selectorMatches(':root', state) is true for EVERY state, so a state whose
+	 * own block is deleted from both files does not fail: it silently degenerates
+	 * into the :root state, and the `it()` named for it re-asserts, under the
+	 * label of a density or a theme, exactly what the :root case already covers.
+	 * Probed rather than assumed: with the [data-density='relaxed'] block cut out
+	 * of both files, all twelve tests passed — the one named
+	 * [data-density='relaxed'] included — and the suite still read as six-state
+	 * coverage while testing five.
+	 *
+	 * So require every state to be LOAD-BEARING, the way the allowlist entries
+	 * now are: in each file, at least one declaration it reaches that :root does
+	 * not. That is what makes its comparison a second data point rather than a
+	 * second printing of the first.
+	 */
+	it('gives every STATE a block :root does not reach, so none degenerates into :root', () => {
+		expect(
+			STATES.some(isRootState),
+			'no STATE is the bare :root case any more, so the palette every other state ' +
+				'inherits is never compared, and the states below are being measured against ' +
+				'a baseline this file synthesised rather than one it tests. Restore it.'
+		).toBe(true);
+
+		const labels = STATES.map((state) => state.label);
+		const dead: string[] = [];
+
+		for (const state of STATES) {
+			if (isRootState(state)) continue;
+			const barren = FILES.filter(
+				(file) =>
+					!file.decls.some((decl) => declApplies(decl, state) && !declApplies(decl, ROOT_STATE))
+			).map((file) => file.name);
+			const excused = state.label in STATES_MATCHING_ROOT;
+
+			if (barren.length > 0 && !excused) {
+				dead.push(
+					`${state.label} reaches no declaration in ${barren.join(' or ')} that :root does ` +
+						'not, so it resolves to the :root palette and the test named for it is a ' +
+						'copy of the :root test — it can no longer fail on anything the :root test ' +
+						'would not fail on first. Restore the block this state was written for, ' +
+						'drop the state, or record it in STATES_MATCHING_ROOT with a reason and a ' +
+						'RETIRED BY.'
+				);
+			} else if (barren.length === 0 && excused) {
+				dead.push(
+					`${state.label} is recorded in STATES_MATCHING_ROOT as deliberately identical to ` +
+						':root, but it now reaches a block of its own in both files, so the entry ' +
+						'excuses nothing. Delete it.'
+				);
+			}
+		}
+
+		for (const label of Object.keys(STATES_MATCHING_ROOT)) {
+			if (!labels.includes(label)) {
+				dead.push(
+					`${label} is recorded in STATES_MATCHING_ROOT, but no STATE carries that label, ` +
+						'so the entry is never consulted and can never fail: it is unreachable, not ' +
+						`passing. Delete it, or correct the label to one of:\n${labels
+							.map((line) => `      ${line}`)
+							.join('\n')}`
+				);
+			}
+		}
+
+		if (dead.length > 0) {
+			expect.fail(
+				`${dead.length} STATE(s) test nothing the :root state does not already test\n` +
+					`${AUTHORITY}\n\n` +
+					dead.map((line) => `  ${line}`).join('\n\n')
+			);
+		}
+	});
+
 	it('parsed both files, and did not read a commented-out value as a live one', () => {
 		// A regression guard on the parser itself: if either read returns nothing
 		// the comparisons above pass vacuously. #8a5300 is the superseded
 		// --status-warn, present in BOTH files as prose next to the live value.
 		expect(TOKENS_DECLS.length).toBeGreaterThan(100);
 		expect(APP_DECLS.length).toBeGreaterThan(100);
-		for (const decls of [TOKENS_DECLS, APP_DECLS]) {
-			expect(decls.filter((d) => d.name === '--status-warn').map((d) => d.value)).not.toContain(
-				'#8a5300'
-			);
+
+		for (const file of FILES) {
+			// The bait has to be checked before it is used, because the check below
+			// is only a check while the bait is there: "the parser did not read
+			// #8a5300 as a live value" is true of every parser, however broken, once
+			// no file contains #8a5300 at all. Probed rather than assumed: with that
+			// value edited out of the prose in both files, all twelve tests passed.
+			// So assert both halves of what the guard assumes — the value is in the
+			// file, and it is in there as prose rather than as a live declaration.
+			// If the prose is ever rewritten away, move this guard onto another
+			// commented-out value rather than deleting it.
+			expect(
+				file.text,
+				`${file.name} no longer carries ${SUPERSEDED_STATUS_WARN} anywhere, so the parser ` +
+					'check below has nothing to catch and passes whatever stripComments() does. ' +
+					'Restore the prose, or re-point SUPERSEDED_STATUS_WARN at another value both ' +
+					'files carry in a comment.'
+			).toContain(SUPERSEDED_STATUS_WARN);
+			expect(
+				stripComments(file.text),
+				`${file.name} carries ${SUPERSEDED_STATUS_WARN} outside a comment. The guard below ` +
+					'assumes it is prose — a live declaration of it is either the drift itself or ' +
+					'a bait that has to move.'
+			).not.toContain(SUPERSEDED_STATUS_WARN);
+
+			expect(
+				file.decls.filter((decl) => decl.name === '--status-warn').map((decl) => decl.value),
+				`${file.name}: the parser read the superseded --status-warn out of a comment`
+			).not.toContain(SUPERSEDED_STATUS_WARN);
 		}
 	});
 });
