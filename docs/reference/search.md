@@ -1,6 +1,12 @@
 # Reference — Search
 
-**Status:** designed, not implemented. **Scope:** tiers 1 and 2 are **v0.1**. There is no tier 3.
+**Status:** partly implemented, and the split is **corpus yes, retrieval no**. §2's corpus is
+maintained today — `internal/store`'s catalogue writer owns `search_doc`, `search_fts` and
+`search_trgm` and the invariants that keep the three in step, and `internal/libsync` fills them on
+import. **Nothing queries them**: §3's query construction, §4's fusion and re-rank and §5's
+client-side index are still design, and no `MATCH` against either FTS table exists outside a test.
+`internal/store` and `internal/httpapi` are the check on that, not this line. **Scope:** tiers 1 and
+2 are **v0.1**. There is no tier 3.
 **Parent:** [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §8.
 
 ---

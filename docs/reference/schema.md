@@ -650,6 +650,16 @@ CREATE TABLE service_item_alias (
 ) STRICT, WITHOUT ROWID;
 ```
 
+⚠️ **The container-column comment above is superseded and is left standing deliberately.** It says
+those columns *"are written by the \*Arr sync first and carry no catalogue reader until then"*,
+which was true of the build order ADR-0036 set and is not true of the one that shipped:
+[ADR-0041](../DECISIONS.md#adr-0041) put Kavita in v0.1, so `remote_library_id` and `remote_subtype`
+got their first writer from a **catalogue** source and the \*Arr sync has still written neither. The
+comment is not edited here because it transcribes migration 0005's own SQL, and **a merged migration
+is never edited** — so the same superseded sentence stands in
+`internal/db/migrations/00005_library_sync.sql` and is history there. `internal/libsync` is what
+answers who writes these columns today.
+
 **`ux_sil` is only usable in full if `remote_kind` is known at lookup time**, which is why the
 northbound ID encodes it (ARCHITECTURE §5.3). Without it, `WHERE service_instance_id=? AND
 remote_id=?` yields `SEARCH service_item_link USING INDEX ux_sil (service_instance_id=?)` — a range
@@ -1337,7 +1347,13 @@ metadata. Deleting it costs a re-sync, not data.
 anywhere in this document*, so the shape below was derived when it was created, from its only two
 specified call sites: [`sync.md`](./sync.md) §4 step 5 (*"emit a `sync_report` row"* per sweep) and
 §4 guard 1's `sync_report{kind: "id_reused", instance, remote_kind, remote_id}`. It is not prior
-art and nothing has exercised it — nothing writes this table yet.
+art. ⚠️ **It has since been exercised, and by neither of those two call sites**: this sentence read
+*"nothing has exercised it — nothing writes this table yet"*, and the shape is now round-tripped by
+`internal/store`'s `RecordSyncReport`, called from the full import (`internal/libsync`) under two
+`kind` values of its own — `container_declined` and `identity_conflict`. §4's sweep, the caller the
+shape was actually derived from, still does not exist, so the inference above is only half
+discharged: the columns hold a row, and neither `kind` the vocabulary was invented for has been
+written by anything.
 
 ```sql
 CREATE TABLE sync_report (
