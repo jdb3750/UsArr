@@ -1675,8 +1675,14 @@ root and the filename parses. Books are the same shape unless LazyLibrarian is p
 `forceProcess` + `getDownloadProgress` genuinely close the loop and are the strongest argument for
 keeping it as a sink after demoting its catalogue. So the grab confirmation is type-specific and
 literal, and **UsArr never renders a progress bar or a "Downloading" state for a Prowlarr grab**,
-because it cannot know. `Grabbed <timestamp>` and stop. The `provenance` row is the whole of what
-UsArr knows, and for comics it is the *only* trace the acquisition ever leaves.
+because it cannot know. `Grabbed <timestamp>` and stop. **What UsArr knows ends at the handover**, and
+for comics that handover is the only trace the acquisition leaves anywhere in the ecosystem.
+⚠️ **This read *"the `provenance` row is the whole of what UsArr knows"*, and the shipped path
+falsifies it.** `handleGrab` writes an `audit_log` row for **every** grab that named a candidate, and
+a grab that never left the process writes **no** `provenance` row at all — so for those the audit row
+is the only record UsArr has, which is why Recent grabs reads the two tables as a **union** (§17.5,
+`internal/httpapi/grabs.go`). **What the sentence exists to say is untouched:** nothing downstream
+reports back, so neither row ever gains a state after "sent".
 
 > 🚩 **The confirmation must name what will and will not import the file, and the sentence is
 > incomplete without the second half.** *"Sent to \<download client\>. UsArr does not import
@@ -1694,14 +1700,25 @@ UsArr knows, and for comics it is the *only* trace the acquisition ever leaves.
 > | Case | Sentence |
 > |---|---|
 > | A watched-folder importer is configured for the type (Audiobookshelf, Komga, Navidrome) | *"Sent to qBittorrent. UsArr does not import downloads. Audiobookshelf watches `/media/books` and will show it once the file is there."* |
-> | An \*Arr owns the type but did not request this release (Sonarr, Radarr — the v0.1 case for every grab) | *"Sent to qBittorrent. Nothing will import this. Radarr did not request this release, so it will not pick it up — the file stays in your download client until you move it into the library folder yourself."* |
+> | An \*Arr owns the type but did not request this release (Sonarr, Radarr — ⚠️ **not a v0.1 case**, below) | *"Sent to qBittorrent. Nothing will import this. Radarr did not request this release, so it will not pick it up — the file stays in your download client until you move it into the library folder yourself."* |
 > | No connected service accepts the type at all (comics with no Mylar3, music with no Lidarr) | *"Sent to qBittorrent. Nothing will import this. No connected service accepts a comic, so the file stays in your download client."* |
 >
-> Every input is already computed: the library's request destination is `none` for four types and an
-> \*Arr for two (§6.5, §17.8), and the watched folder is read from the source for the first case. The
-> named folder is quoted from the source's own report and never typed by UsArr (ADR-0026). **The
-> naming of the *non*-importer is the load-bearing half** — the same principle as §17.7's rule that a
-> reassuring wrong number is worse than none.
+> ⚠️ **The second row's parenthetical read *"the v0.1 case for every grab"*, and both \*Arrs have
+> since re-sequenced out of v0.1** ([ADR-0041](./DECISIONS.md#adr-0041),
+> [ADR-0042](./DECISIONS.md#adr-0042)) — so **no v0.1 grab takes that row at all**; in v0.1 a movie or
+> an episode takes the third, because nothing v0.1 connects accepts one. **The row is re-sequenced,
+> not cut:** its sentence is exactly what gets written once an \*Arr is connected and did not ask for
+> this release, which is the case it was written for.
+>
+> **Every input is still computed, and one of them changed.** ⚠️ This read *"the library's request
+> destination is `none` for four types and an \*Arr for two"*; §17.8 has since established that **no
+> service v0.1 connects can be a library's request sink at all** — a sink must advertise `Add` under
+> §8.3's capability filter and the Prowlarr path does not — so in v0.1 the destination **cannot be
+> set**, and the shape is chosen from the type and the connected services alone. It returns as an
+> input with the first service that can be a destination (§6.5, §17.8). The watched folder is read
+> from the source for the first case, and the named folder is quoted from the source's own report and
+> never typed by UsArr (ADR-0026). **The naming of the *non*-importer is the load-bearing half** — the
+> same principle as §17.7's rule that a reassuring wrong number is worse than none.
 
 **And one qualification that applies to the whole mode, because "runs over just Prowlarr" is
 materially weaker for two of the six types.** ✅ **403 of Prowlarr's 543 shipped indexer definitions
@@ -2334,9 +2351,22 @@ shifted up **without reordering**.
 
 **What is kept, with its remaining cost stated rather than argued away.** The libraries subsystem
 (§6.5) and the auto-proposal flow stay in v0.1. Its four tables are owed by v0.1 either way, its
-screen is one of the five `CLAUDE.md` names as essential, and **a library binding carries
-the request destination** that v0.1's one write path routes on — so it is load-bearing in v0.1
-regardless of which source feeds it. ⚠️ **Its best demonstration is still not in v0.1:** the
+screen is one of the five `CLAUDE.md` names as essential — so it is load-bearing in v0.1 regardless
+of which source feeds it.
+⚠️ **This justification stood on three grounds and now stands on two, and the third is withdrawn
+outright rather than quietly narrowed.** It read *"and **a library binding carries the request
+destination that v0.1's one write path routes on**"*, where that write path was the four \*Arr verbs
+on the durable command queue. [ADR-0042](./DECISIONS.md#adr-0042) re-sequenced those out of v0.1, so
+**nothing in v0.1 routes on a request destination.** **The first two grounds are untouched and the
+subsystem stays** — the four tables are owed by v0.1 either way, and the screen is one of the five.
+🚩 **And the ground is gone more completely than this decision alone would have taken it**, which is
+worth recording because two threads reached it from opposite directions on the same day: §17.8 has
+since established that **no service v0.1 connects can be a library's request sink at all** — a sink
+must advertise `Add` under §8.3's capability filter, and the Prowlarr path does not, because it posts
+a release to Prowlarr's own download client (§8.5). So the destination is not merely un-routed-on in
+v0.1; it **cannot be set**, and §17.8 removes its column from the Libraries row view for the
+milestone. **Both are sequencing, not cuts:** the column and the routing return with the first
+service that can be a destination. ⚠️ **Its best demonstration is still not in v0.1:** the
 Ebooks/Audiobooks split over one Audiobookshelf library was the concrete improvement over upstream's
 own organisation, and that demonstration moves with Audiobookshelf. **But v0.1 gets a real one back**
 ([ADR-0041](./DECISIONS.md#adr-0041)) — an **Ebooks library and a Comics library derived from one
@@ -2349,15 +2379,49 @@ membership with a 250 ms dirty-flush and a denormalised sort key, a derivation w
 predicates, an auto-proposal engine with join-vs-create defaults, and a second first-class settings
 screen (§17.8).** It is true that the Libraries screen *replaces* hard-coded per-type sections rather
 than adding a screen; it is not true that the tables, the derivation and the proposal engine replace
-anything. The correction **UI** is still capped to v0.3, and that cap is correctly described as a
-*scheduling detail*, not as the payment. ⚠️ **Its justification does not survive the source swap
-unexamined:** §6.4's *"tier 1 resolves essentially 100% of the v0.1 identity problem"* was established
-**for Sonarr and Radarr**, which carry provider ids, and [ADR-0041](./DECISIONS.md#adr-0041) records
-the opposite for v0.1's actual source — free Kavita's **null identifier fields make *"not identified"*
-the ordinary case** (ADR-0035 §1), exercised in v0.1 rather than merely present. The nullable column
-and the badge were already v0.1 work because they cannot be retrofitted. **Whether the correction UI's
-v0.3 cap still holds against a source with no ids is a live question this section flags rather than
-answers** — §6.4 owns the tier-1 claim and has not been restated against Kavita.
+anything. ⚠️ **The correction UI's v0.3 cap no longer holds whole, and the question this paragraph
+flagged is now answered rather than left open.** It read *"The correction **UI** is still capped to
+v0.3, and that cap is correctly described as a scheduling detail, not as the payment"*, and closed
+*"whether the correction UI's v0.3 cap still holds against a source with no ids is a live question
+this section flags rather than answers — §6.4 owns the tier-1 claim and has not been restated against
+Kavita."* **§6.4 has since been restated against Kavita and it withdraws the support the cap rested
+on**, and [ADR-0043](./DECISIONS.md#adr-0043) — owner-decided 2026-08-17 — takes the scope call that
+restatement said it needed: **a minimal match-correction UI moves earlier than v0.3.** The reasoning
+is unchanged and is kept here: §6.4's *"tier 1 resolves essentially 100% of the v0.1 identity
+problem"* was established **for Sonarr and Radarr**, which carry provider ids, and
+[ADR-0041](./DECISIONS.md#adr-0041) put a source in v0.1 for which the opposite holds — free Kavita's
+**null identifier fields make *"not identified"* the ordinary case** (ADR-0035 §1), exercised in v0.1
+rather than merely present. The nullable column and the badge were already v0.1 work because they
+cannot be retrofitted; what ADR-0043 moves is the surface that acts on them, so **a user has something
+to correct on day one and now has somewhere to do it.**
+
+**Three things that decision does not say, each stated because inventing any of them here is the
+failure mode this section exists to prevent.**
+
+- **It names no milestone.** The owner said *"earlier"*; **he did not name a version**, and §16 is
+  authoritative for milestone membership, so the honest record is that **the slot is not yet
+  assigned.** This is the same refusal [ADR-0042](./DECISIONS.md#adr-0042) made for Sonarr and Radarr
+  the day before — *"picking a number here would be inventing a commitment nobody made"* — and it is
+  carried in ADR-0043 as an open question rather than closed by a guess. **v0.1 is not claimed for it
+  by this paragraph**, and neither is v0.2.
+- ***"Minimal" is the owner's word, and it is a constraint on scope rather than a synonym for
+  small.*** The full correction surface [ADR-0026](./DECISIONS.md#adr-0026) specifies — all four verbs
+  `exclude`, `include`, `relink`, `field`, plus the Corrections list — **stays at v0.3.** What moves
+  earlier is only the narrow *"fix this match"* case ADR-0043 scopes, and **that division is the
+  payment**: this re-sequences one part of a subsystem ADR-0026 already funded, whose storage
+  (`library_override`, §6.5) is in the tree already, rather than adding a subsystem. An amendment that
+  moved the whole surface would have to say what it removes, and this one does not move the whole
+  surface.
+- **It does not depend on Kavita, and it survives Kavita being replaced.** The owner's stated reason
+  was other people's installs — *"in case anyone is running kavita"*, which is his reasoning on the
+  day and is recorded as his — but the fact underneath it is that **v0.1's catalogue source has weak
+  identity**, and that is a property of the source rather than of its name. 🔍 **A different
+  books-and-comics server, BookOrbit, is under live evaluation on this project as of 2026-08-17;
+  nothing about it is decided and §16 assigns it nothing.** It is named here only because the owner
+  named it in the same breath. **Whichever server ends up in that slot, the decision that a minimal
+  match-correction UI comes earlier stands** — it would be reopened only by a v0.1 source that
+  supplies strong external ids for the ordinary user, which is a fact about a source and would need
+  the same primary-source check Kavita's got (§6.4).
 
 🔍 **The scoping observation behind moving Navidrome ahead of the gateway, marked as inference:**
 v0.4's success criterion is *"Symfonium connects to UsArr with one API key, browses, searches and
@@ -2396,6 +2460,12 @@ after v0.1** — what changed is that v0.1 now proves the sync core on a catalog
 rather than on an \*Arr, so these three land on machinery already run against a real library.
 
 **v0.1 — "It reads your library, it is fast, and you can act on it."**
+⚠️ **What *"act on it"* means in v0.1 narrowed, and the label is kept deliberately rather than by
+inattention.** It was funded by two things: the Prowlarr Search-and-Grab request path, and the minimal
+\*Arr write path (`monitor`, `unmonitor`, `delete`, `add`). **The second re-sequences out**
+([ADR-0042](./DECISIONS.md#adr-0042)), so acting in v0.1 means **searching indexers and grabbing a
+release** — not toggling monitored or deleting through an \*Arr. That is still a real action that
+changes the world outside UsArr, which is what the label claims; it is one verb rather than five.
 Go binary + embedded SPA; SQLite + WAL with the §7.7 discipline; goose migrations. **The sync core,
 with one Tier 0 Go adapter in front of it: Kavita** — which is what proves the replica thesis on real
 data, because it is the source the owner runs and the only one whose delta has been verified against
@@ -2403,18 +2473,35 @@ a live instance ([ADR-0035](./DECISIONS.md#adr-0035) §2a) — plus **Prowlarr i
 (§8.5), which is the request path for **all six** media types. **Sonarr and Radarr re-sequence out of
 v0.1** (ADR-0041): the owner runs neither, so *"a real Sonarr and a real Radarr, imported"* was a
 criterion no v0.1 could meet. **They are re-sequenced, not cut** — they arrive onto a sync core
-already proven on real data. **No command sinks** — no Lidarr, no LazyLibrarian, no Mylar3, no
-Kapowarr.
+already proven on real data. **No command sinks — none at all**, not merely the four §16.0 defers.
+⚠️ **This read *"No command sinks — no Lidarr, no LazyLibrarian, no Mylar3, no Kapowarr"***, which
+enumerated the four deferred by [ADR-0032](./DECISIONS.md#adr-0032) at a time when Sonarr and Radarr
+were v0.1's *kept* sinks. [ADR-0041](./DECISIONS.md#adr-0041) removed those two and
+[ADR-0042](./DECISIONS.md#adr-0042) re-sequenced the write path that addressed them, so the honest
+statement is **zero command sinks and no command path to one** — Lidarr, LazyLibrarian, Mylar3 and
+Kapowarr are still out, and Sonarr and Radarr are out with them.
 Sync channels **1, 3b and 4**: full import; **channel 3b (§7.1a) — the ordered page walk with a
 client-side stop — for Kavita**, which is every library-bearing service v0.1 has, and which is
 therefore **built here rather than only specified** (ADR-0041). **Channel 3 (`/history/since`) is not
 applicable to Kavita** (§7.1a) and lands with the first \*Arr adapter. **Reconciliation with 7-day
 tombstones and both sweep guards** for everything — and it carries more weight here than it would for
 an \*Arr, because a page walk cannot observe a deletion (§7.1a) and Kavita's watermark moves on a
-chapter *add* only (ADR-0035 §2a clause (c)). SignalR and webhooks are **out**. ⚠️ **The minimal
-write path** (`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue **had only \*Arr
-targets and now has none** — whether it re-sequences with them or stays for Prowlarr's grab path
-alone is this section's call to make; no optimistic apply either way.
+chapter *add* only (ADR-0035 §2a clause (c)). SignalR and webhooks are **out**. **The minimal write path**
+(`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue **re-sequences out of v0.1 and
+lands with the first \*Arr adapter — specified, not built** ([ADR-0042](./DECISIONS.md#adr-0042)); no
+optimistic apply when it does. ⚠️ **This clause carried an open question and now carries its answer.**
+It read *"had only \*Arr targets and now has none — whether it re-sequences with them or stays for
+Prowlarr's grab path alone is this section's call to make"*, flagged by
+[ADR-0041](./DECISIONS.md#adr-0041) when that ADR took Sonarr and Radarr out of v0.1 and left all four
+Servarr-shaped verbs addressing nothing. **The call is made**, on the owner's answer of 2026-08-17 and
+on one measurement: **the shipped Prowlarr grab path never used the queue**, so keeping the write path
+"for the grab path alone" would have meant *building* v0.1's first queue writer, worker and
+verification loop for a path that completes synchronously inside `handleGrab` and is barred from
+retrying (§7.6, `grab` is max one attempt). **v0.1 still has a write path — Search-and-Grab is it, and
+it is now the only one.** **`write_queue` stays in the schema with no writer for the whole milestone,
+deliberately**: that is the seam, and [ADR-0039](./DECISIONS.md#adr-0039) left both `state` and `kind`
+unconstrained, so the first writer costs **no migration at all**. **Sonarr and Radarr are re-sequenced,
+not cut, and neither is this write path** — the owner's explicit condition, recorded in ADR-0042.
 
 > **What "six media types" does and does not mean in v0.1**, because the phrase is load-bearing and
 > was previously overstated. The **schema** is six-type — it has to be, migration 0001 cannot be
@@ -2435,15 +2522,24 @@ its own `kind_byte`, excluded from the navigation enum, the prefix index and the
 The rule is [ADR-0040](./DECISIONS.md#adr-0040)'s and it is unchanged: **each lands with the catalogue
 source that writes it**, so which milestone a table falls in follows its source. **`work_book`,
 `work_comic` and `work_comic_issue` are v0.1's**, because Kavita is v0.1's catalogue source and Kavita
-is what writes them ([ADR-0041](./DECISIONS.md#adr-0041)) — **none of the three exists in the tree
-today**, and they arrive in a **new migration**, because `00005_library_sync.sql` is merged and a
-merged migration is never edited. **`work_album`, `work_track` and `work_credit` are not v0.1's, and
+is what writes them ([ADR-0041](./DECISIONS.md#adr-0041)) — and ✅ **all three now exist in the tree**:
+`internal/db/migrations/00006_kavita_subtypes.sql` creates `work_book` (`:129`), `work_comic` (`:153`)
+and `work_comic_issue` (`:180`), with `ix_comic_issue_sort` (`:211`), in commit `d0a02aa`. ⚠️ **This
+clause read *"none of the three exists in the tree today, and they arrive in a new migration"*, which
+was true when it was written (`b2dc092`) and was falsified by `d0a02aa` the same day.** Its prediction
+was right and is now **discharged rather than merely stale**: a new migration is exactly what landed,
+because `00005_library_sync.sql` is merged and a merged migration is never edited. **`work_album`, `work_track` and `work_credit` are not v0.1's, and
 this clause does not claim them**: they wait on Navidrome, which has no adapter, at #1 in §16.1's
 sequence. ADR-0030, ADR-0031 and ADR-0033 stay authoritative for their **shape** — that is what the
 enumeration above states of them, and a shape is owed whenever the table is created, not before.
 Everything else enumerated above is v0.1's, tables included.
-**Identity tier 1 only**; the
-correction *UI* deferred to v0.3. Library auto-proposal on service add, the Libraries settings screen
+**Identity tier 1 only** — ⚠️ **and what tier 1 is worth in v0.1 is a property of the instance rather
+than of the design** (§6.4, restated against Kavita): essentially all of it on a Kavita+ install,
+close to none on a free one. ⚠️ **This clause read *"the correction UI deferred to v0.3"*, and
+[ADR-0043](./DECISIONS.md#adr-0043) lifted that cap for the minimal *"fix this match"* case only.**
+The full four-verb surface still lands at v0.3; **the minimal case has no milestone assigned**, and
+**this entry does not claim it for v0.1** — §16.0 carries the decision and the open question.
+Library auto-proposal on service add, the Libraries settings screen
 (§17.8), Home's three fixed blocks (§17.2). Library grid with **"Load more" + `content-visibility`
 on grid rows carrying explicit ARIA roles (§4.5)**, keyset pagination, image pipeline **including the
 §4.4.1 cold-start plan**.
@@ -2482,8 +2578,10 @@ included.**
 > `work_comic_issue` are back in v0.1's scope by ADR-0040's own unchanged rule — the table lands with
 > the source that writes it, and the source moved. **00005's deferral of them is not thereby wrong**:
 > it declined to create tables nothing queried, and that stays correct for the tree it shipped into.
-> What follows is that **the three are still absent and now owed**, in a new migration rather than an
-> edit to 00005. The music three are untouched and stay deferred. **Read
+> What followed is that the three were **owed in a new migration rather than in an edit to 00005** —
+> and ✅ **that migration has landed**: `00006_kavita_subtypes.sql` creates all three (`d0a02aa`).
+> ⚠️ **This sentence read *"the three are still absent and now owed"*, and it is no longer true of the
+> tree.** The music three are untouched and stay deferred. **Read
 > `internal/db/migrations` for what exists**; the clause above says what v0.1 owes, not what has
 > landed.
 
@@ -2496,7 +2594,12 @@ read joining `write_queue` to `provenance`, one index to serve it, one API endpo
 an existing screen.** That is the whole of it. ⚠️ **The cost estimate held; the shape it costed did
 not ship whole.** What landed is `GET /api/v1/grabs/recent` — **six columns, no join, no keyset
 cursor, a server-clamped `LIMIT`** — because nothing writes `write_queue` yet and the category
-resolver is behind a layering boundary `internal/httpapi` may not cross. §17.5 carries the full
+resolver is behind a layering boundary `internal/httpapi` may not cross. ⚠️ **And the word *yet* has
+since stopped being accurate about v0.1.** That clause was written when a v0.1 queue writer was still
+scoped; [ADR-0042](./DECISIONS.md#adr-0042) re-sequenced the write path out, so **no v0.1 work will
+write `write_queue` at all** and the queue-state column is a **post-v0.1 addition rather than a gap
+v0.1 still owes**. The estimate's other half is unaffected: the `provenance` rows are real, they are
+what the shipped endpoint reads, and the block works without the join. §17.5 carries the full
 shipped-against-target table and is authoritative for the difference; the estimate is left standing
 above rather than retro-fitted, because a cost note rewritten after the fact stops being evidence
 about estimating. **This is a deliberate addition to v0.1 and it is
@@ -2566,7 +2669,13 @@ identifier fields — so *"not identified"* is **v0.1's ordinary case** (ADR-003
 source's.
 **The library correction surface** (`exclude`,
 `include`, `relink`, `field`) plus the Corrections list lands here, with the weak catalogues it
-exists for. **LazyLibrarian** as the first Tier 1 manifest — as a
+exists for. ⚠️ **Minus the minimal *"fix this match"* case, which
+[ADR-0043](./DECISIONS.md#adr-0043) moved earlier than v0.3 on the owner's decision of 2026-08-17.**
+v0.3 keeps the **full** four-verb surface and the Corrections list; what left is the narrow
+identity-correction case, and **its milestone is not assigned** (§16.0). ⚠️ **The clause's own
+premise also moved:** *"the weak catalogues it exists for"* placed them at v0.3, and
+[ADR-0041](./DECISIONS.md#adr-0041) put one in **v0.1** — which is why the minimal case could not wait
+here. **LazyLibrarian** as the first Tier 1 manifest — as a
 **request sink only** — proving the mechanism on a genuinely hostile API (HTTP 200 +
 `Success:false`).
 

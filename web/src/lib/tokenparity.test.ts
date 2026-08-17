@@ -79,7 +79,13 @@ const APP_ONLY_ALLOWED: Record<string, string> = {
 	'--sidebar-w':
 		'Shell geometry, taken from the mockup, which renders at 208px. tokens.css ' +
 		'sizes controls rather than the shell, so it never had to name it. ' +
-		'RETIRED BY: tokens.css gaining a shell-geometry section.'
+		'RETIRED BY: tokens.css gaining a shell-geometry section.',
+	'--font-serif':
+		'The Home wordmark, and nothing else in the app, is set in it. tokens.css ' +
+		'§4 names two families — sans for the UI, mono for machine data — and a ' +
+		'third one arrived here first because the owner settled the serif on the ' +
+		'wordmark, not on the palette. app.css is where that gets proven. ' +
+		'RETIRED BY: tokens.css declaring --font-serif in its own type section.'
 };
 
 /**

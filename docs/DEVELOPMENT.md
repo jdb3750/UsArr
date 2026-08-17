@@ -119,6 +119,8 @@ UsArr/
 │   ├── cassettes/              # go-vcr recordings, secrets scrubbed (§7.1)
 │   └── releases/               # real release-name corpus for the parser tests
 ├── deploy/
+│   ├── update.sh               # ff-only pull -> make build -> install -> restart -> verify (§12.1)
+│   ├── status.sh               # read-only "am I current?" (§12.1.1)
 │   ├── Dockerfile              # digest-pinned distroless base, non-root 65532
 │   └── compose/
 │       ├── usarr.yml           # UsArr alone
@@ -253,6 +255,8 @@ closes `FI-12` in `docs/REVIEW-LOG.md` as coded rather than as documented.
 | `make modverify` | `go mod verify` against `go.sum`. |
 | `make vuln` | `govulncheck` + `pnpm audit`. **Gating.** The only step that touches the network. |
 | `make migrate`, `migrate-new name=…` | Migration authoring against the dev DB. |
+| `make deploy` | Wrapper for `deploy/update.sh`: ff-only pull, `make build`, install, restart, then verify the **running** process is that commit. §12.1. |
+| `make deploy-status` | Wrapper for `deploy/status.sh`: read-only "am I current?" across checkout, installed binary and running process. §12.1.1. |
 | `make docker` | ⚠️ **Cannot succeed today: it builds `-f deploy/Dockerfile`, and that file is not in the tree.** Intended shape: digest-pinned base enforced, `--provenance` + `--sbom`. Also needs a daemon — §8. To deploy, build and install the binary instead: §12. |
 | `make design` | `docs/design/check.mjs` — DESIGN-DIRECTION §13 made runnable: bans, token drift, contrast, overflow, row heights, roving tabindex, the webfont. Needs a browser; **not** part of `check`. |
 | `make build-tagged` | `go build -tags=bench ./...`. **Gating.** The packages `go list ./...` cannot see — `internal/db/spike` is behind `//go:build bench`, so a type error in it passed the entire gate until this step existed. |
@@ -656,12 +660,13 @@ values and an untyped envelope, so it gets hand-written fixtures and a hand-writ
 internal port mappings were not verified in this pass — check each project's own compose example
 before committing the file.
 
-✅ **Both `(not yet)` markers in this section were re-verified against the tree on 2026-08-17 at
-`8756d02`, and both still hold.** `deploy/` does not exist on disk or in `git ls-files`, and the
-`Makefile` has no `seed` target — the string does not occur in it at all. They mark real absences,
-so leave them until the files land; the marker is doing its job. Stated here so the next pass reads
-a dated result instead of re-deriving one. The third marker this file carried, on `make dev`, was
-**false** — `Makefile:284` defines the target — and was removed in the same pass.
+✅ **Both `(not yet)` markers in this section still hold**, but the reason recorded for them on
+2026-08-17 at `8756d02` — *"`deploy/` does not exist on disk or in `git ls-files`"* — has since gone
+stale: `deploy/` does exist, holding `update.sh` and `status.sh` (§12.1). Nothing under
+`deploy/compose/` does, and the `Makefile` still has no `seed` target. Do not trust that sentence or
+this one for what is on disk; `git ls-files deploy/` and `grep -c '^seed:' Makefile` answer it in the
+form that cannot go stale. The third marker this file carried, on `make dev`, was **false** —
+`Makefile` defines the target — and was removed in the same pass.
 
 The awkward part is **seeding**: a fresh *Arr has an empty library and a random API key.
 
@@ -1293,11 +1298,11 @@ who to talk to, not who is permitted to type.
 
 ## 12. Deploying to a server — build, install, restart
 
-**This is the only install path that works today, and until now it was the one path nobody had
-written down.** No image is published; there is no `deploy/` directory and no `deploy/Dockerfile`
-in the tree; no systemd unit file ships in this repo; there is no installer script. What UsArr
-produces is a single static binary, so deploying it is exactly three moves: build it, copy it onto
-`PATH`, restart the service that runs it.
+**This is the only install path that works today.** No image is published; no `deploy/Dockerfile` is
+in the tree; no systemd unit file ships in this repo. What UsArr produces is a single static binary,
+so deploying it is exactly three moves: build it, copy it onto `PATH`, restart the service that runs
+it. `deploy/update.sh` does all three and then proves they took effect; `deploy/status.sh` answers
+"am I running the latest `main`?" without changing anything.
 
 The README's Compose block is flagged **illustrative only** for that reason (`README.md`,
 *Quickstart*). Do not read it as a working Docker path.
@@ -1305,9 +1310,53 @@ The README's Compose block is flagged **illustrative only** for that reason (`RE
 **Known-good target**, from the owner's own deployment rather than from a template: **Debian 13 LXC
 on Proxmox**, checkout at `/opt/UsArr`, binary at `/usr/local/bin/usarr`, systemd unit named
 `usarr`. Nothing below is specific to Proxmox — any Linux host with the §1 toolchain and a service
-manager works — but that is the shape it has actually been run on.
+manager works — but that is the shape it has actually been run on, and it is what the two scripts
+default to.
 
 ### 12.1 The update path, from an existing checkout
+
+```bash
+/opt/UsArr/deploy/update.sh          # or: make -C /opt/UsArr deploy
+```
+
+That is the whole procedure. The script fetches, fast-forwards, builds, installs and restarts, and
+**refuses to half-update**: every step is checked, and each failure names what state the host was
+left in — including the one failure that genuinely does leave a half-updated host, an `install` that
+succeeded followed by a `systemctl restart` that did not. Pass `--check` to find out whether an
+update is available without applying one; it still runs `git fetch`, because the question cannot be
+answered without one, but it touches nothing in the working tree and builds nothing.
+
+**Untracked files do not stop it, modified tracked files do**, and the split is deliberate rather
+than lenient. A server accumulates scratch files — the owner's checkout carries a
+`kavita-watermark-probe.sh` in its root — and an untracked file cannot affect a fast-forward or be
+lost by one, so aborting on it would only teach the operator to pass `USARR_ALLOW_DIRTY=1` on every
+run, disabling the half of the check that matters. A modified **tracked** file can make the merge
+fail or lose work, so that is the case that stops the script and the case `USARR_ALLOW_DIRTY=1`
+overrides. The build output is gitignored (`.gitignore`: `/usarr`), so it is not untracked cruft at
+all; if that entry ever goes missing, `update.sh` says so by name rather than letting every run
+report a tree that looks dirty.
+
+**Why a script rather than three commands.** All three commands below can succeed while the live
+process keeps running the old build, and none of them says so. The checkout can merge instead of
+fast-forwarding and end up on a commit that is on no branch anywhere; `make build` can be skipped in
+favour of `go build` and produce a binary with no SPA in it; `install` replaces the destination inode
+while the running process keeps the one it already has open, so a forgotten `systemctl restart` looks
+exactly like a successful deploy. That last one is the failure that prompted this: the owner's host
+repeatedly ended up not running `main`, with nothing on the machine willing to say so. The script's
+final act is therefore not "restart succeeded" but **"the running process reports commit `X`, `X` is
+what the checkout is on, and it is still that process three seconds later"** — read out of the
+process's own startup log line, not off the disk.
+
+That last clause is not padding. `cmd/usarr/main.go` logs `starting UsArr` **before** `buildApp`
+opens the database and runs migrations, and before the listener binds — so a port clash, a failed
+migration or an unreadable master key emits a perfectly good startup line carrying the new commit and
+*then* exits. Checking only the log line reports `update: OK` over a service that is already dead or
+crash-looping, which was measured, not theorised. The script therefore re-reads `is-active` **and**
+`MainPID` after a short settle: a state that is no longer `active` means it started and died, and a
+`MainPID` that has moved means systemd is restarting it as fast as it dies.
+
+**The underlying three steps**, still true and still worth knowing, because that is what the script
+runs and what you fall back to when something in it breaks:
 
 ```bash
 cd /opt/UsArr && git pull && make build
@@ -1315,15 +1364,16 @@ install -m755 usarr /usr/local/bin/usarr
 systemctl restart usarr
 ```
 
-**No `sudo`, deliberately.** The documented target is an LXC administered as root directly, where
-`sudo` is not installed at all — prefixing these commands with it fails outright, which is a real
-failure that has happened rather than a hypothetical. Because the binary is absent rather than the
-rights, the shell answers `sudo: command not found` and not a permission refusal, and it answers it
-on the **second and third lines**, after the `make build` above them has already succeeded — so the
-transcript reads like a build failure and is not one. **On a host where you are not root**, add
-`sudo` to the **last two lines only**: `git pull` and `make build` should run as the user that owns
-the checkout, because building as root leaves root-owned objects in `/opt/UsArr` and
-`web/node_modules` that the next unprivileged build cannot overwrite.
+**No `sudo`, deliberately** — in the script and here alike. The documented target is an LXC
+administered as root directly, where `sudo` is not installed at all; prefixing these commands with it
+fails outright, which is a real failure that has happened rather than a hypothetical. Because the
+binary is absent rather than the rights, the shell answers `sudo: command not found` and not a
+permission refusal, and it answers it on the **second and third lines**, after the `make build` above
+them has already succeeded — so the transcript reads like a build failure and is not one. **On a host
+where you are not root**, add `sudo` to the **last two lines only** (or run the script itself under
+`sudo`, accepting the same caveat): `git pull` and `make build` should run as the user that owns the
+checkout, because building as root leaves root-owned objects in `/opt/UsArr` and `web/node_modules`
+that the next unprivileged build cannot overwrite.
 
 Two details worth knowing rather than rediscovering:
 
@@ -1331,12 +1381,90 @@ Two details worth knowing rather than rediscovering:
   stops there. Nothing in the Makefile installs, and no target knows about `/usr/local/bin` — the
   `install -m755` line is the step that puts the new build on `PATH`, and it is not optional.
 * `install` replaces the destination by creating and renaming, so a **running** process keeps the
-  old inode it already has open. The new binary is not live until `systemctl restart usarr`. Do not
-  infer from `usarr --version` that the service is running that version.
+  old inode it already has open. The new binary is not live until `systemctl restart usarr`. **Do not
+  infer from `usarr --version` that the service is running that version**: the flag reports the
+  identity of the binary on disk that you just invoked, which after an `install` is precisely the one
+  the running process is *not* executing. `deploy/status.sh` exists because that distinction cannot
+  be collapsed — it reads the disk and the process separately and compares them.
 
 There is no first-install variant of this to document, because there is no first-install artifact to
 document it against: the very first deployment was this same sequence preceded by a `git clone` into
 `/opt/UsArr` and a unit file written by hand on the host (see §12.4).
+
+### 12.1.1 "Am I current?", in one command
+
+```bash
+/opt/UsArr/deploy/status.sh          # or: make -C /opt/UsArr deploy-status
+```
+
+Read-only. It writes nothing and restarts nothing; its one side effect is the `git fetch` that makes
+"how far behind?" answerable at all, and `USARR_NO_FETCH=1` drops even that.
+
+It prints the checkout's branch, `HEAD`, `origin/main` and commit distance, then **two** file counts —
+modified tracked files and untracked files, never one combined "dirty" number — then the installed
+binary's path, mtime and `--version` output, and then the service's active state, `MainPID`,
+`/proc/<pid>/exe` and the commit from its startup journal line. It ends on one verdict line. Only the
+tracked count reaches that verdict: a scratch file sitting in the checkout says nothing about whether
+the install is current, and letting it colour the verdict would make a healthy host read as broken.
+
+**Three links, reported separately, because they go stale independently**: the checkout can be behind
+`origin`, the installed binary can be older than the checkout, and the running process can be older
+than the installed binary. A `(deleted)` suffix on `/proc/<pid>/exe` is the signature of the third —
+the binary was replaced under a process that was never restarted — and the script calls it out by
+name. Exit status is `0` when all three agree, `1` when something is stale, and **`2` when a reading
+could not be taken**: an absent `systemctl`, an unreadable journal or a binary too old to answer
+`--version` cannot confirm anything, and reporting "up to date" off a partial reading is the false
+green the script exists to remove. A unit that is not `active` is `1`, not `2` — a service that is
+down is an answer, not a missing reading, and letting it fall through to "unverified" would bury it.
+
+The journal line is selected by **`_PID` of the running process, read forwards**, rather than out of
+the last *N* lines of the unit. The distinction is load-bearing: `starting UsArr` is logged exactly
+once, at start, so any fixed window drops it as soon as the host logs past that window, and a fully
+current deployment then reports `UNVERIFIED` forever after. That was measured against an `-n 2000`
+window and is the reason the query is shaped the way it is; raising the number only moves the
+threshold. There is a windowed `-u` fallback for a unit whose logging PID is not `MainPID`.
+
+### 12.1.2 `usarr --version`, and what the scripts do with it
+
+```
+$ usarr --version
+usarr e77c4ad
+commit: e77c4ad
+built:  2026-08-17T20:05:43Z
+go:     go1.25.13
+```
+
+That is a real capture, and the first line looks the way it does for a reason worth knowing: `VERSION`
+is `git describe --tags --always --dirty`, **this repo has no tags at all** (`git tag` is empty), so
+`describe` falls through to `--always` and yields the bare short SHA — the same value as `commit:`.
+The day someone cuts the first tag the first line becomes `usarr v0.1.0-12-gabc1234` and `commit:`
+stays a bare short SHA; the scripts read only `commit:`, so that change does not affect them. Do not
+copy a `v…` string out of this block today expecting to see one — no release has been tagged.
+
+The values are the ones `-ldflags` stamps in (`Makefile`'s `LDFLAGS` → `main.version`, `main.commit`,
+`main.buildDate`), so `commit:` is the short SHA the checkout was on **at build time** — which is
+exactly what makes it useful as evidence. The flag short-circuits inside `config.Load` before any
+environment is read, any directory is resolved or created, or the master key is touched, so it
+answers for an unprivileged caller with no config directory and no environment at all; asking an
+installed binary what it is must never depend on being able to start the service.
+
+The one-per-line `key: value` shape is a contract, not decoration: `update.sh` compares `commit:`
+against the checkout's short `HEAD` to catch a build that silently produced a stale artifact, and
+`status.sh` greps the same line. `TestPrintVersionShape` in `cmd/usarr/version_test.go` pins it.
+
+### 12.1.3 Environment the scripts read
+
+Both scripts are configured entirely through the environment, and both default to the known-good
+target above, so on the owner's host neither needs an argument.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `USARR_CHECKOUT` | `/opt/UsArr` | The git checkout to update or inspect. `make deploy` / `make deploy-status` pass `$(CURDIR)` instead, because through `make` the checkout in question is by definition the one the Makefile is in. |
+| `USARR_INSTALL_PATH` | `/usr/local/bin/usarr` | Where the built binary is installed to. |
+| `USARR_SERVICE` | `usarr` | The systemd unit name. |
+| `USARR_BRANCH` | `main` | The branch `HEAD` must be on; also what `origin` is compared against. |
+| `USARR_ALLOW_DIRTY` | unset | `update.sh` only: `1` builds despite locally modified **tracked** files instead of aborting. The abort lists them. **Untracked files never block an update** and this variable has nothing to say about them. |
+| `USARR_NO_FETCH` | unset | `status.sh` only: `1` skips `git fetch` and compares against whatever `origin/$USARR_BRANCH` is already on disk. |
 
 ### 12.2 What the server needs before its first `make build`
 
@@ -1378,8 +1506,12 @@ Nothing in this section is a gap someone forgot to fill in; each is a real absen
 when you look for it.
 
 * **No systemd unit file.** The unit named `usarr` on the owner's host was written by hand there and
-  exists nowhere in this tree. `systemctl restart usarr` above assumes you have written one.
-* **No install script, and no `deploy/` directory.**
+  exists nowhere in this tree. `systemctl restart usarr` above assumes you have written one, and
+  `deploy/update.sh` fails loudly rather than skipping the restart when no such unit exists.
+* **No *first*-install script.** `deploy/` now exists and holds `update.sh` and `status.sh`, but both
+  operate on a checkout that is already there, next to a service that is already defined. Neither
+  clones the repo, writes a unit file, creates a user or provisions a config directory; there is
+  still no path from a bare host to a running UsArr that is not done by hand.
 * **`make docker` cannot succeed on any checkout, because the file it builds from is absent.** The
   recipe passes `-f deploy/Dockerfile`, and that path does not exist in the repo. The `Makefile`'s
   own header says so; §4's target table now says so too. The daemon requirement (§8) is the second
