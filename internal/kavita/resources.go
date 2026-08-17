@@ -378,3 +378,166 @@ func (c QueryContext) valid() bool {
 	}
 	return false
 }
+
+// ---- credits ---------------------------------------------------------------
+
+// PersonRole is Kavita's own role enum. Members start at 3; there is no 0, 1 or
+// 2, which is why the Go constants below are written out rather than iota'd.
+//
+// UsArr does NOT read this field. It is declared because PersonDto.roles carries
+// it and because TestEnumsCoverSpecValues then fails if Kavita adds a member —
+// which is the event that would silently leave a whole category of credit
+// unmapped. The mapping UsArr actually uses runs off the ARRAY NAME on
+// SeriesMetadataDto (writers, pencillers, …), not off this field: a PersonDto in
+// the `writers` array carries whatever roles that person holds ACROSS THE WHOLE
+// INSTANCE, so reading roles[] would credit a series' writer as its colorist the
+// moment that person colored something else. internal/libsync/credits.go carries
+// the mapping and that reasoning.
+type PersonRole int32
+
+const (
+	PersonRoleWriter      PersonRole = 3
+	PersonRolePenciller   PersonRole = 4
+	PersonRoleInker       PersonRole = 5
+	PersonRoleColorist    PersonRole = 6
+	PersonRoleLetterer    PersonRole = 7
+	PersonRoleCoverArtist PersonRole = 8
+	PersonRoleEditor      PersonRole = 9
+	PersonRolePublisher   PersonRole = 10
+	PersonRoleCharacter   PersonRole = 11
+	PersonRoleTranslator  PersonRole = 12
+	PersonRoleImprint     PersonRole = 13
+	PersonRoleTeam        PersonRole = 14
+	PersonRoleLocation    PersonRole = 15
+)
+
+// PersonDto is one credited entity on SeriesMetadataDto.
+//
+// ⚠️ "PERSON" IS KAVITA'S WORD AND IT IS WRONG FOR FIVE OF THE THIRTEEN ROLES.
+// Publisher, Imprint and Team are organisations, Character is fictional and
+// Location is a place; Kavita stores all five in the same table as its writers
+// and pencillers. UsArr does not inherit that — internal/libsync maps only the
+// roles whose members are actually creators onto work_credit, and says in one
+// place what happens to the other five.
+//
+// Name is the only field UsArr reads. Id is the KAVITA INSTANCE's own person id
+// and is deliberately NOT written as an external_id: it is instance-local, so
+// two Kavita instances would both claim person 5 and ux_extid_work_strong
+// (UNIQUE(source, value)) would read that collision as a merge signal between
+// two unrelated humans.
+type PersonDto struct {
+	ID               int32        `json:"id"`
+	Name             string       `json:"name"`
+	CoverImageLocked bool         `json:"coverImageLocked"`
+	PrimaryColor     string       `json:"primaryColor"`
+	SecondaryColor   string       `json:"secondaryColor"`
+	CoverImage       string       `json:"coverImage"`
+	Aliases          []string     `json:"aliases"`
+	Description      string       `json:"description"`
+	ASIN             string       `json:"asin"`
+	AniListID        int32        `json:"aniListId"`
+	MalID            int64        `json:"malId"`
+	HardcoverID      string       `json:"hardcoverId"`
+	WebLinks         []string     `json:"webLinks"`
+	Roles            []PersonRole `json:"roles"`
+}
+
+// GenreTagDto and TagDto are SeriesMetadataDto's two tag arrays. UsArr reads
+// neither today — the tag system is v1.0 (schema.md §8) — and they are declared
+// so the contract test can see the whole DTO.
+type GenreTagDto struct {
+	ID    int32  `json:"id"`
+	Title string `json:"title"`
+}
+
+// TagDto is a plain tag. Same shape as GenreTagDto and a separate type upstream.
+type TagDto struct {
+	ID    int32  `json:"id"`
+	Title string `json:"title"`
+}
+
+// AgeRating and PublicationStatus are integer enums UsArr does NOT branch on,
+// so they are declared as named types without a constant block: a constant block
+// would owe TestEnumsCoverSpecValues an exhaustive list for an enum nothing
+// reads. AgeRating notably has a NEGATIVE member (-1, NotApplicable).
+type AgeRating int32
+
+// PublicationStatus is OnGoing=0, Hiatus=1, Completed=2, Cancelled=3, Ended=4.
+// It is what a later commit reads to decide whether a comic series has an honest
+// denominator (schema.md §1's k="count" blob); nothing reads it yet.
+type PublicationStatus int32
+
+// SeriesMetadataDto is GET /api/Series/metadata?seriesId=N.
+//
+// IT IS THE ONLY PLACE KAVITA REPORTS A CREDIT. SeriesDto — what
+// POST /api/Series/all-v2 streams — carries no creator field at all, and the
+// three alternatives were checked against the vendored spec and cannot rebuild
+// the series→creator mapping: POST /api/Person/all returns people with no series
+// linkage, GET /api/Person/series-known-for is documented "top 20 series", and
+// GET /api/Person/chapters-by-role is documented "Limited to 20 results". So one
+// GET per series is not a lazy choice, it is the only shape on offer, and
+// internal/libsync runs it as a bounded phase-B pass rather than inside the
+// stream.
+//
+// THE THIRTEEN PERSON ARRAYS ARE ALL DECLARED, INCLUDING THE FIVE UsArr DROPS.
+// An array that is present in the spec and absent from this struct is an upstream
+// change nobody sees; the drop decision belongs in the mapping, not in the
+// parser.
+type SeriesMetadataDto struct {
+	ID      int32  `json:"id"`
+	Summary string `json:"summary"`
+
+	Genres []GenreTagDto `json:"genres"`
+	Tags   []TagDto      `json:"tags"`
+
+	// The creator arrays UsArr maps onto work_credit.role.
+	Writers      []PersonDto `json:"writers"`
+	CoverArtists []PersonDto `json:"coverArtists"`
+	Pencillers   []PersonDto `json:"pencillers"`
+	Inkers       []PersonDto `json:"inkers"`
+	Colorists    []PersonDto `json:"colorists"`
+	Letterers    []PersonDto `json:"letterers"`
+	Editors      []PersonDto `json:"editors"`
+	Translators  []PersonDto `json:"translators"`
+
+	// The five arrays whose members are not creators. See PersonDto's comment
+	// and internal/libsync/credits.go for what happens to each.
+	Publishers []PersonDto `json:"publishers"`
+	Imprints   []PersonDto `json:"imprints"`
+	Teams      []PersonDto `json:"teams"`
+	Characters []PersonDto `json:"characters"`
+	Locations  []PersonDto `json:"locations"`
+
+	AgeRating         AgeRating         `json:"ageRating"`
+	ReleaseYear       int32             `json:"releaseYear"`
+	Language          string            `json:"language"`
+	MaxCount          int32             `json:"maxCount"`
+	TotalCount        int32             `json:"totalCount"`
+	PublicationStatus PublicationStatus `json:"publicationStatus"`
+	WebLinks          string            `json:"webLinks"`
+	SeriesID          int32             `json:"seriesId"`
+
+	// The *Locked flags say a HUMAN pinned that field against Kavita's own
+	// scanner. UsArr reads none of them and they are declared for the same
+	// reason every other unread field is.
+	LanguageLocked          bool `json:"languageLocked"`
+	SummaryLocked           bool `json:"summaryLocked"`
+	AgeRatingLocked         bool `json:"ageRatingLocked"`
+	PublicationStatusLocked bool `json:"publicationStatusLocked"`
+	GenresLocked            bool `json:"genresLocked"`
+	TagsLocked              bool `json:"tagsLocked"`
+	WriterLocked            bool `json:"writerLocked"`
+	CharacterLocked         bool `json:"characterLocked"`
+	ColoristLocked          bool `json:"coloristLocked"`
+	EditorLocked            bool `json:"editorLocked"`
+	InkerLocked             bool `json:"inkerLocked"`
+	ImprintLocked           bool `json:"imprintLocked"`
+	LettererLocked          bool `json:"lettererLocked"`
+	PencillerLocked         bool `json:"pencillerLocked"`
+	PublisherLocked         bool `json:"publisherLocked"`
+	TranslatorLocked        bool `json:"translatorLocked"`
+	TeamLocked              bool `json:"teamLocked"`
+	LocationLocked          bool `json:"locationLocked"`
+	CoverArtistLocked       bool `json:"coverArtistLocked"`
+	ReleaseYearLocked       bool `json:"releaseYearLocked"`
+}

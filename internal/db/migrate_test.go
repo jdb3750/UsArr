@@ -59,7 +59,7 @@ func TestMigrationRoundTrip(t *testing.T) {
 // asserted rather than derived so that adding a migration is a deliberate edit
 // here too — a version the tests do not know about is a migration nobody
 // round-tripped.
-const latestSchemaVersion int64 = 6
+const latestSchemaVersion int64 = 7
 
 // Down is not a supported user path, but it must work, because it is the
 // cheapest way to test a migration locally. A Down that leaves objects behind
@@ -456,8 +456,15 @@ func TestDeferredTablesAreAbsent(t *testing.T) {
 	// `want` below. The music three did not move: Navidrome still has no
 	// adapter in internal/.
 	deferred := []string{
-		// music — lands with Navidrome (§16.1 position 1 or 2)
-		"work_album", "work_track", "work_credit",
+		// music — lands with Navidrome (§16.1 position 1 or 2). work_credit was
+		// on this line until 0007 and is NOT any more: ADR-0044 applied
+		// ADR-0040's own rule — the landing point is the source that writes the
+		// table — and noticed that Kavita writes credits (writers, cover
+		// artists, pencillers, inkers, colorists, letterers, editors,
+		// translators) while Navidrome writes albums and tracks. So work_credit
+		// moved to `want`; work_album and work_track did not move, because an
+		// album and a track are still music objects with no v0.1 writer.
+		"work_album", "work_track",
 		// v0.2
 		"request", "request_quota",
 		// v0.3
@@ -490,10 +497,12 @@ func TestDeferredTablesAreAbsent(t *testing.T) {
 		"sync_report",
 		// 0006 — the subtype tables Kavita writes (ADR-0040 + ADR-0041)
 		"work_book", "work_comic", "work_comic_issue",
+		// 0007 — the credit table Kavita also writes (ADR-0040 + ADR-0044)
+		"work_credit",
 	}
 	for _, name := range want {
 		if !present[name] {
-			t.Errorf("%s is missing; it should be created by migrations 0001-0006", name)
+			t.Errorf("%s is missing; it should be created by migrations 0001-0007", name)
 		}
 	}
 
@@ -2306,6 +2315,12 @@ func TestMigrate0006DownAndUp(t *testing.T) {
 
 	created := []string{"work_book", "work_comic", "work_comic_issue"}
 
+	// 0007 now sits on top of 0006, and MigrateDown rolls back exactly one
+	// migration, so this walks past 0007 first and back up past it at the end.
+	// Every assertion below is still about 0006's own block.
+	if err := d.MigrateDown(ctx); err != nil {
+		t.Fatalf("MigrateDown 7→6: %v", err)
+	}
 	at6, err := dumpSchema(ctx, d.Read())
 	if err != nil {
 		t.Fatal(err)
@@ -2361,7 +2376,10 @@ func TestMigrate0006DownAndUp(t *testing.T) {
 	}
 
 	if err := d.Migrate(ctx); err != nil {
-		t.Fatalf("Migrate 5→6: %v", err)
+		t.Fatalf("Migrate 5→7: %v", err)
+	}
+	if err := d.MigrateDown(ctx); err != nil {
+		t.Fatalf("MigrateDown 7→6: %v", err)
 	}
 	again, err := dumpSchema(ctx, d.Read())
 	if err != nil {
@@ -2369,5 +2387,412 @@ func TestMigrate0006DownAndUp(t *testing.T) {
 	}
 	if again != at6 {
 		t.Error("a Down followed by an Up did not reproduce the schema 0006 creates")
+	}
+}
+
+// ─── Migration 0007 · work_credit ───────────────────────────────────────────
+
+// creditRoleVocabulary is migration 0007's `role` CHECK, written out once.
+//
+// It is the vocabulary docs/reference/schema.md §1.1 declares, in §1.1's own
+// order, and it is shared by every assertion below so that a test which inserts
+// a legal role and a test which pins the CHECK cannot drift apart.
+var creditRoleVocabulary = []string{
+	// music — no v0.1 writer; they are here because SQLite cannot ALTER a CHECK
+	"primary", "featured", "composer", "conductor", "performer", "remixer", "producer",
+	// books
+	"author", "translator", "editor", "illustrator", "narrator",
+	// comics
+	"writer", "penciller", "inker", "colorist", "letterer", "cover_artist",
+}
+
+// TestMigrate0007WorkCreditShape pins the column set, the declared types and the
+// primary-key ORDER.
+//
+// The order is the part worth asserting rather than the membership. schema.md
+// §1.1 states the reason — "the PK leads with (work_id, role, position) because
+// the only hot read is 'give me this work's credits in billing order', which is
+// then a single covered range scan" — and a PK that spelled the same four
+// columns in a different order would satisfy a set comparison, keep every
+// uniqueness property, and quietly turn that range scan into a full scan of the
+// table. On a WITHOUT ROWID table the primary key IS the storage order, so this
+// is a physical-layout assertion, not a style one.
+func TestMigrate0007WorkCreditShape(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	wantCols := [][2]string{
+		{"work_id", "INTEGER"},
+		{"creator_work_id", "INTEGER"},
+		{"role", "TEXT"},
+		{"position", "INTEGER"},
+		{"credited_as", "TEXT"},
+	}
+	rows, err := d.Read().QueryContext(ctx,
+		`SELECT name, type FROM pragma_table_info('work_credit') ORDER BY cid`)
+	if err != nil {
+		t.Fatalf("work_credit does not exist: %v", err)
+	}
+	var gotCols [][2]string
+	for rows.Next() {
+		var name, typ string
+		if err := rows.Scan(&name, &typ); err != nil {
+			t.Fatal(err)
+		}
+		gotCols = append(gotCols, [2]string{name, typ})
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	_ = rows.Close()
+	if fmt.Sprint(gotCols) != fmt.Sprint(wantCols) {
+		t.Errorf("work_credit columns = %v\nwant %v\n"+
+			"docs/reference/schema.md §1.1 is authoritative for this table's shape. "+
+			"0007 is merged; a genuinely wanted column goes in its successor.",
+			gotCols, wantCols)
+	}
+
+	// The primary key, in its declared order. pragma_table_info.pk is the
+	// 1-based position within the key, 0 for a non-key column.
+	pkRows, err := d.Read().QueryContext(ctx,
+		`SELECT name FROM pragma_table_info('work_credit') WHERE pk > 0 ORDER BY pk`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = pkRows.Close() }()
+	var pk []string
+	for pkRows.Next() {
+		var name string
+		if err := pkRows.Scan(&name); err != nil {
+			t.Fatal(err)
+		}
+		pk = append(pk, name)
+	}
+	if err := pkRows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := strings.Join(pk, ","), "work_id,role,position,creator_work_id"; got != want {
+		t.Errorf("work_credit PRIMARY KEY = (%s), want (%s).\n"+
+			"The order is load-bearing: this is a WITHOUT ROWID table, so the key IS the "+
+			"storage order, and the hot read is one work's credits in billing order.", got, want)
+	}
+
+	// WITHOUT ROWID, asserted by executing the thing it forbids rather than by
+	// reading the DDL text: a WITHOUT ROWID table has no rowid column.
+	if _, err := d.Read().QueryContext(ctx, `SELECT rowid FROM work_credit LIMIT 1`); err == nil {
+		t.Error("work_credit has a rowid, so it is not WITHOUT ROWID — " +
+			"the PK is then a secondary index and the covered range scan it exists for is gone")
+	}
+}
+
+// TestMigrate0007RoleCheckIsEnforced fires the CHECK.
+//
+// Every one of the eighteen legal roles is inserted and must be accepted; then
+// a nineteenth that is not a member must be rejected. Both halves are needed:
+// a CHECK that rejects everything passes the negative test alone, and DB-01 —
+// the `IN (NULL, …)` defect this project shipped twice — passes the positive
+// test alone.
+func TestMigrate0007RoleCheckIsEnforced(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO work (id, kind, title, sort_title, normalized_title)
+			VALUES (1, 'comic', 'Saga', 'saga', 'saga')`); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO work (id, kind, title, sort_title, normalized_title)
+			VALUES (2, 'person', 'Brian K. Vaughan', 'vaughan, brian k.', 'brian k vaughan')`)
+		return err
+	}); err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+
+	for i, role := range creditRoleVocabulary {
+		if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, `
+				INSERT INTO work_credit (work_id, creator_work_id, role, position)
+				VALUES (1, 2, ?, ?)`, role, i)
+			return err
+		}); err != nil {
+			t.Errorf("role %q was rejected but is a member of schema.md §1.1's vocabulary: %v", role, err)
+		}
+	}
+
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO work_credit (work_id, creator_work_id, role, position)
+			VALUES (1, 2, 'TOTAL-GARBAGE', 99)`)
+		return err
+	}); err == nil {
+		t.Error("work_credit.role accepted 'TOTAL-GARBAGE' — the CHECK is a no-op.\n" +
+			"role is NOT NULL, so the correct form is the bare `role IN (...)`; if someone " +
+			"rewrote it as `role IS NULL OR role IN (...)` that is harmless, but if a NULL " +
+			"reached the IN list itself this is DB-01 for the third time.")
+	}
+
+	// A NULL role is rejected by NOT NULL, which is what makes the bare IN list
+	// the correct form rather than an oversight.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO work_credit (work_id, creator_work_id, role, position)
+			VALUES (1, 2, NULL, 98)`)
+		return err
+	}); err == nil {
+		t.Error("work_credit.role accepted NULL; it is declared NOT NULL")
+	}
+}
+
+// TestMigrate0007CoCreditsAndBillingOrder is the by-execution proof that the
+// primary key models what ADR-0031 says it models.
+//
+// Three things must all be true at once, and a scalar author column breaks all
+// three: one work carries several people in one role at different positions;
+// two people share one role AND one position (a co-credit); and the same person
+// carries two different roles on one work (the writer who also letters).
+func TestMigrate0007CoCreditsAndBillingOrder(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO work (id, kind, title, sort_title, normalized_title)
+			VALUES (1, 'comic', 'Saga', 'saga', 'saga')`); err != nil {
+			return err
+		}
+		for id, name := range map[int]string{
+			2: "Brian K. Vaughan", 3: "Fiona Staples", 4: "Fonografiks",
+		} {
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO work (id, kind, title, sort_title, normalized_title)
+				VALUES (?, 'person', ?, ?, ?)`, id, name, name, name); err != nil {
+				return err
+			}
+		}
+		for _, c := range []struct {
+			creator  int
+			role     string
+			position int
+		}{
+			{2, "writer", 0},
+			{2, "letterer", 0}, // the same person, a second role
+			{3, "cover_artist", 0},
+			{4, "letterer", 1},  // a second letterer, later in the billing
+			{3, "writer", 0},    // a CO-credit: same work, same role, same position
+		} {
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO work_credit (work_id, creator_work_id, role, position)
+				VALUES (1, ?, ?, ?)`, c.creator, c.role, c.position); err != nil {
+				return fmt.Errorf("credit %d/%s/%d: %w", c.creator, c.role, c.position, err)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+
+	var n int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT count(*) FROM work_credit WHERE work_id = 1`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 5 {
+		t.Errorf("work 1 has %d credits, want 5 — a co-credit or a second role was swallowed", n)
+	}
+
+	// The exact row is rejected on a re-insert: the PK is uniqueness, not just
+	// ordering.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO work_credit (work_id, creator_work_id, role, position)
+			VALUES (1, 2, 'writer', 0)`)
+		return err
+	}); err == nil {
+		t.Error("the identical credit was inserted twice; the PRIMARY KEY is not unique")
+	}
+
+	// Billing order comes out of the index, in the key's own order.
+	rows, err := d.Read().QueryContext(ctx, `
+		SELECT role, position, creator_work_id FROM work_credit
+		 WHERE work_id = 1 AND role = 'letterer' ORDER BY position`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	var order []string
+	for rows.Next() {
+		var role string
+		var pos, creator int
+		if err := rows.Scan(&role, &pos, &creator); err != nil {
+			t.Fatal(err)
+		}
+		order = append(order, fmt.Sprintf("%d:%d", pos, creator))
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := strings.Join(order, ","), "0:2,1:4"; got != want {
+		t.Errorf("letterers in billing order = %s, want %s", got, want)
+	}
+}
+
+// TestMigrate0007CascadesFromBothParents is the integrity property this table
+// has that no other subtype table has: TWO foreign keys into `work`, and a
+// credit must die with either end.
+//
+// The creator half is the one worth executing. work_id's cascade is the
+// familiar subtype-row lifetime; creator_work_id's is what stops a deleted
+// person leaving credits pointing at a work id that has since been reallocated
+// to a film.
+func TestMigrate0007CascadesFromBothParents(t *testing.T) {
+	ctx := t.Context()
+
+	for _, tc := range []struct{ name, deleteID string }{
+		{"the credited work is deleted", "1"},
+		{"the creator is deleted", "2"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := openTestDB(t)
+			if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+				if _, err := tx.ExecContext(ctx, `
+					INSERT INTO work (id, kind, title, sort_title, normalized_title)
+					VALUES (1, 'book', 'Piranesi', 'piranesi', 'piranesi')`); err != nil {
+					return err
+				}
+				if _, err := tx.ExecContext(ctx, `
+					INSERT INTO work (id, kind, title, sort_title, normalized_title)
+					VALUES (2, 'person', 'Susanna Clarke', 'clarke, susanna', 'susanna clarke')`); err != nil {
+					return err
+				}
+				_, err := tx.ExecContext(ctx, `
+					INSERT INTO work_credit (work_id, creator_work_id, role, position)
+					VALUES (1, 2, 'author', 0)`)
+				return err
+			}); err != nil {
+				t.Fatalf("fixture: %v", err)
+			}
+			if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+				_, err := tx.ExecContext(ctx, `DELETE FROM work WHERE id = `+tc.deleteID)
+				return err
+			}); err != nil {
+				t.Fatalf("deleting work %s: %v", tc.deleteID, err)
+			}
+			var n int
+			if err := d.Read().QueryRowContext(ctx,
+				`SELECT count(*) FROM work_credit`).Scan(&n); err != nil {
+				t.Fatal(err)
+			}
+			if n != 0 {
+				t.Errorf("%d credit(s) survived the delete of work %s", n, tc.deleteID)
+			}
+		})
+	}
+
+	// And a dangling creator is rejected outright. Foreign keys really are on —
+	// 0002 pins that — and this is the insert that would silently succeed if
+	// they were not.
+	d := openTestDB(t)
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO work (id, kind, title, sort_title, normalized_title)
+			VALUES (1, 'book', 'Piranesi', 'piranesi', 'piranesi')`); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO work_credit (work_id, creator_work_id, role, position)
+			VALUES (1, 99999, 'author', 0)`)
+		return err
+	}); err == nil {
+		t.Error("work_credit accepted a creator_work_id for a work that does not exist")
+	}
+}
+
+// TestMigrate0007NoWorkPersonTable pins a deliberate ABSENCE, which is the kind
+// of decision that otherwise gets "fixed" by the next reader.
+//
+// schema.md §6.1: every kind has a subtype table or an explicit justification
+// for not having one, and 'person' has the justification — a credited human is a
+// name, some external_id rows and the credits pointing at it, all of which
+// `work`, `external_id` and `work_credit` already carry. A work_person table
+// would hold a birth year and a biography, which no v0.1 source reports.
+func TestMigrate0007NoWorkPersonTable(t *testing.T) {
+	var n int
+	if err := openTestDB(t).Read().QueryRowContext(t.Context(),
+		`SELECT count(*) FROM pragma_table_list WHERE name = 'work_person'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Error("work_person exists. 'person' has NO subtype table by design " +
+			"(docs/reference/schema.md §6.1); if that is being reversed it needs an ADR, " +
+			"not a migration.")
+	}
+}
+
+// TestMigrate0007DownAndUp round-trips the migration.
+//
+// One DROP, and this is what checks the header's claim that nothing else is
+// owed: after Down work_credit is gone and NOTHING ELSE changed — asserted over
+// the whole schema dump rather than over the one name, because a Down that also
+// took an index with it would pass a one-name check.
+func TestMigrate0007DownAndUp(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	at7, err := dumpSchema(ctx, d.Read())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.MigrateDown(ctx); err != nil {
+		t.Fatalf("MigrateDown 7→6: %v", err)
+	}
+	if v, err := d.Version(ctx); err != nil || v != 6 {
+		t.Fatalf("version after Down = %d (err %v), want 6", v, err)
+	}
+	var n int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT count(*) FROM pragma_table_list WHERE name = 'work_credit'`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Error("work_credit survived the Down block")
+	}
+
+	at6, err := dumpSchema(ctx, d.Read())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, obj := range strings.Split(at7, "\n\n") {
+		if obj == "" || strings.Contains(obj, "work_credit") {
+			continue
+		}
+		if !strings.Contains(at6, obj) {
+			t.Errorf("0007's Down block removed or changed an object it did not create:\n%s", obj)
+		}
+	}
+
+	rows, err := d.Read().QueryContext(ctx, `PRAGMA foreign_key_check`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	if rows.Next() {
+		t.Error("PRAGMA foreign_key_check reports a violation after 0007's Down")
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate 6→7: %v", err)
+	}
+	again, err := dumpSchema(ctx, d.Read())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != at7 {
+		t.Error("a Down followed by an Up did not reproduce the schema 0007 creates")
 	}
 }

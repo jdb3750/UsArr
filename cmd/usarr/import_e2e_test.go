@@ -57,6 +57,26 @@ func kavitaSeries(id, libraryID int, name string, extra map[string]any) map[stri
 	return s
 }
 
+// kavitaMetadata builds a SeriesMetadataDto body with the named person arrays
+// populated. Every array Kavita declares is emitted, empty where unnamed, which
+// is the shape a real response has — an adapter that only works when an array is
+// absent would pass a fixture that omitted them.
+func kavitaMetadata(seriesID int, people map[string][]string) map[string]any {
+	out := map[string]any{"id": seriesID, "seriesId": seriesID, "summary": ""}
+	for _, array := range []string{
+		"writers", "coverArtists", "publishers", "characters", "pencillers",
+		"inkers", "imprints", "colorists", "letterers", "editors", "translators",
+		"teams", "locations",
+	} {
+		dtos := []map[string]any{}
+		for i, name := range people[array] {
+			dtos = append(dtos, map[string]any{"id": i + 1, "name": name})
+		}
+		out[array] = dtos
+	}
+	return out
+}
+
 // armBootstrapImport does what main() does one line before it starts the
 // prober: it gives the registry a process-lifetime context, which is the switch
 // that turns the on-connect import on. A test that does not call this gets no
@@ -69,10 +89,10 @@ func armBootstrapImport(t *testing.T, env *testEnv) {
 	env.app.registry.enableBootstrapImport(ctx)
 }
 
-func countIn(t *testing.T, env *testEnv, q string) int {
+func countIn(t *testing.T, env *testEnv, q string, args ...any) int {
 	t.Helper()
 	var n int
-	if err := env.app.store.DB().Read().QueryRowContext(t.Context(), q).Scan(&n); err != nil {
+	if err := env.app.store.DB().Read().QueryRowContext(t.Context(), q, args...).Scan(&n); err != nil {
 		t.Fatalf("count %q: %v", q, err)
 	}
 	return n
@@ -114,6 +134,27 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 		kavitaSeries(44, 1, "Berserk", map[string]any{"aniListId": 30013}),
 		kavitaSeries(45, 2, "Berserk (Deluxe)", map[string]any{"aniListId": 30013}),
 	}
+	// Credits (ADR-0044). Kentaro Miura writes AND draws both Berserk rows, and
+	// the two rows resolve onto ONE work — so the same person must not be
+	// created twice, and the two remote items' credit sets must not fight. The
+	// Hobbit is in a BOOK library, so its `writers` array becomes an 'author'
+	// and not a 'writer'.
+	kav.metadata = map[int]map[string]any{
+		41: kavitaMetadata(41, map[string][]string{
+			"writers": {"Kanehito Yamada"}, "coverArtists": {"Tsukasa Abe"},
+			// Not a creator: a publisher is an organisation, and UsArr credits
+			// none of Kavita's five non-creator arrays.
+			"publishers": {"Shogakukan"}, "characters": {"Frieren"},
+		}),
+		43: kavitaMetadata(43, map[string][]string{"writers": {"J. R. R. Tolkien"}}),
+		44: kavitaMetadata(44, map[string][]string{
+			"writers": {"Kentaro Miura"}, "pencillers": {"Kentaro Miura"},
+		}),
+		45: kavitaMetadata(45, map[string][]string{"writers": {"Kentaro Miura"}}),
+		// 42 (Saga) deliberately has NO entry: the fake answers an empty
+		// metadata object, which is what a real Kavita returns for a series
+		// nobody has tagged.
+	}
 
 	env := newTestApp(t)
 	var sess sessionBody
@@ -151,10 +192,16 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 		t.Errorf("library_source rows = %d, want 3", n)
 	}
 
-	// Five series, FOUR works: the two Berserk rows share an AniList id and tier
-	// 1 resolves them onto one work across two libraries.
-	if n := countIn(t, env, `SELECT COUNT(*) FROM work`); n != 4 {
-		t.Errorf("work rows = %d, want 4 — the two Berserk series are one work", n)
+	// Five series, FOUR CATALOGUE works: the two Berserk rows share an AniList id
+	// and tier 1 resolves them onto one work across two libraries.
+	//
+	// ⚠️ THE PREDICATE EXCLUDES 'person' AND THAT IS ADR-0044's COST, STATED.
+	// `work` is no longer a table of catalogue items alone: a credited author is
+	// a work of kind 'person' (ADR-0033), so `SELECT COUNT(*) FROM work` counts
+	// people too. The people are asserted separately below rather than swept
+	// into this number.
+	if n := countIn(t, env, `SELECT COUNT(*) FROM work WHERE kind <> 'person'`); n != 4 {
+		t.Errorf("catalogue work rows = %d, want 4 — the two Berserk series are one work", n)
 	}
 	if n := countIn(t, env, `SELECT COUNT(*) FROM service_item_link`); n != 5 {
 		t.Errorf("service_item_link rows = %d, want 5 — one per remote series", n)
@@ -188,10 +235,117 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 
 	// DEGRADED IDENTITY IS THE ORDINARY CASE. Three of the four works carry no
 	// external id at all, and all four are still filed and still indexed.
+	//
+	// A PERSON CARRIES NO external_id EITHER, by design — see
+	// store.personWorkID: Kavita's person id is instance-local, so writing it
+	// would make two installs both claim person 5 and ux_extid_work_strong would
+	// read that as a merge signal between unrelated humans. So people are
+	// excluded here too, rather than inflating the count.
 	if n := countIn(t, env, `
 		SELECT COUNT(*) FROM work w
-		 WHERE NOT EXISTS (SELECT 1 FROM external_id e WHERE e.work_id = w.id)`); n != 3 {
+		 WHERE w.kind <> 'person'
+		   AND NOT EXISTS (SELECT 1 FROM external_id e WHERE e.work_id = w.id)`); n != 3 {
 		t.Errorf("unidentified works = %d, want 3 — a work with no resolvable identity is KEPT", n)
+	}
+
+	// ── credits, through the real HTTP path (ADR-0044) ──────────────────────
+	//
+	// FOUR people. Kentaro Miura writes AND pencils Berserk and is credited on
+	// both remote rows, which resolve onto ONE work — so he is one person work,
+	// not two.
+	if n := countIn(t, env, `SELECT COUNT(*) FROM work WHERE kind = 'person'`); n != 4 {
+		t.Errorf("person works = %d, want 4 (Yamada, Abe, Tolkien, Miura). If this is 5 the "+
+			"dedupe did not survive the two Berserk rows resolving onto one work.", n)
+	}
+
+	// ⚠️ A WORK SHARED BY TWO REMOTE ITEMS GETS LAST-WRITER-WINS CREDITS, and
+	// this asserts it rather than pretending otherwise. It is the exact shape of
+	// LS-07's reading_direction finding, in a second column, and it falls out of
+	// the same tier-1 reuse: ApplyCredits replaces one WORK's credits wholesale
+	// per REMOTE ITEM, so remote 44 writes Miura as writer AND penciller, and
+	// remote 45 — the same work, a different Kavita row with a thinner metadata
+	// entry — then clears both and writes writer alone.
+	//
+	// FOUR credits, not five: Frieren 2, The Hobbit 1, Berserk 1, Saga 0.
+	//
+	// The alternative was weighed and rejected: accumulating a work's credits
+	// across the remote items that share it would have to hold state across
+	// batch boundaries and across the whole import, which turns a wholesale
+	// replace into a merge — and a merge is the thing v0.1 explicitly does not
+	// have (ApplyCatalogueBatch's doc comment, work_merge is v1.0). The loss is
+	// bounded to works that two remote items resolve onto, it lands in a table
+	// the operator can see, and re-importing after the thinner row is fixed
+	// upstream repairs it. Recorded as LS-13.
+	if n := countIn(t, env, `SELECT COUNT(*) FROM work_credit`); n != 4 {
+		t.Errorf("work_credit rows = %d, want 4 — see the last-writer-wins note above", n)
+	}
+	if n := countIn(t, env, `
+		SELECT COUNT(*) FROM work_credit c JOIN work w ON w.id = c.work_id
+		 WHERE w.title LIKE 'Berserk%'`); n != 1 {
+		t.Errorf("the shared Berserk work has %d credits, want 1 — the LAST remote item to "+
+			"be applied is the one whose credit set stands", n)
+	}
+	// The kind-dependent role: The Hobbit is in a BOOK library, so Kavita's
+	// `writers` array becomes an 'author'. Frieren is in a MANGA library, so the
+	// same array becomes a 'writer'.
+	var hobbitRole string
+	if err := env.app.store.DB().Read().QueryRowContext(t.Context(), `
+		SELECT c.role FROM work_credit c
+		  JOIN work w ON w.id = c.work_id
+		  JOIN work p ON p.id = c.creator_work_id
+		 WHERE w.title = 'The Hobbit' AND p.title = 'J. R. R. Tolkien'`).Scan(&hobbitRole); err != nil {
+		t.Fatalf("The Hobbit has no Tolkien credit: %v", err)
+	}
+	if hobbitRole != "author" {
+		t.Errorf("Tolkien is credited on The Hobbit as %q, want \"author\" — Kavita has no "+
+			"`authors` array, so a book library's writers ARE its authors", hobbitRole)
+	}
+	var frierenRole string
+	if err := env.app.store.DB().Read().QueryRowContext(t.Context(), `
+		SELECT c.role FROM work_credit c
+		  JOIN work w ON w.id = c.work_id
+		  JOIN work p ON p.id = c.creator_work_id
+		 WHERE w.title = 'Frieren' AND p.title = 'Kanehito Yamada'`).Scan(&frierenRole); err != nil {
+		t.Fatalf("Frieren has no Yamada credit: %v", err)
+	}
+	if frierenRole != "writer" {
+		t.Errorf("Yamada is credited on Frieren as %q, want \"writer\"", frierenRole)
+	}
+	// The five NON-creator arrays produced nothing. Shogakukan is a publisher
+	// and Frieren is a character; neither is a credited human.
+	for _, name := range []string{"Shogakukan", "Frieren"} {
+		if n := countIn(t, env,
+			`SELECT COUNT(*) FROM work WHERE kind = 'person' AND title = ?`, name); n != 0 {
+			t.Errorf("%q became a person work. Publishers, imprints and teams are "+
+				"ORGANISATIONS and characters and locations are not people at all.", name)
+		}
+	}
+	// Saga has no metadata entry at all, so the fake answers an empty
+	// SeriesMetadataDto — the ordinary case on a fresh Kavita. It gets no
+	// credits and that is not an error.
+	if n := countIn(t, env, `
+		SELECT COUNT(*) FROM work_credit c JOIN work w ON w.id = c.work_id
+		 WHERE w.title = 'Saga'`); n != 0 {
+		t.Errorf("Saga has %d credits from an empty metadata response", n)
+	}
+	// The application-enforced invariant migration 0007 cannot declare.
+	if n := countIn(t, env, `
+		SELECT COUNT(*) FROM work_credit c JOIN work w ON w.id = c.creator_work_id
+		 WHERE w.kind NOT IN ('artist','person')`); n != 0 {
+		t.Errorf("%d credit(s) point at a work that is neither an artist nor a person", n)
+	}
+	// AND NO PERSON REACHED THE SEARCH CORPUS OR A LIBRARY (schema.md §6.1),
+	// asserted here as well as in internal/store because this is the path a real
+	// import takes.
+	if n := countIn(t, env, `
+		SELECT COUNT(*) FROM search_doc d JOIN work w ON w.id = d.work_id
+		 WHERE w.kind = 'person'`); n != 0 {
+		t.Errorf("%d person work(s) reached the search corpus through the real import", n)
+	}
+	if n := countIn(t, env, `
+		SELECT COUNT(*) FROM library_member m JOIN work w ON w.id = m.work_id
+		 WHERE w.kind = 'person'`); n != 0 {
+		t.Errorf("%d person work(s) were filed into a library through the real import", n)
 	}
 
 	// ── §7 invariants 2 and 5, over a populated corpus ──────────────────────

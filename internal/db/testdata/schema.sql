@@ -16,6 +16,9 @@ CREATE INDEX ix_cc_user ON client_credential(user_id, revoked_at);
 -- index ix_comic_issue_sort
 CREATE INDEX ix_comic_issue_sort ON work_comic_issue(number_sort);
 
+-- index ix_credit_creator
+CREATE INDEX ix_credit_creator ON work_credit(creator_work_id, role);
+
 -- index ix_edition_work
 CREATE INDEX ix_edition_work ON edition(work_id, is_primary DESC);
 
@@ -914,6 +917,59 @@ CREATE TABLE work_comic_issue (
                             -- false-positive machine ADR-0007 refuses.
   page_count      INTEGER
 ) STRICT;
+
+-- table work_credit
+CREATE TABLE work_credit (
+  work_id         INTEGER NOT NULL REFERENCES work(id) ON DELETE CASCADE,
+  -- A work of kind 'artist' OR of kind 'person' (ADR-0033), and WHICH ONE IS A
+  -- RULE RATHER THAN A PER-ROW CHOICE: 'artist' when a connected service models
+  -- the creator as a top-level catalogue entity in its own right — a Navidrome
+  -- or Lidarr artist, which has albums, a page and a library row — and 'person'
+  -- otherwise. Kavita models a creator as a PersonDto hanging off series
+  -- metadata and not as a catalogue entity, so every credit this migration's
+  -- first writer produces points at a 'person'.
+  --
+  -- THE KIND IS NOT CONSTRAINED HERE AND CANNOT BE. SQLite has no way to say
+  -- "this foreign key's target row must have kind IN ('artist','person')" — a
+  -- CHECK cannot subquery, and a trigger on work_credit would fire on the
+  -- credit rather than on the work it points at. It is an application-enforced
+  -- invariant with a CI assertion over a POPULATED fixture, in exactly the form
+  -- schema.md §1.1 already uses for work_track.edition_id — must return no rows:
+  --
+  --   SELECT c.work_id, c.creator_work_id FROM work_credit c
+  --     JOIN work w ON w.id = c.creator_work_id
+  --    WHERE w.kind NOT IN ('artist','person');
+  --
+  -- TestCreditedWorksAreArtistsOrPeople is that assertion.
+  creator_work_id INTEGER NOT NULL REFERENCES work(id) ON DELETE CASCADE,
+  -- Eighteen members, verbatim from schema.md §1.1. NINE of them are the ones
+  -- Kavita writes today (author, translator, editor, writer, penciller, inker,
+  -- colorist, letterer, cover_artist); the music seven and illustrator/narrator
+  -- have no v0.1 writer and are here because SQLite cannot ALTER a CHECK.
+  --
+  -- NOT NULL, so the bare IN list is the correct and complete form. See the
+  -- header on DB-01 and on why `IS NULL OR` would be wrong here rather than
+  -- merely redundant.
+  role            TEXT NOT NULL CHECK (role IN (
+                    -- music
+                    'primary','featured','composer','conductor','performer','remixer','producer',
+                    -- books
+                    'author','translator','editor','illustrator','narrator',
+                    -- comics
+                    'writer','penciller','inker','colorist','letterer','cover_artist')),
+  -- Billing order WITHIN (work, role). It is part of the primary key, which is
+  -- what lets one work carry two writers without them colliding.
+  position        INTEGER NOT NULL DEFAULT 0,
+  -- The string this release printed, when it differs from the creator work's
+  -- title ("Sting" on a Police reissue). Free text; no CHECK, see the header.
+  credited_as     TEXT,
+  -- The PK LEADS WITH (work_id, role, position) because the only hot read is
+  -- "give me this work's credits in billing order", which is then a single
+  -- covered range scan over a WITHOUT ROWID table. creator_work_id TRAILS it to
+  -- make the row unique when two creators share a role and a position — a
+  -- co-credit — which is a real shape and not a defensive tiebreaker.
+  PRIMARY KEY (work_id, role, position, creator_work_id)
+) STRICT, WITHOUT ROWID;
 
 -- table work_episode
 CREATE TABLE work_episode (

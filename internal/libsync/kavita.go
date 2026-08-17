@@ -18,6 +18,12 @@ import (
 type KavitaReader interface {
 	Libraries(ctx context.Context) ([]kavita.LibraryDto, error)
 	StreamSeries(ctx context.Context, opts kavita.SeriesListOptions, fn func(kavita.SeriesDto) error) (kavita.SeriesPage, error)
+
+	// SeriesMetadata is the credit path (ADR-0044). It is on this interface and
+	// not on a second one because a Kavita client that could stream series but
+	// not read one series' metadata does not exist — both are the same
+	// controller and the same credential.
+	SeriesMetadata(ctx context.Context, seriesID int32) (kavita.SeriesMetadataDto, error)
 }
 
 // KavitaSource adapts one Kavita instance to Source.
