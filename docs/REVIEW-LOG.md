@@ -6435,6 +6435,18 @@ exactly the same from the outside. **That is `OPTIN-01`, performed rather than d
 is the reason the disposition above is *recorded*, not *applied*: an entry that fixed this by running
 the checker one more time would have proved the opposite of its own point.
 
+### Appended 2026-08-17 on `556a029` — the pointer back to `NOCI-01`, the other end of this finding
+
+📎 **A pure append. Nothing above is renumbered, reworded or deleted** — §6.1's convention, *"nothing
+above is renumbered, reworded or deleted"*. The *"Raised, not fixed — the repo names a CI as an
+actor, and there is no CI"* section above routed its sites rather than fixing them, and the routing
+was taken up: [`NOCI-01`](#noci-01--the-repo-named-a-ci-as-an-actor-in-nine-places-and-has-never-had-one-applied-the-constraints-are-kept-the-actor-is-not)
+holds the sweep, the three-way sort and the fixes. Its `NOCI.6` sub-note puts the two together as
+**one finding met from opposite ends** — a guard nothing invokes, here; *"a guard that misdescribes
+its own invocation"*, there — and records this pointer as owed: *"The reverse pointer, from
+`OPTIN-01` back to here, is not added by this commit and is outstanding."* **This is it.** The link
+in the other direction already resolves, so a reader landing on either entry now reaches the other.
+
 ---
 
 # M5-30 — the \*Arr client capped every response at 32 MB under a transport that permits 200 MB, and buffered the endpoints `ARCHITECTURE.md` §7.2 forbids buffering
