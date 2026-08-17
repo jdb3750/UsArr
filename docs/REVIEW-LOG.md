@@ -11429,3 +11429,152 @@ arms fail **differently** rather than the asymmetric rule being decorative:
   points at ADR-0045. **Verified against `DECISIONS.md` rather than taken on the routing** — and one
   detail differed from how it was relayed: ADR-0045 is **owner-DELEGATED** (*"whatever you think is
   best"*), not owner-chosen, and the amended sentence says so.
+
+---
+
+# CH1 — the sync-status claim went stale when channel 1 landed
+
+**Date:** 2026-08-17. **Prefix:** `CH1-` (channel 1), verified unused across `docs/` and all 21
+remote heads before it was chosen.
+
+**Trigger.** The frontend thread landed Home's Block C at `2b6e739` and reported that the Home empty
+state's *"because the library sync is not built in this version"* had become false. They fixed
+`web/`'s copy and flagged that the same claim probably lived in the prose docs. It did.
+
+### CH1-01 The premise, measured before anything was edited
+
+The report said *"the sync is built"*. That is broader than what the tree carries, and a correction
+written to the broader claim would have been the next stale sentence. What runs, measured at
+`c56c8e4`:
+
+| Question | Where it is answered | Answer |
+|---|---|---|
+| Is there a sync core? | `internal/libsync`, `doc.go` | Yes — **channel 1 only**, `Importer.FullImport` (`importer.go:190`) |
+| How many adapters? | `libsync.NewKavitaSource`, `kavita.go` | **One, Kavita.** `(*registry).FullImport` (`cmd/usarr/import.go:41`) returns an error for any other kind |
+| Does anything run on its own? | `cmd/usarr/import.go` header, `cmd/usarr/services.go:221` | **A bootstrap, not a timer.** `go g.bootstrapImport(...)` fires at the moment a Kavita client stack is built, gated on `last_full_sync_at` being unset — at most once per instance per database |
+| Is there a manual trigger? | `(*registry).FullImport` | Yes, by call |
+| Channel 3b (ordered page walk)? | `doc.go`, "NOT HERE" | **Not built** |
+| Channel 4 (reconciliation sweep)? | `doc.go`, "NOT HERE" — `remote_hash` is *written* here and read by nothing | **Not built** |
+| The write queue? | `doc.go`, "NOT HERE" | **Not built** |
+| Phase B (§7.2)? | `doc.go` | Empty for Kavita's series list, and argued rather than deferred |
+
+So the accurate sentence is **"a first-import channel exists for Kavita, fires on connect, and has
+no periodic re-sync behind it"** — not "the sync is built", and not "an import runs when you connect
+Kavita" alone either, since the manual trigger is the other half. Every correction below is written
+to that sentence and to no larger one.
+
+### CH1-02 Three sites, counted from the grep that found them
+
+`grep -rn -iE "no sync channel runs|nothing syncs a library|no catalogue behind|nothing replicates"`
+over `CLAUDE.md`, `README.md`, `docs/` at `c56c8e4` returned **6 hits in 4 files**, which is
+**3 live claims** plus this log's own superseded row (CH1-03) — `CLAUDE.md` and
+`docs/ARCHITECTURE.md` each match on two lines of one sentence. ⚠️ **This paragraph first said
+"five hits", from memory rather than from the grep**, which is the defect two other sweeps hit
+today; the number above is the `git grep` output pasted back, and both counts are stated because a
+hit count and a claim count are not the same number.
+
+* **`CLAUDE.md`, Status.** *"No sync channel runs yet, so there is no catalogue behind any of it."*
+  → replaced with a pointer at `internal/libsync` and `cmd/usarr/import.go`, per this file's own
+  rule that a stale status claim is replaced by the pointer and not by a fresher claim. The
+  paragraph's *"such a list is false within days, and this one was"* now reads *"has been twice"*.
+* **`README.md`, the status blockquote.** *"Nothing syncs a library in yet, so there is no
+  catalogue."* → the narrow true statement, with its commit. The bold line's *"One path works"* went
+  with it: a count is the shape of claim that goes stale, and *"Parts of it run"* does not.
+* **`docs/ARCHITECTURE.md` §16, v0.1.** *"no sync channel runs yet, so there is no catalogue —
+  nothing replicates from any source, v0.1's own Kavita adapter included."* → a pointer, plus a ⚠️
+  quoting what it said and dating the falsification.
+
+### CH1-02a Grep for the premise, not the feature
+
+Sharpened mid-sweep by the frontend thread, who found the same staleness in **three** `web/` files,
+**none of them near the changed code**. The generalisation is worth keeping: `internal/libsync`
+landing falsified sentences that never mention sync, libsync, or any symbol it introduced. **A grep
+for the feature finds the code that changed; only a grep for the premise finds the prose that
+depended on it.** Their sections carried the claim as the literal strings *"has not shipped"* and
+*"not built"*, which no sync-shaped pattern would have matched.
+
+Re-run over this thread's three files with those literals added. **3 hits, all read, none stale** —
+recorded so the next pass does not re-derive the negative:
+
+| Hit | Reads | Verdict |
+|---|---|---|
+| `CLAUDE.md`, principle 4 | *"the UI simply hides what has not shipped yet"* | About **multi-user**, not the catalogue. Untouched by channel 1 |
+| `README.md`, feature-status preamble | *"Most of this table is not built yet … for that, read the tree"* | Still true of most rows, **and already a pointer** — the form CH1 is converting other sentences *into* |
+| `docs/ARCHITECTURE.md` §16, v0.1 | the write path *"specified, not built"* | ✅ Holds — `libsync/doc.go` lists the write queue under "NOT HERE": *"§7.6's verbs have no target in v0.1"* |
+
+A second pass for premise-shaped wordings that name no feature at all (*"nothing to show"*, *"no
+data"*, *"empty library"*, *"in this version"*, *"currently"*, *"for now"*) returned **one** hit —
+§16 returned none — and it is `README.md`'s Search-and-Grab row describing that mode as working
+*"with no library"*, which is a statement about the **mode's design**, not about the tree. Left.
+
+### CH1-03 The uncomfortable part: §16 argued against itself and this log signed it off
+
+§16's v0.1 entry opens by explaining that it **used to carry a landed/not-yet inventory**, that the
+inventory went stale, and that *"the tree answers the question and cannot go stale"*. It then keeps
+**one** inventory sentence, on the grounds that the milestone's central gap is worth stating at that
+altitude. That sentence is the one that went stale. The exception a correction carves out for itself
+is where the next instance of the same defect lives.
+
+And this log ratified it. The MWP sweep's table recorded *"no sync channel runs yet … v0.1's own
+Kavita adapter included"* as **✅ Holds**, measured against `internal/kavita/` being a client with no
+importer. **That measurement was correct when it was made** — `5b22d58` is 2026-08-17 20:16:41 UTC,
+`01969ed` (the first `internal/libsync` snapshot) is 20:24:54, and `f77ea2a` finished channel 1
+after it. The row is left standing, unedited: it is true of the tree it names, and rewriting it
+would destroy the evidence that a green measurement has a shelf life measured in minutes here.
+
+**What generalises.** A verdict in this log is a statement about a commit, not about the repository.
+The MWP row names its tree and is therefore still readable; a row that had said only *"✅ Holds"*
+would now be indistinguishable from a wrong one. That is the same rule as `DEVELOPMENT.md` §11's
+*"a gate result without a commit sha attached is not a result"*, applied to prose findings.
+
+### CH1-04 One clause was a requirement, not a status claim — flagged, not rewritten
+
+**The distinction that governs this sweep**, and it can change what a correction does: *"the doc says
+no sync runs and a sync now runs"* is stale prose, fix it; *"the doc says the sync must not do X and
+the shipped sync does X"* is a **finding**, and the sentence stays standing with the flag, because a
+stale sentence is sometimes the only surviving witness that code stopped matching its intent.
+Rewriting it destroys the evidence and closes the question in the same stroke.
+
+**Checked, and the sync core is clean on that test.** Everything `libsync/doc.go` lists under "NOT
+HERE" matches what §7 and §16 say v0.1 owes — channel 3b and channel 4 unbuilt, the write queue with
+no target, no timer. The one shape that *looks* like a violation is not: `remote_hash` and
+`remote_identity_hash` are **written by the importer and read by nothing**, which is channel 4's
+comparison basis being laid down ahead of the sweep, declared in the package doc rather than
+discovered. Phase B is empty for Kavita and **argued** (§7.2's fields are absent from
+`POST /api/Series/all-v2`) rather than silently skipped. No finding.
+
+**But one clause of the sentence CH1-02 corrected was a requirement in a status claim's clothes**,
+and correcting the sentence around it would have deleted it: *"every screen that would render a
+library says so rather than drawing an empty one."* That is principle 3 and §17.7's `unconfigured`
+state, not an observation. **Its truth conditions changed even though its text did not.** While
+nothing replicated, it held vacuously. Now `mapLibraryType` (`internal/libsync/kavita.go`) emits
+exactly two `work.kind` values — `comic` and `book` — so **two of §1's six media types have a source
+and four do not**, and the rule has to hold on a **mixed** screen for the first time. It is restored
+to §16 as a standing requirement with the arithmetic attached, and **routed to §17 to re-measure
+rather than declared satisfied here**.
+
+**One concrete thing for whoever takes that**, found while confirming the above and **not touched,
+because `web/` is another thread's section**: `web/src/routes/+page.svelte` carries a Block A
+exemplar in a comment reading *"Comics · no catalogue source · Kavita · after v0.1 · Add"*. Comics
+has a catalogue source **in** v0.1 as of ADR-0041, so the exemplar's *"after v0.1"* is the same
+staleness one layer down. Reported, not edited.
+
+### CH1-05 Deliberately not touched
+
+* **`README.md`'s feature-status table** (the sync-core row, the sync-channels row). Both read
+  `📋 Planned — v0.1`, and the table's own header states that status is the **planned milestone, not
+  progress**, "except where a row says otherwise". Under that contract neither row is falsified by
+  channel 1 landing — the milestone that owns the sync core is still v0.1. Changing them would
+  import a progress axis the table explicitly refuses.
+* **§16's other `not built` / `does not exist yet` clauses.** Re-read and left: §16.0's *"the \*Arr
+  sync that does not exist yet"* is inside the narration of a **rejected** earlier answer (already
+  ruled on by the MWP sweep); the write path's *"specified, not built"* is still true, per
+  `libsync/doc.go`; §16's *"channel 3b … built here rather than only specified"* is a statement about
+  which milestone owns the channel, not about today's tree.
+* **§17, and everything under `web/`** — out of this thread's sections. Routed rather than edited:
+  §17's `v0.1` phrasing around *"no catalogue source"* per media type (§17.2's Block A note, §17.7's
+  `unconfigured` state) is still true of the media types Kavita does not cover — `mapLibraryType`
+  (`internal/libsync/kavita.go:117`) emits exactly two `work.kind` values, `comic` and `book`, so of
+  §1's six types (movies, TV, music, ebooks, audiobooks, comics) **two are covered and four are
+  not**. Two of §17's rows are therefore now wrong and four are right, which is §17's owner's call
+  to make rather than this thread's.
