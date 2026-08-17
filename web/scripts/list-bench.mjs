@@ -1375,6 +1375,31 @@ assert(
 	`element.style.setProperty() did not take: "${cssom.viaCssom}"`
 );
 
+/* ⚠️ THE TWO `textContent` READS BELOW ARE DELIBERATELY NARROW, AND WIDENING
+ * EITHER ONE IS A BUG RATHER THAN A CONVENIENCE.
+ *
+ * `textContent` reads straight through `display: none` and through `[hidden]`,
+ * so a read taken over any tree that holds a hidden VARIANT of what is beside
+ * it welds the two into a string no user has ever seen. That is not theoretical
+ * here: this harness's own table carries 1,000 such nodes at 200 rows —
+ * measured, 800 `.stacklabel` and 200 `.stacksep`, the phone-mode column labels
+ * and their separators, which are `display: none` at desktop width and sit
+ * INSIDE the `<td>`s. Read a row at 1440px and `Size` fuses onto its own value
+ * as "Size1.6 MiB". A sibling checker hit exactly this and manufactured a dozen
+ * fabricated strings out of it.
+ *
+ * ✅ AUDITED, not assumed: both selectors below resolve to a single element with
+ * ZERO descendants of any kind (`.empty__title` is `<h2>{emptyTitle}</h2>`) or,
+ * for `.banner`, to two nested wrappers with zero `[hidden]`, zero `display:
+ * none`, zero `aria-hidden` and no direct text of its own beside its one
+ * blockified child — so there is nothing hidden to weld in and nothing to drop.
+ * Checked in all five states; `textContent` and a hidden-aware text walk return
+ * byte-identical strings in every one. The same walk over the enclosing
+ * `.tablewrap` is where the 1,000 appear.
+ *
+ * So: if you ever need more text than these two strings, walk TEXT NODES and
+ * test each node's own ancestry with `closest('[hidden]')` plus a computed
+ * `display` check — do not reach for `wrap.textContent`. */
 head('14. The states the primitive owns (§10)');
 const states = await page.evaluate(async () => {
 	const out = {};

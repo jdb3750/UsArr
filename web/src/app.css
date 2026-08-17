@@ -635,6 +635,45 @@ textarea {
 	color: var(--fg-muted);
 }
 
+/* ── A figure and its unit are two slots, not one string (§9.1) ─────────────
+ *
+ * `tabular-nums` on a size column buys nothing when what is right-aligned is
+ * the WORD after the number: right-aligning `4.8 GiB` over `820 MiB` aligns the
+ * `B`, so the digits — the one thing being compared down the column — land at
+ * different x-positions, and no numeric font-variant can help because the
+ * misalignment is caused by the word. The fixed width is the half that does the
+ * work. `.is-num` already carries the right-alignment and the tabular figures
+ * at the CELL, so composite values inherit them.
+ *
+ * ⚠️ THE WIDTH BELONGS TO THE UNIT FAMILY, NOT TO THE VALUE IN FRONT OF YOU, or
+ * the digits jump the first time a row crosses from GiB to MiB. §9.1 derives
+ * 2.5ch from the DECIMAL family `B · KB · MB · GB · TB`, widest `MB` at 19px.
+ * This app prints BINARY units, because that is what every indexer and every
+ * *Arr reports, and the binary family is wider — see `sizeParts` in
+ * src/lib/format.ts. The reserve below is measured on the binary family in the
+ * real cell font, which is what §9.1's own rule instructs; carrying the decimal
+ * 2.5ch over would under-reserve and reintroduce the misalignment it exists to
+ * remove.
+ *
+ * ⚠️ SIZE COLUMNS ONLY. A reserved unit box costs column width and two declared
+ * tracks cannot pay it: `Age` in the release tables is a 68px track and Home's
+ * `Items` is 107.375px, and both were measured wrapping at +18px per cell over
+ * 224 cells when this class was applied uniformly. Those two columns stay on
+ * the one-string treatment on purpose — §9.1 names them so a reader can tell an
+ * unfinished job from a decision, and src/lib/format.ts deliberately publishes
+ * no pair-returning function for age. Widening a declared track is its own
+ * decision on the two densest tables in the product. */
+.unit {
+	color: var(--fg-muted);
+	display: inline-block;
+	width: var(--unit-w, 2.5ch);
+	text-align: left;
+}
+
+.unit--size {
+	--unit-w: 3ch;
+}
+
 /* Visually hidden, still in the accessibility tree. Used for live regions and
  * for the word that keeps a status glyph from computing to an empty name. */
 /* The negative margin is not decoration and it is not the clip pattern being

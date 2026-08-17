@@ -212,7 +212,17 @@ const tick = (page) => page.evaluate(() => new Promise((r) => setTimeout(r, 0)))
 const frames = (page) =>
 	page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 
-/** Everything the assertions read, in one round trip. */
+/** Everything the assertions read, in one round trip.
+ *
+ * ⚠️ The one `textContent` here is on `[data-testid="pending"]`, which is a `<p>`
+ * holding one interpolated string and — audited rather than assumed — ZERO child
+ * elements, in both the pending and the no-pending state. That matters because
+ * `textContent` reads through `display: none` and through `[hidden]` alike, so
+ * the same call over a tree carrying a hidden variant of its visible text would
+ * return a sentence no user has seen. The region's own table is such a tree
+ * (`.stacklabel` is `display: none` at desktop width and lives inside the
+ * `<td>`s), which is why the order assertions read `renderedKeys()` off row
+ * `data-key` attributes and never off row text. Keep it that way. */
 const snapshot = (page) =>
 	page.evaluate(() => ({
 		rendered: window.__freeze.renderedKeys(),
