@@ -5051,3 +5051,223 @@ prettier at `docs/REVIEW-LOG.md` explicitly reports style issues **on the unmodi
 too**, so this file has never been formatter-gated and this entry does not change that. **Every
 figure quoted above is taken from the measurement record and from the code comments at `1869f05`;
 none of it was re-measured here.**
+
+---
+
+## LAT-01 — three documents extended a budget that its owner never defined. **Applied.**
+
+**Found.** `DESIGN-DIRECTION.md` §7.4, ADR-0029 and `ARCHITECTURE.md` §4.5 each argued that the
+density and theme toggles are *"pure-local no-data interactions"* and concluded that they are
+therefore **"Tier 0 by §7.2's own definition, whose hard fail is 100 ms."** §7.2 contains four
+latency tiers **keyed to where the data lives**, and its Tier 0 reads, verbatim: *"the data is in
+local SQLite. Nearly every read."* Its stated diagnostic for a breach is *"a query-plan bug"*
+belonging in the `EXPLAIN QUERY PLAN` assertions.
+
+**The density toggle is not a read and touches no data.** It has no query plan to be a bug in, so
+the tier's own diagnostic is meaningless for it — which is the tell that the category was never
+there. **The budget was extended to controls by the three documents that wanted a budget, not by the
+document that owns latency tiers.**
+
+**The general rule, which is the point of this entry:** *a budget belongs to the document that
+defines the category, and a document that wants a budget must not extend someone else's by
+inference.* The §7.4 sentence was written by people who needed a threshold and reached for the
+nearest one; the cost was three documents asserting an authority that did not exist, and one of them
+then deriving a page size from it.
+
+### LAT-01.1 Why a citation swap could never have been the fix
+
+**The 100 ms was not decorative in those sentences — it was the input to every downstream number.**
+This is the most useful thing in the finding and it was not visible from the sentences themselves:
+
+- §7.4's *"100–300 rows in the DOM"* Pi extrapolation is `100 ms ÷ (0.15–0.26 ms/row × 3–5)`;
+- `ARCHITECTURE.md` §4.5 carries the same computation independently;
+- ADR-0029's **≈ 6,400 rows**, **≈ 500 rows** and **100–167 rows** are all `100 ms ÷ a per-row cost`;
+- and ADR-0029's *"roughly six presses of headroom"* — the justification for `LOAD_MORE_PAGE_SIZE`
+  at 200 — is that ceiling divided by the page size.
+
+**A threshold quoted in prose was silently load-bearing for a page size nobody thought they were
+deriving from it.** So the available fixes were never "swap the citation" versus "rewrite the
+sentence": correcting the pointer would have left three documents claiming the wrong tier, and
+correcting the tier without showing the arithmetic would have moved a page-size justification in
+silence. Every site therefore has its **claim** replaced, and every downstream figure is shown with
+its new derivation rather than quietly recomputed.
+
+### LAT-01.2 The number, and the order it was chosen in
+
+**Written reasoning first, number second, and the number is not derived from what the toggles cost
+today.** §6 already carries both anchors from primary sources, so nothing new was imported:
+
+- **Target — Nielsen's 0.1 s**, *"the limit for having the user feel that the system is reacting
+  instantaneously… no special feedback is necessary except to display the result"*
+  (<https://www.nngroup.com/articles/response-times-3-important-limits/>).
+- **Hard fail — Doherty and Thadani's 400 ms** flow limit (*The Economic Value of Rapid Response
+  Time*, IBM Systems Journal, 1982; <https://lawsofux.com/doherty-threshold/>), which §6 already
+  treats as this document's flow threshold when it rejects a 250 ms decorative transition for landing
+  *"two thirds of the way to"* it.
+
+A rare, deliberate, user-initiated control is exactly the case where the flow limit governs: the user
+asked for the change and is not mid-thought waiting on data. Falling short of *instantaneous* costs
+polish; crossing the *flow* limit costs the user their place.
+
+🚩 **The brief for this work proposed a 1 s hard fail, sourced to §7.1, and that was wrong twice
+over — the correction is recorded because catching it was the whole value of the verification
+step.** §7.1 cites NN/g's **skeleton-screens** article, whose *"under 1 second, show nothing"* is a
+rule about **when a loading affordance is worth showing**, not a budget for how long an interaction
+may take. §7.1 contains no "100 ms feels instantaneous" statement and never uses the phrase "flow of
+thought"; the instantaneous anchor is in **§6**, from a different NN/g article. **And §6 pairs it
+with Doherty's 400 ms, not with 1 s** — so a 1 s hard fail in §7.2 would have contradicted §6 of the
+same document, which is precisely the defect being repaired. **Reading an indicator-necessity rule as
+a latency budget is the same category slip as reading a read budget as a control budget.**
+
+### LAT-01.3 The consequence, which is a consequence and not the purpose
+
+📏 **Measured by the frontend thread, not by this one.**
+`web/scripts/measurements/2026-08-17-density-invalidation.md`, added by
+**`dff20fd0eb4df707593da36fb9c2f8b1450c0a90`**, measuring **tree `3ff8151` plus that change** on
+**Chromium 141.0.7390.37 headless** (`playwright-core` 1.56.1), **Node v22.22.2**, **1440×900**,
+machine class **x86-64 container, 4 vCPU (Intel Xeon @ 2.80 GHz), 15 GB RAM, shared host** — which
+that record calls *"a reasonable proxy for a ThinkCentre under Proxmox"* and expressly ***"not a
+proxy for a Pi 5."***
+
+| Rows in the page | 100 | 120 | 160 | 200 |
+|---|---|---|---|---|
+| Density toggle, shipped path | **32.1 ms** | **37.4 ms** | **49.3 ms** | **75.7 ms** |
+
+Every size clears 400 ms outright on that instrument. 🔍 At ADR-0029's pessimistic 5× Pi-5 factor the
+shipped 200-row page is **378.5 ms against 400 ms — 21.5 ms, about 5%** — and that scaling is
+inference, since the source scaled nothing to a Pi and §13 forbids quoting a Pi-derived figure as
+measured. ⚠️ **The 5% is written into all three documents at full precision rather than rounded to
+"passes."** A budget a real configuration clears by 21 ms is a budget doing work, and a threshold
+chosen to flatter a measurement would not have landed 5% above it — which answers the
+"moved-so-it-would-pass" suspicion better than any assurance could.
+
+🚩 **What the old framing would have implied is the strongest evidence it was wrong.** Tier 0's
+100 ms under the same 5× factor is a **20 ms** desktop-equivalent budget — a figure the measurement
+record names in its own §7 — and against it **every page size in the measured range fails, 100 rows
+included at 32.1 ms**, by 1.6× at the smallest setting and 3.8× at the shipped one. **A rule that
+fails at every available setting is not a strict rule, it is a misapplied one.**
+
+ℹ️ **Two limits the source imposes on itself and this entry keeps**: its runner is noisy, **100 and
+120 rows overlap and must not be read apart**, and it declines to support a page-size decision on
+that instrument. The curve is used here as a budget check only. **`LOAD_MORE_PAGE_SIZE` is
+untouched, and Tier 0 is untouched at 100 ms for reads.**
+
+### LAT-01.4 Sites swept
+
+| Site | Change |
+|---|---|
+| `DESIGN-DIRECTION.md` §7.2 | **The category added**, on §7.2's own authority — *Controls*, target < 100 ms, hard fail 400 ms — with the derivation, the consequence and the old framing's failure. §7's preamble now says a non-tier budget lives there, so the heading no longer hides it |
+| `DESIGN-DIRECTION.md` §7.4 | Claim replaced; the 100–300 / 300–600 row ceilings shown as **400–1,200 / 1,200–2,400** with the ×4 derivation stated; the *"if it still exceeds 100 ms"* applying-state trigger moved to the 400 ms fail |
+| `DECISIONS.md` ADR-0029 | A marked **2026-08-17 amendment** in the ADR's existing style, plus three inline supersession markers. See **LAT-02** |
+| `ARCHITECTURE.md` §4.5 | Claim replaced; its own independent 100–300 / 300–600 extrapolation shown with the same derivation |
+
+⚠️ **`ARCHITECTURE.md` §4.5 was initially reported as another owner's and held back.** Ownership was
+then assigned to this thread on the grounds that the substance is the performance budget and that
+splitting one claim across owners would guarantee the three drift apart — which is the failure this
+entry documents, so shipping the sweep four-sited was the point. The edit was announced to the code
+thread.
+
+### LAT-01.5 An absence reported without its search roots — the third tonight
+
+🚩 **The four measured figures were first reported as existing "nowhere in the tree." They were on
+`main` the whole time**, in `web/scripts/measurements/`. **The search covered `docs/`, `web/src` and
+`internal/`** — three roots that exclude `web/scripts` — so the finding was true of where it looked
+and false of the tree.
+
+**The rule, because this is the third instance of the same shape in one session:** a `*.md` grep that
+missed citations living in code comments; a `grep -ril` that could not follow symlinks; and now three
+roots that excluded `web/scripts`. **When you report an absence, name the roots you searched in the
+same sentence.** An unqualified *"nowhere in the tree"* is a claim the reader cannot check, and it
+has now been wrong twice.
+
+ℹ️ **The near-miss is worth stating plainly**: on the strength of that absence the consequence
+paragraph was about to be deferred as unciteable, and §7.2 would have shipped with its budget intact
+but its evidence missing — a correct document made weaker by a search scope. ⚠️ **The related record
+`web/scripts/measurements/2026-08-17-density-toggle.md` is genuinely not on `main`** — verified with
+`git cat-file -e origin/main:…`, which reports *"does not exist in 'origin/main'"* — and is
+deliberately not cited anywhere in this sweep.
+
+---
+
+## LAT-02 — ADR-0029's arithmetic all divides by the borrowed number. **Applied, as a marked amendment.**
+
+**This is the half of LAT-01 that changes numbers rather than claims**, and it gets its own entry
+because ADR-0029 is a decision record: its figures are cited elsewhere, so moving them silently would
+be worse than the defect.
+
+**Found.** Every row ceiling in ADR-0029 is `a budget ÷ a per-row cost`, and the budget in every one
+of them is Tier 0's 100 ms. The per-row costs are sound and measured; the numerator was never this
+ADR's to use.
+
+**Applied.** A **⚠️ Amendment, 2026-08-17** at the top of the ADR, in the style its 2026-08-16
+amendment established — the Decision restated as untouched, then what moves, with the derivation
+shown rather than the numbers swapped:
+
+| Figure | Against 100 ms | Against 400 ms |
+|---|---|---|
+| Curve `0.0146 ms/row + 6.4 ms`, desktop | ≈ 6,400 rows | ≈ 27,000 rows |
+| Same curve, 🔍 Pi-class 3–5× | 930–1,840 rows | **5,000–8,700 rows** |
+| Worst row shape `0.214 ms/row`, desktop | ≈ 500 rows | ≈ 1,870 rows |
+| Same worst case, 🔍 Pi-class 3–5× | **100–167 rows** | **374–623 rows** |
+
+**Nothing was re-measured and no per-row figure changed** — the ceiling is linear in the budget, so
+100 ms → 400 ms is exactly ×4, and the amendment says so instead of presenting new numbers.
+
+⚠️ **The residual-risk note is weakened, not deleted, and the amendment says which.** §3 read *"on
+the worst-case row shape, one 200-row page is already at the Pi-class limit (200 against 100–167)."*
+Against 374–623 a 200-row page sits at **roughly half** the worst-case Pi-class ceiling instead of
+over it. Heavy row shapes still carry the least headroom and `make bench` still settles whether such
+a list needs a smaller page. 🚩 **Kept rather than removed, because the sentence was right about the
+ratio and wrong only about the threshold it measured against** — deleting it would have hidden that
+the risk was overstated by a borrowed number rather than found to be absent.
+
+⚠️ **One warning gets stronger.** ≈ 27,000 rows is further past the linear fit's range than ≈ 6,400
+was — the 25,000-row point is superlinear — so raising the budget made the curve-derived ceiling
+*less* usable, not more. The amendment states that rather than letting the bigger number read as more
+headroom.
+
+⚠️ **And the curve is superseded for the shipped page size by a direct measurement of it.** The curve
+predicts ≈ **9.3 ms** for a 200-row density toggle; the shipped path measures **75.7 ms**. Two
+contributors are visible — a different machine class, and `dff20fd`'s forced re-measurement, which is
+the cost of *complying* with §7.4's invalidation rule and postdates the curve — **and the amendment
+declines to apportion between them**, because nothing in either record separates the two. What it
+states is the conclusion that does not depend on the split: the curve's remaining value is its shape,
+not its constant.
+
+✅ **Index row consistency checked, since the ADR table is generated from nothing and drifts by
+hand.** The `docs/DECISIONS.md` row for 0029 now carries the 2026-08-17 amendment alongside the
+2026-08-16 one, and both the row and the ADR's own **Status** line state that the decision is
+unchanged and the page size is still 200 rows.
+
+**`LOAD_MORE_PAGE_SIZE` is not touched by this entry, and no threshold in `web/` is.**
+
+### LAT-02.1 What this unblocks, and the rename it now requires
+
+⏭️ **Routing, not done here — `web/` is the frontend thread's tree.** `DI-02` records
+`f32b283` on `claude/hearth-thread-d247f2-bench` as *"fixed but held … while the design thread
+replaces the threshold it derives from."* **This entry is that replacement**, so the hold is
+released — but the branch cannot merge as written. Per `2262237`'s own description it introduces
+**`TIER0_HARD_FAIL_MS` / `PI5_FACTOR`** in `web/scripts/list-bench.mjs`, and after this amendment
+**that constant is misnamed and its value is wrong**: the toggles are not Tier 0, and the budget is
+400 ms rather than 100 ms.
+
+🚩 **The margin changes character, which is the part worth carrying across.** The derived desktop
+budget goes from `100 ÷ 5 = 20 ms` to `400 ÷ 5 = 80 ms`, and the shipped 200-row page measures
+**75.7 ms** — so the guard flips from **failing at every page size** to **passing at the shipped one
+by 4.3 ms**. ⚠️ **A guard with 4.3 ms of headroom on a runner whose own record calls it noisy will
+flap**, and that is a design question for whoever lands it — the honest options are to assert against
+the desktop figure directly rather than a Pi-scaled one, or to widen the tolerance and say why.
+**Naming it `CONTROLS_HARD_FAIL_MS` is the minimum; deciding what it asserts is not this entry's
+call.**
+
+---
+
+### On the gate for LAT-01 and LAT-02
+
+`node docs/design/check.mjs` was run on the merged tree. ⚠️ **State plainly what that green is: a
+regression check, and not evidence about this edit.** `check.mjs` is §13's enforcement mechanism — it
+lints the mockups, `tokens.css` and the shipped component CSS against the ban list, the token floors
+and the geometry assertions. **Every change in LAT-01 and LAT-02 is prose in three Markdown files
+that `check.mjs` does not read.** A green here attests that the four documents' edits broke nothing
+the checker covers, which is worth having and is a different claim from the edits being correct.
+Nothing in this pair of entries is evidenced by it.

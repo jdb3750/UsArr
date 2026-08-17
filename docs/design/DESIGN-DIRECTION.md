@@ -790,8 +790,10 @@ Hard rules:
 
 ## 7. Loading and latency policy
 
-Four tiers, keyed to **where the data lives**, not to how long anyone guesses it will take. And
-one headline rule: **there are no skeleton screens anywhere in UsArr.**
+Four tiers, keyed to **where the data lives**, not to how long anyone guesses it will take — plus
+one budget that is deliberately *not* a tier, because the interaction it governs fetches nothing and
+so has no data location to key on (§7.2, **Controls**). And one headline rule: **there are no
+skeleton screens anywhere in UsArr.**
 
 ### 7.1 Why no skeletons
 
@@ -867,6 +869,79 @@ import. **Determinate progress with real counts**: "4 of 9 indexers responded", 
 movies". **Never a fake bar.** Partial results are usable as they arrive — §8.4 already requires
 per-indexer streaming over SSE, and §17.7 already requires home sections to populate live as import
 phase A commits.
+
+**Controls — a user-initiated change to presentation, which fetches nothing.** The density toggle
+and the theme toggle are the current members, and the category is closed to interactions that touch
+data: the moment a control triggers a read, the read is governed by its own tier above. **Target
+< 100 ms; hard fail at 400 ms.** §7.2 covers these, and that sentence is here so nobody has to reach
+the category by inference again.
+
+> ⚠️ **This category exists because the four tiers above did not contain it, and three documents
+> asserted for months that they did.** §7.4, ADR-0029 and `ARCHITECTURE.md` §4.5 each called the two
+> toggles *"pure-local no-data interactions"* and concluded they were *"Tier 0 by §7.2's own
+> definition, whose hard fail is 100 ms"* — but Tier 0 reads, verbatim, *"the data is in local
+> SQLite. Nearly every read,"* and its stated diagnostic for a breach is *"a query-plan bug"*
+> belonging in the `EXPLAIN QUERY PLAN` assertions. **A control that touches no data has no query
+> plan to be a bug in.** The budget was extended to controls by the documents that wanted a budget
+> rather than by the document that owns latency tiers, which is the defect this block repairs.
+> **Tier 0 is unchanged**: 100 ms still stands for reads, exactly as written.
+
+**The derivation, which does not depend on what the toggles currently cost.** §6 already fixes both
+ends of this from primary sources, and the argument runs from them rather than from a measurement.
+Nielsen's **0.1 s** is *"the limit for having the user feel that the system is reacting
+instantaneously… no special feedback is necessary except to display the result"*
+(<https://www.nngroup.com/articles/response-times-3-important-limits/>); **400 ms** is the flow limit
+Doherty and Thadani argued for (*The Economic Value of Rapid Response Time*, IBM Systems Journal,
+1982; <https://lawsofux.com/doherty-threshold/>), and §6 already treats it as this document's flow
+threshold when it rejects a 250 ms decorative transition for landing *"two thirds of the way to"* it.
+**A rare, deliberate, user-initiated control is exactly the case where the flow limit governs and the
+instantaneous one does not.** The user asked for the change, is expecting it, and is not mid-thought
+waiting on data that has not arrived — so falling short of *instantaneous* costs polish, while
+crossing the *flow* limit costs the user their place. Hence: aim at the instantaneous threshold, fail
+at the flow threshold.
+
+📌 **Two guards on that reasoning, because a threshold is only worth as much as its discipline.**
+First, **the 400 ms is §6's own number, not the nearest available one** — §7.1's *"under 1 second,
+show nothing"* (<https://www.nngroup.com/articles/skeleton-screens/>) is a rule about *when a loading
+affordance is worth showing*, not a budget for how long an interaction may take, and reading it as
+the latter is the same category slip this block was written to fix. Second, **no number here was
+derived from what the toggles measure today.** The cost curve lives in ADR-0029 and moves with the
+markup; this budget is a claim about the user, and it would read the same if the toggles were free or
+if they were ten times worse.
+
+**The consequence, stated separately — because it is a consequence of the budget and not its
+purpose.** 📏 **Measured by the frontend thread, not by this one**, and cited with its instrument and
+its tree because §7.4's standing rule for this row requires exactly that. The record is
+`web/scripts/measurements/2026-08-17-density-invalidation.md`, added by **`dff20fd`**; it measures
+**tree `3ff8151` plus that change**, on **Chromium 141.0.7390.37 headless** via `playwright-core`
+1.56.1, **Node v22.22.2**, viewport **1440×900**, against the harness rich release row. The machine
+is an **x86-64 container, 4 vCPU (Intel Xeon @ 2.80 GHz), 15 GB RAM, shared host** — which that
+record calls *"a reasonable proxy for a ThinkCentre under Proxmox"* and, in the same breath,
+***"not a proxy for a Pi 5"***. Each figure is one density change through the real product path,
+five samples, median, on the *with-invalidation* path that holds scrollbar error at 0.00%.
+
+| Rows in the page | 100 | 120 | 160 | 200 |
+|---|---|---|---|---|
+| Density toggle, shipped path | **32.1 ms** | **37.4 ms** | **49.3 ms** | **75.7 ms** |
+
+**Every page size in that range clears the 400 ms hard fail outright on that instrument.** 🔍 **And
+the shipped 200-row default still clears it with ADR-0029's pessimistic 5× Pi-5 multiplier applied —
+378.5 ms, 21.5 ms under the limit — which is inference, not measurement**: the multiplier is
+ADR-0029's, the source record scaled nothing to a Pi and says so in as many words, and §13 forbids
+quoting a Pi-derived figure as a measured one. ⚠️ **That is about 5% of margin, and it is written
+here rather than rounded away**, because
+a budget a real configuration clears by 21 ms is a budget doing work. A threshold chosen to make the
+measurement pass would not have been chosen this tight. ℹ️ Two limits on the row above, from the
+source's own §6: this runner is noisy, 100 and 120 overlap and **must not be read apart**, and the
+trend — a factor of 2.4 across the range — is what it resolves. That is enough for a budget check and
+is *not* enough for a page-size decision, which the source declines to make and so does this section.
+
+🚩 **What the old framing would have implied is the strongest single piece of evidence that it was
+wrong.** Tier 0's 100 ms under the same 5× multiplier is a **20 ms** desktop-equivalent budget — a
+figure the measurement file names in its own §7 — and against it **every page size in the measured
+range fails, 100 rows included at 32.1 ms**, by 1.6× at the smallest setting and 3.8× at the shipped
+one. **A rule that fails at every available setting is not a strict rule, it is a misapplied one**,
+and the four tiers never claimed this interaction in the first place.
 
 ### 7.3 Cross-cutting rules
 
@@ -1206,10 +1281,19 @@ accounts for about 88% of it and scoping the density attribute to the list conta
 5,000 and 6,508 ms at 25,000**, and the **theme toggle** 1,356–4,514 ms at 25,000 — because each
 sets an attribute on `<html>` and invalidates every element reading a custom property. Both are
 top-bar controls on every screen, both are pure-local no-data interactions, and both are therefore
-**Tier 0 by §7.2's own definition, whose hard fail is 100 ms**. 🔍 Extrapolating the measured
-0.15–0.26 ms/row to a Pi 5 at a conservative 3–5× puts that hard fail at **100–300 rows in the DOM**,
-or 300–600 with `table-layout: fixed` and working containment — **so the real ceiling is set by the
-density control, in the hundreds, not by scrolling in the tens of thousands.** ⚠️ **ADR-0029's
+governed by **§7.2's *Controls* budget — target < 100 ms, hard fail at 400 ms**. ⚠️ **This sentence
+used to read *"Tier 0 by §7.2's own definition, whose hard fail is 100 ms"*, and §7.2 contained no
+such definition.** Tier 0 is *"the data is in local SQLite. Nearly every read"*; a control that
+fetches nothing is not a read, and the category it needed did not exist until §7.2 grew one. The
+claim is replaced rather than re-cited, because a corrected pointer to the wrong tier would still be
+the wrong tier. 🔍 Extrapolating the measured 0.15–0.26 ms/row to a Pi 5 at a conservative 3–5×
+puts that hard fail at **400–1,200 rows in the DOM**, or 1,200–2,400 with `table-layout: fixed` and
+working containment — **so the real ceiling is still set by the density control rather than by
+scrolling in the tens of thousands, but it sits in the high hundreds to low thousands rather than in
+the hundreds.** ℹ️ **Those are the previous 100–300 and 300–600 multiplied by four, and that is the
+whole derivation**: the row ceiling is the budget divided by a per-row cost, so it is linear in the
+budget, and 100 ms → 400 ms moves it by exactly 4×. Nothing was re-measured to produce them.
+⚠️ **ADR-0029's
 2026-08-16 amendment sharpens this from the shipped primitive** — a measured cost curve of
 0.0146 ms/row + 6.4 ms fixed, a worst-case row shape at 0.214 ms/row, and a **200-row default page
 size** — and that amendment, not this paragraph, is the current arithmetic. ⚠️ **The per-row
@@ -1219,8 +1303,8 @@ The extrapolation above runs *downward*, into the range the fit covers, which is
 all — **no figure extrapolated past a few thousand rows may be quoted here as though it were
 measured.** Three mitigations before any redesign: set `table-layout: fixed` (never set anywhere
 today, and it halves the cost); **scope the density attribute to the list container rather than
-`:root` — measured at about 25%, on top of containment's ~88%**; and if it still exceeds 100 ms, an
-explicit 150 ms "applying" state is honest where a silent multi-second freeze is not.
+`:root` — measured at about 25%, on top of containment's ~88%**; and if it still exceeds the 400 ms
+hard fail, an explicit 150 ms "applying" state is honest where a silent multi-second freeze is not.
 
 The reasons are concrete. `content-visibility: auto` skips rendering of off-screen content but,
 unlike `display: none`, "the skipped contents must still be available as normal to user-agent
