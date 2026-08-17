@@ -687,18 +687,28 @@ visible **"not identified"** state: whatever the backend reports, UsArr keeps th
 a title and a file and a quiet marker, still searchable. That single behaviour is what
 LazyLibrarian's absence of disqualifies it as a catalogue, and it costs one nullable column and one
 badge. **It is a v0.1 requirement**, not a v0.3-or-later one, **because it cannot be retrofitted** —
-the nullable column belongs in migration 0001 and the badge in the first grid. It is *reached*
-rarely in v0.1, whose Sonarr and Radarr carry TVDB and TMDB ids, and becomes the ordinary case with
-the first catalogue source (ARCHITECTURE §16.1): free Kavita's identifier fields are null, and Komga
-supplies **no external identifiers at all**. It now lives in ARCHITECTURE §6.4 as a rule; it is
-recorded here only so the connection is not lost.
+the nullable column belongs in migration 0001 and the badge in the first grid. ⚠️ **The frequency
+claim that stood here is inverted, and the inversion is the point.** It read *"it is reached rarely
+in v0.1, whose Sonarr and Radarr carry TVDB and TMDB ids, and becomes the ordinary case with the
+first catalogue source"* — but [ADR-0041](./DECISIONS.md#adr-0041) made Kavita the first catalogue
+source **and** put it in v0.1, and [ADR-0045](./DECISIONS.md#adr-0045) moved Sonarr and Radarr to
+v0.2, so the two halves of that sentence swapped milestones: free Kavita's identifier fields are
+null and Komga supplies **no external identifiers at all**, which makes "not identified" the
+**ordinary** case from v0.1 rather than the rare one. What that changes is not the requirement — it
+was always v0.1's, on the same not-retrofittable grounds — but how hard v0.1 exercises it.
+`internal/libsync` is where the null-identifier path is actually taken. It now lives in
+ARCHITECTURE §6.4 as a rule; it is recorded here only so the connection is not lost.
 
 **Trigger.** ⚠️ **Rewritten, because the previous one — *"the milestone that ships any book
 catalogue source with real user data behind it"* — was satisfied by v0.1** under ADR-0032, which
 would have made this a deferred entry whose reopening condition fires one milestone *before* the
-roadmap line that used to claim it. (Under [ADR-0036](./DECISIONS.md#adr-0036) no book catalogue
-source ships in v0.1 at all, so the old trigger would now fire later — but it was the wrong *kind* of
-condition either way, being about data rather than about machinery, and the rewrite stands on that.) **The trigger is now: after v0.3, once the Wikidata edge pipeline has
+roadmap line that used to claim it. (⚠️ The parenthetical here read *"under
+[ADR-0036](./DECISIONS.md#adr-0036) no book catalogue source ships in v0.1 at all, so the old trigger
+would now fire later"*. [ADR-0041](./DECISIONS.md#adr-0041) amended ADR-0036 and put **Kavita** — a
+book, comic and manga source — back into v0.1, so the old trigger is back to firing at v0.1 and the
+round trip changed nothing: it was the wrong *kind* of condition each time round, being about data
+rather than about machinery, and the rewrite stands on that. A trigger that moves whenever the
+roadmap does is the defect the rewrite removed.) **The trigger is now: after v0.3, once the Wikidata edge pipeline has
 proved the confidence/evidence path on real data.** That is the machinery this pass writes into, and
 until it exists there is nowhere to put a computed link.
 
@@ -846,3 +856,71 @@ already determined by three things the current schema fixes:
 user-creation hook that does not exist (v0.1 creates one user, in a migration), and a second
 reserved row nothing reads. Cost of doing it later: one `INSERT … SELECT` over the `user` table, one
 trigger rewrite, and the decision in (2). Nothing about it is a one-way door.
+
+---
+
+## 20. Per-type catalogue coverage on the wire — the array §16's empty-state rule turns on
+
+**What.** One capability array carried with each connected service on `GET /api/v1/services/health`:
+the media types that instance *actually* supplies, derived at ingest from the containers the
+instance itself reported. With it a screen can say *"Ebooks — your Kavita has no book library"*.
+Without it, the most it can say is *"Ebooks — empty"*.
+
+**Why deferred — and it is a wire gap, not a UI failure.** `ARCHITECTURE.md` §16.1's v0.1 entry
+keeps the rule *every screen that would render a library says which source is missing rather than
+drawing an empty one* as a standing requirement, and splits it into the half that is answerable and
+the half that is not. **Answerable:** which source *will* populate a type — §16 is that mapping, it
+covers all six types, and a renderer needs a constant derived from it rather than anything from a
+server. **Not answerable:** whether an already-connected source covers a type. §16 says Kavita
+covers books, so an install whose Kavita holds only comic libraries has an `ebooks` type whose named
+source is connected and healthy with nothing behind it, and **nothing UsArr serves separates that
+from an import that has not run**. `GET /api/v1/library/recent` returns `{items, limit,
+next_cursor}` with no per-type facet (`recentWorksResponse`, `internal/httpapi/library.go`), and
+`GET /api/v1/services/health` carries `kind` plus a `role` whose CHECK admits four values —
+`library|acquisition|indexer|download_client` (migration 0001) — and no media-kind array
+(`serviceHealthResponse`, `internal/httpapi/services.go`).
+
+**Why it is not built now, which is a scope judgement rather than an oversight.** The gap only
+became reachable at all when v0.1 gained a catalogue source: `mapLibraryType`
+(`internal/libsync/kavita.go`) emits exactly two `work.kind` values, `comic` and `book`, so two of
+the six media types have a source and four do not, and the rule has to hold on a mixed screen for
+the first time. But v0.1 connects **one** catalogue source, and with one source the static half
+carries the screen — Ebooks names Kavita, and the residual confusion is one milestone of polish
+rather than a missing capability. The array earns its cost when several sources are connected and
+the answer stops being derivable by hand. *Cut before you add.*
+
+**⚠️ §8.3's `Caps.MediaKinds` is not this, and the resemblance is the trap.** Two independent
+grounds, and the second survives even if the first is fixed. **It is unbuilt:** it occurs zero times
+in Go, and its only non-prose occurrences are two SQL *comments* on
+`library.sink_service_instance_id` (`internal/db/migrations/00005_library_sync.sql` and the schema
+dump in `internal/db/testdata/`). **And it answers a different question:** §8.3 defines it as the
+filter for instances that advertise `Add` for a `(kind, format)` — a **request sink**. §8.3's own
+worked example is why the two must not be folded together: *"Navidrome is an excellent music
+catalogue and cannot accept a request."* A design that reused `Caps.MediaKinds` for catalogue
+coverage would make every read-only source look like a sink, which is the exact error §8.3 was
+written to prevent. (`internal/servarr`'s `Capabilities` field is a third thing again —
+`IndexerCapabilityResource`, Prowlarr's per-*indexer* newznab categories and search-param arrays,
+`internal/servarr/resources.go` — and belongs to §8.5's search filter.)
+
+**What it would cost.** The distinct `work.kind` values each instance's containers map to, retained
+in a queryable shape on `service_instance` or a small join beside it; one field on
+`serviceHealthResponse` plus its key allowlist; and the ingest-side write. No change to `work`, no
+new sync channel, and **no upstream call on a render path** — the value is computed where the
+containers are already being read, and served from SQLite like the rest of that row (principle 1).
+
+**The seam, and it is real rather than aspirational.** The fact this array needs is **already
+produced, once, at ingest**: `mapLibraryType` is documented in its own header as *"THE kind
+decision, and it is UsArr's rather than Kavita's"*, and `library_source` already records the
+container each binding came from as `container_kind` / `container_ref` (§6.5). So the per-container
+kind is decided and the container is retained; what is missing is only the rollup and one wire
+field. Nothing would have to be reconstructed from upstream later, which is the property that keeps
+this a small change whenever it is wanted rather than an archaeology problem.
+
+**Trigger — either of these, whichever comes first.**
+
+* **A second catalogue source lands** (§16.1 #1, Navidrome). With two sources the static §16 mapping
+  stops being a sufficient answer on its own: two instances of the same `kind` can cover different
+  types, and the screen has to say which one is thin rather than which service the roadmap names.
+* **A user reports a type that reads as empty while its source is connected.** That is precisely the
+  confusion this removes, and one report is evidence the static half has stopped carrying the
+  screen.
