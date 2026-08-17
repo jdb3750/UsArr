@@ -11157,3 +11157,27 @@ that was pushed. What the
 green actually attests is that **the tree still builds, lints, tests and scans clean around a
 docs-only change** — i.e. that nothing was broken, not that anything here is right. The claims in
 this pass are checkable by reading §16, §8.3 and `DECISIONS.md`, and that is the only check they have.
+
+## TRIAD.7 Amended disposition — `TRIAD` undercounted its own edits, twice and differently
+
+`TRIAD-11` · 🟡 · **Self-correction, appended rather than applied in place**, per this file's
+*"amend underneath, leaving the original standing"* rule (§6.1) and `DEVELOPMENT.md` §11's *"a
+citation inside a dated record is history, not staleness"*. `TRIAD.2` above opens *"Nine sites were
+amended"* and then lists thirteen; commit `3c0e7f9`'s message says *"fifteen sites"*. **Neither
+number is right, and they are not right in different directions**, which is exactly the defect
+§11's *"report what you measured, not just the verdict"* is about — a count asserted from memory
+rather than taken from the diff.
+
+**Measured on the landed tree** (`git diff 87a01e8 60d093e -- docs/ARCHITECTURE.md | grep -c '^@@'`):
+**13 hunks, all inside §16**, carrying **17 distinct amended clauses** — §16.0 ×6 (*"arrive too"*;
+*"re-sequenced, not cut"* plus its new *"not in that table"* sentence; the libraries paragraph's
+request destination; *"day one"*; the *"Three things that decision does not say"* heading; its first
+bullet), §16.1 ×1 (the new table note), the **v0.1 entry ×8** (the \*Arrs' re-sequencing, channel 3,
+the write path's relative slot, the `write_queue` seam, the correction-UI clause, the badge clause,
+the `Recent grabs` *"post-v0.1"* clause, and *"all three now have a milestone"*), the **v0.2 entry
+×1** (the addition), and the **v0.3 entry ×1**.
+
+**The original sentences above are left standing**, including the wrong counts, because the entry is
+a dated record and the failure is more instructive than a tidy number would be. **Three of those
+sites were named in the brief; the other fourteen came from the sweep** — which is the claim
+`TRIAD.2` was actually making, and it is stronger at 14 than it was at nine.
