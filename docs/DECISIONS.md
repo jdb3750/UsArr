@@ -52,7 +52,7 @@ distinctions now matter and are used consistently below:
 | [0026](#adr-0026) | A library is a user-owned binding to upstream containers, with a correction layer | **Accepted** — refines ADR-0004, extends ADR-0014 |
 | [0027](#adr-0027) | Two axes: media type is navigation, a library is scope | **Accepted** — settles §17.2's open question |
 | [0028](#adr-0028) | Home is three fixed blocks, not one strip per media type | **Accepted** — **amends** ARCHITECTURE §17.2 |
-| [0029](#adr-0029) | "Load more" + `content-visibility`; virtualization is a benchmarked escalation | **Accepted** — **amends** §4.5, corrects an argument in ADR-0003; ⚠️ **amended 2026-08-16** — the required benchmark ran against the shipped primitive: the decision is unchanged, correction (c)'s arithmetic, the mitigation ranking and the row-ceiling extrapolation are corrected, the page size is **200 rows**, and two benchmark gaps are recorded |
+| [0029](#adr-0029) | "Load more" + `content-visibility`; virtualization is a benchmarked escalation | **Accepted** — **amends** §4.5, corrects an argument in ADR-0003; ⚠️ **amended 2026-08-16** — the required benchmark ran against the shipped primitive: the decision is unchanged, correction (c)'s arithmetic, the mitigation ranking and the row-ceiling extrapolation are corrected, the page size is **200 rows**, and two benchmark gaps are recorded; ⚠️ **amended 2026-08-17** — the 100 ms every row ceiling divided by was Tier 0's and was never this ADR's to borrow: the toggles are governed by `DESIGN-DIRECTION.md` §7.2's new **Controls** budget at **400 ms**, so every ceiling scales 4×, the worst-case residual-risk note is weakened rather than withdrawn, the shipped 200-row page gains a measured cost, and the page size is still **200 rows** |
 | [0030](#adr-0030) | `work.kind` gains `comic_issue`; manga is not a separate kind | **Accepted** — refines ADR-0009 |
 | [0031](#adr-0031) | Track position is edition-scoped; attribution is many-to-many | **Accepted** — refines ADR-0009 |
 | [0032](#adr-0032) | Read-only catalogue sources move early; command sinks defer | **Accepted** — **amends** §16; **one member reversed by [ADR-0035](#adr-0035)** |
@@ -2172,7 +2172,94 @@ strips. Strips remain legitimate on an item-detail page ("More from this artist"
 everything over ~200 rows", and **corrects a supporting argument in [ADR-0003](#adr-0003)** without
 reopening its conclusion. Closes `design/DESIGN-DIRECTION.md` OQ-1, which the owner delegated. ·
 ⚠️ **amended 2026-08-16** — the required benchmark has been run against the shipped list primitive;
-**the decision is unchanged** and three supporting numbers below are corrected by it.
+**the decision is unchanged** and three supporting numbers below are corrected by it. ·
+⚠️ **amended 2026-08-17** — the 100 ms this ADR's arithmetic divides by was never this ADR's to use:
+the density and theme toggles are not Tier 0, and `design/DESIGN-DIRECTION.md` §7.2 now carries a
+**Controls** budget for them at **400 ms**. **The decision is again unchanged**; every row ceiling
+below moves, and the page size does not.
+
+### ⚠️ Amendment, 2026-08-17 — the budget this ADR divides by was borrowed, and it was the wrong one
+
+**What this amendment does not touch.** The Decision stands: "Load more" over keyset pages plus
+`content-visibility: auto`, virtualization as a benchmarked escalation, **and `LOAD_MORE_PAGE_SIZE`
+at 200 rows, which is unchanged**. What moves is the denominator underneath every row-ceiling figure
+in this ADR, and the residual-risk note that denominator produced.
+
+**The defect, stated as the general rule it is an instance of.** This ADR, `ARCHITECTURE.md` §4.5 and
+`DESIGN-DIRECTION.md` §7.4 each argued that the two toggles are *"pure-local no-data interactions"*
+and concluded they were therefore **"Tier 0 by `design/DESIGN-DIRECTION.md` §7.2's own definition —
+whose hard fail is 100 ms."** §7.2 defined no such category. Its Tier 0 reads *"the data is in local
+SQLite. Nearly every read,"* and names a breach *"a query-plan bug"* for the `EXPLAIN QUERY PLAN`
+assertions — a diagnosis that is meaningless for an interaction with no query. **A budget belongs to
+the document that defines the category; a document that wants a budget must not extend someone
+else's by inference.** §7.2 has now been given the category on its own authority, derived from §6's
+existing anchors — Nielsen's 0.1 s instantaneous limit as the target, Doherty and Thadani's 400 ms
+flow limit as the hard fail — and the derivation is deliberately independent of what the toggles
+cost. **Tier 0 is unchanged at 100 ms for reads.**
+
+**1. Every row ceiling in this ADR is the budget over a per-row cost, so all of them scale by 4×.**
+No per-row figure was re-measured and none changed; only the numerator did.
+
+| Figure, as this ADR states it | Against 100 ms | Against 400 ms |
+|---|---|---|
+| Shipped cost curve `0.0146 ms/row + 6.4 ms`, desktop | ≈ 6,400 rows | ≈ 27,000 rows |
+| Same curve, 🔍 Pi-class at 3–5× | 930–1,840 rows | **5,000–8,700 rows** |
+| Worst observed row shape, `0.214 ms/row`, desktop | ≈ 500 rows | ≈ 1,870 rows |
+| Same worst case, 🔍 Pi-class at 3–5× | **100–167 rows** | **374–623 rows** |
+
+⚠️ **The first two rows are worth less than they look, and this ADR already said why**: the linear
+fit is good only to a few thousand rows because the 25,000-row point is superlinear, so ≈ 27,000 is
+an extrapolation several times further past the fit's range than ≈ 6,400 was. **It is not a ceiling
+anyone may build against, and raising the budget made that worse rather than better.** The operative
+figures are the worst-case row.
+
+**2. The residual-risk note is weakened, not deleted, and here is exactly how much.** §3 of the
+2026-08-16 amendment reads *"on the worst-case row shape, one 200-row page is already at the Pi-class
+limit (200 against 100–167)"*. Against the *Controls* budget the same worst case admits **374–623
+rows**, so **a 200-row page now sits at roughly half the worst-case Pi-class ceiling instead of
+over it.** The concern does not vanish — heavy row shapes still carry the least headroom on this
+page size, and the required `make bench` line is still what settles whether such a list needs a
+smaller page — but it is no longer a statement that the shipped default is already at the limit.
+🚩 **Recorded rather than removed, because the sentence was right about the ratio and wrong only
+about the threshold it was measured against**, and deleting it would hide that the risk was
+overstated by a borrowed number rather than discovered to be absent.
+
+**3. The shipped page size now has a measured cost, and it clears the budget by about 5%.**
+📏 **Measured by the frontend thread, not by the thread writing this amendment.** The record is
+`web/scripts/measurements/2026-08-17-density-invalidation.md`, added by **`dff20fd`**, measuring
+**tree `3ff8151` plus that change** on **Chromium 141.0.7390.37 headless** (`playwright-core` 1.56.1),
+**Node v22.22.2**, viewport **1440×900**, machine class **x86-64 container, 4 vCPU (Intel Xeon @
+2.80 GHz), 15 GB RAM, shared host** — which that record calls *"a reasonable proxy for a ThinkCentre
+under Proxmox"* and expressly ***"not a proxy for a Pi 5."*** One density change through the real
+product path, five samples per cell, medians, on the with-invalidation path that holds scrollbar
+error at 0.00%:
+
+| Rows in the page | 100 | 120 | 160 | 200 |
+|---|---|---|---|---|
+| Density toggle, shipped path | **32.1 ms** | **37.4 ms** | **49.3 ms** | **75.7 ms** |
+
+🔍 **At this ADR's own pessimistic 5× Pi-5 factor, the shipped 200-row page is 378.5 ms against a
+400 ms hard fail — 21.5 ms of margin, about 5%.** ⚠️ **That is stated at full precision rather than
+rounded to "passes", because it is thin**, and because a budget chosen to flatter a measurement would
+not have landed 5% above it. The scaling is inference — the source scaled nothing to a Pi and §13
+forbids quoting a Pi-derived figure as measured — while the desktop figures clear 400 ms outright.
+ℹ️ **Two limits the source itself imposes**: its runner is noisy, **100 and 120 rows overlap and must
+not be read apart**, and it declines to support a page-size decision on that instrument. This
+amendment therefore uses the curve as a budget check and **does not revisit the page size**.
+
+⚠️ **Note what these figures do to §3 of the previous amendment.** Its cost curve predicts about
+**9.3 ms** for a 200-row density toggle; the shipped path now measures **75.7 ms** at that size. Two
+contributors are visible and this amendment does not apportion between them: a different machine
+class, and `dff20fd`'s forced re-measurement, which is the cost of *complying* with §7.4's
+invalidation rule and did not exist when the curve was taken. **The curve is superseded for the
+shipped path by a direct measurement at the size that actually ships**, and the curve's remaining
+value is its shape, not its constant.
+
+**4. What would have happened under the old framing, recorded because it is the evidence the framing
+was wrong.** Tier 0's 100 ms under the same 5× factor is a **20 ms** desktop-equivalent budget — the
+figure the measurement record names in its own §7 — and against it **every page size in the measured
+range fails, 100 rows included at 32.1 ms**, by 1.6× at the smallest setting and 3.8× at the shipped
+one. **A rule that fails at every available setting is not a strict rule, it is a misapplied one.**
 
 ### ⚠️ Amendment, 2026-08-16 — the benchmark ran; the decision stands and three of its numbers move
 
@@ -2303,6 +2390,13 @@ is **107 ms at 5,000 rows**, still over Tier 0's 100 ms hard fail. The mitigatio
 own make an unbounded list safe; the page size in §3 is what does, and it is doing real work rather
 than belt-and-braces.
 
+> ⚠️ **Amended 2026-08-17 — the threshold in that paragraph is the borrowed one.** Against the
+> *Controls* budget the shipped configuration's **107 ms at 5,000 rows is comfortably inside 400 ms**,
+> so this paragraph's specific claim no longer holds. ✅ **Its conclusion survives on a different
+> footing and is the reason it is kept**: 5,000 rows is far outside anything "Load more" produces at
+> a 200-row page, the mitigations still do not make an *unbounded* list safe, and the page size is
+> still what does the work. See the 2026-08-17 amendment at the top of this ADR.
+
 **3. The page size is 200 rows, and this is the arithmetic.** The extrapolation being sharpened:
 
 > 🔍 **The escalation threshold this settles is a DOM-row ceiling in the hundreds, not the tens of
@@ -2332,6 +2426,19 @@ hardware**, and the shipped curve at the same factor is roughly 930–1,840 rows
   100–167). Heavy row shapes — the six-line services row, not the one-line search row — therefore
   carry the residual risk of this page size, and the required `make bench` line above is what settles
   whether such a list needs a smaller page. That is left to the measurement, not decided here.
+
+> ⚠️ **Amended 2026-08-17 — every figure in §3 divides by a budget this ADR was not entitled to.**
+> The toggles are not Tier 0; §7.2's *Controls* budget is **400 ms**, so each ceiling above scales by
+> 4×: **≈ 6,400 → ≈ 27,000 rows** desktop on the curve, **≈ 500 → ≈ 1,870** desktop on the worst-case
+> row, **100–167 → 374–623** 🔍 Pi-class on that worst case, and *"roughly six presses of headroom"*
+> becomes roughly twenty-five or more. **The page size stays at 200** and no per-row cost changed —
+> only the numerator. ⚠️ **The second bullet above is weakened, not withdrawn**: at 374–623 a
+> 200-row page is no longer *"already at the Pi-class limit"*, it is at roughly half of it, and heavy
+> row shapes still carry the least headroom on this page size. ⚠️ **The first bullet's warning gets
+> stronger, not weaker** — ≈ 27,000 rows is further past the linear fit's range than ≈ 6,400 was, so
+> it is even less usable as a ceiling. **And §3's arithmetic is now superseded for the shipped page
+> size by a direct measurement of it — 75.7 ms at 200 rows** — in the 2026-08-17 amendment at the top
+> of this ADR, which is where the current numbers live.
 
 **4. The `<tr>` finding was independently reproduced; nothing is amended.** A separate run on a
 separate harness reproduces both halves exactly: containment on `<div>` rows moves the container's
@@ -2460,7 +2567,10 @@ away, and the ~200 figure had no measurement behind it.
 
   Desktop x86 Chromium, real markup, mean of four changes. **Both are top-bar controls present on
   every screen and both are pure-local no-data interactions, so both are Tier 0 by
-  `design/DESIGN-DIRECTION.md` §7.2's own definition — whose hard fail is 100 ms.** The required
+  `design/DESIGN-DIRECTION.md` §7.2's own definition — whose hard fail is 100 ms.**
+  ⚠️ **Superseded by the 2026-08-17 amendment at the top of this ADR: §7.2 had no such definition,
+  and the toggles are governed by its *Controls* budget — hard fail 400 ms — not by Tier 0.** The
+  premise either side of that clause is untouched; only the tier and the number are wrong. The required
   line therefore measures, at 1k / 5k / 25k rows, in both themes and at all three densities, on the
   §13 reference hardware: **density-toggle wall clock · theme-toggle wall clock · filter and sort
   wall clock · scroll frame time · scrollbar drift**, the last as

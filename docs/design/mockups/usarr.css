@@ -1379,7 +1379,7 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
   border: 1px solid var(--border);
 }
 /* THE TITLE AND YEAR SIT BELOW THE TILE, ON THE CHROME'S OWN GROUND, and this
-   is §9.7's rule rather than a preference -- the mockup was simply the last
+   is §9.2's rule rather than a preference -- the mockup was simply the last
    thing still doing it the old way.
 
    They used to be set inside .card__art, over the fill, which is why usarr.js

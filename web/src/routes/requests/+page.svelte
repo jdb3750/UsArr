@@ -104,6 +104,7 @@
 		categoryNames,
 		categoryTree,
 		clearScopeLabel,
+		indexerCategoryTitle,
 		indexerFacts,
 		indexerNames,
 		indexerPickerLegend,
@@ -241,15 +242,43 @@
 		// no "Indexer page" link, and its track measured 63 px against its
 		// siblings' 155.02 px.
 		//
-		// 198px = the widest state this cell can hold, measured in the real cell:
-		// "Search again" + "Indexer page" is 174 px of content, plus 2 ×
-		// --row-pad-x, which is 12 px at all three densities. The other states
-		// measure 131 / 150 / 86 / 39 px and fit inside it.
+		// 220px, AND THE SIZING FACE IS THE FALLBACK RATHER THAN IBM PLEX. The
+		// widest state this cell holds is "Search again" + "Indexer page". With
+		// the faces served that is 174.00 px of content, which is exactly what
+		// 198px was cut to: zero slack, so the constraint was invisible to
+		// whoever touched the cell next, and it rested on "the webfont always
+		// loads" — a premise a real host has already broken. The SAME shape on
+		// the fallback stack measures 191.09 px, and at 198px it wrapped.
+		//
+		// 191.09 + 24 (2 × --row-pad-x, 12 px at all three densities) = 215.09.
+		// The next multiple of 4 — the unit every other fixed track here uses —
+		// is 216px, which is 0.91 px clear and is the invisible constraint all
+		// over again, so the reserve is the one after it. 220px leaves 4.91 px
+		// of slack on the fallback face and 46.00 px on Plex. The 22 px comes
+		// off the four fr tracks: at 1280 px Indexer goes 157.5 → 152 px, still
+		// far clear of the 110 px the fraction note above rejected.
+		//
+		// The other eight states, fallback / Plex: 141.98 / 131.00 Grab + link
+		// (identical with the grab window expired — `aria-disabled` does not
+		// change the label), 161.56 / 150.00 Sending + link, 92.78 / 86.00 link
+		// alone, 92.31 / 82.00 Search again alone, 62.78 / 58.00 Sending alone,
+		// 43.20 / 39.00 Grab alone, 0 / 0 the two empty states.
+		//
+		// Measured in web/scripts/harness re-seeded with this COLUMNS array and
+		// this cell's markup — NOT on the real route, which needs the Go backend
+		// and a live SSE stream — at 1280/1440/1680/1920 px, under BOTH font
+		// conditions, each one asserted before it was trusted:
+		// `document.fonts.check('600 13px "IBM Plex Sans"')` false for the
+		// fallback pass and true for the Plex pass. A width measured without
+		// knowing which face was active is not a measurement; that is how the
+		// 174 px figure came to be treated as the whole story.
 		//
 		// §9.1's policy is kept by `.cell-actions` wrapping instead of by an
 		// unbounded track: content that outgrows the reserve drops to a second
-		// line, so it is still reachable rather than cut.
-		{ id: 'actions', header: 'Actions', width: '198px', stackLine: 1 }
+		// line, so it is still reachable rather than cut. The slack above does
+		// not retire that net — another host's fallback face is another set of
+		// metrics — it stops the shipped configuration from riding on it.
+		{ id: 'actions', header: 'Actions', width: '220px', stackLine: 1 }
 	];
 
 	// ⚠️ `Time`, NEVER `Downloaded`, AND THE UNION IS WHY IT MATTERS RATHER THAN
@@ -1754,8 +1783,29 @@
 				     passes so [3000, 3030] reads `book · audiobook` rather than
 				     `music`, which is exactly what category 3030 exists to prevent. -->
 				{@const label = categoryLabel(release.tags, release.categories)}
+				<!-- The tooltip is the OTHER vocabulary: what the indexer that
+				     returned THIS row calls the categories it filed it under. It joins
+				     against that indexer's own subtree, keyed on the pair (the
+				     instance the search resolved to, plus the row's indexer id) —
+				     never against `categoryTree`'s union, whose name collisions are
+				     settled arbitrarily and untraceably, so a lookup over it would
+				     print one indexer's wording under another's category on every row
+				     and look right. `$lib/indexercatalog.indexerCategoryTitle` owns
+				     the argument and every absence.
+
+				     It falls back to `label` — the cell's own visible text, which is
+				     what the `.trunc` tooltip has always been — rather than to
+				     nothing, because dropping the title would take the truncation
+				     readout away from a cell that still overflows. That fallback can
+				     never mislead: it is the string already on screen. -->
+				{@const upstream = indexerCategoryTitle(
+					catalog?.indexers ?? [],
+					searchedInstance,
+					release.indexerId,
+					release.categories
+				)}
 				{#if label}
-					<span class="trunc" title={label}>{label}</span>
+					<span class="trunc" title={upstream || label}>{label}</span>
 				{:else}
 					<span class="muted">{NOTHING.empty}</span>
 				{/if}

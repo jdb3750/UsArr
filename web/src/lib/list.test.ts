@@ -14,10 +14,12 @@
  * by `pnpm bench:list` (scripts/list-bench.mjs), which drives the REAL
  * component under Playwright and exits non-zero on a failed invariant.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
 	capChips,
+	findContentSizedTracks,
 	gridTemplate,
+	isContentSized,
 	NOTHING,
 	rowCount,
 	rowIndex,
@@ -25,15 +27,19 @@ import {
 	type ListColumn
 } from './list';
 
+// ⚠️ THE ACTIONS TRACK IS 198px HERE AND IT USED TO BE `minmax(max-content,
+// auto)`. That was the shipped bug (see findContentSizedTracks), so leaving it
+// in the fixture would make this suite print the guard's own console.error on
+// every run and teach whoever reads the output to ignore it.
 const COLUMNS: ListColumn[] = [
 	{ id: 'release', header: 'Release', width: 'minmax(0, 3fr)' },
 	{ id: 'size', header: 'Size', width: '9ch', align: 'end' },
-	{ id: 'actions', header: 'Actions', width: 'minmax(max-content, auto)' }
+	{ id: 'actions', header: 'Actions', width: '198px' }
 ];
 
 describe('gridTemplate', () => {
 	it('joins the declared tracks in column order', () => {
-		expect(gridTemplate(COLUMNS)).toBe('minmax(0, 3fr) 9ch minmax(max-content, auto)');
+		expect(gridTemplate(COLUMNS)).toBe('minmax(0, 3fr) 9ch 198px');
 	});
 
 	it('degrades to one full-width track rather than to an empty value', () => {
@@ -42,6 +48,171 @@ describe('gridTemplate', () => {
 		// column with no min-width:0, which is how a release name pushes the
 		// document sideways.
 		expect(gridTemplate([])).toBe('minmax(0, 1fr)');
+	});
+
+	// ⚠️ THE GUARD IS FIRED HERE, NOT JUST DECLARED. `import.meta.env.DEV` is
+	// true under vitest, so gridTemplate really runs warnContentSized in this
+	// suite; spying on console.error is what proves the wiring exists rather
+	// than only the predicate.
+	it('console.errors, naming the column, when a caller declares a content-sized track', () => {
+		const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			gridTemplate([
+				{ id: 'release', header: 'Release', width: 'minmax(0, 3fr)' },
+				{ id: 'actions', header: 'Actions', width: 'minmax(max-content, auto)' }
+			]);
+			expect(spy).toHaveBeenCalledTimes(1);
+			const message = String(spy.mock.calls[0][0]);
+			expect(message).toContain('actions (width: minmax(max-content, auto))');
+			// The clean column is not accused alongside the dirty one.
+			expect(message).not.toContain('release');
+			expect(message).toContain('ADR-0029');
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it('names every offending column, not just the first', () => {
+		const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			gridTemplate([
+				{ id: 'a', header: 'A', width: 'auto' },
+				{ id: 'b', header: 'B', width: 'minmax(0, 1fr)' },
+				{ id: 'c', header: 'C', width: 'fit-content(200px)' }
+			]);
+			const message = String(spy.mock.calls[0][0]);
+			expect(message).toContain('a (width: auto)');
+			expect(message).toContain('c (width: fit-content(200px))');
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	it('stays silent, and still returns the template, when every track is safe', () => {
+		const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			expect(gridTemplate(COLUMNS)).toBe('minmax(0, 3fr) 9ch 198px');
+			expect(gridTemplate([])).toBe('minmax(0, 1fr)');
+			expect(spy).not.toHaveBeenCalled();
+		} finally {
+			spy.mockRestore();
+		}
+	});
+
+	// A guard that can take a screen down is a guard someone deletes. It reports
+	// a cosmetic defect; it must not become a functional one.
+	it('does not throw on an offending column, and returns the declared template anyway', () => {
+		const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			expect(() =>
+				gridTemplate([{ id: 'actions', header: 'Actions', width: 'max-content' }])
+			).not.toThrow();
+			expect(gridTemplate([{ id: 'actions', header: 'Actions', width: 'max-content' }])).toBe(
+				'max-content'
+			);
+		} finally {
+			spy.mockRestore();
+		}
+	});
+});
+
+/**
+ * ⚠️ BOTH HALVES OR NEITHER. A validator is only as good as its false-positive
+ * rate: one that returns `widths` unconditionally passes every "it catches the
+ * bad form" test ever written. The legitimate forms below are therefore not
+ * padding — they are the half of the suite that has teeth.
+ */
+describe('findContentSizedTracks', () => {
+	const OFFENDING = [
+		// The bare keywords.
+		'auto',
+		'max-content',
+		'min-content',
+		// fit-content() is min(max-content, max(auto, arg)) — content-sized
+		// whatever the argument is, including a plain length.
+		'fit-content(200px)',
+		'fit-content(30%)',
+		// minmax() with a content-sized FLOOR. The first is the exact form that
+		// shipped and misaligned the Requests release table.
+		'minmax(max-content, auto)',
+		'minmax(max-content, 1fr)',
+		'minmax(min-content, 1fr)',
+		'minmax(auto, 1fr)',
+		// A fit-content() nested in the floor is still content-sized: the check
+		// has to recurse rather than pattern-match the argument text.
+		'minmax(fit-content(200px), 1fr)',
+		// minmax() with a content-sized MAXIMUM. CSS Grid §7.2.3: "auto as a
+		// maximum is identical to max-content".
+		'minmax(0, auto)',
+		'minmax(80px, max-content)',
+		'minmax(0, fit-content(200px))',
+		// Whitespace and case are not a defence.
+		'minmax( max-content , auto )',
+		'  auto  ',
+		'MAX-CONTENT',
+		'MinMax(Max-Content, 1fr)',
+		// Two tracks smuggled into one field.
+		'minmax(0, 1fr) auto'
+	];
+
+	const LEGITIMATE = [
+		// Fixed lengths — the fix that landed on the Requests actions column.
+		'198px',
+		'80px',
+		'10ch',
+		'9ch',
+		'4rem',
+		'0',
+		'50%',
+		// Flex.
+		'1fr',
+		'2.4fr',
+		// The workhorse forms across every list in this repo.
+		'minmax(0, 1fr)',
+		'minmax(80px, 1fr)',
+		'minmax(0, 2.4fr)',
+		'minmax(0, 3fr)',
+		'minmax(0, 1.9fr)',
+		'minmax(120px, 240px)',
+		// A function that merely CONTAINS no content keyword must not be caught
+		// by a substring test, and `calc` is the one a naive regex trips over.
+		'calc(100% - 10px)',
+		'minmax(calc(2rem + 4px), 1fr)',
+		// Degenerate input is not an offence; it is somebody else's error.
+		'',
+		'   '
+	];
+
+	it.each(OFFENDING)('flags %j', (width) => {
+		expect(isContentSized(width)).toBe(true);
+		expect(findContentSizedTracks([width])).toEqual([width]);
+	});
+
+	it.each(LEGITIMATE)('leaves %j alone', (width) => {
+		expect(isContentSized(width)).toBe(false);
+		expect(findContentSizedTracks([width])).toEqual([]);
+	});
+
+	it('returns only the offenders, in input order, out of a mixed set', () => {
+		expect(
+			findContentSizedTracks(['minmax(0, 3fr)', 'auto', '9ch', 'minmax(max-content, auto)'])
+		).toEqual(['auto', 'minmax(max-content, auto)']);
+	});
+
+	it('is silent on an empty column set', () => {
+		expect(findContentSizedTracks([])).toEqual([]);
+	});
+
+	it('reports a repeated offender once per column rather than deduplicating', () => {
+		// Two columns, two problems to fix; collapsing them would under-report.
+		expect(findContentSizedTracks(['auto', 'auto'])).toEqual(['auto', 'auto']);
+	});
+
+	// The predicate is pure: no mutation of the caller's array.
+	it('does not mutate its input', () => {
+		const widths = ['auto', 'minmax(0, 1fr)'];
+		findContentSizedTracks(widths);
+		expect(widths).toEqual(['auto', 'minmax(0, 1fr)']);
 	});
 });
 

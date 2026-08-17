@@ -886,7 +886,7 @@ head('1c. data-when and data-inst never write hidden on the same element');
  * from usarr.js. CSP governs the style ATTRIBUTE in markup and the <style>
  * element; CSSOM mutation from script is not an inline style and is not
  * blocked. The poster grid's --dc assignment is that, and it stays. (--dc-fg
- * went with §9.7's move of the poster title off the fill; --dc remains,
+ * went with §9.2's move of the poster title off the fill; --dc remains,
  * because it is still the image placeholder.)
  * This rule is therefore evaluated over the HTML sources only.
  * ========================================================================== */
@@ -1517,7 +1517,27 @@ head('8b. The install switcher: two installs, and every screen answers to it');
     if (moved === SCREENS.length) ok(`install: all ${moved} screens render differently in the two installs`);
 
     /* The mockup notice is the labelled-mockup exception DESIGN-DIRECTION rule
-     * 13 grants, so it has to stay true of whichever install is selected. */
+     * 13 grants, so it has to stay true of whichever install is selected.
+     *
+     * Everything below asserts a PROPERTY of the notice, never its wording,
+     * and that is the finding rather than the code. The notice used to read
+     * "…UsArr, which is pre-alpha software: none of these screens is
+     * implemented and every value on them is invented", and half of it went
+     * false while nobody noticed — the screens shipped. Any guard that had
+     * pinned that sentence VERBATIM would have been holding the false half in
+     * place: it would have gone green for as long as the claim stayed wrong
+     * and failed the first person to correct it. A guard asserts a property,
+     * not a fact; pinning a fact makes the guard an obstacle to fixing it.
+     * Three properties, each of which survives any honest rewording:
+     *
+     *   · the notice describes the install that is selected;
+     *   · the notice names its data as invented — the true half, and the whole
+     *     reason rule 13 grants the labelled-mockup exception;
+     *   · the notice claims nothing about implementation status. That fact
+     *     belongs to ARCHITECTURE §16 and to the tree; a mockup that restates
+     *     it owns a copy nothing keeps in step, which is REVIEW-LOG SD-01 and
+     *     is exactly how the sentence above went stale.
+     */
     for (const install of INSTALLS) {
       await setInstall(page, install);
       /* The long form of the notice, not the whole .mocknote — the switcher
@@ -1530,7 +1550,39 @@ head('8b. The install switcher: two installs, and every screen answers to it');
       } else {
         ok(`install: the mockup notice describes the ${install} install — "${notice.slice(0, 96)}…"`);
       }
+
+      if (!/\b(invent(ed|s)?|fabricated|made up)\b/i.test(notice)) {
+        fail(`install: the ${install} mockup notice does not name its data as invented, which is the ` +
+          `one thing rule 13's exception is granted for — "${notice.slice(0, 120)}"`);
+      } else {
+        ok(`install: the ${install} mockup notice names its data as invented`);
+      }
+
+      const status = notice.match(/\b(pre-alpha|unimplemented|implemented|shipped|ships)\b/i);
+      if (status) {
+        fail(`install: the ${install} mockup notice makes an implementation-status claim ("${status[0]}") — ` +
+          `§16 and the tree own that fact, a mockup restating it owns a copy that goes stale (SD-01)`);
+      } else {
+        ok(`install: the ${install} mockup notice makes no implementation-status claim`);
+      }
     }
+
+    /* The same property over document.title, and it is here rather than in the
+     * §13 corpus below because that corpus COUNTS strings and does not read
+     * them. The title carried the identical claim — "UsArr screen mockups:
+     * static, invented data, nothing implemented" — for the same reason and
+     * for the same length of time, and it is the one user-visible string a
+     * rendered DOM walk cannot see, so it is the one most likely to be missed
+     * again. One document, one assertion. */
+    const docTitle = await page.title();
+    const titleStatus = docTitle.match(/\b(pre-alpha|unimplemented|implemented|shipped|ships)\b/i);
+    if (titleStatus) {
+      fail(`document.title makes an implementation-status claim ("${titleStatus[0]}") — "${docTitle}". ` +
+        `§16 and the tree own that fact (SD-01); the tab is not the place to restate it`);
+    } else {
+      ok(`document.title makes no implementation-status claim — "${docTitle}"`);
+    }
+
     await setInstall(page, 'full');
   }
 }

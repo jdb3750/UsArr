@@ -433,6 +433,84 @@ export function categoryLabelFor(category: { id: number; name: string }): string
 }
 
 /**
+ * ⚠️ THE PER-INDEXER JOIN — WHAT `categoryTree` ABOVE IS STRUCTURALLY UNABLE TO
+ * ANSWER, AND THE ONLY HONEST WAY TO ASK IT.
+ *
+ * A release row's Category cell shows UsArr's OWN derived words —
+ * `$lib/requests.categoryLabel` reads the server's `type:` / `format:` tags, one
+ * vocabulary across every indexer, which is what makes the column comparable
+ * down its length. The tooltip is the other half: what the indexer that actually
+ * returned this release calls the categories it filed it under. Prowlarr's
+ * `Movies/HD` against another tracker's `HD Movies` for the same 2040 is
+ * ORDINARY, and that divergence is the entire reason the tooltip exists.
+ *
+ * ⚠️ SO IT JOINS AGAINST ONE INDEXER'S OWN SUBTREE, NEVER THE MERGED TREE.
+ * `categoryTree` is a UNION whose name collisions are settled first-non-empty-
+ * wins in indexer arrival order, and `CatalogCategory` keeps no record of which
+ * indexer supplied the survivor — see that function's own warning. A tooltip
+ * resolved from it would populate on EVERY row and look entirely right while
+ * printing one indexer's wording under another indexer's category, destroying
+ * the divergence it was added to show. There is no way to detect that at the
+ * call site, which is why the lookup is here rather than over a shared map.
+ *
+ * ⚠️ THE KEY IS THE PAIR, for the reason `IndexerPair` below spells out at
+ * length: Prowlarr numbers its indexers per install, so a bare indexer id 3
+ * names a different tracker in each configured service. The caller passes the
+ * instance the SEARCH was resolved to — the server's own `instance_id` off the
+ * accepted body — and not whatever the picker happens to be showing now, which
+ * the user may have switched since the results landed. Neither wrong key fails
+ * loudly, which is the trap: ids are small and dense per install, so the other
+ * instance almost certainly HAS an indexer 3, and the lookup finds it and prints
+ * that tracker's wording rather than falling through to the empty string below.
+ *
+ * ⚠️ IT DEGRADES TO THE EMPTY STRING, AND THE CALLER RENDERS NO TOOLTIP RATHER
+ * THAN AN EMPTY ONE. Four absences reach it and none is an error: no instance
+ * resolved yet, a release whose frame carried no `indexer_id`, an indexer the
+ * catalogue replica has not got (deleted upstream, or `never_fetched`), and an
+ * indexer that names none of the ids on this release. A missing tooltip is a
+ * fact about the replica; a guessed one would be the bug above under a new name.
+ *
+ * The walk is recursive because `api.toCatalogIndexer` builds the tree to
+ * whatever depth the wire has — `categoryTree` reads two levels because that is
+ * what the PICKER draws, which is not a claim about the data.
+ */
+export function indexerCategoryTitle(
+	indexers: readonly CatalogIndexer[],
+	instanceId: number,
+	indexerId: number | undefined,
+	categoryIds: readonly number[]
+): string {
+	if (!Number.isSafeInteger(instanceId) || instanceId <= 0) return '';
+	if (indexerId === undefined || !Number.isSafeInteger(indexerId) || indexerId < 0) return '';
+	const source = indexers.find((i) => i.instanceId === instanceId && i.indexerId === indexerId);
+	if (source === undefined) return '';
+
+	const named = new Map<number, string>();
+	const walk = (nodes: readonly CatalogCategory[]): void => {
+		for (const node of nodes) {
+			// Unnamed ids are skipped rather than filled in with `Category 2040`:
+			// the cell already falls back to the bare ids, so a tooltip repeating
+			// them adds nothing and would make "this indexer has no wording for it"
+			// indistinguishable from "it does".
+			if (node.name !== '' && !named.has(node.id)) named.set(node.id, node.name);
+			walk(node.children);
+		}
+	};
+	walk(source.categories);
+
+	// The release's own order, which is Prowlarr's — parent first, so `[3000,
+	// 3030]` reads `Audio · Audio/Audiobook` down the same path the release was
+	// filed along. Repeats are dropped so a doubled id cannot print twice.
+	const out: string[] = [];
+	for (const id of categoryIds) {
+		const name = named.get(id);
+		if (name === undefined || out.includes(name)) continue;
+		out.push(name);
+	}
+	return out.join(' · ');
+}
+
+/**
  * Names for the scope sentence, catalogue first and the SSE-learned union
  * behind it.
  *

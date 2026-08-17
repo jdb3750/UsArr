@@ -1882,6 +1882,44 @@ select[multiple] {
 	contain-intrinsic-size: auto var(--row-ci, var(--leading-base));
 }
 
+/*
+ * ONE FRAME OF FORCED RE-MEASUREMENT, WHICH IS §7.4's INVALIDATION RULE.
+ *
+ * `contain-intrinsic-size: auto` above means "use the length until you have
+ * rendered this row, then remember what it really was and use that instead".
+ * The memory belongs to the ELEMENT and survives the row going off screen, so a
+ * keyed `{#each}` — which reuses row nodes by design, and which §9.1a clause 4
+ * requires — carries the OLD density's remembered heights across a density
+ * change. §7.4 makes invalidating them REQUIRED rather than advisory, and
+ * permits exactly two ways: rebuild the row nodes, or force re-measurement of
+ * every mounted row before the next paint. This class is the second.
+ *
+ * `content-visibility: visible` is what forces it: the row stops skipping its
+ * contents, lays out for real at the new density, and the browser records a
+ * fresh last-remembered size. List.svelte adds the class for one frame and
+ * takes it off again, so nothing about the steady state changes.
+ *
+ * ⚠️ THE THREE CHEAPER THINGS THAT LOOK LIKE THEY SHOULD WORK, AND DO NOT.
+ * Measured on this primitive (x86-64 container, 4 vCPU, shared host; Chromium
+ * via playwright-core 1.56.1), 5,000 rich rows, compact -> relaxed, against the
+ * 14.57% error that doing nothing leaves:
+ *
+ *   drop the `auto` keyword for a frame   14.57%   no better than nothing
+ *   `content-visibility: hidden`          14.09%   no better than nothing
+ *   `display: none` on the tbody          14.59%   no better than nothing
+ *
+ * So the remembered size is not discarded by hiding the row, by taking the box
+ * away, or by removing the keyword that reads it. Only actually laying the row
+ * out again replaces it. Anyone optimising this should re-measure rather than
+ * reason: two of those three were this author's own hypotheses.
+ *
+ * Specificity is deliberate — (0,1,2), identical to `.tbl tbody tr` above — so
+ * this wins on source order alone and must stay BELOW it.
+ */
+.tbl--remeasure tbody tr {
+	content-visibility: visible;
+}
+
 .tbl tbody tr:hover {
 	background: var(--bg-hover);
 }
@@ -2227,7 +2265,32 @@ select[multiple] {
 	/* A four-line stack costs ~105px per media type, which puts the block that
 	 * reports a rejected API key 914px down an 844px viewport. Two columns makes
 	 * the type summary two lines: identity and count, then availability and sync
-	 * time. The Type label is dropped because the value IS the row's identity. */
+	 * time. The Type label is dropped because the value IS the row's identity.
+	 *
+	 * ⚠️ THE `auto` HERE IS A KNOWN, MEASURED SHEAR, AND IT IS LEFT AS IS BECAUSE
+	 * NOTHING RENDERS IT YET. Every row is its own grid (ADR-0029), so a
+	 * content-sized second track resolves against ONE ROW's contents. There is no
+	 * header to disagree with in this fork — thead is clipped above — but the body
+	 * rows disagree with EACH OTHER. Measured in Chromium on the mockup, which is
+	 * the only document that applies this class today (docs/design/mockups,
+	 * "Library by media type", six rows): the row template resolved three
+	 * different ways — `145px 151px`, `131px 165px`, `123px 173px` — so the second
+	 * column started at three different offsets, a 22px spread, and the same 22px
+	 * spread at 360 / 480 / 600 / 760px.
+	 *
+	 * NO SHIPPED SCREEN CAN REACH IT. `List.svelte` stamps `tbl--stack` and
+	 * `tbl--2line` only; `tbl--2up` could arrive through its `class` prop and
+	 * nothing passes one. The block it was written for is Home's Block A, which
+	 * ADR-0028 and `lib/home.ts` keep undrawn until `work` / `edition` /
+	 * `media_file` exist. Fixing it now would mean choosing a split for content
+	 * that does not exist, from mockup strings that are not the real ones.
+	 *
+	 * SO THE FIX IS OWED BY WHOEVER WIRES BLOCK A UP, at this line: replace the
+	 * `auto` with a fixed second track measured off the real cell — the same
+	 * reserve-plus-`flex-wrap` shape routes/requests, routes/services and
+	 * routes/+page use — because no guard can catch this one. `gridTemplate()`
+	 * refuses content-sized tracks it is given; a hand-written per-row
+	 * `grid-template-columns` never passes through it. */
 	.tbl--2up tbody tr:not([hidden]) {
 		grid-template-columns: minmax(0, 1fr) auto;
 		column-gap: var(--space-4);

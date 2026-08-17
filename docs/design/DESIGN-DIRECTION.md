@@ -1,12 +1,13 @@
 # UsArr — Design direction
 
-**Status:** design document, pre-alpha. **None of this design is implemented.** A `web/` directory
-now exists and carries a SvelteKit shell — sign-in, a search page and a scaffold `/services` route
-whose own header says to delete it when §17.3 lands — but it implements none of the system below:
-not the tokens, not the density model, not the component set, not the state sets. Treat every value
-here as still ahead of the code. This document and [`tokens.css`](./tokens.css) remain upstream of
-the UI, in the same spirit as [`ARCHITECTURE.md`](../ARCHITECTURE.md) §17 — which owns what the
-screens *are*, and which this document is downstream of.
+**Where implementation status lives — not here, deliberately.** This document says what the design
+*is*. [`ARCHITECTURE.md`](../ARCHITECTURE.md) §16 is authoritative for what ships in which
+milestone, and the tree is authoritative for what exists right now; a status line restated here
+would have nothing keeping it in step with either. So read nothing below as a claim that a value is
+or is not yet built — check §16, or the code, before describing it either way. This document and
+[`tokens.css`](./tokens.css) remain upstream of the UI, in the same spirit as
+[`ARCHITECTURE.md`](../ARCHITECTURE.md) §17 — which owns what the screens *are*, and which this
+document is downstream of.
 
 **Last revised:** 2026-08-16.
 **Constraints this obeys:** [`ARCHITECTURE.md`](../ARCHITECTURE.md) §17 (screens and UI
@@ -216,7 +217,7 @@ These are not new. They are restated because every decision below is downstream 
 | **ARCHITECTURE §17.1** | **No animation on any list, grid or navigation transition** |
 | **ARCHITECTURE §17.1** | **Density is a feature**, and compact is what loads |
 | **ARCHITECTURE §17.1** | **Every screen usable on a phone browser** — responsive layout, not a separate mobile design |
-| **ARCHITECTURE §17.1 / §4.4.1** | **No skeleton shimmer.** The image placeholder is a `dominant_color` block — the cover's own average colour, reserved at the right aspect before the image arrives. Informative, not decorative, and it never pulses. **The title sits below it, not in it** (§9.7) |
+| **ARCHITECTURE §17.1 / §4.4.1** | **No skeleton shimmer.** The image placeholder is a `dominant_color` block — the cover's own average colour, reserved at the right aspect before the image arrives. Informative, not decorative, and it never pulses. **The title sits below it, not in it** (§9.2) |
 | **ARCHITECTURE §2.3 / §5.5 / §17.7** | Degraded ≠ blocked. A small **non-modal** banner. **The catalogue never greys out and never shows a spinner** |
 | **ARCHITECTURE §13** | Client-side prefix filter p50 < 5 ms, p99 < 16 ms — one frame. The UI's own budget, not the server's |
 | **ARCHITECTURE §16** (amended by ADR-0032, then re-sequenced) | **v0.1 connects three services: Sonarr, Radarr and Prowlarr.** The six media types stay in the model and the navigation, but **v0.1 has no catalogue source for music, audiobooks, ebooks or comics** — the read-only catalogue sources (**Navidrome, Audiobookshelf, Kavita**, then Komga) sequence **after** v0.1, one at a time, so the \*Arr library sync proves the replica thesis on real data first. Of the pair, **Kavita is the one that ships and Komga follows it** — ADR-0032 cut Kavita and **ADR-0035 reversed that**, because Kavita is the install the owner actually runs and it covers books, comics and manga in one source. ARCHITECTURE §16 is authoritative for which milestone each lands in. The **command sinks are all out of v0.1**, and they do not all land together: **LazyLibrarian is v0.3** (the first Tier 1 manifest, request sink only), while **Lidarr, Mylar3 and Kapowarr are v1.0**. Requests in v0.1 is the **Prowlarr Search-and-Grab path only — for all six types**, which is what keeps the four sourceless types navigable |
@@ -789,8 +790,10 @@ Hard rules:
 
 ## 7. Loading and latency policy
 
-Four tiers, keyed to **where the data lives**, not to how long anyone guesses it will take. And
-one headline rule: **there are no skeleton screens anywhere in UsArr.**
+Four tiers, keyed to **where the data lives**, not to how long anyone guesses it will take — plus
+one budget that is deliberately *not* a tier, because the interaction it governs fetches nothing and
+so has no data location to key on (§7.2, **Controls**). And one headline rule: **there are no
+skeleton screens anywhere in UsArr.**
 
 ### 7.1 Why no skeletons
 
@@ -823,7 +826,7 @@ data. So the policy is not austerity; the case simply does not arise.
 placeholder*: a reserved box carrying the cover's own average colour, present because §4.4.1 makes
 `dominant_color` available before ThumbHash. It is the item's real data rather than a stand-in
 animation — it never pulses, and what it replaces is a grey box, not the title. The title is not in
-it; §9.7 puts the title and year below the tile, on the chrome's own ground.
+it; §9.2 puts the title and year below the tile, on the chrome's own ground.
 
 ### 7.2 The four tiers
 
@@ -866,6 +869,79 @@ import. **Determinate progress with real counts**: "4 of 9 indexers responded", 
 movies". **Never a fake bar.** Partial results are usable as they arrive — §8.4 already requires
 per-indexer streaming over SSE, and §17.7 already requires home sections to populate live as import
 phase A commits.
+
+**Controls — a user-initiated change to presentation, which fetches nothing.** The density toggle
+and the theme toggle are the current members, and the category is closed to interactions that touch
+data: the moment a control triggers a read, the read is governed by its own tier above. **Target
+< 100 ms; hard fail at 400 ms.** §7.2 covers these, and that sentence is here so nobody has to reach
+the category by inference again.
+
+> ⚠️ **This category exists because the four tiers above did not contain it, and three documents
+> asserted for months that they did.** §7.4, ADR-0029 and `ARCHITECTURE.md` §4.5 each called the two
+> toggles *"pure-local no-data interactions"* and concluded they were *"Tier 0 by §7.2's own
+> definition, whose hard fail is 100 ms"* — but Tier 0 reads, verbatim, *"the data is in local
+> SQLite. Nearly every read,"* and its stated diagnostic for a breach is *"a query-plan bug"*
+> belonging in the `EXPLAIN QUERY PLAN` assertions. **A control that touches no data has no query
+> plan to be a bug in.** The budget was extended to controls by the documents that wanted a budget
+> rather than by the document that owns latency tiers, which is the defect this block repairs.
+> **Tier 0 is unchanged**: 100 ms still stands for reads, exactly as written.
+
+**The derivation, which does not depend on what the toggles currently cost.** §6 already fixes both
+ends of this from primary sources, and the argument runs from them rather than from a measurement.
+Nielsen's **0.1 s** is *"the limit for having the user feel that the system is reacting
+instantaneously… no special feedback is necessary except to display the result"*
+(<https://www.nngroup.com/articles/response-times-3-important-limits/>); **400 ms** is the flow limit
+Doherty and Thadani argued for (*The Economic Value of Rapid Response Time*, IBM Systems Journal,
+1982; <https://lawsofux.com/doherty-threshold/>), and §6 already treats it as this document's flow
+threshold when it rejects a 250 ms decorative transition for landing *"two thirds of the way to"* it.
+**A rare, deliberate, user-initiated control is exactly the case where the flow limit governs and the
+instantaneous one does not.** The user asked for the change, is expecting it, and is not mid-thought
+waiting on data that has not arrived — so falling short of *instantaneous* costs polish, while
+crossing the *flow* limit costs the user their place. Hence: aim at the instantaneous threshold, fail
+at the flow threshold.
+
+📌 **Two guards on that reasoning, because a threshold is only worth as much as its discipline.**
+First, **the 400 ms is §6's own number, not the nearest available one** — §7.1's *"under 1 second,
+show nothing"* (<https://www.nngroup.com/articles/skeleton-screens/>) is a rule about *when a loading
+affordance is worth showing*, not a budget for how long an interaction may take, and reading it as
+the latter is the same category slip this block was written to fix. Second, **no number here was
+derived from what the toggles measure today.** The cost curve lives in ADR-0029 and moves with the
+markup; this budget is a claim about the user, and it would read the same if the toggles were free or
+if they were ten times worse.
+
+**The consequence, stated separately — because it is a consequence of the budget and not its
+purpose.** 📏 **Measured by the frontend thread, not by this one**, and cited with its instrument and
+its tree because §7.4's standing rule for this row requires exactly that. The record is
+`web/scripts/measurements/2026-08-17-density-invalidation.md`, added by **`dff20fd`**; it measures
+**tree `3ff8151` plus that change**, on **Chromium 141.0.7390.37 headless** via `playwright-core`
+1.56.1, **Node v22.22.2**, viewport **1440×900**, against the harness rich release row. The machine
+is an **x86-64 container, 4 vCPU (Intel Xeon @ 2.80 GHz), 15 GB RAM, shared host** — which that
+record calls *"a reasonable proxy for a ThinkCentre under Proxmox"* and, in the same breath,
+***"not a proxy for a Pi 5"***. Each figure is one density change through the real product path,
+five samples, median, on the *with-invalidation* path that holds scrollbar error at 0.00%.
+
+| Rows in the page | 100 | 120 | 160 | 200 |
+|---|---|---|---|---|
+| Density toggle, shipped path | **32.1 ms** | **37.4 ms** | **49.3 ms** | **75.7 ms** |
+
+**Every page size in that range clears the 400 ms hard fail outright on that instrument.** 🔍 **And
+the shipped 200-row default still clears it with ADR-0029's pessimistic 5× Pi-5 multiplier applied —
+378.5 ms, 21.5 ms under the limit — which is inference, not measurement**: the multiplier is
+ADR-0029's, the source record scaled nothing to a Pi and says so in as many words, and §13 forbids
+quoting a Pi-derived figure as a measured one. ⚠️ **That is about 5% of margin, and it is written
+here rather than rounded away**, because
+a budget a real configuration clears by 21 ms is a budget doing work. A threshold chosen to make the
+measurement pass would not have been chosen this tight. ℹ️ Two limits on the row above, from the
+source's own §6: this runner is noisy, 100 and 120 overlap and **must not be read apart**, and the
+trend — a factor of 2.4 across the range — is what it resolves. That is enough for a budget check and
+is *not* enough for a page-size decision, which the source declines to make and so does this section.
+
+🚩 **What the old framing would have implied is the strongest single piece of evidence that it was
+wrong.** Tier 0's 100 ms under the same 5× multiplier is a **20 ms** desktop-equivalent budget — a
+figure the measurement file names in its own §7 — and against it **every page size in the measured
+range fails, 100 rows included at 32.1 ms**, by 1.6× at the smallest setting and 3.8× at the shipped
+one. **A rule that fails at every available setting is not a strict rule, it is a misapplied one**,
+and the four tiers never claimed this interaction in the first place.
 
 ### 7.3 Cross-cutting rules
 
@@ -916,11 +992,11 @@ more" plus `content-visibility: auto` with `contain-intrinsic-size`**, and virtu
 "~1,000 rows" this document previously floated, because the finding against §4.5's "~200" was that it
 had no measurement behind it, and answering an unmeasured number with a different unmeasured number
 concedes the argument while pretending to fix it. `make bench` gains the measurement (ARCHITECTURE
-§4.5, §13); the threshold is whatever it says. **Part of that harness exists in the frontend thread's
-tree as `pnpm bench:list` — it is what supplies every measured number below — but it is not on `main`
-and does not yet complete a full run (a 25,000-row Chromium out-of-memory). ADR-0029's 2026-08-16
-amendment carries what it has already settled, including a measured density-toggle cost curve and a
-default page size of 200 rows; the virtualization threshold itself is still unset.**
+§4.5, §13); the threshold is whatever it says. **That harness is `pnpm bench:list`, and it is what
+supplies every measured number below — the harness is authoritative for what it measures and where
+it stops, so read it rather than a summary of it here. ADR-0029's 2026-08-16 amendment carries what
+it has already settled, including a measured density-toggle cost curve and a default page size of
+200 rows, and ADR-0029 is authoritative for the virtualization threshold itself.**
 
 🚩 **The list primitive is a grid, not a table, and that is a constraint rather than a preference.**
 `content-visibility: auto` is defined entirely in terms of size, layout and paint containment, and
@@ -1122,22 +1198,30 @@ the next paint**. One or the other, on every list, not "where it matters": a lis
 across a density change and does neither is wrong, and it is wrong in the one dimension this whole
 section exists to protect.
 
-⚠️ **Where that rule will be enforced, and the fact that it is not enforced today.** It cannot be
-asserted by `docs/design/check.mjs`. The bug needs node **reuse** across a density change, plus
+**Any measurement of the density toggle reports both numbers — what the toggle costs and the
+scrollbar error it leaves behind — and neither one alone settles anything.** A fast toggle that
+leaves the scrollbar 14.57% wrong is not a fix, and a correct toggle nobody can afford is not one
+either; optimising whichever half is easier to measure is the failure this requirement exists to
+prevent. **The corollary is that rebuild is the baseline to beat:** forced re-measurement, the other
+permitted option above, wins only by matching rebuild's *scrollbar-error* figure and not merely its
+cost — otherwise "cheaper" reads as "better" while the correctness half quietly regresses.
+
+⚠️ **Where that rule is enforced, and the one place it cannot be.** It cannot be asserted by
+`docs/design/check.mjs`. The bug needs node **reuse** across a density change, plus
 enough rows for the drift to exceed threshold; the check's target is `prototype.html`, which is
 static HTML with no reuse semantics and no list at that scale, so **an assertion written there could
 not reproduce the condition and would pass for ever** — a rule that can never fire, indistinguishable
 from a rule that passes, which is the exact failure shape this repository caught three times in a
-single day. Enforcement therefore belongs to the frontend thread's **`pnpm bench:list`**, the only
-harness that mounts a large keyed list. **Threshold, once it lands: fail above 2% drift** — the same
+single day. Enforcement therefore belongs to **`pnpm bench:list`**, the only harness that mounts a
+large keyed list. **Threshold: fail above 2% drift** — the same
 budget `contain-intrinsic-size` is already held to rather than a second number invented for this,
 and the two cases sit either side of it with room to spare (0.65–0.76% rebuilt, 14.57% stale).
-**The honest sequencing is fix, then assert, then call it enforced:** `bench:list` currently exits
-non-zero on a full run because of a 25,000-row Chromium out-of-memory, so the OOM is fixed first, the
-assertion lands second, and nobody writes "the bench asserts this" until both are true. If the app
-target later grows large-list mounting, moving the assertion into `check.mjs` is a small change and
-the frontend thread would not object — the split is *where the condition can exist*, not a
-territorial line.
+**The honest sequencing is fix, then assert, then call it enforced:** a harness that cannot complete
+a full run cannot host the assertion either, so whatever stops it is fixed first, the assertion
+lands second, and nobody writes "the bench asserts this" until both are true — `bench:list` itself
+is the record of which of those it has done. If the app target later grows large-list mounting,
+moving the assertion into `check.mjs` is a small change and nobody would object — the split is
+*where the condition can exist*, not a territorial line.
 
 **And the earlier prescription — `contain-intrinsic-size: auto var(--row-h)` — was wrong three ways.**
 Kept here because each one is a way to arrive at a wrong placeholder again:
@@ -1197,10 +1281,19 @@ accounts for about 88% of it and scoping the density attribute to the list conta
 5,000 and 6,508 ms at 25,000**, and the **theme toggle** 1,356–4,514 ms at 25,000 — because each
 sets an attribute on `<html>` and invalidates every element reading a custom property. Both are
 top-bar controls on every screen, both are pure-local no-data interactions, and both are therefore
-**Tier 0 by §7.2's own definition, whose hard fail is 100 ms**. 🔍 Extrapolating the measured
-0.15–0.26 ms/row to a Pi 5 at a conservative 3–5× puts that hard fail at **100–300 rows in the DOM**,
-or 300–600 with `table-layout: fixed` and working containment — **so the real ceiling is set by the
-density control, in the hundreds, not by scrolling in the tens of thousands.** ⚠️ **ADR-0029's
+governed by **§7.2's *Controls* budget — target < 100 ms, hard fail at 400 ms**. ⚠️ **This sentence
+used to read *"Tier 0 by §7.2's own definition, whose hard fail is 100 ms"*, and §7.2 contained no
+such definition.** Tier 0 is *"the data is in local SQLite. Nearly every read"*; a control that
+fetches nothing is not a read, and the category it needed did not exist until §7.2 grew one. The
+claim is replaced rather than re-cited, because a corrected pointer to the wrong tier would still be
+the wrong tier. 🔍 Extrapolating the measured 0.15–0.26 ms/row to a Pi 5 at a conservative 3–5×
+puts that hard fail at **400–1,200 rows in the DOM**, or 1,200–2,400 with `table-layout: fixed` and
+working containment — **so the real ceiling is still set by the density control rather than by
+scrolling in the tens of thousands, but it sits in the high hundreds to low thousands rather than in
+the hundreds.** ℹ️ **Those are the previous 100–300 and 300–600 multiplied by four, and that is the
+whole derivation**: the row ceiling is the budget divided by a per-row cost, so it is linear in the
+budget, and 100 ms → 400 ms moves it by exactly 4×. Nothing was re-measured to produce them.
+⚠️ **ADR-0029's
 2026-08-16 amendment sharpens this from the shipped primitive** — a measured cost curve of
 0.0146 ms/row + 6.4 ms fixed, a worst-case row shape at 0.214 ms/row, and a **200-row default page
 size** — and that amendment, not this paragraph, is the current arithmetic. ⚠️ **The per-row
@@ -1210,8 +1303,8 @@ The extrapolation above runs *downward*, into the range the fit covers, which is
 all — **no figure extrapolated past a few thousand rows may be quoted here as though it were
 measured.** Three mitigations before any redesign: set `table-layout: fixed` (never set anywhere
 today, and it halves the cost); **scope the density attribute to the list container rather than
-`:root` — measured at about 25%, on top of containment's ~88%**; and if it still exceeds 100 ms, an
-explicit 150 ms "applying" state is honest where a silent multi-second freeze is not.
+`:root` — measured at about 25%, on top of containment's ~88%**; and if it still exceeds the 400 ms
+hard fail, an explicit 150 ms "applying" state is honest where a silent multi-second freeze is not.
 
 The reasons are concrete. `content-visibility: auto` skips rendering of off-screen content but,
 unlike `display: none`, "the skipped contents must still be available as normal to user-agent
@@ -2363,27 +2456,30 @@ both. One bad hand-picked swatch would have been a nit; having no rule was the f
 an average taken over arbitrary cover art, mid-luminance fills are common and *both* black and white
 land near 3.5:1 on them.
 
-**§9.7 resolved that by moving the text rather than by constraining the colour**, and the rule below
+**§9.2 resolved that by moving the text rather than by constraining the colour**, and the rule below
 survives it as a general one. The reason the move beats the constraint is worth keeping: a solver
 constrains against a **single averaged colour**, and real cover art is not one colour — a white
 title over the light half of a Blue Note sleeve fails whatever the average says. The poster title
 and year are now ordinary `--fg` / `--fg-muted` on a known ground, which the contrast sweep above
 already covers.
 
-> **Pick whichever of the two theme text tokens scores higher against the computed
-> `dominant_color`. If the winner is still below 4.5:1, adjust `dominant_color`'s lightness — away
-> from the text colour, in 2% steps in OKLCh, preserving hue and chroma — until it clears. The fill
-> is decoration; the title is content, and content wins.**
+> **Where a surface sets text on a computed fill, pick whichever of the two theme text tokens
+> scores higher against the computed `dominant_color`. If the winner is still below 4.5:1, adjust
+> `dominant_color`'s lightness — away from the text colour, in 2% steps in OKLCh, preserving hue and
+> chroma — until it clears. The fill is decoration; the title is content, and content wins.**
 
 Two supporting rules, because otherwise the ratio is not computable from what ships. **Neither the
 title nor the year carries `opacity`** — compositing changes the effective ratio (by ~0.45 on the
 measured pair) through a mechanism no contrast check sees, so the year gets a real colour token.
 And **12 px semibold is normal text under WCAG, not large** (large is ≥18.66 px bold or ≥24 px), so
 4.5:1 applies to both lines. **Asserted in CI over any computed-fill / foreground pair that ships in
-a fixture** — and as of §9.7 **no such pair ships**, so the assertion currently has nothing to run
-over and must not be reported as passing. It binds the moment a surface sets text on a computed
+a fixture**, and §13's checklist carries the entry. **The assertion is retained deliberately, and
+the reason is the shape of the rule above:** a conditional rule needs a *standing* guard, because a
+guard added by whoever writes the first call site is a guard that call site had to know about
+first — which is the same as having no rule. It binds the moment any surface sets text on a computed
 fill, and it binds in the image pipeline where the colour is produced regardless (ARCHITECTURE
-§4.4.1).
+§4.4.1). **Which surfaces do that is not this section's to say** — §9.2's poster-grid entry owns the
+call-site question, and the tree owns the answer. §11 fixes the rule; it does not keep an inventory.
 
 **Two ARIA requirements the grid-row primitive creates, both stated as requirements rather than as
 review items**, because a hand-built grid supplies nothing a native `<table>` supplies for free
@@ -2853,7 +2949,7 @@ widened, and nothing else. The `[review]` rules below are still human judgement 
 - `[review]` Contrast re-measured in both themes when any token changes.
 - `[grep]` **Every `dominant_color` / foreground pair in a fixture clears 4.5:1** (§11). This is the
   one colour that is data rather than a token, so it cannot be checked once. ⚠️ **No such pair ships
-  today** — §9.7 moved the poster title off the fill and the constraint machinery was deleted with
+  today** — §9.2 moved the poster title off the fill and the constraint machinery was deleted with
   it — so this line is armed and idle. Do not record it as passing; it has nothing to check until a
   surface sets text on a computed fill again.
 - `[review]` No live region missing on a determinate progress readout or on a control that changes a

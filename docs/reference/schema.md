@@ -1,11 +1,11 @@
 # Reference — Data model and DDL
 
-**Status:** partly implemented. Migration 0001 exists and creates `user`, `session`,
-`client_credential`, `audit_log`, `service_instance`, `provenance`, `release_candidate`,
-`write_queue`, `tag` and `tag_assignment`. The library tables — `work`, `edition`, `media_file`,
-`external_id`, `service_item_link` — and the search indexes are designed, not implemented.
+**Status:** partly implemented. This document is authoritative for the *shape* of the schema, not
+for how much of that shape has been created — **`internal/db/migrations` answers that**, and
+reading the files there is the only form of the answer that does not go stale. A table given in
+full below may still be design-only.
 **Scope:** tables marked **v0.1** ship in the first milestone; everything else is in the "later
-tables" appendix at the bottom and is **not** in migration 0001.
+tables" appendix at the bottom.
 **Parent document:** [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §6 carries the design and the
 reasoning; this file carries the DDL and the invariant behind each index.
 
