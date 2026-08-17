@@ -1675,8 +1675,14 @@ root and the filename parses. Books are the same shape unless LazyLibrarian is p
 `forceProcess` + `getDownloadProgress` genuinely close the loop and are the strongest argument for
 keeping it as a sink after demoting its catalogue. So the grab confirmation is type-specific and
 literal, and **UsArr never renders a progress bar or a "Downloading" state for a Prowlarr grab**,
-because it cannot know. `Grabbed <timestamp>` and stop. The `provenance` row is the whole of what
-UsArr knows, and for comics it is the *only* trace the acquisition ever leaves.
+because it cannot know. `Grabbed <timestamp>` and stop. **What UsArr knows ends at the handover**, and
+for comics that handover is the only trace the acquisition leaves anywhere in the ecosystem.
+⚠️ **This read *"the `provenance` row is the whole of what UsArr knows"*, and the shipped path
+falsifies it.** `handleGrab` writes an `audit_log` row for **every** grab that named a candidate, and
+a grab that never left the process writes **no** `provenance` row at all — so for those the audit row
+is the only record UsArr has, which is why Recent grabs reads the two tables as a **union** (§17.5,
+`internal/httpapi/grabs.go`). **What the sentence exists to say is untouched:** nothing downstream
+reports back, so neither row ever gains a state after "sent".
 
 > 🚩 **The confirmation must name what will and will not import the file, and the sentence is
 > incomplete without the second half.** *"Sent to \<download client\>. UsArr does not import
@@ -1694,14 +1700,25 @@ UsArr knows, and for comics it is the *only* trace the acquisition ever leaves.
 > | Case | Sentence |
 > |---|---|
 > | A watched-folder importer is configured for the type (Audiobookshelf, Komga, Navidrome) | *"Sent to qBittorrent. UsArr does not import downloads. Audiobookshelf watches `/media/books` and will show it once the file is there."* |
-> | An \*Arr owns the type but did not request this release (Sonarr, Radarr — the v0.1 case for every grab) | *"Sent to qBittorrent. Nothing will import this. Radarr did not request this release, so it will not pick it up — the file stays in your download client until you move it into the library folder yourself."* |
+> | An \*Arr owns the type but did not request this release (Sonarr, Radarr — ⚠️ **not a v0.1 case**, below) | *"Sent to qBittorrent. Nothing will import this. Radarr did not request this release, so it will not pick it up — the file stays in your download client until you move it into the library folder yourself."* |
 > | No connected service accepts the type at all (comics with no Mylar3, music with no Lidarr) | *"Sent to qBittorrent. Nothing will import this. No connected service accepts a comic, so the file stays in your download client."* |
 >
-> Every input is already computed: the library's request destination is `none` for four types and an
-> \*Arr for two (§6.5, §17.8), and the watched folder is read from the source for the first case. The
-> named folder is quoted from the source's own report and never typed by UsArr (ADR-0026). **The
-> naming of the *non*-importer is the load-bearing half** — the same principle as §17.7's rule that a
-> reassuring wrong number is worse than none.
+> ⚠️ **The second row's parenthetical read *"the v0.1 case for every grab"*, and both \*Arrs have
+> since re-sequenced out of v0.1** ([ADR-0041](./DECISIONS.md#adr-0041),
+> [ADR-0042](./DECISIONS.md#adr-0042)) — so **no v0.1 grab takes that row at all**; in v0.1 a movie or
+> an episode takes the third, because nothing v0.1 connects accepts one. **The row is re-sequenced,
+> not cut:** its sentence is exactly what gets written once an \*Arr is connected and did not ask for
+> this release, which is the case it was written for.
+>
+> **Every input is still computed, and one of them changed.** ⚠️ This read *"the library's request
+> destination is `none` for four types and an \*Arr for two"*; §17.8 has since established that **no
+> service v0.1 connects can be a library's request sink at all** — a sink must advertise `Add` under
+> §8.3's capability filter and the Prowlarr path does not — so in v0.1 the destination **cannot be
+> set**, and the shape is chosen from the type and the connected services alone. It returns as an
+> input with the first service that can be a destination (§6.5, §17.8). The watched folder is read
+> from the source for the first case, and the named folder is quoted from the source's own report and
+> never typed by UsArr (ADR-0026). **The naming of the *non*-importer is the load-bearing half** — the
+> same principle as §17.7's rule that a reassuring wrong number is worse than none.
 
 **And one qualification that applies to the whole mode, because "runs over just Prowlarr" is
 materially weaker for two of the six types.** ✅ **403 of Prowlarr's 543 shipped indexer definitions

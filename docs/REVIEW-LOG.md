@@ -9015,3 +9015,138 @@ them, which for a docs-only diff was never in doubt.
 `cmd/`, and reading `00005_library_sync.sql`'s DDL, `internal/httpapi/grab.go` and §7.6 directly. The
 `state`-has-no-`CHECK` and `kind`-never-had-one facts in particular were read out of the migration
 rather than taken from the brief, and the `kind` half is a fact the brief did not supply.
+---
+
+<a id="expl-01"></a>
+# EXPL-01 — §8.5's grab explainer, corrected against two landed decisions and against the code
+
+**Prefix note.** `EXPL-` = *explainer*, which is what §8.5's three-shape block is. `M5-` is retired,
+and `MWP-`, `VN9-` and `ADRC-` are taken. ⚠️ **`LS-` was named to this thread as taken and is not
+observable as such**: it returns zero on `main` and zero on all twenty remote heads. Recorded rather
+than corrected — §11 says *prefixes are allocated by landing*, so the most likely reading is a thread
+holding `LS-` on an unpushed branch, which is precisely the case §11 names as making the cheap check
+unsound for everyone else. It was avoided either way. Verified unused before it was committed to:
+`EXPL-` returns **zero** matches in `docs/REVIEW-LOG.md` on `origin/main` (`5b22d58`) and **zero
+across all twenty remote heads** (`git ls-remote --heads origin` → 20 refs; a `grep -cE '\bEXPL-[0-9]'`
+of `docs/REVIEW-LOG.md` per head hit on none). It also passes `DEVELOPMENT.md` §11's three rules and
+`MWP-01`'s addendum to them: multi-letter, not `SYNC-`, not in the crowded S neighbourhood, and **not
+a near-miss of any live prefix** — `main` carries no `E`-initial prefix at all.
+
+**What this entry is.** `MWP-01` (§MWP.6) routed **two** defects in §8.5 rather than fixing them,
+because §8.5 is not §16. Both were re-derived here against the primary sources rather than relayed,
+and **a third was found that no relay named** — a behavioural claim the shipped code contradicts.
+Three findings, all applied.
+
+## EXPL.1 — Applied: the second shape's *"the v0.1 case for every grab"*
+
+**Before**, in the three-shapes table:
+
+> `| An \*Arr owns the type but did not request this release (Sonarr, Radarr — the v0.1 case for every grab) | … |`
+
+**After:** the parenthetical reads *"(Sonarr, Radarr — ⚠️ **not a v0.1 case**, below)"*, and the
+correction sits under the table rather than inside a cell: **no v0.1 grab takes that row at all**,
+because in v0.1 a movie or an episode takes the third row — nothing v0.1 connects accepts one. The
+row is marked **re-sequenced, not cut**; its sentence is what gets written once an \*Arr is connected
+and did not ask for the release.
+
+**Which landed decision it follows from.** [ADR-0041](./DECISIONS.md#adr-0041) took Sonarr and Radarr
+out of v0.1 and [ADR-0042](./DECISIONS.md#adr-0042) (`5b22d58`) re-sequenced the \*Arr write path
+behind them, both *"re-sequenced, not cut"*. The framing is copied from ADR-0042's own §16
+amendments — quote what it used to claim, name the decision, say the capability is preserved — which
+is the house style for this kind of correction.
+
+## EXPL.2 — Applied: *"`none` for four types and an \*Arr for two"*
+
+**Before:**
+
+> *"Every input is already computed: the library's request destination is `none` for four types and an
+> \*Arr for two (§6.5, §17.8), and the watched folder is read from the source for the first case."*
+
+**After:** *"**Every input is still computed, and one of them changed**"* — the destination **cannot
+be set in v0.1**, so the shape is chosen from the type and the connected services alone, and the
+destination returns as an input with the first service that can be a destination. The watched-folder
+half is unchanged.
+
+**Which landed decision it follows from.** §17.8 as amended by `d8130d2`: *"No service v0.1 connects
+can be a library's request sink at all: a sink is a pin inside §8.3's capability filter and must
+advertise `Add`, which the Prowlarr path does not — it posts a release to Prowlarr's own download
+client."* The old text was doubly stale — the count was wrong **and** its own `§17.8` citation pointed
+at the text that refutes it. Prowlarr implements the **Grabber** shape, not the Requester one: a grab
+ends in the download client and never routes to a sink.
+
+## EXPL.3 — Applied, and found here rather than routed: *"the `provenance` row is the whole of what UsArr knows"*
+
+Neither relayed defect was about behaviour, so §8.5's behavioural claims were checked against
+`internal/releases/grab.go` and `internal/httpapi/grab.go` independently. **One is false.**
+
+**Before:**
+
+> *"`Grabbed <timestamp>` and stop. The `provenance` row is the whole of what UsArr knows, and for
+> comics it is the *only* trace the acquisition ever leaves."*
+
+**After:** *"**What UsArr knows ends at the handover**"*, with the record claim corrected in place and
+the point the sentence exists to make kept: nothing downstream reports back, so neither row ever gains
+a state after "sent".
+
+**Measured against the tree on `5b22d58`, not inferred:**
+
+- `internal/httpapi/grab.go` writes an `audit_log` row on **every** path that named a candidate —
+  `s.audit(…, auditGrabAction, …)` on the success path, on the error path, and in `auditNotSent` for
+  the four pre-dispatch returns it covers.
+- `internal/httpapi/grabs.go:22–31` states the consequence directly: the Recent-grabs read **is a
+  union of two tables**, and for a grab that never left the process *"these write no provenance row at
+  all, so this table is the only record they have."* That is the exact inverse of the sentence §8.5
+  carried.
+- The audit row also carries something `provenance` structurally cannot — `grabAuditMeta.InstanceID`,
+  i.e. **which** Prowlarr — because `provenance` has no `service_instance_id`
+  (`internal/httpapi/grabs.go:51–53`).
+
+**Why it matters rather than being pedantry.** §8.5's sentence is the ground for a real product rule
+one paragraph above it (*"UsArr never renders a progress bar or a Downloading state"*), and it is also
+the sentence a reader would use to answer *"what does UsArr retain about a failed grab?"* The honest
+answer is an `audit_log` row, and only that.
+
+## EXPL.4 — Checked and found sound, recorded so the next pass does not re-derive it
+
+- **§8.3 was not touched.** `VN9-01` fixed it in `d8130d2` and `MWP-01` re-checked it; re-read here
+  and confirmed the amended text is present.
+- **`GET /api/v1/indexers` reading `indexer_catalog` (migration 0004)** is correct on both halves:
+  `internal/db/migrations/00004_indexer_catalog.sql` creates the table, and
+  `internal/httpapi/server.go:264` registers `GET /api/v1/indexers` as **UsArr's own** route — it is
+  not a mis-spelling of Prowlarr's singular `/api/v1/indexer`, which the same block cites correctly.
+- **Grab is `POST /api/v1/search` with a `ReleaseResource` body**, and `downloadClientId` selects one
+  of Prowlarr's own clients: `internal/servarr/client.go:570` and
+  `releases.Service.preflightDownloadClient`, which routes by id when the release names one and by
+  protocol otherwise, mirroring Prowlarr's `SendReportToClient`.
+- **"UsArr therefore needs no download-client integration"** stands. The preflight calls Prowlarr's
+  `GET /api/v1/downloadclient`, which is a Prowlarr API call, not a download-client one.
+- **"Grabbed releases are recorded in `provenance`"** stands — `recordProvenance` on both the confirmed
+  and the sent-unknown path.
+
+## EXPL.5 — Raised, not fixed
+
+- **The blockquote's lead-in still reads *"Three shapes, chosen from the library's request destination
+  and the type"*.** It is the general rule and is correct from the first service that can be a
+  destination; EXPL.2's paragraph directly below it states the v0.1 selector instead. Left as the
+  general rule rather than amended twice in one block, which would be growing an explainer that was
+  sent here to be shortened.
+- **Sonarr and Radarr still have no milestone.** Unchanged from `MWP-01` §MWP.6, and still the owner's
+  to answer. §8.5's corrected row-2 note now hangs on the same unnumbered arrival.
+
+### On the gate for EXPL-01
+
+`make check` from a **cleaned lint cache** — `/root/go/bin/golangci-lint cache clean` by absolute path
+first, per `DEVELOPMENT.md` §11. Binaries, versions and the tail are in the commit message.
+
+🚩 **What the green attests here, at its real size.** The diff is **two Markdown files** —
+`docs/ARCHITECTURE.md` and `docs/REVIEW-LOG.md` — and no Go, TypeScript, Svelte, SQL or `go.mod`. Of
+the gate's steps exactly one reads them: `secrets` runs `gitleaks dir .` over the working tree. So the
+green says **"no credential-shaped string in these two files"**, and that the tree they sit on was not
+broken. **It says nothing about whether the prose is right** — this repo has no markdown linter and no
+link checker in `make check`, so nothing mechanical verified a claim, a cross-reference or an anchor
+in this entry.
+
+**The load-bearing verification is manual and is EXPL.3 and EXPL.4**: reading
+`internal/httpapi/grab.go`, `internal/httpapi/grabs.go`, `internal/releases/grab.go`,
+`internal/httpapi/server.go` and `internal/db/migrations/` directly, and reading §17.8's amended text
+and ADR-0042's §16 amendments at their commits rather than taking the relay's summary of either.
