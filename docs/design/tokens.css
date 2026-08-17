@@ -116,6 +116,21 @@
   --n-8: #1c1a17; /* primary ink and the focus ring. Never #000.               */
                   /*  16.50:1 · 15.25:1 · 13.58:1 (target >= 12)               */
 
+  /* Two INTERSTITIALS, not ramp steps. Both were raised by the mockup, recorded
+   * in §4 as undecided, and are now adopted — see §4 for the decision and who
+   * made it. They sit between named steps rather than extending the nine, so
+   * the ramp is still nine values with two interstitials and --n-N keeps its
+   * meaning. Both are FILLS and neither is ever a text ground, so neither is
+   * contrast-bound on its own; what IS measured against them is every status
+   * value, on all five grounds (see --status-* below).                        */
+  --inset: #fdfcfb; /* the interior of an input. One step AWAY from the page
+                     * ground rather than towards it, so a field reads as a well
+                     * rather than as a raised surface: --n-0 on --n-1 chrome is
+                     * invisible and --n-1 on --n-0 is a button.               */
+  --hover: #eceae5; /* row/control hover fill, DISTINCT from --bg-selected so a
+                     * hovered selected row has something to say. Sits between
+                     * --n-1 (#f2f0ec, raised) and --n-2 (#e7e3dd, selected).  */
+
   /* Status. The ONLY saturated colour in the app besides cover art — the
    * protocol chips gave theirs up, see below. Always rendered as icon + text +
    * colour together, never colour alone; and an icon-only status must still
@@ -194,6 +209,9 @@
   --n-8: #efece5; /* primary ink + focus ring.
                    *                  15.33:1 · 14.29:1 · 12.47:1 (>= 12)      */
 
+  --inset:  #100f0e; /* interior of an input — see §1                          */
+  --hover:  #26241f; /* row/control hover fill — see §1                        */
+
   --status-ok:    #5cba7d; /*                     7.56 · 7.04 · 6.15           */
   /* Same hue family as the light value, deliberately: Lab hue 58.6° against
    * light's 58.0°. It replaces #e0a33a, which was Lab hue 77.8° — a gold, a
@@ -224,6 +242,9 @@
     --n-7: #d3ccc0;
     --n-8: #efece5;
 
+    --inset: #100f0e;
+    --hover: #26241f;
+
     --status-ok:    #5cba7d;
     --status-warn:  #fb9349;
     --status-error: #f0837a;
@@ -241,11 +262,14 @@
 :root {
   --bg:            var(--n-0); /* page ground                                  */
   --bg-raised:     var(--n-1); /* toolbar, sticky header, sidebar, popover     */
-  --bg-hover:      var(--n-1); /* row/control hover. A FILL change only — hover
-                                * never changes geometry (see §7)              */
+  --bg-hover:      var(--hover); /* row/control hover. A FILL change only —
+                                  * hover never changes geometry (see §7). Was
+                                  * var(--n-1); see the note below §4          */
   --bg-selected:   var(--n-2); /* selected row. Selection is a neutral fill
                                 * step, not a coloured highlight               */
   --bg-pressed:    var(--n-2);
+  --bg-inset:      var(--inset); /* the interior of an input — the alias for the
+                                  * interstitial adopted in §1                 */
 
   --border:        var(--n-3); /* decorative divider between rows/cells        */
   --border-strong: var(--n-4); /* the boundary of an actual control            */
@@ -264,27 +288,38 @@
   --ring-offset:   1px;
 }
 
-/* Raised by docs/design/mockups/usarr.css and recorded here rather than
- * invented there. Building the first five real screens needed two roles this
- * file does not have, and the mockup declares them locally:
+/* ADOPTED. --inset and --hover are declared in §1-§3 above and aliased in §4 as
+ * --bg-inset and --bg-hover. This note used to defer that decision; it now
+ * records how it was answered, because the deferral was the interesting part.
  *
- *   --inset  #fdfcfb light / #100f0e dark — the interior of an input. It is
- *            one step AWAY from the page ground rather than towards it, so a
- *            field reads as a well rather than as a raised surface; --n-0 on
- *            --n-1 chrome is invisible and --n-1 on --n-0 is a button.
- *   --hover  #eceae5 light / #26241f dark — a row/control hover fill DISTINCT
- *            from --bg-selected. §4 currently maps hover and raised to the
- *            same --n-1 and selected to --n-2, which leaves hover-over-a-
- *            selected-row with nothing to say.
+ * The two roles were RAISED by docs/design/mockups/usarr.css, which needed them
+ * to draw the first five real screens and declared them locally rather than
+ * inventing colour silently. This file recorded them and declined to adopt
+ * them, on the ground that adopting meant either two more ramp steps or
+ * admitting the ramp is nine values with two interstitials — "a decision for
+ * the pass that writes web/src/app.css, not for a mockup".
  *
- * Adopting them means either two more ramp steps or admitting the ramp is nine
- * values with two interstitials, and that is a decision for the pass that
- * writes web/src/app.css, not for a mockup. WHETHER IT HAS BEEN TAKEN IS NOT A
- * FACT THIS FILE OWNS: web/src/app.css declares the ramp the running app uses,
- * and it names this note where it declares them — so read the answer there
- * rather than from a status sentence here, which has no mechanism holding it in
- * step. What this note is, and stays, is the record of the two roles and their
- * values, and that the mockup did not invent colour silently.
+ * THAT PASS ANSWERED, BY NAME. web/src/app.css declares both, at these exact
+ * values, in all three of its state blocks, and says so where it declares them:
+ * "This is the pass that writes web/src/app.css, which is the pass tokens.css
+ * names as the one that decides — so both are adopted here". The answer was
+ * never carried back, which is precisely the failure this note predicted when
+ * it wrote WHETHER IT HAS BEEN TAKEN IS NOT A FACT THIS FILE OWNS. It was right
+ * about the risk and the risk landed: --bg-hover then read var(--n-1) here and
+ * var(--hover) there, a real colour divergence in both themes (#f2f0ec/#1e1d1a
+ * against #eceae5/#26241f) that the parity test had to carry as a recorded
+ * exception.
+ *
+ * So this is not a conflict resolved by fiat. The values were always this
+ * file's own — the note above quoted them at these literals — and the mapping
+ * this file has now was the one it argued against in writing, on the ground
+ * that mapping hover and raised both to --n-1 "leaves hover-over-a-selected-row
+ * with nothing to say". The interstitials win, tokens.css moves, and the
+ * deferral is closed rather than left open a second time.
+ *
+ * Adoption direction, for the next role that arrives this way: the mockup or
+ * app.css may prove a role first, but the answer comes back HERE, and the file
+ * that proved it stops being the place the answer lives.
  */
 
 /* -----------------------------------------------------------------------------
