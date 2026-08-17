@@ -1122,6 +1122,14 @@ the next paint**. One or the other, on every list, not "where it matters": a lis
 across a density change and does neither is wrong, and it is wrong in the one dimension this whole
 section exists to protect.
 
+**Any measurement of the density toggle reports both numbers — what the toggle costs and the
+scrollbar error it leaves behind — and neither one alone settles anything.** A fast toggle that
+leaves the scrollbar 14.57% wrong is not a fix, and a correct toggle nobody can afford is not one
+either; optimising whichever half is easier to measure is the failure this requirement exists to
+prevent. **The corollary is that rebuild is the baseline to beat:** forced re-measurement, the other
+permitted option above, wins only by matching rebuild's *scrollbar-error* figure and not merely its
+cost — otherwise "cheaper" reads as "better" while the correctness half quietly regresses.
+
 ⚠️ **Where that rule will be enforced, and the fact that it is not enforced today.** It cannot be
 asserted by `docs/design/check.mjs`. The bug needs node **reuse** across a density change, plus
 enough rows for the drift to exceed threshold; the check's target is `prototype.html`, which is
