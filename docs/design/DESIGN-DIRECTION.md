@@ -1768,6 +1768,23 @@ treatment by media type.** Same slots, same positions, different values.
     It is nonetheless **left deferred**: this bullet's scope is *"size columns only"*, extending it
     is a design decision rather than a correction, and the whole point of the paragraph above is
     that a scope which changes quietly reads as an unfinished job.
+  - **`Category` prints UsArr's derived tags; the indexer's own Newznab path goes in `title`.** The
+    same release found on two indexers comes back with two different paths, so the raw value renders
+    one fact two ways depending on who answered. UsArr's tags are stable across indexers, so they are
+    what the column says — `movie`, `book · audiobook` — and the raw path carries detail ours drops,
+    `Movies/UHD` against `movie`, so it goes in the tooltip rather than in the bin. Same pattern as
+    the poster titles, and tier 1 above is why the detail is kept at all.
+  - ⚠️ **That tooltip's content is RECONSTRUCTED, not transmitted, and looking for a `raw_category`
+    field will not find one.** `ReleaseResource.CategoryIDs()` flattens `Categories` to ids and drops
+    `Name` at the first hop, so what reaches the browser is integers all the way down. The name is
+    recovered by joining the row's `indexerId` and `categories[]` against the **indexer catalogue**,
+    which ships each indexer's own tree. **Not against `categoryTree()`** — that is a deliberate
+    union across indexers, *"first non-empty name wins"*, which is right for the picker and destroys
+    the per-indexer divergence this tooltip exists to show. Two consequences: the catalogue is a
+    probed replica, so an id newer than the last probe shows the bare number (`Category 2045`) and
+    never a guessed name; and a surface that does not already load the catalogue **does not fetch it
+    for a tooltip** — it shows the tag with no tooltip, which is §2's first principle and this
+    section's own rule that an absent value is not decorated.
 - **A composite numeric cell says what its parts are.** `41 / 9` in a `Peers` column announces as
   *"Peers, 41 slash 9"* and nothing on the screen says which number is seeders — while prose four
   hundred pixels below calls the same column "seeders". Keep the ecosystem-verbatim header (`Peers`

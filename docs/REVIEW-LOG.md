@@ -4248,3 +4248,42 @@ Overflow verdicts, `document.scrollWidth` and z-index chains all differing 0; el
 viewport 0 before and 0 after. ℹ️ `SU-03b` costed the reserve at *"+18px per cell"*; the wrap this
 deletes cost **exactly −18px per cell**, from the other direction, which is the two measurements
 agreeing.
+
+
+---
+
+# SU-05's `Category` column: our tags in the cell, the indexer's own path in the tooltip
+
+**Date:** 2026-08-17. **Branch:** `claude/hearth-thread-vn9w7u`. **Closes `SU-05`.** With `SU-07`
+(size) and `SU-08` (`Age`), all three columns `SU-05` found are now drawing what the product can
+produce.
+
+**Owner decision, and the reason belongs here rather than in a commit message.** The same release
+found on two indexers comes back with **two different Newznab paths**, so the raw value renders one
+fact two ways depending on who answered — the same defect the Requests thread removed from grab
+outcomes. UsArr's derived tags are stable across indexers, so **they go in the column**. The raw path
+carries detail ours drops — `Movies/UHD` against `movie` — so it goes in **`title`** rather than in
+the bin, the same pattern as the poster titles and consistent with §9.1's tier 1.
+
+| # | Finding | Resolution |
+|---|---|---|
+| **SU-09** | **18 cells printed Newznab paths the API does not put on a release row. They now print `categoryLabel`'s output, with the raw path in `title`** | **18 authored cells** in `requests.html`, 36 rendered with the mirror, reconciling with `SU-05`'s survey. `Movies/UHD` and `Movies/HD` → **`movie`**; `Audio/Audiobook` → **`book · audiobook`**; `Books/EBook` → **`book · ebook`** — verified against `mapping.MediaType` in `internal/servarr/mapping/mapping.go` rather than guessed, including the two-pass rule that makes `[3000, 3030]` an audiobook instead of music. 🚩 **The collapse is the point and it is now visible on screen**: six rows that said `Movies/UHD` and six that said `Movies/HD` all say `movie`, and the only place the difference survives is the tooltip — which is exactly the owner's argument rendered rather than asserted |
+| **SU-09a** | ✅ **VERIFIED IN THE TREE BEFORE ANYTHING WAS BUILT ON IT, because a tooltip fed by mockup-only data would be a fresh instance of the bug this whole round is about. The raw path never reaches the browser** | `ReleaseResource.CategoryIDs()` (`internal/servarr/resources.go`) walks `Categories` and appends `c.ID` only — **`Name` is dropped at the first hop** — and `internal/releases/search.go` puts that `[]int32` on the wire. So there is no `raw_category` field and there never was one. **The tooltip is RECONSTRUCTED, not transmitted**, and that sentence is in §9.1 now because the next person will look for the field, not find it, and conclude the tooltip is impossible. The join is the row's `indexerId` and `categories[]` against the **indexer catalogue**, whose `CatalogIndexer.categories` is a per-indexer tree carrying upstream names; `categoryLabelFor` (`web/src/lib/indexercatalog.ts`) returns the upstream name verbatim. **Requests already loads the catalogue** (`catalog`, `catalogIndexers` in `web/src/routes/requests/+page.svelte`), so this needs **no backend work and no new fetch** |
+| **SU-09b** | 🚩 **The obvious helper is the wrong one, and using it would silently defeat the entire purpose of the tooltip** | `categoryNames(categoryTree(indexers))` looks like the lookup and is not. **`categoryTree` builds a UNION across indexers**, and its own comment says so: *"First non-empty name wins. Two indexers naming 2000 differently is ordinary."* That is right for the picker, whose list must not reshuffle — and it is **exactly wrong here**, because the one thing this tooltip exists to preserve is the per-indexer divergence that the union discards. **The lookup must resolve the row's `indexerId` to its own `CatalogIndexer` and read that indexer's tree.** Recorded because the union helper is the one already imported on the page |
+| **SU-09c** | **Two caveats carried into the design rather than discovered later, both about degrading honestly** | **(1) The catalogue is a probed replica**, so an id newer than the last probe has no name. The existing fallback is already honest and is the one to use: `categoryLabelFor` returns **`Category 2045`** — the number — never a guessed name. **(2) It is dead weight on a surface that does not already load the catalogue.** Requests does. **No other screen fetches the catalogue to populate a tooltip**: there the column shows the derived tag and carries no tooltip, which degrades honestly rather than blocking a render on an upstream fetch — principle 1, and §9.1's own rule that an absent value is not decorated |
+| **SU-09d** | ✅ **The zero-delta is a zero over a population, and the old data was 0.41px from wrapping** | **384 rendered `Category` cells walked** — 2 viewports × 3 densities × 2 installs × every state — **384 carry a `title`, 0 wrap, 0 ink past the content box.** The declared track is `minmax(0, 0.9fr)`, resolving to **108.453px**, and it is content-independent, which the capture confirms rather than assumes: **1,296,736 element rects compared, 0 differing; list geometries 1,392, 0 differing.** ⚠️ **The one number that moved is slack, and it moved the right way for a reason worth recording: the tightest cell had 0.41px of it.** `Audio/Audiobook` sat under half a pixel from wrapping its 84.45px content box at 1440px; `book · audiobook` leaves **4.44px**. The old sample data was not only unproducible, it was **one glyph from a second broken column** — the same latent defect `SU-08a` found in `Age`, caught only because the before side was measured |
+
+**Gate**: `node docs/design/check.mjs` — **exit 0, all checks, both installs, every panel** — on the
+merged tree; §13 copy corpus **6978** strings and the `title` corpus **406**, both **unchanged** —
+and that was checked rather than predicted, because the first draft of this line claimed the `title`
+corpus would grow by 18 and it did not. The attribute sweep carries `if (el.closest('td')) return;`,
+the same *"a `<td>` is data, not copy"* invariant that exempts the cells themselves, so **a tooltip
+on a `<td>` is outside the copy corpus by construction** — as the release titles' own `title`
+attributes already were. `make check: OK`,
+Go linting via **`/root/go/bin/golangci-lint` 2.12.2** (built with go1.25.13) after an absolute-path
+`cache clean`, per PG-04.
+
+⏭️ **Needs routing, not done here.** `web/` is the frontend thread's tree and was not touched: the
+Requests table needs the per-indexer `title` built as `SU-09a`/`SU-09b` describe, and
+`web/src/app.css` and `web/src/lib/format.ts` still carry the *"`Age` … 68px track"* sentence that
+`SU-08b` corrected in the design tree.
