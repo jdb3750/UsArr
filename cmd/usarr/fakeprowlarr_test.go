@@ -51,6 +51,11 @@ type fakeProwlarr struct {
 	// blockedIndexerID, when non-zero, is reported by /api/v1/indexerstatus.
 	blockedIndexerID int32
 
+	// searchDelay is held before every GET /api/v1/search answers. UsArr times
+	// each leg with a wall clock and reports whole milliseconds, so a test that
+	// needs a non-zero duration on the wire has to spend one.
+	searchDelay time.Duration
+
 	srv *httptest.Server
 }
 
@@ -168,6 +173,13 @@ func (f *fakeProwlarr) authed(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (f *fakeProwlarr) handleSearch(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	delay := f.searchDelay
+	f.mu.Unlock()
+	if delay > 0 {
+		time.Sleep(delay)
+	}
+
 	ids := r.URL.Query()["indexerIds"]
 	f.mu.Lock()
 	for _, id := range ids {
@@ -511,6 +523,15 @@ func (f *fakeProwlarr) blockIndexer(id int32) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.blockedIndexerID = id
+}
+
+// slowSearches makes every search leg take at least d, so the per-indexer
+// duration UsArr reports is deterministically non-zero. A sleep can overshoot
+// but never undershoot, which is the direction that matters here.
+func (f *fakeProwlarr) slowSearches(d time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.searchDelay = d
 }
 
 func indexerJSON(id int32, name, protocol, privacy string, priority int32, enable bool) map[string]any {

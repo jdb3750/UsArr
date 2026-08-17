@@ -1060,7 +1060,10 @@ systemctl restart usarr
 
 **No `sudo`, deliberately.** The documented target is an LXC administered as root directly, where
 `sudo` is not installed at all — prefixing these commands with it fails outright, which is a real
-failure that has happened rather than a hypothetical. **On a host where you are not root**, add
+failure that has happened rather than a hypothetical. Because the binary is absent rather than the
+rights, the shell answers `sudo: command not found` and not a permission refusal, and it answers it
+on the **second and third lines**, after the `make build` above them has already succeeded — so the
+transcript reads like a build failure and is not one. **On a host where you are not root**, add
 `sudo` to the **last two lines only**: `git pull` and `make build` should run as the user that owns
 the checkout, because building as root leaves root-owned objects in `/opt/UsArr` and
 `web/node_modules` that the next unprivileged build cannot overwrite.

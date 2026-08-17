@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -46,16 +47,15 @@ var volatileFields = map[string]bool{
 	"finished_at":   true,
 	"blocked_until": true,
 	"duration_ms":   true,
-	// age_days is derived from wall-clock now, and reason embeds a wall-clock
-	// deadline ("blocked until 2026-…"). Both keep their real recorded values in
-	// the fixture, because the SPA's own test reads them, but neither can be
+	// age_days is derived from wall-clock now. It keeps its real recorded value
+	// in the fixture, because the SPA's own test reads it, but it cannot be
 	// compared against a later run.
 	"age_days": true,
-	"reason":   true,
 }
 
-// timestampFields are rewritten to a fixed value when the recording is
-// regenerated, so the checked-in file does not churn.
+// timestampFields hold a timestamp and NOTHING else, so the whole value is
+// replaced by a fixed placeholder when the recording is regenerated and the
+// checked-in file does not churn.
 var timestampFields = map[string]bool{
 	"expires_at":    true,
 	"published_at":  true,
@@ -64,10 +64,60 @@ var timestampFields = map[string]bool{
 	"blocked_until": true,
 }
 
+// embeddedTimestampFields hold PROSE with a wall-clock timestamp inside it —
+// releases.blockedReason emits "Prowlarr has this indexer blocked until
+// 2026-08-17T02:46:36Z". Blanking the whole value the way timestampFields are
+// blanked would throw away the sentence, and the sentence is the signal: it is
+// what tells "blocked until a deadline" apart from "blocked after repeated
+// failures" and from "indexer is disabled in Prowlarr", all three of which the
+// SPA renders verbatim into the degraded banner (web/src/lib/api.ts,
+// indexerProblems). So only the timestamp inside the string is normalised, both
+// when the fixture is written and again on both sides before it is compared —
+// the prose keeps being checked, and only the part that cannot be reproduced
+// stops being checked.
+var embeddedTimestampFields = map[string]bool{
+	"reason": true,
+}
+
+// rfc3339InText matches an RFC 3339 instant anywhere inside a string.
+// time.RFC3339 is what blockedReason formats with; the optional fractional
+// seconds and numeric offset are there so a later caller that formats with
+// RFC3339Nano or in a non-UTC zone is normalised too rather than silently
+// reintroducing the churn.
+var rfc3339InText = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})`)
+
+// normaliseEmbeddedTimestamps rewrites every RFC 3339 instant inside a string
+// value to placeholderTime and leaves every other byte alone. Non-strings pass
+// through untouched. It is idempotent: placeholderTime is itself RFC 3339, so
+// running it over an already-normalised fixture value is a no-op, which is what
+// lets covers() run it over the recorded and the live value alike.
+func normaliseEmbeddedTimestamps(v any) any {
+	s, ok := v.(string)
+	if !ok {
+		return v
+	}
+	return rfc3339InText.ReplaceAllLiteralString(s, placeholderTime)
+}
+
 const (
 	placeholderSearchID = "SEARCH_ID"
 	placeholderTime     = "2026-08-16T00:00:00Z"
+	// placeholderDurationMS must not be 0. duration_ms is `omitempty` on an
+	// int64 (search.go), so 0 is the one value the wire can never carry:
+	// recording it would pin a value that no later run can reproduce, and
+	// covers() — which requires every recorded key to still be PRESENT — would
+	// then fail with "field is gone from the wire" on any run whose legs
+	// finished inside a millisecond. Any non-zero placeholder is fine, because
+	// duration_ms is volatile and only its presence is compared.
+	placeholderDurationMS = 1
 )
+
+// searchLegDelay is held by the Prowlarr double on every search leg, so
+// duration_ms is deterministically non-zero and therefore deterministically ON
+// the wire. Without it the field rounds to 0, omitempty drops it, and the
+// recording cannot pin its spelling at all — the SPA reads value.duration_ms
+// (web/src/lib/api.ts) against nothing.
+const searchLegDelay = 2 * time.Millisecond
 
 type recordedFrame struct {
 	Name string          `json:"name"`
@@ -93,6 +143,7 @@ func TestSSEFramesMatchTheClientContract(t *testing.T) {
 	// One blocked indexer, so the run produces the degraded report the client has
 	// to be able to render — an all-green run would never exercise it.
 	prowlarr.blockIndexer(2)
+	prowlarr.slowSearches(searchLegDelay)
 
 	stream := env.openStream(t)
 	defer stream.close()
@@ -168,6 +219,16 @@ func TestSSEFramesMatchTheClientContract(t *testing.T) {
 			t.Errorf("no release on the stream carries %q; web/src/lib/api.ts reads it", field)
 		}
 	}
+
+	// duration_ms is `omitempty`, so it is on the wire only when a leg took a
+	// whole millisecond — which is why slowSearches is set above. Asserting it
+	// by name here is what stops a future regeneration from quietly dropping the
+	// field back out of the recording and leaving its spelling unobserved: a
+	// fixture that does not carry it cannot fail when it is renamed.
+	if !anyIndexerOutcomeHasField(t, live, "duration_ms") {
+		t.Errorf("no indexer outcome on the stream carries %q even though the Prowlarr double "+
+			"was made to take %s per leg; web/src/lib/api.ts reads it", "duration_ms", searchLegDelay)
+	}
 }
 
 // collectSearchFrames reads the stream until search.done, ignoring frames from
@@ -230,6 +291,12 @@ func covers(path string, want, got any) []string {
 			if volatileFields[key] {
 				continue // presence only: the value changes every run
 			}
+			if embeddedTimestampFields[key] {
+				// Compare the prose, not the deadline buried in it. The
+				// recorded side is already normalised by stabilise(), and
+				// normalising it again is a no-op.
+				wv, gv = normaliseEmbeddedTimestamps(wv), normaliseEmbeddedTimestamps(gv)
+			}
 			problems = append(problems, covers(path+"."+key, wv, gv)...)
 		}
 		return problems
@@ -268,6 +335,25 @@ func anyResultHasField(t *testing.T, frames []recordedFrame, field string) bool 
 			if _, ok := res[field]; ok {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// anyIndexerOutcomeHasField reports whether any search.indexer frame's outcome
+// object carries the named key.
+func anyIndexerOutcomeHasField(t *testing.T, frames []recordedFrame, field string) bool {
+	t.Helper()
+	for _, f := range frames {
+		if f.Name != httpapi.EventSearchIndexer {
+			continue
+		}
+		var payload struct {
+			Indexer map[string]any `json:"indexer"`
+		}
+		mustUnmarshal(t, string(f.Data), &payload)
+		if _, ok := payload.Indexer[field]; ok {
+			return true
 		}
 	}
 	return false
@@ -326,9 +412,11 @@ func stabilise(v any) any {
 			case k == "search_id":
 				out[k] = placeholderSearchID
 			case k == "duration_ms":
-				out[k] = 0
+				out[k] = placeholderDurationMS
 			case timestampFields[k]:
 				out[k] = placeholderTime
+			case embeddedTimestampFields[k]:
+				out[k] = normaliseEmbeddedTimestamps(val)
 			default:
 				out[k] = stabilise(val)
 			}
