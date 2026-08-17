@@ -50,6 +50,7 @@ import (
 //     same nine bytes whether Kavita+ matched it or the scanner read it out of a
 //     ComicInfo.xml <Web> element. UsArr cannot tell, so the WEAKEST writer
 //     governs — otherwise the amendment is unenforceable by construction.
+//
 //  2. THE FREE-TEXT PATH DOES NOT MERELY COEXIST WITH THE PROVIDER PATH, IT
 //     OVERWRITES IT. ProcessSeries.cs:358-367 lives inside UpdateSeriesMetadata,
 //     which ProcessSeries.cs:165 calls on EVERY scan of the series, and the
@@ -57,12 +58,24 @@ import (
 //     matched id with whatever the first chapter's <Web> holds. So even a value
 //     that WAS provider-supplied stops being one, with nothing on the DTO
 //     changing to say so.
-//  3. THE SAME BLOCK ERASES. `?? 0` on lines 363-364, and GetMangaBakaId's own
-//     `?? 0` on line 366, mean a first chapter whose <Web> lacks that site's
-//     link sets the field to ZERO. Identity flaps across scans. UsArr's
-//     external_id write is an upsert and never a delete, so a wrong id survives
-//     the erasure — which is precisely why the cap, not the erasure, has to be
-//     the defence.
+//
+//  3. THE SAME BLOCK ERASES, AND THE ERASURE IS A PROPERTY OF THE OWNER'S
+//     RELEASE RATHER THAN OF KAVITA. `?? 0` on lines 363-364, and
+//     GetMangaBakaId's own `?? 0` on line 366, mean a first chapter whose <Web>
+//     lacks that site's link sets the field to ZERO. The chapter level does the
+//     same unconditionally (ProcessSeries.cs:746-749). ⚠️ DEVELOP GUARDS BOTH —
+//     `if (info.MetronId is > 0)` and the reworked series block at :421-443 —
+//     so this is v0.9.0.2 behaviour specifically, and a re-check against
+//     develop would not reproduce it.
+//
+//     🚩 THE CONSEQUENCE IS A RULE FOR ANY FUTURE DELTA CHANNEL, not just for
+//     this mapping: ON THE OWNER'S VERSION, AN ID GOING FROM PRESENT TO ABSENT
+//     IS NOT EVIDENCE ABOUT THE WORK. It may be nothing but a rescan of a file
+//     whose ComicInfo note moved. Nothing here infers anything from absence —
+//     webLinkIdentity treats "" and "0" as the ordinary unidentified case and
+//     stops — and UsArr's external_id write is an upsert and never a delete, so
+//     a wrong id survives the erasure rather than being corrected by it. That
+//     is why the CAP has to be the defence: the erasure cannot be one.
 //
 // Point 2 is the one that would survive any future Kavita release note claiming
 // these are "Kavita+ fields": the overwrite is in the plain scanner.
@@ -80,7 +93,10 @@ import (
 //   - AniList, MyAnimeList and MangaBaka have NO chapter-level URL space for
 //     WeblinkParser to read: its only Series-bound prefixes are
 //     "https://anilist.co/manga/", "https://myanimelist.net/manga/" and
-//     "https://mangabaka.org/" (WeblinkParser.cs:11-20). A link in a chapter's
+//     "https://mangabaka.org/" (Kavita.Common/Helpers/WeblinkParser.cs:11-20 —
+//     ⚠️ at v0.9.0.2; develop renamed the class to ExternalIdParser.cs, which
+//     DOES NOT EXIST at the tag, so a citation using that name is reading
+//     develop). A link in a chapter's
 //     <Web> element names the SERIES the chapter belongs to. Inheriting it is an
 //     accuracy risk when a file is misfiled, not a kind confusion, and 0.90
 //     already covers accuracy risk.

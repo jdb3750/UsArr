@@ -368,35 +368,62 @@ func mapSeries(dto kavita.SeriesDto, d kindDecision) store.CatalogueItem {
 //     comment owns the measurement — including the two places the answer is NOT
 //     ComicVine's. MangaBaka has no provider writer at all; AniList and MAL each
 //     have a real, licence-gated one and still do not earn 1.0.
+//
 //  2. ✅ LS-10 IS CLOSED TOO, because it is the same line of code. 'mal' is no
 //     longer bare: MyAnimeList really does number anime and manga separately
 //     (verified first-party — myanimelist.net/anime/1 is "Cowboy Bebop" and
 //     /manga/1 is "Monster"), so it lands under MalMangaSource. AniList's id
 //     space really IS global, so AniListSource stays bare. LS-10 could only
 //     guess at both; both are now measured, and weblinkid.go cites each.
+//
 //  3. THE ComicVine ID IS NEVER WRITTEN AT 1.0, and is written only when its
 //     KIND IS PROVEN. comicVineIdentity owns that; its comment owns the why.
+//
 //  4. mangaBakaEditionId IS DELIBERATELY NOT WRITTEN. It is an EDITION
 //     identifier, and §6.4's amendment 4 is categorical that writing an edition
 //     id as a work id "silently claims a paperback and an audiobook are the same
 //     edition". external_id's CHECK requires exactly one of work_id/edition_id,
 //     this commit writes no edition rows, and the honest answer to "there is
-//     nowhere correct to put it" is to not put it anywhere. It is also
-//     develop-only: Kavita.Models/Entities/Series.cs:120-125 at v0.9.0.2
-//     declares AniListId, MalId, HardcoverId, MetronId, ComicVineId and
-//     MangaBakaId — and NO MangaBakaEditionId and no CbrId. Both are modelled on
-//     the vendored develop spec and simply absent on the owner's instance.
-//  5. ⚠️ 'hardcover_book' AND 'metron' STILL GO OUT AT 1.0, AND PROBABLY SHOULD
-//     NOT. The same whole-tree grep found Series.HardcoverId written by
-//     ExternalMetadataIdHelper.cs:28 ALONE and Series.MetronId by
-//     ExternalMetadataIdHelper.cs:33 alone — the Edit Series dialog, i.e. free
-//     text and nothing else, with neither a scanner nor a provider writer. That
-//     is a WEAKER provenance than the three capped above, and the last thing
-//     going out at 1.0 from here on the strength of an unexamined premise. It is
-//     not changed in this commit for exactly the reason LS-12 was not changed
-//     inside LS-11 — different fields, different fixtures, and a third behaviour
-//     bundled in would make none of them reviewable. docs/REVIEW-LOG.md LS-35
-//     carries it with the measurement.
+//     nowhere correct to put it" is to not put it anywhere. ⚠️ It is ALSO
+//     DEVELOP-ONLY, and the citation that settles it is the DTO rather than the
+//     entity, because the DTO is what goes on the wire:
+//     Kavita.Models/DTOs/SeriesDto.cs:104-109 at v0.9.0.2 declares exactly six
+//     ids — AniListId, MalId, HardcoverId, MetronId, ComicVineId, MangaBakaId —
+//     and NEITHER MangaBakaEditionId NOR CbrId. (At the tag, CbrId exists only
+//     on Kavita+ DTOs and on ExternalSeriesMetadata, never on the series shape
+//     all-v2 serves.) The vendored api/specs/kavita.json is DEVELOP's — it
+//     reports info.version 0.9.0.20 where a v0.9.0.2 server reports 0.9.0.0 —
+//     so both fields are modelled from a spec ahead of the owner's release, and
+//     both decode as the Go zero value on his instance.
+//
+//  5. ⚠️ 'hardcover_book', 'metron' AND 'cbr' STILL GO OUT AT 1.0, AND ALL THREE
+//     ARE WORSE THAN THEY LOOK. The same whole-tree grep found:
+//
+//     'hardcover_book' — Series.HardcoverId written by
+//     ExternalMetadataIdHelper.cs:28 ALONE: the Edit Series dialog, free text,
+//     with neither a scanner nor a provider writer. WEAKER provenance than the
+//     three capped above, and still strong enough to merge two works.
+//
+//     'metron' — Series.MetronId likewise written by
+//     ExternalMetadataIdHelper.cs:33 alone, and 🚩 METRON'S IDENTITY IS
+//     ISSUE-LEVEL IN PRACTICE. metron-tagger's id is parsed out of ComicInfo's
+//     <Notes> (Parser.cs:1350, DefaultParser.cs:178-179) into ParserInfo and
+//     lands on the CHAPTER (ProcessSeries.cs:749) — nothing on any scan path
+//     writes Series.MetronId, and metron.cloud is not in WeblinkParser's <Web>
+//     vocabulary at all. So the only Metron id Kavita actually populates is one
+//     level BELOW the work, which is §6.4 amendment 4's shape and exactly what
+//     LS-14 refused for a ComicVine issue. Series-level Metron identity would
+//     have to be derived the way ComicVine's is at ProcessSeries.cs:162-167 —
+//     Distinct(), accept only when exactly one — and Kavita does not do that.
+//
+//     'cbr' — 🚩 DEAD ON THE OWNER'S VERSION. SeriesDto.cs at v0.9.0.2 has no
+//     CbrId at all (decision 4), so dto.CbrID is always the Go zero value there
+//     and this line can never fire on the install it was written for.
+//
+//     None of the three is changed in this commit, for exactly the reason LS-12
+//     was not changed inside LS-11 — different fields, different fixtures, and a
+//     fourth behaviour bundled in would make none of them reviewable.
+//     docs/REVIEW-LOG.md LS-35 carries all three with the measurements.
 func kavitaExternalIDs(dto kavita.SeriesDto, d kindDecision) []store.ExternalIdentifier {
 	var out []store.ExternalIdentifier
 	add := func(source, value string) {
