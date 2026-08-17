@@ -1,4 +1,10 @@
 import { describe, expect, it } from 'vitest';
+// HOME'S TEMPLATE AS TEXT, for the copy guard at the bottom of this file. `?raw`
+// is Vite's own mechanism and it types as `string`, which is what lets a ban
+// list run over inline markup in an `environment: 'node'` vitest run with no
+// Svelte plugin. See `$lib/copyguard` for why the stripping is not written here.
+import HOME_SOURCE from '../routes/+page.svelte?raw';
+import { sectionsMarkup, userFacingMarkup } from './copyguard';
 import {
 	attention,
 	hasIndexer,
@@ -7,6 +13,9 @@ import {
 	HOME_SEARCH_SCOPE_NOTE,
 	needsAttention
 } from './home';
+// §17.5's ban list, imported rather than restated: Home renders the same grab
+// vocabulary the Requests block does, and two copies of a ban list is two lists.
+import { FORBIDDEN_OUTCOME_WORDS } from './requests';
 import { rollup, rollupCount, type ServiceRow } from './services';
 import type { ServiceHealth, ServicesHealth } from './api';
 
@@ -239,5 +248,77 @@ describe('HOME_SEARCH_SCOPE_NOTE', () => {
 		// The whole point of the string. A box that only says "Search" is the
 		// merge §8.3 forbids, arrived at by omission.
 		expect(HOME_SEARCH_SCOPE_NOTE).toMatch(/not your own library/i);
+	});
+});
+
+/* ── §17.5's ban, over Home's own Recent-grabs chrome ─────────────────────── */
+
+/**
+ * THE HOLE THIS CLOSES, STATED FIRST, BECAUSE IT WAS REAL AND NOT HYPOTHETICAL.
+ *
+ * §17.5's banned vocabulary is checked against shipped strings in three places
+ * and, until this block, all three were on the Requests side of the app:
+ * `requests.test.ts` holds the strings `requests.ts` exports, the markup of
+ * `routes/requests/+page.svelte`, and the markup of `$lib/RecentGrabs.svelte`.
+ *
+ * Home draws grab copy too, and NONE of it was any of those three. The rows
+ * themselves are the shared component and were covered the day it was extracted
+ * — but the CHROME around them is Home's own: the `Recent grabs` heading, the
+ * count beside it (`3 grabs`, or `the 10 most recent`), the show-all link, and
+ * the whole unreadable-list banner, which is four sentences about what a
+ * missing list does and does not mean. Every one of those is a statement about
+ * a grab, written inline in `routes/+page.svelte`, and no guard read the file.
+ * A `failed` typed into that banner would have shipped green.
+ *
+ * ⚠️ THE REGION IS BOTH ARMS OF THE `{#if}`, WHICH IS WHY THE SLICER RETURNS A
+ * LIST. Home renders `id="home-grabs"` twice — once for the error banner and
+ * once for the loaded table — and a guard that took the first match would have
+ * read the banner and silently dropped the heading, the count and the link.
+ * `sectionsMarkup` throws rather than returning nothing when the marker moves,
+ * for the reason the Requests guard records: an empty corpus passes every
+ * `not.toContain` there is.
+ *
+ * WHAT THIS BLOCK DELIBERATELY DOES NOT DO. It does not re-check the rows: they
+ * are `$lib/RecentGrabs.svelte`, which `requests.test.ts` already holds against
+ * the same list, and a second copy of that assertion would be the duplication
+ * the component was extracted to remove. And it does not extend the subset ban
+ * across the REST of Home — the search entry point and the three mode blocks —
+ * which is a real gap and a separate change, because those are statements about
+ * a search and about configuration rather than about a download.
+ */
+const HOME_GRAB_MARKUP = sectionsMarkup(userFacingMarkup(HOME_SOURCE), 'id="home-grabs"').join(
+	'\n'
+);
+
+describe('the banned vocabulary, in Home’s Recent-grabs chrome', () => {
+	it('is reading the region it thinks it is reading', () => {
+		// Both arms, each pinned to a string only that arm carries. A guard that
+		// matches nothing is indistinguishable from no guard, and after the
+		// `{#if}` there are two ways to match half of it rather than one.
+		expect(HOME_GRAB_MARKUP).toContain('Recent grabs');
+		expect(HOME_GRAB_MARKUP).toContain('Your recent grabs could not be read');
+		expect(HOME_GRAB_MARKUP).toContain('most recent');
+		expect(HOME_GRAB_MARKUP).toContain('All recent grabs on Requests');
+	});
+
+	it.each(FORBIDDEN_OUTCOME_WORDS)('never says “%s” about a grab', (word) => {
+		expect(HOME_GRAB_MARKUP.toLowerCase()).not.toContain(word);
+	});
+
+	it('never asserts in the markup that a grab did not happen', () => {
+		// The same two phrases the Requests guard pins, and the reason Home needs
+		// them is that its banner is the one place in the app that comes closest:
+		// "Nothing is missing here because a grab did not happen" is the DENIAL of
+		// the claim, and an edit that dropped its first four words would turn it
+		// into the assertion §17.5 forbids.
+		expect(HOME_GRAB_MARKUP.toLowerCase()).not.toContain('did not go through');
+		expect(HOME_GRAB_MARKUP.toLowerCase()).not.toContain('nothing was sent');
+	});
+
+	it('keeps saying that an unreadable list is not an empty one', () => {
+		// The counter-case, pinned so a later tightening of the ban has to face
+		// it. This sentence is the point of the banner: a local read failing says
+		// something about UsArr, not about whether anything was ever grabbed.
+		expect(HOME_GRAB_MARKUP).toContain('a grab did not happen');
 	});
 });
