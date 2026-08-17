@@ -95,13 +95,16 @@ fi
 printf '\nrunning service\n'
 LIVE_COMMIT="$UNKNOWN"
 EXE_DELETED=0
+UNIT_ACTIVE="$UNKNOWN"
 if ! command -v systemctl >/dev/null 2>&1; then
 	field "systemctl" "not found — cannot inspect a service on this host"
 elif ! systemctl cat "$SERVICE" >/dev/null 2>&1; then
 	field "unit" "$SERVICE — no such unit (set USARR_SERVICE)"
 else
 	field "unit" "$SERVICE"
-	field "active" "$(systemctl is-active "$SERVICE" 2>/dev/null || echo inactive)"
+	UNIT_ACTIVE="$(systemctl is-active "$SERVICE" 2>/dev/null || true)"
+	[ -n "$UNIT_ACTIVE" ] || UNIT_ACTIVE=inactive
+	field "active" "$UNIT_ACTIVE"
 	MAIN_PID="$(systemctl show -p MainPID --value "$SERVICE" 2>/dev/null || echo 0)"
 	field "MainPID" "${MAIN_PID:-0}"
 
@@ -117,8 +120,30 @@ else
 
 		# The startup line is the only source that reports what the process
 		# itself was built from, rather than what is sitting on disk.
-		LOGLINE="$(journalctl -u "$SERVICE" --no-pager -n 2000 2>/dev/null |
-			grep -F 'starting UsArr' | tail -n 1 || true)"
+		#
+		# Selected by _PID and read FORWARDS, with no line window at all.
+		#
+		# Any "last N lines" window is wrong in the direction that matters. The
+		# line is emitted exactly once, at start, so on a host that has since
+		# logged past N it falls out of range and a perfectly current
+		# deployment reports UNVERIFIED — the steady state on a long-running
+		# box, not an edge case. Measured: an -n 2000 window did precisely
+		# that. Raising N only moves the threshold.
+		#
+		# _PID pins the query to the process actually running, and the startup
+		# line is among the first things that process logs, so `grep -m1` stops
+		# after a handful of lines however long ago it started. journalctl
+		# takes SIGPIPE when grep exits; `|| true` absorbs it under pipefail.
+		LOGLINE="$(journalctl _PID="$MAIN_PID" --no-pager 2>/dev/null |
+			grep -m1 -F 'starting UsArr' || true)"
+		if [ -z "$LOGLINE" ]; then
+			# Fallback for a unit whose logging PID is not MainPID (a wrapper
+			# script, Type=forking). Windowed from the END on purpose: without
+			# a PID to pin it, reading forwards would find the OLDEST startup
+			# line in the unit's history rather than the current one.
+			LOGLINE="$(journalctl -u "$SERVICE" --no-pager -n 5000 2>/dev/null |
+				grep -F 'starting UsArr' | tail -n 1 || true)"
+		fi
 		if [ -n "$LOGLINE" ]; then
 			LIVE_COMMIT="$(printf '%s\n' "$LOGLINE" |
 				sed -n 's/.*commit["=:]*[ "]*\([0-9a-f][0-9a-f]*\).*/\1/p')"
@@ -135,6 +160,13 @@ printf '\n'
 # `if` rather than `test && array+=`: under `set -e` a failing left-hand test in
 # an && list is only exempt by a rule subtle enough not to rely on here.
 STALE=()
+# A unit that is not running is the loudest answer to "am I current?" there is,
+# and it must not fall through to UNVERIFIED just because a dead process leaves
+# no MainPID and therefore no journal reading. Reporting "a reading could not be
+# taken" for a service that is simply down would bury the actual problem.
+if [ "$UNIT_ACTIVE" != "$UNKNOWN" ] && [ "$UNIT_ACTIVE" != "active" ]; then
+	STALE+=("$SERVICE is '$UNIT_ACTIVE' — nothing is serving, whatever is installed")
+fi
 if [ "$BEHIND" != "$UNKNOWN" ] && [ "$BEHIND" != "0" ]; then
 	STALE+=("checkout is $BEHIND commit(s) behind origin/$BRANCH")
 fi
