@@ -4211,3 +4211,40 @@ elements past the viewport **0 before and 0 after**. ℹ️ The mirror-image of 
 check that this capture is measuring what it claims: there the unit BOX grew 20px → 24px and moved
 540 desktop cells by −4 while leaving mobile at 0; here the FIGURE grew and moved 32 mobile cells by
 +4 while leaving desktop at 0. Same 4px, opposite viewport, for the opposite reason.
+
+
+---
+
+# SU-05's `Age` column: the mockups move to the product, and the move deletes a wrap
+
+**Date:** 2026-08-17. **Branch:** `claude/hearth-thread-vn9w7u`. **Follows `SU-07`**, which took the
+size column. **Owner decision on the shape**, taken after seeing the alternative: `Age` stays at
+**hours and days** — *"I just think its better for understanding what you're looking at."* A
+coarsening scheme (`5 months`, `2 years`, never compound) was drafted and **reversed before any of it
+was written**, so there is no revert to read; it is recorded here because a decision that was
+considered and rejected is worth more than one that appears from nowhere.
+
+| # | Finding | Resolution |
+|---|---|---|
+| **SU-08** | **`Age` printed `2 days`, `11 months`, `3 years`; `formatAge` prints `d` and `h`. The mockups moved to the product, and this is the case where that direction needed no argument at all** | **18 authored cells** in `requests.html` — 36 rendered with the `prototype.html` mirror, reconciling with `SU-05`'s survey — converted to `formatAge`'s output (`web/src/lib/format.ts`: `h` below a day, rounded `d` above it). The word forms become day counts: `2 days` → **`2 d`**, `11 months` → **`330 d`**, `2 years` → **`730 d`**, `3 years` → **`1095 d`**. ✅ **No backend change, and that is the whole point**: the product already emits this and the mockup was the thing out of date. 🚩 **Two of `SU-05`'s three columns resolved by moving the mockup to the product, and only one — `Age` — was even considered the other way.** That is the pattern to keep: **the product's actual output is the default truth, and moving it is the exception that needs an argument.** ⚠️ **What the sample no longer demonstrates**: every rendered `Age` value is now `d`, because the release sample has nothing under a day old. The family still has two members, so `SU-03a`'s verdict — no unit in the header — still stands **on the family**, but the screen no longer shows why. That is the shape of trap `SU-03` fell into, named here rather than fixed, because adding an hours-old release is inventing sample data rather than converting it |
+| **SU-08a** | 🚩 **The old sample data was not merely wrong, it was VISIBLY BROKEN, and nobody had measured it. `11 months` overflowed its cell and wrapped to two lines** | Found by measuring the column before changing it rather than after. `Age` is an **80px** track, **56px** of content after padding. Ink, by a `Range`, at 1440px: `2 days` **38px**, `11 days` **46px**, `3 years` **42px**, and **`11 months` 43px on each of two lines** — it wraps, at **compact, standard and relaxed alike**, taking its cell from **26px to 44px** and its row from **33px to 45px**. ✅ **After the conversion: 0 cells on more than one line, at any density**, and the widest value is `1095 d` at **43px in the 56px box — 13px of slack**. **The before/after capture caught exactly that and nothing else** — see below. ℹ️ This is the sharpest argument in the whole `SU-05` sequence for treating sample data as an instrument: the wrong data was not just generating wrong numbers, it was rendering a broken row in the file every design measurement is taken against |
+| **SU-08b** | ⚠️ **The `Age` deferral from the unit split rests on TWO wrong numbers, both now corrected in place — and the deferral still stands, for a different reason** | **(1) The track.** `SU-03b`, §9.1, `usarr.css` and `web/src/app.css` all say *"`Age` in the release tables is a 68px track"*. **Walked rather than quoted: it is 80px.** 68px is the **`Grabs`** track, two columns along, and `git log -S` over `.cols-requests-releases` shows the row has read `60px 88px 80px … 80px 68px 84px …` since the class was created in `250f7be` — **the miscount is as old as the class**. **(2) The word.** `months` at 43px is measured correctly and is a word the product never prints. ✅ **Re-measured on the real family, two ways as `SU-06` did**: a span appended into a rendered `Age` cell gives **`h` 7px, `d` 8px** — widest `d` at exactly **1ch**, against 5.5ch for `months`. Widest figure the column can print is four digits at 32px under `tabular-nums`, so figure + gap + a 1ch box is **43px in a 56px content box, 13px of slack, one line**. **The cost argument for the deferral is void.** ✅ **`Age` is deferred anyway, and the reason is now honest**: §9.1's scope is *"size columns only"*, and extending a scope is a design decision rather than a correction. **Recorded in §9.1 and in `usarr.css`, not acted on.** ⏭️ **Needs routing, not done here**: `web/src/app.css` and `web/src/lib/format.ts` carry the same 68px sentence and belong to the frontend thread |
+
+**Gate**: `node docs/design/check.mjs` — **exit 0, all checks, both installs, every panel** — on the
+merged tree. `make check: OK`, Go linting via **`/root/go/bin/golangci-lint` 2.12.2** (built with
+go1.25.13) after an absolute-path `cache clean`, per PG-04.
+
+**The before/after capture.** Baseline is the tree `SU-07` landed, so this isolates `Age`. **1040
+combos, 1,296,736 element rects compared, 644 differing — in 8 combos, all of them
+`requests | nosink` at 1440×900**, which is the only state that renders the *Audiobook release
+results* table where `11 months` sits. **Three delta shapes and nothing else**: **8** rects at
+`dh = −18.00` — the `Age` `<td>`s that stopped wrapping, 44px → 26px; **40** at `dh = −12.00` — the
+row and the blocks that contain it, 45px → 33px; **596** at `dy = −12.00` — everything below,
+shifted up by the height the wrap was costing. **No `dx`, no `dw`, anywhere.** **List geometries
+1,392, differing 8 — and in all 8 the change is the row-height array alone**
+(`[79,33,33,33,33,45]` → `[79,33,33,33,33,33]`): **`grid-template-columns` changed in 0, header cell
+widths changed in 0, table width 1232px → 1232px. No declared track moved, and none was widened.**
+Overflow verdicts, `document.scrollWidth` and z-index chains all differing 0; elements past the
+viewport 0 before and 0 after. ℹ️ `SU-03b` costed the reserve at *"+18px per cell"*; the wrap this
+deletes cost **exactly −18px per cell**, from the other direction, which is the two measurements
+agreeing.

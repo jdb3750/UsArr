@@ -343,16 +343,27 @@ button, input, select, textarea { font: inherit; color: inherit; }
    reason.
    ⚠️ ONLY THE SIZE FAMILY SHIPS SO FAR, AND THE REASON IS MEASURED RATHER THAN
    a matter of taste: A RESERVED UNIT BOX COSTS COLUMN WIDTH, and two tracks are
-   already too narrow to pay it. `Age` in the release tables is a 68px track —
-   24px of padding leaves 44px, and `months` alone is 43px, so the figure has
-   nothing left and the cell wraps to two lines. Home's `Items` is 107.375px:
-   52px of reserve for `episodes` plus 24px of padding leaves 31px, and
-   `1,842` is 36px. Both were measured wrapping, at +18px per cell over 224
+   already too narrow to pay it. `Age` in the release tables is an 80px track —
+   24px of padding leaves 56px, and `months` alone is 43px, so the figure had
+   almost nothing left and the cell wrapped to two lines. Home's `Items` is
+   107.375px: 52px of reserve for `episodes` plus 24px of padding leaves 31px,
+   and `1,842` is 36px. Both were measured wrapping, at +18px per cell over 224
    cells across the sweep. The rule is right and the tracks are wrong; widening
    a declared track is its own decision, on the two densest tables in the
    product, and it is not folded in here. §9.1 names the columns still
    carrying the old treatment so a reader can tell an unfinished job from a
-   decision. */
+   decision.
+   TWO CORRECTIONS TO THAT PARAGRAPH, both from measuring rather than quoting,
+   and both left standing rather than acted on. This comment said 68px for the
+   `Age` track; the resolved track is 80px and 68px is `Grabs`, two columns
+   along, a miscount as old as the class. And `months` is not a word the product
+   prints: `formatAge` emits `h` and `d`, the mockups' Age sample data has been
+   converted to match, and the real family's widest member is `d` at 8px, so the
+   reserve would be 1ch rather than 5.5ch and would leave 13px of slack against
+   the widest figure the column can print (`1095 d`). The cost argument is
+   therefore void for `Age` — but extending the scope of this treatment is a
+   design decision, not a correction, so it is recorded here and in §9.1 and not
+   applied. See REVIEW-LOG SU-08. */
 .unit {
   color: var(--fg-muted);
   display: inline-block;

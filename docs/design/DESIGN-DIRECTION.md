@@ -1687,9 +1687,14 @@ treatment by media type.** Same slots, same positions, different values.
   - **The width belongs to the unit FAMILY, not to the value in front of you**, or the digits jump
     the first time a row crosses from GiB to MiB. Reserve the widest unit the column can ever print,
     measured in the cell font (13 px IBM Plex Sans, `1ch` = 8 px) and rounded up to the next half-ch:
-    **size** `B · KiB · MiB · GiB · TiB`, widest `MiB` at 22 px → `3ch`; **duration** `days · weeks ·
-    months · years · hours`, widest `months` at 43 px → `5.5ch`; **item nouns** `films · series ·
-    books · artists · issues · episodes`, widest `episodes` at 52 px → `6.5ch`.
+    **size** `B · KiB · MiB · GiB · TiB`, widest `MiB` at 22 px → `3ch`; **duration** `h · d`,
+    widest `d` at 8 px → `1ch`; **item nouns** `films · series · books · artists · issues ·
+    episodes`, widest `episodes` at 52 px → `6.5ch`. ⚠️ **The duration family read `days · weeks ·
+    months · years · hours`, widest `months` at 43 px → `5.5ch`, and that was a family the mockups
+    invented.** `formatAge` emits `h` below a day and `d` above it and nothing else, so five of the
+    seven members were never printable — the same calibration error as the size family, one column
+    along. Re-measured on the real family, the reserve is `1ch`; see the deferral bullet below for
+    why `Age` still does not take it.
   - ⚠️ **The size family is the BINARY one, and mistaking it for the decimal one is how this
     reserve was first mis-measured.** The rule shipped at `2.5ch`, derived from
     `B · KB · MB · GB · TB` whose widest member `MB` is 19 px — the family **the mockups drew at the
@@ -1729,15 +1734,18 @@ treatment by media type.** Same slots, same positions, different values.
     rejected: it only works where every row of the column shares one unit, which rules out size.**
     A `Size` column holding `68.4 GiB` beside `820 MiB` beside `4.2 KiB` has no unit to put in its
     header, and the moment one exists the header is lying about some rows. The same disqualifies it
-    for `Age` (`3 years` beside `11 months`) and for Home's `Items`, whose six rows count films,
+    for `Age` (`7 h` beside `31 d`) and for Home's `Items`, whose six rows count films,
     series, artists and books. A rule that fails on the three columns it was proposed for is not a
     rule. The header form remains right for a column whose unit is genuinely constant — but that
     column is covered already, by the rule four bullets above: a value identical for every row is
     not data and is not rendered.
   - ⚠️ **Applied so far to the size columns only — 98 cells — and the reason is a measured cost, not
     an unfinished opinion.** A reserved unit box costs column width, and two declared tracks cannot
-    pay it. `Age` in the release tables is a 68 px track: 24 px of padding leaves 44 px and `months`
-    alone is 43 px, so the figure has nothing left and the cell wraps to two lines. Home's `Items`
+    pay it. `Age` in the release tables is an **80 px** track: 24 px of padding leaves 56 px and
+    `months` alone is 43 px, so the figure had almost nothing left and the cell wrapped to two
+    lines. (⚠️ This bullet said **68 px** until the track was walked rather than quoted; 68 px is the
+    `Grabs` track in the same row, and the miscount is as old as the class. `months` is measured at
+    43 px in both readings, so the verdict was right for a partly wrong reason.) Home's `Items`
     is 107.375 px: 52 px of reserve plus 24 px of padding leaves 31 px against a 36 px `1,842`.
     Both were measured wrapping at **+18 px per cell over 224 cells** across the render sweep.
     **Still carrying the old one-string treatment, named so that a reader can tell an unfinished job
@@ -1749,9 +1757,17 @@ treatment by media type.** Same slots, same positions, different values.
     stated *premise* is a separate matter — `months` and `years` are what **the mockups** put in the
     `Age` column, while `formatAge` in the shipping app emits only `d` and `h`, so the 43 px figure
     the deferral is argued from is a measurement of the mockup rather than of the product. That is
-    the same calibration error as the size family, it is filed with it under **SU-05**, and it is
-    left standing here rather than silently re-derived because re-measuring `Age` is a decision
-    about a declared track, not an edit to this bullet.
+    the same calibration error as the size family, and it is filed with it under **SU-05**.
+    ✅ **The mockups' `Age` sample data has since been converted to `formatAge`'s output, so the
+    premise is now void and the measurement that replaces it is recorded here rather than acted
+    on.** The duration family is `h · d`: measured by a span in a rendered `Age` cell, `h` is 7 px
+    and `d` is 8 px, so the widest is `d` at **1ch** — against 5.5ch for `months`. Widest figure the
+    column can print is four digits (`1095 d`, three years of indexer retention) at 32 px under
+    `tabular-nums`, so figure plus gap plus a 1ch box is **43 px in the 56 px content box, 13 px of
+    slack, one line at every density**. **The cost argument for the `Age` deferral no longer holds.**
+    It is nonetheless **left deferred**: this bullet's scope is *"size columns only"*, extending it
+    is a design decision rather than a correction, and the whole point of the paragraph above is
+    that a scope which changes quietly reads as an unfinished job.
 - **A composite numeric cell says what its parts are.** `41 / 9` in a `Peers` column announces as
   *"Peers, 41 slash 9"* and nothing on the screen says which number is seeders — while prose four
   hundred pixels below calls the same column "seeders". Keep the ecosystem-verbatim header (`Peers`
