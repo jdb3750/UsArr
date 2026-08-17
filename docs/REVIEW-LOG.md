@@ -6834,6 +6834,127 @@ outstanding.** `OPTIN-01` is the design thread's entry per §11's area map, and 
 any amendment underneath the entry's own text; the pointer back is therefore theirs to append, not
 ours to insert.
 
+### NOCI.7 Appended 2026-08-17 on `d862526` — a fourth form that hides a presence, and the site count re-measured at sixteen
+
+📎 **A pure append, on §NOCI.6's own terms.** Nothing above this line is renumbered, reworded or
+deleted; `git diff --numstat` for this commit reports **0 deletions** in this file. §NOCI.6's three
+forms stand exactly as written and are added to, not revised.
+
+**Two things come back from
+[`NOCI-02`](#noci-02--the-design-threads-half-of-noci-01-sorted-site-by-site-rather-than-swept)**,
+the design thread's disposition of the seven `docs/design/` sites §NOCI.5 routed to them, merged to
+`origin/main` at **`556a029`**: a fourth form of the pattern, and a correction to this entry's own
+count.
+
+#### The form that runs the other way
+
+`NOCI-02`'s `DESIGN-DIRECTION` §9.1 row is a fourth mechanism, and **it is the inverse of §NOCI.6's
+three.** Their words for it, which are better than a paraphrase: *"the sharpest of the seven, because
+the assertion is real and only the actor was wrong"* — *"a reader who took the sentence at its word
+would look for a CI, find none, and conclude the rule is unguarded, when in fact it is **guarded
+harder than the sentence claims**."*
+
+4. **A guard that a wrong actor makes look absent.** `DESIGN-DIRECTION` §9.1's *"CI asserts it"*,
+   where `docs/design/check.mjs` really does assert it — `4. Overflow: nothing past the viewport,
+   nothing past its own .tablewrap` at line 1064 on `d862526`, testing `b.right <= window.innerWidth
+   + 0.5` at line 1098 plus a `.tablewrap` shear check. **Read on this tree rather than taken from
+   the row**, per §11's standing rule about relayed claims; `NOCI-02` §NOCI-02.3 also carries it by
+   execution, `make design` reporting `110 screen×state×install×panel combinations (floor 104)` at
+   five widths.
+
+🔍 **Why this is a form and not a variant of form 3.** Forms 1, 2 and 3 all end with a reader
+believing in a guard that is not there — mute when it fires, invoked by nothing, claiming to run
+where it does not. **This one ends with a reader disbelieving a guard that is.** The damage is
+opposite in sign, and so is the remedy: the first three manufacture unearned confidence and are
+fixed by building or wiring the guard, while this one destroys earned confidence and invites
+somebody to write the same check a second time, or to treat a real rule as unenforced and drop it —
+and the guard here is finished, so only the sentence needed changing. What unifies all four is that
+**one question catches every one of them — does the actor this sentence names exist?** — which is
+why they are one finding rather than four.
+
+⚠️ **`NOCI-02` already spends the word "fourth" on a different mechanism, and the two must not be
+merged.** Its §NOCI-02.2 numbers the same three forms §NOCI.6 does, then adds *"a fourth, adjacent
+and already logged, is **a guard that cannot see the file it is guarding**"* — the `SW-05`
+correction, where `check.mjs`'s `const SOURCES` (line 454 on `d862526`) omits `web/src/app.css` and a
+`#ff00ff` planted there leaves the checker green at exit 0. **That one hides an absence too**: an
+unscanned file looks scanned. So the §9.1 mechanism is not `NOCI-02`'s fourth — it is a **fifth** in
+the union of the two entries, and so far the only one pointing the other way. `NOCI-02`'s closing
+line survives the renumber and gets stronger for it: *"in this repo, 'there is a check for that' has
+been wrong in four different ways, and only one of them was about the check's logic"* — five ways
+now, and the second clause is untouched.
+
+#### The count: nine was never nine, and eleven is nine's arithmetic
+
+The correction that arrived reads *nine → eleven* — §NOCI.4's nine, plus the two sites `e6d335c`
+found in `ARCHITECTURE.md` §16.1 after this entry was written. **Re-measured rather than carried
+forward, and it does not come out at eleven.** The search tree, so the figure is reproducible instead
+of asserted; instrument `git grep`, run 2026-08-17 in a detached worktree, re-confirmed on `d862526`
+after a rebase off `556a029` moved nothing, strict
+pattern `\bCI\b|continuous integration|GitHub Actions` throughout.
+
+* **Root 1 — the strict pattern replayed on this entry's own base tree.** `git grep -cE '<pattern>'
+  d64b8fc -- 'docs/*' ':!docs/reference/*' CLAUDE.md README.md Makefile` reproduces §NOCI.2's
+  per-file breakdown exactly — `REVIEW-LOG` 34, `ARCHITECTURE` 17, `DEVELOPMENT` 16,
+  `DESIGN-DIRECTION` 5, `Makefile` 5, `DECISIONS` 4, `CLAUDE.md` 4, `CONFIGURATION` 2, `RESEARCH` 1,
+  `README` 0 — but totals **90, not the 88 stated**. `docs/design/check.mjs`'s 2 are inside the
+  searched roots and outside the ten-file list the 88 was summed from. Not a defect in the sort,
+  which dispositioned those two anyway in §NOCI.5; a defect in the sum.
+* **Root 2 — the (a)-class sites, counted off the diffs that fixed them**, which is the only surface
+  on which *site* has a stable meaning. `git show 2d3138a --format="" -U0 | grep '^-' | grep -E
+  '<pattern>'` returns **18 removed lines**. Three are not (a): the two lines of `CLAUDE.md`'s
+  query-plan bullet, which §NOCI.2(c) itself files as (c), and `DEVELOPMENT.md` §5's *"gates on
+  shared CI are flake generators"*, which names shared CI as a class exactly as `Makefile` line 115
+  does and which §NOCI.5 left standing there for that reason. The remaining **15 lines are 14
+  sites** — `CLAUDE.md`'s Tests site spans two of them. The same grep over `git show e6d335c
+  --format="" -U0 -- docs/ARCHITECTURE.md` returns **2**, both (a), both §16.1. **Fourteen plus two
+  is sixteen.**
+
+**Where nine came from, which is worth knowing rather than only correcting.** §NOCI.2(a) enumerates
+its sites in prose, and that enumeration holds **thirteen** quoted phrases, not nine; `2d3138a`'s
+commit message repeats the same thirteen under the heading *"(a) asserts a CI acts TODAY — 9 sites,
+all fixed"*. **The number and the list beneath it never agreed, in either place, on the day both were
+written** — so nine was never a count of anything countable, and *eleven* is nine's arithmetic
+carried one commit forward. The fourteenth site, fixed in the diff and named in neither list, is §8's
+*"The Docker daemon is unavailable in the CI/agent container."* On the narrower definition *"phrases
+§NOCI.2(a) actually names, plus §16.1's two"* the figure is **fifteen**; on the diff-counted
+definition above it is **sixteen**. Neither is eleven. ⚠️ **This entry's own heading — *"in nine
+places"* — is therefore wrong, and is deliberately left standing**, because it is a dated record and
+this is the amendment underneath it (§11, and §NOCI.3's own test applied to itself).
+
+ℹ️ **Sixteen is a floor over named roots, not a total.** It counts passages already rewritten, so it
+can only rise: a site nobody has found yet does not lower it, and a later thread reporting seventeen
+is **making a new observation, not contradicting this one** — which is the whole reason the roots are
+written down beside the number. **The next increase is already visible and is raised, not fixed
+here**: `ARCHITECTURE.md` §13, line 1923 on `d862526` — ***"What stays in CI:*** *`EXPLAIN QUERY
+PLAN` assertions and **row-count assertions** on hot queries"*. That is the same sentence as §16.1's
+deliverables line, which `e6d335c` promoted out of category (c) precisely because a deliverable list
+is present tense about today; §13's copy survived only because `e6d335c` swept §16 and judged
+`ARCHITECTURE`'s other fifteen strict hits **as a class rather than line by line**. Line 2127's
+*"every migration tested against a fixture in CI"* is the second candidate, and a harder one than
+category (c) covers, because migrations and their tests exist. **Neither is touched here** — this
+commit is a `REVIEW-LOG` append and nothing else, and §13 is not this entry's to re-tense.
+
+✅ **The reverse pointer §NOCI.6 recorded as outstanding has landed, and it landed while this sub-note
+was being written.** On `556a029` the string `NOCI` appeared nowhere in `OPTIN-01`'s section; the
+re-fetch immediately before this commit found `origin/main` moved to `d862526`, carrying
+**`190814c`** — *"docs: OPTIN-01 gains the reverse pointer to NOCI-01 that NOCI.6 recorded as
+outstanding"* — which appends a dated sub-note under `OPTIN-01` quoting §NOCI.6's own sentence and
+answering it: *"**This is it.** The link in the other direction already resolves, so a reader landing
+on either entry now reaches the other."* **So §NOCI.6's 🚩 is discharged**, by the thread that owned
+it and beneath their own entry, exactly as §11's area map prescribes. ℹ️ **Recorded here rather than
+by editing §NOCI.6**, which keeps its flag: a record says what was true on its date, and the
+amendment goes underneath. **`OPTIN-01` and `NOCI-02` are untouched by this commit** — their text,
+ids and severities are unchanged, and `NOCI-01`'s own §NOCI.1–§NOCI.6 are byte-identical across
+`190814c`'s move (`sha256` of the entry unchanged at `01a4fdd1…`, verified before and after).
+
+ℹ️ **On the gate.** `make check` was run green on this tree and the binaries, versions and SHA are in
+the commit message. ⚠️ **It is not load-bearing for a word above.** The diff is one Markdown file
+under `docs/`; `fmt-check` runs prettier rooted at `web/`, so no Markdown under `docs/` is
+formatter-gated, and of the gate's seven steps only `gitleaks dir .` opens the file at all. The green
+attests that no credential-shaped string appears in the tree and **nothing whatever** about whether
+the count above is right — that is carried by the two roots named in it. No guard was fired: this
+commit touches no executable line.
+
 ---
 
 # M5-32 — §16 applied ADR-0041, and the renumber was the smallest part of it: eleven surrounding sentences had gone false
