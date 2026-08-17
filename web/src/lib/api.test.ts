@@ -9,7 +9,7 @@ import {
 	toReport,
 	type StreamEvent
 } from './api';
-import { formatAge, formatSize } from './format';
+import { formatAge, formatSize, sizeParts } from './format';
 import recorded from './__fixtures__/sse-frames.json';
 
 /**
@@ -319,12 +319,52 @@ describe('normalizeStreamEvent', () => {
 	});
 });
 
+describe('sizeParts', () => {
+	it('hands back the figure and the unit as two slots', () => {
+		expect(sizeParts(0)).toEqual({ value: '0', unit: 'B' });
+		expect(sizeParts(1024)).toEqual({ value: '1.0', unit: 'KiB' });
+		expect(sizeParts(1536 * 1024 * 1024)).toEqual({ value: '1.5', unit: 'GiB' });
+	});
+
+	// null rather than an empty pair: a caller that spread `{ value: '', unit: '' }`
+	// into the two spans would reserve the unit box around nothing, where §9.1
+	// wants the cell to fall back to `—`.
+	it('is null for an absent or nonsensical byte count', () => {
+		expect(sizeParts(undefined)).toBeNull();
+		expect(sizeParts(-1)).toBeNull();
+		expect(sizeParts(Number.NaN)).toBeNull();
+		expect(sizeParts(Number.POSITIVE_INFINITY)).toBeNull();
+	});
+
+	// The unit box is sized for the widest member of the family this app can
+	// print, not for the value in front of you — so the family itself is the
+	// thing under test. Binary, because that is what every indexer reports.
+	it('never prints a unit outside the binary family the reserve is sized for', () => {
+		const family = new Set(['B', 'KiB', 'MiB', 'GiB', 'TiB']);
+		for (let pow = 0; pow < 80; pow++) {
+			const parts = sizeParts(2 ** pow);
+			expect(parts).not.toBeNull();
+			expect(family).toContain(parts?.unit);
+		}
+	});
+});
+
 describe('formatSize', () => {
 	it('uses binary units', () => {
 		expect(formatSize(0)).toBe('0 B');
 		expect(formatSize(1024)).toBe('1.0 KiB');
 		expect(formatSize(1536 * 1024 * 1024)).toBe('1.5 GiB');
 		expect(formatSize(undefined)).toBe('');
+	});
+
+	// The one-string form is now a composition of the pair, so the two can only
+	// disagree by the separator. Callers that have no two slots to emit into —
+	// a title, an aria-label — depend on that.
+	it('is the pair joined by one space', () => {
+		for (const bytes of [0, 1, 1023, 1024, 1536 * 1024 * 1024, 2 ** 45]) {
+			const parts = sizeParts(bytes);
+			expect(formatSize(bytes)).toBe(`${parts?.value} ${parts?.unit}`);
+		}
 	});
 });
 
