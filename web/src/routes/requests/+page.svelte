@@ -104,6 +104,7 @@
 		categoryNames,
 		categoryTree,
 		clearScopeLabel,
+		indexerCategoryTitle,
 		indexerFacts,
 		indexerNames,
 		indexerPickerLegend,
@@ -1782,8 +1783,29 @@
 				     passes so [3000, 3030] reads `book · audiobook` rather than
 				     `music`, which is exactly what category 3030 exists to prevent. -->
 				{@const label = categoryLabel(release.tags, release.categories)}
+				<!-- The tooltip is the OTHER vocabulary: what the indexer that
+				     returned THIS row calls the categories it filed it under. It joins
+				     against that indexer's own subtree, keyed on the pair (the
+				     instance the search resolved to, plus the row's indexer id) —
+				     never against `categoryTree`'s union, whose name collisions are
+				     settled arbitrarily and untraceably, so a lookup over it would
+				     print one indexer's wording under another's category on every row
+				     and look right. `$lib/indexercatalog.indexerCategoryTitle` owns
+				     the argument and every absence.
+
+				     It falls back to `label` — the cell's own visible text, which is
+				     what the `.trunc` tooltip has always been — rather than to
+				     nothing, because dropping the title would take the truncation
+				     readout away from a cell that still overflows. That fallback can
+				     never mislead: it is the string already on screen. -->
+				{@const upstream = indexerCategoryTitle(
+					catalog?.indexers ?? [],
+					searchedInstance,
+					release.indexerId,
+					release.categories
+				)}
 				{#if label}
-					<span class="trunc" title={label}>{label}</span>
+					<span class="trunc" title={upstream || label}>{label}</span>
 				{:else}
 					<span class="muted">{NOTHING.empty}</span>
 				{/if}
