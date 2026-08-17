@@ -116,8 +116,10 @@ const TOKENS_ONLY_ALLOWED: Record<string, string> = {};
  * which tokens.css §10 deleted along with the Tailwind path ADR-0025 retired;
  * §10 is now prose describing what a future adoption would restore, and prose
  * is stripped before parsing, so no such prelude reaches this list any more.
- * Note that an entry here is only ever consulted when the block exists, so a
- * dead one cannot fail — it has to be removed with the block it named.
+ * That entry died the quiet way: the coverage test consults an entry only while
+ * the block it names still exists, so once §10 went, `@theme inline` could not
+ * fail again, and it was a human reading §10 (b38306c) who removed it rather
+ * than this suite. The staleness of an entry here is asserted directly, below.
  */
 const TOKENS_CSS_NON_TOKEN_BLOCKS: Record<string, string> = {};
 
@@ -504,6 +506,60 @@ describe('web/src/app.css is a faithful hand-port of docs/design/tokens.css', ()
 			'tokens.css declares tokens in a block no STATE reaches. Add the state, or ' +
 				'record the block in TOKENS_CSS_NON_TOKEN_BLOCKS with a reason.'
 		).toEqual([]);
+	});
+
+	/*
+	 * The --bg-hover hole again, one list over.
+	 *
+	 * TOKENS_CSS_NON_TOKEN_BLOCKS is consulted exactly once per declaration, by
+	 * the test above, and only for a prelude tokens.css still declares a token
+	 * under. Delete the block and its entry stops being reached at all: nothing
+	 * to exclude, nothing to mismatch, and a green suite carrying a dead
+	 * exclusion. `@theme inline` sat there after tokens.css §10 dropped the
+	 * Tailwind bridge, and it was a human reading §10 who retired it (b38306c).
+	 * This suite never had a way to say so.
+	 *
+	 * So require every entry to be LOAD-BEARING, the way DIVERGENT_ALLOWED now
+	 * is. Two ways it stops being that, and both are dead weight rather than a
+	 * passing check: the block is gone, or the block is still there but a STATE
+	 * reaches it, in which case the coverage test would clear it anyway.
+	 */
+	it('leaves no TOKENS_CSS_NON_TOKEN_BLOCKS entry standing after its block is gone', () => {
+		const keyOf = (decl: Decl) => decl.preludes.join(' >> ');
+		const declared = new Set(TOKENS_DECLS.map(keyOf));
+		// Reachability is a property of the preludes alone, so it is the same for
+		// every declaration sharing a key: one STATE hit settles the whole block.
+		const reached = new Set(
+			TOKENS_DECLS.filter((decl) => STATES.some((state) => declApplies(decl, state))).map(keyOf)
+		);
+		const present = [...declared].sort();
+
+		const stale: string[] = [];
+		for (const key of Object.keys(TOKENS_CSS_NON_TOKEN_BLOCKS)) {
+			if (!declared.has(key)) {
+				stale.push(
+					`${key} excludes a block that declares no token in tokens.css any more. The ` +
+						'coverage test only consults this list for a block that exists, so this ' +
+						'entry can never be reached and can never fail: it is unreachable, not ' +
+						'passing. Delete it. The preludes tokens.css does declare tokens under:\n' +
+						present.map((line) => `      ${line}`).join('\n')
+				);
+			} else if (reached.has(key)) {
+				stale.push(
+					`${key} is excluded as a non-token block, but a STATE now reaches it, so the ` +
+						'coverage test would clear that block on its own. The entry excludes ' +
+						'nothing. Delete it.'
+				);
+			}
+		}
+
+		if (stale.length > 0) {
+			expect.fail(
+				`${stale.length} TOKENS_CSS_NON_TOKEN_BLOCKS entry(s) no longer exclude a live block\n` +
+					`${AUTHORITY}\n\n` +
+					stale.map((line) => `  ${line}`).join('\n\n')
+			);
+		}
 	});
 
 	it('parsed both files, and did not read a commented-out value as a live one', () => {
