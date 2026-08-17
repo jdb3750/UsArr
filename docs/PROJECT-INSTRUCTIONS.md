@@ -15,16 +15,18 @@ This file records the instruction text only. The design detail lives in `CLAUDE.
 
 | Version | Date | State | Size |
 | --- | --- | --- | --- |
-| v1.4 | 2026-08-17 | **Proposed — supersedes v1.3, not yet applied** | 8118 bytes |
+| v1.4 | 2026-08-17 | **Applied to project settings** — 2026-08-17 04:52 UTC | 8118 bytes |
 | v1.3 | 2026-08-16 | Applied 2026-08-16 16:34 UTC, superseded by v1.4 | 7844 bytes |
 | v1.2 | 2026-08-16 | Applied 2026-08-16 07:57 UTC, superseded by v1.3 the same day | 7585 bytes |
 | v1.1 | 2026-08-16 | Superseded by v1.2, never applied | 7022 bytes |
 | v1.0 | 2026-08-16 | Superseded by v1.2 — applied 2026-08-16, replaced the same day | 3849 bytes |
 
-## v1.4 — proposed
+## v1.4 — as applied
 
-Supersedes v1.3 and is not yet applied: this is the text to paste into the Project's settings
-verbatim, replacing v1.3 — 8118 bytes.
+The text applied verbatim to the Project's settings at 04:52 UTC on 2026-08-17, replacing v1.3,
+and live in the settings now — 8118 bytes. The applied text was verified byte-identical to this
+block by checksum on both sides of the apply: 8118 bytes, md5 `2d52321ed5c04b8481df6eb4c0ccb8e8`,
+measured on the extract before applying and on the settings read-back afterwards.
 
 ````
 You are working on UsArr: a fast, self-hosted, unified hub and gateway over the media-acquisition ecosystem, running on a single self-hoster's own server. It aggregates the *Arrs (Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian) and media backends (Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita) into one local library you can browse, search and request from, and it exposes protocol surfaces (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend individually. It is meant to coexist with the rest of the ecosystem, not replace it. The stack is Go compiled to a single static binary with a SvelteKit SPA embedded in it, over SQLite in WAL mode. Do not state a Go minimum from memory: the go directive in go.mod is authoritative, 1.25.13 at the time of writing, and it is a moving floor raised by the gating govulncheck step rather than by the dependency floor beneath it, with the reasoning in docs/DEVELOPMENT.md. Implementation on main moves faster than the prose describing it. Section 16 stays authoritative for scope; status is a separate question, and the landed/not-yet split in section 16, the README's status column and CLAUDE.md's status paragraph are hand-edited after the fact and lag the tree. Treat a "not yet" in any of the three as unverified: read the tree — web/src/routes for a screen, internal/ for a subsystem — and name the commit you read. A milestone label is scope, not status.
@@ -57,9 +59,9 @@ On interface design, read section 17 of ARCHITECTURE.md before touching a screen
 ## v1.3 — superseded
 
 The text applied verbatim to the Project's settings at 16:34 UTC on 2026-08-16, replacing v1.2.
-It was superseded by v1.4 above, which has not been applied yet, so this remains the text in
-the settings until v1.4 replaces it by hand. Preserved verbatim as the record of what v1.3 said
-— the settings read-back was confirmed to match it, 7844 bytes.
+It was live in the settings until v1.4 above replaced it at 04:52 UTC on 2026-08-17, and is no
+longer live. Preserved verbatim as the record of what v1.3 said — the settings read-back was
+confirmed to match it, 7844 bytes.
 
 ````
 You are working on UsArr: a fast, self-hosted, unified hub and gateway over the media-acquisition ecosystem, running on a single self-hoster's own server. It aggregates the *Arrs (Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian) and media backends (Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita) into one local library you can browse, search and request from, and it exposes protocol surfaces (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend individually. It is meant to coexist with the rest of the ecosystem, not replace it. The stack is Go compiled to a single static binary with a SvelteKit SPA embedded in it, over SQLite in WAL mode. Do not state a Go minimum from memory: the go directive in go.mod is authoritative, 1.25.13 at the time of writing, and it is a moving floor raised by the gating govulncheck step rather than by the dependency floor beneath it, with the reasoning in docs/DEVELOPMENT.md. The first slice of code is on main — the Prowlarr Search-and-Grab path runs end to end — and everything else is still design. CLAUDE.md, the README and section 16 each carry an accurate landed / not-yet split, so read them rather than assuming in either direction: a milestone label is scope, not status.
@@ -184,7 +186,7 @@ On interface design: utilitarian over stylish. The bar is tried-and-true, easy t
 
 ## Changelog
 
-### v1.4 — 2026-08-17 (proposed)
+### v1.4 — 2026-08-17 (applied 04:52 UTC)
 
 Produced by the 04:07 UTC drift check after `main` advanced 264 commits overnight. An adversarial
 review of the draft raised 3 majors and 2 minors; all were applied.
