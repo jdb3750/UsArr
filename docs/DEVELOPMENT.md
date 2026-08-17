@@ -1231,8 +1231,9 @@ paragraph describing a repo that no longer exists.
     collision. Pick elsewhere in the alphabet.
   * **Check `main`, then land your first entry promptly.** Measured 2026-08-17 on `10e7b00`:
     **52 live entry-id prefixes on `main`** (51 under `grep -oE '\b[A-Z][A-Z0-9]*-[0-9]{2}\b'`, plus
-    `OQ-`, whose ids are single-digit), and **the union across all seventeen remote heads equals
-    `main`'s set exactly** — no head carries a prefix `main` does not. So checking `main` alone is
+    `OQ-`, whose ids are single-digit), and **the union across the seventeen non-`main` remote heads
+    equals `main`'s set exactly** — no head carries a prefix `main` does not (`git ls-remote --heads
+    origin` returned eighteen refs, `main` among them). So checking `main` alone is
     sufficient **today**, and the condition is worth more than the conclusion: it holds *because
     prefixes are allocated by landing*. A thread that claims a prefix on a branch and sits on it has
     made the check unsound for everyone else with nothing anyone can observe. Landing promptly is the
