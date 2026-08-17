@@ -77,7 +77,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0023](#adr-0023) | UsArr coexists with the ecosystem rather than replacing it | **Accepted** (rev 2) |
 | [0024](#adr-0024) | AGPL-3.0 is the licence | **Accepted** — owner-confirmed 2026-08-16 |
 | [0025](#adr-0025) | Styling and typography: Tailwind v4 with the default theme deleted, Bits UI, Tabler, self-hosted IBM Plex | **Accepted** — ⚠️ **amended 2026-08-16**: **Tailwind is not used**; the styling layer is hand-written CSS in `web/src/app.css`. Bits UI, Tabler and IBM Plex are unaffected |
-| [0026](#adr-0026) | A library is a user-owned binding to upstream containers, with a correction layer | **Accepted** — refines ADR-0004, extends ADR-0014 |
+| [0026](#adr-0026) | A library is a user-owned binding to upstream containers, with a correction layer | **Accepted** — refines ADR-0004, extends ADR-0014; ⚠️ **amended 2026-08-17 by [ADR-0043](#adr-0043)** — the binding, the four verbs and the storage are untouched, but this ADR's consequence capping the correction **UI** at v0.3 rested on *"§6.4 already establishes that tier 1 resolves essentially 100% of the v0.1 identity problem"*, which [ADR-0041](#adr-0041) falsified for v0.1's actual source: **the minimal *"fix this match"* case moves earlier**, and the full four-verb surface stays at v0.3 |
 | [0027](#adr-0027) | Two axes: media type is navigation, a library is scope | **Accepted** — settles §17.2's open question |
 | [0028](#adr-0028) | Home is three fixed blocks, not one strip per media type | **Accepted** — **amends** ARCHITECTURE §17.2 |
 | [0029](#adr-0029) | "Load more" + `content-visibility`; virtualization is a benchmarked escalation | **Accepted** — **amends** §4.5, corrects an argument in ADR-0003; ⚠️ **amended 2026-08-16** — the required benchmark ran against the shipped primitive: the decision is unchanged, correction (c)'s arithmetic, the mitigation ranking and the row-ceiling extrapolation are corrected, the page size is **200 rows**, and two benchmark gaps are recorded; ⚠️ **amended 2026-08-17** — the 100 ms every row ceiling divided by was Tier 0's and was never this ADR's to borrow: the toggles are governed by `DESIGN-DIRECTION.md` §7.2's new **Controls** budget at **400 ms**, so every ceiling scales 4×, the worst-case residual-risk note is weakened rather than withdrawn, the shipped 200-row page gains a measured cost, and the page size is still **200 rows** |
@@ -94,6 +94,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0040](#adr-0040) | The six subtype tables land with the catalogue source that writes each | **Accepted** — 2026-08-17; records as a decision what `00005_library_sync.sql` did; **in tension with** ARCHITECTURE §16's enumerated v0.1 schema line, which is left to the thread that owns §16 |
 | [0041](#adr-0041) | The sync core ships with **Kavita** as its first adapter; Sonarr and Radarr re-sequence behind it | **Accepted** — owner-decided 2026-08-17; **amends [ADR-0036](#adr-0036)** (*"No catalogue source ships in v0.1"*) and **amends** ARCHITECTURE §16, whose replacement text is proposed here and routed to the thread that owns §16; **re-sequences, rejects nothing** — Sonarr and Radarr still arrive; confirms [ADR-0035](#adr-0035) and [ADR-0040](#adr-0040); ⚠️ **amended 2026-08-17 by [ADR-0042](#adr-0042)** — the write-path question this ADR flagged as *"NOT decided here"* is now answered: the minimal write path **re-sequences with the \*Arr adapters**, so its consequence bullet and the ⚠️ clause in its proposed §16 text are both settled |
 | [0042](#adr-0042) | v0.1's minimal write path re-sequences with the \*Arr adapters; Sonarr and Radarr stay on the roadmap | **Accepted** — owner-decided 2026-08-17; **answers the question [ADR-0041](#adr-0041) flagged and refused**; **amends** ARCHITECTURE §16, [ADR-0041](#adr-0041), [ADR-0036](#adr-0036) and [ADR-0012a](#adr-0012a); **re-sequences, rejects nothing** — [ADR-0012a](#adr-0012a)'s queue design is untouched, the seam costs **no migration**, and Sonarr and Radarr stay on the roadmap at the owner's explicit condition; raises one open question it does not close (neither \*Arr has a milestone) |
+| [0043](#adr-0043) | A **minimal** match-correction UI moves earlier than v0.3; the full correction surface stays there | **Accepted** — owner-decided 2026-08-17; **answers the scope call ARCHITECTURE §6.4 flagged and routed**; **amends [ADR-0026](#adr-0026)**'s correction-UI consequence and **amends** ARCHITECTURE §16.0, §16.1's v0.1 and v0.3 entries; **re-sequences, rejects nothing** — ADR-0026's model, verbs, tables and scoping are untouched and `library_override` is already in the tree; **source-independent** — it turns on v0.1 having a weak-identity catalogue source, not on that source being Kavita; **assigns no milestone**, which is carried as an open question |
 
 ---
 
@@ -1901,7 +1902,25 @@ enforcement is the reason Tailwind is chosen — so this is a fallback, not a pr
 
 **Status:** Accepted · **Refines [ADR-0004](#adr-0004)** (replica, not proxy) and **extends
 [ADR-0014](#adr-0014)** (the M:N link). Neither is superseded; ADR-0004's conflict rule is *narrowed*
-below, in writing, rather than quietly reinterpreted.
+below, in writing, rather than quietly reinterpreted. · ⚠️ **Amended 2026-08-17 by
+[ADR-0043](#adr-0043)** — see the block below.
+
+> ⚠️ **AMENDED 2026-08-17 by [ADR-0043](#adr-0043): one consequence bullet's cap on the correction
+> *UI* no longer holds whole.** The bullet *"It absorbs scope rather than adding it"* closes with
+> *"The correction **UI** is capped to v0.3, where the weak catalogues actually arrive — §6.4 already
+> establishes that tier 1 resolves essentially 100% of the v0.1 identity problem, so there is nothing
+> to correct before then."* **Both halves of that ground were falsified by [ADR-0041](#adr-0041)**,
+> which put a weak catalogue **in v0.1** and replaced the providers §6.4's percentage was measured on;
+> `ARCHITECTURE.md` §6.4 has since been restated against the new source and withdraws the support
+> explicitly. ADR-0043 therefore **moves the minimal *"fix this match"* case earlier than v0.3** and
+> **leaves the full four-verb surface and the Corrections list at v0.3**. The bullet carries an inline
+> flag at its own site.
+>
+> **Nothing else in this ADR moves.** The binding model, the single-kind rule, the four verbs
+> `exclude` / `include` / `relink` / `field`, their `library_id` scoping and `CHECK`, the four tables,
+> `target_identity_hash` and the no-foreign-key rule, the three-axis split and every rejected
+> alternative all stand exactly as decided. **This is a scheduling amendment to one consequence, not a
+> reopening of the design** — and the storage it re-sequences against is already in the tree.
 
 ### Context
 
@@ -2015,9 +2034,16 @@ catalogue comics with no sink at all beyond Prowlarr free-text.
   wrong trade.
 - **It absorbs scope rather than adding it.** §8.3's undefined routing rule gets a definition,
   `user_library_access` gets a referent, and Home's per-type sections are *replaced* rather than
-  extended. The correction *UI* is capped to v0.3, where the weak catalogues actually arrive — §6.4
+  extended. ~~The correction *UI* is capped to v0.3, where the weak catalogues actually arrive — §6.4
   already establishes that tier 1 resolves essentially 100% of the v0.1 identity problem, so there is
-  nothing to correct before then.
+  nothing to correct before then.~~ 🚩 **STRUCK 2026-08-17 by [ADR-0043](#adr-0043), and struck rather
+  than deleted because it is the clause the amendment at the top of this ADR exists for.** Both of its
+  grounds went at once: [ADR-0041](#adr-0041) put a **weak catalogue in v0.1** — so the weak catalogues
+  do not "actually arrive" at v0.3 — and it replaced the two providers §6.4's *"essentially 100%"* was
+  measured on, which `ARCHITECTURE.md` §6.4 has since restated as *"a property of the instance, not of
+  the design"*. There **is** something to correct before v0.3. **What replaces it:** the minimal
+  *"fix this match"* case moves earlier, its milestone unassigned; the **full** four-verb surface and
+  the Corrections list stay at v0.3. ARCHITECTURE §16.0 is authoritative for the scope.
 - **UsArr now owns a bug it cannot blame upstream for.** If the derivation is wrong, the grid shows
   the wrong items and there is no \*Arr to point at. Materialised membership is a cache with an
   invalidation problem. This is the honest cost.
@@ -4792,3 +4818,178 @@ commitments pointing at a milestone that does not exist is a thinner position th
 owner's *"we should add them"* is a reason to close the gap rather than to leave it. It is raised here
 for §16's owner and the project owner to settle together; it is not closed here, because no owner
 statement supports a number and this ADR will not invent one.
+
+---
+
+<a id="adr-0043"></a>
+## ADR-0043 — A **minimal** match-correction UI moves earlier than v0.3; the full correction surface stays there
+
+**Status:** Accepted · **owner-decided 2026-08-17** · **Answers the scope call
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) §6.4 flagged and deliberately routed** ·
+**Amends [ADR-0026](#adr-0026)**, whose consequence bullet capped the correction UI at v0.3 on a
+ground [ADR-0041](#adr-0041) falsified · **Amends [`ARCHITECTURE.md`](./ARCHITECTURE.md) §16.0 and
+§16.1**'s v0.1 and v0.3 entries · **Re-sequences, rejects nothing** — ADR-0026's binding model, its
+four verbs and its four tables are untouched · **Assigns no milestone**, which is recorded as an open
+question rather than closed by a guess.
+
+### Context
+
+**[ADR-0026](#adr-0026) capped the correction UI at v0.3, and it gave a reason.** Its consequence
+bullet reads *"The correction **UI** is capped to v0.3, where the weak catalogues actually arrive —
+§6.4 already establishes that tier 1 resolves essentially 100% of the v0.1 identity problem, so there
+is nothing to correct before then."* §16.0 restated the same cap and called it *"a scheduling
+detail, not the payment"*.
+
+**[ADR-0041](#adr-0041) falsified both halves of that ground on the same day, in one move.** It put
+**Kavita in v0.1** as the sync core's first adapter, which does two things at once:
+
+- **A weak catalogue now arrives in v0.1, not at v0.3.** *"where the weak catalogues actually arrive"*
+  was a statement about the roadmap ADR-0026 was written against, and the roadmap moved.
+- **The providers §6.4's percentage was measured on are no longer v0.1's.** *"Essentially 100%"* was
+  established for **Sonarr and Radarr**, every row of which carries `tmdbId` / `imdbId` / `tvdbId`.
+
+**The identity finding, verified in this repo rather than taken from the brief.** Both sources agree
+and neither is inference:
+
+- **[ADR-0035](#adr-0035) §1**, verbatim: *"**Kavita's `aniListId`, `malId`, `comicVineId` and the rest
+  are null without Kavita+.**"* It goes on that under that ADR this becomes *"what an ordinary user
+  sees once Kavita lands, not a documented edge case"*, and it requires the screens to render null
+  identifiers as *"the normal case"*. The *"not in v0.1"* rider on that requirement is itself **struck
+  at its own site** by ADR-0041.
+- **`ARCHITECTURE.md` §6.4**, restated against Kavita after ADR-0041, checks the same fact against the
+  vendored spec: `SeriesDto` in `api/specs/kavita.json` carries `aniListId`, `malId`, `hardcoverId`,
+  `metronId` and `cbrId` as integers and `comicVineId` and `mangaBakaEditionId` as nullable strings,
+  **all written only by the Kavita+ match path**, so a free instance returns `0`, `null` or `""` for
+  every one. Its conclusion: *"How much of v0.1's identity problem tier 1 resolves is now **a property
+  of the instance, not of the design** — essentially all of it on a Kavita+ install, close to none on
+  a free one."*
+
+**§6.4 then withdrew the cap's support and refused to take the call, on ownership grounds.** Its own
+words: *"the restatement **withdraws the support the cap was resting on**: a v0.1 whose only source may
+carry no external ids at all is a v0.1 where a user has something to correct on day one, which is not
+what 'a cap on a declared no-op' describes. Whether the cap survives is a **scope** question, scope is
+owned by the ADRs with §16 authoritative … **it needs an ADR and an owner decision.**"* This ADR is
+that ADR, and the owner decision it needed is below.
+
+**The owner was asked and answered. His words, verbatim, 2026-08-17:**
+
+> *"but yeah, i guess we can do a minimal fix this match thing earlier. in case anyone is running
+> kavita. but bookorbit seems to be the new meta tbh."*
+
+**Three things are read out of that sentence and nothing more.** *(1)* **"minimal"** and *(2)*
+**"earlier"** are decided, and both are load-bearing. *(3)* **"in case anyone is running kavita"** is
+his **rationale**, and it is attributed to him rather than presented as a fact about the roadmap: he
+does not run the case he is protecting — he is scoping for **other people's installs**, which is
+principle 3 applied by the owner to a user who is not him. The third clause, *"bookorbit seems to be
+the new meta"*, is **not** read as a decision; see the Decision's clause 4.
+
+### Decision
+
+> **1. The v0.3 cap on the correction UI is lifted for the minimal *"fix this match"* case, and holds
+> for everything else.** [ADR-0026](#adr-0026)'s cap is amended, not reversed: **the full four-verb
+> surface — `exclude`, `include`, `relink`, `field` — plus the Corrections list still land at v0.3.**
+> What comes earlier is the narrow case a user meets on the first screen of a catalogue whose source
+> supplied no external ids: an item shown as *"not identified"*, or bound to the wrong `work`, and a
+> way to say so.
+>
+> **2. "Minimal" is the owner's word and it is a constraint on scope, not a synonym for "small".** It
+> is what makes this a re-sequencing rather than an addition, and *"cut before you add"* is satisfied
+> by the split itself: the part that moves is bounded by what the *"fix this match"* case needs, and
+> **everything outside that boundary stays at v0.3.** 🔍 **Marked as inference, because the owner did
+> not enumerate verbs:** the case he named is an identity correction, which is ADR-0026's **`relink`**
+> — repointing a `service_item_link` at the right `work` — and **not** `exclude` / `include`, which
+> are library **membership** and answer a different complaint. `field` sits between the two and is not
+> claimed here either way. **The exact surface is settled by the milestone that takes it**, against
+> this boundary; this ADR fixes the boundary, not the widget.
+>
+> **3. No milestone is assigned, and that refusal is deliberate.** The owner said *"earlier"*; **he
+> named no version**, and `ARCHITECTURE.md` §16 is authoritative for milestone membership. Naming
+> v0.2 — or v0.1 — here would be inventing a commitment nobody made, which is the exact failure
+> [ADR-0042](#adr-0042) refused for Sonarr and Radarr the same day. §16.0 records that **the slot is
+> not yet assigned**; the gap is carried as this ADR's open question.
+>
+> **4. This decision is source-independent and survives a change of catalogue source.** What it turns
+> on is that **v0.1's catalogue source has weak identity**, which is a property of the source and not
+> of its name. 🔍 **`BookOrbit` is under live evaluation on this project as of 2026-08-17 and nothing
+> about it is decided** — it is named only because the owner named it, no ADR has taken it, and §16
+> assigns it nothing. **Whichever server ends up in that slot, clauses 1–3 stand.** The only thing
+> that would reopen them is a v0.1 source that supplies **strong external ids for the ordinary,
+> unpaid user** — a factual claim about a specific source, needing the same primary-source check
+> against a vendored spec that Kavita's got (§6.4), and no source now under evaluation has had it.
+>
+> **5. Nothing about [ADR-0026](#adr-0026)'s design is reopened.** The binding model, the single-kind
+> rule, the four verbs, `library_id IS NULL` for `relink` and `field` with its `CHECK`, the four
+> tables, `target_identity_hash` and the deliberate absence of a foreign key on the override's
+> `work_id` / `link_id` all stand exactly as decided.
+
+### Alternatives considered
+
+- **(a) Keep the v0.3 cap and rely on the *"not identified"* badge alone until then.** ⚠️ **The
+  strongest alternative, and the one the status quo already implements.** The badge and its column are
+  v0.1 work regardless — §6.4 and §16 both say they cannot be retrofitted — and *"failing to identify
+  is honest"* is this project's own rule. **It fails on what it leaves the user with:** the badge
+  tells a user their library is wrong and offers nothing to do about it, on a catalogue where
+  ADR-0035 §1 says that state is **the majority path, not the exception**. A screen that is honest
+  about a defect it forbids you to fix is a worse product than one that is silent about it, and the
+  owner's answer is a direct rejection of this option.
+- **(b) Move the whole ADR-0026 correction surface earlier.** Rejected by *"cut before you add"* and
+  by the owner's own word. Four verbs plus a Corrections list is a subsystem; moving it into an
+  earlier milestone would need a statement of what leaves to pay for it, and there is none. **The
+  owner said "minimal", and this alternative is the reading that ignores the adjective.**
+- **(c) Assign the minimal case to v0.2 — or to v0.1 — to make *"earlier"* concrete.** ⚠️ **Tempting
+  and refused, for the reason [ADR-0042](#adr-0042) gave in the same position a day earlier.** *"He
+  did not say when"* applies verbatim: he said "earlier", the milestones are §16's to allocate, and a
+  number invented in an ADR whose whole subject is a clause that outlived its evidence would be the
+  same mistake one turn later. Recorded as an open question instead.
+- **(d) Reverse [ADR-0026](#adr-0026)'s consequence outright rather than amend it.** Rejected on this
+  file's own convention. The bullet is a **dated record of a decision as taken**, and it was right
+  against the roadmap it was written against — v0.1 genuinely had strong-id sources at the time. It is
+  **struck in place with the correction beside it**, per the preamble's *"How an ADR is amended when
+  the world moves under it"*, which is exactly the rule the `162dca5` incident recorded there exists
+  to protect.
+- **(e) Wait for the BookOrbit evaluation to conclude, then decide.** Rejected because **the decision
+  does not depend on its outcome** (clause 4). Blocking an owner-taken scope call on an unrelated
+  live evaluation would leave the falsified cap standing in two documents for no gain, and if the
+  evaluation *did* change the answer it would do so by supplying a strong-id source — which reopens
+  this ADR cleanly rather than needing it withheld.
+
+### Consequences
+
+**What this changes:**
+
+- **[ADR-0026](#adr-0026) gains all four marks the preamble requires** — index row, `Status:` line, a
+  dated `> ⚠️ **AMENDED …**` block, and an inline `~~`-struck flag at the falsified bullet itself.
+  Nothing in its body is rewritten.
+- **`ARCHITECTURE.md` §16.0's kept-with-its-cost paragraph loses its open flag and gains this
+  answer.** It had ended *"whether the correction UI's v0.3 cap still holds against a source with no
+  ids is a live question this section flags rather than answers"*. It now records the decision, the
+  three things the decision does **not** say, and the unassigned slot.
+- **§16.1's v0.1 entry no longer reads *"the correction UI deferred to v0.3"* flat**, and **does not
+  claim the minimal case for v0.1 either.** §16.1's v0.3 entry keeps the full surface and says what
+  left it.
+- **A user has something to correct on day one and, when the minimal case lands, somewhere to do it.**
+  That is the whole user-visible effect.
+
+**What this does NOT change — stated explicitly, because a re-sequencing ADR is easy to over-read:**
+
+- **No schema change and no migration.** `library_override` and its `CHECK` are in the tree already
+  (`internal/db/migrations/00005_library_sync.sql`); the correction *storage* was never the deferred
+  part. **The seam ships and has shipped; this moves part of the feature.**
+- **[ADR-0035](#adr-0035)'s choice of source, [ADR-0041](#adr-0041)'s milestone move and
+  [ADR-0042](#adr-0042)'s write-path re-sequencing are all untouched.** This ADR consumes their
+  results; it revisits none of them.
+- **No ADR is reversed.** ADR-0026 is amended in one consequence.
+- **`ARCHITECTURE.md` §6.4 is not edited here.** It owns the identity cascade and its restated tier-1
+  claim is this ADR's evidence, not its subject; its 🚩 flag that the call *"needs an ADR and an owner
+  decision"* is answered by this record and its wording is §6's thread to update.
+
+### 🚩 Open question this ADR raises and does not answer
+
+**The minimal match-correction case has no milestone.** §16 is authoritative for membership and this
+ADR deliberately assigns none, because the owner said *"earlier"* and named no version. The candidate
+answers are not equivalent — **v0.1** makes it concurrent with the source that motivates it and needs
+a *"cut before you add"* payment named, while **v0.2** ships the badge without its remedy for one
+whole milestone on a catalogue where the badge is the majority state. **This is the second commitment
+in two days hung on an unnumbered slot** — [ADR-0042](#adr-0042) left Sonarr, Radarr and the minimal
+write path in the same position — and that pattern is itself worth the owner's attention. It needs his
+input, not an agent's guess.
