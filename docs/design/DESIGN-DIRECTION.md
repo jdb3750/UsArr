@@ -1761,8 +1761,8 @@ treatment by media type.** Same slots, same positions, different values.
     deferral quotes is a resolution rather than a width.** `minmax(0, 1.15fr)` is 107.375 px at
     1440 px and **87.80 px at 1280 px**, the narrowest desktop width the design check sweeps —
     63.80 px of content, in which `1,204 films` (67 px), `612 artists` (64 px) and `1,842 books`
-    (74 px) **already wrap today with no reserve at all**, and the reserve takes three of six rows
-    to six of six. At 1440 px and above the reserve fits, with 9.38 px to spare. Widening a
+    (74 px) **already wrap today with no reserve at all**, and the reserve takes the full install's
+    three wrapped rows of six to six of six. At 1440 px and above the reserve fits, with 9.38 px to spare. Widening a
     fractional track on Home is its own decision, and §9.1's own overflow bullet is the reason it is
     not folded in casually. ⚠️ **The deferral's stated premise was wrong twice over and the verdict
     survives both corrections**, which is worth saying plainly because a verdict that survives is

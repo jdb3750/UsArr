@@ -435,7 +435,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
    check sweeps: `minmax(0,1.15fr)` resolves to 87.80px there and leaves 63.80px
    of content, three of the six rows already wrap in it with no reserve at all
    (`1,204 films` 67px, `612 artists` 64px, `1,842 books` 74px), and the reserve
-   takes that to six of six. At 1440px and above it fits, with 9.38px to spare.
+   takes the full install's three of six to six of six. At 1440px and above it fits, with 9.38px to spare.
    ⚠️ THE 107.375px THIS COMMENT USED TO QUOTE FOR `Items` IS THAT TRACK'S
    RESOLUTION AT 1440px, NOT ITS WIDTH. A fractional track has no single number,
    and quoting one hides the width at which it actually fails. Widening it is
@@ -445,9 +445,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
    `Age` WAS DEFERRED HERE TOO, ON A COST THAT WAS NEVER REAL, AND NOW SHIPS.
    This comment said `months` alone is 43px; `months` is a word `formatAge`
    cannot emit, the sample data has since been converted, and the real family is
-   `h` 7px and `d` 8px. Re-measured over 960 rendered cells the reserve costs
-   exactly nothing: `1095 d` is 43px in the same 56px content box with the box
-   as without it, and 0 cells sit on more than one line either way.
+   `h` 7px and `d` 8px. Re-measured, the reserve costs exactly nothing: `1095 d`
+   is 43px in the same 56px content box with the box as without it, 0 of 1920
+   cells sit on more than one line either way, and `d`'s 8px ink in the 8px box
+   spills in 0 of 1920 spans.
    ⚠️ AND WHAT THE `Age` BOX BUYS IS 1.00px, NOT 14.00px. The control that
    justified the size reserve forces rows onto the widest and the narrowest unit
    and reads the figures' right edges: for size the spread goes 14.00px -> 0.00px,
@@ -462,9 +463,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
    `COLUMNS` in web/src/routes/requests/+page.svelte has read Age 68px since
    cd94779. Both trees hold both numbers on different columns — 68px is `Grabs`
    here and `Age` there, 80px is `Age` here and `Protocol` there — which is how
-   one came to be quoted for the other. Nine of this table's tracks disagree
-   between the two trees, as does the position of `Category`; that belongs in
-   REVIEW-LOG rather than in a stylesheet comment. See SU-10. */
+   one came to be quoted for the other. Eight of the ten columns the two trees
+   share carry different widths; only `Category` and `Actions` agree, `Category`
+   sits in a different position, and the `Select` column here has no counterpart
+   there. That belongs in REVIEW-LOG rather than in a stylesheet comment. See
+   SU-10. */
 .unit {
   color: var(--fg-muted);
   display: inline-block;

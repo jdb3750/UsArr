@@ -356,7 +356,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
    check sweeps: `minmax(0,1.15fr)` resolves to 87.80px there and leaves 63.80px
    of content, three of the six rows already wrap in it with no reserve at all
    (`1,204 films` 67px, `612 artists` 64px, `1,842 books` 74px), and the reserve
-   takes that to six of six. At 1440px and above it fits, with 9.38px to spare.
+   takes the full install's three of six to six of six. At 1440px and above it fits, with 9.38px to spare.
    ⚠️ THE 107.375px THIS COMMENT USED TO QUOTE FOR `Items` IS THAT TRACK'S
    RESOLUTION AT 1440px, NOT ITS WIDTH. A fractional track has no single number,
    and quoting one hides the width at which it actually fails. Widening it is
