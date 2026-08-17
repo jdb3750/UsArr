@@ -21,7 +21,16 @@ import { describe, expect, it } from 'vitest';
 // been the obvious way and is not available: this workspace ships no
 // `@types/node`, and adding one to read one file is a dependency for nothing.
 import SCREEN_SOURCE from '../routes/requests/+page.svelte?raw';
-import { PRIORITY_NOTE, indexerFacts, scopeSummary, unavailableReason } from './indexercatalog';
+import {
+	PRIORITY_NOTE,
+	clearScopeLabel,
+	indexerFacts,
+	indexerPickerLegend,
+	pickerScopeNote,
+	scopeSummary,
+	serviceFacts,
+	unavailableReason
+} from './indexercatalog';
 import {
 	DEFAULT_SEARCH_TYPE,
 	EMPTY_IDLE_TITLE,
@@ -923,6 +932,22 @@ const SCOPE_COPY: string[] = (() => {
 		{ id: 3, name: 'Gamma' },
 		{ id: 4, name: 'Delta' }
 	];
+	// The service NAME is rendered upstream data — the user's own label for a
+	// configured service — so the corpus uses neutral names on purpose. §17.5's
+	// ban is over UsArr's own sentences and has never reached a service or an
+	// indexer name; a user who calls their Prowlarr "Downloading" is not the
+	// thing this guard is for.
+	const service = {
+		instanceId: 1,
+		name: 'Prowlarr',
+		kind: 'prowlarr',
+		enabled: true,
+		status: 'ok',
+		message: '3 indexers from "Prowlarr"',
+		action: '',
+		fetchedAt: '2026-08-16T12:00:00Z',
+		indexerCount: 3
+	};
 	return [
 		unavailableReason({ ...base, enabled: false }),
 		unavailableReason({ ...base, supportsSearch: false }),
@@ -930,13 +955,32 @@ const SCOPE_COPY: string[] = (() => {
 		PRIORITY_NOTE,
 		indexerFacts(base),
 		indexerFacts({ ...base, priority: 0 }),
+		// The copy that changes meaning with a second indexer service. Every arm
+		// of each helper, so the one-service wording and the two-service wording
+		// are both held to the list.
+		...[0, 1, 2, 3].flatMap((count) => [
+			indexerPickerLegend('Prowlarr', count),
+			pickerScopeNote(count),
+			clearScopeLabel(count)
+		]),
+		serviceFacts(service),
+		serviceFacts({ ...service, indexerCount: 1 }),
+		serviceFacts({ ...service, indexerCount: 0 }),
+		serviceFacts({ ...service, fetchedAt: undefined }),
+		serviceFacts({ ...service, enabled: false }),
 		...[0, 1, 2, 4].flatMap((n) =>
-			[0, 1, 2, 4].map((m) =>
-				scopeSummary({
-					indexers: named.slice(0, n),
-					categories: named.slice(0, m),
-					knownIndexers: 9
-				})
+			[0, 1, 2, 4].flatMap((m) =>
+				// With and without a service, and with one service and with several:
+				// the sentence has a different shape in each and all of them ship.
+				[undefined, { name: 'Prowlarr', total: 1 }, { name: 'Prowlarr', total: 2 }].map(
+					(withService) =>
+						scopeSummary({
+							indexers: named.slice(0, n),
+							categories: named.slice(0, m),
+							knownIndexers: 9,
+							service: withService
+						})
+				)
 			)
 		)
 	].filter((s) => s.length > 0);
@@ -989,6 +1033,10 @@ describe('the banned vocabulary, over the search-side copy', () => {
 		// And something only the scope picker says, so widening the corpus to it
 		// cannot silently become a no-op.
 		expect(strings.some((s) => s.includes('the lower number wins'))).toBe(true);
+		// And something only the two-service copy says, so the arms added for the
+		// one-search-one-service fix cannot silently fall out of the corpus.
+		expect(strings.some((s) => s.includes('is not asked'))).toBe(true);
+		expect(strings.some((s) => s.includes('every indexer in this service'))).toBe(true);
 		expect(strings.length).toBeGreaterThan(50);
 	});
 
