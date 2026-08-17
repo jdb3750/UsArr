@@ -2872,6 +2872,36 @@ mockups and the section that specifies them. It caught one on its first run: the
 banner's second button read `Not the same — remove and re-add` against §17.3's
 `Not the same instance — remove and re-add`.
 
+⚠️ **And the channel that exemption opened, now closed.** Because §17 was in `check.mjs` *only* as
+the source of that exemption, the order of operations laundered the rule: a UI label is authored in
+§17 and copied into a mockup afterwards, so writing the em dash into §17 first made every mockup
+copy of it exempt **because §17 said so**. A §17-originated em dash could not be caught, by
+construction. One was drafted during the §17.8 pass and removed by hand rather than by the checker.
+
+**So §17's shipping copy — the `*"…"*` spans, 56 of them — is now a corpus of its own**, checked by
+the same three rules with the §17 exemption **withheld**, because a string cannot be its own
+authority. That closes the laundering channel. It is not sufficient on its own: the sentence actually
+drafted runs to twenty-four words, so a corpus fix alone still let it through, which was confirmed by
+planting it rather than reasoned about.
+
+**The fifteen-word floor is therefore narrowed to the corpus it was meant for, and nowhere widened.**
+The floor is easy to read backwards — `< 15` is what *fires*, so it confines the rule to short
+strings rather than excusing them — and it is a **proxy for "is this a UI string"**, worth having only
+where a corpus mixes microcopy with prose, as the rendered walk does. Every `*"…"*` span in §17 is a
+specified UI string by construction, so there the proxy has no question left to answer, and the floor
+is not applied: this section grounds it on *"a sentence long enough to need one is already too long
+for a button, a tooltip, a toast or an empty state"*, which is a claim about the **element**, not
+about the count. The rendered walk keeps the floor exactly as it was.
+
+**Six §17 strings are recorded individually in `check.mjs`, each with a reason and what retires it.**
+Four are the head-and-detail error form this section prescribes two paragraphs above
+(`Grab failed — HTTP 502`), which no word count can distinguish from prose. ⚠️ **Two are open copy
+questions rather than blessings** — §17.5's `— [Show it]`, which may be notation for two adjacent
+elements rather than one string, and §17.8's twenty-two-word `add sources — never reshape it`, which
+is the likelier real finding. They are carried visibly because §17 shipping copy is the owner's to
+word and a checker does not edit the specification it checks. A seventh fails and asks a human, which
+is the point.
+
 ⚠️ **What it is not.** It runs against `docs/design/mockups/prototype.html`, because that is the only
 artefact that exists — **there is no `web/` implementation to check** (`CLAUDE.md`: the code does not
 exist). Every DOM assertion is written against the rendered document rather than against the mockup's
