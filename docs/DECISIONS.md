@@ -93,9 +93,10 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0039](#adr-0039) | `write_queue.state` loses its `CHECK`; `work_id` gets its foreign key back | **Accepted** — 2026-08-17; **supersedes** `reference/schema.md` §10 step 1 and the seam in `FUTURE.md` §11 / §11.1; closes `REVIEW-LOG.md` WQ-05; ⚠️ **amended 2026-08-17** — decision 3's ground 1 is **struck**, on a misquotation of `reference/sync.md` §4 that dropped the words *toward the \*Arr*: the decision stands on grounds 2 and 3, which are independent of it; ⚠️ **corrected 2026-08-17** — decision 1 and the first rejected alternative wrote the Go `state` validation as **done**; it is **owed by the first `write_queue` writer** and nothing validates the vocabulary today (`REVIEW-LOG.md` M5-25) |
 | [0040](#adr-0040) | The six subtype tables land with the catalogue source that writes each | **Accepted** — 2026-08-17; records as a decision what `00005_library_sync.sql` did; **in tension with** ARCHITECTURE §16's enumerated v0.1 schema line, which is left to the thread that owns §16; ⚠️ **amended 2026-08-17 by [ADR-0044](#adr-0044)** — the RULE is confirmed and **applied**, not overridden, and one table moves under it: `work_credit` lands with **Kavita** rather than Navidrome, because Kavita is the source that writes credits. `work_album` and `work_track` are unaffected and this ADR's decision clause 1 is otherwise untouched |
 | [0041](#adr-0041) | The sync core ships with **Kavita** as its first adapter; Sonarr and Radarr re-sequence behind it | **Accepted** — owner-decided 2026-08-17; **amends [ADR-0036](#adr-0036)** (*"No catalogue source ships in v0.1"*) and **amends** ARCHITECTURE §16, whose replacement text is proposed here and routed to the thread that owns §16; **re-sequences, rejects nothing** — Sonarr and Radarr still arrive; confirms [ADR-0035](#adr-0035) and [ADR-0040](#adr-0040); ⚠️ **amended 2026-08-17 by [ADR-0042](#adr-0042)** — the write-path question this ADR flagged as *"NOT decided here"* is now answered: the minimal write path **re-sequences with the \*Arr adapters**, so its consequence bullet and the ⚠️ clause in its proposed §16 text are both settled |
-| [0042](#adr-0042) | v0.1's minimal write path re-sequences with the \*Arr adapters; Sonarr and Radarr stay on the roadmap | **Accepted** — owner-decided 2026-08-17; **answers the question [ADR-0041](#adr-0041) flagged and refused**; **amends** ARCHITECTURE §16, [ADR-0041](#adr-0041), [ADR-0036](#adr-0036) and [ADR-0012a](#adr-0012a); **re-sequences, rejects nothing** — [ADR-0012a](#adr-0012a)'s queue design is untouched, the seam costs **no migration**, and Sonarr and Radarr stay on the roadmap at the owner's explicit condition; raises one open question it does not close (neither \*Arr has a milestone) |
-| [0043](#adr-0043) | A **minimal** match-correction UI moves earlier than v0.3; the full correction surface stays there | **Accepted** — owner-decided 2026-08-17; **answers the scope call ARCHITECTURE §6.4 flagged and routed**; **amends [ADR-0026](#adr-0026)**'s correction-UI consequence and **amends** ARCHITECTURE §16.0, §16.1's v0.1 and v0.3 entries; **re-sequences, rejects nothing** — ADR-0026's model, verbs, tables and scoping are untouched and `library_override` is already in the tree; **source-independent** — it turns on v0.1 having a weak-identity catalogue source, not on that source being Kavita; **assigns no milestone**, which is carried as an open question |
+| [0042](#adr-0042) | v0.1's minimal write path re-sequences with the \*Arr adapters; Sonarr and Radarr stay on the roadmap | **Accepted** — owner-decided 2026-08-17; **answers the question [ADR-0041](#adr-0041) flagged and refused**; **amends** ARCHITECTURE §16, [ADR-0041](#adr-0041), [ADR-0036](#adr-0036) and [ADR-0012a](#adr-0012a); **re-sequences, rejects nothing** — [ADR-0012a](#adr-0012a)'s queue design is untouched, the seam costs **no migration**, and Sonarr and Radarr stay on the roadmap at the owner's explicit condition; raises one open question it does not close (neither \*Arr has a milestone); ⚠️ **amended 2026-08-17 by [ADR-0045](#adr-0045)** — that open question is **closed**: the owner delegated the call and **Sonarr, Radarr and this write path all land in v0.2**. The decision, the measurement and the seam are untouched; only *"this ADR does not assign them a milestone"* (clause 5), alternative (e) and the open question itself are overtaken |
+| [0043](#adr-0043) | A **minimal** match-correction UI moves earlier than v0.3; the full correction surface stays there | **Accepted** — owner-decided 2026-08-17; **answers the scope call ARCHITECTURE §6.4 flagged and routed**; **amends [ADR-0026](#adr-0026)**'s correction-UI consequence and **amends** ARCHITECTURE §16.0, §16.1's v0.1 and v0.3 entries; **re-sequences, rejects nothing** — ADR-0026's model, verbs, tables and scoping are untouched and `library_override` is already in the tree; **source-independent** — it turns on v0.1 having a weak-identity catalogue source, not on that source being Kavita; **assigns no milestone**, which is carried as an open question; ⚠️ **amended 2026-08-17 by [ADR-0045](#adr-0045)** — that open question is **closed**: the owner delegated the call and the minimal case lands in **v0.2**, chosen **by elimination** (the only slot both earlier than v0.3 and not v0.1) with its cost recorded — v0.1 ships the *"not identified"* badge without its remedy for one milestone. The *"minimal"* boundary, the source-independence and the v0.3 cap on the full surface are all untouched |
 | [0044](#adr-0044) | Author and creator credits ship in v0.1; `work_credit` lands with **Kavita**, not Navidrome | **Accepted** — owner-decided 2026-08-17; **applies [ADR-0040](#adr-0040)'s rule rather than overriding it** — the landing point is the source that writes the table, and Kavita writes credits; **amends [ADR-0040](#adr-0040)** for `work_credit` **only** — `work_album` and `work_track` still wait for Navidrome; **confirms [ADR-0033](#adr-0033)**, whose `person` kind finally gets a writer; **costs a ROW, not a column** — an author is a `work` of kind `person`, which nothing in v0.1 created before; leaves [ADR-0035](#adr-0035), [ADR-0041](#adr-0041) and [ADR-0042](#adr-0042) untouched; raises one open question it does not close (nothing collects an uncredited person) |
+| [0045](#adr-0045) | The three unslotted commitments land in **v0.2**: Sonarr and Radarr, the minimal write path, and the minimal match-correction UI | **Accepted** — **owner-delegated 2026-08-17** (*"whatever you think is best"*); **closes the open questions [ADR-0042](#adr-0042) and [ADR-0043](#adr-0043) each raised and refused**; **amends** ARCHITECTURE §16 (§16.0, §16.1, and the v0.1, **v0.2** and v0.3 entries) and **amends [ADR-0042](#adr-0042)** and **[ADR-0043](#adr-0043)** at their no-milestone clauses; **assigns milestones and nothing else** — no scope moves, no design reopens, no ADR is reversed; for the two \*Arr items this **writes down a dependency v0.2 already had** (§8.3's `Add` capability filter), for the correction UI it is **by elimination** and the cost is recorded rather than argued away; raises one open question it does not close (whether v0.2 should be split) |
 
 ---
 
@@ -4672,7 +4673,19 @@ be made together.
 now carries this answer · **Amends [ADR-0041](#adr-0041), [ADR-0036](#adr-0036) and
 [ADR-0012a](#adr-0012a)** where their bodies assume a v0.1 queue writer ·
 **Re-sequences, rejects nothing** — [ADR-0012a](#adr-0012a)'s queue design is untouched and Sonarr and
-Radarr both still arrive.
+Radarr both still arrive · ⚠️ **Amended 2026-08-17 by [ADR-0045](#adr-0045)** — see the block below.
+
+> ⚠️ **AMENDED 2026-08-17 by [ADR-0045](#adr-0045): this ADR's decision, its measurement and its seam
+> all stand; its refusal to name a milestone is overtaken by an owner delegation it did not have.**
+> Clause 5's *"This ADR does not assign them a milestone"*, alternative **(e)**'s *"picking a number
+> here would be inventing a commitment nobody made"*, and the **🚩 Open question** at the foot of this
+> record were all **correct when written** — no owner statement supported a version. The owner was
+> asked and answered on 2026-08-17: *"idk lets just slot them in somewhere i reckon? i don't really
+> care, whatever you think is best"*. **[ADR-0045](#adr-0045) takes that delegation and puts Sonarr,
+> Radarr and this write path in v0.2**, on the ground that §16's v0.2 — the \*Arr-backed request flow
+> — already required them: §8.3's capability filter can only route `Add` to an instance that
+> advertises `Add`, and no v0.1 service does. **Nothing below is rewritten**; the three sites carry
+> inline flags. `ARCHITECTURE.md` §16 remains authoritative for milestone membership.
 
 ### Context
 
@@ -4750,6 +4763,9 @@ and is written into the Decision below rather than left to be inferred.
 > §16.1's table does not hold a slot for them; §16 is authoritative for when, and the gap between
 > *"they arrive"* and *"they arrive at milestone N"* is recorded below as an open question rather
 > than closed by invention.
+> ⚠️ **2026-08-17, [ADR-0045](#adr-0045): they have a milestone now — v0.2.** Taken on an owner
+> delegation this ADR did not have. The refusal above is left standing because it was right for the
+> information it had; §16's v0.2 entry carries the assignment and the argument.
 
 ### Alternatives considered
 
@@ -4781,6 +4797,10 @@ and is written into the Decision below rather than left to be inferred.
   nobody made, in an ADR whose whole subject is a clause that outlived the fact it rested on. The gap
   is real and is recorded as an open question below, where §16's owner can close it with the owner's
   input rather than with this ADR's guess.
+  ⚠️ **2026-08-17, [ADR-0045](#adr-0045): closed exactly that way — with the owner's input, not with a
+  guess.** He delegated the choice, and v0.2 was picked because §16's v0.2 already required a service
+  that advertises `Add` (§8.3) and no v0.1 service does. This alternative's objection stands as
+  written: a number invented *here* would still have been invention.
 
 ### Consequences
 
@@ -4836,6 +4856,12 @@ and is written into the Decision below rather than left to be inferred.
 
 ### 🚩 Open question this ADR raises and does not answer
 
+> ✅ **ANSWERED 2026-08-17 by [ADR-0045](#adr-0045), owner-delegated: Sonarr, Radarr and this write
+> path all land in v0.2.** The question below is left standing as it was asked — it is what prompted
+> the owner to be asked at all, and its *"two commitments pointing at a milestone that does not exist
+> is a thinner position than one"* is the argument that got it closed rather than a claim that has
+> gone stale.
+
 **Sonarr and Radarr have no milestone.** §16.1's post-v0.1 table numbers three catalogue sources and
 holds no slot for either; §16's prose says only that they *"arrive too, onto a core already proven"*.
 This ADR now hangs a second thing off that unnumbered arrival — the minimal write path. **Two
@@ -4855,7 +4881,22 @@ statement supports a number and this ADR will not invent one.
 ground [ADR-0041](#adr-0041) falsified · **Amends [`ARCHITECTURE.md`](./ARCHITECTURE.md) §16.0 and
 §16.1**'s v0.1 and v0.3 entries · **Re-sequences, rejects nothing** — ADR-0026's binding model, its
 four verbs and its four tables are untouched · **Assigns no milestone**, which is recorded as an open
-question rather than closed by a guess.
+question rather than closed by a guess · ⚠️ **Amended 2026-08-17 by [ADR-0045](#adr-0045)** — see the
+block below.
+
+> ⚠️ **AMENDED 2026-08-17 by [ADR-0045](#adr-0045): every clause of this ADR's decision stands except
+> its refusal to name a milestone, which is overtaken by an owner delegation it did not have.**
+> Decision clause **3**'s *"No milestone is assigned, and that refusal is deliberate"*, alternative
+> **(c)**'s *"Assign the minimal case to v0.2 — or to v0.1 — … Tempting and refused"*, and the
+> **🚩 Open question** at the foot of this record were **correct when written**: the owner had said
+> *"earlier"* and named no version. He was asked and answered on 2026-08-17 — *"idk lets just slot
+> them in somewhere i reckon? i don't really care, whatever you think is best"* — and
+> **[ADR-0045](#adr-0045) puts the minimal case in v0.2**, ⚠️ **by elimination rather than by fit**,
+> with the cost this ADR's open question predicted written down rather than argued away: **v0.1 ships
+> the badge without its remedy for one whole milestone.** **Clauses 1, 2, 4 and 5 are untouched** —
+> *"minimal"* is still the boundary, the decision is still source-independent, the full four-verb
+> surface is still v0.3's, and [ADR-0026](#adr-0026)'s design is still not reopened. **Nothing below
+> is rewritten**; the three sites carry inline flags.
 
 ### Context
 
@@ -4932,6 +4973,10 @@ the new meta"*, is **not** read as a decision; see the Decision's clause 4.
 > v0.2 — or v0.1 — here would be inventing a commitment nobody made, which is the exact failure
 > [ADR-0042](#adr-0042) refused for Sonarr and Radarr the same day. §16.0 records that **the slot is
 > not yet assigned**; the gap is carried as this ADR's open question.
+> ⚠️ **2026-08-17, [ADR-0045](#adr-0045): the slot is assigned — v0.2**, on the owner's delegation.
+> The refusal above is left standing because it was right for the information it had: it says a
+> version invented *here* would be a commitment nobody made, and that is still true. §16's v0.2 entry
+> carries the assignment, the elimination argument and the cost.
 >
 > **4. This decision is source-independent and survives a change of catalogue source.** What it turns
 > on is that **v0.1's catalogue source has weak identity**, which is a property of the source and not
@@ -4966,6 +5011,11 @@ the new meta"*, is **not** read as a decision; see the Decision's clause 4.
   did not say when"* applies verbatim: he said "earlier", the milestones are §16's to allocate, and a
   number invented in an ADR whose whole subject is a clause that outlived its evidence would be the
   same mistake one turn later. Recorded as an open question instead.
+  ⚠️ **2026-08-17, [ADR-0045](#adr-0045): this alternative is now the decision, taken elsewhere and on
+  new information.** *"He did not say when"* stopped being true — asked directly, he delegated — and
+  **v0.2 is the answer, chosen by elimination**: v0.1 had no *"cut before you add"* payment to name
+  after ADR-0041 and ADR-0044. The objection above is not withdrawn; it is satisfied, because the
+  number was allocated by §16 rather than invented in an ADR.
 - **(d) Reverse [ADR-0026](#adr-0026)'s consequence outright rather than amend it.** Rejected on this
   file's own convention. The bullet is a **dated record of a decision as taken**, and it was right
   against the roadmap it was written against — v0.1 genuinely had strong-id sources at the time. It is
@@ -5009,6 +5059,14 @@ the new meta"*, is **not** read as a decision; see the Decision's clause 4.
   decision"* is answered by this record and its wording is §6's thread to update.
 
 ### 🚩 Open question this ADR raises and does not answer
+
+> ✅ **ANSWERED 2026-08-17 by [ADR-0045](#adr-0045), owner-delegated: v0.2.** The question below is
+> left standing as it was asked, because **it framed the trade correctly and the answer accepts the
+> half it warns about**: v0.2 does ship the badge without its remedy for one whole milestone, on a
+> catalogue where the badge is the majority state. v0.1 was refused for the reason the question itself
+> names — it *"needs a *cut before you add* payment named"*, and none can be. **The pattern the last
+> two sentences flag — two commitments in two days on an unnumbered slot — is what got the owner
+> asked**, and ADR-0045 closes both.
 
 **The minimal match-correction case has no milestone.** §16 is authoritative for membership and this
 ADR deliberately assigns none, because the owner said *"earlier"* and named no version. The candidate
@@ -5219,3 +5277,197 @@ unbounded over years of re-imports on a churning library. Collecting it inside t
 replace is wrong, because the same person may be credited by another work in another batch, so the
 right shape is a sweep, and a sweep is a subsystem this change deliberately does not add. It is
 recorded here rather than guessed at, and `ix_credit_creator` is the index such a sweep would read.
+
+---
+
+<a id="adr-0045"></a>
+## ADR-0045 — The three unslotted commitments land in v0.2: Sonarr and Radarr, the minimal write path, and the minimal match-correction UI
+
+**Status:** Accepted · **owner-delegated 2026-08-17** · **Closes the open questions
+[ADR-0042](#adr-0042) and [ADR-0043](#adr-0043) each raised and deliberately refused** ·
+**Amends [`ARCHITECTURE.md`](./ARCHITECTURE.md) §16**, whose §16.0, §16.1-intro, v0.1, **v0.2** and
+v0.3 entries all carried the unassigned slot · **Amends [ADR-0042](#adr-0042) and
+[ADR-0043](#adr-0043)** at the clauses that record no milestone · **Assigns milestones and nothing
+else** — no scope moves, no design is reopened, and no ADR is reversed.
+
+### Context
+
+**Two ADRs closed on the same day with the same hole in them, and both were right to leave it.**
+[ADR-0042](#adr-0042) re-sequenced v0.1's minimal write path out of the milestone and recorded, in its
+decision clause 5, that *"this ADR does not assign them a milestone, because the owner named none"*;
+its alternative (e) refused the number outright — *"picking a number here would be inventing a
+commitment nobody made"*. [ADR-0043](#adr-0043) lifted ADR-0026's v0.3 cap for the minimal *"fix this
+match"* case and made the identical refusal in its decision clause 3 and its alternative (c), for the
+identical reason. **Both refusals were correct at the time**: `ARCHITECTURE.md` §16 is authoritative
+for milestone membership, and neither ADR had an owner statement that supported a version.
+
+ADR-0042's own open question says why the hole could not simply be left: *"Two commitments pointing at
+a milestone that does not exist is a thinner position than one."* ADR-0043's says the same one turn
+later, and adds that *"this is the second commitment in two days hung on an unnumbered slot … that
+pattern is itself worth the owner's attention."* Both routed the question to the owner.
+
+**The owner was asked and answered, verbatim, 2026-08-17:**
+
+> *"idk lets just slot them in somewhere i reckon? i don't really care, whatever you think is best"*
+
+**That is a delegation, not an assignment, and this ADR treats it as one.** He supplies the authority
+to choose and no preference to follow, so the choice has to stand on the repository's own logic and be
+written down where it can be checked later — *"the owner didn't mind"* is not an argument anyone can
+audit. The three things needing a slot:
+
+1. **Sonarr and Radarr as services.** Moved out of v0.1 by [ADR-0041](#adr-0041); ADR-0042 clause 5
+   records that they are **re-sequenced, not cut**, with the capability preserved, at the owner's
+   explicit condition (*"we should add them though or at least the capability to add them as they're
+   very popular services"*). No milestone.
+2. **The minimal write path** — `monitor`, `unmonitor`, `delete`, `add`, plus the durable command
+   queue's worker and its `pending → inflight → verifying → done | failed` settlement loop.
+   ADR-0042 gave it a **relative** slot, *"lands with the first \*Arr adapter"*, which moves wherever
+   (1) moves.
+3. **The minimal match-correction UI.** ADR-0043 constrained it to *"earlier than v0.3"* and to
+   *"minimal"*, both the owner's words, with [ADR-0026](#adr-0026)'s full four-verb surface staying at
+   v0.3. No milestone.
+
+### Decision
+
+> **1. All three land in v0.2.** §16's v0.2 entry is amended to say so and to state what the
+> milestone now contains.
+>
+> **2. For (1) and (2) this is not an addition to v0.2 — it is writing down a dependency v0.2 already
+> had.** §16's v0.2 entry is *"Requests"*, and its headline is the **\*Arr-backed request flow**:
+> *"Request model, routing rules, approval workflow, quotas … One Add that routes; availability
+> states; per-season TV."* Three checks, each against a document rather than against intuition:
+>
+> * **`Add` needs a service that advertises `Add`.** §8.3's routing is *"explicit user choice → a
+>   routing rule → capability filter (instances whose probed `Caps.MediaKinds` contain this
+>   `(kind, format)` **and that advertise `Add`**) → highest `priority`"*. §16.0 and §17.8 already
+>   record that **no service v0.1 connects passes that filter** — the Prowlarr path posts a release to
+>   Prowlarr's own download client (§8.5), so §17.8 removes the request-destination column from the
+>   Libraries row view for v0.1.
+> * **Every other candidate sink is later than v0.2.** LazyLibrarian is v0.3 (*"as a request sink
+>   only"*); Lidarr, Mylar3 and Kapowarr are v1.0 (§16.0's deferred command sinks). Sonarr and Radarr
+>   are the **only** sinks the roadmap can supply at v0.2.
+> * **`add` is a queue verb.** The four verbs and the settlement loop are §7.6's, and an Add that
+>   routes to Radarr is a `write_queue` row, a worker and a `verifying` state. v0.2's request model
+>   cannot be built without (2) either.
+>
+> **So *"cut before you add"* has nothing to demand here.** `CLAUDE.md`'s rule is that a proposal
+> adding a subsystem must say what it removes; **this proposal adds no subsystem to v0.2** — it names
+> two prerequisites the milestone already implied. A v0.2 without them is an Add button with nowhere
+> to route.
+>
+> **3. For (3) this is by elimination, not by fit, and that is stated rather than dressed up.** The
+> minimal match-correction UI has no dependency on anything in v0.2 and nothing in v0.2 depends on it.
+> The owner's constraint leaves exactly two candidates, and **v0.1 is refused on this project's own
+> rule**: adding a screen to v0.1 is adding a subsystem to a milestone that has just absorbed Kavita
+> ([ADR-0041](#adr-0041)), the `work_book` / `work_comic` / `work_comic_issue` tables and `work_credit`
+> ([ADR-0044](#adr-0044)), and there is no payment available to name. `CLAUDE.md`: *"This project's
+> biggest risk is never shipping."* **v0.2 is what is left**, and it satisfies *"earlier than v0.3"*
+> exactly.
+>
+> **4. The cost of clause 3 is recorded, not argued away.** **v0.1 ships the *"not identified"* badge
+> without its remedy for a whole milestone**, on a catalogue where [ADR-0035](#adr-0035) §1 makes that
+> state the majority path rather than an edge case — a v0.1 user is told their library is wrong and
+> given nowhere to fix it. ADR-0043's alternative (a) rejected *"the badge alone until v0.3"*; this
+> decision accepts *"the badge alone until v0.2"*, which is a shorter version of the same defect and
+> is the price of refusing to grow v0.1. **Two mitigations, both real and neither a fix:** nothing in
+> v0.2 gates the correction UI, so it is the part of that milestone that **can and should land
+> first**; and §16.1's catalogue sequence interleaves with v0.2 rather than blocking it.
+>
+> **5. Nothing else moves.** No scope is added or removed, no design is reopened, and the *"minimal"*
+> boundary [ADR-0043](#adr-0043) clause 2 fixed is untouched — v0.3 keeps the full four-verb surface
+> and the Corrections list. [ADR-0012a](#adr-0012a)'s queue design, [ADR-0039](#adr-0039)'s
+> unconstrained `state` and `kind`, [ADR-0041](#adr-0041)'s source choice and
+> [ADR-0042](#adr-0042)'s clause 5 condition all stand exactly as decided.
+>
+> **6. One consequence follows for free and is named so it is not lost.** v0.2 is the milestone that
+> writes `write_queue` first, so **[ADR-0039](#adr-0039)'s outstanding obligation** — its corrected
+> decision 1, the Go `state`-vocabulary declaration and validation *"owed by whoever writes the first
+> `write_queue` writer"* — is **v0.2's**. It still costs no migration.
+
+### Alternatives considered
+
+- **(a) Put (1) and (2) in §16.1's post-v0.1 catalogue sequence as a slot #4, ahead of or behind
+  Komga.** ⚠️ **The strongest alternative, because §16.1 is where every other re-sequenced source
+  went.** Rejected on two grounds. **It breaks the table's definition:** §16.1 is the **read-only
+  catalogue** sequence — four Tier 0 adapters sharing channel 3b, with a per-source watermark probe in
+  its `Gate` column — and the \*Arrs are library sources *and* command sinks, on channel 3
+  (`/history/since`), carrying a write path. Neither the gate column nor the success criterion fits.
+  **And it does not solve the problem:** slot #4 sits after Komga, which §16.1 pins last, so v0.2
+  would still have an Add button with no sink. A slot ahead of Komga would be v0.2 by another name,
+  with the dependency hidden in a table instead of stated in the entry that needs it.
+- **(b) Put the minimal correction UI in v0.1 and (1) and (2) in v0.2.** ⚠️ **Tempting, and it is the
+  reading §16.0's own sentence invites** — *"a user has something to correct on day one and now has
+  somewhere to do it"* — where "day one" is the day Kavita lands. Rejected on *"cut before you add"*,
+  which is a rule with a test: name what leaves v0.1 to pay for it. **Nothing can be named.** v0.1
+  grew twice on 2026-08-17 already (ADR-0041, ADR-0044), its five essential screens are all
+  `CLAUDE.md` commitments, and its security floor is non-negotiable. The alternative is not wrong
+  about the user's experience — decision clause 4 concedes exactly that point — it is wrong about
+  what the milestone can carry.
+- **(c) Split the three: (1) and (2) to v0.2, (3) left unassigned pending a further owner
+  conversation.** Rejected because it reproduces the defect both source ADRs flagged. ADR-0042's open
+  question is that *"two commitments pointing at a milestone that does not exist is a thinner position
+  than one"*; leaving one of three unslotted keeps a thin position alive for no gain, and the owner has
+  already been asked once and answered.
+- **(d) Create a new milestone between v0.1 and v0.2 for the \*Arr adapters and the write path.**
+  Rejected by *"cut before you add"* read at the roadmap level and by §16's own ordering rationale.
+  The rationale is *"the earliest milestone that is not already available elsewhere is the one that
+  must ship soonest"*; a milestone whose whole content is *"connect to Sonarr and Radarr"* delivers
+  the user nothing they cannot already get from Sonarr and Radarr. The work belongs to the milestone
+  whose success criterion needs it, which is v0.2.
+- **(e) Refuse again and route back to the owner for a version number.** Rejected because **it is
+  what has already happened, twice, and he answered by delegating.** Asking a third time for a
+  preference he has said he does not have converts a decision into a stall, and `CLAUDE.md`'s
+  *"cut before you add"* names never shipping as this project's biggest risk. The delegation is
+  honoured by choosing **and by writing the argument down**, which is what this record is.
+
+### Consequences
+
+**What this changes:**
+
+- **`ARCHITECTURE.md` §16's v0.2 entry states its contents**, including the argument that (1) and (2)
+  were prerequisites rather than additions, the honest size of the resulting milestone, and the
+  ordering inside it (adapters and write path before the request flow; correction UI first or last).
+- **Five further sites in §16 lose an unassigned slot and gain v0.2**, each quoting what it used to
+  say: §16.0's *"Sonarr and Radarr arrive too"*, §16.0's *"re-sequenced, not cut"* paragraph, §16.0's
+  libraries paragraph (the request destination *"returns with the first service that can be a
+  destination"*), §16.0's *"It names no milestone"* bullet, §16.1's table note, and the v0.1 and v0.3
+  entries' correction-UI and write-path clauses.
+- **[ADR-0042](#adr-0042) and [ADR-0043](#adr-0043) each gain the four marks the preamble requires** —
+  index row, `Status:` line, a dated `> ⚠️ **AMENDED …**` block, and an inline flag at every clause
+  that says no milestone is assigned. **Neither body is rewritten**; both refusals were correct when
+  taken, and what changed is that the owner has since answered.
+- **v0.2 is now visibly the third-largest milestone in the plan**, behind v0.1 and v1.0 and ahead of
+  v0.3. That is worth the owner's attention even though he delegated the choice, and it is stated in
+  §16's v0.2 entry rather than left to be discovered. **Most of that size was already true and merely
+  unwritten** — the two \*Arr items are v0.2's own prerequisites — but *"already true"* is not the
+  same as *"already visible"*, and the split seam is named in case it has to be used.
+- **[ADR-0039](#adr-0039)'s outstanding obligation acquires a version**, per decision clause 6.
+  ADR-0042 narrowed it from *"whoever writes the first writer"* to *"the first \*Arr adapter's"*; this
+  narrows it once more, to **v0.2**.
+
+**What this does NOT change — stated explicitly, because a scheduling ADR is easy to over-read:**
+
+- **No scope moves.** Nothing enters the roadmap, nothing leaves it, nothing is cut. Every one of the
+  three was already committed; only the version was missing.
+- **No design is reopened.** [ADR-0012a](#adr-0012a)'s queue, [ADR-0026](#adr-0026)'s correction
+  model and its four verbs, [ADR-0043](#adr-0043)'s *"minimal"* boundary and
+  [ADR-0041](#adr-0041)'s choice of Kavita are untouched.
+- **No schema change and no migration.** `write_queue` and `library_override` are both in the tree
+  already; this ADR names when their first writers land, not what they will be.
+- **v0.1 is not touched.** Nothing is added to it and nothing is taken out of it. That is the point of
+  decision clause 3.
+- **No ADR is reversed.** [ADR-0042](#adr-0042) and [ADR-0043](#adr-0043) are **completed**, not
+  corrected: each raised this question and routed it here.
+- **The full correction surface stays at v0.3**, and `BookOrbit` is still assigned nothing by any
+  document ([ADR-0043](#adr-0043) clause 4).
+
+### 🚩 Open question this ADR raises and does not answer
+
+**Whether v0.2 should be split.** Naming its real contents makes it a milestone with two independent
+halves — the \*Arr adapters plus the write path, then the request model on top of them — and §16's own
+ordering rationale is suspicious of large milestones, having reordered the roadmap once already so
+that *"a one-to-two-person project"* would not *"survive its largest milestone before delivering
+anything the owner asked for"*. **This ADR does not split it**, because a split is a scope decision
+with an owner's name on it and nothing here was measured against a real \*Arr instance the owner does
+not run. The seam is named in §16's v0.2 entry so that the split, if it is taken, is taken
+deliberately rather than discovered halfway through.
