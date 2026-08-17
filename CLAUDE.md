@@ -158,10 +158,10 @@ See `docs/ARCHITECTURE.md` §14 for the full threat model.
 
 **Quality gate**
 - `gofumpt`, `golangci-lint`, `eslint`, `prettier`, `svelte-check`.
-- **`make check` (`fmt-check` + `lint` + `modverify` + `secrets` + `test`, then `vuln`) is the
-  pre-commit gate and must pass before any commit.** It needs no Docker daemon and makes exactly
-  two network calls, both to vulnerability databases — govulncheck's to `vuln.go.dev` and
-  `pnpm audit`'s to the npm registry. `make check-offline` drops both.
+- **`make check` (`fmt-check` + `lint` + `build-tagged` + `modverify` + `secrets` + `test`, then
+  `vuln`) is the pre-commit gate and must pass before any commit.** It needs no Docker daemon and
+  makes exactly two network calls, both to vulnerability databases — govulncheck's to `vuln.go.dev`
+  and `pnpm audit`'s to the npm registry. `make check-offline` drops both.
 
 **Tests**
 - Recorded HTTP fixtures (`go-vcr`) plus contract tests against the shipped Servarr OpenAPI
