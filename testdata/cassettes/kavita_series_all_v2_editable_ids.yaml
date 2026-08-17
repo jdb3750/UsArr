@@ -1,0 +1,297 @@
+---
+# SYNTHETIC — hand-authored from api/specs/kavita-develop.json (develop @
+# 9c3e540, SeriesDto). NOT a wire capture. Claimed Kavita version: 0.9.0.20
+# (develop, ADR-0046's CEILING) — see kavita_libraries_editable_ids.yaml for why
+# this pair claims the ceiling where the other two claim the owner's tag.
+#
+# WHY THIS FIXTURE EXISTS: it is the smallest series list that fires every
+# metronId and cbrId path §6.4 amendment 3 now reaches, and — the part a unit
+# test cannot reach — it makes each field's MERGE consequence observable in the
+# database. Each series exists to fail a specific way if the cap comes off:
+#
+#   401 (lib 30)  metronId 156409 — the value from Kavita's OWN doc comment for
+#       the regex that reads it (Parser.cs:722-726 at v0.9.0.2, verbatim:
+#       "Tagged with MetronTagger-4.4.0 using info from Metron on 2025-12-24
+#       12:32:18. [issue_id:156409]"). It is used here deliberately: it is the
+#       number a real tagged file carries, it is an ISSUE id, and it is exactly
+#       what a user copies into the Edit Series dialog's untyped "Metron Id" box
+#       when the only Metron number they have ever seen is that one.
+#   402 (lib 30)  metronId 156409 — 🚩 THE METRON MERGE CASE. The SAME id on a
+#       different series, which is what two volumes of one run look like when
+#       both were tagged from the same issue's notes. At confidence 1.0 the
+#       second write hits ux_extid_work_strong, store.ApplyCatalogueBatch reuses
+#       the first work, AND THE TWO BECOME ONE — with no work_merge table in
+#       v0.1 to undo it. At 0.90 they stay two.
+#   403 (lib 31)  cbrId 7 — the ComicBookRoundup path in a ComicVine library,
+#       which KavitaPlusConfiguration offers that provider to. comicVineId is
+#       null on it ON PURPOSE: a ComicVine library is where the two ids are most
+#       likely to be confused for each other, and a row carrying both would make
+#       a failure ambiguous about which rule broke.
+#   404 (lib 31)  cbrId 7 — 🚩 THE CBR MERGE CASE, the same shape as 402. Both
+#       fields get their own, because they are capped by one constant and a
+#       single merge fixture would let one of them regress unobserved.
+#   405 (lib 30)  every id zero. The untagged control: a work is still written,
+#       filed and searchable, and §6.4's "not identified" state is the ABSENCE
+#       of an external_id row rather than an error.
+#
+# hardcoverId is 0 on all five. It is the one field still written at 1.0
+# (kavitaExternalIDs decision 5) and its presence here would put a genuinely
+# work-strong row in the same fixture as the two being capped, which is the
+# ambiguity the paragraph above declines for comicVineId.
+#
+# It carries NO Pagination header: the header is middleware, it is not in the
+# OpenAPI document, and a proxy that strips unknown headers must degrade to
+# "total unknown" rather than fail the read.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            Content-Type:
+                - application/json
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/all-v2?context=1
+        method: POST
+        body: '{"id":0,"name":null,"statements":[],"combination":1,"sortOptions":{"sortField":4,"isAscending":false},"entityType":0,"limitTo":0}'
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 2ms
+        body: |-
+            [
+              {
+                "id": 401,
+                "name": "Chew",
+                "originalName": "",
+                "localizedName": "",
+                "sortName": "Chew",
+                "pages": 400,
+                "coverImageLocked": false,
+                "lastChapterAdded": "2026-08-17T03:00:30.118",
+                "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
+                "userRating": 0,
+                "hasUserRated": false,
+                "totalReads": 0,
+                "pagesRead": 0,
+                "latestReadDate": "0001-01-01T00:00:00",
+                "format": 1,
+                "created": "2026-02-11T18:22:04.771Z",
+                "sortNameLocked": false,
+                "localizedNameLocked": false,
+                "nameLocked": false,
+                "wordCount": 0,
+                "libraryId": 30,
+                "libraryName": "L30",
+                "minHoursToRead": 1,
+                "maxHoursToRead": 2,
+                "avgHoursToRead": 1.5,
+                "folderPath": "/mnt/user/media/401",
+                "lowestFolderPath": "/mnt/user/media/401",
+                "lastFolderScanned": "2026-08-17T07:00:30.118Z",
+                "dontMatch": false,
+                "isBlacklisted": false,
+                "isStandAlone": false,
+                "coverImage": "series401",
+                "primaryColor": "#000000",
+                "secondaryColor": "#111111",
+                "aniListId": 0,
+                "malId": 0,
+                "hardcoverId": 0,
+                "metronId": 156409,
+                "comicVineId": null,
+                "mangaBakaId": 0,
+                "mangaBakaEditionId": null,
+                "cbrId": 0
+              },
+              {
+                "id": 402,
+                "name": "Chew: Omnivore",
+                "originalName": "",
+                "localizedName": "",
+                "sortName": "Chew: Omnivore",
+                "pages": 400,
+                "coverImageLocked": false,
+                "lastChapterAdded": "2026-08-17T03:00:30.118",
+                "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
+                "userRating": 0,
+                "hasUserRated": false,
+                "totalReads": 0,
+                "pagesRead": 0,
+                "latestReadDate": "0001-01-01T00:00:00",
+                "format": 1,
+                "created": "2026-02-11T18:22:04.771Z",
+                "sortNameLocked": false,
+                "localizedNameLocked": false,
+                "nameLocked": false,
+                "wordCount": 0,
+                "libraryId": 30,
+                "libraryName": "L30",
+                "minHoursToRead": 1,
+                "maxHoursToRead": 2,
+                "avgHoursToRead": 1.5,
+                "folderPath": "/mnt/user/media/402",
+                "lowestFolderPath": "/mnt/user/media/402",
+                "lastFolderScanned": "2026-08-17T07:00:30.118Z",
+                "dontMatch": false,
+                "isBlacklisted": false,
+                "isStandAlone": false,
+                "coverImage": "series402",
+                "primaryColor": "#000000",
+                "secondaryColor": "#111111",
+                "aniListId": 0,
+                "malId": 0,
+                "hardcoverId": 0,
+                "metronId": 156409,
+                "comicVineId": null,
+                "mangaBakaId": 0,
+                "mangaBakaEditionId": null,
+                "cbrId": 0
+              },
+              {
+                "id": 403,
+                "name": "Saga",
+                "originalName": "",
+                "localizedName": "",
+                "sortName": "Saga",
+                "pages": 400,
+                "coverImageLocked": false,
+                "lastChapterAdded": "2026-08-17T03:00:30.118",
+                "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
+                "userRating": 0,
+                "hasUserRated": false,
+                "totalReads": 0,
+                "pagesRead": 0,
+                "latestReadDate": "0001-01-01T00:00:00",
+                "format": 1,
+                "created": "2026-02-11T18:22:04.771Z",
+                "sortNameLocked": false,
+                "localizedNameLocked": false,
+                "nameLocked": false,
+                "wordCount": 0,
+                "libraryId": 31,
+                "libraryName": "L31",
+                "minHoursToRead": 1,
+                "maxHoursToRead": 2,
+                "avgHoursToRead": 1.5,
+                "folderPath": "/mnt/user/media/403",
+                "lowestFolderPath": "/mnt/user/media/403",
+                "lastFolderScanned": "2026-08-17T07:00:30.118Z",
+                "dontMatch": false,
+                "isBlacklisted": false,
+                "isStandAlone": false,
+                "coverImage": "series403",
+                "primaryColor": "#000000",
+                "secondaryColor": "#111111",
+                "aniListId": 0,
+                "malId": 0,
+                "hardcoverId": 0,
+                "metronId": 0,
+                "comicVineId": null,
+                "mangaBakaId": 0,
+                "mangaBakaEditionId": null,
+                "cbrId": 7
+              },
+              {
+                "id": 404,
+                "name": "Saga: Compendium",
+                "originalName": "",
+                "localizedName": "",
+                "sortName": "Saga: Compendium",
+                "pages": 400,
+                "coverImageLocked": false,
+                "lastChapterAdded": "2026-08-17T03:00:30.118",
+                "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
+                "userRating": 0,
+                "hasUserRated": false,
+                "totalReads": 0,
+                "pagesRead": 0,
+                "latestReadDate": "0001-01-01T00:00:00",
+                "format": 1,
+                "created": "2026-02-11T18:22:04.771Z",
+                "sortNameLocked": false,
+                "localizedNameLocked": false,
+                "nameLocked": false,
+                "wordCount": 0,
+                "libraryId": 31,
+                "libraryName": "L31",
+                "minHoursToRead": 1,
+                "maxHoursToRead": 2,
+                "avgHoursToRead": 1.5,
+                "folderPath": "/mnt/user/media/404",
+                "lowestFolderPath": "/mnt/user/media/404",
+                "lastFolderScanned": "2026-08-17T07:00:30.118Z",
+                "dontMatch": false,
+                "isBlacklisted": false,
+                "isStandAlone": false,
+                "coverImage": "series404",
+                "primaryColor": "#000000",
+                "secondaryColor": "#111111",
+                "aniListId": 0,
+                "malId": 0,
+                "hardcoverId": 0,
+                "metronId": 0,
+                "comicVineId": null,
+                "mangaBakaId": 0,
+                "mangaBakaEditionId": null,
+                "cbrId": 7
+              },
+              {
+                "id": 405,
+                "name": "Untagged Scans",
+                "originalName": "",
+                "localizedName": "",
+                "sortName": "Untagged Scans",
+                "pages": 400,
+                "coverImageLocked": false,
+                "lastChapterAdded": "2026-08-17T03:00:30.118",
+                "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
+                "userRating": 0,
+                "hasUserRated": false,
+                "totalReads": 0,
+                "pagesRead": 0,
+                "latestReadDate": "0001-01-01T00:00:00",
+                "format": 1,
+                "created": "2026-02-11T18:22:04.771Z",
+                "sortNameLocked": false,
+                "localizedNameLocked": false,
+                "nameLocked": false,
+                "wordCount": 0,
+                "libraryId": 30,
+                "libraryName": "L30",
+                "minHoursToRead": 1,
+                "maxHoursToRead": 2,
+                "avgHoursToRead": 1.5,
+                "folderPath": "/mnt/user/media/405",
+                "lowestFolderPath": "/mnt/user/media/405",
+                "lastFolderScanned": "2026-08-17T07:00:30.118Z",
+                "dontMatch": false,
+                "isBlacklisted": false,
+                "isStandAlone": false,
+                "coverImage": "series405",
+                "primaryColor": "#000000",
+                "secondaryColor": "#111111",
+                "aniListId": 0,
+                "malId": 0,
+                "hardcoverId": 0,
+                "metronId": 0,
+                "comicVineId": null,
+                "mangaBakaId": 0,
+                "mangaBakaEditionId": null,
+                "cbrId": 0
+              }
+            ]

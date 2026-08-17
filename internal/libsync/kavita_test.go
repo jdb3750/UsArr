@@ -295,11 +295,25 @@ func TestIdentifiedCassetteMapsEveryIDSourceAndDropsTheEditionID(t *testing.T) {
 	// absorbed by a startsWith. comicvine_test.go and weblinkid_test.go own the
 	// two rules in full; this asserts only that the mapping applies the right one
 	// to the right source.
+	//
+	// ⚠️ REVERSED 2026-08-17 (LS-72): THIS TABLE REQUIRED THE BUG. Neither
+	// MetronSeriesSource nor ComicBookRoundupSource was in it, so the
+	// `!weakSources[...] && x.Confidence < 1.0` arm below ERRORED IF `cbr` CAME
+	// OUT BELOW 1.0 — a test that would have failed the moment the cap it exists
+	// to protect was applied. It is the third instance of this shape in one
+	// round (LS-40, LS-45), and the reason is the same each time: the table was
+	// written as "the four fields we have just capped" rather than as "every
+	// field §6.4 does not name work-strong", so a field that had not been
+	// measured yet defaulted to the strong side. Both are now here, and the
+	// remaining strong source is hardcover_book ALONE — the only one §6.4
+	// amendment 4 names.
 	weakSources := map[string]bool{
-		ComicVineVolumeSource: true,
-		AniListSource:         true,
-		MalMangaSource:        true,
-		MangaBakaSource:       true,
+		ComicVineVolumeSource:  true,
+		AniListSource:          true,
+		MalMangaSource:         true,
+		MangaBakaSource:        true,
+		MetronSeriesSource:     true,
+		ComicBookRoundupSource: true,
 	}
 	ids := func(remoteID string) map[string]string {
 		out := map[string]string{}
@@ -322,7 +336,15 @@ func TestIdentifiedCassetteMapsEveryIDSourceAndDropsTheEditionID(t *testing.T) {
 	}
 	// Library 6 does not set inheritWebLinksFromFirstChapter, so the bare
 	// "42563" the scanner wrote can only have come from a 4050 volume link.
-	if got := ids("104"); got[ComicVineVolumeSource] != "42563" || got["cbr"] != "7" || len(got) != 2 {
+	//
+	// ⚠️ REVERSED 2026-08-17 (LS-73): this asserted the source string `cbr`,
+	// which is renamed to ComicBookRoundupSource. `cbr` already means the Comic
+	// Book RAR ARCHIVE FORMAT in this schema — it is an edition.format CHECK
+	// value (00005_library_sync.sql, and internal/store/recent.go:390 lists it
+	// beside 'cbz' and 'pdf') — so one token named two unrelated things in one
+	// database. This fixture claims develop, which is the only line where cbrId
+	// exists at all.
+	if got := ids("104"); got[ComicVineVolumeSource] != "42563" || got[ComicBookRoundupSource] != "7" || len(got) != 2 {
 		t.Errorf("Saga external ids = %v", got)
 	}
 	if got := ids("106"); got[MalMangaSource] != "9115" || len(got) != 1 {
@@ -337,6 +359,13 @@ func TestIdentifiedCassetteMapsEveryIDSourceAndDropsTheEditionID(t *testing.T) {
 				"so a bare namespace lets two different works collide on (source, value)",
 				remote, malBareSource, v)
 		}
+	}
+	// The same, for the source string this pass retired. Series 104 is the only
+	// fixture row carrying a cbrId at all.
+	if v, ok := ids("104")[cbrBareSource]; ok {
+		t.Errorf("series 104 carries the BARE source %q=%s; in this schema %q already names the "+
+			"Comic Book RAR ARCHIVE FORMAT (an edition.format CHECK value), so one token would "+
+			"mean two unrelated things in one database", cbrBareSource, v, cbrBareSource)
 	}
 
 	// mangaBakaEditionId is set on 103 and MUST NOT appear: it is an EDITION

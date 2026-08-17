@@ -306,8 +306,11 @@ func TestStructsCoverSpecProperties(t *testing.T) {
 // are absent from the v0.9.0.2 response body, so encoding/json leaves the Go
 // field at its zero value — no error, no warning, and any code branching on one
 // takes the zero branch forever on the stable line. `cbrId` is the live example:
-// internal/libsync's kavitaExternalIDs writes a `cbr` external_id from it, and
-// that row is UNREACHABLE until the owner upgrades past the stable line.
+// internal/libsync's kavitaExternalIDs writes a `comicbookroundup` external_id
+// from it, and that row is UNREACHABLE until the owner upgrades past the stable
+// line — which is exactly why renaming that source string away from the bare
+// `cbr` cost nothing on 2026-08-17 (libsync/editableid.go, REVIEW-LOG.md LS-73)
+// and would have cost a migration once any develop user had synced.
 //
 // It is written out by hand so that the next develop-only field is a DECISION
 // rather than a silent addition — TestCeilingOnlyPropertiesAreDeclared computes

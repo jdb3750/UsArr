@@ -12014,6 +12014,178 @@ The `LS.82` divergences and the `LS.83` guard firing are unaffected and remain o
 
 ---
 
+# LS-90 — a count written from recollection, three times in one day
+
+**Date:** 2026-08-17. **Prefix:** `LS-` (library sync), id `LS-90` from this thread's reserved
+`LS-90`–`LS-99` block. **Requested by the code thread and assigned by the project coordinator** —
+`docs/DEVELOPMENT.md` maps to whoever lands `internal/`, `cmd/` and the build, which is this thread,
+so this is announced rather than taken.
+
+| # | Finding | Severity | Disposition |
+| --- | --- | --- | --- |
+| **LS-90** | **Three counts in one day, in three different threads, each contradicted by the list printed beside it** — twice low, once high, and one of the three contradicted by its own commit message as well. The common mechanism, not the individual slips: the number was formed at one moment and the list moved afterwards, and nothing recomputed it before the commit. §11's guard rules covered the instrument (rule 2), the surface (rule 5) and the transcription (rule 7), but **no rule said the figure itself has to be re-derived at write time**; the `wc`/`grep`-it-now instruction lived only in per-brief boilerplate, so it held exactly as often as the brief's author remembered it | Medium | **Applied as `docs/DEVELOPMENT.md` §11 rule 8, *"A count is a measurement — compute it from the artefact, never from recollection"*.** Placed after rule 7 and before the closing *"the pattern worth carrying"* paragraph, so the numbered list stays contiguous and rules 2, 5 and 7 keep their cross-references — the topically nearer slot beside rule 5 was rejected because inserting there renumbers 6 and 7 and breaks the *"rule 5 names what it was pointed at"* references. The three instances are cited **by count, not re-told**, per the subsection's own register. No renumbering of existing entries or rules |
+
+---
+
+
+---
+
+# Round 5 continued — `LS-70`–`LS-79`: the last two Kavita ids at 1.0, and the one that keeps it
+
+**Date:** 2026-08-17. **Prefix:** `LS-` (library sync). **Ids `LS-70`–`LS-79` were RESERVED for this
+pass before it started, and the file was deliberately NOT read to find the next free one** — that
+read is the race, and it has now collided five times in this round alone (`EXPL-01`, `LS-01`,
+`LS-17`, `LS-30`, `LS-47`). `LS-53`–`LS-69` are unallocated here and that is correct, not a gap to
+close.
+
+**What this pass was handed.** `LS-43` measured three sources still going out at confidence 1.0 —
+`hardcover_book`, `metron` and `cbr` — and raised them without fixing them, for the reason `LS-12`
+was not fixed inside `LS-11`. This is that fix for two of the three, and the third is decided rather
+than deferred again.
+
+**The brief was right about the measurement and wrong about the rule, and that is the finding.** It
+handed over Metron as `ARCHITECTURE.md` §6.4 **amendment 4**'s shape — an identifier one level below
+the work, the rule that made `LS-14` refuse a ComicVine `4000` issue outright — and instructed that
+the premise be verified at the tag first. Verifying it is what broke it: the premise is true and its
+consequence does not follow, because the chapter-level id and the field UsArr reads never meet.
+
+| # | Finding | Severity | Disposition |
+| --- | --- | --- | --- |
+| **LS-70** | **The handed-over Metron premise is TRUE and it does not reach the field UsArr reads.** Re-verified at tag `v0.9.0.2` (`6bcd568`): a whole-tree `MetronId` grep, migrations excluded, finds exactly two assignment sites — `ProcessSeries.cs:749` (`chapter.MetronId = info.MetronId ?? 0`) and `ExternalMetadataIdHelper.cs:31-33`. 🚩 **Nothing on any scan path writes `Series.MetronId`**, exactly as relayed. But the scanner's id is parsed out of ComicInfo `<Notes>` and lands on `Chapter.MetronId` → `ChapterDto.metronId`, **a field UsArr never reads**, and Kavita has no `ProcessSeries.cs:162` analogue promoting it to the series. So the only writer of `SeriesDto.metronId` is the Edit Series dialog, and **the field is series-level by construction** | **High** | **Applied as a CAP, not a refusal — §6.4 amendment 3 rather than amendment 4.** Amendment 4 bars an id from a level *below* the work; nothing below the work reaches this field, so it has nothing to bite on. What is left is a hand-typed number: `metron_series` at `EditableIDConfidence` **0.90**, via the new `editableIdentity` in `internal/libsync/editableid.go`. The ASCII diagram of the two non-meeting write paths is in that file, because the next reader will be handed the same premise |
+| **LS-71** | **`cbr` is Comic Book Roundup, it is SERIES-level, and it is provider-supplied *and* free-text at once.** Established at both refs as instructed. Level, from three independent readings: `KavitaPlusConfiguration.MetadataProvidersForLibraryTypes` offers `MetadataProvider.ComicBookRoundup` to the **Comic**, **Image** and **ComicVine** library types and matches per SERIES (`ExternalMetadataService.cs:205-223`, `match.Series.CbrId`); `HasRequiredId` gates the provider on `series.CbrId > 0` (`:264`); Kavita's link builder is `comicbookroundup.com/comic-books/reviews/${id}` (`provider-url.util.ts:8`) and that path is a **series** page on the site, with issues one segment deeper (fetched 2026-08-17). Writers at develop `9c3e540`: `ExternalMetadataService.cs:223` and `:1773-75` (**provider**, licence-gated) and `ExternalMetadataIdHelper.cs:15` (**Edit dialog**). No scanner writer at either ref | **High** | **Applied. 0.90, on `weblinkid.go`'s reason 1 standing alone.** Amendment 4 does not reach it either — it is not an edition or issue id. It is capped because **`SeriesDto` carries no provenance**: UsArr cannot tell a Kavita+ match from a typed number, so the weakest writer must govern or the amendment is unenforceable by construction. 🚩 **And the free-text writer is strictly worse on develop than at the tag** — `ExternalMetadataIdHelper` guards every assignment with `is > 0` at `v0.9.0.2` and rewrites all six as `dto.X ?? 0` on develop, so on the very releases where `cbrId` is reachable, **saving the Edit Series dialog overwrites a Kavita+ match and can clear it to zero** |
+| **LS-72** | 🚩 **A SHIPPED TEST REQUIRED THE BUG — the third instance in one round.** `kavita_test.go`'s `weakSources` table listed the four already-capped sources, and its `!weakSources[…] && x.Confidence < 1.0` arm therefore **errored if `cbr` came out below 1.0**. It would have failed the moment the cap it exists to protect was applied | **High** | **Applied, with the reversal and its reason written at the assertion site** — the `LS-40`/`LS-45` shape. The root cause is recorded because it will recur: the table was written as *"the four fields we have just capped"* rather than as *"every field §6.4 does not name work-strong"*, so an unmeasured field defaulted to the strong side. Fired deliberately as **Break D** below |
+| **LS-73** | ✅ **ADR-0046's second open question, settled.** It read: *"`external_id.source = 'cbr'` is not enumerated anywhere as a legal source … the `cbr` that does appear in `00005_library_sync.sql` is `edition.format`'s `CHECK`, a different thing entirely."* 🚩 **That clause names the defect without noticing it: `cbr` ALREADY MEANS the Comic Book RAR archive format inside this schema** — an `edition.format` `CHECK` value, listed beside `cbz` and `pdf` at `internal/store/recent.go:390`. One token, two unrelated meanings, one database | Medium | **Applied. `ComicBookRoundupSource = "comicbookroundup"`.** The site's own name cannot be read as a file extension. ⚠️ **The rename was free EXACTLY NOW and never again**: `cbrId` is absent from `SeriesDto` at the floor (`LS-46`, `LS-48`, machine-checked by `ceilingOnlyProperties`), so no `cbr` row has ever been written and there is nothing to migrate — the same rename after one develop user syncs needs a migration. ADR-0046 and both Kavita comment sites now say so |
+| **LS-74** | ⚠️ **`hardcover_book` KEEPS 1.0, and the tension is recorded rather than resolved quietly.** On provenance it is the **weakest** of the six — `ExternalMetadataIdHelper.cs:28` at `v0.9.0.2` is its only writer, with neither a scanner nor a provider one — so amendment 3 would reach it on the same argument that capped the other five | **High** | **Not changed, deliberately.** §6.4 **amendment 4 NAMES it**: *"work-strong book sources are `openlibrary_work`, `hardcover_book` and `goodreads_work`, and nothing else."* That is the architecture electing a source, and an adapter overruling it is the wrong place for the decision. 🚩 **The unresolved half, stated plainly rather than left implicit: amendment 4 names it work-strong for the BOOK cascade and says nothing about what a HAND-TYPED Kavita field carrying it is worth.** Closing that is an amendment to §6.4 with its own owner, not a line in a Kavita adapter. Pinned by `TestHardcoverIsTheONLYRemainingStrongKavitaSource`, which is **two-sided** — a new field at 1.0 fails it, and so does `hardcover_book` quietly losing its 1.0 |
+| **LS-75** | **Refusing was considered for Metron and rejected on measurement.** The brief warned against copying `LS-11`'s refusal or `LS-12`'s cap reflexively, so both were tested against the facts. `LS-11` refused two shapes and **both rest on something absent here**: a value whose text *proves* it names an issue (`LS-14`), or one Kavita **itself** filled from a chapter after erasing the discriminator (`LS-13`). Neither applies. And `SeriesDto.metronId` has exactly one writer, so **refusing would refuse 100% of what the source can produce** | **High** | **Cap, and the argument is written where the refusal would have gone.** `comicvine.go`'s own test for a refusal — *"there is no source string under which a value of unknown kind is a true statement"* — fails here in the other direction: `metron_series` **is** a true statement about every value that writer can produce |
+| **LS-76** | ⚠️ **The residual Metron risk is real and 0.90 is exactly its defence.** A user pasting an **issue** id into the series box, because the form gives them nothing to go on: the Edit modal renders one bare numeric input per id from a **shared component used at series, volume and chapter level**, labelled only *"Metron Id"* (`edit-external-metadata-form.component.html`; `en.json`). And Metron's `Issue` and `Series` are **separate Django models with separate auto primary keys** (`Metron-Project/metron` `comicsdb/models/{issue,series}.py`, checked 2026-08-17), so issue 42 and series 42 are different objects — **ComicVine's `4050`/`4000` hazard with no prefix to distinguish them** | Medium | **Named as an ACCURACY risk, which the cap covers**, in `weblinkid.go`'s own words for the identical `MalMangaSource` case: *"at 0.90 a user who pastes an anime id gets a wrong row that cannot merge anything"* |
+| **LS-77** | **`metron_series` is namespaced on measurement, not on symmetry** — the distinction `LS-39` drew when it kept `anilist` and `mangabaka` bare. Metron has two numeric spaces and **UsArr is one phase from holding both**: `Chapter.MetronId` is an ISSUE id, named as such by the token itself in metron-tagger (`create_notes()` writes `[issue_id:{issue_id}]`, fetched 2026-08-17) and by Kavita's regex (`Parser.cs:725`, `MetronTagger-.*\[issue_id:(?<Id>\d+)\]`), and it reaches `ChapterDto.metronId`, which `doc.go`'s phase-B chapter walk will decode | Medium | **Applied.** Under a bare `metron`, Metron series 42 and Metron issue 42 would collide on `(source, value)` — the exact key `ux_extid` and `ux_extid_work_strong` are built on. ⚠️ **The constant carries the forward instruction**: a commit that writes the chapter id **must not reuse the string**, because it is an issue id and amendment 4 bars it from a work row at **any** confidence |
+| **LS-78** | **One shared cap constant where ComicVine and the weblink three got two, and the departure is argued rather than assumed.** `weblinkid.go` says the existing two are separate *"on purpose: the two caps rest on different measurements of different Kavita code paths"* | Nit | **`EditableIDConfidence` covers both, because they rest on ONE measurement** — the Edit Series dialog reaches both and `SeriesDto` carries no provenance for either, so the weakest writer governs both for the same reason. ⚠️ The constant's comment carries the condition: **their writer sets already differ** (Metron has no provider writer at any ref; ComicBookRoundup has one on develop), so **if a future measurement separates them the constant SPLITS rather than moves** |
+| **LS-79** | **`ARCHITECTURE.md` §6.4 still carries the falsified premise, in the bullet this pass's rule is quoted from.** It reads that `SeriesDto`'s identifier fields are *"all of them written only by the Kavita+ match path"* — disproved for `comicVineId` by `LS-11`, for three more fields by `LS-38`, and now for `metronId` and `cbrId` | Medium | **Recorded, not back-edited**, on `LS-38`'s and `LS-47`'s precedent: this file is a historical record, a docs sweep was in flight in another worktree, and `LS-11`/`LS-38` both fixed the equivalent claim at the **code** site (`resources.go`, `kavitaExternalIDs`) rather than in §6.4. The amendments this pass applies — 3 and 4 — are unaffected by that bullet. **The pointer is the entry; a fresher status sentence is not written** |
+
+## LS.20 The four guards fired, with verbatim output
+
+Every guard was broken on purpose, run red, and reverted. The breaks are chosen so that **no two
+fail for the same reason** — a set of breaks that all trip the same assertion proves one guard, not
+four.
+
+**Break A — the original wrong behaviour restored** (`add("metron", …)` and `add("cbr", …)`, i.e.
+1.0 *and* the bare source strings):
+
+```
+--- FAIL: TestEditableIDsAreNeverWorkStrong (0.00s)
+    editableid_test.go:58: inherit=false: no metron_series identifier at all; [{Source:metron Value:156409 Confidence:1} {Source:cbr Value:7 Confidence:1}]
+    editableid_test.go:78: inherit=false: an id was written under the BARE source "metron"
+    editableid_test.go:78: inherit=false: an id was written under the BARE source "cbr"
+--- FAIL: TestHardcoverIsTheONLYRemainingStrongKavitaSource (0.00s)
+    editableid_test.go:127: the sources written at confidence >= 1.0 are map[cbr:7 hardcover_book:445 metron:156409]; want exactly {hardcover_book:445}. ...
+--- FAIL: TestEditableIDEndToEndAgainstTheDatabase (0.05s)
+    editableid_test.go:257: series 401 and 402 resolved to 1 distinct works, want 2 — they share metronId 156409, and a strong write MERGED THEM: a Metron id is hand-typed into an untyped "Metron Id" box, and Metron numbers issues and series separately
+    editableid_test.go:257: series 403 and 404 resolved to 1 distinct works, want 2 — they share cbrId 7, and a strong write MERGED THEM: a ComicBookRoundup id is indistinguishable on the DTO from one the Edit Series dialog typed over the Kavita+ match
+    editableid_test.go:276: 3 work rows, want 5 — weakening an identity claim must not drop the work
+--- FAIL: TestIdentifiedCassetteMapsEveryIDSourceAndDropsTheEditionID (0.00s)
+    kavita_test.go:348: Saga external ids = map[cbr:7 comicvine_volume:42563]
+```
+
+⚠️ **`3 work rows, want 5` is the whole point of the fixture** and the reason the pair assertions
+count `DISTINCT work_id` rather than rows: five series collapsed into three works, unrecoverably,
+and a `count(*)` over `service_item_link` would still have read five.
+
+**Break B — the 0.90 cap KEPT, only the two namespaces reverted.** This is the one that matters: it
+proves the namespace guards test the **string** and not the confidence, so a future change that
+keeps the cap and reverts a source name cannot pass unnoticed.
+
+```
+--- FAIL: TestEditableIDsAreNeverWorkStrong (0.00s)
+    editableid_test.go:58: inherit=false: no metron_series identifier at all; [{Source:metron Value:156409 Confidence:0.9} {Source:cbr Value:7 Confidence:0.9}]
+    editableid_test.go:78: inherit=false: an id was written under the BARE source "metron"
+--- FAIL: TestEditableIDEndToEndAgainstTheDatabase (0.06s)
+    editableid_test.go:222: series 401 claim 0 = {source:metron value:156409 confidence:0.9}, want {source:metron_series value:156409 confidence:0.9}
+    editableid_test.go:267: 2 rows carry the bare source "metron"; "metron" would collide with Metron's separate ISSUE number space, and "cbr" already names the Comic Book RAR archive format in edition.format's CHECK
+    editableid_test.go:267: 2 rows carry the bare source "cbr"; ...
+```
+
+🚩 **`TestHardcoverIsTheONLYRemainingStrongKavitaSource` did NOT fire on Break B, and the drill rule
+adopted from design's `c56c8e4` says that must be answered rather than passed over.** It is a
+correct non-firing and not an absorbed one: that test asks *which sources come out at ≥ 1.0*, Break B
+left both ids at 0.90, so the strong set really is still exactly `{hardcover_book}` and there was
+nothing for it to catch. The property Break B attacks — the source **string** — is not one it
+asserts, and it is covered by the two tests above that did fire, on the strings themselves. The
+distinction is checked rather than asserted: **Break A moved the confidence and the same test fired
+immediately**, which is what an absorbed firing could not do.
+
+**Break C — `hardcover_book` quietly routed through `editableIdentity` too**, i.e. the pass
+over-applying its own rule. It proves `LS-74`'s guard is **two-sided** rather than a floor:
+
+```
+--- FAIL: TestHardcoverIsTheONLYRemainingStrongKavitaSource (0.00s)
+    editableid_test.go:127: the sources written at confidence >= 1.0 are map[]; want exactly {hardcover_book:445}. A source at 1.0 satisfies ux_extid_work_strong and can MERGE TWO WORKS, and §6.4 amendment 4 names only openlibrary_work, hardcover_book and goodreads_work as work-strong — so a new name here is an adapter overruling §6.4, and a missing hardcover_book is the same thing in the other direction
+--- FAIL: TestIdentifiedCassetteMapsEveryIDSourceAndDropsTheEditionID (0.00s)
+    kavita_test.go:327: 103: hardcover_book=445 came out at confidence 0.9; want 1.0
+```
+
+ⓘ The first attempt at this break **did not compile** — `declared and not used: add` — which is a
+finding worth keeping: with `metron` and `cbr` rerouted, `hardcover_book` is the **only** remaining
+caller of the 1.0 closure, so removing it makes the closure dead code and Go says so. The break was
+re-applied with `_ = add` to get past the compiler and reach the assertions.
+
+**Break D — `LS-72`'s reversal undone, the production fix KEPT.** The proof that the shipped test
+required the bug, rather than merely being silent about it:
+
+```
+--- FAIL: TestIdentifiedCassetteMapsEveryIDSourceAndDropsTheEditionID (0.00s)
+    kavita_test.go:325: 104: comicbookroundup=7 came out at confidence 0.9; want 1.0
+```
+
+## LS.21 Fixtures
+
+Two new cassettes, **both synthetic and both saying so in their own headers**, along with the Kavita
+version each claims — and here that version is **`0.9.0.20` (develop), where the other two identity
+fixture pairs claim the owner's tag.** ⚠️ **That is forced, not a preference: `cbrId` does not exist
+on `SeriesDto` at `v0.9.0.2`**, so a fixture claiming the floor and carrying one would assert a shape
+the floor cannot emit — the class of error `LS-15` found in the `comicVineId` fixture.
+
+* `kavita_libraries_editable_ids.yaml` — libraries 30 (Comic) and 31 (ComicVine), the two regimes
+  `KavitaPlusConfiguration` offers the ComicBookRoundup provider to. `inheritWebLinksFromFirstChapter`
+  is **false on both, and the header says why that is the point rather than an omission**: the flag
+  drives `ProcessSeries.cs:358-367`, and **neither field is in that block at either ref**, so it
+  cannot change either outcome. Setting it true on one library would imply it was a variable under
+  test.
+* `kavita_series_all_v2_editable_ids.yaml` — 401/402 share `metronId` **156409**, the value from
+  Kavita's **own doc comment** for the regex that reads it (`Parser.cs:722-726`, verbatim: *"Tagged
+  with MetronTagger-4.4.0 using info from Metron on 2025-12-24 12:32:18. [issue_id:156409]"*);
+  403/404 share `cbrId 7`; 405 is the untagged control. **Each capped field gets its own merge pair**,
+  because one constant caps both and a single pair would let one regress unobserved. `hardcoverId` is
+  0 on all five deliberately — the one field still at 1.0 does not belong in the fixture for the two
+  being capped.
+
+**The database side is not synthetic.** `TestEditableIDEndToEndAgainstTheDatabase` runs the whole
+channel-1 path against a real migrated SQLite, populates it, then asks SQLite in
+`ux_extid_work_strong`'s **own predicate** what it holds — and counts `DISTINCT work_id` for each
+pair, because a row count still adds up after a merge.
+
+## LS.22 What this pass did NOT do
+
+* **No ADR.** Both changes apply rules `ARCHITECTURE.md` §6.4 already states, which is what `LS-11`
+  and `LS-38` did without one; the only decision that closed an alternative is ADR-0046's own open
+  question 2, and it is answered **in ADR-0046**. **This also avoids taking a number from the shared
+  counter that moved mid-pass twice tonight** (`LS-52`).
+* **No migration.** `external_id.source` is free `TEXT` with no `CHECK`, and no row under either old
+  string has ever been written — `cbr` is unreachable at the floor and no catalogue source has
+  shipped. **The migration comment's source list is left stale rather than edited**: a merged
+  migration is never edited, it is already stale for `comicvine_volume`, `mal_manga` and
+  `hardcover_book`, and the vocabulary now lives on named Go constants the compiler checks.
+* **`ChapterDto.metronId` is not read**, and the seam for it is left explicit rather than filled.
+  Reading it needs `doc.go`'s phase-B chapter walk, an N+1 upstream call `LS-11` already priced and
+  declined; what ships is the namespace that will keep the issue space from colliding with this one.
+* **`hardcover_book` is not capped** — `LS-74`, and the §6.4 amendment it would take is not written
+  here.
+* **No live Kavita was contacted.** Everything above is Kavita's **source at both refs** in a full
+  working tree, the two vendored specs, and four first-party fetches recorded at their assertions
+  (metron-tagger's `talker.py`, Metron's `comicsdb` models, Metron's URL routes, and a
+  comicbookroundup.com series page).
+
+---
+
 ## LS-53 ADR-0046 is sound and is not a template: the assumption it rests on is that upstream regenerates its spec per release
 
 **Applied** — 2026-08-17, as an **amendment to [ADR-0046](./DECISIONS.md#adr-0046)**, not a new ADR
