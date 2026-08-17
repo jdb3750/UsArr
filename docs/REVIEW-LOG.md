@@ -4359,27 +4359,87 @@ its pin, no vulnerabilities found. Go linting via **`/root/go/bin/golangci-lint`
 with go1.25.13), which is the Makefile's own `GOBIN_DIR` pin and **not** the `$PATH` binary at
 2.5.0, per PG-04.
 
-⚠️ **`SU-13`: the paragraph above originally reported a run that had not happened, and the
-correction is recorded rather than overwritten.** It read *"on the merged tree, twice: once at the
-merge and once on the final tree after the stylesheet comments and `prototype.html` were brought
-back into step"*. That sentence was committed in **`a844e8a` (03:21:35Z)** — **2 min 37 s before
-`9fab501` (03:24:12Z) created the final tree it claims to have been run against.** The merge
-`baff65e` followed 9 s later and was on `origin/main` within the next 16 s, against a check that
-takes roughly four minutes. 🚩 **So the second run was not merely unrecorded, it was impossible —
-and the branch reached `origin/main` before any gate had passed on it**, inverting this repo's own
-rule that `check.mjs` passes on the *merged* tree before *every* push. ✅ **Both gates have since
-been run to completion on `baff65e` itself and both pass** — `check.mjs` exit 0 and `make check: OK`,
-which is what the corrected paragraph above now reports — **so the verdict was right, but it was
-right by luck rather than by check, and those are not the same claim.** ℹ️ **The measurements this
-section rests on were independently re-run at the same time** and every load-bearing number
-reproduced exactly: `months` **43px**, `h` **7px**, `d` **8px**, `1095 d` **43px** in the mockups'
-**56px** content box, the `Age` control **1.00px → 0.00px** against size's **14.00px → 0.00px**, the
-`Items` nouns **28/34/35/37px**, and the **87.80px** 1280px resolution in which three of six rows
-already wrap. 🚩 **The general shape is this round's own lesson one level up**: a gate result written
-ahead of its gate is the same defect as a track width quoted rather than walked, and it fails in the
-same direction — **it reads as evidence and contains none.** This is why a green must name its
-binary and its tree; one that names neither is a rumour, and one recorded before its run is not even
-that.
+❌ **`SU-13` IS WITHDRAWN. It accused a previous agent of fabricating a gate result, and the
+artifacts refute it — artifacts that were sitting in the accusing agent's own scratchpad, with
+mtimes, while the accusation was being written.** `SU-13` read: *"the paragraph above originally
+reported a run that had not happened … That sentence was committed in **`a844e8a` (03:21:35Z)** —
+**2 min 37 s before `9fab501` (03:24:12Z) created the final tree it claims to have been run
+against.** The merge `baff65e` followed 9 s later and was on `origin/main` within the next 16 s,
+against a check that takes roughly four minutes. 🚩 **So the second run was not merely unrecorded,
+it was impossible — and the branch reached `origin/main` before any gate had passed on it**."*
+**Both runs happened, the second finished before the push, and the tree it ran on is byte-identical
+to the pushed tree in every file the gate opens.** The correction is recorded in place, rather than
+`SU-13` being deleted, for the same reason `SU-13` itself gave: the sequence is the record.
+
+✅ **Both runs survive as files, and each one fingerprints the tree it ran on.** `check.mjs`'s
+`strip()` blanks a comment by replacing every non-newline character with a space, so the *"N chars
+scanned"* it prints beside each check is the exact character count of the nine `SOURCES` files —
+an unforgeable stamp of the tree under test. The two outputs are identical but for two numbers:
+**run 1**, written **03:19:20Z**, 78 `ok` lines, `all design checks pass`, `exit=0`, **839471**
+chars over nine sources and **731771** over `prototype.html`; **run 2**, written **03:23:51Z**,
+same 78 checks and same verdict, **839498** and **731954**. **Re-derived from the trees rather than
+read off the outputs**: `915a328` (*"Merge origin/main into claude/hearth-thread-vn9w7u before the
+gate"*, 03:16:41Z) totals **839471 / 731771**; `a844e8a` totals **839498 / 731954**. 🚩 **The
+deltas are +27 and +183 and they are `a844e8a`'s own edits.** The **+27** is the single comment line
+it rewrites in `usarr.css` (90919 → 90946 chars); the **+183** is that line *plus two earlier
+stylesheet-comment edits `prototype.html` had not yet mirrored* — which is precisely what *"brought
+back into step"* names. **So run 1 was the merge tree and run 2 was `a844e8a`'s tree, and
+`a844e8a`'s tree is the tree the sentence describes.** `make check: OK, exit=0` is logged at
+**03:21:00Z**, between the two.
+
+🚩 **`SU-13` attached its 157-second gap to the wrong commit.** `9fab501` touches only
+`REVIEW-LOG.md` and `DESIGN-DIRECTION.md` and changes no file `check.mjs` opens; it cannot be *"the
+final tree after the stylesheet comments and `prototype.html` were brought back into step"*, because
+it brings nothing into step. **`a844e8a` is that commit** — it is the only one in the window that
+edits `usarr.css` and regenerates `prototype.html` — **so the sentence describes its own tree, and
+the run at 03:23:51Z is on exactly that tree.**
+
+✅ **Run 2 finished 37 s BEFORE the push, not after it.** `origin/main` moved `7ab87c6 → baff65e` at
+**03:24:28Z**, from this clone's `.git/logs/refs/remotes/origin/main`. ✅ **And the pushed tree is
+the tested tree in every gate-visible file**: `9fab501` and `baff65e` share tree **`4ef3a84`**, and
+`git diff --stat a844e8a baff65e` is three lines of prose in `REVIEW-LOG.md` and
+`DESIGN-DIRECTION.md` — neither file is in `SOURCES`, neither is `prototype.html`. Recomputed at
+`baff65e`: **839498 / 731954**, identical to `a844e8a`.
+
+🚩 **The duration figure did the work, and nobody had measured it.** *"Roughly four minutes"* is
+what turned a 37-second margin into *"impossible"*. Timed three times on this box at `4fb96e0`:
+**127.6 / 128.5 / 128.5 s**. Relayed downstream the same figure grew to *"about fourteen
+minutes"* — 6.5× high. **Both errors ran in the direction that made the accusation stronger**, which
+is the signature of a number chosen rather than read.
+
+ℹ️ **What honestly survives is two things, and neither is a fabricated gate result.** **(1)** The
+gate sentence was committed at **03:21:35Z**, before the run it describes completed at **03:23:51Z**
+— written ahead of its own evidence. **That is the practice the corrected paragraph above defends in
+as many words**, and it is unavoidable: a commit cannot name its own SHA, so the line is written
+first and made true by running the gate before the push, never after. **(2)** No gate ran on
+`baff65e`'s exact SHA before the push — only on a tree identical to it in every file the gate opens.
+**That gap was closed 4 min 52 s later**, at **03:29:20Z**, by a run against `origin/main` at
+`baff65e` itself: **839498 / 731954**, `all design checks pass`, `EXIT=0`.
+
+🚩 **The lesson is about `SU-13`, and it is worth more than the incident it got wrong.** `SU-13` is a
+conclusion asserted rather than walked — **the exact defect it accused someone else of, one level
+up** — and it rested on a duration nobody had timed. **The disconfirming evidence was three files in
+the accusing agent's own scratchpad and it did not look.** An accusation is a measurement: it names
+its artifacts and its clock, or it is a rumour with a flag in front of it. *(The recovery pass that
+produced `SU-13` is not in dispute and is not disparaged here. It independently re-ran every
+load-bearing number in this section and reproduced each exactly — `months` **43px**, `h` **7px**,
+`d` **8px**, `1095 d` **43px** in the mockups' **56px** content box, the `Age` control
+**1.00px → 0.00px** against size's **14.00px → 0.00px**, the `Items` nouns **28/34/35/37px**, the
+**87.80px** 1280px resolution in which three of six rows already wrap — and it caught the real
+staleness recorded as `SU-10d`. One finding in that pass is wrong; the pass around it is sound.)*
+
+❌ **The rule `SU-13` derived is CONSIDERED AND REJECTED, recorded so nobody proposes it again.**
+The candidate was *"a gate result whose write time precedes the tree it names is a fabrication."*
+**It is false on this very incident** — run 2's output post-dates `a844e8a` by 2 min 16 s and
+pre-dates the push by 37 s — **and it would fire on sanctioned practice**, because the gate paragraph
+must be written before the commit that carries it and before the merge the gate then runs on. **A
+rule that convicts the correct procedure is not a stricter rule, it is a broken one.** ✅ **What does
+survive is the standing rule already in `CLAUDE.md`**: a green names its binary, its version and its
+tree, and a guard is fired deliberately before it is trusted. **`SU-13` is the case FOR that rule,
+not against the agent it accused** — the artifacts here were conclusive only because `check.mjs`
+prints a per-tree character count beside every check, so an output cannot be attributed to a tree it
+did not run on. A gate that printed only `PASS` would have left this unresolvable in either
+direction.
 
 **The before/after capture.** Baseline is the tree `SU-09` landed, so this isolates the `Age` split.
 **1040 combos**, **1,296,736 element rects before and 1,299,616 after**. The split **adds**
