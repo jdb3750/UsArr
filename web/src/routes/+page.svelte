@@ -8,23 +8,24 @@
 	 *
 	 *   Block A   media-type summary    ≤6 rows          NOT DRAWN — no source
 	 *   Block B   attention             hidden when empty      DRAWN
-	 *   Block C   recently added        one unified table      NOT DRAWN — no source
+	 *   Block C   recently added        one unified table      DRAWN in `library` mode
 	 *
-	 * AND TWO THINGS THAT ARE NOT BLOCKS, added because the three above leave
+	 * AND TWO THINGS THAT ARE NOT BLOCKS, added because the blocks above leave
 	 * this screen with nothing to do on the install the owner actually has:
 	 *
 	 *   Search      a release-search entry point, drawn when an indexer exists
 	 *   Recent grabs  GET /api/v1/grabs/recent, hidden when empty
 	 *
 	 * ⚠️ RECENT GRABS IS NOT BLOCK C AND MUST NEVER BE LABELLED AS IT. Block C
-	 * is `Recently added` — one unified table over the catalogue, sorted by
+	 * is `Recently added` — one unified table over the CATALOGUE, sorted by
 	 * `added_at DESC`, with a Type column — and a grab is not an item that
 	 * arrived. `$lib/requests`' own KNOWLEDGE_STOPS_NOTE is the whole reason:
 	 * UsArr stops watching at the moment Prowlarr accepts the release, so it
 	 * does not know whether a single byte followed. A list of grabs under the
 	 * words "recently added" would assert exactly the thing UsArr has gone to
-	 * some trouble not to claim. It occupies the SLOT Block C will occupy, under
-	 * its own honest heading, and it vacates that slot when a catalogue exists.
+	 * some trouble not to claim. It used to occupy Block C's slot on an install
+	 * with no catalogue; Block C now holds that slot where there is a catalogue
+	 * to hold it, and the grabs list sits below under its own heading.
 	 *
 	 * NEITHER IS A FOURTH BLOCK IN THE SENSE ADR-0028 BOUNDS. The decision fixes
 	 * Home's height at O(1) in the number of MEDIA TYPES, which is what six
@@ -35,30 +36,28 @@
 	 * place. Nothing was added beside the three blocks that could not be put
 	 * inside something already on the screen.
 	 *
-	 * WHY TWO OF THE THREE ARE ABSENT, AND WHY THAT IS THE CORRECT RENDERING
-	 * RATHER THAN AN UNFINISHED ONE. The `work` / `edition` / `media_file`
-	 * tables and the sync channels that fill them are unbuilt, so there is no
-	 * catalogue: every count in Block A and every row in Block C would have to
-	 * be invented. DESIGN-DIRECTION §9.6 closes that off in as many words —
-	 * never fabricated data in a shipped product surface — and a zeroed table
-	 * and a skeleton shimmer are the same fabrication with different
-	 * punctuation. §17.2's own hard rule reaches the same place from the other
-	 * side: a media type the user does not have is not shown AT ALL, not in
-	 * Block A, not in the sidebar, not as a search group. With no catalogue,
-	 * the honest number of media-type rows on this screen is zero, which is
-	 * what `routes/+layout.svelte` already does with the sidebar.
+	 * WHY BLOCK A IS STILL ABSENT WHILE BLOCK C IS DRAWN, AND WHY THAT IS THE
+	 * CORRECT RENDERING RATHER THAN A HALF-FINISHED ONE. The two blocks want
+	 * different reads and only one of them exists. `GET /api/v1/library/recent`
+	 * is Block C's, and it landed; Block A's per-type rollup is its own read and
+	 * has not, so every count in it would have to be invented. DESIGN-DIRECTION
+	 * §9.6 closes that off in as many words — never fabricated data in a shipped
+	 * product surface — and a zeroed table and a skeleton shimmer are the same
+	 * fabrication with different punctuation. §17.2's own hard rule reaches the
+	 * same place from the other side: a media type the user does not have is not
+	 * shown AT ALL, not in Block A, not in the sidebar, not as a search group,
+	 * and nothing on this screen can yet say which types the user has.
 	 *
-	 * ⚠️ §17.2 DOES specify Block A's four sourceless rows for a v0.1 install —
+	 * ⚠️ §17.2 DOES specify Block A's sourceless rows for a v0.1 install —
 	 * `Comics · no catalogue source · Kavita · after v0.1 · Add` — and that is
-	 * NOT what is missing here. Those four rows are the shape for an install
-	 * where the OTHER two rows carry real counts, which requires the Sonarr and
-	 * Radarr catalogue sync §16 puts in v0.1 and which is not built. Rendering
-	 * six rows of which six are `no catalogue source` is not §17.2's screen; it
-	 * is a table with no data in it, and rule 13's own bound — the ban is on a
-	 * region that says NOTHING — does not rescue a block whose every row says
-	 * the same nothing. The block arrives with the first catalogue source, and
-	 * §17.7's `partial` and `stale` states arrive with it, because both of them
-	 * are statements about an import that cannot run yet.
+	 * NOT what is missing here. Those rows are the shape for an install where
+	 * the OTHER rows carry real counts, and no per-type count is readable yet.
+	 * Rendering six rows of which six are `no catalogue source` is not §17.2's
+	 * screen; it is a table with no data in it, and rule 13's own bound — the
+	 * ban is on a region that says NOTHING — does not rescue a block whose every
+	 * row says the same nothing. The block arrives with the read that fills it.
+	 * §17.7's `partial` and `stale` states arrive with a per-instance sync clock,
+	 * which is a different read again and is not one of the two above.
 	 *
 	 * WHAT IS LEFT IS THE STATE THE OWNER IS ACTUALLY IN, and §8.5 names it
 	 * rather than leaving it as an implicit empty app: Prowlarr configured, no
@@ -73,8 +72,10 @@
 	 *   unconfigured     `setup_required`, or no services. §17.7: this goes to
 	 *                    the first-run path and NEVER to an empty home page.
 	 *   search-and-grab  services configured, none library-bearing (§8.5).
-	 *   library          at least one library-bearing service. Unreachable in
-	 *                    this build; see $lib/home for why it is still derived.
+	 *   library          at least one library-bearing service. REACHABLE: a
+	 *                    `kavita` instance carries role `library`, which is what
+	 *                    Block C is drawn off. See $lib/home, whose own note
+	 *                    records the day this stopped being hypothetical.
 	 *
 	 * AND THE FOUR THAT ARE NOT, each for the same reason. `partial` (an import
 	 * in progress) and `stale` (an instance degraded, "showing cached data from
@@ -125,7 +126,19 @@
 	import Icon from '$lib/Icon.svelte';
 	import List from '$lib/List.svelte';
 	import RecentGrabs from '$lib/RecentGrabs.svelte';
-	import { type ListColumn } from '$lib/list';
+	import { LOAD_MORE_PAGE_SIZE, NOTHING, type ListColumn } from '$lib/list';
+	import {
+		appendPage,
+		cursorRejected,
+		EMPTY_RECENT_FEED,
+		fetchRecentPage,
+		hasMore,
+		haveCell,
+		mediaTypeLabel,
+		nextRequest,
+		type RecentFeed,
+		type RecentItem
+	} from '$lib/library';
 	import {
 		attention,
 		hasIndexer,
@@ -135,7 +148,7 @@
 		type AttentionRow,
 		type HomeMode
 	} from '$lib/home';
-	import { KNOWLEDGE_STOPS_NOTE, requestsSearchHref } from '$lib/requests';
+	import { formatWhen, KNOWLEDGE_STOPS_NOTE, requestsSearchHref } from '$lib/requests';
 	import { firstLine, rollupCount } from '$lib/services';
 
 	/**
@@ -229,6 +242,59 @@
 	/** §17.5's own limit for the block, and the endpoint's default. */
 	const RECENT_LIMIT = 10;
 
+	/**
+	 * BLOCK C's COLUMNS. ONE UNIFIED TABLE ACROSS EVERY MEDIA TYPE (ADR-0028),
+	 * which is why `Type` is a COLUMN here rather than a heading over a region:
+	 * a sixth media type adds rows to this list, not a sixth thing to scan.
+	 *
+	 * ⚠️ `Type` RENDERS FROM `media_type` AND NEVER FROM `kind`. §17.2 states
+	 * that the Tier 1 client index carries no format, so a browser cannot split
+	 * ebooks from audiobooks: both are `kind: 'book'` and only `edition.format`
+	 * separates them, which is not on this wire. `$lib/library` holds the rule
+	 * and the vocabulary so a test can read them.
+	 *
+	 * ⚠️ EVERY TRACK IS `fr` OR A FIXED RESERVE, WHICH THE DEV GUARD IN
+	 * `gridTemplate()` ENFORCES. ADR-0029 makes every row its own grid, so a
+	 * content-sized track resolves against its own row's contents and the header
+	 * cannot agree with the body. Block B's `Action` track above documents the
+	 * measured failure in detail.
+	 *
+	 * `132px` on `Added` is NOT a new measurement. It is the Time width the
+	 * recent-grabs table below already carries, for the same content in the same
+	 * shape: an absolute time with a relative one under it. A new fixed reserve
+	 * would need its own measurement; reusing a measured one for identical
+	 * content does not.
+	 *
+	 * `stackLine` is §9.1's TWO-LINE phone fork, which it gives to a list that is
+	 * SCANNED rather than read one record at a time. §17.2 asks for "the same
+	 * small-multiple row as search", and this is that row: the title identifies
+	 * the line, and the type and the date are the two secondary fields worth the
+	 * second line. `Type` drops its stacked label because the value is the row's
+	 * own identity and the word `Type` only restates it.
+	 */
+	const RECENT_COLUMNS: ListColumn[] = [
+		{
+			id: 'type',
+			header: 'Type',
+			width: 'minmax(0, 0.9fr)',
+			stackLabel: false,
+			stackLine: 2
+		},
+		{ id: 'title', header: 'Title', width: 'minmax(0, 3.2fr)', stackLabel: false, stackLine: 1 },
+		{ id: 'year', header: 'Year', width: 'minmax(0, 0.6fr)', align: 'end', stackLine: 'hidden' },
+		{ id: 'have', header: 'Have', width: 'minmax(0, 1.7fr)', stackLine: 'hidden' },
+		{ id: 'added', header: 'Added', width: '132px', stackLine: 2 }
+	];
+
+	/**
+	 * A Block C row carries a sub-line wherever the data has one (the relative
+	 * time under the absolute one, a gap figure under a fraction), so it is the
+	 * same two-line shape as Block B's rows above and takes the same measured
+	 * figure. `ROW_INTRINSIC`'s default is measured on a ONE-line row and would
+	 * be wrong by half, which shows as scroll-height jitter.
+	 */
+	const ROW_INTRINSIC_RECENT = 44;
+
 	const servicesPath = resolve('/services');
 	const requestsPath = resolve('/requests');
 
@@ -256,6 +322,22 @@
 	let grabsError = $state('');
 
 	/**
+	 * BLOCK C's STATE. `$lib/library`'s `RecentFeed` is the whole of the paging
+	 * position: the rows read so far, the cursor for the next page, and whether
+	 * the server has answered at all. There is deliberately no `hasMore` boolean
+	 * beside it, because "is there more" is `cursor !== undefined` and nothing
+	 * else, and two fields that must agree are two fields that can disagree.
+	 */
+	let recent = $state<RecentFeed>(EMPTY_RECENT_FEED);
+	let recentLoading = $state(false);
+	let recentError = $state('');
+	/** The server's own `action`: the one thing it says fixes this. */
+	let recentAction = $state('');
+	/** Whether the failure was the server rejecting a cursor UsArr sent it. That
+	 * one is not retryable and gets a restart control rather than silence. */
+	let recentRejected = $state(false);
+
+	/**
 	 * Re-read on a timer so the relative clauses stay true rather than freezing
 	 * at whatever they said on arrival. `paused` carries "retrying 14:19, in 4
 	 * minutes", and a number that goes on saying "in 4 minutes" for an hour is
@@ -276,6 +358,8 @@
 	 */
 	const searchHref = $derived(requestsSearchHref(requestsPath, query));
 
+	const recentMore = $derived(hasMore(recent));
+
 	async function load() {
 		try {
 			const health = await fetchServicesHealth();
@@ -287,6 +371,68 @@
 		} catch (error) {
 			loadError = error instanceof ApiError ? error.detail : String(error);
 		}
+		// BLOCK C IS ASKED FOR ONLY WHERE THERE IS SOMETHING TO ASK ABOUT, which
+		// is principle 3 rather than an optimisation: with no library-bearing
+		// service there is no catalogue, the `search-and-grab` block below already
+		// says so in words, and a request whose only possible answer is an empty
+		// list is a request that teaches the screen nothing.
+		//
+		// `!recent.loaded` is what keeps this to ONE read. `load()` is on a
+		// 60-second timer because Block B's relative clauses go stale; a
+		// recently-added table has no such clause, so re-reading it every minute
+		// would be a repeated query for a table that changes only while the user
+		// is on another screen. Recent grabs is excluded from the timer for the
+		// same reason.
+		if (mode === 'library' && !recent.loaded) void loadRecent();
+	}
+
+	/**
+	 * ONE PAGE OF BLOCK C, AND THE STOP RULE IS NOT HERE.
+	 *
+	 * `nextRequest` owns it: it answers `undefined` when there is nothing left to
+	 * ask for, which happens exactly when the server omitted `next_cursor`. This
+	 * function cannot short-page itself into stopping early, because it never
+	 * looks at `items.length` at all. The rule and its test live in
+	 * `$lib/library`, where a rule can be read rather than inferred from an
+	 * `{#if}`.
+	 *
+	 * A LOCAL SQLITE READ, which is what lets Home make it at all (principle 1).
+	 * `internal/httpapi/library.go` says so at its own declaration: one statement
+	 * per page, no *Arr, no metadata provider, no image fetch.
+	 */
+	async function loadRecent() {
+		const request = nextRequest(recent, LOAD_MORE_PAGE_SIZE);
+		if (request === undefined) return;
+		recentLoading = true;
+		try {
+			recent = appendPage(recent, await fetchRecentPage(request));
+			recentError = '';
+			recentAction = '';
+			recentRejected = false;
+		} catch (error) {
+			recentError = error instanceof ApiError ? error.detail : String(error);
+			recentAction = error instanceof ApiError ? error.action : '';
+			// ⚠️ A REJECTED CURSOR IS NOT RETRIED, AND THE SERVER'S OWN COMMENT IS
+			// THE REASON: it answers 400 rather than silently resetting to page one,
+			// because resetting "turns a stale bookmark into a Load-more loop that
+			// re-serves the first page for ever and looks like the list is stuck".
+			// Retrying here would build that loop on the other side of the wire. The
+			// screen surfaces the action and offers a restart the user presses.
+			recentRejected = cursorRejected(error);
+		} finally {
+			recentLoading = false;
+		}
+	}
+
+	/** Start again from the newest items, which is the action the server names.
+	 * It is a request with NO cursor, so it cannot fail the way the last one
+	 * did. */
+	function restartRecent() {
+		recent = EMPTY_RECENT_FEED;
+		recentError = '';
+		recentAction = '';
+		recentRejected = false;
+		void loadRecent();
 	}
 
 	/**
@@ -540,10 +686,221 @@
 {/if}
 
 <!--
-	RECENT GRABS, AND IT IS NOT BLOCK C. Block C is `Recently added` over a
-	catalogue that does not exist; this is the local record a grab leaves, read
-	from GET /api/v1/grabs/recent. It occupies the slot Block C will occupy and
-	says what it actually is at the top of it.
+	BLOCK C. ONE UNIFIED RECENTLY-ADDED TABLE ACROSS ALL TYPES (§17.2 as amended
+	by ADR-0028), read from GET /api/v1/library/recent.
+
+	⚠️ ONE TABLE WITH A TYPE COLUMN, NEVER ONE STRIP PER MEDIA TYPE. ADR-0028
+	settled that on this project's own arithmetic rather than on the carousel
+	research: six strips put about sixteen items above a 900 px fold against the
+	design's own twenty-five-item floor, on the screen whose entire job is
+	inventory. A sixth media type has to add ROWS here, not a sixth region to
+	scan, which is what keeps Home's height O(1) in the number of types.
+
+	DRAWN ONLY IN `library` MODE, and that is principle 3 rather than an
+	omission. With no library-bearing service there is no catalogue to have
+	recently added anything to, and the Search-and-Grab block below already says
+	that in words with the reason attached. Asking the endpoint anyway would put
+	an empty table under a heading that promises rows.
+
+	NOTHING IS DRAWN BEFORE THE READ LANDS. No skeleton, no shimmer, no zeroed
+	table: §9.6 bans fabricated data in a shipped product surface, and a
+	placeholder row is fabricated data with rounded corners. The section appears
+	when there is something true to put in it, which on a Tier 0 local read is
+	about as long as a frame.
+
+	THE ERROR ARM DRAWS WHERE AN EMPTY ONE WOULD NOT. This is a local SQLite
+	read, so it failing says something about UsArr rather than about the library,
+	and silence would let the screen imply nothing has ever been catalogued.
+-->
+{#if mode === 'library'}
+	<section class="section" id="home-recent">
+		<div class="section__head">
+			<h2>Recently added</h2>
+			{#if recent.loaded && recent.items.length > 0}
+				<!--
+					`so far` is the honest suffix while a cursor is outstanding: the
+					endpoint is keyset-paginated and never sends a total, so the only
+					number this screen has is how many rows it holds. Printing it bare
+					would claim the library is that size.
+				-->
+				<span class="section__count num">
+					{recent.items.length}
+					{recent.items.length === 1 ? 'item' : 'items'}{recentMore ? ' so far' : ''}
+				</span>
+			{/if}
+		</div>
+
+		{#if recentError}
+			<div class="banner banner--err" role="alert">
+				<Icon name="x-circle" />
+				<div class="banner__body">
+					<div class="banner__title">Your recently added items could not be read</div>
+					<div class="banner__text">
+						This is a local read from UsArr’s own database, so it failing is not an upstream
+						problem. Nothing is missing here because an item did not arrive: the list simply could
+						not be loaded.
+					</div>
+					<p class="verbatim">{recentError}</p>
+					{#if recentRejected}
+						<!--
+							⚠️ THE SERVER'S OWN `action`, AND NO AUTOMATIC RETRY. A cursor
+							this endpoint did not issue is a 400, deliberately, because a
+							silent reset to page one turns a stale bookmark into a Load-more
+							loop that re-serves the first page for ever. Sending the same
+							cursor again would produce the same answer, so the fix is a
+							restart the user presses, and it goes out with no cursor on it.
+						-->
+						{#if recentAction}<p class="banner__text">{recentAction}</p>{/if}
+						<div class="empty__actions">
+							<button type="button" class="btn btn--sm" onclick={restartRecent}>
+								Start again from the newest items
+							</button>
+						</div>
+					{/if}
+				</div>
+			</div>
+		{/if}
+
+		{#if recent.loaded}
+			<!--
+				`two-line` below 760 px, which §9.1 gives to a list that is SCANNED
+				rather than read one record at a time, and §17.2 asks Block C for "the
+				same small-multiple row as search".
+
+				`total` IS PASSED ONLY ON THE LAST PAGE, and the omission is the honest
+				answer rather than a gap. ARIA defines `aria-rowcount="-1"` for a total
+				that is genuinely unknown, and it is unknown here by construction: a
+				keyset endpoint never says how many rows exist. Passing `items.length`
+				while a cursor is outstanding is what makes a screen reader say
+				"row 3 of 200" when the truth is "row 3 of 4,000".
+			-->
+			<List
+				label="Recently added"
+				columns={RECENT_COLUMNS}
+				rows={recent.items}
+				key={(item: RecentItem) => String(item.id)}
+				total={recentMore ? undefined : recent.items.length}
+				rowIntrinsic={ROW_INTRINSIC_RECENT}
+				stack="two-line"
+				state={recent.items.length === 0 ? 'empty' : 'default'}
+				emptyTitle="Nothing catalogued yet"
+				emptyText="A library-bearing service is connected and UsArr has not written any catalogue rows from it yet. The first full import starts on its own the first time UsArr builds a connection to a service that has never completed one, and on a large library it runs for minutes rather than seconds. This table fills in as those rows are written."
+				hasMore={recentMore}
+				loadingMore={recentLoading}
+				onloadmore={loadRecent}
+				cell={recentCell}
+			/>
+		{/if}
+	</section>
+{/if}
+
+{#snippet recentCell(item: RecentItem, column: ListColumn)}
+	{#if column.id === 'type'}
+		<!--
+			§17.2's six-value navigation enum, RESOLVED SERVER-SIDE. This cell may
+			never be derived from `item.kind`: the Tier 1 client index carries no
+			format, so a browser holding `kind: 'book'` cannot tell an ebook from an
+			audiobook, and deriving it here would silently collapse two of the six
+			values into one. `$lib/library` owns the vocabulary and the fallback for
+			a value outside it.
+		-->
+		{@const label = mediaTypeLabel(item.mediaType)}
+		<span class="trunc">{label}</span>
+	{:else if column.id === 'title'}
+		{#if item.title}
+			<span class="cell-title trunc" title={item.title}>{item.title}</span>
+		{:else}
+			<span class="muted">{NOTHING.empty}</span>
+		{/if}
+	{:else if column.id === 'year'}
+		<!--
+			⚠️ AN ABSENT YEAR RENDERS AS AN ABSENCE, NOT AS `0` AND NOT AS `1970`.
+			The server omits the key rather than sending a zero, because a rendered
+			zero is a claim about a release date. `NOTHING.empty` is §9.1's word for
+			a value that is genuinely empty and unremarkably so.
+		-->
+		{#if item.year !== undefined}
+			<span class="num">{item.year}</span>
+		{:else}
+			<span class="muted">{NOTHING.empty}</span>
+		{/if}
+	{:else if column.id === 'have'}
+		<!--
+			§17.2's `have / total · N missing`, rendered through §6.3's rule and
+			schema.md's polymorphic blob. `$lib/library.haveCell` owns every decision
+			in here; this renders what it is handed.
+
+			⚠️ THE TICK IS THE ONE THING THIS CELL MAY NOT GET WRONG. schema.md is
+			explicit that `total: null` is not `total: 0` and that §6.3's tick "must
+			never fire" on the first, so the mark arrives as a discriminated union
+			with a fourth state for a count with no honest denominator, and this
+			markup cannot reconstruct a comparison of its own.
+
+			CHROMA MARKS WHAT IS WRONG, NOT WHAT IS FINE (§9.5), which is why the
+			complete tick is muted and the gap figure is the one thing here carrying
+			the warn role. Every glyph has a word beside it in the accessibility
+			tree, because §11 forbids a status glyph with an empty accessible name.
+		-->
+		{@const have = haveCell(item)}
+		{#each have.lines as line (line.key)}
+			<div class="availline">
+				{#if line.label}
+					<span class="availlabel trunc" title={line.label}>{line.label}</span>
+				{/if}
+				{#if line.mark.k === 'complete'}
+					<span class="muted"><Icon name="check" size="sm" /><span class="sr">complete</span></span>
+				{:else if line.mark.k === 'none'}
+					<span class="muted"
+						><Icon name="x-circle" size="sm" /><span class="sr">none held</span></span
+					>
+				{:else if line.mark.k === 'fraction'}
+					<span class="num">{line.mark.have} / {line.mark.total}</span>
+				{:else}
+					<span class="num">{line.mark.have}</span>
+				{/if}
+			</div>
+		{/each}
+		{#if have.more > 0}
+			<!-- §9.1 caps a cell that renders one line per related object at three
+			     plus a count of the rest. A dual-Radarr work has two tiers; a
+			     well-catalogued album can have many editions. -->
+			<div class="cell-sub">+{have.more} more</div>
+		{/if}
+		{#if have.missing}
+			<div class="cell-sub availgap">{have.missing}</div>
+		{/if}
+		{#if have.gaps}
+			<!-- The contiguity list, which is the number that is always honest: it
+			     is computed locally from the issue numbers rather than taken from an
+			     upstream's declared total. -->
+			<div class="cell-sub trunc" title={have.gaps}>Gaps at {have.gaps}</div>
+		{/if}
+	{:else if column.id === 'added'}
+		<!--
+			⚠️ AN UNDATED ROW IS REAL AND RENDERS AS UNDATED. Kavita reaches that
+			state with one absent `created` field, and the server sorts such rows
+			LAST rather than first so that a missing date cannot claim the top of a
+			block whose question is "what did I just get". Absolute and relative
+			together, per §17.3: one identifies the moment, the other answers "how
+			long ago" without arithmetic.
+		-->
+		{@const when = formatWhen(item.addedAt, now)}
+		{#if when.absolute}
+			<span class="num">{when.absolute}</span>
+			<div class="cell-sub">{when.relative}</div>
+		{:else}
+			<span class="muted">{NOTHING.empty}</span>
+		{/if}
+	{/if}
+{/snippet}
+
+<!--
+	RECENT GRABS, AND IT IS NOT BLOCK C. Block C is `Recently added` over the
+	catalogue and is drawn above; this is the local record a grab leaves, read
+	from GET /api/v1/grabs/recent. It used to occupy Block C's slot on an install
+	with no catalogue, and it has vacated it rather than been deleted: a grab is
+	a release handed to a download client, which is a different fact from an item
+	that arrived, and it stays worth its own region under its own heading.
 
 	HIDDEN WHEN EMPTY, which is Block B's discipline applied to the one other
 	region on this screen that can be empty for an honest reason. A user who has
@@ -738,28 +1095,22 @@
 {/if}
 
 <!--
-	The third arm. It is unreachable in this build — every kind the API accepts
-	is an indexer — and it is written rather than left as a blank screen,
-	because the alternative is that the first build to connect a Sonarr renders
-	Home as nothing at all. It says only what would be true of it: a
-	library-bearing service is configured and there is no catalogue behind it.
-	It does not draw Block A, Block C or §17.7's `partial` banner, because all
-	three would need the import that has not been built.
+	⚠️ THE THIRD ARM'S STANDALONE EMPTY BLOCK IS GONE, AND IT WAS REPLACED
+	RATHER THAN DELETED. It read "Nothing catalogued yet ... because the library
+	sync is not built in this version", which was true when every kind the API
+	accepted was an indexer and no importer existed. Both halves have since
+	moved: `internal/libsync` imports a Kavita catalogue, and `GET
+	/api/v1/library/recent` reads it. So the same state is now Block C's own
+	empty state, above, three sentences from the table it is about and with the
+	current reason attached instead of the old one. One region replaced one
+	region; nothing was added beside it.
 -->
-{#if mode === 'library'}
-	<div class="section">
-		<div class="empty">
-			<h2 class="empty__title">Nothing catalogued yet</h2>
-			<p class="empty__text">
-				A library-bearing service is configured and UsArr has not read a catalogue from it, because
-				the library sync is not built in this version.
-			</p>
-			<div class="empty__actions">
-				<a class="btn btn--primary" href={servicesPath}>Open Services</a>
-			</div>
-		</div>
-	</div>
-{/if}
+
+<!--
+	§9.6 rule 4's below-the-buttons paragraph, and the Block C rules that have
+	nowhere else to live. Nothing here is a container, a panel or a background
+	step.
+-->
 
 <style>
 	/*
@@ -884,5 +1235,37 @@
 	 * paragraph following a button row. */
 	.home-grabnote {
 		margin-bottom: var(--space-4);
+	}
+
+	/*
+	 * BLOCK C's Have CELL. A tier- or edition-keyed rollup renders one line per
+	 * bucket, so the label and its mark share a line and the lines stack.
+	 *
+	 * No width is declared on either part. The COLUMN's track is declared (see
+	 * RECENT_COLUMNS) and that is where ADR-0029's alignment requirement lives;
+	 * inside the cell, a label that outgrows its share wraps, which is §9.1's
+	 * own answer to overflow and is what the column comment means by letting the
+	 * cell wrap rather than giving the track an unbounded maximum.
+	 */
+	.availline {
+		display: flex;
+		align-items: baseline;
+		gap: var(--space-2);
+		min-width: 0;
+	}
+
+	.availlabel {
+		color: var(--fg-muted);
+	}
+
+	/*
+	 * §9.5, and §17.2 states it for this exact column: chroma marks what is
+	 * wrong, not what is fine. So the gap figure is the one thing in this cell
+	 * that carries a hue, and the complete tick above is muted rather than
+	 * green. The word is present whatever the colour does, which is §9.5's
+	 * ordering (icon, text, colour) applied to a cell that has no icon.
+	 */
+	.availgap {
+		color: var(--status-warn);
 	}
 </style>
