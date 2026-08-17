@@ -258,7 +258,7 @@
   --ring-offset:   1px;
 }
 
-/* OPEN, raised by docs/design/mockups/usarr.css and recorded here rather than
+/* Raised by docs/design/mockups/usarr.css and recorded here rather than
  * invented there. Building the first five real screens needed two roles this
  * file does not have, and the mockup declares them locally:
  *
@@ -271,10 +271,14 @@
  *            same --n-1 and selected to --n-2, which leaves hover-over-a-
  *            selected-row with nothing to say.
  *
- * Neither is adopted here yet. Adopting them means either two more ramp steps
- * or admitting the ramp is nine values with two interstitials, and that is a
- * decision for the pass that writes web/src/app.css, not for a mockup. Until
- * then this note is the record that the mockup did not invent colour silently.
+ * Adopting them means either two more ramp steps or admitting the ramp is nine
+ * values with two interstitials, and that is a decision for the pass that
+ * writes web/src/app.css, not for a mockup. WHETHER IT HAS BEEN TAKEN IS NOT A
+ * FACT THIS FILE OWNS: web/src/app.css declares the ramp the running app uses,
+ * and it names this note where it declares them — so read the answer there
+ * rather than from a status sentence here, which has no mechanism holding it in
+ * step. What this note is, and stays, is the record of the two roles and their
+ * values, and that the mockup did not invent colour silently.
  */
 
 /* -----------------------------------------------------------------------------
