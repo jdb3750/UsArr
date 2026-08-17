@@ -1018,7 +1018,27 @@ for (const [name, fit] of [
  * them this bench's to choose. The pass message used to re-derive its headroom
  * from its own second copy of `100`, so a change to §7.2 would have moved the
  * verdict and left the sentence explaining it stale. One source each now. */
+/* ⚠️ HELD PENDING §7.2, AND TWO THINGS MUST HAPPEN WHEN ITS REPLACEMENT LANDS.
+ * This branch is deliberately not on `main`: the gate below derives from a
+ * threshold the design thread is currently replacing, so merging it now would
+ * put a red gate on `main` against a number about to be retired. It is parked,
+ * not abandoned. When the replacement lands both constants get re-derived — and
+ * neither re-derivation is only a change of value:
+ *
+ * 1. `TIER0_HARD_FAIL_MS` will be the wrong NAME, not merely the wrong number.
+ *    The whole point of the pending §7.2 change is that a user-initiated
+ *    presentation control IS NOT TIER 0 — Tier 0 is the budget for a
+ *    local-SQLite read. A constant that keeps the `TIER0_` name while holding
+ *    the control budget re-encodes the exact claim the change removes. Rename
+ *    it for what it is when the value changes; a constant name is a claim.
+ *
+ * 2. `PI5_FACTOR` only travels with §13's caveat attached. A Pi-derived figure
+ *    is a DESIGN FLOOR, never quotable as a measured number — §13 names this
+ *    density-toggle argument specifically. Dividing by it to obtain a desktop
+ *    budget is legitimate; presenting the result as what the hardware DOES is
+ *    not. That distinction belongs on the constant, not only in the doc. */
 const TIER0_HARD_FAIL_MS = 100; // DESIGN-DIRECTION §7.2, Tier 0: hard fail.
+// A design floor extrapolated to reference hardware, not a measurement (§13).
 const PI5_FACTOR = 5; // ADR-0029, pessimistic end of "conservatively 3–5× slower".
 const DESKTOP_BUDGET_MS = TIER0_HARD_FAIL_MS / PI5_FACTOR;
 /* ⚠️ ON A FRESH PAGE, VIA `atSize`, NOT `setRows` ON WHATEVER THE SWEEP LEFT.
