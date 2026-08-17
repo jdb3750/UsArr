@@ -6789,3 +6789,163 @@ and it **re-measures §8's own claim on today's tree**, since the guard only spe
 fails. The rest of this commit is prose and has no failure path to fire.
 
 ---
+
+# M5-32 — §16 applied ADR-0041, and the renumber was the smallest part of it: eleven surrounding sentences had gone false
+
+**Date:** 2026-08-17. **Worktree:** detached off `origin/main` at `075db37`. **This is the apply
+half of [M5-31](#m5-31--v01s-success-criterion-was-unmeetable-as-scoped-and-the-question-that-found-it-was-does-the-owner-actually-run-these-services).**
+M5-31 wrote [ADR-0041](./DECISIONS.md#adr-0041) and **deliberately did not edit §16**, routing the
+amendment per `DEVELOPMENT.md` §11. This entry is the thread that owns §16 taking that route. **Only
+`docs/ARCHITECTURE.md` §16 is touched** — §17, `docs/design/`, `PROJECT-INSTRUCTIONS.md`, `CLAUDE.md`
+and `DEVELOPMENT.md` are all other threads' and were left alone.
+
+## M5.27 The scope claim arrived by relay, and was treated as a hypothesis until the tree agreed
+
+**A milestone move that reaches you as a message is not yet a fact about the repository.** Before any
+edit, five checks, each with its result rather than a verdict:
+
+1. **Is `075db37` on `origin/main`?** ✅ `git fetch origin` moved `main` `d64b8fc..075db37`;
+   `git rev-parse origin/main` = `075db372145f59bc24551e6534a3bad584379104`.
+2. **Is ADR-0041 Accepted, and by whom?** ✅ Status line reads *"Accepted · owner-decided
+   2026-08-17"*, and the decision rests on a quoted owner sentence — *"I don't run sonarr or radarr
+   just yet … thats gonna have to be future"* — not on an agent's inference.
+3. **Does it actually say Kavita moves into v0.1?** ✅ Decision clause 1: *"v0.1's catalogue source is
+   **Kavita**, not Sonarr and Radarr."* ⚠️ **The commit subject alone would not have established
+   this** — it reads *"the sync core ships with Kavita as its first adapter, not Radarr"*, which is
+   true but narrower than the scope move. The ADR body was read in full; the subject was not trusted.
+4. **How does it relate to ADR-0035 / 0036 / 0040?** **Amends ADR-0036** (the sentence *"No catalogue
+   source ships in v0.1"*), **confirms ADR-0035** (which source) and **ADR-0040** (when each subtype
+   table lands), **reverses nothing**. ✅ Both index entries and both Status lines were already
+   updated to say so: the index row for 0036 carries *"⚠️ amended 2026-08-17 by ADR-0041"*, and
+   ADR-0036's own Status line plus a blockquote name the two consequences it supersedes.
+5. **Does the ADR's replacement text still fit a tree that moved several times today?** ✅ **Checked
+   mechanically, not by eye.** The ADR quotes the current §16.1 v0.1 entry verbatim above its
+   replacement; that quote was extracted from `DECISIONS.md` and `diff`ed against the corresponding
+   lines of `ARCHITECTURE.md`. **Identical, modulo one trailing blank line.** So the block applied
+   cleanly and **what landed is what was reviewed** — the replacement was inserted by an exact-match
+   substitution asserting a single occurrence, not retyped.
+
+## M5.28 The renumber was safe; the prose around it was not
+
+§16.1's table was re-sequenced earlier today at `34383c9` on the probe's result. Dropping Kavita from
+#1 and shifting Navidrome / Audiobookshelf / Komga to #1–#3 **without reordering** is mechanical.
+**What is not mechanical is that `34383c9`, and the prose it inherited, asserted in eight places that
+v0.1 has no catalogue source** — and a renumber that leaves those standing is worse than no edit,
+because the table and the paragraph beneath it would then contradict each other on the same screen.
+
+**Falsified by this change and amended here, each named rather than silently rewritten:**
+
+| Where | The sentence that went false | Written by |
+|---|---|---|
+| §16.0 ordering ¶ | *"**None of this moves a catalogue source into v0.1** — … running it early has not given v0.1 one."* | `34383c9` |
+| §16.0 ordering ¶ | *"the sequence takes the Kavita branch: **Kavita first** … **then Navidrome**"* — Kavita left the sequence entirely | `34383c9` |
+| §16.0 v0.4 rider | *"which the sequence satisfies at **#2**"* → `#1` | `34383c9` |
+| §16.1 table ¶ | *"**nothing in it is in v0.1**, which ships no catalogue source at all … #1 is the first milestone *after* v0.1"* | `34383c9` |
+| §16.1 table ¶ | *"and **#2** satisfies that"* → `#1` | `34383c9` |
+| §16.1 *Schema, enumerated* | the ⚠️ closing sentence scoping **six** subtype tables out of v0.1 | `34383c9` |
+| §16.1 ⚠️ 00005 blockquote | *"the six tables are now scoped out of v0.1 **as well as** absent from the tree"* | `34383c9` |
+| §16.1 day-one-spike ¶ | *"with no catalogue source in v0.1 it had nothing to gate here"* and *"changes nothing in this milestone: the source it clears is the first thing **after** v0.1"* | `34383c9` |
+| §16.0 🚩 blockquote | *"**When they enter is not v0.1**"*; *"v0.1 proves the replica thesis on the \*Arr library sync first, on the two services that are already half-built"* | pre-`34383c9` |
+| §16.0 *honest payment* ¶ | *"v0.1 ships **no catalogue source at all**. Its services are **Sonarr, Radarr and Prowlarr**."* — named in ADR-0041's rider (ii) | pre-`34383c9` |
+| §16.0 shared-machinery bullet | *"it exists only once the **\*Arr library sync** has landed and run against a real library"* | pre-`34383c9` |
+
+**Style used throughout: amend in place and say what the sentence used to claim**, rather than
+appending a contradicting sentence beside it. That is the rule the *Schema, enumerated* clause was
+explicitly held to — it now carries **one** scope statement covering all six tables, three in and
+three out, not two statements disagreeing.
+
+## M5.29 Verified against the tree, not against the ADR: which of the three tables exist
+
+ADR-0041 says `work_book`, `work_comic` and `work_comic_issue` *"are now due with THIS work"*. **Due
+is not the same as present**, and the amendment was written so it cannot be misread as a status
+claim. Checked directly — `CREATE TABLE` across all five files in `internal/db/migrations`:
+
+* **`work_book` — does not exist.** **`work_comic` — does not exist.** **`work_comic_issue` — does
+  not exist.**
+* What does exist for subtypes: `work_movie`, `work_series`, `work_episode`, `work_alt_title`.
+* The music three — `work_album`, `work_track`, `work_credit` — also do not exist, and **stay**
+  deferred; they wait on Navidrome, now #1 in §16.1.
+
+So the clause states the three are **v0.1's scope, absent from the tree today, and owed in a new
+migration** — `00005_library_sync.sql` is merged and `CLAUDE.md` is unambiguous that a merged
+migration is never edited. It also records that **00005's original deferral was not wrong**: it
+declined to create tables nothing queried, which was correct for the tree it shipped into, and what
+changed is the source, not the judgement.
+
+## M5.30 Two claims deliberately NOT asserted, because no primary source was checked
+
+**A source swap invalidates evidence as well as conclusions, and the tempting move is to re-point the
+evidence at the new source and carry on.** Two places in §16.1's v0.1 entry justified a v0.1 property
+by citing an \*Arr API. Both are now flagged as **owed** rather than restated for Kavita:
+
+* **Zero external metadata providers** was justified by *"Radarr's `MovieResource` and Sonarr's
+  `SeriesResource` already carry everything the grid needs"*. The **requirement** is unchanged; the
+  equivalent claim for Kavita's series and volume payloads **has not been checked against Kavita's
+  API** and is not written. Asserting it would be exactly the "verify, don't assert" failure.
+* **The correction UI's v0.3 cap** rests on §6.4's *"tier 1 resolves essentially 100% of the v0.1
+  identity problem"* — established **for sources that carry provider ids**. ADR-0035 §1 records the
+  opposite for free Kavita: null identifier fields make *"not identified"* the **ordinary** case.
+  Whether the cap survives is flagged as a live question; **§6.4 owns that claim and this pass did
+  not touch §6.4.**
+
+## M5.31 Raised, not fixed
+
+* **v0.1's minimal write path still has no target.** ADR-0041 flagged it and called it *"this
+  section's call to make"*. The ADR's replacement text — applied verbatim — carries that ⚠️ open
+  question into §16 unresolved. **This pass did not decide it**, because the task was to apply
+  reviewed text, not to make an undecided scope call under cover of applying it. It needs an owner
+  decision and its own ADR.
+* **§7.1a's closing paragraph and §7's channel table are outside §16 and still say channel 3b is
+  "built with the first catalogue adapter", not in v0.1.** ADR-0041 names §7.1a as amended by the
+  decision. **Routed, not edited** — §16 does not own §7.
+* **`docs/SETUP-CHECKLIST.md`** carries per-service milestone labels that the move invalidates,
+  already flagged by M5-31 and still open.
+* **The README's status tables are generated from §16**, so they move after §16 does. Untouched here.
+* **A pre-existing inaccuracy noticed in passing and left alone:** §16.1's closing status sentence
+  claimed *"no `work`/`edition`/`media_file` tables"*, but `00005_library_sync.sql` creates all
+  three. Only the clause my own change falsified (*"no Sonarr or Radarr replication"*) was rewritten;
+  the table claim is reported rather than fixed, since it is not this pass's finding.
+
+### On the gate for M5-32
+
+`make check` was run in the worktree; command, absolute tool paths, versions, SHA and the verbatim
+tail are in the commit message. ⚠️ **The green is not load-bearing and its scope is narrow.** This
+diff is **two files, both under `docs/`**, and **`gitleaks dir .` is the only gate step that reads
+`docs/` at all** — `gofumpt`, `golangci-lint`, `go test`, `eslint`, `svelte-check` and `govulncheck`
+read Go, TypeScript and `go.mod`, none of which changed. **So the green attests exactly one thing: no
+credential-shaped string appears anywhere in the tree.** It says **nothing** about whether the §16
+prose is true, whether the ADR block was transcribed faithfully, or whether the eleven amended
+sentences are now correct. Those were established by the mechanical `diff` in M5.27 check 5, the
+`CREATE TABLE` enumeration in M5.29, and reading each amended paragraph against ADR-0041 — and where
+no source was checked, M5.30 records that nothing was claimed.
+
+⚠️ **The gate was measured twice, because §11's own rule says the first result had expired.** *"A
+gate result without a commit sha attached is not a result — several threads push to `main` within the
+same hour here."* That is precisely what happened: the first green was taken on `075db37` + this
+diff, and while it ran `origin/main` moved to `2d3138a` (`NOCI-01`, plus an `app.css` fix), which
+**changed the `Makefile`**. This commit was rebased onto `2d3138a` — one append-vs-append conflict in
+this file, resolved by keeping **both** entries, `NOCI-01` then `M5-32`, with no existing text
+reworded — and **`make check` was re-run from a cleaned lint cache on the rebased tree**. The SHA in
+the commit message is the second measurement, not the first. ℹ️ Also reported rather than hidden: the
+first run aborted once with *"parallel golangci-lint is running"* — another thread held the lock, not
+a finding about this diff.
+
+✅ **§11 rule 3 — "fire the guard deliberately" — was applied to the one step that matters here, and
+it produced a real result rather than a reassurance.** Since the whole claim of this commit's green
+rests on `gitleaks dir .` reading `docs/`, that branch was tested by planting a credential-shaped
+string in a scratch file **under `docs/`** and running `make secrets`:
+
+* ⚠️ **First attempt did NOT fire.** An `AWS_SECRET_ACCESS_KEY` assignment using AWS's own canonical
+  documentation key (`wJalrXUtnFEMI/...EXAMPLEKEY`) produced *"no leaks found"* and exit 0 — gitleaks
+  allowlists the published example. **Had the probe stopped there, the honest conclusion would have
+  been that the guard was mute, and it would have been wrong.** Recorded because a guard test that
+  only ever tries one string is the proxy problem in rule 1 wearing a different hat.
+* ✅ **Second attempt fired correctly.** A `ghp_`-prefixed token and a Slack `xoxb-` token in the same
+  location gave *"leaks found: 2"*, exit 1, and `make: *** [Makefile:605: secrets] Error 1`. **The
+  failure branch runs, reaches its message, and fails the gate.**
+* The scratch file was deleted and `git status` confirmed clean before the final run; it is in no
+  commit.
+
+**So the narrow claim this commit's green supports is now itself evidenced**: `gitleaks dir .` does
+read `docs/`, and it does fail the build — for credential shapes it recognises. It remains true that
+this says nothing whatever about whether the prose is correct.

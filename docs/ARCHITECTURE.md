@@ -2145,7 +2145,7 @@ elsewhere is the one that must ship soonest.* The previous order put the gateway
 differentiators last, so a one-to-two-person project had to survive its largest milestone before
 delivering anything the owner asked for.
 
-### 16.0 The scope amendment, argued rather than asserted (ADR-0032, re-sequenced by ADR-0036)
+### 16.0 The scope amendment, argued rather than asserted (ADR-0032, re-sequenced by ADR-0036, membership amended by ADR-0041)
 
 The owner's scope moved from two media types to six. That is a bigger claim, so it has to be paid
 for, and "cut before you add" means saying what enters, what leaves and what is refused.
@@ -2155,15 +2155,18 @@ Komga move out of the single v1.0 "Breadth" bucket, where taken literally they l
 media types as empty screens until the last milestone. They are precisely what makes *"everything in
 one place"* true rather than aspirational.
 
-> 🚩 **When they enter is not v0.1.** [ADR-0032](./DECISIONS.md#adr-0032) put three of them *inside*
-> v0.1 and [ADR-0035](./DECISIONS.md#adr-0035) swapped which three;
-> [ADR-0036](./DECISIONS.md#adr-0036) moves all four out of v0.1 and makes them a **sequence that
-> starts immediately after it — Navidrome, Audiobookshelf and Kavita one at a time, then Komga.**
-> **This is re-sequencing, not rejection**: every source ADR-0032 named still arrives, each behind a
-> milestone that ships on its own. What changes is that **v0.1 proves the replica thesis on the
-> \*Arr library sync first**, on the two services that are already half-built, rather than on four
-> adapters written at once. See §16.1 for the sequence and for what the six-type claim honestly is
-> in v0.1.
+> 🚩 **When they enter: one in v0.1, three after it.** [ADR-0032](./DECISIONS.md#adr-0032) put three
+> of them *inside* v0.1 and [ADR-0035](./DECISIONS.md#adr-0035) swapped which three;
+> [ADR-0036](./DECISIONS.md#adr-0036) moved all four out; **[ADR-0041](./DECISIONS.md#adr-0041) puts
+> one back — Kavita — and leaves the other three in a sequence that starts immediately after v0.1:
+> Navidrome, then Audiobookshelf, then Komga.** **Every one of these moves is re-sequencing, not
+> rejection**: every source ADR-0032 named still arrives, each behind a milestone that ships on its
+> own. What changes across them is **which single source v0.1 proves the replica thesis on** — never
+> the rule that it is one source, and never whether the others come. ⚠️ **This blockquote read
+> *"When they enter is not v0.1"* and named the \*Arr library sync as v0.1's proof, on *"the two
+> services that are already half-built"*. ADR-0041 amended both**: the owner runs neither Sonarr nor
+> Radarr, so that proof was unreachable, and Kavita — which he does run — carries it instead. See
+> §16.1 for the sequence and for what the six-type claim honestly is in v0.1.
 
 **What they cost, priced honestly rather than minimised.** An earlier draft of this section said all
 four were *"the same shape … with no write path, no state machine and no new subsystem"*, and that
@@ -2193,10 +2196,13 @@ correctly and then not acted on.
 - **The read machinery is genuinely shared** — and that is the argument for the sequence, not
   against it. `RemoteItem`, the registry, the circuit breaker, the import phasing, the
   write-queue-free read path and the reconciliation sweep are reused unchanged by every catalogue
-  adapter. But **shared machinery has to exist before it can be shared**, and it exists only once the
-  \*Arr library sync has landed and run against a real library. Writing the first catalogue adapter
-  against machinery that has never imported anything is how the shared layer gets designed around the
-  wrong source.
+  adapter. But **shared machinery has to exist before it can be shared**, and it exists only once one
+  adapter has landed and run against a real library. Writing the second adapter against machinery
+  that has never imported anything is how the shared layer gets designed around the wrong source.
+  ⚠️ **This bullet named the \*Arr library sync as that first adapter, and
+  [ADR-0041](./DECISIONS.md#adr-0041) changed which one it is, not the argument.** The conclusion the
+  bullet draws — the shared layer must be shaped by whichever source goes first, and that source must
+  be one that can be run against real data — is what selected **Kavita**.
 
 **What is deferred, and why: the command sinks.** Lidarr, LazyLibrarian, Mylar3 and Kapowarr stay
 out. A write path is per-service and expensive — routing, capability probing, an idempotent verb
@@ -2210,7 +2216,9 @@ in v0.1** — **ebooks at `7020`, audiobooks at `3030`** (which is under `Audio`
 and merging the two here misstated §8.5), comics and manga at `7000`, music at `3000` — so deferring
 the sinks defers *convenience*, not *capability*. That is the trade, stated plainly.
 
-**What has to move out to pay for it: all four catalogue sources, out of v0.1 (ADR-0036).** Two
+**What has to move out to pay for it: three of the four catalogue sources, out of v0.1 (ADR-0036, as
+amended by [ADR-0041](./DECISIONS.md#adr-0041) — which keeps the one-source rule and returns Kavita
+as that one).** Two
 earlier answers here were wrong in the same direction. The first was *"nothing is cut, and one thing
 is capped"*, where the capped thing was the library correction UI — which the very next sentence
 argued has no work to do in v0.1, and a cap on a declared no-op is not a payment. The second was
@@ -2218,57 +2226,82 @@ argued has no work to do in v0.1, and a cap on a declared no-op is not a payment
 size: it left v0.1 carrying three hand-written adapters, three auth schemes, one token lifecycle and
 a brand-new sync channel *on top of* the \*Arr sync that does not exist yet.
 
-**The honest payment is that v0.1 ships no catalogue source at all.** Its services are **Sonarr,
-Radarr and Prowlarr**. The \*Arr library sync lands first and proves the replica thesis on real data
-— a real Sonarr and a real Radarr, imported, delta-synced, reconciled, searched and rendered — and
-the catalogue sources then arrive **one at a time, after v0.1, each behind a milestone that ships on
-its own**. Nothing is refused: **Navidrome, Audiobookshelf, Kavita and Komga all still arrive**, in
-that order subject to the probe below.
+**The honest payment is that v0.1 ships exactly one catalogue source, and three of the four wait.**
+⚠️ **This paragraph read *"v0.1 ships no catalogue source at all"*, and
+[ADR-0041](./DECISIONS.md#adr-0041) amended it — see the ⚠️ note under the ordering paragraph below
+for why.** The payment ADR-0036 argued for is intact and only its currency changed: what v0.1 refuses
+is **three adapters, three auth schemes and a token lifecycle**, not all four. **v0.1's services are
+Kavita and Prowlarr.** The sync core lands with **one** adapter in front of it and proves the replica
+thesis on real data — the owner's own Kavita, imported, delta-synced by channel 3b, reconciled,
+searched and rendered — and the rest arrive **one at a time, after v0.1, each behind a milestone that
+ships on its own**. Nothing is refused: **Navidrome, Audiobookshelf and Komga all still arrive** in
+§16.1's order, and **Sonarr and Radarr arrive too**, onto a core already proven.
 
 **What the six-type claim honestly is in v0.1, stated rather than implied.** The **schema** is
 six-type, because migration 0001 can never be edited (see the enumeration in the v0.1 entry).
 **Requesting** is six-type, because Prowlarr Search-and-Grab covers all six categories. **The
-catalogue is film and TV**, because those are the sources that ship. A screen for a media type with
-no configured source says so — principle 3, degrade honestly — rather than rendering an empty grid,
-and that behaviour is the same one an install without Navidrome would get in any case.
+catalogue is books and comics/manga**, because Kavita is the source that ships
+([ADR-0041](./DECISIONS.md#adr-0041); it read *"film and TV"* while Sonarr and Radarr were v0.1's
+sources, and they are not). A screen for a media type with no configured source says so — principle
+3, degrade honestly — rather than rendering an empty grid, and that behaviour is the same one an
+install without Navidrome would get in any case.
 
 **The order within the catalogue sequence was left to the Kavita `LastChapterAdded` watermark
 probe** ([ADR-0035](./DECISIONS.md#adr-0035) §2, §7.1a) — **Kavita first if it passed, Navidrome
 first if it failed** — and ✅ **the probe ran on 2026-08-17 against the owner's live Kavita and
 passed** ([ADR-0035](./DECISIONS.md#adr-0035) §2a; §7.1a's Kavita row is verified accordingly, and
-Komga's is now the only unverified one). **So the sequence takes the Kavita branch: Kavita first**,
-because it is the owner's install and the source with the most media types riding on it, **then
-Navidrome**, which has to precede v0.4 either way. The Navidrome-first branch is *closed* rather
-than merely unchosen: it existed for the case where Kavita turned out reconciliation-only, and
-Kavita has a usable channel-3b watermark. **Komga is last regardless**, because nobody on this
-project can point it at a real library. §16.1 carries the resulting sequence. **None of this moves a
-catalogue source into v0.1** — the probe stopped being a day-one item precisely because v0.1 has no
-catalogue source for it to gate, and running it early has not given v0.1 one.
+Komga's is now the only unverified one). **So the branch taken is the Kavita branch: Kavita ahead of
+Navidrome**, because it is the owner's install and the source with the most media types riding on it.
+The Navidrome-first branch is *closed* rather than merely unchosen: it existed for the case where
+Kavita turned out reconciliation-only, and Kavita has a usable channel-3b watermark. **Komga is last
+regardless**, because nobody on this project can point it at a real library.
+
+⚠️ **What that branch then decided is larger than the sequence, and this paragraph originally said
+the opposite.** It closed by asserting *"none of this moves a catalogue source into v0.1 … running it
+early has not given v0.1 one"*, and **that is no longer true**:
+[ADR-0041](./DECISIONS.md#adr-0041) moved **Kavita into v0.1** on exactly this result. The reason was
+a fact ADR-0036 never checked — **the owner runs neither Sonarr nor Radarr** (*"thats gonna have to be
+future"*, 2026-08-17) — which made ADR-0036's own v0.1 criterion, *"a real Sonarr and a real Radarr,
+imported"*, unmeetable on the hardware the milestone targets. **Kavita is the one catalogue source
+that can be run against real data, and the probe is what shows it.** The rule ADR-0036 set is kept
+unchanged — one source, proven on real data, before a second adapter — and only its membership moves;
+**Sonarr and Radarr are re-sequenced, not cut.** §16.1 carries the resulting sequence, which now
+**starts at Navidrome** because Kavita was lifted out of it into v0.1, with the remaining three
+shifted up **without reordering**.
 
 **What is kept, with its remaining cost stated rather than argued away.** The libraries subsystem
 (§6.5) and the auto-proposal flow stay in v0.1. Its four tables are owed by v0.1 either way, its
 screen is one of the five `CLAUDE.md` names as essential, and **a library binding carries
-the request destination** that v0.1's one write path routes on — so it is load-bearing in v0.1 even
-with only \*Arr sources. ⚠️ **Its best demonstration is not:** the Ebooks/Audiobooks split over one
-Audiobookshelf library was the concrete improvement over upstream's own organisation, and that
-demonstration moves with Audiobookshelf. What v0.1 can show instead is narrower and honest — an
-Anime library bound to one Sonarr tag, or one Films library spanning a 1080p and a 4K Radarr — and
-the subsystem should be judged on that in v0.1, not on the split it cannot yet perform. The cost that
+the request destination** that v0.1's one write path routes on — so it is load-bearing in v0.1
+regardless of which source feeds it. ⚠️ **Its best demonstration is still not in v0.1:** the
+Ebooks/Audiobooks split over one Audiobookshelf library was the concrete improvement over upstream's
+own organisation, and that demonstration moves with Audiobookshelf. **But v0.1 gets a real one back**
+([ADR-0041](./DECISIONS.md#adr-0041)) — an **Ebooks library and a Comics library derived from one
+Kavita's own containers**, which is the §17.8 binding doing exactly its job. ⚠️ **The narrower
+examples this paragraph used to offer — an Anime library on one Sonarr tag, a Films library spanning
+a 1080p and a 4K Radarr — are gone with Sonarr and Radarr**, and return with them. The subsystem
+should be judged in v0.1 on the Kavita binding, not on the split it cannot yet perform. The cost that
 remains, plainly: **four tables, materialised
 membership with a 250 ms dirty-flush and a denormalised sort key, a derivation with five container
 predicates, an auto-proposal engine with join-vs-create defaults, and a second first-class settings
 screen (§17.8).** It is true that the Libraries screen *replaces* hard-coded per-type sections rather
 than adding a screen; it is not true that the tables, the derivation and the proposal engine replace
-anything. The correction **UI** is still capped to v0.3 — §6.4 establishes that tier 1 resolves
-essentially 100% of the v0.1 identity problem for Sonarr and Radarr — but that cap is now correctly
-described as a *scheduling detail*, not as the payment.
+anything. The correction **UI** is still capped to v0.3, and that cap is correctly described as a
+*scheduling detail*, not as the payment. ⚠️ **Its justification does not survive the source swap
+unexamined:** §6.4's *"tier 1 resolves essentially 100% of the v0.1 identity problem"* was established
+**for Sonarr and Radarr**, which carry provider ids, and [ADR-0041](./DECISIONS.md#adr-0041) records
+the opposite for v0.1's actual source — free Kavita's **null identifier fields make *"not identified"*
+the ordinary case** (ADR-0035 §1), exercised in v0.1 rather than merely present. The nullable column
+and the badge were already v0.1 work because they cannot be retrofitted. **Whether the correction UI's
+v0.3 cap still holds against a source with no ids is a live question this section flags rather than
+answers** — §6.4 owns the tier-1 claim and has not been restated against Kavita.
 
 🔍 **The scoping observation behind moving Navidrome ahead of the gateway, marked as inference:**
 v0.4's success criterion is *"Symfonium connects to UsArr with one API key, browses, searches and
 plays"*, which requires a **populated music replica before the surface exists**. As originally
 written, v0.4 contained both a new southbound adapter and a new northbound protocol. Splitting them
 is a scheduling correction, not a new feature — and it constrains the sequence above at one end:
-**Navidrome has to land before v0.4**, which the sequence satisfies at #2.
+**Navidrome has to land before v0.4**, which the sequence satisfies at #1.
 
 ### 16.1 The catalogue sequence, after v0.1
 
@@ -2279,36 +2312,52 @@ the sequence is deliberately allowed to interleave with them.
 
 | # | Source | Media types it lights up | Gate |
 |---|---|---|---|
-| 1 | **Kavita** | books + comics/manga | ✅ **Gate cleared.** The [ADR-0035](./DECISIONS.md#adr-0035) §2 watermark criterion, run 2026-08-17 against the owner's live instance — Kavita 0.9.0.2, 151 series — and met clause by clause (ADR-0035 §2a, §7.1a). The delta it clears is a **sorted page walk with a client-side stop**, not a since-filter, and it observes **chapter adds only**; edits, retitles and deletions stay reconciliation's work. |
-| 2 | **Navidrome** | music | 🔍 `getScanStatus.lastScan` as a change signal, then an `updated_at`-ordered walk — inference from the model, probed at connect (§7.1a) |
-| 3 | **Audiobookshelf** | audiobooks (and ebooks where the install holds them) | `LibraryItem.updatedAt` probe at connect (§7.1a) |
-| 4 | **Komga** | a second comics source | Its own `sort=lastModified,desc` probe (§7.1a); reconciliation-only if that fails |
+| 1 | **Navidrome** | music | 🔍 `getScanStatus.lastScan` as a change signal, then an `updated_at`-ordered walk — inference from the model, probed at connect (§7.1a) |
+| 2 | **Audiobookshelf** | audiobooks (and ebooks where the install holds them) | `LibraryItem.updatedAt` probe at connect (§7.1a) |
+| 3 | **Komga** | a second comics source | Its own `sort=lastModified,desc` probe (§7.1a); reconciliation-only if that fails |
+
+⚠️ **Kavita is no longer in this table because it moved INTO v0.1, not because it was cut**
+([ADR-0041](./DECISIONS.md#adr-0041)). It held slot #1 here on the probe's result; it is now v0.1's
+one catalogue source and the sync core's first adapter, and the three that sat below it shift up by
+one **without reordering** — the order between them is unchanged, and no source is refused. **This table
+is therefore the sequence after v0.1's own source**, and its success criterion is unchanged: *this
+source's library appears in the grid, is searchable, delta-syncs, and its Services row is honest
+about what it cannot do.*
 
 **The order is the probe's result, not a preference.** §16.0 states the branch and why the other one
-is closed; ADR-0035 §2a is the run. **Navidrome must precede v0.4**, because v0.4's success
-criterion needs a populated music replica, and #2 satisfies that. Nothing else in the table is
-pinned to a version — and **nothing in it is in v0.1**, which ships no catalogue source at all
-(ADR-0036): #1 is the first milestone *after* v0.1, not a late part of it.
+is closed; ADR-0035 §2a is the run — and the branch it settled is what put Kavita ahead of Navidrome,
+which is why Kavita is the source v0.1 took. **Navidrome must precede v0.4**, because v0.4's success
+criterion needs a populated music replica, and #1 satisfies that with more room than before, not
+less. Nothing else in the table is pinned to a version. **Each entry here is still its own milestone
+after v0.1** — what changed is that v0.1 now proves the sync core on a catalogue source of its own
+rather than on an \*Arr, so these three land on machinery already run against a real library.
 
 **v0.1 — "It reads your library, it is fast, and you can act on it."**
-Go binary + embedded SPA; SQLite + WAL with the §7.7 discipline; goose migrations. **Tier 0 Go
-adapters** for **Sonarr and Radarr** — the \*Arr library sync, which is what proves the replica
-thesis on real data — plus **Prowlarr in Search-and-Grab mode** (§8.5), which is the request path for
-**all six** media types. **No catalogue source ships in v0.1** (§16.0, ADR-0036): Navidrome,
-Audiobookshelf, Kavita and Komga arrive one at a time afterwards, in §16.1's sequence. **No command
-sinks** — no Lidarr, no LazyLibrarian, no Mylar3, no Kapowarr.
-Sync channels **1, 3 and 4**: full import for every service; **channel 3 (`/history/since`) for
-Sonarr and Radarr**, which is every library-bearing service v0.1 has; **reconciliation with 7-day
-tombstones and both sweep guards** for everything. **Channel 3b is specified (§7.1a) and not built
-here**, because the sources that need it are not here. SignalR and webhooks are **out**. **Minimal
-write path** (`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue; no optimistic
-apply.
+Go binary + embedded SPA; SQLite + WAL with the §7.7 discipline; goose migrations. **The sync core,
+with one Tier 0 Go adapter in front of it: Kavita** — which is what proves the replica thesis on real
+data, because it is the source the owner runs and the only one whose delta has been verified against
+a live instance ([ADR-0035](./DECISIONS.md#adr-0035) §2a) — plus **Prowlarr in Search-and-Grab mode**
+(§8.5), which is the request path for **all six** media types. **Sonarr and Radarr re-sequence out of
+v0.1** (ADR-0041): the owner runs neither, so *"a real Sonarr and a real Radarr, imported"* was a
+criterion no v0.1 could meet. **They are re-sequenced, not cut** — they arrive onto a sync core
+already proven on real data. **No command sinks** — no Lidarr, no LazyLibrarian, no Mylar3, no
+Kapowarr.
+Sync channels **1, 3b and 4**: full import; **channel 3b (§7.1a) — the ordered page walk with a
+client-side stop — for Kavita**, which is every library-bearing service v0.1 has, and which is
+therefore **built here rather than only specified** (ADR-0041). **Channel 3 (`/history/since`) is not
+applicable to Kavita** (§7.1a) and lands with the first \*Arr adapter. **Reconciliation with 7-day
+tombstones and both sweep guards** for everything — and it carries more weight here than it would for
+an \*Arr, because a page walk cannot observe a deletion (§7.1a) and Kavita's watermark moves on a
+chapter *add* only (ADR-0035 §2a clause (c)). SignalR and webhooks are **out**. ⚠️ **The minimal
+write path** (`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue **had only \*Arr
+targets and now has none** — whether it re-sequences with them or stays for Prowlarr's grab path
+alone is this section's call to make; no optimistic apply either way.
 
 > **What "six media types" does and does not mean in v0.1**, because the phrase is load-bearing and
 > was previously overstated. The **schema** is six-type — it has to be, migration 0001 cannot be
-> edited. **Requesting** is six-type — Prowlarr covers all six categories. **The catalogue is film
-> and TV.** A media type with no configured source says so on screen rather than rendering an empty
-> grid.
+> edited. **Requesting** is six-type — Prowlarr covers all six categories. **The catalogue is books
+> and comics/manga**, because Kavita is the source that ships (ADR-0041). A media type with no
+> configured source says so on screen rather than rendering an empty grid.
 
 **Schema, enumerated — because §16 is authoritative for scope and an implementer reads this line,
 not the ADRs:** `work`/`edition`/`media_file`/`external_id`/`service_item_link`; the **four library
@@ -2319,13 +2368,17 @@ its own `kind_byte`, excluded from the navigation enum, the prefix index and the
 `work_credit.creator_work_id` renamed from `artist_work_id` to match (ADR-0033)**;
 `work_track.edition_id`, `work_track.track_number TEXT` plus the derived `track_position`, the M:N
 **`work_credit`**, and `edition.narrators` / `duration_seconds` / `abridged` (ADR-0031).
-⚠️ **Six of the tables named in that enumeration are no longer v0.1's scope, and this clause no
-longer claims them.** `work_album`, `work_track`, `work_credit`, `work_book`, `work_comic` and
-`work_comic_issue` are scoped out by [ADR-0040](./DECISIONS.md#adr-0040), each landing with the
-catalogue source that writes it, in §16.1's sequence. ADR-0030, ADR-0031 and ADR-0033 stay
-authoritative for their **shape** — that is what the enumeration above states of them, and a shape
-is owed whenever the table is created, not before. Everything else enumerated above is v0.1's,
-tables included.
+⚠️ **Of the six subtype tables named in that enumeration, three are v0.1's scope and three are not.**
+The rule is [ADR-0040](./DECISIONS.md#adr-0040)'s and it is unchanged: **each lands with the catalogue
+source that writes it**, so which milestone a table falls in follows its source. **`work_book`,
+`work_comic` and `work_comic_issue` are v0.1's**, because Kavita is v0.1's catalogue source and Kavita
+is what writes them ([ADR-0041](./DECISIONS.md#adr-0041)) — **none of the three exists in the tree
+today**, and they arrive in a **new migration**, because `00005_library_sync.sql` is merged and a
+merged migration is never edited. **`work_album`, `work_track` and `work_credit` are not v0.1's, and
+this clause does not claim them**: they wait on Navidrome, which has no adapter, at #1 in §16.1's
+sequence. ADR-0030, ADR-0031 and ADR-0033 stay authoritative for their **shape** — that is what the
+enumeration above states of them, and a shape is owed whenever the table is created, not before.
+Everything else enumerated above is v0.1's, tables included.
 **Identity tier 1 only**; the
 correction *UI* deferred to v0.3. Library auto-proposal on service add, the Libraries settings screen
 (§17.8), Home's three fixed blocks (§17.2). Library grid with **"Load more" + `content-visibility`
@@ -2334,7 +2387,9 @@ on grid rows carrying explicit ARIA roles (§4.5)**, keyset pagination, image pi
 Search tiers 1 and 2, corpus limited to top-level kinds, **no typo tolerance**. System tags `type:`,
 `format:`, `source:`, `quality:`, `indexer:` with the `downloadId` provenance join. The **"1080p ✓ /
 4K ✗"** badge — a free consequence of the M:N link and a strong signal to power users, though *not*
-the landing-page claim, since it needs two Radarr instances. **The Services health screen (§17.3),
+the landing-page claim. ⚠️ **It is unexercised in v0.1**: it needs two Radarr instances, and
+[ADR-0041](./DECISIONS.md#adr-0041) re-sequenced Radarr out — the badge is a property of the M:N link
+that v0.1 still ships, demonstrated when the \*Arr adapters arrive. **The Services health screen (§17.3),
 whose add flow asks for four fields — kind, name, base URL, API key — plus an optional `URL base`
 for reverse-proxy sub-paths, and draws all four states of the mandatory connection test, failure
 included.**
@@ -2355,11 +2410,17 @@ included.**
 > `CREATE TABLE` later, with no rebuild, no backfill and no codec change, so nothing about it is a
 > one-way door; `work_track.edition_id` in particular is free because the table it is a column of
 > does not exist yet. That is 00001's own rule — *"a migration that creates a table nothing queries is
-> a schema claim nobody has tested"* — applied to the six tables no v0.1 source writes. **ADR-0040
-> recorded that this left the enumeration above and the tree disagreeing, and routed the amendment of
-> the enumeration to the thread that owns §16 rather than making it there. That amendment is the ⚠️
-> sentence closing the enumeration, and the disagreement is closed with it: the six tables are now
-> scoped out of v0.1 as well as absent from the tree.** **Read
+> a schema claim nobody has tested"* — applied to the six tables no v0.1 source wrote **at the time
+> 00005 was written**. **ADR-0040 recorded that this left the enumeration above and the tree
+> disagreeing, and routed the amendment of the enumeration to the thread that owns §16 rather than
+> making it there. That amendment is the ⚠️ sentence closing the enumeration.** ⚠️ **It no longer
+> scopes all six out, and the disagreement is closed on three of them only.**
+> [ADR-0041](./DECISIONS.md#adr-0041) put Kavita in v0.1, so `work_book`, `work_comic` and
+> `work_comic_issue` are back in v0.1's scope by ADR-0040's own unchanged rule — the table lands with
+> the source that writes it, and the source moved. **00005's deferral of them is not thereby wrong**:
+> it declined to create tables nothing queried, and that stays correct for the tree it shipped into.
+> What follows is that **the three are still absent and now owed**, in a new migration rather than an
+> edit to 00005. The music three are untouched and stay deferred. **Read
 > `internal/db/migrations` for what exists**; the clause above says what v0.1 owes, not what has
 > landed.
 
@@ -2384,18 +2445,26 @@ multi-gigabyte download that UsArr forgets on the next navigation, and the acqui
 project exists to close has no memory.
 Owner account, Argon2id, cookie sessions, CSRF, encrypted credentials **with key versioning, AAD and
 a working `usarr key rotate`**, the SSRF egress policy, redaction middleware. **Zero external metadata
-providers** — Radarr's `MovieResource` and Sonarr's `SeriesResource` already carry everything the
-grid needs, so **no TMDB account is required to see your own library**. Docker image, `VACUUM INTO`
+providers** — **no TMDB account is required to see your own library**, because v0.1's source carries
+its own metadata. ⚠️ **The evidence for that clause named Radarr's `MovieResource` and Sonarr's
+`SeriesResource`, and neither is in v0.1 any more** (ADR-0041); the equivalent claim for **Kavita**'s
+series and volume payloads is **owed and not yet made here** — it needs the same primary-source check
+against Kavita's API that the \*Arr claim had, and this section will not assert it before that runs.
+The *requirement* — zero external providers in v0.1 — is unchanged. Docker image, `VACUUM INTO`
 backups. CI: `EXPLAIN QUERY PLAN` + row-count assertions; `make bench` as a manual release gate.
 **One day-one spike, before the schema is written:** the arm64 RSS spike (§13). **The catalogue
-watermark probe is no longer day-one.** ADR-0032 funded a day-one probe of Komga's
-`sort=lastModified,desc` and [ADR-0035](./DECISIONS.md#adr-0035) §2 retargeted it to Kavita's
-`LastChapterAdded`; with no catalogue source in v0.1 it had nothing to gate here. ✅ **It has since
-run — 2026-08-17, against the owner's live Kavita — and it passed** ([ADR-0035](./DECISIONS.md#adr-0035) §2a, §7.1a),
-which orders §16.1's sequence **Kavita, then Navidrome** and changes nothing in this milestone: the
-source it clears is the first thing *after* v0.1, not a late addition to it. Its pass condition was
-written down in advance (ADR-0035 §2, §7.1a) precisely so that deferring it did not turn it back
-into a guess, and it was judged against that text clause by clause.
+watermark probe was deferred out of day-one and has since been run.** ADR-0032 funded a day-one probe
+of Komga's `sort=lastModified,desc` and [ADR-0035](./DECISIONS.md#adr-0035) §2 retargeted it to
+Kavita's `LastChapterAdded`; ADR-0036 then took every catalogue source out of v0.1, which left it
+nothing to gate here. ✅ **It ran anyway — 2026-08-17, against the owner's live Kavita — and it
+passed** ([ADR-0035](./DECISIONS.md#adr-0035) §2a, §7.1a). ⚠️ **That result is now load-bearing
+*inside* this milestone, not after it**: [ADR-0041](./DECISIONS.md#adr-0041) made Kavita v0.1's
+catalogue source precisely because it is the one source whose delta has been checked against a live
+instance, so the probe is this milestone's evidence rather than the next one's ordering input, and
+§16.1's remaining sequence starts at Navidrome. **The probe is therefore already discharged** — it is
+listed here as a gate that has been met, not as work v0.1 still owes. Its pass condition was written
+down in advance (ADR-0035 §2, §7.1a) precisely so that deferring it did not turn it back into a
+guess, and it was judged against that text clause by clause.
 
 *Which of the above is built is not listed here, and the omission is the correction.* This entry
 used to carry a landed/not-yet inventory, and it went wrong in exactly the way an inventory in a
@@ -2405,7 +2474,7 @@ tree answers the question and cannot go stale — `web/src/routes` is the set of
 the set of backend surfaces, `internal/db/migrations` the schema that actually exists, and
 `git log` the order they arrived in. What is worth stating at this altitude is the gap the whole
 milestone is about, and it is one sentence: **no sync channel runs yet, so there is no catalogue** —
-no `work`/`edition`/`media_file` tables, no Sonarr or Radarr replication, and every screen that
+nothing replicates from any source, v0.1's own Kavita adapter included, and every screen that
 would render a library says so rather than drawing an empty one. (CI query-plan assertions are in
 place for the tables that exist.)
 
@@ -2413,7 +2482,8 @@ place for the tables that exist.)
 auto-approve. **One search box over owned and unowned** (§8.6). One Add that routes; availability
 states; per-season TV. Release search behind progressive disclosure. **No catalogue source is pinned
 to this milestone** — §16.1's sequence runs on its own numbering and is expected to interleave with
-v0.2, with the first source (Kavita or Navidrome, per the probe) landing before or alongside it.
+v0.2, with **Navidrome** (#1, since Kavita moved into v0.1 — [ADR-0041](./DECISIONS.md#adr-0041))
+landing before or alongside it.
 
 **v0.3 — "Cross-media" — Train Dreams works end to end.** Ship `wikidata-edges.db` from the committed
 SPARQL script. Tiers 0–2 only; nothing below 0.85; no review inbox. Grouped result cards derived at
@@ -2424,8 +2494,11 @@ audiobook only when the files share a folder, and everything else treats them as
 that would populate it is deferred**, with its cost and its seam, to [`FUTURE.md`](./FUTURE.md) §16.
 What v0.3 ships is the cross-media machinery the pass would eventually plug into. **The visible
 *"not identified"* state is *not* deferred with it** — the column and the badge are a v0.1 rule
-(§6.4) because they cannot be retrofitted, even though v0.1's Sonarr-and-Radarr catalogue rarely
-reaches the state; it becomes the ordinary case with the first catalogue source (§16.1).
+(§6.4) because they cannot be retrofitted. ⚠️ **They are also exercised in v0.1 now, not merely
+present:** this read *"v0.1's Sonarr-and-Radarr catalogue rarely reaches the state"*, and
+[ADR-0041](./DECISIONS.md#adr-0041) replaced that catalogue with Kavita, whose free tier returns null
+identifier fields — so *"not identified"* is **v0.1's ordinary case** (ADR-0035 §1), not a later
+source's.
 **The library correction surface** (`exclude`,
 `include`, `relink`, `field`) plus the Corrections list lands here, with the weak catalogues it
 exists for. **LazyLibrarian** as the first Tier 1 manifest — as a
