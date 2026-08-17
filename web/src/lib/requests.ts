@@ -92,6 +92,33 @@ export const THIN_COVERAGE_NOTE =
 	'audiobooks are invite-only — so a stock Prowlarr returns a materially thinner list for these ' +
 	'two than for a film. Adding a private indexer you already have an account on is what changes it.';
 
+/**
+ * THE ONE WAY ANOTHER SCREEN SENDS A QUERY TO REQUESTS, as a function rather
+ * than as a template literal repeated per call site.
+ *
+ * §17.4 fixes the mechanism twice — the `Search indexers →` action on an
+ * incomplete result row, and the same action on the zero-results state — and
+ * both are specified as a link carrying the query pre-filled. `onMount` on the
+ * Requests screen reads `?q=`, trims it and runs the search, so a link built
+ * this way works on a middle-click into a new tab as well as on a plain one.
+ * That is the whole contract, and it is the reason this is a real `<a href>`
+ * everywhere it appears rather than a click handler.
+ *
+ * ⚠️ `base` IS A RESOLVED PATH AND THIS FUNCTION DOES NOT RESOLVE ONE. A
+ * `ResolvedPathname` cannot carry a query string, which is why every call site
+ * suppresses `svelte/no-navigation-without-resolve` on the one line that uses
+ * the result; passing an unresolved literal here would silently drop a
+ * configured base path. Callers pass `resolve('/requests')`.
+ *
+ * An empty or whitespace-only query yields the bare path rather than `?q=`,
+ * because an empty parameter would make Requests echo a search for nothing
+ * back at the user instead of showing its idle state.
+ */
+export function requestsSearchHref(base: string, query: string): string {
+	const trimmed = query.trim();
+	return trimmed === '' ? base : `${base}?q=${encodeURIComponent(trimmed)}`;
+}
+
 /* ── 2. The fan-out sentence ──────────────────────────────────────────────── */
 
 /** What the fan-out line is rendered from. Real counts only: §17.5 bans a

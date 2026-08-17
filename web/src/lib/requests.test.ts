@@ -55,6 +55,7 @@ import {
 	grabOutcome,
 	isFreeTextOnly,
 	legReasons,
+	requestsSearchHref,
 	searchEmptyState,
 	searchTypeParam,
 	type IndexerLeg
@@ -1144,5 +1145,39 @@ describe('RECENT_GRAB_ROW_INTRINSIC', () => {
 		for (const density of ['compact', 'standard', 'relaxed']) {
 			expect(RECENT_GRAB_ROW_INTRINSIC[density]).toBeGreaterThan(0);
 		}
+	});
+});
+
+/**
+ * THE `?q=` CONTRACT, which §17.4 fixes twice — the `Search indexers →` action
+ * on an incomplete result row, and the zero-results state — and which Home now
+ * also uses. It is one function so the three call sites cannot encode a query
+ * three ways; the Requests screen's `onMount` reads `?q=`, trims it and runs the
+ * search, so anything this builds must survive a middle-click into a new tab.
+ */
+describe('requestsSearchHref', () => {
+	it('carries the query on the parameter Requests reads', () => {
+		expect(requestsSearchHref('/requests', 'dune')).toBe('/requests?q=dune');
+	});
+
+	it('preserves a configured base path rather than rebuilding one', () => {
+		expect(requestsSearchHref('/usarr/requests', 'dune')).toBe('/usarr/requests?q=dune');
+	});
+
+	it('encodes what would otherwise change the URL', () => {
+		// A release name is arbitrary text: `&`, `#` and a space all break a
+		// hand-built link, and `#` would drop everything after it.
+		expect(requestsSearchHref('/requests', 'S&M #2 live')).toBe('/requests?q=S%26M%20%232%20live');
+	});
+
+	it('drops the parameter entirely for an empty or blank query', () => {
+		// `?q=` would make Requests echo a search for nothing back at the user
+		// instead of showing its idle state.
+		expect(requestsSearchHref('/requests', '')).toBe('/requests');
+		expect(requestsSearchHref('/requests', '   ')).toBe('/requests');
+	});
+
+	it('trims, so a pasted query does not travel with its whitespace', () => {
+		expect(requestsSearchHref('/requests', '  dune  ')).toBe('/requests?q=dune');
 	});
 });
