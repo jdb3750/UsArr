@@ -6207,3 +6207,69 @@ here**: M5-27 edits `internal/db/migrate_test.go`, so `gofumpt`, `golangci-lint`
 **M5-28's file is not covered by any step** — no gate step reads `ARCHITECTURE.md`. The
 `golangci-lint` cache was cleaned by absolute path before the run, per the standing M5-01…M5-11 gate
 note.
+
+---
+
+# M5-29 — §16.0's near-duplicate of the probe sentence: is a section headed "the scope amendment" a dated record?
+
+**Date:** 2026-08-17. **Branch:** detached worktree cut from `origin/main` at `a1da450`. **Picks up
+the hand-off M5-28 left in M5.15**, which named §16.0's differently-worded copy of the same sentence,
+declined to touch it, and said *"whoever tenses it should decide first whether §16.0 is a record in
+`DEVELOPMENT.md` §11's sense."* That question is the whole finding; the tense fix is downstream of
+it. **`M5-29` is the next free id**, checked rather than assumed with
+`grep -on "M5-[0-9]\+" docs/REVIEW-LOG.md | sed 's/.*M5-//' | sort -n | tail -1`, whose highest hit
+before this entry is **M5-28**.
+
+## M5.16 The check that was run, and what it decided
+
+The rule at issue is `DEVELOPMENT.md` §11's *"a citation inside a dated record is history, not
+staleness"* — an entry that already carries **a date and a tree** describes the tree it was taken on
+and is supposed to keep describing it. M5-28's working test, which is the one applied here: **does
+the text claim something *as of a moment*, or does it merely sit near something dated?** Three
+observations, in the order they were made:
+
+1. **§16.0 carries no date and no tree**, and neither does the bullet. §7.1a's probe-status table —
+   the thing M5-28 correctly refused to rewrite — is marked *"Dated 2026-08-16, amended 2026-08-17"*.
+   Nothing of that kind is attached here.
+2. **§16 declares itself present-tense authority in its own opening lines** — *"§16 is authoritative
+   for scope. Where the README or any other document disagrees about what ships when, this section
+   wins."* A record of an argument does not adjudicate today's disagreements; §16 says it does.
+3. **The repo already treats §16.0 as live, today.** `34383c9` (2026-08-17) rewrote §16.0's ordering
+   paragraph **in place** to take the Kavita branch, and amended the *"Schema, enumerated"* clause in
+   place for ADR-0040 — neither by the amend-underneath mechanism §11 prescribes for dated records.
+   Whatever §16.0 is, it is not being maintained as history.
+
+The heading *"The scope amendment, argued rather than asserted"* is what makes the question worth
+asking, and it is the sole argument on the other side: the section narrates an argument that happened.
+But the narration is not stamped to a moment, and the bullet in question does not report what was
+true on a date — it states, in the present, what channel 3b's schedule **is**. **Verdict: live design
+prose, and the ordinary correction applies.**
+
+## M5.17 Disposition
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| **M5-29** | Low | **`ARCHITECTURE.md` §16.0's channel-3b cost bullet still describes the Kavita-versus-Navidrome probe as pending**, three paragraphs above the same section's own ordering paragraph recording that it ran and passed: *"It is specified ahead of its milestone and built with the first adapter, because the probe that decides which adapter is first has to have its pass condition on paper before it runs."* (the italics on *specified* and *built* are in the source and are unchanged) | **APPLIED, one sentence.** §16.0 judged live design prose, not a dated record — the check is §M5.16 above. The clause now reads *"…because the probe that decided which adapter is first had to have its pass condition on paper before it ran — as the next one will too. **That probe has since run**, and the ordering paragraph below records the branch it settled."* Three choices inside that: (a) **the durable rule is kept**, carried by *"as the next one will too"*, so past tense cannot be read as retiring it; (b) **the result is pointed at, not restated** — `34383c9` already put the run, the pass, ADR-0035 §2a and the Kavita-then-Navidrome branch in §16.0's ordering paragraph, and a second copy in the same section is the drift this log keeps catching; (c) **the two present-tense claims in the same sentence are left alone**, because *specified ahead of its milestone* and *built with the first adapter* are both still true — §16's own v0.1 entry reads *"Channel 3b is specified (§7.1a) and not built here"*. A bare tense flip would have left the bullet asserting a forward-looking reason for a decision already taken, which is why the pointer went in with it |
+
+## M5.18 Raised, not fixed
+
+* **`DECISIONS.md` carries the same claim twice, both in ADR-0036**, and both are left standing:
+  Decision §5 (*"with its three-clause pass condition unchanged and still written down in advance"*)
+  and the Consequences bullet on channel 3b (*"because the probe needs its pass condition on paper"*).
+  These are the opposite call to this entry's, on the opposite facts: an ADR is a decision **as
+  accepted on its date**, with its own Status and Date lines, which is the dated-record genre §11
+  protects. ADR-0035 §2a is where the result is recorded, and it is recorded there already. Named
+  here so the next reader sees a deliberate distinction rather than an inconsistency.
+* **No other future-tense instance survives in `ARCHITECTURE.md`.** Grepped for *"pass condition"*,
+  *"before it runs"* and *"written down in advance"* across `docs/` at `a1da450`: §7.1a is past tense
+  as of `952a472`, §16's v0.1 entry already reads *"Its pass condition **was** written down in
+  advance"*, and this bullet was the last one.
+
+### On the gate for M5-29
+
+`make check` was run on this tree and is green — command, absolute tool paths, versions, SHA and the
+verbatim tail are in the commit message. ⚠️ **The green is not load-bearing for this entry.** The
+diff is two files, both under `docs/`, and **only `gitleaks dir .` reads `docs/` at all** — so the
+green attests that no credential-shaped string appears anywhere in the tree, and says nothing
+whatever about whether the prose is true. The `golangci-lint` cache was cleaned by absolute path
+(`/root/go/bin/golangci-lint cache clean`) before the run, per the standing M5-01…M5-11 gate note.

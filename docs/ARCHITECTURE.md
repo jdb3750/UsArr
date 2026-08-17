@@ -2187,7 +2187,9 @@ correctly and then not acted on.
   page-walk delta with a watermark, an overlap window and a stated fallback. That is a new channel,
   specified now rather than left as an assumption, and it is the single largest thing this amendment
   adds. It is *specified* ahead of its milestone and *built* with the first adapter, because the
-  probe that decides which adapter is first has to have its pass condition on paper before it runs.
+  probe that decided which adapter is first had to have its pass condition on paper before it ran —
+  as the next one will too. **That probe has since run**, and the ordering paragraph below records
+  the branch it settled.
 - **The read machinery is genuinely shared** — and that is the argument for the sequence, not
   against it. `RemoteItem`, the registry, the circuit breaker, the import phasing, the
   write-queue-free read path and the reconciliation sweep are reused unchanged by every catalogue
