@@ -5397,3 +5397,230 @@ formatter is claimed either, because none covers this file**: prettier's root he
 formatter-gated. **Every figure and every quoted line above is taken from
 `web/scripts/measurements/2026-08-17-density-toggle.md` and from the bench's own comments at
 `1b89426`; nothing was re-measured here, and the bench was deliberately not run.**
+
+---
+
+# MEAS-02 — ten overnight guard rules get an address, and three of the staged claims did not survive being checked. **Applied by `8d426cd`, as a pure append.**
+
+**Date:** 2026-08-17. **Records the promotion carried by `8d426cd`**, *"docs: fold the overnight
+guard rules into DEVELOPMENT §11"*, verified against that tree. **`MEAS-02` is the next free id in
+the `MEAS-` prefix** — checked rather than assumed, with
+`git grep -hoE '\bMEAS-[0-9]+[a-z]?\b' origin/main | sort -u`, which returns `MEAS-01` and nothing
+else. **Read it with `MEAS-01`**, whose disposition it repeats at scale: the same
+promotion-rather-than-rewording move, ten items instead of one, and the same reason — a rule that
+lives in message history has no address, and a rule with no address is re-derived from scratch by
+whoever next needs it.
+
+**Promoted.** Ten rules earned across the code, design, frontend and Requests threads on 2026-08-16
+→17 lived only in cross-session message history and a staging file that is not in the tree — which
+is to say they were correct, expensive, and unreachable. They land in `docs/DEVELOPMENT.md` §11,
+*"Writing a guard that can be trusted"*, and in §11's *"Working alongside other threads"*. ℹ️ **Ten
+items across nine sites, at four different granularities**, because the granularity is the decision:
+a rule that is a case of an existing rule earns a bullet, not a number, and a rule about
+collaboration does not belong on the guard list at all.
+
+| # | Staged item | Landed as |
+|---|---|---|
+| 1 | Checks that share one stimulus agree for free — five independent-looking checks all missed one transient, because every one of them could read only files that were present and committed, and the file was written unstaged and deleted before it was ever staged | **New rule 6**, *"Corroboration is coverage, not repetition"*, first bullet. Framed against rule 4: rule 4 asks what one check should find, rule 6 asks how many **different** things a set of checks can see between them |
+| 2 | *"None of my workers wrote that file"* is not establishable from the tree, because the tree is precisely where the evidence is absent — the unexplained `ZZ-probe.md` came from a worker whose own transcript had to be read before its four unstaged writes surfaced | **New rule 6**, second bullet. Kept under one number rather than given its own, because both halves are the same arithmetic: count the stimuli, not the checks |
+| 3 | Quote the tool; do not paraphrase it — the `ZZ-probe.md` investigation burned its first pass on a theory about a filename gitleaks had never printed, because the real output, `leaks found: 1` with no path in it at all, had been summarised | **New rule 7**, *"Quote the tool; do not paraphrase it"*. Written as the rest of rule 2's sentence: name the instrument, then report its output in the instrument's own characters |
+| 4 | An absence claim carries the roots it searched — *"the four figures exist nowhere in the tree"* came from a search that never entered `web/scripts/`, one of three scope-wrong searches in a single night | **Bullet under rule 5**, in rule 5's existing pairing with rule 2. ℹ️ It is filed as rule 4 with the sign flipped: a check that found nothing and a check that looked at nothing must not produce the same exit code |
+| 5 | A probe carries the gate that has to reject it — firing a guard on purpose (rule 3) is evidence only when the stimulus is one that guard would actually catch | **Bullet under rule 5.** ⚠️ **Measured at promotion time rather than relayed, and the measurement corrected the staged claim** — see the corrections below |
+| 6 | Key the worktree decision to the **operation**, not to the size of your change: any whole-tree git operation belongs in a worktree of your own, however small your edit | **Bullet under *Working alongside other threads*.** `ec4298d` carries the case — a one-file edit whose diff holds a second hunk its own commit message never mentions, because the sweep took whatever the tree was holding |
+| 7 | Give a throwaway branch a name nobody else will pick, because a branch name is a shared mutable ref across worktrees and git's protection against reuse is uneven | **Bullet under *Working alongside other threads*.** ⚠️ **The staged SHAs were wrong and the mechanism was right** — see the corrections below |
+| 8 | Cite the author commit for when a thing was done and the merge commit for when it reached `main` | **Bullet under *Working alongside other threads*,** carrying one verified pair. ⚠️ **A second offered pair was not a pair at all** — see the corrections below |
+| 9 | A citation inside a dated record is history, not staleness — do not "fix" the line numbers and SHAs inside an entry that already carries a date and a tree | **Bullet under *Working alongside other threads*,** naming this file's own §6.1 *Amended dispositions* as the mechanism: amend underneath, leave the original standing |
+| 10 | What a green `make check` attests on a documentation commit, which is very nearly nothing | **Unnumbered scope note at the end of the guard section**, immediately before *"Consistency is a property of the read"*. Unnumbered deliberately: it is a fact about this repo's gate, not a rule about writing guards |
+
+**The constraint that held: append, never renumber.** §11's rule numbers are load-bearing in two
+directions at once. **Inward**, rule 3's text cites *"the same `make design` guard from rule 1"*, so
+a renumber would break the section against itself. **Outward**, this log cites *"DEVELOPMENT §11
+rule 4"* and *"`DEVELOPMENT.md` §11's rule 1"*, and six more sites cite rule numbers besides. ✅ **So
+the promotion was constrained to append**, and the diff proves it rather than asserting it:
+`git show --stat 8d426cd` reports **`1 file changed, 86 insertions(+)`** — **86 insertions and zero
+deletions**, one file. Rules 1–5 are byte-identical before and after; rules 6 and 7 are new numbers
+at the end of the list, and everything else went in as a bullet under an existing rule or under an
+existing subsection.
+
+✅ **The outward citations were enumerated and re-read on both trees rather than assumed safe.**
+`git grep -nE "§11('s)? rule [0-9]"` at `6b904e1` (the parent) and at `8d426cd` returns **the same
+eight lines, byte for byte, across seven files**:
+
+| Site | Cites |
+|---|---|
+| `docs/REVIEW-LOG.md:3451` | *"cannot produce the same green (DEVELOPMENT §11 rule 4)."* |
+| `docs/REVIEW-LOG.md:4989` | *"is `DEVELOPMENT.md` §11's rule 1 — "probe the condition, not a proxy for it""* |
+| `docs/design/DESIGN-DIRECTION.md:1046` | *"one general rule that `docs/DEVELOPMENT.md` §11 rule 5 now owns"* |
+| `docs/reference/tags.md:84` | *"tests the wrong thing and answers confidently. `DEVELOPMENT.md` §11 rule 1."* |
+| `internal/httpapi/grabs_test.go:239` | *"(docs/DEVELOPMENT.md §11 rule 4): assert the floor first"* |
+| `internal/store/audit_notsent_test.go:116` | *"docs/DEVELOPMENT.md §11 rule 3: a"* |
+| `internal/store/provenance_recent_test.go:206` | *"docs/DEVELOPMENT.md §11 rule 3: a"* |
+| `internal/store/releases.go:406` | *"docs/DEVELOPMENT.md §11 rule 1: a"* |
+
+📌 **Eight citations in seven files, and the distinction is worth keeping straight** — the promotion
+was described in its own commit message as *"REVIEW-LOG, DESIGN-DIRECTION, reference/tags.md and
+four Go files"*, which counts **files**, and this log carries two of them. A restatement of that
+count as "seven citations" is off by one; the measured figure is eight lines across seven paths.
+ℹ️ Line numbers here are dated to `8d426cd` per §11's own shelf-life bullet; the quoted strings are
+the durable half.
+
+## The three staged claims that did not survive checking
+
+🚩 **This section is the reason the entry exists.** A promotion whose own supporting claims were
+never re-derived would be `MEAS-01`'s defect committed by `MEAS-01`'s fix — and two of the three
+below are exactly the shape §11 rule 5 was being extended to catch: a probe that proves nothing
+while looking like proof, and a SHA quoted for a tree it was never read on. **All three were
+re-measured for this entry rather than copied from the routing message.**
+
+**1. The `ghp_` probe claim was two-thirds wrong, and only the measurement could tell.** The staged
+note said a `ghp_`-shaped token fires gitleaks where the canonical AWS documentation pair does not.
+⚠️ **The AWS half is right and the `ghp_` half is right only for a high-entropy body.** Measured
+2026-08-17 on `/root/go/bin/gitleaks`, build-info `github.com/zricethezav/gitleaks/v8 v8.30.1` (from
+`go version -m`, which reads the file on disk — the binary answers `version is set by build process`
+to `gitleaks version`), one planted line per directory under
+`gitleaks dir <dir> --redact=100 --no-banner --exit-code 1`:
+
+```
+########## aws ##########      # AKIAIOSFODNN7EXAMPLE / wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+INF scanned ~106 bytes (106 bytes) in 4.84ms
+INF no leaks found
+EXIT=0
+########## ghpseq ##########   # ghp_0123456789abcdefghijklmnopqrstuvwxyz
+INF scanned ~48 bytes (48 bytes) in 4.43ms
+INF no leaks found
+EXIT=0
+########## ghprand ##########  # ghp_ + 36 random chars, NOT quoted here — see the note below
+INF scanned ~48 bytes (48 bytes) in 4.45ms
+WRN leaks found: 1
+EXIT=1
+```
+
+🚩 **Two of the three obvious probes exit 0.** The AWS pair is allowlisted upstream — already
+recorded in this file under *"What a `make check` green on a docs-only commit does and does not
+attest"* — and the sequential `ghp_` body clears the rule's **length** and not its **entropy floor**,
+which is a second, independent way to hand yourself a silent false negative. Only `ghp_` plus a
+random 36-character body reports `leaks found: 1` and exit 1. ⚠️ **A reviewer who reached for either
+of the first two would have "proven" that `make secrets` does not read `docs/`** — the exact claim
+the older entry exists to correct — through a scanner behaving perfectly. §11's rule-5 bullet is
+written with all three probes in it for that reason.
+
+ℹ️ **The third probe's literal body is deliberately not written into this file, and the reason is a
+measurement rather than caution.** The first draft of this entry quoted the generated token in full;
+`make check` then failed at `secrets` — `gitleaks dir .` over the worktree reporting
+`scanned ~6914820 bytes (6.91 MB) in 1.84s` and `leaks found: 1`, `make: *** [Makefile:562: secrets]
+Error 1`. ✅ **Which is the scope note two sections down demonstrated from the other side**: the one
+gate step that reads `docs/` read this entry, found the planted credential in it, and stopped the
+commit. **A random high-entropy body is not reproducible from a written record anyway** — generate
+one at probe time; the two that do **not** fire are the ones worth quoting exactly, and both are
+above.
+
+**2. `c2cefa3` / `a29a07f` was offered as an author-vs-merge pair and is not one.** ⚠️ **Dropped
+from the promotion rather than written in.** Verified with `git log -1 --format='%h %p | %s'`:
+
+```
+a29a07f 22f86bf | docs: cross-reference SD-02r, whose verdict this sweep invalidated
+c2cefa3 0656bd9 | docs(design): the same status claim, in the two places it was not reported
+```
+
+`a29a07f` has **one** parent, `22f86bf`, so it is not a merge at all, and `c2cefa3` is nowhere among
+its parents — `c2cefa3`'s own parent is `0656bd9`. Both sit on `main`'s first-parent line as
+ordinary commits. ✅ **The pair that is correct, and the one §11 now carries alone:**
+
+```
+c9610e2 a29a07f | docs: SD-01a said "pinned" where its own evidence said "unguarded"
+cda979c ec4298d c9610e2 | Merge the §9.7→§9.2 citation sweep and the SD-01a framing fix
+```
+
+`c9610e2` is the work (single parent), `cda979c` is the merge that put it on `main` (two parents,
+the second being `c9610e2`). ℹ️ **Where the wrong pair came from is legible and instructive**:
+`a29a07f` and `c2cefa3` appear together all over `SD-02r`, as *the commit where a verdict was
+noticed to be false* and *the commit that made it false*. That is a real and useful relation. It is
+not the author/merge relation, and two SHAs that keep appearing in one sentence acquire an implied
+relation nobody ever checked.
+
+**3. `ac7f534` → `6b53791` does not support the branch-name-reuse hazard; the mechanism does, and it
+was reproduced.** Verified the same way:
+
+```
+ac7f534 4fb96e0 f23bf66 | Merge branch 'claude/hearth-thread-4vbzaj': a dev guard refuses content-sized list column tracks
+6b53791 fd9d334 2262237 | Merge branch 'claude/hearth-thread-d247f2-revlog-fix': correct DI-02's claim that the bench page-size fix is unowned and unfixed
+```
+
+`6b53791`'s parents are `fd9d334` and `2262237`; `ac7f534` is neither, and is itself an unrelated
+merge. ✅ **So §11 records the mechanism with a reproduction and not the SHAs** — which is the
+stronger form anyway, because a reproduction can be re-run and a SHA pair can only be re-read.
+Reproduced 2026-08-17 on `git version 2.43.0` in a scratch repo, with branch `shared` checked out in
+a second worktree:
+
+```
+=== second worktree HEAD ===
+d00050d2c78c739837238479859a53ceab6d6578
+=== 1. git branch -f shared main ===
+fatal: cannot force update the branch 'shared' used by worktree at '…/gitrepro/second'
+EXIT=128
+=== 2. git worktree add -b shared ===
+Preparing worktree (new branch 'shared')
+fatal: a branch named 'shared' already exists
+EXIT=255
+=== 3. git checkout -B shared (from primary) ===
+Switched to and reset branch 'shared'
+EXIT=0
+=== second worktree AFTER ===
+729f4f19d7dc44e185b68fd815153852cfd7351a
+M  f.txt
+```
+
+🚩 **Two verbs refuse and the third succeeds silently.** `git branch -f` and `git worktree add -b`
+both decline; **`git checkout -B` from the primary checkout returns exit 0**, moves the other
+worktree's `HEAD` from `d00050d` to `729f4f1`, and leaves a **staged** modification (`M  f.txt`) that
+nobody in that worktree made. ⚠️ **The one unprotected verb is the one everybody types**, and the
+damage lands in a tree whose occupant gets no message at all. That is why the rule is *suffix the
+branch with your agent id or a timestamp* rather than *be careful*.
+
+## Two of the ten were already recorded here, measured, and §11 points rather than restates
+
+📎 **Staged items 5 and 10 — the probe-carries-its-gate half of rule 5, and the scope note on what a
+docs-only green attests — are not new findings.** Both were measured and written up in this file
+under the `SD-02` method note, *"What a `make check` green on a docs-only commit does and does not
+attest — measured, because the absolute version of this claim is wrong"*: the `secrets` step runs
+`gitleaks dir .` over the whole working tree and does read `docs/`, `fmt-check`'s prettier half runs
+with its cwd in `web/` and never sees a Markdown file under `docs/`, and the first probe of that
+guard was the AWS false negative. ✅ **So §11 states both compactly and names this file as the long
+form**, in both places — *"The full case … is in `docs/REVIEW-LOG.md` under …"* on the rule-5 bullet,
+and *"The measured version of this, fired in both directions, is in `docs/REVIEW-LOG.md` under …"* on
+the scope note. **That is `SD-01`'s rule applied to this promotion**, the same way `MEAS-01` applied
+it to `DESIGN-DIRECTION.md` §7.4: a document that is not authoritative for a fact should not restate
+it, it should name the document that is. §11 owns the *rule*; this log owns the *measurement*, and
+the measurement is where the numbers decay.
+
+🚩 **The pattern `MEAS-01` named is now attested twice, which makes it a pattern.** `MEAS-01`'s
+closing observation was that when a correctly-worded rule is broken repeatedly by people who have
+read it, the next edit to try is a change of address rather than a change of emphasis. Every one of
+the ten items here had already been *stated*, correctly, in a message thread; not one of them was
+reachable by a thread that had not been in that conversation. ℹ️ **Nine of the ten are a paragraph or
+less**, which is the other half of the finding: the expensive part was never the wording, and
+writing them longer would not have helped.
+
+## On the gate for MEAS-02
+
+`make check` was run on this entry's tree — `8d426cd` plus this diff — and reported **`check: OK`**.
+✅ **The binaries it asserted, since a green that names neither its tool nor its tree is a rumour:**
+gofumpt **v0.11.0** over **135 `.go` files**; golangci-lint **2.12.2** over **11 Go packages**, `0
+issues`, cache cleaned first via `/root/go/bin/golangci-lint cache clean` because the `PATH` copy is
+the wrong version; prettier `All matched files use Prettier code style!`; svelte-check **236 files,
+0 errors, 0 warnings**; `go mod verify` → `all modules verified`; gitleaks **v8.30.1** (build-info,
+`--version` is unstamped) scanning **~8,493,690 bytes (8.49 MB) in 2.24s**, `no leaks found`;
+**11 Go packages `ok`**; **386 web tests in 9 files passed**; govulncheck **v1.7.0**, `No
+vulnerabilities found`; `pnpm audit` → `No known vulnerabilities found`.
+
+⚠️ **State plainly what that green is
+worth here, because this entry adds a section to §11 that says exactly this.** The diff is one
+Markdown file — `docs/REVIEW-LOG.md`, nothing else. **Exactly one step of the gate read it**:
+`secrets`, which runs `gitleaks dir .` from the repo root over the whole working tree. `fmt-check`'s
+Go half globs `*.go` and its prettier half runs with cwd in `web/`, so **no Markdown under `docs/` is
+formatter-gated at all**; `lint`, `test`, `modverify` and `vuln` never leave the Go module and
+`web/`. **So the green attests one thing — no credential-shaped string anywhere in the tree — and
+nothing whatever about whether the prose above is true, current, or well formed.** ✅ **Every claim
+in this entry is instead carried by its own quoted transcript**: the three `gitleaks` runs, the four
+`git log -1 --format='%h %p'` reads, the `git version 2.43.0` worktree reproduction, the
+`git show --stat 8d426cd` insertion count, and the `git grep` citation sweep run on both trees.
