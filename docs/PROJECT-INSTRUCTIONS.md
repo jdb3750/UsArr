@@ -15,15 +15,51 @@ This file records the instruction text only. The design detail lives in `CLAUDE.
 
 | Version | Date | State | Size |
 | --- | --- | --- | --- |
-| v1.3 | 2026-08-16 | **Applied to project settings** — 2026-08-16 16:34 UTC | 7844 bytes |
+| v1.4 | 2026-08-17 | **Proposed — supersedes v1.3, not yet applied** | 8118 bytes |
+| v1.3 | 2026-08-16 | Applied 2026-08-16 16:34 UTC, superseded by v1.4 | 7844 bytes |
 | v1.2 | 2026-08-16 | Applied 2026-08-16 07:57 UTC, superseded by v1.3 the same day | 7585 bytes |
 | v1.1 | 2026-08-16 | Superseded by v1.2, never applied | 7022 bytes |
 | v1.0 | 2026-08-16 | Superseded by v1.2 — applied 2026-08-16, replaced the same day | 3849 bytes |
 
-## v1.3 — as applied
+## v1.4 — proposed
+
+Supersedes v1.3 and is not yet applied: this is the text to paste into the Project's settings
+verbatim, replacing v1.3 — 8118 bytes.
+
+````
+You are working on UsArr: a fast, self-hosted, unified hub and gateway over the media-acquisition ecosystem, running on a single self-hoster's own server. It aggregates the *Arrs (Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian) and media backends (Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita) into one local library you can browse, search and request from, and it exposes protocol surfaces (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend individually. It is meant to coexist with the rest of the ecosystem, not replace it. The stack is Go compiled to a single static binary with a SvelteKit SPA embedded in it, over SQLite in WAL mode. Do not state a Go minimum from memory: the go directive in go.mod is authoritative, 1.25.13 at the time of writing, and it is a moving floor raised by the gating govulncheck step rather than by the dependency floor beneath it, with the reasoning in docs/DEVELOPMENT.md. Implementation on main moves faster than the prose describing it. Section 16 stays authoritative for scope; status is a separate question, and the landed/not-yet split in section 16, the README's status column and CLAUDE.md's status paragraph are hand-edited after the fact and lag the tree. Treat a "not yet" in any of the three as unverified: read the tree — web/src/routes for a screen, internal/ for a subsystem — and name the commit you read. A milestone label is scope, not status.
+
+Before you propose or write anything, read CLAUDE.md at the repo root and then docs/ARCHITECTURE.md. Those two files, plus the ADRs in docs/DECISIONS.md, are the source of truth. Section 16 of ARCHITECTURE.md is authoritative for what belongs in which milestone, and it wins over every other document, this one included.
+
+Four principles govern every decision.
+
+First, replica not proxy: every user-facing read renders from local SQLite, and no screen ever blocks on an *Arr or a metadata provider. Perceived speed is the owner's number-one requirement, so anything that puts a synchronous upstream call on a render path is wrong by default and needs an explicit argument to survive. Three narrow exceptions are documented where they occur, and none of them blocks a render: byte streams on UsArr's own protocol surfaces, where audio, ebooks and comics are proxied with a plain io.Copy, video links out, and images are always proxied and cached; search over unowned items, which runs out of band and streams into an already-rendered page over SSE; and release search across indexers, which is remote and sits behind progressive disclosure.
+
+Second, UsArr is not a player: it never transcodes, never depends on FFmpeg, and does not implement video playback. It routes and links out to whichever media server owns the bytes.
+
+Third, pluggable by default: UsArr must work over a full stack, over any single library-bearing service, or over Prowlarr alone in Search-and-Grab mode, and every feature degrades honestly when a service is absent rather than rendering an empty screen. Presenting a library requires at least one library-bearing service; Prowlarr alone has no library. Requests are a pillar rather than a side feature: the Prowlarr free-text path ships in v0.1 and the *Arr-backed flow in v0.2.
+
+Fourth, single-user in v0.1 but multi-user in the schema from migration 0001. Two rules hold from the first migration: every user-scoped row carries a user_id, and every read path that aggregates across instances takes an access-scope parameter in its query signature, covering the grid, search, the client prefix index, the availability rollup and every northbound surface, defaulting in v0.1 to the owner's full scope. A rollup computed across instances a user cannot see is an existence oracle. The UI merely hides what has not shipped; authorization is enforced server-side from the first commit and is never bolted on later.
+
+Adversarial review is mandatory, and the owner asked for it explicitly. Substantive design, research or synthesis gets a reviewer pass that attacks assumptions, hunts for gaps and omissions, and verifies factual claims against primary sources. Every finding is then applied or rebutted in writing in docs/REVIEW-LOG.md. Findings are never quietly dropped. Several threads work this repo at once: section 11 of docs/DEVELOPMENT.md has the merge cadence, the file-ownership map and the guard rules.
+
+Verify, do not assert. Every claim about an external API, rate limit, licensing term, port, endpoint or field name must cite a primary source: official documentation, an OpenAPI spec, or the service's own source code. Training data about this ecosystem is stale and wrong in specific, load-bearing ways, so treat recollection as a hypothesis to check rather than a fact. Where you are reasoning rather than citing, say so and label it as inference. Never document a feature as existing when it does not. The same standard applies to this project's own gates: report what you measured — the binary, its version and the commit — because a green that names neither its tool nor its tree is a rumour, and fire a guard deliberately before trusting it, since one that has never been triggered is indistinguishable from no guard. The "Ecosystem facts that stale training data gets wrong" section of CLAUDE.md is the list rather than a sample; re-verify any entry against a primary source before relying on it.
+
+Security is not negotiable. *Arr API keys are full-admin credentials: encrypted at rest under a versioned, AAD-bound scheme, never logged, never sent to the browser, and never sent to a host the user has just edited without re-entry. SSRF is a first-class risk because users configure arbitrary internal URLs, so resolve then pin. Argon2id is for user passwords only; per-app API keys verify with a fast keyed hash, because running Argon2id on every request is a remote memory-exhaustion vector. Section 14 of ARCHITECTURE.md owns the full threat model.
+
+Cut before you add, but leave the seams open. The project's largest risk is never shipping, so a proposal that adds a subsystem must say what it removes or defer itself to a later milestone. Deferred is not rejected: docs/FUTURE.md holds the features that are wanted later, each with the specific seam in the current design that keeps it cheap to add. Preserve those seams; do not build the future feature early.
+
+Some things are permanently refused rather than deferred. Section 1.4 of ARCHITECTURE.md lists six: a video transcoder, an in-app media player, any FFmpeg dependency, reimplementing the *Arr download and import engines, a required sidecar (optional backends may exist, but Postgres, Redis or a search server may never be required), and being a dashboard. Section 16 adds native TV or mobile apps. Do not propose these and do not reopen them. Section 16 does name two measured conditions that would reopen playback, a hostile or unusable Jellyfin API and at least two engineers who can own an FFmpeg surface indefinitely including security response; neither is met, so treat it as closed. Anything out of scope that is not on those two lists is deferred rather than closed, so check docs/FUTURE.md before assuming either way.
+
+On interface design, read section 17 of ARCHITECTURE.md before touching a screen. It is authoritative over the screens, and docs/design/ specifies the visual system that renders them — DESIGN-DIRECTION.md, tokens.css and the mockups. Read both, and where they disagree, section 17 wins. The constraint is utilitarian over stylish: standard patterns in preference to novel ones, density and speed over animation, and no visual flair that costs render time. Navidrome is the reference point, and "sleek" and "modern" are explicitly not goals. Concretely: no animation on any list, grid or navigation transition; native controls and real middle-clickable links; compact by default; every screen usable in a phone browser; and no skeleton shimmer. Section 17 enumerates the screens and section 16 says which ship in v0.1; read both rather than assuming a count. A degraded backend gets a non-modal banner; the catalogue never greys out.
+````
+
+## v1.3 — superseded
 
 The text applied verbatim to the Project's settings at 16:34 UTC on 2026-08-16, replacing v1.2.
-This is what is live now; the settings read-back was confirmed to match it — 7844 bytes.
+It was superseded by v1.4 above, which has not been applied yet, so this remains the text in
+the settings until v1.4 replaces it by hand. Preserved verbatim as the record of what v1.3 said
+— the settings read-back was confirmed to match it, 7844 bytes.
 
 ````
 You are working on UsArr: a fast, self-hosted, unified hub and gateway over the media-acquisition ecosystem, running on a single self-hoster's own server. It aggregates the *Arrs (Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian) and media backends (Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita) into one local library you can browse, search and request from, and it exposes protocol surfaces (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend individually. It is meant to coexist with the rest of the ecosystem, not replace it. The stack is Go compiled to a single static binary with a SvelteKit SPA embedded in it, over SQLite in WAL mode. Do not state a Go minimum from memory: the go directive in go.mod is authoritative, 1.25.13 at the time of writing, and it is a moving floor raised by the gating govulncheck step rather than by the dependency floor beneath it, with the reasoning in docs/DEVELOPMENT.md. The first slice of code is on main — the Prowlarr Search-and-Grab path runs end to end — and everything else is still design. CLAUDE.md, the README and section 16 each carry an accurate landed / not-yet split, so read them rather than assuming in either direction: a milestone label is scope, not status.
@@ -147,6 +183,40 @@ On interface design: utilitarian over stylish. The bar is tried-and-true, easy t
 ````
 
 ## Changelog
+
+### v1.4 — 2026-08-17 (proposed)
+
+Produced by the 04:07 UTC drift check after `main` advanced 264 commits overnight. An adversarial
+review of the draft raised 3 majors and 2 minors; all were applied.
+
+- **The project-status sentence is rewritten to be stateless, and this is deliberate.** v1.2 told
+  agents to distrust the status prose; v1.3 reversed it because the documents had just been
+  corrected; within eleven hours they were wrong again — the Services, Home and Requests screens
+  landed 2.5 to 4.5 hours after v1.3 was applied, and `ARCHITECTURE.md:2331` still said the
+  Services screen UI did not exist. The new wording never asserts what has landed, only that the
+  status prose lags the tree and where to look instead, so it stays true whether the documents are
+  currently right or wrong. **Do not flip it back the next time a doc sweep makes them accurate.**
+- **The scope/status distinction is now explicit.** The draft applied one undifferentiated
+  "unverified" verdict to §16 one paragraph before declaring §16 authoritative over every document
+  including the instructions. The text now separates §16's authority over scope from the
+  unreliability of status prose, borrowing the formulation `docs/DEVELOPMENT.md` §11 already uses.
+- **"Read the tree" now names where** — `web/src/routes` for a screen, `internal/` for a subsystem
+  — and restores v1.2's demand to name what you checked, as "name the commit you read". Without it
+  the instructions would demand measured evidence for gate results while accepting unmeasured
+  status claims, which rot faster.
+- **The verify-don't-assert standard is extended to the project's own gates**, from
+  `CLAUDE.md:84-88`: report the binary, its version and the commit, and fire a guard before
+  trusting it. This is not duplication — v1.3's paragraph governs claims about external sources;
+  this governs claims about this repo's own tooling, which it never covered.
+  `docs/DEVELOPMENT.md` §11 records four separate incidents where a gate reported green without
+  having run what it claimed.
+- **The licence sentence is cut** to fit the 8192-byte limit. `CLAUDE.md:186-189` carries all three
+  of its operative facts in more detail — AGPL-3.0 confirmed 2026-08-16, no per-file headers, an
+  AGPL-compatibility check on new dependencies — and the instructions' first order is to read
+  `CLAUDE.md`. The only agent this could harm has already ignored instruction one.
+- **Not changed:** the four principles, the permanent refusals, the security paragraph, the Go
+  floor and the UI paragraph all re-verified clean against `main`. ADRs 0036, 0037 and 0038 are
+  scope-only or component-level and force no edit, since the instructions defer to §16.
 
 ### v1.3 — 2026-08-16 (applied 16:34 UTC)
 
