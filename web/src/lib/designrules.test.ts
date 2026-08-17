@@ -1,8 +1,9 @@
 /*
- * §13 OVER web/src — THE STATIC HALF, AND ONLY THE STATIC HALF
+ * §13 AND §17.4 OVER web/src — THE STATIC HALF, AND ONLY THE STATIC HALF
  *
  * WHAT THIS FILE ENFORCES. Eight `[grep]` rules from
- * `docs/design/DESIGN-DIRECTION.md` §13, and no others:
+ * `docs/design/DESIGN-DIRECTION.md` §13, plus one from `docs/ARCHITECTURE.md`
+ * §17.4, and no others:
  *
  *   1. colour — no indigo / violet / purple / fuchsia, BY NAME
  *   2. colour — no indigo / violet / purple / fuchsia, BY VALUE (OKLCH)
@@ -12,6 +13,16 @@
  *   6. type   — no banned family in a font stack
  *   7. type   — no `text-align: center` outside a dialog
  *   8. copy   — no em dash (U+2014) in a string under 15 words
+ *   9. copy   — §17.4 rule 7: Search's own copy never enumerates media types,
+ *               and it names the corpus as "your services"
+ *
+ * ⚠️ RULE 9 IS THE ONE RULE HERE THAT IS NOT §13's, and it is written down that
+ * way rather than filed under §13 for tidiness. Its authority is ARCHITECTURE
+ * §17.4 rule 7, its corpus is `web/src/routes/search/**` and not the tree, and
+ * §17 wins over §13 wherever the two ever touch (CLAUDE.md: §17 is authoritative
+ * over DESIGN-DIRECTION). It ships here because this is the only checker that
+ * reads `web/src` at all — see WHY A VITEST FILE below — not because it belongs
+ * to §13's family. Its own limits are written at the rule.
  *
  * Rules 1 and 2 are one §13 clause with two halves, and neither half subsumes
  * the other. §13 bans the four families "or equivalent hex/oklch": the word
@@ -20,7 +31,8 @@
  * purples fall between them.
  *
  * ⚠️ ITS GREEN DOES NOT MEAN §13 PASSES, and there are two separate reasons, so
- * nobody should read this file's pass as covering §13 entire.
+ * nobody should read this file's pass as covering §13 entire. Nor does it mean
+ * §17 passes: rule 9 is one rule out of one subsection of it.
  *
  * REASON ONE — THE RENDERED RULES ARE NOT HERE AND NEVER WILL BE. Every
  * `[review]` rule in §13 is human judgement. Every RENDERED `[grep]` rule stays
@@ -36,17 +48,18 @@
  *   A static rule can catch a forbidden literal; only a rendered check can
  *   catch a failed outcome.
  *
- * The seven above are decidable from the text of a file: the declaration IS the
+ * The nine above are decidable from the text of a file: the declaration IS the
  * violation, so reading the source answers the question completely and a browser
  * adds nothing. Moving a rendered rule down here would assert a declaration
  * instead of an effect, which is the `content-visibility`-on-`<tr>` lesson
  * check.mjs records at its check 8 — the declaration was present, the
  * containment was not live, and the guard that read the declaration passed.
  *
- * REASON TWO — TWO §13 CLAUSES ARE ENFORCED BY NEITHER CHECKER. Recorded here
- * so nobody reads a green from either file as coverage of them, and so nobody
- * "fixes" one file to match the other. Both went to the design thread as
- * documentation questions on 2026-08-17:
+ * REASON TWO — FIVE THINGS ARE HELD BY NEITHER CHECKER, IN WHOLE OR AT THE
+ * EDGES. Recorded here so nobody reads a green from either file as coverage of
+ * them, and so nobody "fixes" one file to match the other. The first two went to
+ * the design thread as documentation questions on 2026-08-17; the last three are
+ * rulings that came back from it the same day.
  *
  *   · §13 bans the four hues, and §13 alone bans a hue by value; rule 2 below
  *     is now that ban, and check.mjs still has no equivalent. The centring
@@ -61,6 +74,53 @@
  *     so `web/src`'s 2px / 4px / 6px satisfies "at most three" and the tree is
  *     compliant; the `0` versus `0px` spelling is an inconsistency, not a hole.
  *     ⚠️ Do not add a count check here — the ceiling is the whole rule.
+ *   · THE PALE VIOLET TINTS, WRITTEN AS RAW HEX, ARE STRUCTURALLY UNCATCHABLE BY
+ *     CHROMA IN THIS PALETTE, and that is a property of the colours rather than
+ *     a threshold anyone has yet to find. Two measurements, either file:
+ *
+ *         the neutral ramps' maximum chroma   0.0244   (--n-4 light, #807869)
+ *         Tailwind violet-100, #ede9fe        0.0284
+ *
+ *     Four thousandths apart. Nothing sits between them that is a margin rather
+ *     than noise: a floor low enough to fail `#ede9fe` is a floor the palette's
+ *     own greys start failing, and a false failure on a legitimate grey is how a
+ *     colour rule gets deleted instead of fixed. ⚠️ A RETUNE OF THE FLOOR FROM
+ *     0.0515 TO 0.025 WAS PROPOSED ON 2026-08-17 AND WITHDRAWN ON THIS
+ *     MEASUREMENT; the floor and its margin below are unchanged, and the
+ *     derivation stated there — basis plus the palette's largest recorded
+ *     retune — is still the live one and is not a leftover. What the withdrawal
+ *     replaced it with is this bullet: the gap is documented rather than tuned.
+ *     ⚠️ Do not reopen it by moving the number. What escapes is the HEX
+ *     SPELLING only. Both tints are caught by NAME, in both trees, because
+ *     `violet` is on rule 1's word list — so closing this wants a mechanism that
+ *     is not a chroma threshold (a lightness term is the obvious candidate,
+ *     since what makes `#ede9fe` a wash rather than a grey is that it sits at
+ *     L 0.943), and that is the design thread's instrument to choose.
+ *   · §13's em-dash ban is scoped by WORD COUNT, and rule 8 below applies that
+ *     count to a whole text run. Design ruled on 2026-08-17 that this is the
+ *     rule working rather than the rule broken — the count is what scopes the
+ *     ban to microcopy, which is what the clause is about — but that length was
+ *     never the property that actually mattered, so the proxy is poor at both
+ *     edges and the ban is soft there in BOTH directions. A long empty-state
+ *     paragraph escapes with a dash in it; a short label is caught whether or
+ *     not the dash is doing any harm. The Search screen's `pagehead__meta` is
+ *     the worked example, measured on 2026-08-17: 29 words as a run and 19 as
+ *     the sentence carrying the dash, so it was out of reach at BOTH
+ *     granularities and a sentence-scoped rule would have passed it too. It was
+ *     fixed by hand. ⚠️ DO NOT TUNE THE 15 to close this; design looked at the
+ *     number and left it. Closing it wants a different property, not a
+ *     different threshold, and that is the design thread's to choose.
+ *   · §17.4 rule 7's THIRD clause — "the silence for the rest is correct, so
+ *     this rule does not license copy that explains it" — is enforced by
+ *     neither checker, and rule 9 below implements the first two clauses only.
+ *     A string that explains why an unsupplied media type is silent is not a
+ *     forbidden literal: it is a claim, spelled any number of ways, and telling
+ *     it apart from the legitimate sentences on the same screen ("nothing in
+ *     UsArr answers a search against your own catalogue yet") is judgement
+ *     rather than grep. It is a `[review]` clause in every way but its section
+ *     number. What rule 9 does buy against it is indirect and partial: the
+ *     likeliest form of the explanation names the types it is explaining, and
+ *     clause 1 refuses that.
  *
  * ⚠️ THE THIRD CLAUSE LEFT THIS LIST ON 2026-08-17, AND IS NOW RULE 2. It read:
  * "§13 bans the four hues 'or equivalent hex/oklch'. Only the words are matched,
@@ -95,6 +155,25 @@
  * between two. Where the corpus differs — check.mjs reads a rendered DOM for its
  * copy rule and this file reads source text — the difference is written down at
  * the rule that carries it.
+ *
+ * ⚠️ RULE 9 IS THE EXCEPTION TO THAT PARAGRAPH, BECAUSE THERE IS NOTHING TO
+ * COPY. check.mjs has no §17.4-rule-7 rule in any form: its §17 sweep reads §17's
+ * own `*"…"*` spans as a shipping-copy corpus, which holds the SPECIFICATION to
+ * §13's copy bans, and says nothing about whether the SPA agrees with the
+ * specification. Rule 9 is therefore written from §17.4's text rather than
+ * transcribed from a sibling implementation, and its wording is read live out of
+ * §17.4 rather than retyped here, so §17 stays the single definition and this
+ * file stays a check that the app has not drifted from it.
+ *
+ * ⚠️ AND ONE PLACE THIS FILE IS KNOWINGLY BEHIND check.mjs AS OF 2026-08-17.
+ * Design's `5879d50` widened the gate's colour word list past §13's four
+ * families to the CSS keywords that are those families under another name, and
+ * more are landing. Rule 1 below still bans four. THAT SYNC IS DELIBERATELY NOT
+ * MADE HERE YET: the gate's list is mid-change, and syncing to a moving list
+ * means being wrong in between and doing it twice. It is a known gap, recorded
+ * rather than half-closed, and it closes in one edit against the gate's final
+ * list. ⚠️ Do not partially sync it — read `docs/design/check.mjs` and take the
+ * whole list, or take none of it.
  *
  * TWO PROPERTIES INHERITED FROM check.mjs, BECAUSE THEY ARE WHY IT IS TRUSTED:
  *
@@ -147,6 +226,14 @@
  * paragraphs above banning its punctuation, and §13 is being amended so the
  * endorsement names the colon.
  *
+ * A SIXTH WAS FOUND BY HAND ON THE SAME DAY AND THIS FILE COULD NOT SEE IT. The
+ * Search screen's `pagehead__meta` read "Not built yet — below is what it is
+ * waiting on"; it now takes the colon, for the reason three of the four above
+ * did. Rule 8 never had a chance at it and still would not, which is measured
+ * rather than assumed and is written up in REASON TWO. It is here as well as
+ * there because the two lists answer different questions: that one records the
+ * limit, this one records that the limit has already cost a real string.
+ *
  * ⚠️ AND ONE THING THAT WAS CONSIDERED AND REFUSED, recorded because it will
  * occur to the next person. `.th__arrow`'s centring can be written as
  * `display: inline-flex; justify-content: center`, which does the identical
@@ -161,6 +248,10 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+/* The six, imported rather than restated: rule 9's vocabulary is keyed on them,
+   so a seventh media type fails this file instead of going unguarded. This is the
+   only import here from the app's own code, and it is data, not behaviour. */
+import { MEDIA_TYPES, type MediaType } from './library';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '../../..');
@@ -692,6 +783,194 @@ const EMDASH_DEFERRED: Record<string, string> = {
 		'check.mjs exempts the rendered form of this one through §17; the source form ' +
 		'has a hole where the two-words-either-side window needs a word.'
 };
+
+/* =============================================================================
+ * RULE 9'S MACHINERY — ARCHITECTURE §17.4 rule 7, over the Search screen
+ *
+ * THE RULE, QUOTED AS WRITTEN, because a paraphrase of it is what produced the
+ * string it exists to forbid. `docs/ARCHITECTURE.md` §17.4, rule 7:
+ *
+ *   "Search's own copy never enumerates media types, and the corpus it names is
+ *   *your services*. The set of types behind that phrase is whatever the
+ *   connected services supply, which is a different set on a Prowlarr-only
+ *   install than on a full stack, so any fixed list is a promise the install may
+ *   not keep. **A shorter list is the same defect with fewer words** — the
+ *   failure is enumeration, not arity."
+ *
+ * ⚠️ IT SAYS "SEARCH'S OWN COPY", AND THAT IS THE CORPUS THIS RULE TAKES. The
+ * rule is §17.4's, §17.4 is the Search screen, and the scope is neither widened
+ * to `web/src` nor narrowed below the route. Widening it was tried and rejected
+ * on evidence rather than on principle: run over the whole tree it fails
+ * `web/src/lib/requests.ts`, whose indexer-coverage note reads "the trackers that
+ * carry ebooks and audiobooks are invite-only". That string is §17.5's copy, it
+ * is about which trackers carry what rather than about what the library holds,
+ * and rule 7 does not govern it. A tree-wide port would therefore have landed
+ * either a false failure or the named exception this file refuses to keep. If
+ * design wants the ban on every screen, that is §17's sentence to write and this
+ * rule's corpus to widen afterwards.
+ *
+ * TWO OF THE RULE'S THREE CLAUSES ARE IMPLEMENTED HERE:
+ *
+ *   1. NO ENUMERATION — a Search copy string naming two or more media types
+ *      fails. Two, not three: §17 says a shorter list is the same defect, so the
+ *      threshold is the smallest number that is a list at all. One mention is
+ *      not an enumeration and is not touched.
+ *   2. THE CORPUS IS NAMED — §17's standing wording must still be on the screen,
+ *      read live out of §17.4 rather than retyped here. That makes it a
+ *      copy-drift check in the same shape as the em-dash rule's §17 exemption:
+ *      §17 stays the single definition, and this file only asserts that the app
+ *      has not drifted from it.
+ *
+ * The third clause — the silence for an unsupplied type must not be explained —
+ * is judgement rather than grep, and is recorded in the header's REASON TWO
+ * alongside the §13 clauses no checker holds. It is NOT implemented below, and
+ * nothing here should be read as covering it.
+ *
+ * WHAT CLAUSE 1 CANNOT SEE, STATED BEFORE THE CODE RATHER THAN AFTER IT:
+ *
+ *   · IT IS A WORD LIST, WHICH IS RULE 1'S SHAPE OF PROBLEM AND HAS RULE 1'S
+ *     HOLE. The six types are derived — `MEDIA_TYPES` is imported from
+ *     `$lib/library`, and a seventh fails the coverage test below rather than
+ *     going quietly unguarded — but the WORDS for each are hand-written, because
+ *     the string this rule was written about ("film, episode, album, book and
+ *     comic") uses none of the six enum values. A synonym nobody listed walks
+ *     through. There is no derivation available that would fix this: the enum is
+ *     the schema's vocabulary and copy is English.
+ *   · THREE OBVIOUS WORDS ARE DELIBERATELY OFF THE LIST — `series`, `show` and
+ *     `track` — because each is a common non-media word in this product's own
+ *     prose ("a series of", "show the user", "keep track of"), and a copy rule
+ *     that fires on prose gets deleted rather than fixed. That is the same
+ *     structural argument the font rule makes about "Internally". The cost is
+ *     real and is bounded: a two-item enumeration built ONLY from excluded words
+ *     ("series and shows") passes. A longer list survives losing one word,
+ *     because two of the remaining ones still trip it.
+ *   · IT READS THE SOURCE, SO IT CANNOT SEE A LIST ASSEMBLED AT RUNTIME. Copy
+ *     built by joining `MEDIA_TYPES` through `mediaTypeLabel()` would enumerate
+ *     every type on screen and contain no type word in the file at all. That is
+ *     the dividing rule again, and it belongs to a rendered pass.
+ *   · IT READS THE ROUTE, SO IT CANNOT FOLLOW COPY OUT OF IT. If Search's
+ *     strings move into a `$lib` module the way Requests' did, this rule stops
+ *     seeing them and says nothing about it. Clause 2 is what catches that: the
+ *     standing wording disappearing from the route fails, loudly, and the fix is
+ *     to widen the corpus rather than to delete the assertion.
+ * ========================================================================== */
+
+/** §17.4's own text: rule 7's section, sliced out of the §17 already read above. */
+const s174Body = (() => {
+	const at = s17Body.indexOf('\n### 17.4 ');
+	if (at === -1) return '';
+	const rest = s17Body.slice(at);
+	const end = rest.indexOf('\n### ', 10);
+	return end === -1 ? rest : rest.slice(0, end);
+})();
+
+/**
+ * Rule 7 itself. Its numbered item runs unbroken to the blank line that ends it,
+ * which is what bounds it here — taking the rest of §17.4 would sweep in the
+ * "Every result row is one template" paragraph and its backticked column lists.
+ */
+const RULE7_HEAD = "7. **Search's own copy never enumerates media types";
+const rule7 = (() => {
+	const at = s174Body.indexOf(RULE7_HEAD);
+	if (at === -1) return '';
+	const end = s174Body.indexOf('\n\n', at);
+	return end === -1 ? s174Body.slice(at) : s174Body.slice(at, end);
+})();
+
+/**
+ * §17's standing wording for this screen, read live out of rule 7's `*"…"*` span.
+ *
+ * ⚠️ THE ITALIC-QUOTED FORM IS LOAD-BEARING AND IS §17'S OWN CONVENTION, not a
+ * parsing convenience. §17.4 says so where it retires the old string: "That is in
+ * backticks and not in this section's italic-quoted form, because the
+ * italic-quoted form marks copy that ships and this string is retired." So the
+ * span this reads is exactly the span §17 marks as shipping copy, and the
+ * retired one is structurally excluded from being read as the standard.
+ */
+const STANDING_WORDING = (() => {
+	const m = /\*"([\s\S]*?)"\*/.exec(rule7);
+	return m ? collapse(m[1]) : '';
+})();
+
+/**
+ * The string this rule exists because of, read out of rule 7's BACKTICKS — the
+ * form §17 uses for copy that is retired.
+ *
+ * It is the drill's probe below, and reading it rather than retyping it is the
+ * point: a probe typed from memory drifts from the string it claims to be, and
+ * then the drill proves the rule fires on something nobody ever shipped.
+ */
+const RETIRED_ENUMERATION = (() => {
+	const spans = [...rule7.matchAll(/`([^`]+)`/g)].map((m) => collapse(m[1]));
+	return spans.find((s) => /\bfilm\b/i.test(s) && /\bcomic\b/i.test(s)) ?? '';
+})();
+
+/**
+ * The words that name a media type, keyed by the type they name.
+ *
+ * The KEYS are `MEDIA_TYPES`, imported rather than restated, so the six cannot
+ * drift apart and a seventh fails the coverage test. The VALUES are English and
+ * are hand-written; see the limits above.
+ */
+const MEDIA_TYPE_WORDS: Record<MediaType, readonly string[]> = {
+	movies: ['film', 'films', 'movie', 'movies'],
+	tv: ['episode', 'episodes', 'tv'],
+	music: ['album', 'albums', 'music', 'song', 'songs'],
+	ebooks: ['book', 'books', 'ebook', 'ebooks', 'e-book', 'e-books'],
+	audiobooks: ['audiobook', 'audiobooks', 'audio-book', 'audio-books'],
+	comics: ['comic', 'comics']
+};
+
+const WORD_TO_TYPE: ReadonlyMap<string, MediaType> = new Map(
+	Object.entries(MEDIA_TYPE_WORDS).flatMap(([type, words]) =>
+		words.map((w) => [w, type as MediaType] as const)
+	)
+);
+
+/**
+ * One alternation, LONGEST ALTERNATIVE FIRST, and that ordering is the whole
+ * reason this is one regex rather than a loop over the words.
+ *
+ * `audiobooks` contains `books` and `ebooks` contains `books`. Matched
+ * separately, "audiobooks" would count as BOTH audiobooks and ebooks, and a
+ * string naming one type would read as an enumeration of two — a false positive
+ * on the strictest possible input, which is how a copy rule earns its first
+ * exception. Sorted by length, the engine consumes `audiobooks` at that position
+ * and `books` never sees it. `\b` handles the other direction: `book` does not
+ * match inside `bookmark`.
+ */
+const MEDIA_TYPE_WORD = new RegExp(
+	`\\b(${[...WORD_TO_TYPE.keys()].sort((a, b) => b.length - a.length).join('|')})\\b`,
+	'gi'
+);
+
+/** The media types one string names, in `MEDIA_TYPES` order so a report is stable. */
+function typesNamed(text: string): MediaType[] {
+	const found = new Set<MediaType>();
+	const re = new RegExp(MEDIA_TYPE_WORD.source, 'gi');
+	let m: RegExpExecArray | null;
+	while ((m = re.exec(text)) !== null) {
+		const t = WORD_TO_TYPE.get(m[1].toLowerCase());
+		if (t) found.add(t);
+	}
+	return MEDIA_TYPES.filter((t) => found.has(t));
+}
+
+/** §17's own threshold: a list of two is a list. */
+const ENUMERATION_MIN = 2;
+
+/**
+ * The failure line. File, line, source position, WHICH types were named and the
+ * offending text, because "no enumeration" tells the person reading CI nothing
+ * they can act on — they need to know which words tripped it to know what to cut.
+ */
+const reportEnumeration = (s: CopyString, types: readonly MediaType[]): string =>
+	`${s.file}:${s.line}  ${s.source}  names ${types.length} media types ` +
+	`(${types.join(', ')})  "${s.text.slice(0, 160)}"`;
+
+/** Search's own copy, which is rule 7's corpus and nothing wider. */
+const SEARCH_ROUTE = 'web/src/routes/search/';
+const SEARCH_COPY: readonly CopyString[] = COPY.filter((s) => s.file.startsWith(SEARCH_ROUTE));
 
 /* =============================================================================
  * RULE 2'S MACHINERY — §13's colour ban, BY VALUE
@@ -1924,5 +2203,194 @@ describe('DESIGN-DIRECTION §13 — the static rules, over web/src', () => {
 				'only TS literals, Svelte script literals, attributes and markup text. Extend ' +
 				'the corpus to cover it, or move the string into markup.'
 		).toEqual([]);
+	});
+});
+
+/* =============================================================================
+ * RULE 9 — ARCHITECTURE §17.4 rule 7, over Search's own copy
+ *
+ * A SEPARATE `describe` BECAUSE THE AUTHORITY IS SEPARATE. Everything above is
+ * DESIGN-DIRECTION §13 and reads the whole of `web/src`; this is ARCHITECTURE
+ * §17.4 and reads one route. Filing it under the §13 block would have made a
+ * failing test name cite the wrong document, which is the sort of small
+ * inaccuracy that later gets quoted as an argument.
+ * ========================================================================== */
+
+describe('ARCHITECTURE §17.4 rule 7 — over web/src/routes/search', () => {
+	it('reads §17.4 rule 7 at all, and both of the strings it defines', () => {
+		/* ANTI-VACUITY, AND IT IS THE FIRST TEST FOR A REASON. Every assertion below
+		   compares the app against text read out of §17. If that read silently
+		   returns nothing — the section renumbered, the rule reworded, the
+		   italic-quoted convention abandoned — then `''` is a substring of
+		   everything, the drift check passes on any input, and the drill fires on an
+		   empty probe. The failure has to happen HERE, where the message can say
+		   which of the three reads came back empty. */
+		expect(
+			s174Body.length,
+			'ARCHITECTURE §17.4 could not be located inside §17, so rule 9 is comparing the ' +
+				'app against nothing at all'
+		).toBeGreaterThan(2000);
+		expect(
+			rule7,
+			`ARCHITECTURE §17.4 rule 7 could not be located. It is matched on its opening ` +
+				`words, "${RULE7_HEAD}". If design has reworded the rule, this file follows ` +
+				`the wording rather than the other way round: update the marker, then check ` +
+				`that the standing wording below is still what ships.`
+		).not.toBe('');
+		expect(
+			STANDING_WORDING,
+			'rule 7 was found but carries no *"…"* span, so §17 no longer states the ' +
+				'standing wording in the form it reserves for copy that ships. The drift ' +
+				'check has nothing to compare against.'
+		).not.toBe('');
+		expect(
+			RETIRED_ENUMERATION,
+			'rule 7 was found but no longer records the retired string in backticks. That ' +
+				'string is this rule\'s only positive control: without it the drill below ' +
+				'fires on nothing and proves nothing.'
+		).not.toBe('');
+	});
+
+	it('rule 9 vocabulary: every media type the app ships has words', () => {
+		/* The seam that keeps the hand-written half honest. `MEDIA_TYPES` is §17.2's
+		   navigation enum and the app's own vocabulary; if a seventh lands, this
+		   fails and asks for its words rather than letting it go unguarded — which
+		   is the silent direction and the one a word list always fails in. */
+		expect(
+			Object.keys(MEDIA_TYPE_WORDS).sort(),
+			'the media-type word list and MEDIA_TYPES have diverged. Add the words for the ' +
+				'new type, or remove the ones for the type that went.'
+		).toEqual([...MEDIA_TYPES].sort());
+		for (const t of MEDIA_TYPES) {
+			expect(MEDIA_TYPE_WORDS[t].length, `no words listed for media type "${t}"`).toBeGreaterThan(
+				0
+			);
+		}
+	});
+
+	it('reads a Search copy corpus big enough to be the corpus', () => {
+		/* 17 strings today, over one file: 11 attributes, 5 markup runs and one
+		   module specifier. Floor 12, which is what losing the markup walk costs —
+		   the five runs are the copy, the attributes are mostly class names, and a
+		   count satisfied by the attribute sweep alone would be the exact hole the
+		   per-source floors above exist to refuse. It also fails hard at zero, which
+		   is what a renamed route looks like. */
+		expect(
+			SEARCH_COPY.length,
+			`${SEARCH_COPY.length} copy string(s) read under ${SEARCH_ROUTE}, below the floor ` +
+				`of 12. Rule 7's corpus is the Search route; a scan that reads none of it ` +
+				`reports "no enumeration" forever.`
+		).toBeGreaterThanOrEqual(12);
+	});
+
+	it('§17.4 rule 7: Search names the corpus as "your services"', () => {
+		/* CLAUSE 2, AND IT IS A DRIFT CHECK RATHER THAN A BAN. §17 fixes the wording;
+		   this asserts the screen still carries it. Compared with the terminal
+		   punctuation trimmed, because §17 quotes two whole sentences and the screen
+		   continues the second one ("…and nothing else, and it renders from SQLite"),
+		   which is the shipped string agreeing with the standard rather than drifting
+		   from it. Everything else — every word, in order — must match. */
+		const wanted = norm(STANDING_WORDING).replace(/[.\s]+$/, '');
+		const haystack = SEARCH_COPY.map((s) => norm(s.text)).join('\n');
+		expect(
+			haystack.includes(wanted),
+			`§17.4 rule 7: the Search screen no longer carries §17's standing wording for ` +
+				`its corpus. §17 fixes it as:\n\n    ${STANDING_WORDING}\n\n` +
+				`Nothing under ${SEARCH_ROUTE} contains it. Either the copy has drifted and ` +
+				`should be put back, or §17 has been amended and this file is reading the ` +
+				`amendment — check which, because only one of those is a bug. Do not soften ` +
+				`the comparison to make this green.`
+		).toBe(true);
+	});
+
+	it('§17.4 rule 7: Search enumerates no media types', () => {
+		/* CLAUSE 1, over the real corpus. */
+		const found: string[] = [];
+		for (const s of SEARCH_COPY) {
+			const types = typesNamed(s.text);
+			if (types.length >= ENUMERATION_MIN) found.push(reportEnumeration(s, types));
+		}
+		expect(
+			found,
+			`§17.4 rule 7: Search's copy enumerates media types.\n\n` +
+				`The set of types behind "your services" is whatever the connected services ` +
+				`supply, which is a different set on a Prowlarr-only install than on a full ` +
+				`stack, so a fixed list is a promise the install may not keep. §17 is explicit ` +
+				`that a SHORTER list is the same defect with fewer words: the failure is ` +
+				`enumeration, not arity, so do not cut the list down.\n\n` +
+				`Name the corpus instead. §17's standing wording is:\n\n    ${STANDING_WORDING}\n\n` +
+				`⚠️ And do not add a sentence explaining why an unsupplied type is silent. ` +
+				`Nothing in the schema or on the wire separates "no rows matched" from "no ` +
+				`source can supply this type", so no string may claim to.\n\n` +
+				found.join('\n')
+		).toEqual([]);
+	});
+
+	it('§17.4 rule 7: fires on the string §17.4 records as its origin', () => {
+		/* THE DRILL, MADE PERMANENT, and run through the REAL extractor: the probe is
+		   markup, `scanMarkup` turns it into a CopyString exactly as it does for the
+		   shipped file, and the same `typesNamed` decides it. A drill against a
+		   re-implementation of the rule proves something about the re-implementation.
+
+		   The probe itself is read out of §17.4's backticks rather than retyped, so
+		   it is the string that actually shipped until 2026-08-17 and not an
+		   approximation of it that happens to be easier to catch. */
+		const probe: CopyString[] = [];
+		scanMarkup(
+			`<div class="pagehead">\n\t<p class="pagehead__meta">\n\t\tThis screen searches ${RETIRED_ENUMERATION}.\n\t</p>\n</div>\n`,
+			'web/src/routes/search/planted.svelte',
+			probe
+		);
+
+		const runs = probe.filter((s) => s.source === 'markup text');
+		expect(runs.length, 'the planted markup produced no text run at all').toBe(1);
+
+		const types = typesNamed(runs[0].text);
+		expect(
+			types,
+			'the retired string no longer reads as an enumeration, so the rule has gone ' +
+				'inert on the one input it was written for'
+		).toEqual(['movies', 'tv', 'music', 'ebooks', 'comics']);
+		expect(types.length).toBeGreaterThanOrEqual(ENUMERATION_MIN);
+
+		/* An actionable message names the file, the line, WHICH types tripped it and
+		   the text. "no enumeration" would tell the person reading CI none of it.
+
+		   ⚠️ THE LINE IS WHERE THE RUN STARTS, NOT WHERE THE OFFENDING WORD SITS, and
+		   that is asserted here rather than left to surprise someone: the probe's
+		   dash-free enumeration begins on line 3 and reports line 2, because a text
+		   run is located at its opening tag. Over a wrapped paragraph the gap can be
+		   several lines. The full text is printed alongside for exactly this reason —
+		   the line gets you to the paragraph, the text gets you to the sentence. */
+		const message = reportEnumeration(runs[0], types);
+		expect(message).toContain('web/src/routes/search/planted.svelte:2');
+		expect(message).toContain('markup text');
+		expect(message).toContain('names 5 media types');
+		expect(message).toContain('movies, tv, music, ebooks, comics');
+		expect(message).toContain('film');
+
+		/* THE NEGATIVE HALF, WHICH IS WHAT SEPARATES A RULE FROM AN ASSERTION THAT
+		   ALWAYS FAILS. §17's own replacement wording must pass, and so must a single
+		   type named once: one mention is not an enumeration and rule 7 does not
+		   touch it. If either of these fired, the rule would be unusable and the
+		   first person to hit it would add the exception this file has none of. */
+		expect(typesNamed(STANDING_WORDING), "§17's own standing wording trips the rule").toEqual([]);
+		expect(
+			typesNamed('Searching your indexers for a film you do not own is a different thing'),
+			'one media type named once reads as an enumeration'
+		).toEqual(['movies']);
+		expect(
+			typesNamed('every film and movie your services already own'),
+			'two words for ONE type read as an enumeration of two'
+		).toEqual(['movies']);
+
+		/* And the substring trap the alternation ordering exists to close, drilled
+		   rather than trusted to the comment: `audiobooks` must not also count as
+		   `ebooks`, or a string naming one type fails as though it named two. */
+		expect(
+			typesNamed('audiobooks are supplied by Audiobookshelf'),
+			'`audiobooks` is being read as two types because `books` matched inside it'
+		).toEqual(['audiobooks']);
+		expect(typesNamed('bookmark this page'), '`book` matched inside `bookmark`').toEqual([]);
 	});
 });
