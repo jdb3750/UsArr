@@ -346,7 +346,7 @@ const NOT_SENT_BY_CODE: Record<string, NotSentCopy> = {
 	// §17.5 is explicit that this reads as EXPIRED and offers Search again —
 	// never as a rejection, which would read as "the tracker refused you".
 	expired: {
-		detail: 'the listing had expired — Prowlarr keeps a release grabbable for 30 minutes',
+		detail: 'the listing had expired: Prowlarr keeps a release grabbable for 30 minutes',
 		nonAction: '',
 		action: 'search-again'
 	},
@@ -470,7 +470,7 @@ const NOT_SENT_UNRECOGNISED: NotSentCopy = {
  * recognise which release a row is about.
  */
 export const GRAB_MISSING_TITLE_NOTE =
-	'no name recorded — the listing was already gone when you pressed Grab';
+	'no name recorded: the listing was already gone when you pressed Grab';
 
 function notSentCopy(input: GrabOutcomeInput): NotSentCopy {
 	const code = input.errorCode ?? '';
@@ -537,7 +537,7 @@ export function grabOutcome(
 				outcome: OUTCOME_SENT_UNKNOWN,
 				label: 'sent, outcome unknown',
 				tone: 'warn',
-				detail: 'Prowlarr reported a problem after accepting it — check your download client',
+				detail: 'Prowlarr reported a problem after accepting it. Check your download client.',
 				// No action, permanently. The only button that would fit is one that
 				// sends the release again, which is what produces two copies of a
 				// 68 GB release; the truth lives in the download client, and the

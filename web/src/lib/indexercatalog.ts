@@ -312,7 +312,7 @@ export function isSearchable(indexer: CatalogIndexer): boolean {
  */
 export function unavailableReason(indexer: CatalogIndexer): string {
 	if (!indexer.enabled) return 'Turned off in this indexer service, so a search never asks it.';
-	if (!indexer.supportsSearch) return 'RSS only — it advertises no search, so a search skips it.';
+	if (!indexer.supportsSearch) return 'RSS only: it advertises no search, so a search skips it.';
 	return '';
 }
 
