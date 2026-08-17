@@ -1672,6 +1672,42 @@ treatment by media type.** Same slots, same positions, different values.
   `tabular-nums` is applied at the cell rather than per-span so composite values
   (`1,187 have · 17 wanted`, `13,204 / 14,061 episodes`) inherit it — eight such cells had it
   missing, and they are precisely the composite ones.
+  - **The treatment: the figure at full contrast, the unit muted, `tabular-nums` retained on the
+    cell, and the unit box given a fixed width.** The figure is the value and the unit is only its
+    scale, so the unit is `--fg-muted` and the figure is not. **The fixed width is the half that does
+    the work**, and it is what makes right-alignment mean anything: right-aligning `4.8 GB` over
+    `820 MB` aligns the `B`, so the digits — the one thing being compared down the column — land at
+    two different x-positions, and `tabular-nums` cannot help because the misalignment is caused by
+    the word. Measured on the Requests release table with one row moved onto each of two other size
+    units: **with the fixed unit box the last digit of `68.4 GB` and of `4 B` both sit at
+    x = 928.06 px, a spread of 0.00 px; with the box switched off they sit at 931.06 and 940.06, a
+    spread of 9.00 px.**
+  - **The width belongs to the unit FAMILY, not to the value in front of you**, or the digits jump
+    the first time a row crosses from GB to MB. Reserve the widest unit the column can ever print,
+    measured in the cell font (13 px IBM Plex Sans, `1ch` = 8 px) and rounded up to the next half-ch:
+    **size** `B · KB · MB · GB · TB`, widest `MB` at 19 px → `2.5ch`; **duration** `days · weeks ·
+    months · years · hours`, widest `months` at 43 px → `5.5ch`; **item nouns** `films · series ·
+    books · artists · issues · episodes`, widest `episodes` at 52 px → `6.5ch`.
+  - 🚩 **The alternative was the unit in the column header with bare numbers in the cells, and it is
+    rejected: it only works where every row of the column shares one unit, which rules out size.**
+    A `Size` column holding `68.4 GB` beside `820 MB` beside `4.2 KB` has no unit to put in its
+    header, and the moment one exists the header is lying about some rows. The same disqualifies it
+    for `Age` (`3 years` beside `11 months`) and for Home's `Items`, whose six rows count films,
+    series, artists and books. A rule that fails on the three columns it was proposed for is not a
+    rule. The header form remains right for a column whose unit is genuinely constant — but that
+    column is covered already, by the rule four bullets above: a value identical for every row is
+    not data and is not rendered.
+  - ⚠️ **Applied so far to the size columns only — 98 cells — and the reason is a measured cost, not
+    an unfinished opinion.** A reserved unit box costs column width, and two declared tracks cannot
+    pay it. `Age` in the release tables is a 68 px track: 24 px of padding leaves 44 px and `months`
+    alone is 43 px, so the figure has nothing left and the cell wraps to two lines. Home's `Items`
+    is 107.375 px: 52 px of reserve plus 24 px of padding leaves 31 px against a 36 px `1,842`.
+    Both were measured wrapping at **+18 px per cell over 224 cells** across the render sweep.
+    **Still carrying the old one-string treatment, named so that a reader can tell an unfinished job
+    from a decision:** `Age` on *Release results* and *Audiobook release results* (36 cells), and
+    `Items` on Home's *Library by media type* (16 cells). Widening a declared track is its own
+    decision on the two densest tables in the product, and §9.1's own overflow bullet is the reason
+    it is not folded in casually.
 - **A composite numeric cell says what its parts are.** `41 / 9` in a `Peers` column announces as
   *"Peers, 41 slash 9"* and nothing on the screen says which number is seeders — while prose four
   hundred pixels below calls the same column "seeders". Keep the ecosystem-verbatim header (`Peers`
