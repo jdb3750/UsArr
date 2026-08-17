@@ -225,19 +225,22 @@ export function createFrozenOrder<T>(options: FrozenOrderOptions<T>): FrozenOrde
 			 *
 			 * THE POINTER EVENTS ARE NOT THE CULPRIT, though they read like it.
 			 * Chromium never dispatches a pointer boundary event synchronously
-			 * out of a mutation — six mutation shapes × four forced-layout
-			 * variants, every one landing after the lifecycle. And focusout
-			 * throws only from DEEP ENOUGH BLOCK STRUCTURE: a flat `{#each}` of
-			 * divs writes the flag legally where `$lib/List.svelte`'s real
-			 * nesting throws, which is why three earlier versions of the scenario
-			 * passed against broken code. Do not flatten the repro.
+			 * out of a mutation — five mutation shapes × four forced-layout
+			 * variants, twenty cells, every one landing in a later task. And
+			 * focusout throws only from DEEP ENOUGH BLOCK STRUCTURE: a flat
+			 * `{#each}` of divs writes the flag legally where `$lib/List.svelte`'s
+			 * real nesting throws, which is why three earlier versions of the
+			 * scenario passed against broken code. Do not flatten the repro. That
+			 * much is measured in Chromium, not reasoned about: re-run the matrix
+			 * with `pnpm probe:pointer` rather than trusting the count here.
 			 *
-			 * The deferral stays on all four listeners regardless: one uniform
-			 * rule is cheaper to keep true than a per-event one, and a microtask
-			 * runs after the flush and before the next task, so the flag is set
-			 * well before any click can be dispatched against it — a click is a
-			 * separate task. Nothing about the rule changes; only the instant of
-			 * the write does. Measured in Chromium, not reasoned about.
+			 * WHAT FOLLOWS IS THE REASONING, AND NO TEST ASSERTS IT. The deferral
+			 * stays on all five listeners and on `destroy()` regardless, because
+			 * one uniform rule is cheaper to keep true than a per-event one; and a
+			 * microtask runs after the flush and before the next task, so the flag
+			 * is set well before any click can be dispatched against it — a click
+			 * is a separate task. Nothing about the rule changes; only the instant
+			 * of the write does.
 			 */
 			const defer = (write: () => void) => queueMicrotask(write);
 

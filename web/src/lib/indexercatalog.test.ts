@@ -448,10 +448,12 @@ describe('which indexer service a search asks', () => {
 
 	it('takes the catalogue’s instances as the services, in the server’s order', () => {
 		// indexers.go already filters to Role == "indexer", so this passes the
-		// list through rather than re-filtering it. The order is the catalogue's
-		// own `name ASC` and is deliberately NOT re-sorted here — 🔍 measured, it
-		// disagrees with resolveIndexerInstance's priority-then-name default, which
-		// is why the client names the instance rather than trusting either order.
+		// list through rather than re-filtering it. The order is the server's and
+		// is deliberately NOT re-sorted here: catalogue and search path share one
+		// `ORDER BY priority DESC, name ASC`, so they AGREE on sort. What they
+		// disagree on is membership — the catalogue keeps disabled services,
+		// resolveIndexerInstance drops them — which is why the client names the
+		// instance rather than trusting position.
 		const catalog = {
 			status: CATALOG_OK,
 			message: '',

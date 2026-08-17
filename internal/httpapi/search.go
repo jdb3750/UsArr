@@ -351,12 +351,17 @@ func toReportResponse(rep releases.Report) reportResponse {
 // rate-limited, and when nothing matched — identically. Without this sentence a
 // total failure is indistinguishable from a genuine no-results, which is exactly
 // the empty screen that looks broken.
+//
+// The noun agrees with the denominator, not the numerator: a one-indexer install
+// is the common case, and "1 of 1 indexers answered" on the first screen a new
+// user reaches reads as a bug in everything behind it. "%d failed, %d skipped"
+// elides the noun on purpose — it stays correct at every count.
 func reportSummary(rep releases.Report) string {
 	if !rep.Degraded() {
-		return fmt.Sprintf("%d of %d indexers answered", rep.Answered, rep.TotalIndexers)
+		return fmt.Sprintf("%d of %s answered", rep.Answered, countNoun(rep.TotalIndexers, "indexer"))
 	}
-	return fmt.Sprintf("%d of %d indexers answered — %d failed, %d skipped; these results are incomplete",
-		rep.Answered, rep.TotalIndexers, rep.Failed, rep.Skipped)
+	return fmt.Sprintf("%d of %s answered — %d failed, %d skipped; these results are incomplete",
+		rep.Answered, countNoun(rep.TotalIndexers, "indexer"), rep.Failed, rep.Skipped)
 }
 
 // ── plumbing ────────────────────────────────────────────────────────────────
