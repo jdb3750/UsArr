@@ -22,9 +22,15 @@ export type ColumnAlign = 'start' | 'end';
  * rows. Making the field optional would let a caller opt back into the cost by
  * omission, which is the failure mode a required field forecloses.
  *
- * The value is a single CSS grid track: `minmax(0, 2fr)`, `12ch`,
- * `minmax(max-content, auto)` for an action column (§9.1's overflow policy —
- * a fixed track shears the buttons attached to the rows that are broken).
+ * The value is a single CSS grid track: `minmax(0, 2fr)`, `12ch`, `198px`.
+ *
+ * ⚠️ IT MUST NOT BE CONTENT-SIZED. `auto`, `max-content`, `min-content`,
+ * `fit-content()`, and any `minmax()` built out of them are all forbidden here,
+ * and `findContentSizedTracks` below says why and enforces it in dev. This
+ * comment used to recommend `minmax(max-content, auto)` for an action column,
+ * citing §9.1's overflow policy, and that recommendation shipped the bug the
+ * guard now closes. §9.1's policy is honoured by letting the CELL wrap
+ * (`.tbl .cell-actions { flex-wrap: wrap }`), not by an unbounded track.
  */
 export interface ListColumn {
 	/** Stable id. Also written to `data-col`, which the stacked fork keys on. */
@@ -112,8 +118,149 @@ export type NothingKind = keyof typeof NOTHING;
  * written through the CSSOM is not covered by the directive.
  */
 export function gridTemplate(columns: readonly ListColumn[]): string {
+	if (import.meta.env.DEV) warnContentSized(columns);
 	if (columns.length === 0) return 'minmax(0, 1fr)';
 	return columns.map((c) => c.width).join(' ');
+}
+
+/**
+ * The three CSS-wide keywords that size a track to its own grid's content.
+ *
+ * Matched case-insensitively because CSS keywords are ASCII case-insensitive,
+ * so `MAX-CONTENT` is the same declaration and the same bug.
+ */
+const CONTENT_SIZED_KEYWORD = /^(?:auto|max-content|min-content)$/i;
+
+/** `name(args)` as one whole token — `minmax(0, 1fr)`, `fit-content(200px)`. */
+const TRACK_FUNCTION = /^([a-zA-Z-]+)\((.*)\)$/s;
+
+/**
+ * Split on a top-level separator, ignoring anything inside parentheses.
+ *
+ * The nesting is the whole reason this is not `String.split`: the comma in
+ * `minmax(fit-content(200px), 1fr)` that matters is the outer one, and the
+ * whitespace in `minmax( max-content , auto )` is not a track boundary.
+ */
+function splitTopLevel(input: string, on: 'comma' | 'space'): string[] {
+	const parts: string[] = [];
+	let depth = 0;
+	let start = 0;
+	for (let i = 0; i < input.length; i++) {
+		const ch = input[i];
+		if (ch === '(') depth++;
+		else if (ch === ')') depth--;
+		else if (depth === 0 && (on === 'comma' ? ch === ',' : /\s/.test(ch))) {
+			parts.push(input.slice(start, i));
+			start = i + 1;
+		}
+	}
+	parts.push(input.slice(start));
+	return parts.map((p) => p.trim()).filter((p) => p !== '');
+}
+
+/**
+ * Whether one grid track sizes against the content of its own grid.
+ *
+ * ⚠️ THIS IS THE PREDICATE THE WHOLE GUARD RESTS ON, SO ITS SCOPE IS EXACT.
+ * Content-sized: the bare keywords `auto` / `max-content` / `min-content`, any
+ * `fit-content()`, and any `minmax()` with a content-sized argument in EITHER
+ * position. Not content-sized: lengths (`80px`, `10ch`, `4rem`), percentages,
+ * `<flex>` (`1fr`, `2.4fr`), `calc()`, and the `minmax(0, 1fr)` /
+ * `minmax(80px, 1fr)` forms every well-behaved column in this repo uses.
+ *
+ * ⚠️ EITHER POSITION, NOT JUST THE FLOOR, AND THAT IS DELIBERATE. CSS Grid
+ * §7.2.3 says "auto as a maximum is identical to max-content", so
+ * `minmax(80px, auto)` is every bit as row-local as `minmax(max-content, 1fr)`
+ * — it just fails less dramatically because the floor holds the short rows
+ * together. Checking only the floor would let the same bug back in through the
+ * second argument. No legitimate track in this repo has a content-sized
+ * maximum, so the wider rule costs nothing.
+ */
+export function isContentSized(track: string): boolean {
+	const t = track.trim();
+	if (t === '') return false;
+
+	// A `width` is documented as ONE track, but nothing enforces that, and
+	// `'minmax(0, 1fr) auto'` in a single field must not slip through on a
+	// technicality. Recurse into whitespace-separated tracks first.
+	const tracks = splitTopLevel(t, 'space');
+	if (tracks.length > 1) return tracks.some(isContentSized);
+
+	if (CONTENT_SIZED_KEYWORD.test(t)) return true;
+
+	const fn = TRACK_FUNCTION.exec(t);
+	if (!fn) return false;
+	const name = fn[1].toLowerCase();
+	// `fit-content(<length-percentage>)` is `min(max-content, max(auto, arg))`:
+	// content-sized by construction whatever the argument is.
+	if (name === 'fit-content') return true;
+	if (name === 'minmax') return splitTopLevel(fn[2], 'comma').some(isContentSized);
+	return false;
+}
+
+/**
+ * THE TRACKS IN `widths` THAT CANNOT ALIGN ACROSS ROWS, IN INPUT ORDER.
+ *
+ * ⚠️ THE BUG CLASS THIS CLOSES, BECAUSE IT IS INVISIBLE OTHERWISE. ADR-0029
+ * makes every row of a list an INDEPENDENT `display: grid`; header and body
+ * rows line up only because both resolve the same `--cols`. A content-sized
+ * track therefore has nothing to agree with — it sizes against the contents of
+ * its own row, so the header row sizes to the column NAME and each body row
+ * sizes to whatever that row happens to hold. There is no grid algorithm in
+ * play that could reconcile them, which is why this is a rule and not a
+ * preference.
+ *
+ * It shipped once. The Requests release table declared Actions as
+ * `minmax(max-content, auto)`; measured in Chromium at 1440 px that track came
+ * out 61 px in the header and 155.02 px in a body row, and the 94.02 px
+ * difference was handed to the header row's `fr` tracks alone, drifting every
+ * column right of Indexer 37–94 px off its own header. Rows sheared against
+ * EACH OTHER too — a release with no `info_url` renders no "Indexer page" link,
+ * and its track measured 63 px against its siblings' 155.02 px. Fixed on `main`
+ * at 9bcb547 by giving the column a measured 198 px reserve.
+ *
+ * Nothing failed. It rendered, it just misaligned — no exception, no failing
+ * assertion, no visual that reads as broken rather than as slightly ugly. A
+ * guard is the only instrument that catches it, so `gridTemplate` calls this on
+ * every dev render and `console.error`s the offending column ids.
+ *
+ * PURE, AND EXPORTED FOR ITS OWN SAKE. It takes strings rather than columns so
+ * `list.test.ts` can fire it at every legitimate form as well as every
+ * offending one — a validator that flags everything passes a suite that only
+ * feeds it bad input.
+ */
+export function findContentSizedTracks(widths: readonly string[]): string[] {
+	return widths.filter(isContentSized);
+}
+
+/**
+ * The dev-only half: name the columns, say why, and DO NOT THROW.
+ *
+ * Throwing would take down a screen over a cosmetic defect, and a guard that
+ * can break the app is a guard people delete. `import.meta.env.DEV` is a
+ * literal `false` in a production build, so Rollup drops this call and the
+ * function with it — verified by grepping the built bundle for the message.
+ */
+function warnContentSized(columns: readonly ListColumn[]): void {
+	// Through `findContentSizedTracks` rather than straight to the predicate, so
+	// the exported entry point is the one the running app depends on. A
+	// validator only the tests call is a validator that can rot without failing
+	// anything. The second pass is what maps a width back to the column id the
+	// message has to name; it is two passes over at most a dozen columns, in dev.
+	if (findContentSizedTracks(columns.map((c) => c.width)).length === 0) return;
+	const named = columns
+		.filter((c) => isContentSized(c.width))
+		.map((c) => `${c.id} (width: ${c.width})`)
+		.join(', ');
+	console.error(
+		`[UsArr list] content-sized column track(s): ${named}. ` +
+			'Every list row is an independent grid (ADR-0029), so a track sized by ' +
+			'`auto`, `max-content`, `min-content`, `fit-content()` or a `minmax()` ' +
+			'built from them resolves against its OWN row and cannot line up with ' +
+			'the header row or with the other body rows. Declare a fixed reserve ' +
+			'(measure the widest state) or an `fr` track with a 0 floor, and let ' +
+			'the cell wrap if its contents can outgrow the reserve.'
+	);
 }
 
 /**
