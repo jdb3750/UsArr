@@ -4029,6 +4029,69 @@ failure, duplicate releases across two Prowlarrs pointed at the same tracker —
 it. **This finding does not ask for multi-instance search. It asks for the single-instance search
 UsArr already does to stop presenting itself as something else.**
 
+## INST-01.6 — the two orderings were relayed as disagreeing; one was read backwards, and the real divergence is a different one
+
+**Relayed from the Requests thread as a measured observation:** that
+`store.ReadIndexerCatalog` orders instances **name ASC** while `resolveIndexerInstance` picks
+`candidates[0]` from **priority, then name**, and that on a live two-service install the catalogue
+listed *"Prowlarr Private"* (priority 20) first while an unqualified search would have gone to
+*"Prowlarr Public"* (priority 10). The claim is checked in, as the warning block above
+`indexerServices` at `web/src/lib/indexercatalog.ts:144-149`.
+
+⚠️ **Re-read against the source before recording, because an entry whose whole point is that two
+orders disagree is worth nothing if either is backwards. One is.** Both, in the form the code
+actually has:
+
+| Path | Where the **instance** order is actually decided | The order |
+|---|---|---|
+| Catalogue | `ReadIndexerCatalog` (`internal/store/indexers.go:245`) does not order instances at all — it delegates to `listServiceInstances` (`internal/store/serviceinstance.go:190`) | `ORDER BY priority DESC, name ASC` |
+| Search | `resolveIndexerInstance` (`internal/httpapi/search.go:371`) filters `ListServiceInstances` — the exported wrapper over that same `listServiceInstances` — to `role == "indexer" && Enabled`, then takes `candidates[0]` | `ORDER BY priority DESC, name ASC` |
+
+**They are the same statement.** There is exactly one `ORDER BY` over `service_instance` in the tree
+(`serviceinstance.go:195`), both paths read through it, and `internal/db/queryplan_test.go:268` pins
+that plan. The relayed claim's own conclusion — *"the first row a user sees is not necessarily the
+service their unqualified search hits"* — is nonetheless correct; see the ✅ below.
+
+🚩 **The `name ASC` in the claim is a different query.** `store/indexers.go` does carry
+`ORDER BY name ASC`, in `indexerListSQL` (`internal/store/indexers.go:138`) — which orders **the
+indexers inside one instance**, not the instances. `ReadIndexerCatalog` calls it once per instance,
+inside its loop over the already-ordered instance list. A file-level grep for the ORDER BY finds it;
+following the call does not.
+
+🚩 **The live example is backwards too, and for a reason worth naming.** `service_instance.priority`
+is **highest-wins** (`docs/DECISIONS.md:1340`, *"highest `priority` among healthy instances"*) and
+the sort is `DESC`, so priority 20 sorts ahead of priority 10 on **both** paths: the search would
+have hit *"Prowlarr Private"* — the service the catalogue listed first — not *"Prowlarr Public"*.
+The mis-read is an easy one to make on precisely this screen, because Prowlarr's **own** indexer
+priority is smaller-is-better, which `indexercatalog.ts:310-318` documents in full a hundred and
+sixty lines below the block that got it wrong. **Two priority fields, opposite directions, one
+screen** — that is the hazard here, not the sort key.
+
+✅ **A real divergence does survive, and it is the enabled filter rather than the ordering.** The
+catalogue handler keeps a **disabled** indexer service as a row (`internal/httpapi/indexers.go:204`
+— *"the row still appears, with the reason and the one action that changes it"*), while
+`resolveIndexerInstance` drops it from `candidates` entirely. On an install whose highest-priority
+indexer service is switched off, **the first row of the catalogue is still not the service an
+unqualified search hits.** The Requests thread's conclusion holds, by a mechanism it did not
+observe.
+
+📌 **This lands on option (b), which is why it is recorded here rather than as its own finding.**
+(b) has the handler state which instance it auto-picked, and that statement is read against a list:
+
+- **The sort key needs no reconciling.** It is one key, already shared by both paths.
+- **The membership does.** A report that names a **position** — *"the first indexer service"* — is
+  wrong the moment a disabled service occupies row 1 of the list the user is looking at.
+- ⚠️ **So (b) must name the service, never its position:** its `instance_name`, the string already
+  on the wire and already parsed per §INST-01.4. Whoever implements (b), that is the constraint this
+  sub-section exists to carry.
+
+**Neither ordering is changed here.** Whether the catalogue *should* list a disabled service above
+enabled ones is a design question, and this entry does not take it. The stale warning block at
+`indexercatalog.ts:144-149` is left alone for the same reason it is cited: correcting another
+thread's freshly landed comment mid-flight is how two threads write the same line twice. **Follow-up
+for the Requests thread: that comment asserts a `name ASC` catalogue order that the store does not
+have, and should be restated as the enabled-filter divergence above.**
+
 ---
 
 # The second gate hole, and the unit that had never actually been split

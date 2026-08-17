@@ -292,7 +292,7 @@ func instanceCatalogState(si store.ServiceInstance, count int) (status, message,
 			fmt.Sprintf("%q answered and has no indexers configured", si.Name),
 			"Add an indexer in " + si.Name
 	default:
-		return catalogOK, fmt.Sprintf("%d indexers from %q", count, si.Name), ""
+		return catalogOK, fmt.Sprintf("%s from %q", countNoun(count, "indexer"), si.Name), ""
 	}
 }
 
@@ -307,7 +307,7 @@ func catalogSummary(instances []indexerInstanceResponse, total int) (status, mes
 	}
 	if total > 0 {
 		return catalogOK,
-			fmt.Sprintf("%d indexers across %s", total, countNoun(len(instances), "indexer service")),
+			fmt.Sprintf("%s across %s", countNoun(total, "indexer"), countNoun(len(instances), "indexer service")),
 			""
 	}
 	// Nothing to offer. Report the FIRST instance's own reason rather than a
@@ -317,6 +317,9 @@ func catalogSummary(instances []indexerInstanceResponse, total int) (status, mes
 	return first.Status, first.Message, first.Action
 }
 
+// countNoun renders "1 indexer" / "3 indexers": the one pluralisation idiom in
+// this package, so a second one does not grow beside it. Suffix-s nouns only —
+// a noun with an irregular plural needs its own call site, not a rule here.
 func countNoun(n int, noun string) string {
 	if n == 1 {
 		return "1 " + noun
