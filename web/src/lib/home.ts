@@ -11,27 +11,43 @@
  *
  * ADR-0028 fixes Home at three blocks: A, a ≤6-row media-type summary; B, an
  * attention block hidden entirely when empty; C, one unified recently-added
- * table. **A and C have no data source in this build and are therefore not
- * drawn at all.** The `work` / `edition` / `media_file` tables and the sync
- * channels that would fill them are unbuilt, so every number those two blocks
- * exist to carry would have to be invented, and DESIGN-DIRECTION §9.6 closes
- * that off in as many words: never fabricated data in a shipped product
- * surface. A zeroed table and a skeleton are the same fabrication with
- * different punctuation. Block B is the one of the three with a real source
- * today — GET /api/v1/services/health — so Block B is what this file computes.
+ * table. ⚠️ THIS READ **"A and C have no data source in this build and are
+ * therefore not drawn at all"**, on the ground that *"the `work` / `edition` /
+ * `media_file` tables and the sync channels that would fill them are unbuilt"*.
+ * **Half of that premise is dead.** A first-import channel exists for Kavita —
+ * it fires when a Kavita client stack is built or on demand, with no periodic
+ * re-sync behind it — and it writes those tables; `GET /api/v1/library/recent`
+ * reads them. **So Block C IS drawn** (`routes/+page.svelte`, `library` mode).
+ * **Block A is still not**, and it is worth being exact about which reason
+ * survives, because the sweeping one did not: Block A's per-type rollup is a
+ * SECOND read and nothing serves it, so every count in it would still have to
+ * be invented. DESIGN-DIRECTION §9.6 closes that off in as many words: never
+ * fabricated data in a shipped product surface. A zeroed table and a skeleton
+ * are the same fabrication with different punctuation. Block B is what this
+ * file computes, from GET /api/v1/services/health. It was the only block with a
+ * real source on the day this was written; it is now one of two.
  *
  * ⚠️ TWO THINGS ON HOME ARE NOT ONE OF THE THREE BLOCKS, and saying so here is
  * the point rather than a caveat. A release-search entry point and the recent
  * grabs list both have real sources in this build and neither is Block A or
- * Block C: `Recently added` is a catalogue read that does not exist yet, and a
- * grab is a request handed to a download client rather than an item that
- * arrived. Filing recent grabs under Block C's heading would be the invented
- * status the rest of this file is written against. What this module adds for
- * them is the two rules that are rules — whether a search box may be drawn at
- * all (`hasIndexer`) and what it must say it searches
- * (`HOME_SEARCH_SCOPE_NOTE`) — because a rule inside a `{#if}` in a template is
- * a rule nothing can test. The grabs themselves are `$lib/requests`'
- * vocabulary, reused rather than restated.
+ * Block C. ⚠️ THE REASON GIVEN FOR THAT WAS **"`Recently added` is a catalogue
+ * read that does not exist yet"**, AND THAT PREMISE IS DEAD WITH THE ONE ABOVE:
+ * the read exists and Block C is drawn off it. **The conclusion does not move,
+ * and it now rests on something firmer than what it was given.** While Block C
+ * was undrawn, filing recent grabs under its heading was an IMPRECISION — a
+ * claim about a catalogue that no catalogue on the screen could contradict.
+ * Block C exists now, so that heading names a REGION THAT IS ALREADY THERE
+ * MEANING SOMETHING ELSE: `Recently added` is the CATALOGUE ordered by
+ * `added_at`, while a grab is a release handed to a download client, which
+ * UsArr stops watching at the moment Prowlarr accepts it (`$lib/requests`'
+ * KNOWLEDGE_STOPS_NOTE). The two claims would COLLIDE rather than merely
+ * overstate — one form of words over two different facts, both on screen at
+ * once — which is the invented status the rest of this file is written against.
+ * What this module adds for them is the two rules that are rules — whether a
+ * search box may be drawn at all (`hasIndexer`) and what it must say it
+ * searches (`HOME_SEARCH_SCOPE_NOTE`) — because a rule inside a `{#if}` in a
+ * template is a rule nothing can test. The grabs themselves are
+ * `$lib/requests`' vocabulary, reused rather than restated.
  *
  * §17.2's hard rule points the same way and is worth restating because it is
  * the one an implementer breaks first: a media type the user does not have is

@@ -48,10 +48,24 @@
 	 * shown AT ALL, not in Block A, not in the sidebar, not as a search group,
 	 * and nothing on this screen can yet say which types the user has.
 	 *
-	 * ⚠️ §17.2 DOES specify Block A's sourceless rows for a v0.1 install —
-	 * `Comics · no catalogue source · Kavita · after v0.1 · Add` — and that is
-	 * NOT what is missing here. Those rows are the shape for an install where
-	 * the OTHER rows carry real counts, and no per-type count is readable yet.
+	 * ⚠️ §17.2 DOES specify Block A's sourceless rows for a v0.1 install — the
+	 * type, `no catalogue source connected`, the service that will populate it,
+	 * the milestone it arrives in, and a link to Add (§17.2) — and that is NOT
+	 * what is missing here. ⚠️ THE EXEMPLAR HERE READ `Comics · no catalogue
+	 * source · Kavita · after v0.1 · Add`, AND IT IS FALSE ON BOTH OF ITS
+	 * CLAIMS: comics HAS a catalogue source, and that source is IN v0.1.
+	 * ADR-0041 made Kavita v0.1's one catalogue source and the sync core's first
+	 * adapter, so §16 — authoritative for scope — puts v0.1's catalogue at books
+	 * and comics/manga (ARCHITECTURE §16.0, "the catalogue is books and
+	 * comics/manga, because Kavita is the source that ships"), and §16.1's
+	 * post-v0.1 table no longer lists Kavita because it moved INTO v0.1 rather
+	 * than being cut. §17.2 has stopped naming which types are sourceless at all
+	 * and defers to §16, so the exemplar has to come from there: `Music · no
+	 * catalogue source connected · Navidrome · after v0.1 · Add`, Navidrome
+	 * being §16.1's slot #1 and the source that lights music up. Those rows are
+	 * the shape for an install where the OTHER rows carry real counts, and no
+	 * per-type count is readable yet — not for books and comics either, whose
+	 * counts a rollup read would now have something true to put in.
 	 * Rendering six rows of which six are `no catalogue source` is not §17.2's
 	 * screen; it is a table with no data in it, and rule 13's own bound — the
 	 * ban is on a region that says NOTHING — does not rescue a block whose every
@@ -320,6 +334,19 @@
 	let grabs = $state<RecentGrab[]>([]);
 	let grabsLoaded = $state(false);
 	let grabsError = $state('');
+
+	/**
+	 * WHETHER THE RECENT-GRABS REGION IS ON SCREEN AT ALL, DERIVED ONCE.
+	 *
+	 * The separator below has to draw only where it has two regions to sit
+	 * between, so it needs this predicate — and a second hand-written copy of
+	 * the `{#if}` conditions is exactly the pair of facts that must agree and
+	 * therefore can disagree, which is the argument `grabsLoaded` above is
+	 * already written against. So the arms read these and nothing restates them:
+	 * `grabsListed` is the list arm, `grabsDrawn` is either arm.
+	 */
+	const grabsListed = $derived(grabsLoaded && grabs.length > 0);
+	const grabsDrawn = $derived(grabsError !== '' || grabsListed);
 
 	/**
 	 * BLOCK C's STATE. `$lib/library`'s `RecentFeed` is the whole of the paging
@@ -895,6 +922,35 @@
 {/snippet}
 
 <!--
+	THE SEPARATOR BETWEEN `Recently added` AND `Recent grabs`, AND IT IS THERE
+	BECAUSE THE DEFECT IS COMPOSITIONAL RATHER THAN LEXICAL. Design ruled on
+	Home's composition: both regions stay, `Recently added` keeps its name
+	because it is conventional and accurate, and the headings are NOT asked to
+	carry the distinction between the two. The screen already tells the truth —
+	the columns diverge and so does the typography — and what was missing is
+	that two adjacent regions, each opening on a past-tense adverb of recency
+	with no copy in between, scan as one thing in two parts. A rule between them
+	is the smallest thing that stops that read, and it costs one line.
+
+	IT DRAWS ONLY WHERE IT HAS TWO REGIONS TO SIT BETWEEN. `Recently added` is
+	`library` mode only and recent grabs is hidden when empty, so on the install
+	that has one and not the other a separator would be a stray rule under
+	whatever happened to precede it — a mark whose only content is that it is a
+	mark, which is rule 13's own ban read onto a one-pixel region.
+
+	AN <hr> RATHER THAN A BORDER ON THE SECTION BELOW, and the reason is the
+	line above rather than semantics: a `border-top` belongs to `#home-grabs`
+	and would therefore draw whenever that section does, including in
+	`search-and-grab` mode where the thing above it is the search block. The
+	separator is a fact about the PAIR, so it is its own element with the pair's
+	own condition on it, and `<hr>` is what a thematic break between two content
+	regions already means.
+-->
+{#if mode === 'library' && grabsDrawn}
+	<hr class="home-sectionsep" />
+{/if}
+
+<!--
 	RECENT GRABS, AND IT IS NOT BLOCK C. Block C is `Recently added` over the
 	catalogue and is drawn above; this is the local record a grab leaves, read
 	from GET /api/v1/grabs/recent. It used to occupy Block C's slot on an install
@@ -931,7 +987,7 @@
 			</div>
 		</div>
 	</section>
-{:else if grabsLoaded && grabs.length > 0}
+{:else if grabsListed}
 	<section class="section" id="home-grabs">
 		<div class="section__head">
 			<h2>Recent grabs</h2>
@@ -1232,9 +1288,35 @@
 
 	/* The note sits between the section head and the table, so it needs the gap
 	 * on the table side rather than the paragraph spacing `.note` carries for a
-	 * paragraph following a button row. */
+	 * paragraph following a button row. It is the region's SUBTITLE and is read
+	 * before the rows it governs, which is the placement design ruled for: a
+	 * reader has to know what a region is before reading it, not after. Nothing
+	 * here makes it one — `.note` supplies the muted colour and the small size,
+	 * and the source order supplies the rest. */
 	.home-grabnote {
 		margin-bottom: var(--space-4);
+	}
+
+	/*
+	 * THE SEPARATOR BETWEEN THE TWO RECENCY REGIONS. `--border` is the token's
+	 * own stated job — "decorative divider between rows/cells" — and this is
+	 * that at region scale; `--border-strong` is reserved for the boundary of an
+	 * actual control, which a thematic break is not.
+	 *
+	 * THE MARGINS PUT IT EQUIDISTANT RATHER THAN NEAR ONE OF ITS NEIGHBOURS,
+	 * which is what makes it read as belonging to the pair instead of as a
+	 * decoration on the region below. `.section` carries
+	 * `padding: 0 var(--space-6) var(--space-7)`, so the gap ABOVE this rule is
+	 * already --space-7 from the section that precedes it, and the same value
+	 * below is the whole of what this needs to be symmetric. The horizontal
+	 * --space-6 is that same padding restated, because an <hr> between sections
+	 * is not inside either one and would otherwise run the full width and cross
+	 * the content edge every other region on this page starts at.
+	 */
+	.home-sectionsep {
+		margin: 0 var(--space-6) var(--space-7);
+		border: 0;
+		border-top: 1px solid var(--border);
 	}
 
 	/*
