@@ -5826,3 +5826,128 @@ more, in the entry that closes two of `SD-02`'s rows: **a present-tense phrase a
 condition**. *"Right now"* should have been *"at 16:20 on 2026-08-17"* when it was written, and the
 amendment is here instead of the edit. **The `Makefile` gap it reports is unaffected and still real**
 — nothing about `fmt-check`'s glob changed, only the directory it was tripping over.
+
+---
+
+# M5-12…M5-24 — the SQL review of `00005_library_sync.sql` itself, and the gate holes the round fell into
+
+**Date:** 2026-08-17. **Branch:** `claude/hearth-thread-93bfq1`, on top of `1b3acd7`. **Target:**
+`internal/db/migrations/00005_library_sync.sql` — **the SQL this time**, which M5-01…M5-11
+explicitly did not review (*"every one of the eleven findings is against those documentation edits,
+not against the SQL"*). Seven findings against the migration, three against the gate, plus a live
+probe result recorded here because it landed in the same window.
+
+🚩 **`00005` IS NOT MERGED TO `main` — it exists only on this branch — so it was fixed IN PLACE
+rather than superseded by a `00006`.** The project rule *"a merged migration is never edited"* is
+about migrations other databases have already run; this one has run nowhere. Verified before any
+edit: `git log origin/main --oneline -- internal/db/migrations/00005_library_sync.sql` returns
+nothing. **`00001`–`00004` are merged and are untouched by this entry** — the diff proves it.
+
+## M5.6 Disposition of all ten
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| **M5-12** | **High** | **The `write_queue` copy silently destroys data.** `work_id` was passed through `CASE WHEN EXISTS (SELECT 1 FROM work …) THEN work_id END`, and `work` is created EMPTY by the same migration — so every non-NULL `work_id` became NULL with no error, no log and no `sync_report` row | **APPLIED, in the preferred shape, and the premise was reproduced first.** Measured: 2 of 2 rows lost the value; all 9 rows survived; it recurs on every down/up cycle. The `CASE` is gone — the copy is now a straight column list — behind a `BEFORE INSERT` trigger on `write_queue_new` that fires `RAISE(ABORT, …)` when any row carries a non-NULL `work_id`. **The message names the count and the remedy**, verbatim: `migration 0005 aborted rather than silently discard data: 2 write_queue row(s) carry a non-NULL work_id, and this migration creates the ``work`` table empty, so every one of them references a work that does not exist. … list them with "SELECT id, kind, state, work_id FROM write_queue WHERE work_id IS NOT NULL", then either DELETE them or set their work_id to NULL, and re-run the migration.` Three mechanics were executed rather than assumed: a bare `SELECT RAISE(ABORT, …)` is rejected (`RAISE() may only be used within a trigger-program`), so it must be a trigger; `RAISE`'s message accepts an **expression**, which is what lets it carry the count; and the `BEFORE` trigger fires **ahead of** the foreign key, so the operator sees this message and not `FOREIGN KEY constraint failed`. `PRAGMA defer_foreign_keys` was considered and rejected — it moves the same failure to `COMMIT` with a worse message |
+| **M5-13** | **High** | **…and the test never exercised the copy at all**, which is the deeper finding: `TestMigrate0005WriteQueueRebuild` runs against `openTestDB`, i.e. 1→5 over an EMPTY database, so the only step of the twelve that can lose data moves zero rows | **APPLIED. Two tests, and the split is itself a finding — see M5.7.** `migrateTo0004` walks a fresh database up and one step back down, which is this package's only route to "the schema as 0004 left it". `wqFixture` then loads nine rows covering every `state` 0001's `CHECK` permits, every `fail_reason` including `NULL`, `NULL` and non-`NULL` for every nullable column, a non-`NULL` `user_id` and `service_instance_id` (a rebuild is where those clauses get copied wrong), unicode outside the BMP plus a zero-width space plus C0 control characters in three free-text columns, and `id = 9223372036854775807`. **`TestMigrate0005WriteQueueCopyIsLossless`** dumps every column of every row **by name from the result set** — so a column a later migration adds is compared too — and diffs typed values, then migrates and diffs again. **`TestMigrate0005AbortsRatherThanDroppingWorkID`** asserts the abort, the count in the message, that the version is still 4, and that the rows are **byte-identical afterwards**. 🔥 **Fired before the fix**: the abort test went red against the silent-NULL migration with the message *"migration 0005 SUCCEEDED against write_queue rows carrying a work_id"*. 🔥 **The lossless test was fired too**, by making the copy write `NULL` for `settled_at`: red, naming the column |
+| **M5-14** | Medium | **`image_asset` foreign keys block the sweep their index exists for.** `work.poster_asset_id` / `.backdrop_asset_id` were `REFERENCES image_asset(id)` with a defaulted `ON DELETE NO ACTION`, and `ix_img_state(state, expires_at)` has no other plausible reader | **APPLIED, both columns, in the migration and in `schema.md` §1.** Reproduced first: `DELETE FROM image_asset WHERE state = 'ready' AND expires_at <= ?` against an asset a work points at fails with `FOREIGN KEY constraint failed` — so the index served a query that could never succeed on the rows it was built to find. Now `ON DELETE SET NULL`, matching `origin_service_instance_id` and `library.sink_service_instance_id` in the same migration. `TestImageAssetExpirySweepEvicts` proves the eviction, that the work's two columns are `NULL` afterwards, **and that the work itself survives** — SET NULL, never CASCADE; a cover expiring must not delete the movie. 🔥 Fired by reverting the two clauses: red, with the constraint error |
+| **M5-15** | Medium | **`media_file.provenance_id` is the third defaulted foreign key — judge it separately** | **JUDGED, AND DELIBERATELY LEFT AS `NO ACTION`.** The poster pair was changed because a sweep exists to delete their parent and the default blocked it; that argument does not transfer. **Nothing deletes a `provenance` row**: `schema.md` §6 makes the table immutable (*"never overwrite provenance on upgrade — insert a new row"*), it carries no expiry column and no index that would serve a sweep, and it is the child of nothing, so no cascade reaches it — `provenance.user_id` carries no foreign key for exactly that reason. So `NO ACTION` blocks no sweep here; what it blocks is an accidental `DELETE FROM provenance` while a file still cites it, which for an acquisition-history table is the outcome to want. `SET NULL` would quietly break the file→grab join that `acquisition_state` exists to keep honest. Recorded in the migration beside the column and in `schema.md` §1 |
+| **M5-16** | Medium | **The reserved `library.id = 0` "Unfiled" row is unprotected.** `DELETE FROM library WHERE id = 0` succeeded, nothing recreated it, and it is also reachable by cascade from deleting user 0 | **APPLIED — `trg_library_unfiled_no_delete`, a `BEFORE DELETE` trigger raising on `OLD.id = 0` — and the `audit_log` interaction was TESTED, which is the half that matters.** `TestUnfiledLibraryIsProtected` covers four things: the direct delete is refused; an **ordinary** library still deletes (a guard that blocked the whole table would be a different bug with the same green test); **a user with a row in every table that references `user(id)`** — library, library_override, session, client_credential, tag_assignment, write_queue, release_candidate, audit_log — **is still deletable**, which is the `audit_log` failure mode re-run at the table 0005 added; and `DELETE FROM user WHERE id = 0` now **fails**. 🚩 **That last one is a behaviour change, recorded rather than discovered**: it used to succeed and took library 0, every shared `tag_assignment`, every shared `write_queue` row and every shared `release_candidate` with it in one statement. A sentinel that can be deleted is not a sentinel. `AFTER DELETE`-and-re-insert was rejected: re-inserting during user 0's cascade violates `library.user_id`'s own foreign key at statement end. 🔥 Fired by deleting the trigger from the migration: red on both the delete and the row count |
+| **M5-17** | Medium | **The per-user *Unfiled* gap — record it, do not solve it.** *Unfiled* is `user_id = 0` while `ux_library_slug`/`ux_library_name` are `(user_id, …)`, so no other user has one and invariant 5's safety net does not exist for them | **RECORDED, not solved, as instructed** — [`FUTURE.md`](./FUTURE.md) §19, plus a ⚠️ pointer at `schema.md` §13.1. The section states the seam as *the defect it will become on the day the second user is created*, and names three specific things the later migration must do rather than "consider it": create one row per user at user-creation time and backfill the existing ones, with `(user_id, slug='unfiled')` — already unique under `ux_library_slug` — becoming the identity in place of the reserved id; keep library 0 and its trigger as user 0's own; **and widen the trigger to `WHEN OLD.slug = 'unfiled'` only after deciding the `audit_log` question again**, because under the widened form the blocked cascade's parent is an *ordinary* user and `DELETE FROM user` would fail for everyone. That last point is the non-obvious one and it is why the entry exists |
+| **M5-18** | Medium | **The `search_doc` visibility invariant is asserted, not enforced** — and `schema.md` §7 invariant 2 likewise | **APPLIED as a written decision: BOTH ARE CODE INVARIANTS, both are now stated as such with the code that owes them, and both are CI-asserted by execution rather than by hope.** Enforcement was considered and is **not available**: invariant 5 has no "at least one child row" constraint in SQLite, and no trigger position expresses it — at insert time the doc necessarily exists *before* its junction row (forced by that table's own foreign key), and the two ways it breaks are **cascades**, where an `AFTER DELETE` trigger cannot distinguish *"lost its last scope"* from *"is being deleted too"*. Invariant 2 is worse: the FTS5 tables are **virtual**, so they can carry no constraint and be the target of no trigger — nothing in SQLite can hold three row counts equal. `TestSearchDocVisibilityIsACodeInvariant` **executes both breaking paths** (`DELETE FROM library`, and `DELETE FROM user` two cascades deep through `library.user_id`) and the FTS divergence, so the queries are proven to detect what they exist to detect. **The Unfiled comment no longer implies the schema upholds anything** — in the migration and in `schema.md` §13.1 it is now *"the PLACE invariant 5 is upheld in"*, and §7's two rows carry the debt and its owner: the search-document builder, which writes all three tables and must re-file a stranded doc into library 0 in the same transaction |
+| **M5-19** | Medium | **`ix_wq_runnable` is only reachable by a query spelling its `IN` list verbatim**, and 0005 re-affirmed the predicate across ~15 lines without noting it | **APPLIED — the constraint is beside the index, in `schema.md` §10, and pinned in CI in both directions.** Measured: `WHERE state IN ('pending','inflight','verifying') AND next_attempt_at <= ?` → `SEARCH write_queue USING COVERING INDEX ix_wq_runnable (state=? AND next_attempt_at<?)`; `WHERE state = 'pending' AND next_attempt_at <= ?` → `SCAN write_queue`. `TestWriteQueueRunnableNeedsTheVerbatimINList` asserts **both**, because pinning only the good plan leaves the trap undocumented and pinning only the bad one reads as a bug report. The rule for callers is stated: **filter the extra states in the SELECT list, never in the `WHERE` clause.** 🔥 Fired by dropping the partial predicate: the single-state query then *does* reach the index and the test goes red saying so |
+| **M5-20** | Low | **`schema.md`'s `search_doc_library` is missing `STRICT`** — one of four corrections `b8bb500` claimed to have made, which did not land | **APPLIED, and the meta-point is recorded because it is the finding's real content.** The table now reads `) STRICT, WITHOUT ROWID;`, matching the migration and `schema.md`'s own *"STRICT tables throughout"*. ⚠️ **A claimed correction was not verified.** `00005`'s header lists four corrections *"that file now carries"*, item 1 being this one; the migration made the change and the sentence describing it was written, but nobody re-read the target. **The correction and the claim that it had been made were written in the same commit, which is exactly the pattern that makes a claim worthless** — the same class as `MEAS-02`'s three staged claims and `SD-01`'s. Items 2, 3 and 4 of that list were re-read while fixing this one and **all three did land** (`field_name` carries `IS NULL OR …`; §12.1 carries `sync_report`'s DDL flagged as inference; §13's *"all four tables are in migration 0001"* is gone) |
+| **M5-21** | Low | **The goose `Down` block silently deletes rows** — `WHERE state IN (…)` drops `awaiting_choice`, the state 0005 exists to permit, with no error | **APPLIED as the remap, and the choice is argued rather than picked.** Every row is now copied; a state 0001's `CHECK` cannot hold is remapped to `'failed'` — terminal, so nothing re-runs it — and the original is appended to `last_error`, which is free text and is where a human looks. **The reason the remap beats the comment-only option:** this is the same defect as M5-12 one block down, and the same answer applies — a row that vanishes is unrecoverable, a row whose state changed is still there to look at. **The reason it beats aborting** (the M5-12 answer) is that there the value's *only* copy was at stake; here it is preserved in a column built for it, and a `Down` that refuses to run is a local testing tool that does not work, which is the one thing the block is for. `TestMigration0005DownPreservesEveryRow` asserts 4 rows in and 4 out, the remapped state, the recorded original, **and that a pre-existing `last_error` is not overwritten**. 🔥 Fired by restoring the `WHERE`: red at *"the Down block kept 2 of 4 rows"* |
+
+## M5.7 The one place the review's own prescription could not be followed, and why
+
+M5-13 asked for **one** test that populates `write_queue` including *"NULL and non-NULL `work_id`"*
+and then *"migrates to 0005 and diffs every column"*. **That test is unwritable once M5-12 is fixed,
+and the reason is worth stating rather than quietly routing around**: a non-NULL `work_id` is
+dangling by construction, the resolution is to abort, and a migration that aborts moves no rows to
+diff. The three outcomes are exhaustive — abort, keep the value, or destroy it silently — and
+keeping it is not available at any price (`PRAGMA foreign_keys=OFF` is a documented no-op inside
+goose's transaction; `defer_foreign_keys` relocates the failure to `COMMIT`).
+
+So it is two tests: the column-by-column diff over the rows the migration is willing to move, and
+the abort over the rows it is not — which between them cover every column and both values of the one
+column they disagree about. **The prescription was followed where it holds and its unwritable half
+is recorded here, rather than a green test being produced that answers a different question.**
+
+## M5.8 The gate follow-ups — all three real, all three fixed, all three fired
+
+| # | Finding | Disposition |
+|---|---|---|
+| **M5-22** | **`internal/db/spike` is compiled by NO step of `make check`.** It is behind `//go:build bench`, so `go list ./...` returns 11 packages and never mentions it — and both spike files were changed by this work | **APPLIED — `make build-tagged` (`go build -tags=bench ./...`), added to `check-offline` between `lint` and `modverify`.** It prints the package count it compiled (**12**, against `go list ./...`'s **11**) so the step cannot silently scan nothing. 🔥 **Fired**: a deliberate `var deliberateTypeError string = 42` in `internal/db/spike/workload.go` passed `go build ./...` ("OK — did not see the error"), passed `go test ./internal/db`, and passed `golangci-lint run` over all 11 packages — and `make build-tagged` failed with `internal/db/spike/workload.go:46:34: cannot use 42 (untyped int constant) as string value in variable declaration`. ℹ️ **Why the hole was invisible**: gofumpt *does* read those files — it parses without resolving build tags — so the formatter reported the package as checked while no compiler had ever looked at it. `go build` rather than `go vet` or `go test` because the spike has no tests and a build is the smallest thing that makes a type error fail; it emits no binary, because `go build` only writes an executable when given a single main package |
+| **M5-23** | **FTS5's tokenizer and prefix behaviour has no behavioural test** — the existing one MATCHes an empty table and never asserts the count | **APPLIED — `TestFTS5TokenizerBehaviour`, eight cases plus a negative control — and 🚩 two of the four options turned out to be far harder to detect than the finding assumed, which is recorded in the test rather than papered over.** Each option was gutted in the migration and the suite re-run: `tokenize=trigram`→`unicode61` turns the two substring cases red; `remove_diacritics 2`→`0` turns four folding cases red; **`2`→`1` turns exactly ONE case red**; **removing `prefix='2 3 4'` turns NOTHING red.** The 2-versus-1 discriminator is not what one would guess — twenty accented characters were tried under both and eighteen behaved identically; what separates them is characters carrying **two** diacritics (ǚ, ǻ, ǭ, ȱ, ṩ), and **ǚ is pinyin**, so `Nǚ Shu` is a romanised Chinese title that `remove_diacritics 1` would not find under the query `nu`. That case is the test's only 2-vs-1 witness and it says so. `prefix='2 3 4'` has **no behavioural signature at all** — FTS5 answers `trai*` from the main term list either way, and the declared prefix index is what makes it a seek rather than a term-list scan — so it is pinned on the DDL, with the reason written down instead of a green case that proves nothing. ⚠️ **One thing measured and NOT fixed here**: the trigram table is diacritic-**sensitive** (`tokenize='trigram'` with no `remove_diacritics`, which defaults to 0), so `melie` finds nothing where the `unicode61` arm folds it. Both halves are pinned as cases; the asymmetry belongs to whoever writes the retriever |
+| **M5-24** | **The `.claude/` gate obstruction is real and unfixed** — a nested git worktree made `fmt-check` sweep 273 `.go` files instead of 135, because `.claude/` is untracked and not in `.gitignore` | **APPLIED, both halves, because a `.gitignore` entry only helps the tools that read one.** `.claude/` is now ignored, with the incident written next to it; and the Makefile grew `GO_SRC_LIST`, which is `git ls-files --cached --others --exclude-standard -- '*.go'` when inside a work tree and a `find` with prunes otherwise. **`--others --exclude-standard` is load-bearing**: it keeps a brand-new `.go` file format-checked *before* it is staged, which a bare `git ls-files` would lose, while excluding anything `.gitignore` covers. `fmt` and `fmt-check` both use it, so `make fmt` can no longer reformat somebody else's checkout either. 🔥 **Fired by recreating the condition**: `git worktree add --detach .claude/worktrees/gate-probe HEAD`, then — with the worktree in place — the **old** glob counts **270** `.go` files and the new list counts **135**, and `make fmt-check` reports `checking 135 .go files with gofumpt` and passes. Worktree removed afterwards; `git worktree prune` run |
+
+## M5.9 The Kavita watermark probe — a live result, recorded where it was owed
+
+**Ran by the owner, 2026-08-17, against his own instance: Kavita 0.9.0.2, 151 series, page size 10.**
+[ADR-0035](./DECISIONS.md#adr-0035) §2 wrote the pass condition down before the probe ran, which is
+what makes this recordable as a result rather than as an impression. Clause **(a)** ordering **PASS**
+— 10 of 10 rows non-increasing on `lastChapterAddedUtc`. Clause **(b)** resumability **PASS** —
+page-1 boundary ≥ page-2 first row, **no id overlap**, page 1 **byte-identical** across two fetches.
+Clause **(c)** **INCONCLUSIVE live** (it needs a library change) and **settled from source instead**:
+`UpdateLastChapterAdded()` has exactly one production call site,
+`Kavita.Services/Scanner/ProcessSeries.cs:769`, inside the `if (chapter == null)` new-chapter branch
+— so the key moves on a chapter **add** and not on an edit, a deletion, a retitle or a cover change.
+
+**Recorded in three places, each in the form that file's rules require.** ADR-0035 gains **§2a**, a
+dated result note that leaves §2's pass condition standing as the standard it was judged against.
+`ARCHITECTURE.md` §7.1a's Kavita row moves from ⚠️ **unverified** to ✅ **verified**, carrying the
+qualification. And the §7.1a header sentence *"the two that carry the strategy are both unverified"*
+is amended rather than rewritten, because it is dated.
+
+🚩 **The qualification changes the MECHANISM, not the verdict, and it falsified wording in two
+files.** `SeriesFilterField` has **no timestamp member**, so §2's *"re-requesting with a filter at
+the last seen value"* is **not expressible** — resumption is a **sorted page walk with a client-side
+stop**. §7.1a's channel-3b description is corrected to say so explicitly, because "stop at the first
+page entirely older than the watermark" was being read as a since-filter.
+
+ℹ️ **And the owner's real data supplies the concrete justification for §7.1a's overlap window**,
+which until now rested on reasoning: the timestamps cluster on the **scan job's** clock — three
+series within microseconds at `07:00:30` — so a walk resuming exactly at the watermark drops the
+siblings sharing the boundary value.
+
+📌 **Citation maintenance, appended rather than rewritten.** ADR-0035 §2's source table cites the
+**old** Kavita tree layout (`API/DTOs/SeriesDto.cs` and friends). The tree has been restructured —
+it is `Kavita.Models/DTOs/SeriesDto.cs` now — and the 2026-08-16 citations are **left exactly as they
+were**, with the new paths noted underneath. A citation inside a dated record is history: it is what
+was read on the day, against the tree as it then stood. This file's own rule, applied to somebody
+else's file.
+
+## M5.10 What this round found that the review did not
+
+* **`DELETE FROM user WHERE id = 0` succeeded**, and took library 0 with it. The finding named the
+  cascade as a *route to* the unprotected row; the larger fact is that the shared/system sentinel
+  user was itself deletable, and deleting it cascaded away every shared `tag_assignment`,
+  `write_queue` and `release_candidate` row in one statement. Closed as a side effect of M5-16 and
+  pinned deliberately, because a fix that changes what `DELETE FROM user` does must not arrive
+  unannounced.
+* **The `golangci-lint` cache pointed at a worktree that no longer exists.** The first lint run of
+  this round reported **4 gosec issues** in files under
+  `/tmp/…/scratchpad/gate-93bfq1-20260817/…` — a previous agent's detached worktree — alongside
+  `level=warning … no such file or directory` for each. `golangci-lint cache clean` by absolute path
+  cleared them and the same tree then reported `0 issues.` ⚠️ **A cached result from a deleted tree
+  is indistinguishable from a finding about this one**, and it is the second time this project has
+  had to clean that cache by absolute path (see the M5-01…M5-11 gate note). It is worth a standing
+  rule rather than two incidents.
+* **`prefix='2 3 4'` is undetectable behaviourally**, which means the config option most obviously
+  connected to a user-visible feature (search-as-you-type) is the one a behavioural test cannot
+  guard. Recorded in M5-23 and in the test.
+
+## M5.11 Raised, not fixed — deliberately out of this entry's scope
+
+* **The trigram arm of search is diacritic-sensitive while the unicode61 arm is not.** Measured,
+  pinned in both directions as test cases, not changed: adding `remove_diacritics` to
+  `search_trgm` is a schema decision with a retrieval-quality argument behind it, and it belongs
+  with whoever writes the retriever and can measure the result.
+* **§16.1's catalogue sequence branch is now decided by a probe that has run.** §16 says *"Kavita
+  first if it passes, Navidrome first if it fails"* and it passed. A ⚠️ pointer to ADR-0035 §2a is
+  added at all three sites so the two documents do not contradict each other, **but the sequence
+  itself is not re-written here** — §16 is authoritative for scope and `DEVELOPMENT.md` §11 says
+  announce before pushing. The §16 owner should apply it.
+* **`CLAUDE.md`'s one-line description of `make check` now under-counts the gate** — it lists five
+  offline steps and there are six. Left for the owner: it is the project instruction file, and this
+  entry does not edit it on its own initiative.

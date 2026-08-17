@@ -1201,6 +1201,21 @@ degraded honestly rather than left implicit.
 > **Channel 3b: walk the source's item list ordered by its own last-modified field, newest first,
 > and stop at the first page entirely older than the watermark minus an overlap.**
 
+🚩 **"Stop at" is the whole mechanism, and it is a CLIENT-SIDE stop.** Channel 3b never asks the
+source for "everything since X" — that is channel 3, which these sources do not have. It asks for an
+ordered page and stops reading. Measured on Kavita 2026-08-17 (ADR-0035 §2a): `SeriesFilterField`
+carries **no timestamp member at all**, so a since-filter is not merely unused, it is *not
+expressible*, and any text describing 3b as "re-requesting with a filter at the last seen value" —
+including the earlier wording of ADR-0035 §2's own pass condition — describes something the API
+cannot do. What the watermark is *for* is deciding when to stop reading and what to compare, never
+what to send.
+
+ℹ️ **And why the overlap window is not optional, from that same live run:** Kavita's
+`lastChapterAddedUtc` values cluster on the **scan job's** clock rather than on the moment each
+chapter appeared — three series within microseconds at `07:00:30`. A walk that resumes exactly at
+the watermark drops the siblings that share the boundary timestamp; the overlap window is what
+absorbs them.
+
 Five properties, each of which is a correctness requirement rather than a detail:
 
 | Property | Rule |
@@ -1218,15 +1233,16 @@ delta time, and the library row (§17.8) carries the same, with the last full-co
 freshness number that is not backed by a delta must never be rendered with the same weight as one
 that is.
 
-⚠️ **Per-source status, dated 2026-08-16. No source in this table ships in v0.1** (§16) — they arrive
-one at a time afterwards — **and the two that carry the strategy are both unverified.** The rows are
-in the order the sources are expected to land.
+⚠️ **Per-source status. No source in this table ships in v0.1** (§16) — they arrive one at a time
+afterwards. Dated 2026-08-16, **amended 2026-08-17: Kavita's row is now verified against a live
+instance** and is no longer one of "the two that carry the strategy are both unverified" — Komga's
+is. The rows are in the order the sources are expected to land.
 
 | Source | Ordering key | Status |
 |---|---|---|
 | Navidrome | `getScanStatus.lastScan` as a cheap change *signal*, then an `updated_at`-ordered walk of the native API | 🔍 inference from the model; probe at connect |
 | Audiobookshelf | `LibraryItem.updatedAt` | 🔍 probe at connect |
-| Kavita | `LastChapterAdded` ordering on `POST /api/Series/all-v2` | ⚠️ **Unverified; the probe is specified in [ADR-0035](./DECISIONS.md#adr-0035) §2.** It passes only if all three hold: the response is ordered by the `lastChapterAdded` value the rows themselves carry; re-requesting from the last seen value returns the expected suffix rather than a shuffled page; and adding a chapter to an existing series moves it to the front. `SortField.LastModifiedDate` exists but `SeriesDto` returns **no** last-modified property, so that key yields no carryable watermark. **Its result orders the post-v0.1 catalogue sequence** (§16). |
+| Kavita | `LastChapterAdded` ordering on `POST /api/Series/all-v2` | ✅ **VERIFIED 2026-08-17 against a live instance** (Kavita 0.9.0.2, 151 series, page size 10 — the run and its numbers are in [ADR-0035](./DECISIONS.md#adr-0035) §2a). Clause (a) ordering **PASS**; clause (b) resumability **PASS** (no id overlap between pages, page 1 byte-identical across two fetches); clause (c) settled from Kavita's source rather than live — `UpdateLastChapterAdded()` has one production call site, in the new-chapter branch, so the key moves on a **chapter add** and not on edits, deletions, retitles or cover changes. 🚩 **With one qualification that changes the mechanism:** `SeriesFilterField` has **no timestamp member**, so there is no server-side since-filter — resumption is a **sorted page walk with a client-side stop**, not a re-request at the watermark. `SortField.LastModifiedDate` exists but `SeriesDto` returns **no** last-modified property, so that key remains unusable. |
 | Komga (later) | `sort=lastModified,desc` on the series list | ⚠️ **Could not be verified from the spec** — Spring `Pageable` sort properties are not enumerated and the DTO field name may not be the entity property name. **The whole Komga delta strategy rests on it**, so it is a probe at the milestone Komga lands in. If it fails, Komga drops to reconciliation-only and says so on its row. |
 
 Budget rows for the walk are in §13. **This channel is specified here but built with the first
@@ -2214,7 +2230,7 @@ and that behaviour is the same one an install without Navidrome would get in any
 
 **The order within the catalogue sequence is not fixed here. It is decided by the Kavita
 `LastChapterAdded` watermark probe** ([ADR-0035](./DECISIONS.md#adr-0035) §2, §7.1a): **Kavita first
-if it passes, Navidrome first if it fails.** Kavita first because it is the owner's install and the
+if it passes, Navidrome first if it fails.** ⚠️ **The probe RAN on 2026-08-17 and PASSED** ([ADR-0035](./DECISIONS.md#adr-0035) §2a, §7.1a) — a status fact recorded here rather than a sequence this section has re-decided; applying its consequence to the ordering below is §16's owner's call. Kavita first because it is the owner's install and the
 source with the most media types riding on it; Navidrome first if Kavita turns out to be
 reconciliation-only, because Kavita is then the *hardest* adapter rather than the easiest and
 Navidrome de-risks v0.4 at the same time. **Komga is last regardless**, because nobody on this
@@ -2256,7 +2272,7 @@ the sequence is deliberately allowed to interleave with them.
 
 | # | Source | Media types it lights up | Gate |
 |---|---|---|---|
-| 1 | **Kavita** *or* **Navidrome** | books + comics/manga, *or* music | The [ADR-0035](./DECISIONS.md#adr-0035) §2 watermark probe. **Kavita first if it passes, Navidrome first if it fails.** |
+| 1 | **Kavita** *or* **Navidrome** | books + comics/manga, *or* music | The [ADR-0035](./DECISIONS.md#adr-0035) §2 watermark probe. **Kavita first if it passes, Navidrome first if it fails.** ⚠️ **The probe RAN on 2026-08-17 and PASSED** ([ADR-0035](./DECISIONS.md#adr-0035) §2a, §7.1a) — a status fact recorded here rather than a sequence this section has re-decided; applying its consequence to the ordering below is §16's owner's call. |
 | 2 | the other of those two | — | — |
 | 3 | **Audiobookshelf** | audiobooks (and ebooks where the install holds them) | `LibraryItem.updatedAt` probe at connect (§7.1a) |
 | 4 | **Komga** | a second comics source | Its own `sort=lastModified,desc` probe (§7.1a); reconciliation-only if that fails |
@@ -2357,7 +2373,7 @@ watermark probe is no longer day-one.** ADR-0032 funded a day-one probe of Komga
 `sort=lastModified,desc` and [ADR-0035](./DECISIONS.md#adr-0035) §2 retargeted it to Kavita's
 `LastChapterAdded`; with no catalogue source in v0.1 it has nothing to gate here. **It runs before
 the first catalogue adapter is written**, and its result orders §16.1's sequence — **Kavita first if
-it passes, Navidrome first if it fails.** Its pass condition stays written down in advance
+it passes, Navidrome first if it fails.** ⚠️ **The probe RAN on 2026-08-17 and PASSED** ([ADR-0035](./DECISIONS.md#adr-0035) §2a, §7.1a) — a status fact recorded here rather than a sequence this section has re-decided; applying its consequence to the ordering below is §16's owner's call. Its pass condition stays written down in advance
 (ADR-0035 §2, §7.1a) precisely so that deferring it does not turn it back into a guess.
 
 *Which of the above is built is not listed here, and the omission is the correction.* This entry

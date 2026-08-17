@@ -58,7 +58,7 @@ distinctions now matter and are used consistently below:
 | [0032](#adr-0032) | Read-only catalogue sources move early; command sinks defer | **Accepted** — **amends** §16; **one member reversed by [ADR-0035](#adr-0035)** |
 | [0033](#adr-0033) | `work.kind` gains `person`; a credit is not a music artist | **Accepted** — owner-decided 2026-08-16; refines ADR-0009, ADR-0031 |
 | [0034](#adr-0034) | The project keeps the name UsArr | **Accepted** — owner-decided 2026-08-16; naming only, nothing in the codebase moves |
-| [0035](#adr-0035) | Kavita, not Komga, is the comics-and-books catalogue source | **Accepted** — owner-decided 2026-08-16; **reverses one member of [ADR-0032](#adr-0032)**, confirms [ADR-0030](#adr-0030); ⚠️ **amended 2026-08-16** — the catalogue sources sequence **after** v0.1 ([ADR-0036](#adr-0036)), so this ADR picks *which* source, and its spike orders the post-v0.1 sequence |
+| [0035](#adr-0035) | Kavita, not Komga, is the comics-and-books catalogue source | **Accepted** — owner-decided 2026-08-16; **reverses one member of [ADR-0032](#adr-0032)**, confirms [ADR-0030](#adr-0030); ⚠️ **amended 2026-08-16** — the catalogue sources sequence **after** v0.1 ([ADR-0036](#adr-0036)), so this ADR picks *which* source, and its spike orders the post-v0.1 sequence; ✅ **§2's spike RAN 2026-08-17 and PASSED** — dated result in §2a, with one qualification (no server-side since-filter exists) |
 | [0036](#adr-0036) | No catalogue source ships in v0.1; they arrive one at a time after it | **Accepted** — owner-decided 2026-08-16; **amends** §16; **re-sequences [ADR-0032](#adr-0032) and [ADR-0035](#adr-0035)** without rejecting any source |
 | [0037](#adr-0037) | TOFU SPKI pin enrolment is removed, not completed; enforcement stays | **Accepted** — 2026-08-16; amends no ADR; reopening conditions stated (a pin field on the update path + the change-acceptance UI) |
 | [0038](#adr-0038) | A list freezes its order while a user is aiming at it | **Accepted** — 2026-08-16; amends no ADR; the argument lives in `design/DESIGN-DIRECTION.md` §9.1a and ARCHITECTURE §17.5, this record holds the rejected alternatives |
@@ -3433,7 +3433,48 @@ actually testing:
   at once, because it is also the service **v0.4's OpenSubsonic surface** is written against. Kavita
   still ships either way; only the order moves. ⚠️ Both branches order the **post-v0.1** sequence.
 
-**This ADR deliberately does not pre-judge which branch is taken.** The evidence above says the
+### 2a. ⚠️ Dated result — the spike was RUN, 2026-08-17, against the owner's live Kavita
+
+**Ran by:** Joe, against his own instance. **Kavita 0.9.0.2 · 151 series · page size 10.** The
+criterion above is applied clause by clause, in its own words, and nothing is graded on a curve.
+
+| Clause | Verdict | What was observed |
+|---|---|---|
+| **(a)** ordered by the `lastChapterAdded` the rows themselves carry | ✅ **PASS** | all 10 rows of page 1 non-increasing on `lastChapterAddedUtc` |
+| **(b)** stable enough to resume from | ✅ **PASS** | page-1 boundary value ≥ page-2 first row, **no id overlap** between the pages, and page 1 **byte-identical** across two fetches |
+| **(c)** adding a chapter moves the series to the front | ⚠️ **INCONCLUSIVE live** (it needs a library change), **settled from source instead** | `UpdateLastChapterAdded()` has exactly **one** production call site — `Kavita.Services/Scanner/ProcessSeries.cs:769`, inside the `if (chapter == null)` new-chapter branch. So the field moves on a **chapter add** and does **not** move on an edit, a deletion, a retitle or a cover change |
+
+**Verdict: the criterion is met, and Kavita has a usable channel-3b watermark** — with the loss
+clause (c)'s source reading makes explicit rather than hypothetical: this watermark observes chapter
+*additions* only, exactly as the key's own table row above says, so metadata edits, deletions and
+retitles are reconciliation's business and not the delta channel's.
+
+🚩 **ONE QUALIFICATION, AND IT CHANGES THE MECHANISM RATHER THAN THE VERDICT.** Clause (b) is
+written as *"re-requesting with a filter at the last seen value"*, and **that is not expressible**:
+`SeriesFilterField` has **no timestamp member**, so there is no server-side "since" filter to send.
+Resumption is therefore a **sorted page walk with a client-side stop** — walk `LastChapterAdded`
+descending and stop at the first row at or below the stored watermark. What was measured (stable
+order, no overlap, repeatable page 1) is exactly what that mechanism needs, which is why the verdict
+stands; but any text that says UsArr *filters* Kavita at the watermark is wrong, including
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) §7.1a's channel-3b wording, corrected in the same change as
+this note.
+
+ℹ️ **And the reason §7.1a's overlap window is not optional, from the owner's real data:** the
+timestamps cluster on the **scan job's** clock, not on the moment each chapter appeared — three
+series land within microseconds of each other at `07:00:30`. A walk that resumes *exactly* at the
+watermark can therefore drop a sibling that shares the boundary timestamp, which is what the overlap
+window exists to absorb.
+
+📌 **Citation maintenance, appended rather than rewritten.** The source table in §2 above cites
+`API/DTOs/Filtering/SortField.cs`, `API/DTOs/SeriesDto.cs` and friends. **Kavita's tree has since
+been restructured** — `SeriesDto` is now `Kavita.Models/DTOs/SeriesDto.cs`, and the call site in
+clause (c) is under `Kavita.Services/`. The 2026-08-16 citations are left exactly as they were
+because a citation inside a dated record is history: they are what was read on the day, against the
+tree as it then stood. Anyone re-verifying today should look under the new paths.
+
+**This ADR deliberately does not pre-judge which branch is taken.** ⚠️ **Superseded by §2a above,
+which ran it** — kept because it is the standard the result was judged against. The evidence below
+says the
 `LastModifiedDate` key is definitely unusable and says nothing conclusive about `LastChapterAdded` —
 the ordering may be applied over the entity rather than the DTO, and that is exactly the class of
 question a spec cannot answer and a probe can. ⚠️ **Recording a guess here would be the same mistake

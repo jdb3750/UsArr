@@ -277,8 +277,18 @@ CREATE TABLE work (
   popularity        REAL NOT NULL DEFAULT 0,
   rating            REAL,
   status            TEXT,
-  poster_asset_id   INTEGER REFERENCES image_asset(id),
-  backdrop_asset_id INTEGER REFERENCES image_asset(id),
+  -- ON DELETE SET NULL, NOT the default NO ACTION, and the difference is what
+  -- decides whether ix_img_state(state, expires_at) has a reader at all. That
+  -- index has no plausible use but an expiry sweep, and under NO ACTION the
+  -- sweep's `DELETE FROM image_asset WHERE …` fails with "FOREIGN KEY
+  -- constraint failed" for every asset any work points at — i.e. for every
+  -- poster on the Home screen, which is exactly the set the sweep is for.
+  -- Executed before this was changed: the delete really did fail. SET NULL is
+  -- also what origin_service_instance_id above and library.sink_service_instance_id
+  -- below already use, for the same reason — an evicted parent leaves a row
+  -- that renders without it, not a row that cannot be evicted.
+  poster_asset_id   INTEGER REFERENCES image_asset(id) ON DELETE SET NULL,
+  backdrop_asset_id INTEGER REFERENCES image_asset(id) ON DELETE SET NULL,
   -- Denormalised rollups. Recomputed per dirty-mark flush batch, NOT per child write.
   have_count        INTEGER NOT NULL DEFAULT 0,
   want_count        INTEGER NOT NULL DEFAULT 0,
@@ -395,6 +405,19 @@ CREATE TABLE media_file (
                       -- UsArr never touches a filesystem, and nothing in any
                       -- milestone scans.
   remote_file_id      TEXT,
+  -- THE THIRD DEFAULTED FOREIGN KEY, JUDGED SEPARATELY FROM THE TWO ABOVE AND
+  -- DELIBERATELY LEFT AS NO ACTION. The poster/backdrop pair was changed
+  -- because a sweep exists to delete their parent and the default blocked it.
+  -- Nothing deletes a `provenance` row: schema.md §6 makes the table immutable
+  -- ("never overwrite provenance on upgrade — insert a new row"), it is the
+  -- acquisition history the *Arr command path exists to keep, it carries no
+  -- expiry column and no index that would serve a sweep, and it is the child
+  -- of nothing, so no cascade reaches it either (provenance.user_id carries no
+  -- foreign key, for that exact reason). So NO ACTION blocks no sweep here —
+  -- what it does is make an accidental `DELETE FROM provenance` fail while a
+  -- file still cites it, which for an immutable history table is the outcome
+  -- to want. SET NULL would quietly break the file→grab join that
+  -- acquisition_state exists to keep honest.
   provenance_id       INTEGER REFERENCES provenance(id),
   path                TEXT NOT NULL,
   content_key         TEXT,   -- physical identity: hex(size_bytes) || ':' || sha256(first 64 KiB)
@@ -555,11 +578,14 @@ CREATE INDEX ix_library_kind ON library(user_id, kind) WHERE enabled = 1;
 
 -- Reserved row: library.id = 0, "Unfiled".
 --
--- It exists to uphold §7 invariant 5: a work the derivation would otherwise
--- place in NO library is a member of Unfiled, which keeps it visible in search
--- to its owner and to nobody else. Without it, a work visible through no
--- library matches no scope and disappears from search for everyone including
--- the owner — a failure the old instance-scope column could not produce.
+-- It is the MECHANISM §7 invariant 5 is upheld BY, and the invariant itself is
+-- upheld by code, not by this schema — see the note above search_doc_library
+-- below, which says exactly what the schema does and does not guarantee. What
+-- this row buys is a place for the membership derivation to put a work it would
+-- otherwise file nowhere, so that the derivation CAN keep the invariant. A work
+-- visible through no library matches no scope and disappears from search for
+-- everyone including its owner — a failure the old instance-scope column could
+-- not produce.
 --
 -- Never listed on the Libraries screen, never offered in the scope chip, never
 -- proposed. `kind` is irrelevant to it; 'movie' satisfies the CHECK and the row
@@ -570,6 +596,40 @@ CREATE INDEX ix_library_kind ON library(user_id, kind) WHERE enabled = 1;
 -- Explicit id 0: an omitted INTEGER PRIMARY KEY would be allocated as 1.
 INSERT INTO library (id, user_id, name, slug, kind, managed_by, enabled, include_in_search)
   VALUES (0, 0, 'Unfiled', 'unfiled', 'movie', 'auto', 1, 1);
+
+-- …and the row is PROTECTED, because "reserved" was previously a comment and
+-- nothing else: `DELETE FROM library WHERE id = 0` succeeded, nothing recreated
+-- the row, and the derivation's only landing place for an unfiled work was gone
+-- for the life of the database.
+--
+-- BEFORE DELETE rather than an AFTER DELETE that re-inserts: re-inserting during
+-- user 0's cascade would violate library.user_id's own foreign key at statement
+-- end anyway, so it would fail with a worse message and a partly-applied delete.
+--
+-- THE audit_log FAILURE MODE WAS CHECKED, NOT ASSUMED, because it is the one
+-- this project has already been bitten by: a trigger that aborts an IMPLICIT
+-- write performed by an ON DELETE action makes some row permanently
+-- undeletable (audit_log.actor_user_id, schema.md §9). Two consequences,
+-- measured in TestUnfiledLibraryIsProtected:
+--
+--   * An ORDINARY user stays deletable, with rows in every table that
+--     references user(id) — library included. The trigger tests `OLD.id = 0`,
+--     and library 0 belongs to user 0, so no other user's cascade touches it.
+--   * `DELETE FROM user WHERE id = 0` now FAILS where it used to succeed. That
+--     is deliberate and it is the second half of the same defect: user 0 is the
+--     shared/system sentinel, and deleting it cascaded away library 0, every
+--     shared tag_assignment, every shared write_queue row and every shared
+--     release_candidate in one statement. A sentinel that can be deleted is not
+--     a sentinel. It is recorded here rather than left to be discovered because
+--     it is a behaviour change, not a side effect.
+CREATE TRIGGER trg_library_unfiled_no_delete BEFORE DELETE ON library
+  WHEN OLD.id = 0
+  BEGIN
+    SELECT RAISE(ABORT, 'library 0 ("Unfiled") is reserved and cannot be deleted: it is where '
+      || 'the membership derivation files a work that belongs to no other library, and without '
+      || 'it such a work is invisible in search to every user including its owner. This also '
+      || 'blocks DELETE FROM user WHERE id = 0, the shared/system sentinel, deliberately.');
+  END;
 
 CREATE TABLE library_source (
   id                  INTEGER PRIMARY KEY,
@@ -714,6 +774,36 @@ CREATE INDEX ix_sd_work ON search_doc(work_id);
 -- scope is the outer filter and the doc set is the inner range; ix_sdl_doc
 -- serves the reverse. STRICT is added here — schema.md declared this one table
 -- WITHOUT ROWID and forgot it.
+--
+-- ⚠️ TWO OF §7'S SIX INVARIANTS ARE CODE INVARIANTS, NOT SCHEMA GUARANTEES, AND
+-- THIS COMMENT SAYS SO RATHER THAN LETTING THE Unfiled ROW ABOVE IMPLY
+-- OTHERWISE. Stated plainly, with the reason each is undeclarable and the code
+-- that will owe it:
+--
+--   * INVARIANT 5 — every search_doc row has at least one search_doc_library
+--     row. SQLite has no "at least one child" constraint: at INSERT time the
+--     doc necessarily exists before its junction row (that ordering is forced
+--     by search_doc_library's own foreign key), so a BEFORE/AFTER INSERT
+--     trigger would either fire too early to be true or reject the only legal
+--     insert order. And the two ways it BREAKS are both cascades — DELETE FROM
+--     library, and DELETE FROM user, which reaches library through
+--     library.user_id — where an AFTER DELETE trigger on the junction cannot
+--     tell "the doc lost its last scope" from "the doc is being deleted too".
+--     Deleting library 0 is now blocked (see the trigger above), which closes
+--     the single worst path, but any OTHER library's deletion can still strand
+--     a doc whose only scope was that library.
+--     OWED BY: the search-document builder — the code that writes search_doc,
+--     search_fts and search_trgm — which must re-file a stranded doc into
+--     library 0 in the same transaction as any library delete. Nothing writes
+--     these three tables yet, so the debt is recorded here and asserted in CI
+--     rather than pretended away: TestSearchDocVisibilityIsACodeInvariant
+--     executes both breaking paths and pins the invariant's own query.
+--
+--   * INVARIANT 2 — count(search_fts) == count(search_trgm) == count(search_doc).
+--     Same class, worse: the FTS5 tables are virtual, cannot carry a foreign
+--     key or a CHECK, and cannot be the target of a trigger. Nothing in SQLite
+--     can hold three row counts equal. It is upheld by the same builder, in the
+--     same transaction, and the same test pins the query.
 CREATE TABLE search_doc_library (
   library_id INTEGER NOT NULL REFERENCES library(id)       ON DELETE CASCADE,
   doc_rowid  INTEGER NOT NULL REFERENCES search_doc(rowid) ON DELETE CASCADE,
@@ -838,26 +928,60 @@ CREATE TABLE write_queue_new (
   settled_at      TEXT
 ) STRICT;
 
--- The copy. work_id is passed through the EXISTS guard rather than copied
--- straight, and that is not defensive noise: `work` is created empty by this
--- very migration, so EVERY pre-existing work_id is dangling by construction and
--- a straight copy would abort the migration — bricking startup — on any
--- database that had one. Nothing in internal/ writes write_queue yet
--- (internal/httpapi/grabs.go says so), so the expected count is zero; the guard
--- is what makes that an observation rather than a bet.
+-- The copy, and the guard in front of it.
+--
+-- `work` is created EMPTY by this very migration, so EVERY pre-existing
+-- non-NULL work_id is dangling by construction and the restored foreign key
+-- cannot accept one. That leaves exactly two honest outcomes — abort, or keep
+-- the value — and keeping it is not available at any price: `PRAGMA
+-- foreign_keys=OFF` is a documented no-op inside goose's transaction, and
+-- `PRAGMA defer_foreign_keys` only moves the same failure to COMMIT with a
+-- worse message.
+--
+-- THIS COLUMN USED TO BE COPIED THROUGH
+-- `CASE WHEN EXISTS (SELECT 1 FROM work …) THEN work_id END`, WHICH IS THE
+-- THIRD OUTCOME AND THE WRONG ONE. It converts every such value to NULL with
+-- no error, no log and no sync_report row — reproduced at 2 of 2 rows, and it
+-- recurs on every down/up cycle. work_id is the only record of which work a
+-- queued command was for; losing it silently is unrecoverable AND invisible,
+-- which is strictly worse than a migration that stops and says so.
+--
+-- The guard is a BEFORE INSERT trigger because SQLite answers a bare
+-- `SELECT RAISE(ABORT, …)` with "RAISE() may only be used within a
+-- trigger-program" (executed on this driver, 2026-08-17). RAISE's message is an
+-- expression rather than a bare literal here, which is what lets it carry the
+-- COUNT — also executed, not assumed. The trigger fires ahead of the foreign
+-- key, so the operator gets this message and not "FOREIGN KEY constraint
+-- failed".
+--
+-- Expected count today is zero: nothing in internal/ writes write_queue
+-- (internal/httpapi/grabs.go:58 says so; the standalone bench binary in
+-- internal/db/spike/ reads it). The guard is what makes that an observation
+-- rather than a bet.
+CREATE TRIGGER trg_wq_rebuild_guard BEFORE INSERT ON write_queue_new
+  WHEN NEW.work_id IS NOT NULL
+  BEGIN
+    SELECT RAISE(ABORT, 'migration 0005 aborted rather than silently discard data: ' ||
+      (SELECT count(*) FROM write_queue WHERE work_id IS NOT NULL) ||
+      ' write_queue row(s) carry a non-NULL work_id, and this migration creates ' ||
+      'the `work` table empty, so every one of them references a work that does ' ||
+      'not exist. Nothing in UsArr writes write_queue yet, so these rows cannot ' ||
+      'run: list them with "SELECT id, kind, state, work_id FROM write_queue ' ||
+      'WHERE work_id IS NOT NULL", then either DELETE them or set their work_id ' ||
+      'to NULL, and re-run the migration.');
+  END;
+
 INSERT INTO write_queue_new (
   id, idempotency_key, user_id, kind, work_id, service_instance_id, payload,
   state, fail_reason, attempts, max_attempts, next_attempt_at, verify_until,
   last_error, created_at, settled_at)
 SELECT
-  id, idempotency_key, user_id, kind,
-  CASE WHEN EXISTS (SELECT 1 FROM work w WHERE w.id = write_queue.work_id)
-       THEN work_id END,
-  service_instance_id, payload,
+  id, idempotency_key, user_id, kind, work_id, service_instance_id, payload,
   state, fail_reason, attempts, max_attempts, next_attempt_at, verify_until,
   last_error, created_at, settled_at
 FROM write_queue;
 
+DROP TRIGGER trg_wq_rebuild_guard;
 DROP TABLE write_queue;
 ALTER TABLE write_queue_new RENAME TO write_queue;
 
@@ -875,6 +999,22 @@ CREATE INDEX ix_wq_work ON write_queue(work_id, state);
 -- fail_reason='unknown'. That is precisely the defect the state exists to fix,
 -- reintroduced through the index. The predicate therefore stays byte-identical
 -- to 00001's.
+--
+-- ⚠️ AND THE CONSTRAINT THE PREDICATE PUTS ON ITS CALLERS, which the reasoning
+-- above re-affirmed across fifteen lines without ever stating: a partial index
+-- is only usable by a query whose WHERE clause IMPLIES the index's predicate,
+-- and SQLite does not derive that implication — it matches the predicate
+-- syntactically. So the sweep must spell the IN list verbatim.
+--
+--   WHERE state IN ('pending','inflight','verifying') AND next_attempt_at <= ?
+--       → SEARCH write_queue USING INDEX ix_wq_runnable (state=?)
+--   WHERE state = 'pending' AND next_attempt_at <= ?
+--       → SCAN write_queue                                  ← a full scan
+--
+-- The second is the obvious way to write "claim the next pending row", it is
+-- logically a strict subset of the first, and it reaches this index not at all.
+-- Both plans are executed and pinned by TestWriteQueueRunnableNeedsTheVerbatimINList
+-- so the constraint is discovered in CI rather than in production.
 --
 -- Still open, and not decided here: terminal rows (`done`/`failed`) are
 -- unreachable by any index, so the settled-row sweep scans (REVIEW-LOG DL-11).
@@ -917,17 +1057,43 @@ CREATE TABLE write_queue_old (
   settled_at      TEXT
 ) STRICT;
 
--- 0005 may have accepted states 0001's CHECK forbids. They cannot come back.
+-- 0005 may have accepted states 0001's CHECK forbids — 'awaiting_choice' above
+-- all, which is the state 0005 exists to permit. They cannot come back, so
+-- something has to give.
+--
+-- THIS FILTERED THEM OUT WITH `WHERE state IN (…)` AND THAT WAS THE WRONG
+-- CHOICE, for the same reason as the work_id guard in the Up block above: it
+-- deleted rows with no error and no count (3 in, 1 out). A row that vanishes is
+-- unrecoverable; a row whose state was remapped is still there to look at.
+--
+-- So every row is copied, and a state 0001 cannot hold is remapped to 'failed'
+-- — the terminal state, so nothing re-runs it — with the original recorded in
+-- last_error, which is free text and is where a human looks. A Down followed by
+-- an Up therefore preserves row count, ids and every other column, which is
+-- what makes the round trip testable at all.
+--
+-- The alternative considered and rejected: abort the Down, as the Up aborts.
+-- The Up aborts because it would otherwise destroy the ONLY copy of a value.
+-- Here the value is preserved, in a column built for exactly this, and a Down
+-- that cannot run is a local testing tool that does not work — which is the one
+-- thing this block is for (docs/CONFIGURATION.md §6.3: downgrades are not a
+-- supported user path).
 INSERT INTO write_queue_old (
   id, idempotency_key, user_id, kind, work_id, service_instance_id, payload,
   state, fail_reason, attempts, max_attempts, next_attempt_at, verify_until,
   last_error, created_at, settled_at)
 SELECT
   id, idempotency_key, user_id, kind, work_id, service_instance_id, payload,
-  state, fail_reason, attempts, max_attempts, next_attempt_at, verify_until,
-  last_error, created_at, settled_at
-FROM write_queue
-WHERE state IN ('pending','inflight','verifying','done','failed');
+  CASE WHEN state IN ('pending','inflight','verifying','done','failed')
+       THEN state ELSE 'failed' END,
+  fail_reason, attempts, max_attempts, next_attempt_at, verify_until,
+  CASE WHEN state IN ('pending','inflight','verifying','done','failed')
+       THEN last_error
+       ELSE COALESCE(last_error || ' | ', '')
+            || 'migration 0005 Down remapped state=''' || state || ''' to ''failed'': '
+            || 'migration 0001''s CHECK cannot hold it' END,
+  created_at, settled_at
+FROM write_queue;
 
 DROP TABLE write_queue;
 ALTER TABLE write_queue_old RENAME TO write_queue;

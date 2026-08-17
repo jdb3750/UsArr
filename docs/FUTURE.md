@@ -801,3 +801,48 @@ wanted rather than an archaeology problem.
   to the grab that produced it goes through `provenance.download_id`; if that join ever has to
   disambiguate by *service* rather than by download id, the column stops being cosmetic and this
   entry closes.
+
+---
+
+## 19. A per-user *Unfiled* library — the multi-user half of §7 invariant 5
+
+**What.** Today there is exactly one *Unfiled* library, `library.id = 0`, `user_id = 0`. It is the
+place the membership derivation files a work that belongs to no other library, which is what keeps
+`search_doc`'s §7 invariant 5 satisfiable at all — a work visible through no library matches no
+search scope and disappears for **every** user including its owner.
+
+**The seam, stated as the defect it will become.** `ux_library_slug` and `ux_library_name` are both
+`(user_id, …)`, so *Unfiled* is a per-user name that only user 0 has. A second user with a work the
+derivation cannot place has **no** row to file it into: the derivation would have to file it into
+library 0, which belongs to user 0, and library scoping is `user_id`-based — so the work is either
+invisible to its own owner or visible to somebody else. Both outcomes are exactly the failure
+invariant 5 exists to prevent, and neither is reachable in v0.1 because there is one user. **This is
+not a bug today. It is a bug on the day the second user is created**, which makes it the multi-user
+migration's business rather than a v0.1 fix hunting for a caller.
+
+**What the later migration must do, specifically.** Not "consider per-user Unfiled" — the shape is
+already determined by three things the current schema fixes:
+
+1. **Create one `Unfiled` row per user, at user-creation time, in the same transaction as the
+   `user` row** — and backfill one for every user that already exists. `id = 0` cannot be the
+   mechanism twice, so the reserved *id* stops being the identity and `(user_id, slug='unfiled')`
+   becomes it. `ux_library_slug` already makes that pair unique, so no new index is needed.
+2. **Keep library 0 exactly as it is, and keep its `BEFORE DELETE` trigger.** It is user 0's own
+   Unfiled — user 0 being the shared/system sentinel — and rows filed into it before the migration
+   must not move. The trigger (`trg_library_unfiled_no_delete`) must GROW to cover the new rows:
+   `WHEN OLD.slug = 'unfiled'` rather than `WHEN OLD.id = 0`. ⚠️ That widening re-opens the
+   `audit_log` question the id-0 form was checked against — a trigger that aborts an implicit
+   `ON DELETE CASCADE` write makes the parent row undeletable — and under `WHEN OLD.slug =
+   'unfiled'` the parent is an **ordinary user**, so `DELETE FROM user` would fail for everyone.
+   The migration must therefore either delete the Unfiled row explicitly ahead of the user, or drop
+   the trigger in favour of a `library.is_reserved` column the delete path checks. **Decide it
+   deliberately; the current trigger is safe only because library 0's owner is the one user nobody
+   deletes.**
+3. **Whoever writes the document builder owes the re-filing either way** (`reference/schema.md` §7,
+   invariants 2 and 5). Per-user Unfiled changes *which* row it files into; it does not change that
+   the schema cannot do the filing itself.
+
+**Cost of doing it now: real, and the reason it is here instead.** A per-user Unfiled needs a
+user-creation hook that does not exist (v0.1 creates one user, in a migration), and a second
+reserved row nothing reads. Cost of doing it later: one `INSERT … SELECT` over the `user` table, one
+trigger rewrite, and the decision in (2). Nothing about it is a one-way door.

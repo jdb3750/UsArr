@@ -79,8 +79,8 @@ CREATE TABLE work (
   popularity        REAL NOT NULL DEFAULT 0,
   rating            REAL,
   status            TEXT,
-  poster_asset_id   INTEGER REFERENCES image_asset(id),
-  backdrop_asset_id INTEGER REFERENCES image_asset(id),
+  poster_asset_id   INTEGER REFERENCES image_asset(id) ON DELETE SET NULL,
+  backdrop_asset_id INTEGER REFERENCES image_asset(id) ON DELETE SET NULL,
   -- Denormalised rollups. Recomputed per dirty-mark flush batch, NOT per child write.
   have_count        INTEGER NOT NULL DEFAULT 0,
   want_count        INTEGER NOT NULL DEFAULT 0,
@@ -102,6 +102,22 @@ CREATE INDEX ix_work_added     ON work(added_at DESC, id DESC) WHERE deleted_at 
 CREATE INDEX ix_work_pop       ON work(popularity DESC, id DESC) WHERE deleted_at IS NULL;
 CREATE INDEX ix_work_dirty     ON work(rollup_dirty) WHERE rollup_dirty = 1;
 ```
+
+**`poster_asset_id` and `backdrop_asset_id` carry `ON DELETE SET NULL`, and the clause is what
+gives `ix_img_state(state, expires_at)` a reader at all.** That index has no plausible use but the
+image expiry sweep, and under the DEFAULTED `ON DELETE NO ACTION` — which is what this file
+specified until 2026-08-17 — the sweep's `DELETE FROM image_asset WHERE state = ? AND expires_at <=
+?` fails with `FOREIGN KEY constraint failed` for every asset any `work` row points at, i.e. for
+every poster on the Home screen. So the index served a query that could never succeed. Executed
+both ways; `TestImageAssetExpirySweepEvicts` pins it, including that the *work* survives the
+eviction (SET NULL, never CASCADE — a cover expiring must not delete the movie).
+
+⚠️ **`media_file.provenance_id` (§3) is the third defaulted foreign key and it is deliberately
+LEFT that way**, judged separately rather than swept up with these two. Nothing deletes a
+`provenance` row — the table is immutable by §6's own rule, has no expiry column, no index that
+would serve a sweep, and no parent whose cascade could reach it — so `NO ACTION` blocks no sweep
+there. What it does block is an accidental `DELETE FROM provenance` while a file still cites it,
+which for an acquisition-history table is the outcome to want.
 
 **Why the partial predicates on `ix_work_added` / `ix_work_pop`:** without `WHERE deleted_at IS
 NULL` the "recently added" and "popular" grids read soft-deleted rows from the index and filter them
@@ -854,7 +870,7 @@ CREATE TABLE search_doc_library (
   library_id INTEGER NOT NULL REFERENCES library(id)      ON DELETE CASCADE,
   doc_rowid  INTEGER NOT NULL REFERENCES search_doc(rowid) ON DELETE CASCADE,
   PRIMARY KEY (library_id, doc_rowid)
-) WITHOUT ROWID;
+) STRICT, WITHOUT ROWID;
 CREATE INDEX ix_sdl_doc ON search_doc_library(doc_rowid);
 ```
 
@@ -877,7 +893,13 @@ CREATE INDEX ix_sdl_doc ON search_doc_library(doc_rowid);
 > the outer filter and the doc set is the inner range. `ix_sdl_doc` serves the reverse — deleting a
 > `search_doc` row, and answering "which libraries can see this" for the item detail page.
 
-**Six invariants, all CI-asserted, all silent-corruption sources if broken:**
+**Six invariants, all CI-asserted, all silent-corruption sources if broken.**
+
+⚠️ **CI-asserted is not schema-enforced, and two of the six are neither declarable nor enforced —
+which this list previously left a reader to assume the other way.** Both are stated plainly below,
+each with the reason SQLite cannot hold it and the code that owes it. Neither is a defect to be
+fixed by a migration; both are debts to be paid by the document builder, and they are written down
+here so that whoever writes it inherits them rather than discovers them.
 
 1. `search_fts.rowid == search_trgm.rowid == search_doc.rowid`. The id is allocated by inserting
    into `search_doc` first, then inserted **explicitly** into both FTS tables in the same
@@ -886,6 +908,15 @@ CREATE INDEX ix_sdl_doc ON search_doc_library(doc_rowid);
    title change issues the matching FTS `DELETE` in the same transaction. Without
    `contentless_delete=1` this is impossible — a plain contentless table answers
    `cannot DELETE from contentless fts5 table`.
+
+   🚩 **A CODE INVARIANT, and undeclarable in principle.** The two FTS5 tables are *virtual*: they
+   can carry no foreign key and no `CHECK`, and no trigger can be created on them. Nothing in
+   SQLite can hold three row counts equal. Measured: `DELETE FROM work` cascades `search_doc` away
+   and leaves **both** FTS tables holding a document for a work that no longer exists.
+   **OWED BY:** the search-document builder — the code that writes `search_doc`, `search_fts` and
+   `search_trgm` — which must issue all three deletes in one transaction. Nothing writes those
+   three tables yet. `TestSearchDocVisibilityIsACodeInvariant` executes the divergence and pins the
+   count query.
 3. `SELECT COUNT(*) FROM search_doc WHERE kind IN ('season','episode','track','comic_issue',
    'person')` is **0**. `comic_issue` is in the list for the same reason as the first three: a large
    manga library's chapter titles would swamp every query (ADR-0030). `person` is there for a
@@ -902,9 +933,24 @@ CREATE INDEX ix_sdl_doc ON search_doc_library(doc_rowid);
 5. **Every `search_doc` row has at least one `search_doc_library` row.** A row visible through no
    library matches no scope and is invisible in search to every user *including the owner* — a
    disappearance the old `instance_scope` could not produce, because every replicated row came from
-   some instance. The invariant is upheld by reserved `library.id = 0`, *Unfiled* (§13).
+   some instance.
    `SELECT COUNT(*) FROM search_doc sd WHERE NOT EXISTS (SELECT 1 FROM search_doc_library sdl
    WHERE sdl.doc_rowid = sd.rowid)` must be **0**.
+
+   🚩 **ALSO A CODE INVARIANT. Reserved `library.id = 0` (*Unfiled*, §13) is the PLACE the builder
+   files an otherwise-unfiled work; it is not a mechanism that upholds anything on its own,** and
+   the sentence that used to read *"the invariant is upheld by reserved `library.id = 0`"* said
+   otherwise. SQLite has no "at least one child row" constraint, and no trigger position expresses
+   it: at insert time the doc necessarily exists *before* its junction row, and the two ways the
+   invariant breaks are both **cascades** — `DELETE FROM library`, and `DELETE FROM user`, which
+   reaches `library` through `library.user_id` — where an `AFTER DELETE` trigger on the junction
+   cannot tell *"this doc lost its last scope"* from *"this doc is being deleted too"*. Both paths
+   are executed in `TestSearchDocVisibilityIsACodeInvariant` and both leave an orphan.
+   **What the schema does now do** is refuse to delete library 0 itself (`BEFORE DELETE` trigger
+   `trg_library_unfiled_no_delete`), which closes the worst single path and, deliberately, also
+   blocks `DELETE FROM user WHERE id = 0`.
+   **OWED BY:** the same document builder, which must re-file a stranded doc into library 0 in the
+   same transaction as any library or user delete.
 6. **The scoped search plan is a seek, not a scan.** `EXPLAIN QUERY PLAN` on the scoped query must
    contain `SEARCH sdl …` and must not contain `SCAN sdl` / `SCAN search_doc_library`.
 
@@ -1122,6 +1168,18 @@ CREATE INDEX ix_wq_work ON write_queue(work_id, state);
 `ux_wq_idem` is `(user_id, idempotency_key)`, **not** a bare `UNIQUE` on the key. A globally unique
 client-supplied key means a weak ULID source, a key reused across accounts, or a replay returns
 another user's `payload` and state. A key that exists under a different `user_id` gets `409`.
+
+🚩 **`ix_wq_runnable` is PARTIAL, and a query only reaches it by spelling the predicate
+verbatim.** SQLite matches a partial index's `WHERE` clause syntactically and does not derive
+implication, so the obvious way to write *"claim the next runnable row"* —
+`WHERE state = 'pending' AND next_attempt_at <= ?` — is a logically strict **subset** of the
+index's predicate and plans as `SCAN write_queue`, a full scan of a table that grows with every
+command UsArr ever issues. The three-state form
+`WHERE state IN ('pending','inflight','verifying') AND next_attempt_at <= ?` plans as
+`SEARCH write_queue USING COVERING INDEX ix_wq_runnable (state=? AND next_attempt_at<?)`. Both
+plans are measured and both are pinned by `TestWriteQueueRunnableNeedsTheVerbatimINList`, so the
+constraint is met in CI rather than in production. **Any narrower sweep must filter the extra
+states in the SELECT list, not in the `WHERE` clause.**
 
 `ix_wq_runnable` is also the reconciliation guard's index. [`sync.md`](./sync.md) §4 states the guard,
 and the scope words are load-bearing: *"The sweep may correct an item **toward the \*Arr** only when
@@ -1362,11 +1420,26 @@ how a schema accumulates dead columns in the one migration that can never be edi
 
 **Reserved row: `library.id = 0`, *Unfiled*.** Inserted alongside the table, `user_id 0`,
 `managed_by 'auto'`, `kind` irrelevant (the CHECK is satisfied with `'movie'` and the row is never
-rendered). It exists to uphold §7 invariant 5: a work that the derivation would otherwise place in
-**no** library is a member of Unfiled, which keeps it visible in search to its owner and nobody
-else. It is never listed on the Libraries screen, never offered in the scope chip, and never
+rendered). It is the PLACE §7 invariant 5 is upheld *in*: a work that the derivation would otherwise
+place in **no** library is filed here instead, which keeps it visible in search to its owner and
+nobody else. The invariant itself is upheld by the code that does the filing — see §7, where both
+undeclarable invariants are stated with the code that owes them — not by the existence of this row.
+It is never listed on the Libraries screen, never offered in the scope chip, and never
 proposed. Reachable states that need it: a `root_folder`-scoped library covering only part of an
 instance, and an `exclude` correction against a work's last remaining library.
+
+**The row is protected by a `BEFORE DELETE` trigger,** because "reserved" was previously a comment
+and nothing else — `DELETE FROM library WHERE id = 0` simply succeeded, nothing recreated the row,
+and the derivation had nowhere to file an unfiled work for the life of that database. Two
+consequences, both measured in `TestUnfiledLibraryIsProtected`: an **ordinary** user with rows in
+every table that references `user(id)` is still deletable (the `audit_log` failure mode, re-run —
+see §9), and `DELETE FROM user WHERE id = 0` now **fails**, deliberately, because the sentinel
+user's cascade reaches this row.
+
+⚠️ **Unfiled is `user_id = 0`, and `ux_library_slug` / `ux_library_name` are `(user_id, …)`, so no
+other user has one.** Invariant 5's safety net does not exist for a second user. v0.1 is
+single-user, so this is not a bug today; it is a seam, and [`../FUTURE.md`](../FUTURE.md) §19 says
+what the multi-user migration must do about it.
 
 ### 13.2 `library_source`
 

@@ -782,3 +782,48 @@ func TestLibraryMemberEditionsBelongToTheirWork(t *testing.T) {
 			"it does not detect the thing it exists to detect", got)
 	}
 }
+
+// TestWriteQueueRunnableNeedsTheVerbatimINList pins a constraint that
+// `ix_wq_runnable` imposes on every future caller and that nothing states:
+// the index is PARTIAL, and SQLite matches a partial index's predicate
+// SYNTACTICALLY rather than deriving implication.
+//
+// So the obvious way to write "claim the next runnable row" —
+// `WHERE state = 'pending' AND next_attempt_at <= ?` — is a logically strict
+// subset of the index's predicate and reaches the index NOT AT ALL. It full
+// scans a table that grows with every command UsArr ever issues.
+//
+// Both facts are asserted, because pinning only the good one leaves the trap
+// undocumented and pinning only the bad one reads as a bug report. Nothing
+// queries write_queue yet (internal/httpapi/grabs.go:58), so this test is the
+// only place the constraint is written in executable form — which is exactly
+// why it is here and not left to the sweep's author to rediscover.
+func TestWriteQueueRunnableNeedsTheVerbatimINList(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	seeks, err := QueryPlan(ctx, d.Read(),
+		`SELECT id FROM write_queue
+		  WHERE state IN ('pending','inflight','verifying') AND next_attempt_at <= ?`,
+		"2026-08-17 00:00:00")
+	if err != nil {
+		t.Fatalf("QueryPlan: %v", err)
+	}
+	if j := strings.Join(seeks, " | "); !strings.Contains(j, "ix_wq_runnable") {
+		t.Errorf("the verbatim three-state predicate no longer reaches ix_wq_runnable:\n  %s\n"+
+			"That predicate is the sweep's, and reference/sync.md §4's reconciliation guard "+
+			"names the same three states literally.", j)
+	}
+
+	scans, err := QueryPlan(ctx, d.Read(),
+		`SELECT id FROM write_queue WHERE state = 'pending' AND next_attempt_at <= ?`,
+		"2026-08-17 00:00:00")
+	if err != nil {
+		t.Fatalf("QueryPlan: %v", err)
+	}
+	if j := strings.Join(scans, " | "); !strings.Contains(j, "SCAN write_queue") {
+		t.Errorf("the single-state predicate now reaches an index:\n  %s\n"+
+			"That is good news and it makes the comment beside ix_wq_runnable in "+
+			"00005_library_sync.sql wrong. Update both in the same change.", j)
+	}
+}

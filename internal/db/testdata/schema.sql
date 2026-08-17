@@ -484,6 +484,19 @@ CREATE TABLE media_file (
                       -- UsArr never touches a filesystem, and nothing in any
                       -- milestone scans.
   remote_file_id      TEXT,
+  -- THE THIRD DEFAULTED FOREIGN KEY, JUDGED SEPARATELY FROM THE TWO ABOVE AND
+  -- DELIBERATELY LEFT AS NO ACTION. The poster/backdrop pair was changed
+  -- because a sweep exists to delete their parent and the default blocked it.
+  -- Nothing deletes a `provenance` row: schema.md §6 makes the table immutable
+  -- ("never overwrite provenance on upgrade — insert a new row"), it is the
+  -- acquisition history the *Arr command path exists to keep, it carries no
+  -- expiry column and no index that would serve a sweep, and it is the child
+  -- of nothing, so no cascade reaches it either (provenance.user_id carries no
+  -- foreign key, for that exact reason). So NO ACTION blocks no sweep here —
+  -- what it does is make an accidental `DELETE FROM provenance` fail while a
+  -- file still cites it, which for an immutable history table is the outcome
+  -- to want. SET NULL would quietly break the file→grab join that
+  -- acquisition_state exists to keep honest.
   provenance_id       INTEGER REFERENCES provenance(id),
   path                TEXT NOT NULL,
   content_key         TEXT,   -- physical identity: hex(size_bytes) || ':' || sha256(first 64 KiB)
@@ -810,8 +823,18 @@ CREATE TABLE work (
   popularity        REAL NOT NULL DEFAULT 0,
   rating            REAL,
   status            TEXT,
-  poster_asset_id   INTEGER REFERENCES image_asset(id),
-  backdrop_asset_id INTEGER REFERENCES image_asset(id),
+  -- ON DELETE SET NULL, NOT the default NO ACTION, and the difference is what
+  -- decides whether ix_img_state(state, expires_at) has a reader at all. That
+  -- index has no plausible use but an expiry sweep, and under NO ACTION the
+  -- sweep's `DELETE FROM image_asset WHERE …` fails with "FOREIGN KEY
+  -- constraint failed" for every asset any work points at — i.e. for every
+  -- poster on the Home screen, which is exactly the set the sweep is for.
+  -- Executed before this was changed: the delete really did fail. SET NULL is
+  -- also what origin_service_instance_id above and library.sink_service_instance_id
+  -- below already use, for the same reason — an evicted parent leaves a row
+  -- that renders without it, not a row that cannot be evicted.
+  poster_asset_id   INTEGER REFERENCES image_asset(id) ON DELETE SET NULL,
+  backdrop_asset_id INTEGER REFERENCES image_asset(id) ON DELETE SET NULL,
   -- Denormalised rollups. Recomputed per dirty-mark flush batch, NOT per child write.
   have_count        INTEGER NOT NULL DEFAULT 0,
   want_count        INTEGER NOT NULL DEFAULT 0,
@@ -909,4 +932,14 @@ CREATE TRIGGER trg_audit_no_delete BEFORE DELETE ON audit_log
 -- trigger trg_audit_no_update
 CREATE TRIGGER trg_audit_no_update BEFORE UPDATE ON audit_log
   BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+
+-- trigger trg_library_unfiled_no_delete
+CREATE TRIGGER trg_library_unfiled_no_delete BEFORE DELETE ON library
+  WHEN OLD.id = 0
+  BEGIN
+    SELECT RAISE(ABORT, 'library 0 ("Unfiled") is reserved and cannot be deleted: it is where '
+      || 'the membership derivation files a work that belongs to no other library, and without '
+      || 'it such a work is invisible in search to every user including its owner. This also '
+      || 'blocks DELETE FROM user WHERE id = 0, the shared/system sentinel, deliberately.');
+  END;
 

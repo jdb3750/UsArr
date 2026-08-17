@@ -102,6 +102,20 @@ deploy/compose/seed/
 testdata/cassettes/*.unscrubbed.yaml
 testdata/cassettes/**/*.raw.yaml
 
+# ─── Agent scratch space, and the gate hole it opened ────────────────────────
+# `.claude/` holds an agent's own working state, and — the part that mattered —
+# git worktrees at `.claude/worktrees/…`, i.e. FULL SECOND CHECKOUTS of this
+# repository inside the repository. Untracked and un-ignored, they were swept by
+# every tool that globs the working tree: `make fmt-check` reported 273 .go
+# files against a clean tree's 135 and failed on another agent's scratch files,
+# so `make check` could not be run in the primary checkout at all
+# (docs/REVIEW-LOG.md, "On the gate for M5-01…M5-11").
+#
+# Ignoring it is half the fix and the weaker half: the Makefile's own file list
+# is the other, because a .gitignore entry only helps the tools that read one.
+# See GO_SRC_LIST in the Makefile.
+.claude/
+
 # ─── Editors and IDEs ────────────────────────────────────────────────────────
 .vscode/
 !.vscode/extensions.json
