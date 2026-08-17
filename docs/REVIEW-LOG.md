@@ -4506,9 +4506,113 @@ fix→assert→enforce sequencing — is kept verbatim in substance; only the da
 clause with them: *"the fact that it is not enforced today"* → *"the one place it cannot be"*, and
 *"Threshold, once it lands"* → *"Threshold"*.
 
-⏭️ **Reported, not applied.** §11's contrast rule still says *"as of §9.7 **no such pair ships**, so
-the assertion currently has nothing to run over"*. It is the same shape, but the surrounding
-prescription (a runtime WCAG solver over `dominant_color`) is itself superseded by §9.7 moving the
-title off the fill — `docs/design/mockups/prototype.html` records `constrainDominant` as deleted —
-so rewriting the status sentence alone would tidy a passage whose design content needs a decision
-first. That is a design change, out of scope for a status sweep.
+⏭️ **Reported, not applied — and now settled; the deferral is kept above so the sequence is
+readable.** §11's contrast rule said *"as of §9.7 **no such pair ships**, so the assertion currently
+has nothing to run over"*. Same shape, but the surrounding prescription (a runtime WCAG solver over
+`dominant_color`) was itself superseded by the poster title moving off the fill, so rewriting the
+status sentence alone would have tidied a passage whose design content needed a decision first.
+That decision is below.
+
+**§11's computed-fill rule is restated as conditional rather than as current. Applied.** Verified
+against the tree before writing: `constrainDominant` survives in `docs/design/mockups/usarr.js`
+**only as the comment recording its deletion** — *"What used to live here was constrainDominant():
+a WCAG ratio solver … It is gone, and it was not a bug fix — it was doing its job correctly"* — and
+nothing in `docs/design/` sets text on a computed fill, so there was no live call site to change
+the answer. **The rule survives, because it is right and cheap to keep; only its tense changes.**
+The blockquote now opens *"**Where a surface sets text on a computed fill**, pick whichever of the
+two theme text tokens scores higher…"*, so it binds a future call site without asserting anything
+about the present. The CI sentence loses *"as of §9.7 no such pair ships, so the assertion currently
+has nothing to run over and must not be reported as passing"* and gains the reason the assertion is
+kept: *"a conditional rule needs a **standing** guard, because a guard added by whoever writes the
+first call site is a guard that call site had to know about first — which is the same as having no
+rule."* The retention is now deliberate on the page rather than inferable from a status note that
+would go stale the moment a call site appeared. Which surfaces set text on a computed fill is named
+as §9.2's question and the tree's answer, not §11's — SD-01's own rule, applied to the section that
+prompted it. **One rider, and three more left as a follow-up:** four sites attributed the
+poster-title move to **§9.7**, which is *"The minimum component set, and where per-type divergence
+is allowed"*; the rule they mean is **§9.2**'s poster-grid entry, which is where *"the title and
+year sit BELOW the tile"* is actually written. The one **inside** this passage is corrected, because
+leaving it would have made the paragraph cite two different sections for one rule. The other three —
+§2's summary table (*"The title sits below it, not in it (§9.7)"*), §7.1, and §13's checklist entry —
+are **not** touched: that is a citation sweep, not a status one, and it is recorded here rather than
+folded in.
+
+---
+
+## SD-01a — a guard that asserts a fact pins the fact. **Applied.**
+
+**Found.** The mockups' permanent notice — the label `DESIGN-DIRECTION` §13's fabricated-data ban
+grants as its one exception — read *"Static design mockup of UsArr, which is pre-alpha software:
+none of these screens is implemented and every value on them is invented"*, on all five source
+pages and in the published `prototype.html`. **The first half went false when the screens shipped**
+(`web/src/routes`; `ARCHITECTURE.md` §16's own inventory of the same claim was removed in `0b8637c`
+for the same reason). The second half is true, and it is the entire reason the exception exists:
+the data really is invented.
+
+**The finding is the shape, not the sentence.** A guard that asserts a string **verbatim** pins
+whatever that string says. While the claim was wrong such a guard would have been green, and it
+would have **failed the first person to correct it** — which inverts what a guard is for: it stops
+being a check on drift and becomes the drift's enforcement mechanism. *A guard should assert a
+**property**, not a **fact**.* "The footer names its data as invented" is a property and survives
+any honest rewording; the sentence itself is a fact, and pinning a fact makes the guard an obstacle
+to fixing it.
+
+**Recorded precisely, because the near-miss is the instructive part: nothing actually asserted this
+sentence.** `grep -rn "none of these screens"` over the tree returns the five source pages, the
+generated `prototype.html` and `mockups/README.md` — **no check at all**. `check.mjs`'s existing
+notice sweep tested one property already (`/every catalogue source/`, that the notice describes the
+selected install) and simply had no opinion about the rest of the sentence, and `build_prototype.py`
+asserts only that `class="mocknote"` is present. So the string was not pinned; it was **unguarded**,
+which is how it went stale in the first place. The rule holds from either direction, and it is what
+the replacement is built on rather than a literal.
+
+**Applied, three properties instead of one.** `check.mjs` now asserts, for **each** install: the
+notice describes the selected install (unchanged); **it names its data as invented**, the half rule
+13's exception is granted for; and **it makes no implementation-status claim at all** — `/pre-alpha|
+unimplemented|implemented|shipped|ships/`. The third is the one that would have caught this, and it
+is SD-01's rule expressed as a check rather than as prose: §16 and the tree own that fact, so a
+mockup restating it owns a copy nothing keeps in step. The notice itself now reads *"Static design
+mockup of UsArr. Every value on these screens is invented."* in both installs, with the compact
+form losing its `Pre-alpha ` prefix for the same reason, edited in the five source pages and
+regenerated into `prototype.html` through `build_prototype.py` rather than by hand.
+
+**Fired deliberately before being trusted**, per `CLAUDE.md`'s *"fire a guard deliberately … one
+that has never been triggered is indistinguishable from no guard"*. With `invented` removed from
+the notice and the old *"which is pre-alpha software"* put back, `node docs/design/check.mjs` exits
+**1** with exactly **4 FAILURES**, all of them the new checks and two per install:
+
+> `FAIL  install: the full mockup notice does not name its data as invented, which is the one thing
+> rule 13's exception is granted for — "Static design mockup of UsArr, which is pre-alpha software.
+> Drawn over an install with every catalogue source connected,"`
+> `FAIL  install: the full mockup notice makes an implementation-status claim ("pre-alpha") — §16
+> and the tree own that fact, a mockup restating it owns a copy that goes stale (SD-01)`
+
+Both repeat for `v01`, and the pre-existing install check stayed green throughout — which is the
+other half of the evidence: the old guard could not see either defect.
+
+---
+
+## DS-07 and DS-14 — closed by `0b8637c`. **Amended dispositions.**
+
+Both were **Open — recorded here rather than applied**, both against `ARCHITECTURE.md` §16's
+landed/not-yet inventory, and both are closed by the code thread's `0b8637c`, *"docs: replace
+per-feature shipped/not-shipped claims with pointers to the tree"* (on `main`; verified with
+`git merge-base --is-ancestor 0b8637c origin/main` and by reading the diff). That commit **removed
+the inventory** — from §16, and the equivalent claims from `CLAUDE.md` and `README.md` — leaving §16
+authoritative for *which milestone owns a thing* and sending the reader to `web/src/routes`,
+`internal/` and `internal/db/migrations` for whether it is built.
+
+| # | Original disposition | Amended disposition |
+|---|---|---|
+| **DS-07** | Open — recorded here rather than applied | **Closed — and closed by a fix it did not propose, which is the clause worth reading.** DS-07 asked for the inventory to be **completed**: *"§16 gains a partial/scaffolding row and the README's row moves to `🚧 Partial`."* `0b8637c` did the opposite and **deleted the inventory**, on the reasoning that a fresher inventory is how this one went wrong. The sentence DS-07 quoted — *"the Services health **screen** (its endpoint exists, the UI does not)"* — is gone from `docs/ARCHITECTURE.md` rather than corrected, so a reader tracing DS-07's fix will not find the row it asked for and should not go looking. The defect is genuinely gone: nothing in §16 now claims the Services UI does not exist, so §17.3's account of that screen's rendered bugs no longer contradicts the section above it |
+| **DS-14** | Open — recorded here rather than applied | **Moot by removal, not fixed** — the distinction matters because **nothing was added**. DS-14 named four shipped endpoints missing from §16's *"Landed so far"* list (`GET /api/v1/system/status`, `GET /api/v1/auth/session`, `POST /api/v1/auth/sudo`, and the sudo re-authentication window). `0b8637c` deleted the list. The four are still undocumented as landed *in §16*, and now correctly so: §16 no longer undertakes to say. **Sudo mode remains a substantive shipped security control**, so the underlying want — that a reader can discover it — is now served by `internal/httpapi/` and by `git log`, and by nothing in the docs. If that turns out to be too thin, it is a new finding against a document that chooses to carry an endpoint list, not a reopening of this one |
+
+**The part that is not bookkeeping.** DS-07 was a **correct, written-down, still-open finding while
+the documentation it described stayed wrong**. The log recorded the defect and did not prevent it;
+what fixed it was a different thread hitting the same wrongness from the other side and arriving at
+a better fix than the one recorded here. **A finding recorded is
+not a finding fixed, and an open finding with no owner is a record that we knew better.** This log's
+promise is that findings are never silently dropped — that promise is about the log, not about the
+tree, and DS-07 is what the gap between the two looks like from the inside. Stated here rather than
+turned into a process: a rule nobody applies at four in the morning would be a third record of
+knowing better.

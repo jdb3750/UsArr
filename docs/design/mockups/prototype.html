@@ -463,11 +463,17 @@ button, input, select, textarea { font: inherit; color: inherit; }
    `COLUMNS` in web/src/routes/requests/+page.svelte has read Age 68px since
    cd94779. Both trees hold both numbers on different columns — 68px is `Grabs`
    here and `Age` there, 80px is `Age` here and `Protocol` there — which is how
-   one came to be quoted for the other. Eight of the ten columns the two trees
-   share carry different widths; only `Category` and `Actions` agree, `Category`
+   one came to be quoted for the other. NINE of the ten columns the two trees
+   share carry different widths; only `Category` still agrees, `Category`
    sits in a different position, and the `Select` column here has no counterpart
-   there. That belongs in REVIEW-LOG rather than in a stylesheet comment. See
-   SU-10. */
+   there. ⚠️ That count was EIGHT when it was walked at 03:21Z: `Actions` agreed
+   at `minmax(max-content,auto)` in both trees until `7fc932e` gave the app a
+   `198px` reserve, because ADR-0029 makes every row its own grid and a
+   content-sized track has no cross-row agreement to appeal to. That commit
+   reached main at 03:27Z, six minutes after the walk — so the count widened
+   while the finding that names it was being gated, which is the finding. A
+   count of divergent columns is perishable and dates itself. That belongs in
+   REVIEW-LOG rather than in a stylesheet comment. See SU-10 and SU-10d. */
 .unit {
   color: var(--fg-muted);
   display: inline-block;
@@ -2038,10 +2044,10 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
         <option value="full">Full stack: a later milestone</option>
         <option value="v01">v0.1: Sonarr, Radarr, Prowlarr</option>
       </select>
-      <span class="mocknote__long" data-inst="full">Static design mockup of UsArr, which is pre-alpha software: none of these screens is implemented and every value on them is invented. Drawn over an install with every catalogue source connected, which is later than v0.1.</span>
-      <span class="mocknote__long" data-inst="v01" hidden>Static design mockup of UsArr, which is pre-alpha software: none of these screens is implemented and every value on them is invented. Drawn over the three services v0.1 connects.</span>
-      <span class="mocknote__short" data-inst="full">Pre-alpha mockup, invented data, full stack</span>
-      <span class="mocknote__short" data-inst="v01" hidden>Pre-alpha mockup, invented data, v0.1 install</span>
+      <span class="mocknote__long" data-inst="full">Static design mockup of UsArr. Every value on these screens is invented. Drawn over an install with every catalogue source connected, which is later than v0.1.</span>
+      <span class="mocknote__long" data-inst="v01" hidden>Static design mockup of UsArr. Every value on these screens is invented. Drawn over the three services v0.1 connects.</span>
+      <span class="mocknote__short" data-inst="full">Mockup, invented data, full stack</span>
+      <span class="mocknote__short" data-inst="v01" hidden>Mockup, invented data, v0.1 install</span>
     </div>
     <div class="searchbox">
       <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>

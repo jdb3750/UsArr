@@ -2372,27 +2372,30 @@ both. One bad hand-picked swatch would have been a nit; having no rule was the f
 an average taken over arbitrary cover art, mid-luminance fills are common and *both* black and white
 land near 3.5:1 on them.
 
-**§9.7 resolved that by moving the text rather than by constraining the colour**, and the rule below
+**§9.2 resolved that by moving the text rather than by constraining the colour**, and the rule below
 survives it as a general one. The reason the move beats the constraint is worth keeping: a solver
 constrains against a **single averaged colour**, and real cover art is not one colour — a white
 title over the light half of a Blue Note sleeve fails whatever the average says. The poster title
 and year are now ordinary `--fg` / `--fg-muted` on a known ground, which the contrast sweep above
 already covers.
 
-> **Pick whichever of the two theme text tokens scores higher against the computed
-> `dominant_color`. If the winner is still below 4.5:1, adjust `dominant_color`'s lightness — away
-> from the text colour, in 2% steps in OKLCh, preserving hue and chroma — until it clears. The fill
-> is decoration; the title is content, and content wins.**
+> **Where a surface sets text on a computed fill, pick whichever of the two theme text tokens
+> scores higher against the computed `dominant_color`. If the winner is still below 4.5:1, adjust
+> `dominant_color`'s lightness — away from the text colour, in 2% steps in OKLCh, preserving hue and
+> chroma — until it clears. The fill is decoration; the title is content, and content wins.**
 
 Two supporting rules, because otherwise the ratio is not computable from what ships. **Neither the
 title nor the year carries `opacity`** — compositing changes the effective ratio (by ~0.45 on the
 measured pair) through a mechanism no contrast check sees, so the year gets a real colour token.
 And **12 px semibold is normal text under WCAG, not large** (large is ≥18.66 px bold or ≥24 px), so
 4.5:1 applies to both lines. **Asserted in CI over any computed-fill / foreground pair that ships in
-a fixture** — and as of §9.7 **no such pair ships**, so the assertion currently has nothing to run
-over and must not be reported as passing. It binds the moment a surface sets text on a computed
+a fixture**, and §13's checklist carries the entry. **The assertion is retained deliberately, and
+the reason is the shape of the rule above:** a conditional rule needs a *standing* guard, because a
+guard added by whoever writes the first call site is a guard that call site had to know about
+first — which is the same as having no rule. It binds the moment any surface sets text on a computed
 fill, and it binds in the image pipeline where the colour is produced regardless (ARCHITECTURE
-§4.4.1).
+§4.4.1). **Which surfaces do that is not this section's to say** — §9.2's poster-grid entry owns the
+call-site question, and the tree owns the answer. §11 fixes the rule; it does not keep an inventory.
 
 **Two ARIA requirements the grid-row primitive creates, both stated as requirements rather than as
 review items**, because a hand-built grid supplies nothing a native `<table>` supplies for free
