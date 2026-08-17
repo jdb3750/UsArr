@@ -93,6 +93,10 @@ proxy for its condition or has never been triggered is indistinguishable from no
 `docs/ARCHITECTURE.md` §16 is authoritative for what lands in which milestone; the README's
 status tables are generated from it. If §16 does not say a thing ships, it does not ship.
 
+**Status is read off the tree, not off a document.** No document owns what is built —
+`web/src/routes`, `internal/` and `internal/db/migrations` do. When you find a status claim that
+has gone stale, do not write a fresher one; write the pointer.
+
 **Cut before you add.** This project's biggest risk is never shipping. A proposal that adds a
 subsystem must say what it removes, or defer itself to a later milestone. "And also" is not a
 plan.
