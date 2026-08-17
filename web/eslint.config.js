@@ -25,11 +25,18 @@ export default ts.config(
 		}
 	},
 	{
-		// scripts/harness/ is the dev-only measurement page driven by
-		// scripts/list-bench.mjs. It is a Vite root of its own, outside the
-		// SvelteKit project, so `projectService` has no tsconfig that covers it
-		// and typed linting errors on the file rather than on its contents.
-		// The driver itself (scripts/list-bench.mjs) IS linted.
-		ignores: ['build/', '.svelte-kit/', 'node_modules/', 'scripts/harness/']
+		// scripts/harness/ and scripts/freeze-harness/ are the dev-only pages
+		// driven by scripts/list-bench.mjs and scripts/freeze-check.mjs. Each is
+		// a Vite root of its own, outside the SvelteKit project, so
+		// `projectService` has no tsconfig that covers it and typed linting
+		// errors on the file rather than on its contents. Both DRIVERS are
+		// linted, and they are where the logic lives.
+		ignores: [
+			'build/',
+			'.svelte-kit/',
+			'node_modules/',
+			'scripts/harness/',
+			'scripts/freeze-harness/'
+		]
 	}
 );
