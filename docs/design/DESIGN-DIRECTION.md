@@ -1692,8 +1692,10 @@ treatment by media type.** Same slots, same positions, different values.
     books · artists · issues · episodes`, widest `episodes` at 52 px → `6.5ch`.
   - ⚠️ **The size family is the BINARY one, and mistaking it for the decimal one is how this
     reserve was first mis-measured.** The rule shipped at `2.5ch`, derived from
-    `B · KB · MB · GB · TB` whose widest member `MB` is 19 px — the family **the mockups draw**, not
-    the family **the application prints**. Every indexer and every \*Arr reports binary units and so
+    `B · KB · MB · GB · TB` whose widest member `MB` is 19 px — the family **the mockups drew at the
+    time**, not the family **the application prints**. (The mockups' size sample data has since been
+    converted, so both trees now draw the binary family; the figures were converted with it, not
+    relabelled — `14.2 GB` became `13.2 GiB`.) Every indexer and every \*Arr reports binary units and so
     does UsArr (`sizeParts` in `web/src/lib/format.ts`), and the binary family is wider: measured in
     the same cell font, `KiB` 19 px, `MiB` 22 px, `GiB` 20 px, `TiB` 18 px. `2.5ch` was then run as
     a control rather than assumed to fail, and the control is the interesting half — the figures
@@ -1703,7 +1705,8 @@ treatment by media type.** Same slots, same positions, different values.
     departure from it**: the rule is unchanged and only its input was wrong. The defect underneath —
     mockups drawing data the product cannot emit — is recorded separately in `docs/REVIEW-LOG.md` as
     **SU-05**, because until the sample data is corrected it will keep producing measurements that
-    are right about the mockup and wrong about the product.
+    are right about the mockup and wrong about the product. **The size half of SU-05 is done**;
+    `Age` and `Category` are still open there.
   - **An absent value gets no unit box, and the reserve is the only thing this rule governs.** A
     `3ch` box held open around an em dash reserves width for a unit that is not there, so the
     absent-value branch emits `—` and no `.unit` span. ⚠️ **Whether the em dash is reachable is a
