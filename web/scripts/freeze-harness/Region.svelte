@@ -46,7 +46,14 @@
 	const columns: ListColumn[] = [
 		{ id: 'label', header: 'Release', width: 'minmax(0, 3fr)' },
 		{ id: 'rank', header: 'Rank', width: '10ch', align: 'end' },
-		{ id: 'actions', header: 'Actions', width: 'minmax(max-content, auto)' }
+		// A fixed reserve, never content-sized: ADR-0029 makes every row its own
+		// grid, so `minmax(max-content, auto)` here resolved to 64.19 px in the
+		// header against 67.20 px in every body row and put the whole body 3.01 px
+		// left of its own header. Measured in this harness's own build, where
+		// /fonts/*.woff2 404 and `document.fonts.check('600 13px "IBM Plex Sans"')`
+		// is false, the lone Grab button spans 43.20 px; + 2 × --row-pad-x = 67.20,
+		// plus one --space-4 of headroom rounded up to the next --space-4 = 80 px.
+		{ id: 'actions', header: 'Actions', width: '80px' }
 	];
 
 	/**

@@ -94,14 +94,43 @@
 	 * so the two screens cannot drift. `What is wrong` carries the instance and
 	 * the qualifying clause, with the upstream's verbatim text on the muted
 	 * second line (§10's `error` row: the verbatim upstream text, never a
-	 * paraphrase). `Action` is a link to the row, on the widthed track §9.1
-	 * requires — a fixed action track shears the buttons attached to exactly
-	 * the rows that are broken.
+	 * paraphrase). `Action` is a link to the row that owns the fix.
+	 *
+	 * ⚠️ THE ACTION TRACK IS A FIXED RESERVE AND MUST NEVER BE CONTENT-SIZED.
+	 * It read `minmax(max-content, auto)`, on the argument that a fixed action
+	 * track shears the buttons attached to exactly the rows that are broken.
+	 * ADR-0029 makes EVERY ROW ITS OWN GRID, so that argument does not hold: a
+	 * content-sized track resolves against its own row's contents, and the
+	 * header row's contents are the word "Action". Measured in Chromium at
+	 * 1440 px with the Plex faces served, the track came out 56 px in the header
+	 * and 130 px in every body row — so the whole body sat 74 px left of its own
+	 * header, and `What is wrong` sat 22 px left of its own.
+	 *
+	 * THE RESERVE IS MEASURED, NOT CHOSEN. This cell has exactly ONE state — an
+	 * unconditional `Open in Services` link, on every row, with no optional
+	 * element to make one row disagree with the next. It measures 106.00 px with
+	 * `document.fonts.check('600 13px "IBM Plex Sans"')` true and 115.23 px with
+	 * it false; the Plex faces are `font-display: block`, so a build that cannot
+	 * serve them renders on fallback metrics forever and the wider number is the
+	 * one that has to fit. 115.23 + 2 × --row-pad-x (12 px at all three
+	 * densities) = 139.23, plus one --space-4 of headroom rounded up to the next
+	 * --space-4 = 152 px.
+	 *
+	 * AND IT DOES NOT GET `.cell-actions`, WHICH WAS CHECKED RATHER THAN
+	 * ASSUMED. That class exists to give a cell holding SEVERAL controls somewhere
+	 * to put the ones that do not fit. Forced to a 40 px reserve, this cell's
+	 * lone anchor spilled 78 px past the cell edge and was clipped by
+	 * `.tablewrap`'s `overflow-x: clip` — and every one of the Services screen's
+	 * `.cell-actions` buttons spilled 75-149 px in exactly the same way, because
+	 * `flex-wrap` cannot wrap a single item and `.btn` is `white-space: nowrap`.
+	 * The class would change nothing here. What keeps this cell safe is that its
+	 * label is a compile-time constant, so the reserve above is its widest state
+	 * by construction. A second control added to this cell needs the class.
 	 */
 	const COLUMNS: ListColumn[] = [
 		{ id: 'state', header: 'State', width: 'minmax(0, 1.1fr)' },
 		{ id: 'what', header: 'What is wrong', width: 'minmax(0, 2.6fr)' },
-		{ id: 'action', header: 'Action', width: 'minmax(max-content, auto)' }
+		{ id: 'action', header: 'Action', width: '152px' }
 	];
 
 	/**
