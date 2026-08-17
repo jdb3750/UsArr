@@ -2228,15 +2228,18 @@ catalogue is film and TV**, because those are the sources that ship. A screen fo
 no configured source says so — principle 3, degrade honestly — rather than rendering an empty grid,
 and that behaviour is the same one an install without Navidrome would get in any case.
 
-**The order within the catalogue sequence is not fixed here. It is decided by the Kavita
-`LastChapterAdded` watermark probe** ([ADR-0035](./DECISIONS.md#adr-0035) §2, §7.1a): **Kavita first
-if it passes, Navidrome first if it fails.** ⚠️ **The probe RAN on 2026-08-17 and PASSED** ([ADR-0035](./DECISIONS.md#adr-0035) §2a, §7.1a) — a status fact recorded here rather than a sequence this section has re-decided; applying its consequence to the ordering below is §16's owner's call. Kavita first because it is the owner's install and the
-source with the most media types riding on it; Navidrome first if Kavita turns out to be
-reconciliation-only, because Kavita is then the *hardest* adapter rather than the easiest and
-Navidrome de-risks v0.4 at the same time. **Komga is last regardless**, because nobody on this
-project can point it at a real library. The probe now runs before the first catalogue adapter is
-written rather than on day one — it decides the order of a sequence that no longer starts
-immediately.
+**The order within the catalogue sequence was left to the Kavita `LastChapterAdded` watermark
+probe** ([ADR-0035](./DECISIONS.md#adr-0035) §2, §7.1a) — **Kavita first if it passed, Navidrome
+first if it failed** — and ✅ **the probe ran on 2026-08-17 against the owner's live Kavita and
+passed** ([ADR-0035](./DECISIONS.md#adr-0035) §2a; §7.1a's Kavita row is verified accordingly, and
+Komga's is now the only unverified one). **So the sequence takes the Kavita branch: Kavita first**,
+because it is the owner's install and the source with the most media types riding on it, **then
+Navidrome**, which has to precede v0.4 either way. The Navidrome-first branch is *closed* rather
+than merely unchosen: it existed for the case where Kavita turned out reconciliation-only, and
+Kavita has a usable channel-3b watermark. **Komga is last regardless**, because nobody on this
+project can point it at a real library. §16.1 carries the resulting sequence. **None of this moves a
+catalogue source into v0.1** — the probe stopped being a day-one item precisely because v0.1 has no
+catalogue source for it to gate, and running it early has not given v0.1 one.
 
 **What is kept, with its remaining cost stated rather than argued away.** The libraries subsystem
 (§6.5) and the auto-proposal flow stay in v0.1. Its four tables are owed by v0.1 either way, its
@@ -2261,7 +2264,7 @@ v0.4's success criterion is *"Symfonium connects to UsArr with one API key, brow
 plays"*, which requires a **populated music replica before the surface exists**. As originally
 written, v0.4 contained both a new southbound adapter and a new northbound protocol. Splitting them
 is a scheduling correction, not a new feature — and it constrains the sequence above at one end:
-**Navidrome has to land before v0.4 whichever branch the probe takes.**
+**Navidrome has to land before v0.4**, which the sequence satisfies at #2.
 
 ### 16.1 The catalogue sequence, after v0.1
 
@@ -2272,13 +2275,16 @@ the sequence is deliberately allowed to interleave with them.
 
 | # | Source | Media types it lights up | Gate |
 |---|---|---|---|
-| 1 | **Kavita** *or* **Navidrome** | books + comics/manga, *or* music | The [ADR-0035](./DECISIONS.md#adr-0035) §2 watermark probe. **Kavita first if it passes, Navidrome first if it fails.** ⚠️ **The probe RAN on 2026-08-17 and PASSED** ([ADR-0035](./DECISIONS.md#adr-0035) §2a, §7.1a) — a status fact recorded here rather than a sequence this section has re-decided; applying its consequence to the ordering below is §16's owner's call. |
-| 2 | the other of those two | — | — |
+| 1 | **Kavita** | books + comics/manga | ✅ **Gate cleared.** The [ADR-0035](./DECISIONS.md#adr-0035) §2 watermark criterion, run 2026-08-17 against the owner's live instance — Kavita 0.9.0.2, 151 series — and met clause by clause (ADR-0035 §2a, §7.1a). The delta it clears is a **sorted page walk with a client-side stop**, not a since-filter, and it observes **chapter adds only**; edits, retitles and deletions stay reconciliation's work. |
+| 2 | **Navidrome** | music | 🔍 `getScanStatus.lastScan` as a change signal, then an `updated_at`-ordered walk — inference from the model, probed at connect (§7.1a) |
 | 3 | **Audiobookshelf** | audiobooks (and ebooks where the install holds them) | `LibraryItem.updatedAt` probe at connect (§7.1a) |
 | 4 | **Komga** | a second comics source | Its own `sort=lastModified,desc` probe (§7.1a); reconciliation-only if that fails |
 
-**Navidrome must precede v0.4** whichever branch #1 takes, because v0.4's success criterion needs a
-populated music replica. Nothing else in the table is pinned to a version.
+**The order is the probe's result, not a preference.** §16.0 states the branch and why the other one
+is closed; ADR-0035 §2a is the run. **Navidrome must precede v0.4**, because v0.4's success
+criterion needs a populated music replica, and #2 satisfies that. Nothing else in the table is
+pinned to a version — and **nothing in it is in v0.1**, which ships no catalogue source at all
+(ADR-0036): #1 is the first milestone *after* v0.1, not a late part of it.
 
 **v0.1 — "It reads your library, it is fast, and you can act on it."**
 Go binary + embedded SPA; SQLite + WAL with the §7.7 discipline; goose migrations. **Tier 0 Go
@@ -2309,6 +2315,13 @@ its own `kind_byte`, excluded from the navigation enum, the prefix index and the
 `work_credit.creator_work_id` renamed from `artist_work_id` to match (ADR-0033)**;
 `work_track.edition_id`, `work_track.track_number TEXT` plus the derived `track_position`, the M:N
 **`work_credit`**, and `edition.narrators` / `duration_seconds` / `abridged` (ADR-0031).
+⚠️ **Six of the tables named in that enumeration are no longer v0.1's scope, and this clause no
+longer claims them.** `work_album`, `work_track`, `work_credit`, `work_book`, `work_comic` and
+`work_comic_issue` are scoped out by [ADR-0040](./DECISIONS.md#adr-0040), each landing with the
+catalogue source that writes it, in §16.1's sequence. ADR-0030, ADR-0031 and ADR-0033 stay
+authoritative for their **shape** — that is what the enumeration above states of them, and a shape
+is owed whenever the table is created, not before. Everything else enumerated above is v0.1's,
+tables included.
 **Identity tier 1 only**; the
 correction *UI* deferred to v0.3. Library auto-proposal on service add, the Libraries settings screen
 (§17.8), Home's three fixed blocks (§17.2). Library grid with **"Load more" + `content-visibility`
@@ -2339,8 +2352,10 @@ included.**
 > one-way door; `work_track.edition_id` in particular is free because the table it is a column of
 > does not exist yet. That is 00001's own rule — *"a migration that creates a table nothing queries is
 > a schema claim nobody has tested"* — applied to the six tables no v0.1 source writes. **ADR-0040
-> records that this leaves the enumeration above and the tree disagreeing, and routes the amendment of
-> the enumeration to the thread that owns §16 rather than making it there.** **Read
+> recorded that this left the enumeration above and the tree disagreeing, and routed the amendment of
+> the enumeration to the thread that owns §16 rather than making it there. That amendment is the ⚠️
+> sentence closing the enumeration, and the disagreement is closed with it: the six tables are now
+> scoped out of v0.1 as well as absent from the tree.** **Read
 > `internal/db/migrations` for what exists**; the clause above says what v0.1 owes, not what has
 > landed.
 
@@ -2371,10 +2386,12 @@ backups. CI: `EXPLAIN QUERY PLAN` + row-count assertions; `make bench` as a manu
 **One day-one spike, before the schema is written:** the arm64 RSS spike (§13). **The catalogue
 watermark probe is no longer day-one.** ADR-0032 funded a day-one probe of Komga's
 `sort=lastModified,desc` and [ADR-0035](./DECISIONS.md#adr-0035) §2 retargeted it to Kavita's
-`LastChapterAdded`; with no catalogue source in v0.1 it has nothing to gate here. **It runs before
-the first catalogue adapter is written**, and its result orders §16.1's sequence — **Kavita first if
-it passes, Navidrome first if it fails.** ⚠️ **The probe RAN on 2026-08-17 and PASSED** ([ADR-0035](./DECISIONS.md#adr-0035) §2a, §7.1a) — a status fact recorded here rather than a sequence this section has re-decided; applying its consequence to the ordering below is §16's owner's call. Its pass condition stays written down in advance
-(ADR-0035 §2, §7.1a) precisely so that deferring it does not turn it back into a guess.
+`LastChapterAdded`; with no catalogue source in v0.1 it had nothing to gate here. ✅ **It has since
+run — 2026-08-17, against the owner's live Kavita — and it passed** ([ADR-0035](./DECISIONS.md#adr-0035) §2a, §7.1a),
+which orders §16.1's sequence **Kavita, then Navidrome** and changes nothing in this milestone: the
+source it clears is the first thing *after* v0.1, not a late addition to it. Its pass condition was
+written down in advance (ADR-0035 §2, §7.1a) precisely so that deferring it did not turn it back
+into a guess, and it was judged against that text clause by clause.
 
 *Which of the above is built is not listed here, and the omission is the correction.* This entry
 used to carry a landed/not-yet inventory, and it went wrong in exactly the way an inventory in a
