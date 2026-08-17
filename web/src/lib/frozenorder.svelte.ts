@@ -214,22 +214,30 @@ export function createFrozenOrder<T>(options: FrozenOrderOptions<T>): FrozenOrde
 			 * ⚠️ EVERY AIM FLAG IS WRITTEN ONE MICROTASK LATE, AND THAT IS A FIX
 			 * FOUND IN A BROWSER RATHER THAN A STYLE CHOICE.
 			 *
-			 * These are raw DOM listeners, and the events that matter here fire
-			 * SYNCHRONOUSLY OUT OF A DOM MUTATION: when an arriving row or a
-			 * re-sort moves the element under a RESTING pointer, the browser
-			 * dispatches pointerleave and pointerenter from inside Svelte's own
-			 * flush. Assigning `$state` at that moment is `state_unsafe_mutation`
-			 * — Svelte throws, the throw surfaces as an uncaught page error, and
-			 * THE ASSIGNMENT IS LOST. Which is the worst possible place to lose
-			 * one: the flag being written is the freeze, the condition that fails
-			 * is a row moving under a pointer, and the affordance under that
-			 * pointer is an irreversible grab.
+			 * These are raw DOM listeners, and one of them fires SYNCHRONOUSLY
+			 * OUT OF A DOM MUTATION: when a re-sort or an arriving row rebuilds
+			 * the blocks holding the focused element, the browser dispatches
+			 * FOCUSOUT from inside Svelte's own flush. Assigning `$state` at that
+			 * moment is `state_unsafe_mutation` — Svelte throws, the throw
+			 * surfaces as an uncaught page error, and THE ASSIGNMENT IS LOST:
+			 * the flag being lost is the freeze, and the affordance it protects
+			 * is an irreversible grab.
 			 *
-			 * A microtask runs after the flush and before the next task, so the
-			 * flag is set well before any click can be dispatched against it — a
-			 * click is a separate task. Nothing about the rule changes; only the
-			 * instant of the write does. Reproduced and re-verified in Chromium
-			 * against the real CSP, not reasoned about.
+			 * THE POINTER EVENTS ARE NOT THE CULPRIT, though they read like it.
+			 * Chromium never dispatches a pointer boundary event synchronously
+			 * out of a mutation — six mutation shapes × four forced-layout
+			 * variants, every one landing after the lifecycle. And focusout
+			 * throws only from DEEP ENOUGH BLOCK STRUCTURE: a flat `{#each}` of
+			 * divs writes the flag legally where `$lib/List.svelte`'s real
+			 * nesting throws, which is why three earlier versions of the scenario
+			 * passed against broken code. Do not flatten the repro.
+			 *
+			 * The deferral stays on all four listeners regardless: one uniform
+			 * rule is cheaper to keep true than a per-event one, and a microtask
+			 * runs after the flush and before the next task, so the flag is set
+			 * well before any click can be dispatched against it — a click is a
+			 * separate task. Nothing about the rule changes; only the instant of
+			 * the write does. Measured in Chromium, not reasoned about.
 			 */
 			const defer = (write: () => void) => queueMicrotask(write);
 
