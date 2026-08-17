@@ -1042,6 +1042,10 @@ is 27 / 31 / 35, so the sentence stayed readable while half of it went false.** 
 `28 / 32 / 36` looks stale, which is exactly why a wrong one survives a reading. **A row height
 quoted without its box is not a measurement.**
 
+📎 **The box rule here, and §7.2's requirement that a figure be cited with its instrument and its
+tree, are two instances of one general rule that `docs/DEVELOPMENT.md` §11 rule 5 now owns and
+states once for the whole repo.** Read it there; it is deliberately not restated in this document.
+
 ✅ **POST-FIX, RE-MEASURED ON BOTH FORKS AT ALL THREE DENSITIES.** The frontend thread's `.stacksep`
 margin fix is on `main` at **`440e92d`**, and the pre-fix figures this table used to carry have been
 replaced by a measurement of the merged tree. Six configurations, four numbers each, one-line rows at

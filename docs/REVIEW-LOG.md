@@ -5271,3 +5271,61 @@ and the geometry assertions. **Every change in LAT-01 and LAT-02 is prose in thr
 that `check.mjs` does not read.** A green here attests that the four documents' edits broke nothing
 the checker covers, which is worth having and is a different claim from the edits being correct.
 Nothing in this pair of entries is evidenced by it.
+
+---
+
+## MEAS-01 — "name the surface" was written in the wrong file three times running. **Applied, as a promotion rather than a rewording.**
+
+**Found.** Three separate incidents, all inside a week, all the same defect: a figure quoted without
+the artifact it was measured on, or two figures compared across artifacts that were never the same.
+
+* **`Age` track width.** `.cols-requests-releases` in `docs/design/mockups/usarr.css` declares it
+  80 px; `COLUMNS` in `web/src/routes/requests/+page.svelte` declares it 68 px. *"The `Age` track is
+  68 px"* is not a complete claim in a repo holding both, and both readings are correct — recorded
+  as **SU-10**, where nine of the ten columns the two trees share carry different widths.
+* **A row-height result taken on the mockups' 80 px track was applied to the product's 68 px one.**
+  Right about the tree it came from, wrong about the tree it was quoted for.
+* **A shipped-path density toggle (~75.7 ms at 200 rows) was compared against a budget being applied
+  at the bench's own measurement site (~18 ms).** That site, in `web/scripts/list-bench.mjs`, is a
+  bare `setAttribute` plus a forced layout, and skips the invalidation the shipped path is required
+  to perform. 🚩 **This is the sharpest of the three, because both numbers were individually correct
+  and independently verified.** Nothing was wrong except the assumption that they described the same
+  surface — and the conclusion drawn from subtracting them was wrong. See **LAT-02.1**, where the
+  same pair decides what a guard constant may assert.
+
+**Why this is a finding about location and not about wording.** The rule was already written, in
+`DESIGN-DIRECTION.md` §7.4, in about as forceful a form as prose gets — *"a row height quoted
+without its box is not a measurement"*, and a standing rule in capitals demanding every number be
+recorded with its box. ⚠️ **In each of the three incidents the person who broke it had written or
+read that section the same night.** A rule that strongly worded, broken that soon by its own
+readers, is not evidence that it needs restating harder; it is evidence about where it lives. §7.4
+is a section on row geometry, so its rule reads as a rule about boxes, and a column width, a bench
+site and a code path are none of them boxes. **The general form had no home, so it was re-derived
+locally each time and each derivation stopped at that instance's shape.**
+
+**Applied.** Promoted to `docs/DEVELOPMENT.md` §11, "Writing a guard that can be trusted", as
+**rule 5, "Name the surface, not just the value"** — the repo's home for measurement and gate
+mechanics, and read across threads rather than by whoever is working on the list. It sits next to
+rule 2 deliberately: rule 2 names the *instrument*, rule 5 names what the instrument was pointed at,
+and rule 2's *"a gate result without a commit sha attached is not a result"* is stated there as the
+gate-output instance of the same standard. ℹ️ **All three incidents are written into the rule
+concretely, with their files and their figures**, because the abstract form is precisely the version
+that demonstrably did not stick.
+
+📎 **`DESIGN-DIRECTION.md` §7.4 now names §11 as the authority and does not restate the rule** — one
+sentence, added under the box paragraph, covering §7.2's instrument-and-tree requirement in the same
+breath since §7.2 already routes through §7.4 for it. **That is SD-01's rule applied to this
+promotion**: a document that is not authoritative for a fact should not restate it. The local box
+discipline stays where it is, because it is a fact about row geometry that §7.4 does own.
+
+🚩 **This is the same argument that moved SD-01's rule towards `CLAUDE.md`**, and it is worth naming
+as a pattern rather than a coincidence: when a correctly-worded rule is broken repeatedly by people
+who have read it, the next edit to try is a change of address, not a change of emphasis.
+
+### On the gate for MEAS-01
+
+`node docs/design/check.mjs` was run on the merged tree. ⚠️ **State plainly what that green is: a
+regression check, and not evidence about this edit.** `check.mjs` lints the mockups, `tokens.css`
+and the shipped component CSS; **it does not read `docs/DEVELOPMENT.md` at all**, and both changes
+here are prose. A green attests that nothing the checker covers was broken, which is a different
+claim from the edit being right.
