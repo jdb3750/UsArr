@@ -223,7 +223,7 @@ layout.
 | Document | What it is |
 |---|---|
 | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | The authoritative design: principles, components, the gateway, the data model, sync, search and requests, cross-media, tags, providers, security, deployment, **the roadmap (§16 is authoritative for scope)** and **the screens**. |
-| **[docs/reference/](docs/reference/)** | The load-bearing detail the architecture links to: full DDL, sync mechanics, search query construction, the gateway endpoint map, cross-media, tags, providers, \*Arr API facts, and the security model. |
+| **[docs/reference/](docs/reference/)** | The load-bearing detail the architecture links to: full DDL, sync mechanics, search query construction, the gateway endpoint map, cross-media, tags, providers, \*Arr API facts, and the security model. **[`http-api.md`](docs/reference/http-api.md) is UsArr's own northbound wire contract** — what a client may rely on, per endpoint. |
 | **[docs/design/](docs/design/)** | The visual system: `DESIGN-DIRECTION.md`, `tokens.css` (the canonical values) and the v0.1 screen mockups. `ARCHITECTURE.md` §17 stays authoritative over all three. |
 | **[docs/FUTURE.md](docs/FUTURE.md)** | Deferred features — what each is, why it waited, what it would cost, and **the seam in the current design that keeps it cheap**. |
 | **[docs/DECISIONS.md](docs/DECISIONS.md)** | The ADRs. Context, decision, consequences, and **what was rejected and why** — including reversals, which record what falsified the original rather than quietly rewriting it. |

@@ -1,12 +1,17 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -334,6 +339,204 @@ func TestRecentWorksClampsTheLimit(t *testing.T) {
 	mustJSON(t, body, &got)
 	if got.Limit != store.RecentWorksMaxLimit {
 		t.Errorf("limit = %d, want the cap %d echoed back", got.Limit, store.RecentWorksMaxLimit)
+	}
+}
+
+// `limit` IS A CLAMP, NOT A VALIDATED RANGE, and the whole table is pinned by
+// execution rather than by the sentence above recentWorksLimit — a rule with an
+// undocumented exception is what sent a client into modelling `limit` as the
+// number it sent. The 2^31 row is the exception this closes: it 400ed while
+// 2147483647 clamped, so "too big is served short" was false at exactly one
+// boundary and true either side of it.
+func TestRecentWorksLimitIsAClampNotAValidatedRange(t *testing.T) {
+	s := newTestServer(t, nil)
+	seedLibraryCorpus(t, s)
+
+	for _, tc := range []struct {
+		query string
+		code  int
+		limit int // the echoed limit, when code is 200
+	}{
+		{"", http.StatusOK, store.RecentWorksDefaultLimit},
+		{"?limit=", http.StatusOK, store.RecentWorksDefaultLimit},
+		{"?limit=0", http.StatusOK, store.RecentWorksDefaultLimit},
+		{"?limit=1", http.StatusOK, 1},
+		{"?limit=50", http.StatusOK, 50},
+		{"?limit=200", http.StatusOK, store.RecentWorksMaxLimit},
+		{"?limit=201", http.StatusOK, store.RecentWorksMaxLimit},
+		{"?limit=100000", http.StatusOK, store.RecentWorksMaxLimit},
+		// int32's ceiling, and one past it. Both are page sizes that came out
+		// too big, so both are clamped; neither is a different kind of request.
+		{"?limit=2147483647", http.StatusOK, store.RecentWorksMaxLimit},
+		{"?limit=2147483648", http.StatusOK, store.RecentWorksMaxLimit},
+		{"?limit=9223372036854775808", http.StatusOK, store.RecentWorksMaxLimit},
+		// Not page sizes at all.
+		{"?limit=-1", http.StatusBadRequest, 0},
+		{"?limit=-9223372036854775809", http.StatusBadRequest, 0},
+		{"?limit=abc", http.StatusBadRequest, 0},
+		{"?limit=1.5", http.StatusBadRequest, 0},
+		{"?limit=0x10", http.StatusBadRequest, 0},
+		// A bare "+" is NOT here on purpose: a query string decodes it to a
+		// space, so it arrives as the empty parameter and takes the default.
+		// That is URL semantics, not this parser's, and pinning it as a 400
+		// would pin the wrong layer.
+	} {
+		code, body := callRecentWorks(t, s, tc.query)
+		if code != tc.code {
+			t.Errorf("GET /api/v1/library/recent%s = %d, want %d: %s", tc.query, code, tc.code, body)
+			continue
+		}
+		if code != http.StatusOK {
+			var errBody errorBody
+			mustJSON(t, body, &errBody)
+			if errBody.Error != CodeBadRequest {
+				t.Errorf("%s: error code = %q, want %q", tc.query, errBody.Error, CodeBadRequest)
+			}
+			if errBody.Action == "" {
+				t.Errorf("%s: the 400 names no action: %s", tc.query, body)
+			}
+			continue
+		}
+		var got recentWorksResponse
+		mustJSON(t, body, &got)
+		if got.Limit != tc.limit {
+			t.Errorf("GET /api/v1/library/recent%s echoed limit %d, want %d",
+				tc.query, got.Limit, tc.limit)
+		}
+		// The echo is AUTHORITATIVE, so it must actually bound the page. A
+		// number a client pages against and the server does not honour is worse
+		// than no number.
+		if len(got.Items) > got.Limit {
+			t.Errorf("%s: %d items against an echoed limit of %d",
+				tc.query, len(got.Items), got.Limit)
+		}
+	}
+}
+
+// seedAvailability puts the four blob states on four real rows of a real
+// migrated database: NULL, valid, malformed text, and an object whose "k" is a
+// value nobody defined. Ids match seedLibraryCorpus's.
+func seedAvailability(t *testing.T, s *Server) {
+	t.Helper()
+	if err := s.store.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		for _, q := range []string{
+			// 1 Berserk: valid, k=tier.
+			`UPDATE work SET availability = '{"k":"tier","1080p":{"have":1,"total":2}}' WHERE id = 1`,
+			// 2 Vinland Saga: NULL — a work that honestly has no blob.
+			`UPDATE work SET availability = NULL WHERE id = 2`,
+			// 3 Piranesi: truncated garbage. This is the row the frontend could
+			// not tell apart from row 2.
+			`UPDATE work SET availability = '{"k":"count","have":' WHERE id = 3`,
+			// 4 Project Hail Mary: valid JSON, object, no discriminator at all.
+			`UPDATE work SET availability = '{"have":1,"total":2}' WHERE id = 4`,
+			// 8 Train Dreams: a fourth "k". §1 names three.
+			`UPDATE work SET availability = '{"k":"sardine","have":1}' WHERE id = 8`,
+			// 9 An Undated Manga: valid JSON that is not an object.
+			`UPDATE work SET availability = '[1,2,3]' WHERE id = 9`,
+		} {
+			if _, err := tx.ExecContext(ctx, q); err != nil {
+				return fmt.Errorf("%s: %w", q, err)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("seed availability: %v", err)
+	}
+}
+
+// `availability` IS OPTIONAL ON THE WIRE, AND ITS TWO REASONS FOR BEING ABSENT
+// ARE NOT THE SAME REASON. Absent-because-NULL is the truth about a work and is
+// silent. Absent-because-corrupt is a bug in whatever wrote the row, and used to
+// be byte-identical to the first — which is the failure shape this endpoint's
+// own comments spend a page refusing everywhere else (an unparseable added_at is
+// dropped, and grabs.go logs an actorless audit row rather than swallowing it).
+func TestRecentWorksAvailabilityAbsenceIsHonestAndCorruptionIsLogged(t *testing.T) {
+	var logs bytes.Buffer
+	s := newTestServer(t, func(c *Config) {
+		c.Logger = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	})
+	seedLibraryCorpus(t, s)
+	seedAvailability(t, s)
+
+	_, body := callRecentWorks(t, s, "")
+	var got recentWorksResponse
+	mustJSON(t, body, &got)
+
+	byID := map[int64]recentWorkResponse{}
+	for _, item := range got.Items {
+		byID[item.ID] = item
+	}
+	if len(byID) != 6 {
+		t.Fatalf("the fixture no longer covers every case: %d rows", len(byID))
+	}
+
+	// The valid blob crosses VERBATIM. It is polymorphic by medium and the
+	// renderer switches on "k", so nothing here flattens it.
+	if want := `{"k":"tier","1080p":{"have":1,"total":2}}`; string(byID[1].Availability) != want {
+		t.Errorf("work 1 availability = %s, want %s", byID[1].Availability, want)
+	}
+	// Every corrupt case is absent from the wire — a bad blob must not fail the
+	// whole block, and the consumer is not asked to parse garbage.
+	for _, id := range []int64{2, 3, 4, 8, 9} {
+		if byID[id].Availability != nil {
+			t.Errorf("work %d put %s on the wire", id, byID[id].Availability)
+		}
+	}
+	if strings.Contains(body, "sardine") {
+		t.Errorf("an unrecognised discriminator reached the browser: %s", body)
+	}
+
+	// …and every corrupt case is OBSERVABLE, by work id, which is what makes the
+	// row findable: SELECT availability FROM work WHERE id = ?.
+	out := logs.String()
+	for _, want := range []string{
+		`work.availability will not decode and was dropped from the response" work_id=3`,
+		`work.availability will not decode and was dropped from the response" work_id=9`,
+		`work.availability has no \"k\" discriminator and was dropped from the response" work_id=4`,
+		`work.availability has an unrecognised \"k\" discriminator and was dropped from the response" work_id=8 k=sardine`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the log does not carry %q:\n%s", want, out)
+		}
+	}
+	// THE NULL ROW IS NOT A FAULT AND MUST NOT BE LOGGED. A warning per
+	// honestly-empty work would fire on most of a fresh catalogue and the log
+	// would stop being worth reading — which is the same as no signal.
+	if strings.Contains(out, "work_id=2") {
+		t.Errorf("a NULL availability was logged as a fault:\n%s", out)
+	}
+	// The blob's own text stays out of the log: it came from the database and
+	// has no length bound.
+	if strings.Contains(out, `"have":`) {
+		t.Errorf("the log echoed the stored blob:\n%s", out)
+	}
+}
+
+// The "k" vocabulary is closed, and this pins the Go-side copy against
+// schema.md — the document that defines it — so a fourth shape cannot be added
+// in one place only. Nothing in internal/ writes an availability blob yet, so
+// today these are the only two statements of the vocabulary that exist.
+func TestAvailabilityKindsMatchSchemaMd(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "reference", "schema.md"))
+	if err != nil {
+		t.Fatalf("read schema.md: %v", err)
+	}
+	found := map[string]bool{}
+	for _, m := range regexp.MustCompile(`"k"\s*:\s*"([a-z_]+)"`).FindAllStringSubmatch(string(raw), -1) {
+		found[m[1]] = true
+	}
+	if len(found) == 0 {
+		t.Fatal(`schema.md declares no "k" discriminators; this guard has stopped measuring anything`)
+	}
+	for k := range found {
+		if !availabilityKinds[k] {
+			t.Errorf("schema.md defines availability shape %q and availabilityKinds does not carry it", k)
+		}
+	}
+	for k := range availabilityKinds {
+		if !found[k] {
+			t.Errorf("availabilityKinds carries %q and schema.md defines no such shape", k)
+		}
 	}
 }
 

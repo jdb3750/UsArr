@@ -11181,3 +11181,145 @@ the `Recent grabs` *"post-v0.1"* clause, and *"all three now have a milestone"*)
 a dated record and the failure is more instructive than a tidy number would be. **Three of those
 sites were named in the brief; the other fourteen came from the sweep** — which is the claim
 `TRIAD.2` was actually making, and it is stronger at 14 than it was at nine.
+
+# Round 5 continued — `LS-60`–`LS-64`: the recently-added read's wire contract
+
+**Date:** 2026-08-17. **Prefix:** `LS-` (library sync). **The id range `LS-60`–`LS-69` was reserved
+for this pass before it started, and `LS-65`–`LS-69` are deliberately left unused** — the three
+renumberings recorded at `LS-38` are what a discovered-at-write-time id costs, and a gap is cheaper
+than a collision. Nothing below is renumbered to close it.
+
+**Subject:** `GET /api/v1/library/recent` — `internal/httpapi/library.go` and its tests, plus the
+new `docs/reference/http-api.md`. **Two findings reported by the frontend thread after wiring Home's
+Block C against the endpoint**, and both are about what a *consumer* can rely on rather than about
+what the server computes. `web/` untouched by instruction: Block C is shipped and live.
+
+**Every behaviour below was measured before it was changed**, by execution against a real migrated
+database seeded through raw SQL — including a work with `NULL` availability, one with a valid blob,
+one with deliberately malformed text, one with a `k`-less object, one with a fourth `k`, and one
+whose blob is a JSON array.
+
+## Findings
+
+| id | Finding | Severity | Disposition |
+| --- | --- | --- | --- |
+| **LS-60** | **`limit` was documented as a validated range `<1..200>` and implemented as a clamp.** Measured: absent, empty and `0` all take the server default of 50; anything above 200 is silently clamped to 200 and echoed back in the response's `limit`. A client that pages against the number it **sent** rather than the number it was **given** reads a full 200-row page as a short one and stops at the boundary — which is exactly what the frontend hit | **Medium** | **Applied, and the clamp is kept rather than replaced by a 4xx.** Justification is in `recentWorksLimit`'s comment and in `http-api.md` §1.2: a page size that came out too big is not a request the server cannot answer, it is one it can answer with fewer rows, and the honest recovery ("ask for fewer") is precisely what the clamp already performs. Rejecting it fails a whole screen over a number the server was about to ignore. What changes is that the behaviour is now **stated** — the full table is in the contract doc, the echoed `limit` is documented as **authoritative**, and `TestRecentWorksLimitIsAClampNotAValidatedRange` pins every row of that table by execution rather than by prose |
+| **LS-61** | **The clamp had an invisible cliff at 2³¹, and the message on the far side of it was false.** `?limit=2147483647` → `200`, clamped to 200. `?limit=2147483648` → `400 "limit=\"2147483648\" is not a non-negative integer"` — of a value that plainly is a non-negative integer. The cause is that the handler borrowed `queryInt32` from `search.go`, so the parse width leaked into the endpoint's contract. **Found by this pass, not reported** | **Medium** | **Applied.** A rule with an undocumented exception is not a rule a client can hold, and "too big is served short" was false at exactly one boundary and true either side of it. `recentWorksLimit` parses at 64 bits and treats `strconv.ErrRange` as the saturation `ParseInt` already performs, so `?limit=9223372036854775808` clamps like every other over-large value. **`queryInt32` is left alone** — it serves the search endpoints, whose parameters are not this parameter, and widening it would change contracts this pass did not measure. The 400s that remain (negative, non-integer) now carry an `action`, which they did not before |
+| **LS-62** | 🚩 **`availability` had two omission paths and one of them was a silent failure.** The key was dropped both when the column is `NULL` and when the stored text will not parse — so a work that honestly has no blob and a work whose writer wrote garbage were **byte-identical on the wire**, with no log, no report and no way for anyone to find the bad row. This is the same failure shape the rest of this endpoint spends a page refusing: an unparseable `added_at` is dropped *and* documented, and `grabs.go` **logs** an actorless audit row rather than swallowing it | **High** | **Applied.** The wire behaviour is unchanged and deliberately so — this struct is marshalled whole, so forwarding a bad blob would fail the entire block for the sake of its decoration, and the consumer already handles absence correctly. What is added is **observability**: `availabilityFor` logs `WARN` with the `work_id`, which is what makes the row findable (`SELECT availability FROM work WHERE id = ?`). The `NULL` case stays **silent**, because it is not a fault and a warning per honestly-empty work would make the log worthless — that half is pinned too. The blob's own text is **not** logged: it came out of the database and has no length bound |
+| **LS-63** | **An unrecognised `"k"` discriminator was forwarded to the browser verbatim.** Measured: a row storing `{"k":"sardine","have":1}` crossed to the client untouched, as did `[1,2,3]` and a `k`-less `{"have":1,"total":2}`. `schema.md` §1 names three shapes and states that `k` is **required on every non-null blob** and that a renderer switches on it, so all three are writer bugs reaching a renderer that has no arm for them — and §6.3's render rule (`have == total && total > 0` → ✓) is exactly the kind of arm that must not fire by accident on a shape nobody specified | **Medium** | **Applied, and given the same treatment as `LS-62`**: dropped from the wire, logged with the work id. **The forward-compatibility objection was considered and does not hold in v0.1** — the writer and this reader are the same binary and ship in the same commit, so there is no version skew for a fourth `k` to be a newer server's shape; it can only be a bug or a hand-edited row. `availabilityKinds` is the **first Go-side statement of that vocabulary** (nothing in `internal/` writes an availability blob yet), and `TestAvailabilityKindsMatchSchemaMd` reads `docs/reference/schema.md` itself and fails if the two disagree, so adding a shape cannot be done in one place only |
+| **LS-64** | **No document owned the endpoint's contract.** It existed in the handler's doc comments, in `LS.16` above and in a handover message — and a client author can reach none of the three. That is the root cause of `LS-60`: `limit`'s clamp *was* written down, in a Go comment, and the browser mis-paged anyway | **Medium** | **Applied.** New `docs/reference/http-api.md`, linked from the README's documentation table and from the handler's own header. It documents **semantics**, not inventory — its preamble points at `internal/httpapi/server.go`'s route table for *which* endpoints exist, per this repo's "status is read off the tree, not off a document" rule — and §1 covers `library/recent` whole: parameters, the clamp table, the response shape with **an example row carrying every optional key absent**, the availability vocabulary and its four corruption cases, the paging walk, and the error table |
+
+## LS.18 `sync_report` was reachable from this path, and was rejected on three counts
+
+The brief asked that this be checked rather than assumed, so: **it is reachable.**
+`store.RecordSyncReport` takes no `Scope`, `s.store` is in scope in the handler, and nothing
+structural prevents the call. It is still the wrong signal here, for three reasons that are recorded
+at `availabilityFor` so the next person does not have to re-derive them:
+
+1. **It needs a `service_instance_id`**, `foreign_keys` is `ON` (`internal/db/sqlite.go`), and this
+   read deliberately never joins `service_item_link` — naming the instance is the one thing `LS.16`
+   says this response refuses to publish. The row cannot be written without adding the join the
+   endpoint exists without.
+2. **It is a write, and this is a render path.** It would serialise on the single writer connection
+   on the first screen the browser asks for, against principle 1.
+3. **It would append one row per corrupt work per page view**, so a refresh loop grows the table
+   without bound. Migration 0005's own header calls `sync_report` *"an operational log the sweep
+   writes and the Services screen reads"*; a browser refresh is not a sweep.
+
+`s.log.Warn` is the codebase's existing signal for exactly this shape — `indexers.go` logs
+`indexer_catalog.search_types will not decode` and degrades the field, and `grabs.go` logs an
+actorless audit row rather than dropping it quietly. This follows both.
+
+## LS.19 The five guards fired, with verbatim output
+
+Every guard below was broken on purpose, run red, and reverted.
+
+**Guard 1 — the 2³¹ cliff put back** (`LS-61`). The break: `recentWorksLimit`'s 64-bit parse replaced
+by the `queryInt32` call it used to make.
+
+```
+--- FAIL: TestRecentWorksLimitIsAClampNotAValidatedRange (0.04s)
+    library_test.go:386: GET /api/v1/library/recent?limit=2147483648 = 400, want 200: {"error":"bad_request","message":"limit=\"2147483648\" is not a non-negative integer"}
+    library_test.go:386: GET /api/v1/library/recent?limit=9223372036854775808 = 400, want 200: {"error":"bad_request","message":"limit=\"9223372036854775808\" is not a non-negative integer"}
+    library_test.go:396: ?limit=-1: the 400 names no action: {"error":"bad_request","message":"limit=\"-1\" is not a non-negative integer"}
+    library_test.go:396: ?limit=-9223372036854775809: the 400 names no action: {"error":"bad_request","message":"limit=\"-9223372036854775809\" is not a non-negative integer"}
+    library_test.go:396: ?limit=abc: the 400 names no action: {"error":"bad_request","message":"limit=\"abc\" is not a non-negative integer"}
+    library_test.go:396: ?limit=1.5: the 400 names no action: {"error":"bad_request","message":"limit=\"1.5\" is not a non-negative integer"}
+    library_test.go:396: ?limit=0x10: the 400 names no action: {"error":"bad_request","message":"limit=\"0x10\" is not a non-negative integer"}
+```
+
+**Guard 2 — the silent drop restored** (`LS-62`, `LS-63`), and this is the one that proves the
+malformed case is now *observable* rather than merely *dropped*. The break:
+`out.Availability = s.availabilityFor(w)` replaced by the shipped-until-today
+`if w.Availability.Valid && json.Valid(…)`.
+
+```
+--- FAIL: TestRecentWorksAvailabilityAbsenceIsHonestAndCorruptionIsLogged (0.04s)
+    library_test.go:482: work 4 put {"have":1,"total":2} on the wire
+    library_test.go:482: work 8 put {"k":"sardine","have":1} on the wire
+    library_test.go:482: work 9 put [1,2,3] on the wire
+    library_test.go:486: an unrecognised discriminator reached the browser: {"items":[…,{"id":4,…,"availability":{"have":1,"total":2}},{"id":8,…,"availability":{"k":"sardine","have":1}},{"id":9,…,"availability":[1,2,3]}],"limit":50}
+    library_test.go:499: the log does not carry "work.availability will not decode and was dropped from the response\" work_id=3":
+    library_test.go:499: the log does not carry "work.availability will not decode and was dropped from the response\" work_id=9":
+    library_test.go:499: the log does not carry "work.availability has no \\\"k\\\" discriminator and was dropped from the response\" work_id=4":
+    library_test.go:499: the log does not carry "work.availability has an unrecognised \\\"k\\\" discriminator and was dropped from the response\" work_id=8 k=sardine":
+```
+
+🚩 **Read the last four lines against work 3.** Work 3's blob is the truncated `{"k":"count","have":`
+and it is the one row that does **not** appear in the on-the-wire complaints above — under the old
+code it was absent from the response *and* absent from the log, with an **empty** log printed after
+the colon. That is the exact silence this finding is about: indistinguishable from work 2's honest
+`NULL`.
+
+**Guard 3 — a fourth discriminator admitted** (`LS-63`). The break: `"sardine": true` added to
+`availabilityKinds`. Two arms fire, and the passing arms' real output is visible in the middle of it.
+
+```
+--- FAIL: TestRecentWorksAvailabilityAbsenceIsHonestAndCorruptionIsLogged (0.04s)
+    library_test.go:482: work 8 put {"k":"sardine","have":1} on the wire
+    library_test.go:486: an unrecognised discriminator reached the browser: {"items":[…,{"id":8,…,"availability":{"k":"sardine","have":1}},…],"limit":50}
+    library_test.go:499: the log does not carry "work.availability has an unrecognised \\\"k\\\" discriminator and was dropped from the response\" work_id=8 k=sardine":
+        time=2026-08-17T22:44:18.565Z level=WARN msg="work.availability will not decode and was dropped from the response" work_id=3 err="unexpected end of JSON input"
+        time=2026-08-17T22:44:18.565Z level=WARN msg="work.availability has no \"k\" discriminator and was dropped from the response" work_id=4
+        time=2026-08-17T22:44:18.565Z level=WARN msg="work.availability will not decode and was dropped from the response" work_id=9 err="json: cannot unmarshal array into Go value of type struct { K string \"json:\\\"k\\\"\" }"
+--- FAIL: TestAvailabilityKindsMatchSchemaMd (0.00s)
+    library_test.go:538: availabilityKinds carries "sardine" and schema.md defines no such shape
+```
+
+**Guard 4 — the honest-absence case made noisy** (`LS-62`, the other half). The break: a
+`s.log.Warn("work.availability is NULL", …)` added to the `!w.Availability.Valid` branch. A signal
+that fires on every empty work is the same as no signal, so this half is asserted too.
+
+```
+--- FAIL: TestRecentWorksAvailabilityAbsenceIsHonestAndCorruptionIsLogged (0.04s)
+    library_test.go:506: a NULL availability was logged as a fault:
+        time=2026-08-17T22:44:29.890Z level=WARN msg="work.availability is NULL" work_id=2
+        time=2026-08-17T22:44:29.890Z level=WARN msg="work.availability will not decode and was dropped from the response" work_id=3 err="unexpected end of JSON input"
+        time=2026-08-17T22:44:29.890Z level=WARN msg="work.availability has no \"k\" discriminator and was dropped from the response" work_id=4
+        time=2026-08-17T22:44:29.890Z level=WARN msg="work.availability has an unrecognised \"k\" discriminator and was dropped from the response" work_id=8 k=sardine
+        time=2026-08-17T22:44:29.890Z level=WARN msg="work.availability will not decode and was dropped from the response" work_id=9 err="json: cannot unmarshal array into Go value of type struct { K string \"json:\\\"k\\\"\" }"
+```
+
+**Guard 5 — the vocabulary guard made to measure the document** (`LS-63`). A test that reads a file
+and compares it to a constant proves nothing unless it is shown to fail when the **file** changes, so
+the break was made in `docs/reference/schema.md` rather than in Go: `"k":"tier"` → `"k":"TIER"` and
+`"k":"edition"` → `"k":"EDITION"` in §1's examples. Reverted immediately; `git diff --stat`
+afterwards shows the two Go files and nothing else.
+
+```
+--- FAIL: TestAvailabilityKindsMatchSchemaMd (0.00s)
+    library_test.go:538: availabilityKinds carries "tier" and schema.md defines no such shape
+    library_test.go:538: availabilityKinds carries "edition" and schema.md defines no such shape
+```
+
+## LS.20 What this pass did NOT do
+
+* **No `web/` change.** Block C is shipped and its files are live; the frontend already models
+  `limit` as the server's echo and already renders an absent `availability` as absence.
+* **No change to `queryInt32`** and therefore none to the search endpoints' parameters (`LS-61`).
+* **No change to the wire** beyond three cases that used to carry a malformed or undiscriminated
+  blob and now carry nothing. The response's key set, ordering, paging and scope are untouched, and
+  `TestRecentWorksResponseKeysAreTheAllowlist` still pins the allowlist unchanged.
+* **No inventory in `http-api.md`.** It documents the semantics of one endpoint and points at the
+  router for which endpoints exist. A hand-maintained endpoint list in a document is the status claim
+  this repo's own rule tells you not to write.
