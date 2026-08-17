@@ -5329,3 +5329,31 @@ regression check, and not evidence about this edit.** `check.mjs` lints the mock
 and the shipped component CSS; **it does not read `docs/DEVELOPMENT.md` at all**, and both changes
 here are prose. A green attests that nothing the checker covers was broken, which is a different
 claim from the edit being right.
+
+---
+
+# A tripwire passed comfortably while measuring nothing: `DI-02`'s clearest demonstration
+
+**Date:** 2026-08-17. **Branch:** `claude/revlog-pc-d247f2-1786953682`. **Prefix `PC-` has not been
+used before** — checked rather than assumed, with `git grep -nE '\bPC-[0-9]' origin/main`, which
+returns nothing. Records the demonstration that arrived with the bench work merged as `1b89426`.
+**This entry exists for `DI-02` and should be read with it**: `DI-02` states the class — *"a
+mitigation that silently does nothing while looking performed"* — and this is the single run in
+which both halves of that shape were visible at once. Every figure, both transcripts and the
+`setAttribute`-versus-`prefs.setDensity` mechanism behind them are in
+[`web/scripts/measurements/2026-08-17-density-toggle.md`](../web/scripts/measurements/2026-08-17-density-toggle.md)
+§2, §5 and §6, and are **not** restated here.
+
+| # | Finding | Resolution |
+|---|---|---|
+| **PC-01** | 🚩 **Both halves of `DI-02`'s shape fired in ONE run, and the broken half is the one that announced a comfortable pass.** `pnpm bench:list` under `USARR_BENCH_FORCE_ATTR_PATH=1` failed the positive control — *"`.tbl--remeasure` was applied in only 0 of 4 measured windows"*, which is to say the measurement was not going through the shipped density path at all — while on **that same run** the wall-clock tripwire passed and reported itself *"30.3× under"*. **A budget assertion is perfectly happy measuring nothing whatever, and it reports that state as a wide margin.** ⚠️ The margin is wide *because* the quantity is wrong — the unshipped path is the cheaper one — so this failure makes a guard look **healthier**, not sicker, and nothing in the output invites a second look | **Nothing but the explicit positive control distinguishes the two, and that is the whole finding.** A green from a budget assertion is evidence about a number, never evidence that the number is of the right thing; only an assertion about the *measurement* can carry that, and it has to be an assertion rather than a log line. Both switches were fired deliberately rather than reasoned about — the drill and the bug are the same event, since `USARR_BENCH_FORCE_ATTR_PATH=1` re-measures at the old site rather than simulating it. §4 and §6 of the measurement record are the long form |
+| **PC-02** | ⚠️ **The bench's own first draft pre-toggled to a known density before measuring**, so every measured value would be a real change. That paid the expensive cold change **outside** the measured window and reported **32.4 ms** — roughly half the honest figure — from four warm repeat toggles. 🚩 **It is worth recording because warming up before measuring is ORDINARILY GOOD PRACTICE.** The wrong version looks *more* careful than the correct one, which is exactly why reading it does not catch it: the mistake is a virtue applied to the wrong interval, and the interval is the thing the reader has to supply | **Fixed by rotating the sequence against the current density instead of pre-toggling**, which guarantees four real changes without spending the cold one first. The general form, since a warm-up is right about as often as it is wrong: **a warm-up is only correct when the operation being priced is the warm one** — here a user toggles density on a page they have been reading, so the cold change *is* the product's cost. This is `MEAS-01`'s rule 5 with time in place of surface, and it is written where it can be re-broken: `web/scripts/list-bench.mjs`'s `densityToggleCostShipped` carries the ⚠️ **NO WARM-UP TOGGLE HERE, DELIBERATELY, AND THE FIRST DRAFT HAD ONE** comment with the figure in it. §5 of the measurement record is the long form |
+
+**Gates, and exactly what they cover.** This entry is **markdown only** — one added entry in
+`docs/REVIEW-LOG.md`, nothing else in the diff — so `make check`, `docs/design/check.mjs` and
+`pnpm bench:list` were **not** run, and nothing above is claimed on their authority. ⚠️ **No
+formatter is claimed either, because none covers this file**: prettier's root here is `web/`, so
+`make fmt-check`'s `pnpm format:check` never reaches `docs/`, and `docs/REVIEW-LOG.md` has never been
+formatter-gated. **Every figure and every quoted line above is taken from
+`web/scripts/measurements/2026-08-17-density-toggle.md` and from the bench's own comments at
+`1b89426`; nothing was re-measured here, and the bench was deliberately not run.**
