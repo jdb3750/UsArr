@@ -103,10 +103,18 @@
 		categoryLabelFor,
 		categoryNames,
 		categoryTree,
+		clearScopeLabel,
 		indexerFacts,
 		indexerNames,
+		indexerPickerLegend,
+		indexerServices,
+		indexersForInstance,
 		isSearchable,
+		isServiceSelectable,
+		pickerScopeNote,
+		resolveActiveInstance,
 		scopeSummary,
+		serviceFacts,
 		sortIndexers,
 		unavailableReason
 	} from '$lib/indexercatalog';
@@ -262,6 +270,15 @@
 	/** The server's own code. `no_indexer_service` is not a failure to retry —
 	 * it means nothing is configured — so it gets the link that fixes it. */
 	let searchErrorCode = $state('');
+	/**
+	 * Which indexer service the RUNNING search was resolved to, off the accepted
+	 * body's own `instance_id` rather than off what the picker showed when the
+	 * button was pressed. It is what the SSE frames' indexer names are filed
+	 * under, and taking it from the server closes the one window where the two
+	 * could disagree: a search sent with no `?instance=` at all, which the server
+	 * answers by picking `candidates[0]` and telling us which that was.
+	 */
+	let searchedInstance = $state(0);
 	let streamGap = $state('');
 	let streamConnected = $state(false);
 	let pickerOpen = $state(false);
@@ -457,7 +474,34 @@
 	/* ── the scope picker's derived shape ─────────────────────────────────── */
 
 	/**
-	 * The indexers the picker offers.
+	 * ⚠️ THE INDEXER SERVICES, AND THE ONE THIS SEARCH WILL ASK.
+	 *
+	 * A search asks exactly one — `?instance=` is a single id and
+	 * `resolveIndexerInstance` resolves one instance per search — so the picker
+	 * is scoped to one at a time and the choice is made explicitly here rather
+	 * than fallen into by `candidates[0]`. `$lib/indexercatalog`'s header owns
+	 * the whole argument, including the two alternatives that were refused.
+	 */
+	const services = $derived(indexerServices(catalog));
+	/**
+	 * `scope.instanceId` IS the active service, not a hint at it: `loadCatalog`
+	 * resolves the stored or linked preference against the catalogue ONCE and
+	 * writes the answer back, so the id the picker draws from, the id the ticks
+	 * are filed under and the id `?instance=` carries are the same value and
+	 * cannot drift. Resolving on every render into a separate derived would give
+	 * three readers of two values, which is how a tick lands in one service and
+	 * a search runs against another.
+	 */
+	const activeInstanceId = $derived(scope.instanceId);
+	const activeService = $derived(services.find((s) => s.instanceId === activeInstanceId));
+	const activeServiceName = $derived(activeService?.name ?? '');
+
+	/**
+	 * The indexers the picker offers — the ACTIVE SERVICE'S, and only those.
+	 *
+	 * This filter is what makes a cross-service selection unrepresentable rather
+	 * than merely discouraged: there is no state of this grid that names two
+	 * services, so there is no state `?instance=` cannot carry.
 	 *
 	 * ⚠️ THE CATALOGUE WINS OUTRIGHT WHENEVER IT HAS ROWS, and the SSE-learned
 	 * union is the fallback rather than a supplement. Merging the two would keep
@@ -466,7 +510,9 @@
 	 * the search planner refuses is worse than one that is briefly short.
 	 * `$lib/indexerscope`'s header owns the argument.
 	 */
-	const catalogIndexers = $derived(sortIndexers(catalog?.indexers ?? []));
+	const catalogIndexers = $derived(
+		sortIndexers(indexersForInstance(catalog?.indexers ?? [], activeInstanceId))
+	);
 	const usingCatalogue = $derived(catalogIndexers.length > 0);
 
 	/** Names for the scope sentence. The catalogue first, the learned union
@@ -484,7 +530,12 @@
 
 	/** THE VISIBLE STATEMENT OF SCOPE — §17.5, and the reason sticky is allowed
 	 * to be sticky. The words live in `$lib/indexercatalog` where a test reads
-	 * them. */
+	 * them.
+	 *
+	 * ⚠️ WITH TWO SERVICES CONFIGURED IT IS ALWAYS RENDERED, even on the default
+	 * scope, because the default is then "every indexer in one of your two
+	 * services" — a scope the user did not set, would not guess, and which the
+	 * screen previously described as searching everything. */
 	const scopeLine = $derived(
 		scopeSummary({
 			indexers: scope.selected.map((id) => ({
@@ -500,9 +551,20 @@
 				// pair rendered "in the category 2000 category".
 				name: treeNames.get(id) ?? String(id)
 			})),
-			knownIndexers: usingCatalogue ? catalogIndexers.length : scope.known.length
+			knownIndexers: usingCatalogue ? catalogIndexers.length : scope.known.length,
+			// Omitted until the catalogue names a service, which is the one state in
+			// which the screen genuinely does not know which one it is asking.
+			service:
+				activeServiceName === '' ? undefined : { name: activeServiceName, total: services.length }
 		})
 	);
+
+	/** The picker's own copy, which changes meaning with the number of services
+	 * configured. All three live in `$lib/indexercatalog` where the banned-word
+	 * guard in `requests.test.ts` reaches them. */
+	const pickerLegend = $derived(indexerPickerLegend(activeServiceName, services.length));
+	const scopeNote = $derived(pickerScopeNote(services.length));
+	const clearLabel = $derived(clearScopeLabel(services.length));
 
 	/** Whether the endpoint's `status` names a fix that lives on UsArr's own
 	 * Services screen. Branching on `status`, never on the HTTP code: all four
@@ -530,7 +592,11 @@
 		// Every frame names an indexer, and the started phase names it before it
 		// has answered — which is what makes the picker's catalogue the full set
 		// rather than only the indexers that returned a row.
-		scope.learn(outcome.indexerId, outcome.name);
+		//
+		// Filed under the instance the SEARCH ran against rather than under the
+		// picker's current one: the server tells us which it resolved, and an
+		// indexer id learned from one Prowlarr names nothing in another.
+		scope.learn(searchedInstance, outcome.indexerId, outcome.name);
 		if (phase !== 'indexer_done') return;
 		outcomes = [...outcomes.filter((o) => o.indexerId !== outcome.indexerId), outcome];
 	}
@@ -565,6 +631,14 @@
 		try {
 			catalog = await fetchIndexerCatalog();
 			catalogError = '';
+			// ⚠️ THE ONE PLACE THE ACTIVE SERVICE IS DECIDED. The stored or linked
+			// preference is held against the catalogue here — kept if that service
+			// still exists and is still enabled, otherwise the first enabled one —
+			// and written back, so from this point the picker, the ticks and
+			// `?instance=` all read one value. Resolving it lazily at each read
+			// instead would let a tick be filed under 0 while the search ran
+			// against 3, which is the class of bug this whole shape exists to close.
+			scope.setInstance(resolveActiveInstance(indexerServices(catalog), scope.instanceId));
 		} catch (error) {
 			catalogError = error instanceof ApiError ? error.detail : String(error);
 		}
@@ -603,7 +677,7 @@
 					case 'done':
 						report = event.report;
 						for (const outcome of event.report?.indexers ?? []) {
-							scope.learn(outcome.indexerId, outcome.name);
+							scope.learn(searchedInstance, outcome.indexerId, outcome.name);
 						}
 						searching = false;
 						finished = true;
@@ -622,10 +696,22 @@
 		);
 
 		const params = page.url.searchParams;
-		// A link that names indexers wins over the sticky selection: whoever sent
-		// it meant that scope, and adopting it makes the link do what it says.
-		const linked = parseIds(params.getAll('indexer').join(','));
-		if (linked.length > 0) scope.adopt(linked);
+		// ⚠️ A LINKED SCOPE IS TWO VALUES, NOT ONE. An indexer id means nothing
+		// without the service it belongs to, so `?indexer=` is only adopted
+		// alongside `?instance=` — a link carrying ids and no service names a
+		// scope that cannot be resolved, and guessing a service for it is exactly
+		// the reinterpretation `RETIRED_KEYS` refuses. The service alone is
+		// adopted happily; it is the whole scope a link most often carries.
+		//
+		// Both run BEFORE `loadCatalog` resolves, and are then validated by it:
+		// a link naming a service that has since been deleted or switched off
+		// falls back to a searchable one, and the scope line says which.
+		const linkedInstance = Number.parseInt(params.get('instance') ?? '', 10);
+		if (Number.isSafeInteger(linkedInstance) && linkedInstance > 0) {
+			scope.setInstance(linkedInstance);
+			const linked = parseIds(params.getAll('indexer').join(','));
+			if (linked.length > 0) scope.adopt(linkedInstance, linked);
+		}
 
 		// The same rule for the category half: a link that names categories meant
 		// that scope, and it wins over whatever was left sticky.
@@ -684,6 +770,11 @@
 		if (text) params.set('q', text);
 		if (searchType !== DEFAULT_SEARCH_TYPE) params.set('type', searchType);
 		writeSort(params, sort);
+		// The service goes in FIRST and unconditionally once it is known, because
+		// the indexer ids after it are only meaningful beside it. A link without
+		// it is a link whose scope the receiving screen has to guess at, and it
+		// deliberately will not.
+		if (scope.instanceId > 0) params.set('instance', String(scope.instanceId));
 		for (const id of scope.selected) params.append('indexer', String(id));
 		for (const id of scope.categories) params.append('category', String(id));
 		writeUrl(params);
@@ -712,6 +803,11 @@
 
 		submitted = trimmed;
 		submittedType = searchType;
+		// The service being asked, provisionally: the accepted body replaces it
+		// with the one the server resolved. Reset here rather than left standing,
+		// so a frame arriving between two searches is never filed under the
+		// previous search's service.
+		searchedInstance = scope.instanceId;
 		searchId = undefined;
 		releases = [];
 		order.reset();
@@ -736,14 +832,48 @@
 				// Narrowed server-side too: an indexer that carries none of these is
 				// skipped before its leg is planned rather than queried and then
 				// discarded (internal/releases/search.go, supportsAnyCategory).
-				categories: scope.categories
+				categories: scope.categories,
+				// ⚠️ THE SERVICE, NAMED. Without it `resolveIndexerInstance` takes
+				// `candidates[0]` by priority-then-name, which is a real choice made
+				// silently — and the indexer ids above are that service's own ids, so
+				// sending them to a service the client did not name is how a scoped
+				// search lands on the wrong tracker. 0 means the catalogue has named
+				// none, and the server's own `no_indexer_service` answer is the
+				// honest one.
+				instanceId: scope.instanceId
 			});
 			if (accepted.searchId) searchId = accepted.searchId;
+			// The server's answer, not the request's hope. On a search sent with no
+			// instance this is the only way to know which one ran.
+			searchedInstance = accepted.instanceId ?? scope.instanceId;
+			// A catalogue that could not be read leaves the picker with no service
+			// at all; the search's own answer is then the first thing that names
+			// one, and the SSE-learned fallback needs it to file anything.
+			if (scope.instanceId <= 0 && searchedInstance > 0) scope.setInstance(searchedInstance);
 		} catch (error) {
 			searching = false;
 			searchError = error instanceof ApiError ? error.detail : String(error);
 			searchErrorCode = error instanceof ApiError ? error.code : '';
 		}
+	}
+
+	/**
+	 * Point the picker, the scope line and the next search at one service.
+	 *
+	 * It does NOT re-run the search. Changing which service is asked changes
+	 * what the results would be, and silently replacing a table the user is
+	 * reading — with a Grab button in every row — because they opened a picker
+	 * is the reordering §9.1a forbids, applied to the whole set. The results on
+	 * screen stay what they were, the scope line states what the next search
+	 * will ask, and Search is the control that acts on it.
+	 */
+	function chooseService(id: number) {
+		scope.setInstance(id);
+		// The category tree is built from the active service's indexers, so a
+		// parent expanded in the previous service's tree is an id that may not
+		// exist in this one.
+		expandedCategories = [];
+		syncUrl(submitted);
 	}
 
 	function toggleIndexer(id: number) {
@@ -945,17 +1075,69 @@
 	{#if scopeLine}
 		<p class="scopeline" role="status">
 			<span>{scopeLine}</span>
-			<span class="muted">This selection is remembered between searches.</span>
-			<button type="button" class="linkish" onclick={clearScope}>
-				Search all indexers and categories
-			</button>
+			<!-- The remembered-and-clearable half only where there is something to
+			     remember or clear. With two services the line above is rendered on
+			     the DEFAULT scope too — because "one of your two services" is not a
+			     default anybody would guess — and a Clear control beside a scope
+			     nobody set is a button that does nothing when pressed. -->
+			{#if !scope.isAll || !scope.isAllCategories}
+				<span class="muted">This selection is remembered between searches.</span>
+				<button type="button" class="linkish" onclick={clearScope}>
+					{clearLabel}
+				</button>
+			{/if}
 		</p>
 	{/if}
 
 	{#if pickerOpen}
 		<div class="picker" id="indexer-picker">
+			<!--
+				⚠️ THE SERVICE CHOICE, AND IT ONLY EXISTS WHEN THERE IS ONE TO MAKE.
+				A search asks exactly one indexer service — `?instance=` is a single
+				id — so this is a RADIO group rather than checkboxes: the control's
+				own shape is what tells the user that picking a second is not a thing
+				the request can express. On the one-service install, which is most of
+				them, it is not rendered at all; naming a choice that does not exist
+				is noise.
+
+				Each option carries its own state underneath, because scoping the grid
+				to one service takes away the only other place a service that UsArr
+				has never read, or that answered with nothing, could have said so.
+			-->
+			{#if services.length > 1}
+				<fieldset class="picker__set picker__set--services">
+					<legend class="picker__legend">Indexer service to search</legend>
+					<div class="picker__grid">
+						{#each services as service (service.instanceId)}
+							<label class="check pick" class:pick--off={!isServiceSelectable(service)}>
+								<input
+									type="radio"
+									name="indexer-service"
+									checked={service.instanceId === activeInstanceId}
+									disabled={!isServiceSelectable(service)}
+									onchange={() => chooseService(service.instanceId)}
+								/>
+								<span class="pick__body">
+									<!-- The service's own name, verbatim: it is the user's label
+									     for it and §17.5's copy rules govern UsArr's sentences,
+									     never rendered data. -->
+									<span class="pick__name">{service.name}</span>
+									<span class="pick__sub" class:pick__sub--off={!isServiceSelectable(service)}>
+										{serviceFacts(service)}
+									</span>
+								</span>
+							</label>
+						{/each}
+					</div>
+					<p class="picker__note muted">
+						One search asks one indexer service. The indexers below are this one’s, and the ticks
+						you set here are remembered per service.
+					</p>
+				</fieldset>
+			{/if}
+
 			<fieldset class="picker__set">
-				<legend class="picker__legend">Indexers to search</legend>
+				<legend class="picker__legend">{pickerLegend}</legend>
 
 				{#if usingCatalogue}
 					<div class="picker__grid">
@@ -1002,7 +1184,13 @@
 
 					<p class="picker__note muted">
 						This is your indexer service’s own list, replicated into UsArr, so it is here before you
-						run a search. Selecting none searches all of them.
+						run a search.
+						<!-- ⚠️ THE SENTENCE HERE USED TO READ "Selecting none searches all
+						     of them" UNDER A GRID DRAWN FROM TWO SERVICES, while the search
+						     asked one of them. `pickerScopeNote` keeps that wording for the
+						     install where it is true and names the boundary where it is
+						     not. -->
+						{scopeNote}
 						<!-- ⚠️ THE PRIORITY RULE, ONCE. The clause is identical for every
 						     indexer, and §9.1 is explicit that a value identical across every
 						     row of a group is stated once and dropped from the rows —
@@ -1016,18 +1204,25 @@
 						`fetched_at` per instance precisely so the screen can show staleness
 						instead of paying for freshness in latency (§8.5), and §17.3 requires
 						both forms of a timestamp.
+
+						⚠️ THE ACTIVE SERVICE'S LINE, NOT EVERY SERVICE'S. It answers "how
+						old is the list I am looking at?", and the list on screen came from
+						one service — a read time for a service whose indexers are not
+						drawn here is not staleness, it is a number beside the wrong rows.
+						The others' states are on their own radio options above, which is
+						where a reader is choosing between them.
 					-->
-					{#each catalog?.instances ?? [] as instance (instance.instanceId)}
-						{@const read = formatWhen(instance.fetchedAt, now)}
+					{#if activeService}
+						{@const read = formatWhen(activeService.fetchedAt, now)}
 						<p class="picker__note muted">
 							<!-- Both forms of the timestamp, which is §17.3's rule: one
 							     identifies the moment, the other answers "how old is this?"
 							     without arithmetic. The separator is written as an entity
 							     because Svelte collapses the whitespace either side of a
 							     block, and `Prowlarr"— read at` is what that costs. -->
-							{instance.message}{#if read.absolute}&nbsp;— read at {read.absolute}, {read.relative}{/if}
+							{activeService.message}{#if read.absolute}&nbsp;— read at {read.absolute}, {read.relative}{/if}
 						</p>
-					{/each}
+					{/if}
 				{:else if catalogError}
 					<!-- A genuine transport or 5xx failure, which is NOT one of the four
 					     states the endpoint reports on a 200. The picker says so and falls
@@ -1072,8 +1267,14 @@
 				{/if}
 
 				{#if !usingCatalogue && scope.known.length > 0}
+					<!-- The `never_fetched` fallback, and it is the ACTIVE service's
+					     learned names only — `scope.known` filters on the instance the
+					     frames were filed under. An indexer id learned from one Prowlarr
+					     names nothing in another, so a merged list here would offer the
+					     same false choice the flat catalogue grid used to. Keyed on the
+					     pair for the same reason the catalogue grid is. -->
 					<div class="picker__grid">
-						{#each scope.known as indexer (indexer.id)}
+						{#each scope.known as indexer (`${indexer.instanceId}:${indexer.id}`)}
 							<label class="check">
 								<input
 									type="checkbox"
@@ -1155,9 +1356,13 @@
 					</ul>
 
 					<p class="picker__note muted">
-						These are the categories your indexers advertise, in their own words. An indexer that
-						carries none of the ones you pick is skipped before it is asked. Selecting none searches
-						every category.
+						<!-- "the indexers this search would ask" rather than "your indexers":
+						     the tree is built from the ACTIVE service's indexers, so with a
+						     second service configured the possessive would claim a coverage
+						     the tree does not have. -->
+						These are the categories advertised by the indexers this search would ask, in their own words.
+						An indexer that carries none of the ones you pick is skipped before it is asked. Selecting
+						none searches every category.
 						{#if !scope.isAll}
 							This list is narrowed to the indexers you selected.
 						{/if}
@@ -1168,13 +1373,13 @@
 					     categories, or nothing selected can be searched. -->
 					<p class="picker__note">
 						{scope.isAll
-							? 'None of your indexers advertises a category list, so there is nothing to narrow a search to. A search still runs; it simply cannot be scoped this way.'
+							? 'None of the indexers this search would ask advertises a category list, so there is nothing to narrow a search to. A search still runs; it simply cannot be scoped this way.'
 							: 'The indexers you selected advertise no category list, so there is nothing to narrow this search to.'}
 					</p>
 					{#if !scope.isAll}
 						<p class="picker__note">
 							<button type="button" class="linkish" onclick={clearScope}>
-								Search all indexers and categories
+								{clearLabel}
 							</button>
 						</p>
 					{/if}
@@ -1345,7 +1550,7 @@
 					     sentence above states both and a button that undid half of it
 					     would look as though it had not worked. -->
 					<button type="button" class="btn btn--primary" onclick={clearScope}>
-						Search all indexers and categories
+						{clearLabel}
 					</button>
 				{:else}
 					<button type="button" class="btn" onclick={() => runSearch()}>Search again</button>
@@ -1915,6 +2120,14 @@
 		border: 1px solid var(--border-strong);
 		border-radius: var(--radius-sm);
 		background: var(--bg-raised);
+	}
+
+	/* The service radios sit in their own box above the indexer box, so the
+	 * boundary between "which service" and "which of its indexers" is a thing
+	 * you can see rather than a thing you infer from a legend. Compact: it is one
+	 * short list, and on a phone it must not push the indexers off the screen. */
+	.picker__set--services {
+		margin-bottom: var(--space-3);
 	}
 
 	.picker__legend {

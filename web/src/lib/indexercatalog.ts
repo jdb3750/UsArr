@@ -23,6 +23,49 @@
  * successfully read" are states of an install rather than failures; a picker
  * that treated them as errors would render an error box on a screen where
  * everything else works. `catalogGuidance` below is the whole of that branch.
+ *
+ * ══════════════════════════════════════════════════════════════════════════
+ * ⚠️⚠️ ONE SEARCH ASKS ONE INDEXER SERVICE, AND THE SCREEN SAYS WHICH ONE.
+ * ══════════════════════════════════════════════════════════════════════════
+ *
+ * THE FACT THAT FORCES THIS. Two indexer services are creatable — `POST
+ * /api/v1/services` answers 201 twice and `service_instance`'s only uniqueness
+ * constraint is the name — but `GET /api/v1/search` takes `?instance=`, a
+ * SINGLE service id, and `resolveIndexerInstance`
+ * (internal/httpapi/search.go) resolves exactly one instance per search:
+ * the one named, or `candidates[0]` by priority-then-name when none is. There
+ * is no wire shape for a fan-out across two Prowlarrs.
+ *
+ * WHAT THE SCREEN USED TO DO WITH THAT, AND WHY IT WAS THE WORST OPTION. The
+ * picker drew BOTH services' indexers in one flat grid with no label, keyed
+ * the selection on the indexer id alone — so ticking a row ticked its twin in
+ * the other service, because Prowlarr numbers its indexers per install and
+ * both carry an id 3 — and then sent no `?instance=` at all. The search
+ * contacted one service and never the other, under a note reading "Selecting
+ * none searches all of them". A screen that appears to cover everything while
+ * silently skipping a whole service is worse than one that covers less and
+ * says so: the results look right.
+ *
+ * THE DECISION. The picker is scoped to ONE service at a time, chosen
+ * explicitly, and `?instance=` carries that choice to the server. A selection
+ * spanning two services is therefore not merely discouraged, it is
+ * UNREPRESENTABLE — the grid only ever holds one service's rows, so there is
+ * no state the request cannot express.
+ *
+ * THE TWO ALTERNATIVES, AND WHY NOT. (a) Keep one flat grid and fan out
+ * client-side — two `startSearch` calls, two SSE streams, one merged table,
+ * two closing reports to reconcile into one "n of m answered". That is a
+ * subsystem, and CLAUDE.md's "cut before you add" is explicit that a proposal
+ * which adds one must say what it removes. (b) Keep one flat grid and let
+ * ticking a row in service B silently drop the ticks in service A. Same
+ * unrepresentability, reached by a control that quietly undoes the user's last
+ * action — surprise for the same correctness.
+ *
+ * WHERE THE SERVICE LABEL GOES. On the FIELDSET, once, not on every row —
+ * `indexerPickerLegend` below. Every row in the grid belongs to the same
+ * service by construction, and DESIGN-DIRECTION §9.1 is explicit that a value
+ * identical across every row of a group is stated once and dropped from the
+ * rows. That is the same rule `PRIORITY_NOTE` already obeys.
  */
 
 /**
@@ -85,6 +128,136 @@ export interface IndexerCatalog {
 	action: string;
 	instances: CatalogInstance[];
 	indexers: CatalogIndexer[];
+}
+
+/* ── 0. Which indexer service this search asks ─────────────────────────────── */
+
+/**
+ * The indexer services the picker may choose between.
+ *
+ * Straight off the catalogue: `internal/httpapi/indexers.go` already filters to
+ * `Role == "indexer"`, and it lists a DISABLED service rather than hiding one —
+ * "it is off" is the most useful thing a list can say about it. So this is a
+ * rename with a documented contract rather than a filter, and it exists so the
+ * page never has to remember that `catalog.instances` is already role-scoped.
+ *
+ * ⚠️ ORDER IS THE CATALOGUE'S, WHICH IS `name ASC` (`store/indexers.go`'s
+ * ReadIndexerCatalog) — and that is NOT the order `resolveIndexerInstance`
+ * picks its own default from, which is `ListServiceInstances`' priority-then-
+ * name. Measured on two services named "Prowlarr Private" (priority 20) and
+ * "Prowlarr Public" (priority 10): the catalogue lists Private first, the
+ * search path would have defaulted to Public.
+ *
+ * Which is exactly why the client names the instance instead of leaning on
+ * either order. Anything here that pre-selects a radio is a CLIENT default the
+ * screen then states in words; it is not a prediction of what an
+ * un-parameterised search would have hit, and writing it as one would be the
+ * same silent-agreement assumption that produced the bug.
+ */
+export function indexerServices(catalog: IndexerCatalog | undefined): CatalogInstance[] {
+	return catalog?.instances ?? [];
+}
+
+/**
+ * Which service the picker is showing, given what the user last chose.
+ *
+ * A remembered choice wins whenever the service is still there AND still
+ * enabled. Otherwise the first ENABLED service, because a disabled one cannot
+ * be searched at all: `resolveIndexerInstance` answers 409 `service_disabled`
+ * for a named-but-disabled instance rather than quietly searching another, and
+ * defaulting onto one would open the screen on a guaranteed error.
+ *
+ * 0 when there is nothing enabled to pick — every service off, or none
+ * configured. The caller then sends no `?instance=` and the server's own
+ * `no_indexer_service` / `service_disabled` answer is what the user sees, which
+ * is the honest one rather than a client-invented sentence.
+ */
+export function resolveActiveInstance(
+	instances: readonly CatalogInstance[],
+	preferred: number
+): number {
+	const kept = instances.find((i) => i.instanceId === preferred && i.enabled);
+	if (kept) return kept.instanceId;
+	return instances.find((i) => i.enabled)?.instanceId ?? 0;
+}
+
+/** One service's indexers, and only that service's. The grid is built from
+ * this, which is what makes a cross-service selection unrepresentable. */
+export function indexersForInstance(
+	indexers: readonly CatalogIndexer[],
+	instanceId: number
+): CatalogIndexer[] {
+	return indexers.filter((i) => i.instanceId === instanceId);
+}
+
+/**
+ * What a service's radio says about itself, under its name.
+ *
+ * It carries the state the picker would otherwise hide by scoping away from it:
+ * with two services configured and the grid showing one, a service that UsArr
+ * has never read, or that answered with nothing, or that the user switched off,
+ * has no row anywhere else to say so. Facts, in the same voice as
+ * `unavailableReason`, never a scolding.
+ */
+export function serviceFacts(instance: CatalogInstance): string {
+	if (!instance.enabled) return 'turned off in UsArr, so a search cannot ask it';
+	if (instance.fetchedAt === undefined || instance.fetchedAt === '') {
+		return 'UsArr has not read its indexer list yet';
+	}
+	if (instance.indexerCount === 0) return 'no indexers configured in it';
+	return `${instance.indexerCount} ${instance.indexerCount === 1 ? 'indexer' : 'indexers'}`;
+}
+
+/** Whether a search may name this service. Mirrors `resolveIndexerInstance`'s
+ * own refusal, so the control is genuinely disabled rather than merely styled:
+ * a radio that could only ever produce a 409 is a control that does not work. */
+export function isServiceSelectable(instance: CatalogInstance): boolean {
+	return instance.enabled;
+}
+
+/**
+ * The indexer fieldset's legend, which is where the service label lives.
+ *
+ * ONCE, ON THE GROUP. Every row below it belongs to the named service by
+ * construction, and §9.1 states a value identical across every row of a group
+ * once rather than repeating it — the rule `PRIORITY_NOTE` already follows. The
+ * name is only added when there is a choice to disambiguate: on the one-service
+ * install, which is most of them, naming it is noise.
+ */
+export function indexerPickerLegend(serviceName: string, serviceCount: number): string {
+	if (serviceCount <= 1 || serviceName === '') return 'Indexers to search';
+	return `Indexers to search in ${quoted(serviceName)}`;
+}
+
+/**
+ * The note under the grid: what an empty selection means, stated for the
+ * install this actually is.
+ *
+ * ⚠️ THE SENTENCE THIS REPLACES WAS FALSE. It read "Selecting none searches all
+ * of them" beside a list drawn from two services, while the search asked one.
+ * With one service configured it was true and is kept verbatim; with more it
+ * names the boundary the request itself has.
+ */
+export function pickerScopeNote(serviceCount: number): string {
+	if (serviceCount <= 1) return 'Selecting none searches all of them.';
+	return (
+		'Selecting none searches every indexer in this service. One search asks one indexer ' +
+		'service, so the others are not asked — pick a different one above to search it.'
+	);
+}
+
+/**
+ * The label on the control that returns to an unscoped search.
+ *
+ * "Search all indexers and categories" is a promise the request cannot keep
+ * once a second service exists, and this control is the one a user reaches for
+ * precisely when they suspect the screen is hiding results from them. It is
+ * rendered in three places on Requests and they must not drift apart, which is
+ * why it is one function rather than three literals.
+ */
+export function clearScopeLabel(serviceCount: number): string {
+	if (serviceCount <= 1) return 'Search all indexers and categories';
+	return 'Search every indexer and category in this service';
 }
 
 /* ── 1. Which indexers are offered, and in what order ──────────────────────── */
@@ -302,6 +475,10 @@ export interface ScopeNames {
 	categories: readonly { id: number; name: string }[];
 	/** How many indexers the picker is offering, for the "n of m" form. */
 	knownIndexers: number;
+	/** The service this search will ask, and how many are configured. Omitted
+	 * where the catalogue has not been read, which is the only state in which
+	 * the screen genuinely does not know. */
+	service?: { name: string; total: number };
 }
 
 /**
@@ -317,13 +494,42 @@ export interface ScopeNames {
  * It lives here rather than in `indexerscope.svelte` for one reason: a `.svelte`
  * module cannot be imported by a `environment: 'node'` vitest run, and this is
  * the copy most worth pinning.
+ *
+ * ⚠️ WITH A SECOND INDEXER SERVICE CONFIGURED IT IS NEVER EMPTY, and that is
+ * the correctness half rather than a flourish. The empty string exists because
+ * "all indexers" on every search teaches the reader to skip the line by the
+ * time it matters — but once there are two services, the default scope is NOT
+ * "all indexers", it is "every indexer in one of your two services". That is a
+ * scope the user did not set and would not guess, so it is the one that most
+ * needs saying, and the line states which service and how many are left out.
  */
 export function scopeSummary(names: ScopeNames): string {
 	const parts: string[] = [];
 	if (names.indexers.length > 0) parts.push(namedScope(names.indexers, names.knownIndexers));
 	if (names.categories.length > 0) parts.push(`in ${namedCategories(names.categories)}`);
-	if (parts.length === 0) return '';
-	return `Searching ${parts.join(', ')}.`;
+
+	const service = names.service;
+	if (service === undefined || service.total <= 1) {
+		if (parts.length === 0) return '';
+		return `Searching ${parts.join(', ')}.`;
+	}
+
+	// The name is rendered upstream data — the user's own label for the service
+	// — so it is quoted rather than re-spelled, exactly as the indexer names on
+	// the rows are. §17.5's copy rules govern UsArr's sentences, never this.
+	const scope = parts.length === 0 ? 'every indexer' : parts.join(', ');
+	const others = service.total - 1;
+	const rest =
+		others === 1
+			? 'The other indexer service is not asked.'
+			: `The other ${others} indexer services are not asked.`;
+	return `Searching in ${quoted(service.name)}: ${scope}. ${rest}`;
+}
+
+/** Upstream data, set off from UsArr's own words. One helper so the quote
+ * characters cannot drift between the legend and the scope line. */
+function quoted(name: string): string {
+	return `“${name}”`;
 }
 
 function namedScope(indexers: readonly { id: number; name: string }[], known: number): string {
@@ -346,4 +552,60 @@ function namedCategories(categories: readonly { id: number; name: string }[]): s
 	if (list.length === 1) return `the ${list[0]} category`;
 	if (list.length <= 3) return `the ${list.slice(0, -1).join(', ')} and ${list.at(-1)} categories`;
 	return `${list.length} categories`;
+}
+
+/* ── 5. The shape a selection is stored and read in ────────────────────────── */
+
+/**
+ * ⚠️ AN INDEXER ID IS ONLY MEANINGFUL BESIDE ITS SERVICE'S ID.
+ *
+ * Prowlarr numbers its indexers per install, so two configured services each
+ * carry an id 1, an id 2 and an id 3, naming entirely different trackers. A
+ * selection stored as bare indexer ids is therefore not a selection at all —
+ * it is a set of numbers whose meaning depends on which service happens to be
+ * active when it is read, which is what made ticking one row tick its twin.
+ *
+ * So the unit is the PAIR, from the checkbox through localStorage to the
+ * `?indexer=` list, and there is no point on the path where the instance is
+ * dropped and reconstructed.
+ *
+ * The wire form is `instance:indexer`, comma-separated — the same
+ * `${instanceId}:${indexerId}` the picker's `each` block has always keyed on,
+ * so one reader can hold both in their head. Parsing is total: anything
+ * unparseable is dropped rather than thrown, because a corrupt preference must
+ * not be able to take the screen down.
+ */
+export interface IndexerPair {
+	instanceId: number;
+	indexerId: number;
+}
+
+export function parsePairs(raw: string | null): IndexerPair[] {
+	if (!raw) return [];
+	const out: IndexerPair[] = [];
+	for (const part of raw.split(',')) {
+		const [left, right, ...rest] = part.split(':');
+		// A two-field form and nothing else. A bare `3` is the RETIRED shape and
+		// is refused here rather than read as `0:3` — see `RETIRED_KEYS` in
+		// `$lib/indexerscope.svelte` for why reinterpreting it was rejected.
+		if (right === undefined || rest.length > 0) continue;
+		const instanceId = Number.parseInt(left, 10);
+		const indexerId = Number.parseInt(right, 10);
+		if (!Number.isSafeInteger(instanceId) || instanceId <= 0) continue;
+		if (!Number.isSafeInteger(indexerId) || indexerId < 0) continue;
+		if (out.some((p) => p.instanceId === instanceId && p.indexerId === indexerId)) continue;
+		out.push({ instanceId, indexerId });
+	}
+	return out;
+}
+
+export function formatPairs(pairs: readonly IndexerPair[]): string {
+	return pairs.map((p) => `${p.instanceId}:${p.indexerId}`).join(',');
+}
+
+/** The indexer ids selected within ONE service — which is what a search sends,
+ * because a search asks one service. */
+export function pairsForInstance(pairs: readonly IndexerPair[], instanceId: number): number[] {
+	if (instanceId <= 0) return [];
+	return pairs.filter((p) => p.instanceId === instanceId).map((p) => p.indexerId);
 }
