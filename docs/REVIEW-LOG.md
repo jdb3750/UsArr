@@ -4661,7 +4661,7 @@ knowing better.
 
 ---
 
-# The status-claim inventory — one rule, twenty-one remaining sites, and two that closed while it was being written
+# The status-claim inventory — one rule, twenty-one remaining sites, and three that closed while it was being written
 
 **Date:** 2026-08-17. **Compiled by the instructions gatekeeper from a drift check, not by a
 reviewer, and the gatekeeper is applying none of it.** Every site was re-read against
@@ -4671,9 +4671,24 @@ already fixed. **Three sites were**, between the first read at `0e7839e` and thi
 recorded as fixed rather than carried. ℹ️ **`main` then moved to `b62eeb3` before this was
 pushed**, and `git diff --stat 0656bd9..b62eeb3` touches `docs/PROJECT-INSTRUCTIONS.md` alone —
 **every site cited below is byte-identical at both**, which is why the reads were not repeated and
-why the pair is named rather than the later SHA alone. The entry exists so the inventory has a durable home and a
-named owner instead of living in cross-session messages, which is the one place a finding reliably
-dies.
+why the pair is named rather than the later SHA alone. 🚩 **`main` moved again while this was being
+corrected, to `a29a07f`, and that one is not inert: it flipped `SD-02r` from *true* to *false*.**
+Amended in place with both SHAs on the row, because a verdict that decayed within a working day is
+the strongest evidence this entry has and hiding the flip would waste it. The entry exists so the
+inventory has a durable home and a named owner instead of living in cross-session messages, which is
+the one place a finding reliably dies.
+
+🚩 **SCOPE, AND IT IS THE FIRST THING TO READ: every verdict in this entry was measured against
+`0656bd9` and means nothing about any later tree. Re-verify your own row against the current tree
+before you act on it.** An inventory published without the SHA it was taken at silently reads as
+*now* to every reader, forever — which is `SD-01`'s own defect committed by the document that logs
+it, and the reason each verdict below carries a commit rather than a date alone. ⚠️ **This is not a
+hypothetical hedge. Two rows needed correcting within about an hour of the entry being written**:
+`SD-02r` went from **true** to **false** under `c2cefa3`, and `docs/design/tokens.css` turned out to
+be **missing from the inventory entirely** — one decay and one gap, found by re-walking the tree and
+recorded below as amendments. ✅ **That is the argument for the caveat, not against the inventory.**
+Both defects were caught by exactly the re-verification this line asks of every reader; an inventory
+that says which commit it saw is falsifiable, and one that does not is merely old.
 
 ## SD-02 — twenty-one sites restate an implementation status they do not own. **Instances of `SD-01`. Queued, not applied.**
 
@@ -4756,7 +4771,7 @@ carries one of:
    it is recorded that way because a stale count inside an entry about stale claims would be the
    joke telling itself.
 
-⚠️ **"Currently true" is not a defence, and 20 of the 21 remaining rows are — 15 true outright and 5 coarse-but-true, against exactly one that is false.** That is
+⚠️ **"Currently true" is not a defence, and 19 of the 21 remaining rows are — 14 true outright and 5 coarse-but-true, against two that are false.** ⚠️ **One of those two, `SD-02r`, was verdicted *true* here and went false about six hours later; it is amended in place below rather than rewritten, so the flip stays legible.** That is
 the finding rather than a mitigation of it: a true restatement is indistinguishable, at the moment
 you read it, from one that went false last night. The verdicts mean only *what the tree said at
 `0656bd9`* — **true**, **false**, or **coarse-but-true** (defensible as written, but reading as a
@@ -4781,7 +4796,7 @@ narrower or wider claim than the tree supports).
 | **SD-02o** | `docs/DEVELOPMENT.md:3-6` | *"**Status: pre-alpha. The first code has landed** … Most of the *layout* is still contract rather than description: commands referencing files that do not exist yet are marked **(not yet)**."* | **Coarse-but-true** as a header; ⚠️ it is also the sentence that **licenses** the markers in `SD-02p` and `SD-02q`, so it is the root of that half of the inventory rather than one more instance of it. Fixing the markers without fixing this leaves the mechanism in place | `Makefile` for what a target does; `ARCHITECTURE.md` §16 for the milestone | ⏭️ Open |
 | **SD-02p** | `docs/DEVELOPMENT.md:168` | 🚩 *"`make dev                   # backend on :8484                  **(not yet)**`"* | 🚩 **FALSE.** `Makefile:284` declares `.PHONY: dev` and `dev:` runs `$(GO) run $(MAIN_PKG) --env-file .env`. ⚠️ **And this file already knows.** `:48` records *"An earlier revision of this line marked the target **(not yet)**, which was stale"* — about a different target, in the same document, **120 lines above a marker carrying the identical defect**. A correction that does not sweep its own file is `SD-01`'s *"second correction of this line's class"* arriving early | **`Makefile`** — the target list is the only thing that can answer whether a target exists | ⏭️ Open |
 | **SD-02q** | `docs/DEVELOPMENT.md:615`, `:628` | *"`deploy/compose/dev-stack.yml` **(not yet)**"* / *"Instead, `make seed` **(not yet)** drives each app's own API after startup"* | **True** — `deploy/compose/` does not exist and the `Makefile` has no `seed` target. ℹ️ **Both are correct today by the same mechanism that made `SD-02p` wrong**: nobody re-walks them, and two of the three happen still to hold | **`Makefile`** and the tree | ⏭️ Open |
-| **SD-02r** | `docs/design/mockups/README.md:269` | *"`prototype.html`'s `<title>` read … It is now *"UsArr screen mockups: static, invented data, nothing implemented"*"* | **True** — `docs/design/mockups/prototype.html:6` matches byte for byte. ℹ️ **The weakest row in the table, and included partly to say plainly that it is NOT the same defect**: this is a dated record of an edit, a genre that is allowed to restate, and its only exposure is that it quotes a live string that `SD-01a`'s third property may yet reword. **Do not sweep it reflexively** | **`prototype.html`** itself | 🔶 **Claimed by the design area**, which is running this README as its own pass — `SD-01a` already landed here |
+| **SD-02r** | `docs/design/mockups/README.md:269` | *"`prototype.html`'s `<title>` read … **It is now** *"UsArr screen mockups: static, invented data, nothing implemented"*"* | ⚠️ **CORRECTED — verdicted True at `0656bd9`, and FALSE at `a29a07f`, which is roughly six hours later.** The original reading stands as taken: `prototype.html:6` did match byte for byte. It no longer does — the design area's own sweep (logged above `DS-07 and DS-14`, and it flagged this row itself) extended `check.mjs` to `document.title` and the tag is now `<title>UsArr screen mockups: static, invented data</title>`, **without** *"nothing implemented"*. So the README's *"It is now"* quotes a title that no longer exists. 🚩 **This was the row called "the weakest in the table" and "NOT the same defect", and it is the only row that has since gone false — which makes it the entry's own thesis demonstrated on the entry, inside one working day.** ℹ️ **The reasoning that filed it as an exception was not wrong**: a dated record of an edit *is* a genre allowed to restate. What the reasoning missed is that this one restates in the **present tense** — *"It is now"* — and a present-tense quotation of a live string is a status claim wearing a historian's coat. **The fix is one word: past-tense it**, so the changelog records what the title was changed *to* at the time without asserting what it is *now* | **`prototype.html`** itself | 🔶 **Claimed by the design area**, which is running this README as its own pass — `SD-01a` and the `document.title` guard already landed here |
 | **SD-02s** | `docs/ARCHITECTURE.md` §17.5, the *"Specified above \| Shipped in v0.1 \| Why they differ"* table (~`:3049-3063`) | *"**Six columns** — When · Release · Indexer · Protocol · Size · Outcome"*; *"on the wire as `sent \| sent_outcome_unknown \| unknown`"* | **Coarse-but-true.** Six columns confirmed in `grabColumns` (`web/src/routes/requests/+page.svelte`), though the first header renders `Time`, not `When` — the same file's comment explains why. The wire vocabulary in `internal/httpapi/grabs.go` is **four** values, not three: `wireOutcomeNotSent = "not_sent"` sits beside the three quoted, and the section's own prose does describe it. 📌 **NOT a request to delete the table**, which exists *because* `RG-01.1` found §17.5 describing something that never shipped; the rule asks only that the shipped column cite its two sources rather than assert independently | `internal/httpapi/grabs.go` and `web/src/routes/requests/+page.svelte` for what shipped; `ARCHITECTURE.md` §16 for what was funded | ⏭️ Open |
 | **SD-02t** | `docs/ARCHITECTURE.md:2296-2301` | *"⚠️ **The cost estimate held; the shape it costed did not ship whole.** What landed is `GET /api/v1/grabs/recent` — **six columns, no join, no keyset cursor, a server-clamped `LIMIT`**"* | **True**, and ✅ **deliberately left standing** — `RG-01.1` records the reason: *a cost estimate edited after the fact stops being evidence about estimating*. ℹ️ **Listed as a legitimate exception rather than as an instance**: it is a dated estimate plus an amendment, and it already names §17.5 as authoritative for the difference, which is the move this entry asks for everywhere else | `ARCHITECTURE.md` §17.5, which this passage already names | ⏭️ Open, **as an exception to leave alone** |
 | **SD-02u** | `api/specs/SOURCES.md:69` | *"They are absent because **no code consumes them yet**, and a vendored spec with no contract test behind it is a file that silently goes stale."* | **True** — `api/specs/` holds `prowlarr.json` and this file; `internal/servarr/contract_test.go` is the only consumer. ℹ️ **The claim is also its own rule** (*"Add each one with the client that reads it"*), which is the healthiest form on the list: it is falsified by the same commit that fixes it | **`api/specs/`** — a directory listing beside `internal/servarr/` | ⏭️ Open |
@@ -4818,8 +4833,8 @@ another area's wording is precisely what §11's *"announce before pushing an edi
 document outside the area you lead"* exists to prevent.
 
 **Two things the owners should not have to rediscover.** ℹ️ **`SD-01`'s reason for asserting no
-status at all** — the twenty non-false rows above are its evidence: they are correct, and they are not
-safe. 🚩 **And `RG-01.1`'s observation, which is why a one-directional sweep is not enough** — §17.5
+status at all** — the nineteen non-false rows above are its evidence: they are correct, and they are not
+safe, and `SD-02r` is what that sentence looks like when it comes due. 🚩 **And `RG-01.1`'s observation, which is why a one-directional sweep is not enough** — §17.5
 was *"wrong in BOTH DIRECTIONS AT ONCE"*, doc-behind-tree in one paragraph and tree-behind-doc four
 hundred words later, and the conclusion drawn there holds for every row here: *"nothing checks tense
 against the tree at all."* A sweep that only hunts for *doc is stale* will write the other direction
@@ -4830,15 +4845,70 @@ a site has a guard that can carry it, that beats prose.
 file at **`0656bd9`**, reached by `git fetch origin && git checkout -B main origin/main` immediately
 before the read; each existence claim was answered by `ls`, `grep -rl` or `git log` over
 `internal/`, `cmd/`, `web/src/routes/`, `api/specs/`, `internal/db/migrations/`, `Makefile` and
-`go.mod` — **not from any other document**. 🚩 **No `make check` result is cited here, and its
-absence is deliberate rather than an omission: `make check` does not read `docs/` at all** —
-`fmt-check` globs `*.go` and prettier runs with its cwd in `web/` — so a green on a docs-only commit
-attests nothing whatever about this prose. Quoting one would be `DEVELOPMENT.md` §11's *"probe the
-condition, not a proxy for it"* violated in an entry about documents claiming things they cannot
-back. ⚠️ **Line numbers are a claim with a shelf life** — §11 says so in as many words — so each is
+`go.mod` — **not from any other document**. ⚠️ **Line numbers are a claim with a shelf life** — §11 says so in as many words — so each is
 dated to `0656bd9` and the quoted string is the durable half of every citation; `docs/reference/schema.md`
 and `docs/design/mockups/README.md` both moved during compilation and their rows were
 re-read after the move. ✅ **Nothing was carried over unverified from the routing messages that
 prompted this**, which is the reason `SD-02p` is in the table (reported as one of ~5 markers, and
 the only false one), the reason `schema.md:3` is recorded as **fixed** rather than open, and the
 reason the mockup banner count reads 0 rather than the 12+ it was handed.
+
+**What a `make check` green on a docs-only commit does and does not attest — measured, because the
+absolute version of this claim is wrong.** The tempting sentence is *"`make check` does not read
+`docs/` at all"*, and it is **false**: `secrets` (`Makefile:562`) runs `$(GITLEAKS) dir . --redact=100
+--no-banner --exit-code 1` over the **whole working tree**, `docs/` included. Everything else does
+ignore it — `fmt-check` globs `*.go` on the Go side and runs prettier with its cwd in `web/`;
+`modverify`, `test` and `vuln` never leave the module. ✅ **Fired in both directions rather than read
+off the `Makefile`**, on `919623a`: a planted `ghp_`-shaped token in `docs/ZZ-probe.md` gives
+*"leaks found: 1"* and `make secrets` **exits 1**; a malformed Markdown file at the same path passes
+`make fmt-check` at **exit 0** (*"All matched files use Prettier code style!"*); the clean tree
+scans **~8,308,092 bytes** and reports no leaks. **So the accurate statement is narrow and
+defensible: a green on a docs-only commit attests exactly "no credential-shaped string in it", and
+nothing whatever about whether the prose is true.** That is still the reason no green is quoted as
+evidence for a single row above — quoting one would be `DEVELOPMENT.md` §11's *"probe the condition,
+not a proxy for it"* violated inside an entry about documents claiming things they cannot back — but
+it is the reason at its real size.
+
+🚩 **And the first probe of that guard was a false negative, which is the part worth carrying.** The
+planted string was the canonical `AKIAIOSFODNN7EXAMPLE` / `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`
+pair from AWS's own documentation — **gitleaks allowlists it upstream**, so `make secrets` reported
+*"no leaks found"* and exited **0** on a tree with a textbook AWS key pair sitting in `docs/`.
+⚠️ **Had the probe stopped there it would have "proven" the secrets step ignores `docs/` — the exact
+claim this paragraph was written to correct, arrived at through a working guard.** The `ghp_` re-run
+is what separated *the guard did not look* from *the guard looked and correctly declined*. ℹ️ **This
+is `DEVELOPMENT.md` §11's rule 1 — *"probe the condition, not a proxy for it"* — landing on the
+probe rather than on the guard**, and it generalises: a **negative** result from a guard is only
+evidence when the probe is known to be something that guard would catch. §11's existing instances
+are all guards asserting the wrong thing; this one is a correct guard asserted with the wrong
+stimulus, and it fails just as silently. **Recorded rather than fixed**: nothing in the repo needs
+changing — gitleaks is right to allowlist a documentation example, and `.gitleaks.toml` is
+untouched — what needed writing down is that the next person verifying this step must not reach for
+the most famous fake key on the internet.
+
+### SD-02 — amended dispositions, same day
+
+**Three rows moved within hours of the entry landing, and the mechanism is `§6.1`'s: nothing above
+is renumbered, reworded or deleted, and each amendment names what changed and how it was checked.**
+Verified at **`98916fe`**.
+
+| # | Original | Amended, and what settles it |
+|---|---|---|
+| **SD-02p** | ⏭️ Open — the one **false** row: `make dev` marked **(not yet)** | ✅ **Closed by `8756d02`.** `docs/DEVELOPMENT.md:168` now reads `make dev                   # backend on :8484` with the marker gone. Confirmed on disk at `98916fe` |
+| **SD-02q** | ⏭️ Open — `deploy/compose/dev-stack.yml` and `make seed`, both **true** | ⏭️ **Still open, and now dated in the file itself by `98916fe`**, which is the better outcome: rather than delete two correct markers, it re-derived them (`deploy/` is absent from disk **and** from `git ls-files`; `seed` does not occur in the `Makefile` at all) and wrote the result down with its SHA. 🚩 **That is the shape this entry was asking for and did not think to ask for — a true claim made *checkable* rather than removed.** The same note records `SD-02p`'s marker as false and removed, so the file now carries the distinction between its three markers instead of one blanket licence |
+| **SD-02r** | ⏭️ Open, verdicted **true** | ⚠️ **Amended in place in the table above: FALSE at `a29a07f`.** Cross-referenced here so the two amendments are found together |
+
+✅ **The `§11` ownership gap is closed, by `8756d02`, and it is closed in the direction this entry
+could not choose.** The map gained four rows — `api/specs/`, `docs/CONFIGURATION.md`,
+`docs/DEVELOPMENT.md` and `docs/reference/` — and the last of them answers the open question rather
+than dodging it: *"**has no fixed lead, and that is the answer rather than a gap in this table** — it
+follows whichever change drove it … where a note pins itself to the migration state, it goes to
+whoever lands the next migration, because that is the commit that falsifies it."* ℹ️ **So the
+follow-up's two options were not chosen between; the table grew rows AND one of them states the
+rule.** Every owner assignment in the section above is now readable off `§11` directly instead of
+derived from prose — which retires the 🚩 that section carries, and the 🚩 is left standing as the
+record of why the rows exist.
+
+⏭️ **Still open after all of it: SD-02a–SD-02o, SD-02q, SD-02s–SD-02u — eighteen of the
+twenty-one.** The three that moved are the two the routing message happened to name and the one that
+decayed on its own. **That distribution is worth noticing**: attention went where a message pointed,
+which is exactly the dynamic that put twenty-one sites in one table.
