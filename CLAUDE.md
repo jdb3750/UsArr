@@ -165,10 +165,13 @@ See `docs/ARCHITECTURE.md` §14 for the full threat model.
 
 **Tests**
 - Recorded HTTP fixtures (`go-vcr`) plus contract tests against the shipped Servarr OpenAPI
-  specs. CI has no Docker daemon, no ffmpeg, and there is no public *Arr demo instance — tests
-  that need a live service do not belong in CI.
-- Query-plan assertions (`EXPLAIN QUERY PLAN`) belong in CI. Wall-clock benchmarks belong in
-  `make bench`, never in the CI gate.
+  specs. The agent container the build runs in has no Docker daemon and no ffmpeg, and there is no
+  public *Arr demo instance — tests that need a live service do not belong in the default suite.
+- **There is no CI**, so `make check` is the whole gate, and nothing mechanises it either: `CLAUDE.md`
+  requires it before a commit, a person or an agent has to type it, and `make design` is required by
+  no document at all. `docs/DEVELOPMENT.md` §8 states the constraint a CI would inherit.
+- Query-plan assertions (`EXPLAIN QUERY PLAN`) belong in the gate, and belong in a CI if one is ever
+  added. Wall-clock benchmarks belong in `make bench`, never in a merge gate.
 
 **Style**
 - Conventional commit prefixes (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`).

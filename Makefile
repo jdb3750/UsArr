@@ -29,8 +29,10 @@
 #      ships nothing — the reasoning is in full above the target itself.
 #   4. `make bench` holds every wall-clock performance measurement. Wall-clock
 #      numbers are a release gate on named hardware, never a merge gate — see
-#      docs/DEVELOPMENT.md §5. What CI does enforce is `EXPLAIN QUERY PLAN` and
-#      row-count assertions, which are deterministic and live in `make test`.
+#      docs/DEVELOPMENT.md §5. What the gate does enforce is `EXPLAIN QUERY PLAN`
+#      and row-count assertions, which are deterministic and live in `make test`.
+#      There is NO CI in this repo — `make check` is the whole gate and a person
+#      or an agent has to type it. See docs/DEVELOPMENT.md §8.
 #
 # Reference: docs/DEVELOPMENT.md
 # ─────────────────────────────────────────────────────────────────────────────
@@ -678,7 +680,7 @@ migrate-new: ## Scaffold a migration: make migrate-new name=add_tag_rules
 docker: ## Build the container image. THE ONLY TARGET THAT NEEDS A DOCKER DAEMON.
 	@docker info >/dev/null 2>&1 || { \
 		echo "no Docker daemon reachable."; \
-		echo "this is expected in the CI/agent container — see docs/DEVELOPMENT.md §8."; \
+		echo "this is expected in the agent container — see docs/DEVELOPMENT.md §8."; \
 		exit 1; }
 	@case '$(BASE_IMAGE)' in \
 		*@sha256:*) : ;; \

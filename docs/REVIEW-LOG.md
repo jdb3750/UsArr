@@ -6628,3 +6628,164 @@ says no credential-shaped string appears anywhere in the tree and says **nothing
 whether ADR-0041's reasoning is sound, whether its quotations are accurate, or whether the proposed
 §16 text is correct. Those were checked by hand against the sources and each quotation carries its
 file and section. ℹ️ **On which tree it was measured**, since that is the M5 series' own standing
+
+---
+
+# NOCI-01 — the repo named a CI as an actor in nine places and has never had one. **Applied: the constraints are kept, the actor is not.**
+
+**Date:** 2026-08-17. **Branch:** detached worktree cut from `origin/main` at `d64b8fc`. **Takes the
+hand-off `OPTIN-01` left** in its *"Raised, not fixed — the repo names a CI as an actor, and there is
+no CI"* section, which named three sites, called it *"an instance of `SD-01`'s class, routed rather
+than swept"*, and declined to fix it because `CLAUDE.md` is the owner's file. It is routed here with
+the owner's instruction attached. **`NOCI-` has not been used before** — checked rather than assumed
+with `git grep -ncE '\bNOCI-[0-9]' d64b8fc`, which exits 1 with no output.
+
+## NOCI.1 Establishing the absence, with the roots the search covered
+
+§11's rule is that **an absence claim carries the roots it searched** — *"never as 'nowhere': the
+second is a claim about the whole tree that the search did not make."* So, four searches, all run on
+`d64b8fc` on 2026-08-17, each named with what it covered:
+
+1. **The tracked tree, by path**, over `git ls-tree -r --name-only d64b8fc` — the whole commit, not
+   the working directory — matched case-insensitively against `.github`, `gitlab-ci`, `.circleci`,
+   `Jenkinsfile`, `.drone`, `azure-pipelines`, `woodpecker`, `.forgejo`, `.gitea`, `.buildkite`,
+   `.travis`, `appveyor`, `bitbucket-pipelines`, `cloudbuild`, `.semaphore`, `Earthfile`, `.cirrus`,
+   `husky`, `lefthook`, `pre-commit-config` and `.tekton`. **Exit 1, no output.** The complete set of
+   tracked dotfiles is eight — `.env.example`, `.gitignore`, `.gitleaks.toml`, `.golangci.yml`,
+   `internal/web/.gitignore`, `internal/web/spa/.gitkeep`, `web/.prettierignore`, `web/.prettierrc`
+   — and there is no CI among them.
+2. **The working directory, by content type**, since a config could be untracked: every `*.yml` /
+   `*.yaml` / `Jenkinsfile*` / `Earthfile` outside `node_modules/`. **Eighteen hits, all accounted
+   for** — `web/pnpm-lock.yaml`, `.golangci.yml`, and sixteen go-vcr cassettes under
+   `testdata/cassettes/`. A directory search for `.github`, `workflows`, `.gitlab*`, `.circleci`,
+   `.drone*`, `.woodpecker*`, `.forgejo`, `.gitea`, `.buildkite`, `.cirrus*` returned nothing.
+3. **Every branch on the remote, not only `main`** — the same path match run across all eighteen
+   remote refs, one at a time. **Zero CI-ish paths on every one**, `origin/main` included. This is the root
+   `OPTIN-01`'s own check did not visit; it reported *"no CI on `origin/main`"*, which was true and
+   narrower than the claim being made from it.
+4. **The forge itself, as the primary source**, because a workflow is a fact about GitHub and not
+   only about the tree: the Actions API for `jdb3750/UsArr` returns **`{"total_count":0}`**.
+
+And the hook path, which is the other way a check could be mechanised: `git config
+--show-origin --get-all core.hooksPath` **exits 1 with no output** in every scope, and `.git/hooks/`
+holds fourteen files of which **zero are non-`.sample`**.
+
+ℹ️ **Four searches, but fewer than four stimuli** — §11 rule 6, *"count the stimuli, not the
+checks."* Searches 1, 2 and 3 all ask the filesystem the same question with different roots, so their
+agreement is worth the roots and nothing more. Search 4 is the only genuinely independent one: it asks
+GitHub, which would know about a workflow this repo's tree could not show. The hook check is a third.
+So: **three stimuli, not five.**
+
+## NOCI.2 Nine sites, and the three-way sort that decided each one
+
+`OPTIN-01` named three. Grepping `\bCI\b`, *"continuous integration"*, *"GitHub Actions"*,
+*"workflow"* and *"pipeline"* case-insensitively across `docs/` (excluding `docs/reference/`),
+`CLAUDE.md`, `README.md` and the `Makefile` returns **137 hits**, most of them false positives — the
+image *pipeline*, the requests approval *workflow*, the build *workflows*, `MediaManager`'s CI health
+in a competitor table. Tightening to `\bCI\b` (case-sensitive), *"continuous integration"* or
+*"GitHub Actions"* leaves **88**: `REVIEW-LOG` 34, `ARCHITECTURE` 17, `DEVELOPMENT` 16,
+`DESIGN-DIRECTION` 5, `Makefile` 5, `DECISIONS` 4, `CLAUDE.md` 4, `CONFIGURATION` 2, `RESEARCH` 1,
+`README` 0. Past the dated records of §NOCI.3, they sort three ways:
+
+**(a) Asserts a CI does something today — fixed, nine sites.** `DEVELOPMENT.md` §8's title and its
+*"CI must not call it"*; §5's *"Runs in CI"* column, *"everything CI runs"*, *"what CI enforces and
+what it does not"*, *"In CI, because they are deterministic"* and *"Not in CI, in `make bench`"*;
+§1's *"absent from the CI container"*; §7's *"CI has no Docker daemon and no FFmpeg"* and *"CI and
+every contributor now run that test"*; `CLAUDE.md`'s *"CI has no Docker daemon, no ffmpeg"*; the
+`Makefile` header's *"What CI does enforce is `EXPLAIN QUERY PLAN`"* and the `docker` recipe's
+*"expected in the CI/agent container"*.
+
+**(b) Forbids a CI from doing something — left, and deliberately.** *"Never in CI"* on
+`dev-stack.yml`, *"never in CI"* on `make test-integration` in both the §4 table and the target's own
+`##` help text, *"never CI"* in §7.3's heading, *"This stack never runs in CI"*, `make bench`'s echo
+*"these are NOT enforced in CI"*, and `CONFIGURATION.md`'s *"never set in CI"* on
+`USARR_INTEGRATION`. 🔍 **A prohibition does not assert its subject exists**, and every one of these
+is *true* of a repo with no CI — vacuously today, substantively the moment one lands. Rewriting them
+to *"never in a future CI"* would add words and no truth. **The distinction that decided the sort is
+the direction of the claim**, not the presence of the letters.
+
+**(c) Design intent about a CI that would exist — left.** `ARCHITECTURE.md` has seventeen (*"CI
+asserts that no query in the identity path…"*, *"CI asserts the counts match"*, *"CI asserts the
+exclusions"*). ⚠️ **These are not the same defect and must not be swept with it.** That document is
+written throughout in the specification present tense about subsystems that do not exist — the
+queries those assertions would guard are themselves unbuilt, and `CLAUDE.md` says so directly:
+§16 *"is authoritative for which milestone owns a thing, which is a different question from whether
+it is built."* *"CI asserts X"* there is the same register as *"the handler returns Y"* for a handler
+nobody has written. Correcting them would mean re-tensing the whole document, and would flatten a
+real distinction: **intent about a hypothetical is fine; only an assertion that the hypothetical is
+already acting is a defect.** `CLAUDE.md`'s own *"Query-plan assertions belong in CI"* is category
+(c) sitting in the same bullet as a category (a) sentence, and the two were separated rather than
+merged — the bullet now reads *"belong in the gate, and belong in a CI if one is ever added."*
+
+## NOCI.3 What was left because it is a dated record
+
+Per §11, *"a citation inside a dated record is history, not staleness"*, and the working test is
+whether the text claims something **as of a moment**:
+
+* **`REVIEW-LOG.md`, 34 hits, all left** — including `OPTIN-01`'s own section, which quotes §8's
+  former title *"CI: no Docker daemon, no FFmpeg, two network calls"* and §5's former subsection
+  heading verbatim. Those quotations are now **wrong about the tree and right about their tree**, and
+  that is what a record is for. This entry is the amendment underneath, which is the mechanism §11
+  prescribes; `OPTIN-01`'s text is untouched, its id, severity and wording unchanged. Also left:
+  `C-02`, `C-28`, `P-08`, `P-16`, `P-20`, `S-16` and the rest, every one of them a disposition
+  recorded on a date.
+* **`DECISIONS.md`, 4 hits, all left** — ADR-0011's *"Both are now invariants with CI assertions"*,
+  ADR-0019's two, and the npm-optional-dependency note. An ADR is a decision **as accepted on its
+  date**, carrying its own Status and Date lines, which is exactly the genre §11 protects. This is
+  the same call `M5-29` made on the same file for the same reason.
+* **`RESEARCH.md`** — *"SeerrNG's exact license, last-commit date, CI health"* is about another
+  project's CI, not this one's. Not a site at all.
+
+## NOCI.4 Disposition
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| **NOCI-01** | Low | **Nine sites named a CI as a present-tense actor — enforcing, running, forbidding, owning a container — in a repo that has never had one.** The worst of them is `DEVELOPMENT.md` §5's *"what CI enforces and what it does not"*, because a reader who believes an enforcing CI exists has no reason to type `make check` at all | **APPLIED across three files.** §8 is retitled *"The unattended environment"* and opens by stating the absence with the roots of §NOCI.1's search and the date, then draws the consequence the sites were obscuring: **every rule in the section is enforced today only by a person or an agent typing the target.** The constraint is kept in every case, re-tensed — *"a CI, if one is ever added, must not call it"*. §5's table column becomes *"In `make test`"* and its performance subsection *"what the gate enforces"*, with the split named as the one a CI would inherit. `CLAUDE.md`'s Tests bullet loses the false environment claim (it is the **agent container** that has no Docker daemon, which is true and verified) and gains the `OPTIN-01` distinction stated at its true size: **`make check` is required by `CLAUDE.md` and mechanised by nothing, and `make design` is required by no document at all.** Its query-plan sentence is preserved as intent, per §NOCI.2(c) |
+
+## NOCI.5 Raised, not fixed
+
+* **`docs/design/DESIGN-DIRECTION.md` (5) and `docs/design/check.mjs` (2) carry the same pattern** —
+  *"**CI asserts it**, and it is cheap"*, *"Asserted in CI over any computed-fill / foreground pair
+  that ships"*, *"enforceable as a CI grep, ESLint or Stylelint rule"*, and a comment reading *"on
+  this machine and in CI"*. **Not touched**: `docs/design/` and `ARCHITECTURE.md` §17 are the design
+  thread's, per §11's area map, and this is a routing note rather than an edit. Most of them look
+  like category (c) on a first read — assertions about guards for a design system that is itself
+  still design — but `check.mjs`'s *"in CI"* is a claim about where that script runs, which
+  `OPTIN-01` established is nowhere.
+* **`Makefile` line 115 was left**: *"There is no TTY in CI or in an agent container, so that prompt
+  is not a question, it is a hang."* It gives a reason for `COREPACK_ENABLE_DOWNLOAD_PROMPT := 0` by
+  naming a class of unattended environments; it does not claim this repo has one, and the agent
+  container half is true and is the half doing the work.
+* **The decision `OPTIN-01` says the repo owes is still owed.** This entry corrects how the repo
+  *describes* its automation; it adds none. Nothing here wires `make design` to anything, and
+  `make check` is exactly as unenforced after this commit as before it. 🚩 **That is worth stating
+  because a section that now says plainly "there is no CI" is easier to mistake for a decision than
+  the muddle it replaces was.** It is a description, not a resolution.
+
+### On the gate for NOCI-01
+
+`make check` was run on this tree and is green — command, absolute tool paths, versions, SHA and the
+verbatim tail are in the commit message. ⚠️ **The green is not load-bearing for this entry.** The diff
+is four files: three under `docs/`, `CLAUDE.md` and the `Makefile` — and of the gate's seven steps,
+**only `gitleaks dir .` reads any of them.** `fmt-check` runs prettier through a `cd` into `web/`, so
+no Markdown at the repo root or under `docs/` is formatter-gated at all, and the `Makefile` change is
+comment-and-echo text that no linter parses. So the green attests **one thing — that no
+credential-shaped string appears anywhere in the tree — and nothing whatever about whether any
+sentence above is true.** The claims are carried by §NOCI.1's four searches and the hook check, not by
+an exit code. The `golangci-lint` cache was cleaned by absolute path
+(`/root/go/bin/golangci-lint cache clean`) before the run, per the standing M5-01…M5-11 gate note.
+
+ℹ️ **One guard was fired deliberately** (§11 rule 3), and it is the only executable thing this commit
+touches: `make docker`, whose changed line is a runtime `echo`. It printed, verbatim —
+
+```
+no Docker daemon reachable.
+this is expected in the agent container — see docs/DEVELOPMENT.md §8.
+make: *** [Makefile:681: docker] Error 1
+```
+
+— which does two jobs at once: it confirms the edited string is the one the recipe actually emits,
+and it **re-measures §8's own claim on today's tree**, since the guard only speaks when `docker info`
+fails. The rest of this commit is prose and has no failure path to fire.
+
+---

@@ -51,9 +51,9 @@ instead). An earlier revision of this line marked the target **(not yet)**, whic
 otherwise process media — video routes to the backend that owns it, and the audio/ebook bytes UsArr
 does carry on its own OpenSubsonic/OPDS surfaces are a plain `io.Copy` with `Range` handling
 (`docs/ARCHITECTURE.md` §5.4). Do not add a media-processing
-dependency, an `ffmpeg`/`ffprobe` shell-out, or a codec library. FFmpeg is also absent from the CI
-container, so such a dependency breaks the build immediately — but the reason it is banned is
-architectural, not environmental.
+dependency, an `ffmpeg`/`ffprobe` shell-out, or a codec library. FFmpeg is also absent from the agent
+container this project builds in (§8), so such a dependency breaks the build immediately — but the
+reason it is banned is architectural, not environmental.
 
 **No CGO, ever.** UsArr builds with `CGO_ENABLED=0` and produces a static binary.
 
@@ -302,7 +302,10 @@ resolution path it tried.
 
 ### Layers
 
-| Layer | Location | Network? | Runs in CI |
+The **In `make test`** column is also the answer to "would a CI run this" — there is no CI today
+(§8), so `make test` *is* the merge-gate suite, and a CI added later inherits this table unchanged.
+
+| Layer | Location | Network? | In `make test` |
 |---|---|---|---|
 | Unit | `*_test.go` beside the code | No | Yes |
 | Golden/table (parsers, mappers, tag rules) | `testdata/` | No | Yes |
@@ -315,7 +318,7 @@ resolution path it tried.
 | Wall-clock benchmarks | `//go:build bench`, `make bench` | No | **No — release gate only** |
 
 ```bash
-make test                                  # everything CI runs
+make test                                  # the whole merge-gate suite
 go test ./internal/servarr/... -run Sonarr -v
 go test ./... -race -coverprofile=cover.out && go tool cover -html=cover.out
 USARR_INTEGRATION=1 make test-integration  # only with a live stack
@@ -324,9 +327,12 @@ USARR_INTEGRATION=1 make test-integration  # only with a live stack
 Always `-race` for the backend. UsArr holds a webhook receiver and background sync jobs writing the
 same SQLite handle; data races are the expected failure mode.
 
-### Performance: what CI enforces and what it does not
+### Performance: what the gate enforces and what it does not
 
-**In CI, because they are deterministic and hardware-independent:**
+There is no CI (§8), so "the gate" means `make check` — required by `CLAUDE.md` before any commit,
+run by hand. The split below is the one a CI would inherit if one is ever added.
+
+**In the gate, because they are deterministic and hardware-independent:**
 
 * `EXPLAIN QUERY PLAN` assertions on every hot query. ~30 lines that catch an index regression
   forever. Assert the *plan string*, and fail on `SCAN` where a `SEARCH … USING INDEX` is required.
@@ -336,10 +342,11 @@ same SQLite handle; data races are the expected failure mode.
 * Index-integrity assertions: `count(search_fts) == count(search_doc)`, no `search_doc` row whose
   `kind` is outside the indexed set.
 
-**Not in CI, in `make bench`:** every p50/p99 latency budget. Enforcing millisecond gates needs either
-a self-hosted single-point-of-failure runner or emulation whose numbers mean nothing, and latency
-gates on shared CI are flake generators — the predictable outcome is that they get disabled in month
-two, but only after blocking real work first. Record `make bench` output in `docs/BENCHMARKS.md`
+**Not in the gate, in `make bench`:** every p50/p99 latency budget. Enforcing millisecond gates needs
+either a self-hosted single-point-of-failure runner or emulation whose numbers mean nothing, and
+latency gates on shared CI runners are flake generators — the predictable outcome is that they get
+disabled in month two, but only after blocking real work first. This is also the standing answer to
+"should the CI we add enforce latency": no. Record `make bench` output in `docs/BENCHMARKS.md`
 with the hardware and commit named, and treat regressions as a release conversation.
 
 ### Browser-driven frontend checks: `pnpm bench:list` and `pnpm test:freeze`
@@ -560,8 +567,8 @@ Rules:
 ## 7. Developing with no *Arr stack at all
 
 **This is the normal case, not the degraded one.** The project owner runs no Sonarr, Radarr or
-Lidarr; CI has no Docker daemon and no FFmpeg. So the two offline mechanisms below are the *primary*
-path, and the live stack exists only to record into them.
+Lidarr; the agent container the build runs in has no Docker daemon and no FFmpeg (§8). So the two
+offline mechanisms below are the *primary* path, and the live stack exists only to record into them.
 
 State it plainly so nobody spends an afternoon looking: **there is no public demo instance of Sonarr,
 Radarr, Lidarr, Prowlarr, Readarr or Whisparr with API access.** Searched 2026-08-16; none official,
@@ -581,7 +588,8 @@ Loop:
 1. Point at a stack — the compose fixture (§7.3), or a contributor's homelab.
 2. Run the test with `USARR_RECORD=1`. Real calls go out; a cassette lands in `testdata/cassettes/`.
 3. Run it again without the flag. Replay. No network.
-4. Commit the cassette. CI and every contributor now run that test with no stack at all.
+4. Commit the cassette. Every contributor — and any CI added later — now runs that test with no
+   stack at all.
 
 **Scrubbing is mandatory and must be a recorder hook, not a manual step.** *Arr keys appear in three
 places — the `X-Api-Key` header, an `Authorization: Bearer` header, and the `?apikey=` /
@@ -685,10 +693,21 @@ SSRF redirect cases.
 
 ---
 
-## 8. CI: no Docker daemon, no FFmpeg, two network calls
+## 8. The unattended environment: no Docker daemon, no FFmpeg, two network calls
 
-**The Docker daemon is unavailable in the CI/agent container.** Verified: `docker info` fails. FFmpeg
-is absent too, and stays absent.
+**There is no CI, and this section is the constraint a future one inherits.** Checked 2026-08-17 on
+`d64b8fc`: no `.github/`, and no `gitlab-ci`/`circleci`/`drone`/`jenkins`/`woodpecker`/`azure`/
+`buildkite`/`forgejo`/`gitea` config anywhere in the tree; `core.hooksPath` is unset and `.git/hooks/`
+is all `.sample`; the GitHub Actions API reports `total_count: 0` workflows for `jdb3750/UsArr`. So
+**every rule below is enforced today only by a person or an agent typing the target.** `make check`
+at least carries an obligation — `CLAUDE.md` requires it before any commit — but nothing mechanises
+even that, and `make design` is required by no document at all (`docs/REVIEW-LOG.md`, `OPTIN-01`).
+Read the rules as binding on whoever runs the build, and as the specification any CI added later must
+satisfy; do not read them as a description of something already watching the tree.
+
+**The Docker daemon is unavailable in the agent container.** Verified: `docker info` fails. FFmpeg
+is absent too, and stays absent. That container is real and is where this project's builds happen;
+it is the environment the rules below were written against, whether or not a CI ever joins it.
 
 Therefore:
 
@@ -703,7 +722,7 @@ Therefore:
 * Anything requiring the stack goes behind `//go:build integration`, is gated on
   `USARR_INTEGRATION=1`, and runs only under `make test-integration` on a developer machine.
 * `make docker` exists for humans and for release pipelines that do have a daemon. It is never part
-  of `check` and CI must not call it.
+  of `check`, and a CI, if one is ever added, must not call it.
 
 A `make check-offline` that passes on a machine with no daemon, no *Arr stack and no network is the
 bar. If you cannot get a test to that bar, it belongs behind the integration tag.
