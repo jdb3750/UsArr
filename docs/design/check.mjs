@@ -1732,11 +1732,18 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
   const countSource = (src, n) => { seenBySource[src] = (seenBySource[src] || 0) + n; };
 
   let strings = 0, exempted = 0; const bad = [];
-  /* 2000 against 4203 while no panel was ever opened; 6685 with the traversal.
-     The old figure was slack enough that it would still have passed over a page
-     missing both poster panels AND one install, which is the kind of floor that
-     exists only to be quoted. */
-  const STRING_FLOOR = 5800;
+  /* 2000 against 4203 while no panel was ever opened; 5800 against 6685 once
+     the traversal landed; 6750 against 6978 now the unit is a run of inline
+     content rather than a childless block element.
+     THE MARGIN IS DERIVED, NOT ROUNDED. Restoring the old element-based unit
+     costs 293 strings — that is what PG-03's fix is worth, measured on this
+     tree — so a floor with more than 293 of slack is a floor that would sit
+     green through exactly the regression it was moved for. 6978 − 6750 = 228,
+     which is under that and still leaves room for a dozen paragraphs of
+     ordinary editing, since one authored string is counted once per combo it
+     renders in. Both previous figures failed this test: 5800 against 6685 had
+     885 of slack, enough to lose every group heading twice over. */
+  const STRING_FLOOR = 6750;
 
   /* One place the three §13 rules are applied, so the rendered walk and the
      attribute sweep cannot drift into checking different things. */
@@ -1813,22 +1820,84 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
         /* The unit is a STRING, not a text node. A sentence interrupted by an
          * inline <a> or <code> is one string that happens to be three nodes,
          * and splitting on nodes turns "…retried automatically — and the row
-         * says so" into a two-word fragment carrying an em dash. So the unit
-         * is the innermost element that lays out as a block: it is exactly one
-         * authored string, and it is what a translator would be handed. */
+         * says so" into a two-word fragment carrying an em dash. That much is
+         * unchanged. What changed is HOW the unit is found.
+         *
+         * IT USED TO BE AN ELEMENT: "the innermost element that lays out as a
+         * block with no blockish children". That definition drops the element's
+         * OWN direct text on the floor the moment it acquires one blockish
+         * child, and CSS hands out blockish children without being asked —
+         * every child of a flex or grid container is blockified, whatever its
+         * own `display` says. `.section__head h2` is `display: flex`, so
+         * `<h2>Ebooks <span class="section__count">14</span></h2>` had a
+         * blockish child, failed the second test, and contributed nothing;
+         * `.section__count` passed the test on its own and contributed "14".
+         * The word "Ebooks" — a group heading, on the two screens that group —
+         * was never read. Neither was `.card__meta`'s media-type word, nor
+         * `.avail`'s "10/10", nor `.detail li`'s prose, nor `.banner__text`,
+         * nor eleven `.pagehead__meta` summaries: 59 distinct strings, all of
+         * them the product's own voice, all of them invisible to §13 since 1b
+         * was written. Logged as PG-03.
+         *
+         * IT IS NOW A RUN OF INLINE CONTENT INSIDE ONE BLOCK BOX, which is what
+         * the browser itself lays out: walk the text nodes in document order,
+         * attribute each to its nearest blockish ancestor, and cut the string
+         * wherever that ancestor changes. Three consequences, all wanted:
+         *
+         *   · An element's own text is never lost, because every text node is
+         *     attributed to something. This is the fix.
+         *   · An inline <a> or <code> does NOT cut the run — it is not blockish,
+         *     so its text keeps its parent's block as its ancestor. The reason
+         *     the old comment gives for the unit's shape still holds exactly.
+         *   · A BLOCKIFIED child DOES cut the run, and should: `.detail li` is
+         *     `display: flex` with a `gap`, so "Recomputed <span>13:40</span>,
+         *     28 minutes ago" is three gapped boxes on the screen, not one
+         *     sentence. Cutting there splits some authored sentences into
+         *     fragments, which makes the em-dash-under-15-words rule STRICTER
+         *     rather than laxer — a five-word box carrying an em dash is the
+         *     thing §13 bans, and the fragment is what the reader sees.
+         *
+         * And one correctness win that falls out rather than being aimed at:
+         * `textContent` reads through `[hidden]` descendants, so the old walk
+         * concatenated both `[data-inst]` variants of a summary line into
+         * strings no user ever sees — "No results for duen in 82 libraries."
+         * was the 8 and the 2 of two hidden alternatives run together. A text
+         * walk tests each node's own ancestry, so the variants stay apart. */
         const out = [];
         const root = document.querySelector('#pg-' + s);
         const BLOCKISH = /^(block|flex|grid|list-item|table-caption)$/;
-        root.querySelectorAll('*').forEach((el) => {
-          if (el.closest('[hidden]')) return;
-          if (el.closest('td')) return;               /* data, not copy */
-          if (el.closest('.statebar')) return;        /* the mockup's own scaffolding */
-          if (!el.offsetParent && el.tagName !== 'BODY') return;
-          if (!BLOCKISH.test(getComputedStyle(el).display)) return;
-          if ([...el.children].some((c) => BLOCKISH.test(getComputedStyle(c).display))) return;
-          const t = el.textContent.replace(/\s+/g, ' ').trim();
+        const blockOf = (n) => {
+          for (let e = n.parentElement; e; e = e.parentElement) {
+            if (BLOCKISH.test(getComputedStyle(e).display)) return e;
+          }
+          return null;
+        };
+        const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        let cur = null, run = '';
+        const flush = () => {
+          const t = run.replace(/\s+/g, ' ').trim();
           if (t) out.push(t);
-        });
+          run = '';
+        };
+        for (let n = w.nextNode(); n; n = w.nextNode()) {
+          const p = n.parentElement;
+          if (!p) continue;
+          /* The SAME structural exclusions as before, applied to the text
+             node's own ancestry. `closest` reaches through inline wrappers, so
+             a word inside `<td><b>…</b></td>` is still data and still exempt. */
+          if (p.closest('[hidden]')) continue;
+          if (p.closest('td')) continue;              /* data, not copy */
+          if (p.closest('.statebar')) continue;       /* the mockup's own scaffolding */
+          const b = blockOf(n);
+          if (!b || (!b.offsetParent && b.tagName !== 'BODY')) continue;
+          /* Whitespace-only nodes are the spaces BETWEEN inline elements. They
+             carry no string of their own, but dropping them would weld "and"
+             to "<a>the row</a>". They join the current run and are trimmed off
+             at the ends by flush(). */
+          if (b !== cur) { flush(); cur = b; }
+          run += n.nodeValue;
+        }
+        flush();
         return out;
       }, screen);
       for (const t of r) checkCopy(where, t);
