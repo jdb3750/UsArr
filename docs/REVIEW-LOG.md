@@ -12424,6 +12424,13 @@ Read off the tree rather than off a document, per CLAUDE.md. Roots searched:
   1, the full import — with Kavita as its first adapter (ADR-0041)"*, and the adapter directory holds
   `kavita.go` and no sibling. `cmd/usarr/import.go` refuses anything else at runtime, in words:
   `"%q has kind %q; v0.1 imports a catalogue from kavita and from nothing else (ADR-0041)"`.
+  ⚠️ **Sharper than "one source", and added after a concurrent read-only pass reported it:** that
+  import has **one trigger**, `bootstrapImport` on a first successful connect to a Kavita, with no
+  timer and no HTTP route behind it (`cmd/usarr/import.go`'s own doc comment: *"TWO TRIGGERS"*, the
+  second being an in-process call). So a v0.1 install has a catalogue only for what a connected
+  Kavita supplies, **and only after that connect has succeeded once**. The new copy is unaffected
+  because it makes no claim about *when* the library exists: it claims only what the services
+  supply. Recorded because the next author to reword this screen will be tempted to.
 - **That source produces two `work.kind` values.** `internal/libsync/kavita.go`'s `kindDecision`
   returns `Kind: "comic"` (three branches, including manga, which is `reading_direction` and not a
   kind per ADR-0030) and `Kind: "book"` (two branches). There is no third.
