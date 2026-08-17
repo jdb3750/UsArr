@@ -6552,7 +6552,7 @@ created the exact defect M5-25 through M5-28 exist to catch, a document that out
 that precaution turned out to be unnecessary, because M5-30's own author committed it first. Recorded
 rather than deleted, because the precaution was right on the information available.
 
-## M5.19 How it was found, and why nothing before it could have
+## M5.23 How it was found, and why nothing before it could have
 
 The finding came out of a **scoping pass over §16, not a review of §16's prose.** Every M5 entry
 before it compared a document against another document or against the tree; this one compared a
@@ -6583,13 +6583,13 @@ success criterion is a factual claim about the world, and it needs verifying lik
 endpoints and field names. **It does not name the operator's own environment**, and this is the case
 that argues it should.
 
-## M5.20 Disposition
+## M5.24 Disposition
 
 | # | Severity | Finding | Disposition |
 |---|---|---|---|
 | **M5-31** | **High** | **v0.1's success criterion cannot be met on the machine v0.1 targets.** [ADR-0036](./DECISIONS.md#adr-0036)'s decision and `ARCHITECTURE.md` §16.1's v0.1 entry both scope the milestone to **Sonarr and Radarr** and both state the criterion as proving the replica thesis **on real data** — *"a real Sonarr and a real Radarr, imported"*. **The owner runs neither service** and has said collecting film and TV is *"gonna have to be future"*. What remains reachable is verification against **recorded fixtures and the vendored specs**, which is a method this repository has already documented failing in this exact subsystem: `ARCHITECTURE.md` §7.2 and `reference/sync.md` §2 record that `GET /api/v3/episode` is not a bare-array endpoint although **the OpenAPI spec marks its parameters `required: false`** — *"the constraint lives in the controller, not the schema"* | **APPLIED as a decision, not as an edit — [ADR-0041](./DECISIONS.md#adr-0041), owner-approved 2026-08-17.** ⚠️ **The criterion is kept and the source is changed**, which is the opposite of the tempting fix: **Kavita becomes the sync core's first adapter in v0.1**, because it is the source the owner runs and the only one whose delta has been verified against a live instance (ADR-0035 §2a — Kavita 0.9.0.2, 151 series, run 2026-08-17, passed clause by clause). **Sonarr and Radarr are re-sequenced, not cut**; they land on a core already proven on real data. ADR-0036's *rule* — one source, proven on real data, before a second adapter — survives untouched; only its membership moves, and the count stays at one. **§16 is NOT edited by this thread**: the replacement text for §16.1's v0.1 entry is drafted inside ADR-0041 as a marked block, with the current text quoted verbatim above it, and routed to the thread that owns §16 per `DEVELOPMENT.md` §11 — the same route [ADR-0040](./DECISIONS.md#adr-0040) took |
 
-## M5.21 What the fix costs, stated here rather than only in the ADR
+## M5.25 What the fix costs, stated here rather than only in the ADR
 
 **One consequence is a genuine addition to v0.1 and must not be read as free.** Channel 3
 (`/history/since`) **does not apply to Kavita** — `ARCHITECTURE.md` §7.1a says so in its opening
@@ -6603,7 +6603,7 @@ been** — a page walk cannot observe a deletion (§7.1a), and Kavita's watermar
 *add* only (ADR-0035 §2a clause (c)) — so reconciliation carries more weight in v0.1 than it would
 have. All of that is priced in the ADR rather than glossed.
 
-## M5.22 Raised, not fixed
+## M5.26 Raised, not fixed
 
 * **v0.1's minimal write path now has no target, and this entry does not decide it.** §16.1 names
   *"minimal write path (`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue"*, and
