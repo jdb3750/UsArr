@@ -877,7 +877,7 @@ flicker rather than hiding speed.
 
 **Tier 3 — over 10 s, or a known N-of-M.** Indexer fan-out across nine indexers; the initial full
 import. **Determinate progress with real counts**: "4 of 9 indexers responded", "1,240 of 10,000
-movies". **Never a fake bar.** Partial results are usable as they arrive — §8.4 already requires
+comics". **Never a fake bar.** Partial results are usable as they arrive — §8.4 already requires
 per-indexer streaming over SSE, and §17.7 already requires home sections to populate live as import
 phase A commits.
 
@@ -1585,7 +1585,7 @@ are real screens the design owes; neither is the other's placeholder.
 ┌───────────────────────────────────────────────────────────────────────────────────────┐
 │ Home                                                    [ Table | Posters ]  [Filter] │  40px toolbar
 ├───────────────────────────────────────────────────────────────────────────────────────┤
-│ Radarr 4K is unreachable — showing cached data from 14:02          [Open Services]    │  banner, only when degraded
+│ Kavita is unreachable — showing cached data from 14:02             [Open Services]    │  banner, only when degraded
 ├───────────────────────────────────────────────────────────────────────────────────────┤
 │ Your library                                                                          │  BLOCK A
 │ ───────────────────────────────────────────────────────────────────────────────────── │
@@ -2241,9 +2241,10 @@ recovery action is reachable:
 - System tags render as chips you can filter by but not delete (`is_system`, ADR-0015). Tag chips
   are neutral; `tag.color` is the only colour field in the data model and is user-controlled, not
   chrome.
-- **Degraded instance → a small non-modal banner** naming it: "Radarr 4K is unreachable — showing
+- **Degraded instance → a small non-modal banner** naming it: "Kavita is unreachable — showing
   cached data from 14:02", linking to Services. **The catalogue does not grey out** and shows no
-  spinner. Writes are accepted with the label "queued — Radarr 4K is unreachable".
+  spinner. Writes are accepted with the label "queued — Radarr 4K is unreachable" — which keeps an
+  \*Arr on purpose, because writes to a media backend do not exist (§17.7).
 - **Needs re-identification → a blocking banner** on that instance's rows and on Services, because
   §7.4's guard 2 exists precisely to stop a silent library-destroying sweep. Loud on purpose.
 
@@ -3071,7 +3072,7 @@ widened, and nothing else. The `[review]` rules below are still human judgement 
   comprehensive, "AI-powered".
 - `[grep]` No `—` (U+2014) in any string under 15 words, **except where
   [`ARCHITECTURE.md`](../ARCHITECTURE.md) §17.7 fixes the wording**: its degraded-instance banner
-  is quoted verbatim as *"Radarr 4K is unreachable — showing cached data from 14:02"*, which is
+  is quoted verbatim as *"Kavita is unreachable — showing cached data from 14:02"*, which is
   eight words. §17 wins over this checklist, so the rule carries the exception rather than the
   banner carrying a rewrite. **What the ban forbids is the punctuation, never the construction:**
   §1.4's head-and-detail form is prescribed, and in a UI string its beat is a **colon** for a

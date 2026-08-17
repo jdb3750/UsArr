@@ -1736,11 +1736,15 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
   const fixedBy17 = norm(s17Body);
   if (fixedBy17.length < 5000) fail('§13 copy: ARCHITECTURE §17 could not be located, so the fixed-wording exemption is not being applied');
   /* What §17 fixes is the CONSTRUCTION, not the instance. Its banner is quoted
-   * as "Radarr 4K is unreachable — showing cached data from 14:02"; the mockup
-   * renders the same banner over different sample data. So the exemption is
-   * granted on the em dash's own two-words-either-side window, which survives a
-   * substituted service name and a substituted timestamp and does not survive a
-   * rewritten phrase. */
+   * as "Kavita is unreachable — showing cached data from 14:02"; the mockup
+   * renders the same banner over different sample data, and over a different
+   * service — it draws a Radarr. So the exemption is granted on the em dash's
+   * own two-words-either-side window, which survives a substituted service name
+   * and a substituted timestamp and does not survive a rewritten phrase. ⚠️ The
+   * subject moved on 2026-08-17, from `Radarr 4K` to `Kavita`, and the window
+   * "is unreachable — showing cached" did not — which is the property this
+   * design was chosen for, demonstrated rather than asserted: the mockup's
+   * banner kept its exemption across a §17 edit that renamed its subject. */
   const exempt = (t) => {
     const w = norm(t).split(' ');
     for (let i = 0; i < w.length; i++) {
