@@ -5020,3 +5020,34 @@ so neither is remaining, and the eighteen-still-open figure above is unaffected.
 number of sites **inventoried** — 24 (21 tabled + 3 closed during compilation) becomes **26**. ℹ️
 The heading's *"three that closed while it was being written"* also stands as worded: these two
 closed **after** it was written, which is the distinction that clause draws.
+
+---
+
+# One animation frame was not enough: a density-invalidation fix that measured as no fix
+
+**Date:** 2026-08-17. **Branch:** `claude/hearth-thread-d247f2-revlog`. **Prefix `DI-` has not been
+used before.** Records what implementing `design/DESIGN-DIRECTION.md` §7.4's invalidation rule
+actually cost, on the tree merged as `1869f05` (`dff20fd`). **Follows `SW-22`**, which reported the
+stale remembered size and wrote §7.4's rule; this is the implementation side of it. **`DI-02` is the
+one worth reading** — `DI-01` is the bug, `DI-02` is the shape it shares with two others on this same
+feature. Every table and per-sample figure is in
+[`web/scripts/measurements/2026-08-17-density-invalidation.md`](../web/scripts/measurements/2026-08-17-density-invalidation.md)
+and is **not** restated here.
+
+| # | Finding | Resolution |
+|---|---|---|
+| **DI-01** | 🚩 **A single-`requestAnimationFrame` version of the fix measured as NO FIX AT ALL: 14.59% scrollbar error, against the 14.57% of doing nothing.** The mechanism is scheduling rather than CSS. A rAF callback scheduled *inside an event handler* runs in **that same frame's** rendering steps, **before** style and layout, so the single rAF took the `content-visibility: visible` class back off before the frame that was supposed to record the new sizes ever rendered. ⚠️ **Forcing a synchronous layout first is not a substitute, and that is the non-obvious half**: it gives correct **geometry** immediately — `document.scrollHeight` read **271,870 px** right after it, which is ground truth — but it does not reliably make the browser **record** that geometry as the row's last remembered size against `contain-intrinsic-size: auto`. Three frames later the same document read **232,198 px**. Only a completed rendering opportunity does the recording | **Shipped holding the class for TWO frames**, which guarantees one such opportunity: **0.00%** error at every size measured. The second frame is nearly free — the rows laid out in the first and the layout is cached, so it costs a style pass rather than a relayout. Written down where it can be re-broken: `web/src/lib/List.svelte` carries the ⚠️ **TWO FRAMES, NOT ONE** comment with these two numbers in it, and `web/src/app.css` carries the mechanism at `.tbl--remeasure`. §5 of the measurement record is the long form |
+| **DI-02** | 🚩 **THIS IS THE PROJECT'S RECURRING FAILURE SHAPE — a mitigation that silently does nothing while looking performed — AND IT IS THE THIRD INSTANCE ON ONE FEATURE.** The single-rAF version compiled, ran, threw nothing and reported success; **nothing distinguished it from the working fix except measuring the scrollbar error against the do-nothing baseline.** Its two siblings, both on this same density toggle: `content-visibility: auto` was **inert on `<tr>`** while reading back as applied (`P-04`, reproduced as a deliberate control in `SW-23`), and `web/scripts/list-bench.mjs:926` asserts against a hard-coded `const PAGE_SIZE = 200` while its failure message names *"`LOAD_MORE_PAGE_SIZE` in src/lib/list.ts is too large"* — so it reads as a guard on that constant and would not follow it if it moved | **Recorded as a class rather than as three incidents, because the defence is one thing and it is not code review.** A mitigation of a *measured* defect is not done until it has been **measured against the un-mitigated baseline**; a green that only shows the mitigation ran shows nothing. All three of these passed reading. ℹ️ The bench's hard-coded 200 is **named here and not changed** — `web/scripts/list-bench.mjs` is another thread's file, and the measurement record's own closing line keeps `LOAD_MORE_PAGE_SIZE` and its thresholds out of this work's scope. **Follow-up, not a fix** |
+| **DI-03** | **It surfaced as the implementer's own measurement disagreeing with itself**, not as a failing test: the per-row sections showed a working fix while the document-level drift section showed none | **Resolved by instrumenting rather than by re-running, and saying so is the point of this row.** A contradiction between two sections of one measurement is **evidence, not noise**, and a re-run is the response that destroys it. Both sections were correct, about different things, and only reading `scrollHeight` synchronously **and** three frames later separated them |
+| **DI-04** | **The un-invalidated error is 7.53% at 100 rows — already 3.8× over §7.4's 2% budget at the smallest page size under discussion.** Recorded because the natural reading of `SW-22`'s 14.57%-at-5,000-rows is that this is a large-list problem that a smaller page size would dodge | **It is not, and no smaller `LOAD_MORE_PAGE_SIZE` could have avoided it.** The error does rise with page size — **7.53 / 8.70 / 10.18 / 11.07%** at 100 / 120 / 160 / 200 rows — but it is over budget before the curve starts, and with the fix it is **0.00% at all four**. §6 of the measurement record carries the cost curve that goes with it |
+
+**Gates, and exactly what they cover.** This entry is **markdown only** — one added entry in
+`docs/REVIEW-LOG.md`, nothing else in the diff — so `make check`, `pnpm bench:list` and
+`docs/design/check.mjs` were **not** run, and nothing above is claimed on their authority.
+`pnpm exec prettier --check .` (prettier 3.9.6, private install) was run from `web/` and is green,
+but ⚠️ **it covers nothing in this diff, and that was checked rather than assumed**: prettier's root
+here is `web/`, so `make fmt-check`'s `pnpm format:check` never reaches `docs/` — and pointing
+prettier at `docs/REVIEW-LOG.md` explicitly reports style issues **on the unmodified `e15cd6a` copy
+too**, so this file has never been formatter-gated and this entry does not change that. **Every
+figure quoted above is taken from the measurement record and from the code comments at `1869f05`;
+none of it was re-measured here.**
