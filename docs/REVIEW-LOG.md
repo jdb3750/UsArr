@@ -4727,6 +4727,18 @@ recorded below as amendments. ✅ **That is the argument for the caveat, not aga
 Both defects were caught by exactly the re-verification this line asks of every reader; an inventory
 that says which commit it saw is falsifiable, and one that does not is merely old.
 
+⚠️ **And re-verifying your row is only half of it, because the count itself is a floor.** The method
+here was a sweep over documentation files, so it undercounts by construction wherever the reasoning
+lives in a code comment rather than in prose — which in this repo is deliberate and common. 📌 **The
+worked instance, measured at `64cea7d`:** the §9.7→§9.2 citation follow-up recorded under `SD-01`
+above left **three** sites; the sweep that ran it found **six** live, the extra three being comments
+in `docs/design/check.mjs:889`, `docs/design/mockups/usarr.css:1382` and
+`docs/design/mockups/usarr.js:958` — plus the two copies `build_prototype.py` inlines into
+`prototype.html:1461` and `:7272` — and its own note names the cause as *"the citation was counted
+over `*.md`"*. All six were fixed in `c9610e2`, merged as `cda979c`. **So read every count below as a
+floor rather than a total, and grep the tree — not only `docs/` — for your own item before
+concluding the row is its only instance.**
+
 ## SD-02 — twenty-one sites restate an implementation status they do not own. **Instances of `SD-01`. Queued, not applied.**
 
 **`SD-01` is the governing rule and this is not a second one.** It reads: *A document that is not
