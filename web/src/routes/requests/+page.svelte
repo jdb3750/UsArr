@@ -118,7 +118,7 @@
 		sortIndexers,
 		unavailableReason
 	} from '$lib/indexercatalog';
-	import { formatAge, formatSize, sizeParts } from '$lib/format';
+	import { formatAge, sizeParts } from '$lib/format';
 	import {
 		CODE_OUTCOME_UNKNOWN,
 		DEFAULT_SEARCH_TYPE,
@@ -1997,11 +1997,32 @@
 						<span class="muted">{NOTHING.empty}</span>
 					{/if}
 				{:else if column.id === 'size'}
-					{#if grab.sizeBytes !== undefined}
-						{formatSize(grab.sizeBytes)}
+					<!-- A figure and its unit are two slots, not one string — §9.1, the
+					     same treatment the release table's Size carries. The reserved box
+					     is the half that does the work: right-aligning `4.8 GiB` over
+					     `820 MiB` as one string aligns the `B`, so the digits land at two
+					     x-positions, and `tabular-nums` cannot help because it is the WORD
+					     that moves them. §9.1's exclusion list names `Age` on the two
+					     release tables and `Items` on Home; a size column is on neither.
+
+					     ⚠️ 3ch, not §9.1's 2.5ch — §9.1's own rule applied rather than its
+					     number copied, because it derives 2.5ch from the DECIMAL family
+					     and this column prints BINARY units. `.unit--size` in app.css owns
+					     the number.
+
+					     ⚠️ THE `{:else}` ARM IS REACHABLE HERE, unlike on the release
+					     table. `internal/httpapi/grabs.go` tags `SizeBytes *int64` with
+					     `omitempty`, so a not-sent row genuinely sends no size — where the
+					     release table's field has no `omitempty` and can only ever send 0.
+					     This is real behaviour, not a defensive branch, which is why
+					     `sizeParts` returning null rather than an empty pair matters: the
+					     em dash gets no `.unit`, so no 3ch is held open around nothing.
+					     Not every indexer reports a size, and 0 would be a lie rather than
+					     an absence. -->
+					{@const size = sizeParts(grab.sizeBytes)}
+					{#if size}
+						{size.value} <span class="unit unit--size">{size.unit}</span>
 					{:else}
-						<!-- Not every indexer reports a size, and 0 would be a lie rather
-						     than an absence. -->
 						<span class="muted">{NOTHING.empty}</span>
 					{/if}
 				{:else if column.id === 'outcome'}
