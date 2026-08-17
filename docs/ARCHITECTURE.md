@@ -2379,15 +2379,49 @@ membership with a 250 ms dirty-flush and a denormalised sort key, a derivation w
 predicates, an auto-proposal engine with join-vs-create defaults, and a second first-class settings
 screen (§17.8).** It is true that the Libraries screen *replaces* hard-coded per-type sections rather
 than adding a screen; it is not true that the tables, the derivation and the proposal engine replace
-anything. The correction **UI** is still capped to v0.3, and that cap is correctly described as a
-*scheduling detail*, not as the payment. ⚠️ **Its justification does not survive the source swap
-unexamined:** §6.4's *"tier 1 resolves essentially 100% of the v0.1 identity problem"* was established
-**for Sonarr and Radarr**, which carry provider ids, and [ADR-0041](./DECISIONS.md#adr-0041) records
-the opposite for v0.1's actual source — free Kavita's **null identifier fields make *"not identified"*
-the ordinary case** (ADR-0035 §1), exercised in v0.1 rather than merely present. The nullable column
-and the badge were already v0.1 work because they cannot be retrofitted. **Whether the correction UI's
-v0.3 cap still holds against a source with no ids is a live question this section flags rather than
-answers** — §6.4 owns the tier-1 claim and has not been restated against Kavita.
+anything. ⚠️ **The correction UI's v0.3 cap no longer holds whole, and the question this paragraph
+flagged is now answered rather than left open.** It read *"The correction **UI** is still capped to
+v0.3, and that cap is correctly described as a scheduling detail, not as the payment"*, and closed
+*"whether the correction UI's v0.3 cap still holds against a source with no ids is a live question
+this section flags rather than answers — §6.4 owns the tier-1 claim and has not been restated against
+Kavita."* **§6.4 has since been restated against Kavita and it withdraws the support the cap rested
+on**, and [ADR-0043](./DECISIONS.md#adr-0043) — owner-decided 2026-08-17 — takes the scope call that
+restatement said it needed: **a minimal match-correction UI moves earlier than v0.3.** The reasoning
+is unchanged and is kept here: §6.4's *"tier 1 resolves essentially 100% of the v0.1 identity
+problem"* was established **for Sonarr and Radarr**, which carry provider ids, and
+[ADR-0041](./DECISIONS.md#adr-0041) put a source in v0.1 for which the opposite holds — free Kavita's
+**null identifier fields make *"not identified"* the ordinary case** (ADR-0035 §1), exercised in v0.1
+rather than merely present. The nullable column and the badge were already v0.1 work because they
+cannot be retrofitted; what ADR-0043 moves is the surface that acts on them, so **a user has something
+to correct on day one and now has somewhere to do it.**
+
+**Three things that decision does not say, each stated because inventing any of them here is the
+failure mode this section exists to prevent.**
+
+- **It names no milestone.** The owner said *"earlier"*; **he did not name a version**, and §16 is
+  authoritative for milestone membership, so the honest record is that **the slot is not yet
+  assigned.** This is the same refusal [ADR-0042](./DECISIONS.md#adr-0042) made for Sonarr and Radarr
+  the day before — *"picking a number here would be inventing a commitment nobody made"* — and it is
+  carried in ADR-0043 as an open question rather than closed by a guess. **v0.1 is not claimed for it
+  by this paragraph**, and neither is v0.2.
+- ***"Minimal" is the owner's word, and it is a constraint on scope rather than a synonym for
+  small.*** The full correction surface [ADR-0026](./DECISIONS.md#adr-0026) specifies — all four verbs
+  `exclude`, `include`, `relink`, `field`, plus the Corrections list — **stays at v0.3.** What moves
+  earlier is only the narrow *"fix this match"* case ADR-0043 scopes, and **that division is the
+  payment**: this re-sequences one part of a subsystem ADR-0026 already funded, whose storage
+  (`library_override`, §6.5) is in the tree already, rather than adding a subsystem. An amendment that
+  moved the whole surface would have to say what it removes, and this one does not move the whole
+  surface.
+- **It does not depend on Kavita, and it survives Kavita being replaced.** The owner's stated reason
+  was other people's installs — *"in case anyone is running kavita"*, which is his reasoning on the
+  day and is recorded as his — but the fact underneath it is that **v0.1's catalogue source has weak
+  identity**, and that is a property of the source rather than of its name. 🔍 **A different
+  books-and-comics server, BookOrbit, is under live evaluation on this project as of 2026-08-17;
+  nothing about it is decided and §16 assigns it nothing.** It is named here only because the owner
+  named it in the same breath. **Whichever server ends up in that slot, the decision that a minimal
+  match-correction UI comes earlier stands** — it would be reopened only by a v0.1 source that
+  supplies strong external ids for the ordinary user, which is a fact about a source and would need
+  the same primary-source check Kavita's got (§6.4).
 
 🔍 **The scoping observation behind moving Navidrome ahead of the gateway, marked as inference:**
 v0.4's success criterion is *"Symfonium connects to UsArr with one API key, browses, searches and
@@ -2488,15 +2522,24 @@ its own `kind_byte`, excluded from the navigation enum, the prefix index and the
 The rule is [ADR-0040](./DECISIONS.md#adr-0040)'s and it is unchanged: **each lands with the catalogue
 source that writes it**, so which milestone a table falls in follows its source. **`work_book`,
 `work_comic` and `work_comic_issue` are v0.1's**, because Kavita is v0.1's catalogue source and Kavita
-is what writes them ([ADR-0041](./DECISIONS.md#adr-0041)) — **none of the three exists in the tree
-today**, and they arrive in a **new migration**, because `00005_library_sync.sql` is merged and a
-merged migration is never edited. **`work_album`, `work_track` and `work_credit` are not v0.1's, and
+is what writes them ([ADR-0041](./DECISIONS.md#adr-0041)) — and ✅ **all three now exist in the tree**:
+`internal/db/migrations/00006_kavita_subtypes.sql` creates `work_book` (`:129`), `work_comic` (`:153`)
+and `work_comic_issue` (`:180`), with `ix_comic_issue_sort` (`:211`), in commit `d0a02aa`. ⚠️ **This
+clause read *"none of the three exists in the tree today, and they arrive in a new migration"*, which
+was true when it was written (`b2dc092`) and was falsified by `d0a02aa` the same day.** Its prediction
+was right and is now **discharged rather than merely stale**: a new migration is exactly what landed,
+because `00005_library_sync.sql` is merged and a merged migration is never edited. **`work_album`, `work_track` and `work_credit` are not v0.1's, and
 this clause does not claim them**: they wait on Navidrome, which has no adapter, at #1 in §16.1's
 sequence. ADR-0030, ADR-0031 and ADR-0033 stay authoritative for their **shape** — that is what the
 enumeration above states of them, and a shape is owed whenever the table is created, not before.
 Everything else enumerated above is v0.1's, tables included.
-**Identity tier 1 only**; the
-correction *UI* deferred to v0.3. Library auto-proposal on service add, the Libraries settings screen
+**Identity tier 1 only** — ⚠️ **and what tier 1 is worth in v0.1 is a property of the instance rather
+than of the design** (§6.4, restated against Kavita): essentially all of it on a Kavita+ install,
+close to none on a free one. ⚠️ **This clause read *"the correction UI deferred to v0.3"*, and
+[ADR-0043](./DECISIONS.md#adr-0043) lifted that cap for the minimal *"fix this match"* case only.**
+The full four-verb surface still lands at v0.3; **the minimal case has no milestone assigned**, and
+**this entry does not claim it for v0.1** — §16.0 carries the decision and the open question.
+Library auto-proposal on service add, the Libraries settings screen
 (§17.8), Home's three fixed blocks (§17.2). Library grid with **"Load more" + `content-visibility`
 on grid rows carrying explicit ARIA roles (§4.5)**, keyset pagination, image pipeline **including the
 §4.4.1 cold-start plan**.
@@ -2535,8 +2578,10 @@ included.**
 > `work_comic_issue` are back in v0.1's scope by ADR-0040's own unchanged rule — the table lands with
 > the source that writes it, and the source moved. **00005's deferral of them is not thereby wrong**:
 > it declined to create tables nothing queried, and that stays correct for the tree it shipped into.
-> What follows is that **the three are still absent and now owed**, in a new migration rather than an
-> edit to 00005. The music three are untouched and stay deferred. **Read
+> What followed is that the three were **owed in a new migration rather than in an edit to 00005** —
+> and ✅ **that migration has landed**: `00006_kavita_subtypes.sql` creates all three (`d0a02aa`).
+> ⚠️ **This sentence read *"the three are still absent and now owed"*, and it is no longer true of the
+> tree.** The music three are untouched and stay deferred. **Read
 > `internal/db/migrations` for what exists**; the clause above says what v0.1 owes, not what has
 > landed.
 
@@ -2624,7 +2669,13 @@ identifier fields — so *"not identified"* is **v0.1's ordinary case** (ADR-003
 source's.
 **The library correction surface** (`exclude`,
 `include`, `relink`, `field`) plus the Corrections list lands here, with the weak catalogues it
-exists for. **LazyLibrarian** as the first Tier 1 manifest — as a
+exists for. ⚠️ **Minus the minimal *"fix this match"* case, which
+[ADR-0043](./DECISIONS.md#adr-0043) moved earlier than v0.3 on the owner's decision of 2026-08-17.**
+v0.3 keeps the **full** four-verb surface and the Corrections list; what left is the narrow
+identity-correction case, and **its milestone is not assigned** (§16.0). ⚠️ **The clause's own
+premise also moved:** *"the weak catalogues it exists for"* placed them at v0.3, and
+[ADR-0041](./DECISIONS.md#adr-0041) put one in **v0.1** — which is why the minimal case could not wait
+here. **LazyLibrarian** as the first Tier 1 manifest — as a
 **request sink only** — proving the mechanism on a genuinely hostile API (HTTP 200 +
 `Success:false`).
 

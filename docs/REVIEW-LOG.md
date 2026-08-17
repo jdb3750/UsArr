@@ -9150,3 +9150,235 @@ in this entry.
 `internal/httpapi/grab.go`, `internal/httpapi/grabs.go`, `internal/releases/grab.go`,
 `internal/httpapi/server.go` and `internal/db/migrations/` directly, and reading §17.8's amended text
 and ADR-0042's §16 amendments at their commits rather than taking the relay's summary of either.
+---
+
+<a id="corr-01"></a>
+# CORR-01 — the correction UI's v0.3 cap, decided rather than flagged; and the §16 schema sentence migration 00006 falsified
+
+**Prefix note.** `CORR-` = *correction UI*. The generic `M5-` prefix is **retired**
+(`DEVELOPMENT.md` §11), and this thread's four earlier prefixes — `NOCI-`, `RG-`, `ADRC-`, `MWP-` —
+are all taken. `CORR-` was verified unused **across `docs/` and every remote head**: a
+`git grep -c 'CORR-' origin/$b -- docs/` per branch from `git ls-remote --heads origin` returned
+nothing on all **twenty** refs, `main` included, and a `grep -rn 'CORR-'` over the whole working tree
+returned nothing.
+
+🚩 **It also passes §11's near-miss rule, which is the half that is easy to skip.** `MWP-01` recorded
+that a prefix must be unused **and** not a near-miss of a live prefix in its own subject area — the
+lesson that renamed `WPQ-` because `WQ-` was the live *write-queue* prefix. The C neighbourhood on
+`main` holds `C-`, `CFG-` and `CRYPTO-`, none of which is about corrections, identity or libraries,
+and the nearest live prefix by subject is `SCOPE-`, which shares no letters. **No roster entry was
+added anywhere**, per §11: the log is the registry, derived rather than declared, and this landed
+entry is the claim.
+
+## CORR.1 — What was decided, and by whom
+
+**[ADR-0043](./DECISIONS.md#adr-0043) — *A minimal match-correction UI moves earlier than v0.3; the
+full correction surface stays there*, Accepted, owner-decided 2026-08-17.**
+
+**The owner's words, verbatim:**
+
+> *"but yeah, i guess we can do a minimal fix this match thing earlier. in case anyone is running
+> kavita. but bookorbit seems to be the new meta tbh."*
+
+**✅ `ARCHITECTURE.md` §6.4's routed question is now answered.** Its 🚩 flag reads *"Whether the cap
+survives is a **scope** question, scope is owned by the ADRs with §16 authoritative
+(`DEVELOPMENT.md` §11), and this pass deliberately does not make it: **it needs an ADR and an owner
+decision.**"* Both now exist. **§6.4 is not edited by this pass** — see CORR.5.
+
+**An ADR was written rather than a §16.0 amendment alone, and the reason is not stylistic.** Three
+tests, all met: **(i)** §6.4 named the instrument it wanted and named it as an ADR; **(ii)** the cap
+being lifted was set by an ADR — [ADR-0026](./DECISIONS.md#adr-0026)'s consequence bullet, not by §16,
+which only restated it — and `CLAUDE.md`'s rule is that a decision closing off an alternative gets an
+ADR; **(iii)** amending §16 alone would have left ADR-0026 asserting a live cap on a falsified ground
+with no record of who lifted it, which is the failure the preamble's amendment convention exists to
+prevent. **ADR-0026 was then annotated, never rewritten** — CORR.3.
+
+## CORR.2 — The identity claim, checked in the repo rather than taken from the brief
+
+The brief asserted that **free Kavita instances write none of the external ids**, and asked for it to
+be verified rather than relayed. **It holds, in both places, and one of them is a primary-source
+check.**
+
+| Where | What it actually says | Verdict |
+|---|---|---|
+| [`DECISIONS.md` ADR-0035](./DECISIONS.md#adr-0035) §1 | *"**Kavita's `aniListId`, `malId`, `comicVineId` and the rest are null without Kavita+.**"* Under that ADR it becomes *"what an ordinary user sees once Kavita lands, not a documented edge case"*, and §17 and the mockups *"must render this as the normal case"* | ✅ As briefed |
+| [`ARCHITECTURE.md`](./ARCHITECTURE.md) §6.4 | Checks the **vendored spec**: `SeriesDto` in `api/specs/kavita.json` carries `aniListId`, `malId`, `hardcoverId`, `metronId`, `cbrId` as integers and `comicVineId`, `mangaBakaEditionId` as nullable strings, *"**all of them written only by the Kavita+ match path**, so a free instance returns `0`, `null` or `""` for every one"* | ✅ As briefed, and **stronger** — it names the spec |
+
+**Two refinements the brief did not carry, and both matter to the argument:**
+
+- ⚠️ **The fields are not absent — they are present and empty.** §6.4's wording is *"present in the
+  payload and empty on a free instance"*. That is a sharper fact than "writes none of them": an
+  adapter cannot detect the paid tier by a missing key, and `0` is a live value for an integer id
+  column. It is why the *"not identified"* state is a rendering rule rather than a parsing accident.
+- ⚠️ **Free Kavita is not worse than the alternative it replaced.** ADR-0035 §1's own honest
+  comparison: *"ADR-0032's own consequence (3) records that **Komga supplies no external identifiers
+  at all**"*, so *"the identity loss against ADR-0032's plan is therefore near zero"* and **comics has
+  no strong-identity path in v0.1 under either choice**. This is load-bearing for ADR-0043's clause 4:
+  the finding is about **v0.1 having a weak-identity source**, not about Kavita specifically, which is
+  what lets the decision survive the source being swapped.
+
+**And the falsified half of ADR-0026's ground, stated plainly.** §6.4's *"essentially 100%"* was
+established **for Sonarr and Radarr**; [ADR-0041](./DECISIONS.md#adr-0041) removed both from v0.1.
+§6.4's restatement is *"a property of the instance, not of the design — essentially all of it on a
+Kavita+ install, close to none on a free one."* **So both halves of ADR-0026's bullet went at once**:
+the weak catalogue does not "actually arrive" at v0.3, and the percentage was not measured on v0.1's
+source.
+
+## CORR.3 — The three constraints on the wording, and how each is met
+
+The brief was explicit that the wording mattered more than the prose. Each constraint, and the
+sentence that discharges it:
+
+- **No invented version number.** ADR-0043 clause 3 and §16.0 both say **the slot is not yet
+  assigned**, and the ADR carries it as a 🚩 open question. **`ADR-0042` was read first and matched**:
+  its rejected alternative (e) refuses to number Sonarr and Radarr because *"the owner said they
+  should be added; **he did not say when**… Picking a number here would be inventing a commitment
+  nobody made"*, and its own open question says it *"is not closed here, because no owner statement
+  supports a number and this ADR will not invent one."* CORR-01 reproduces that shape, including the
+  refusal in an *Alternatives considered* entry rather than only in prose. **§16.1's v0.1 entry
+  explicitly does not claim it for v0.1** — the trap here is that "earlier than v0.3" plus "the source
+  is in v0.1" reads like v0.1, and it is not what he said.
+- ***"Minimal" recorded as a scope constraint, not as "small".*** ADR-0043 clause 2 makes it the thing
+  that keeps the change a re-sequencing: the full four-verb surface and the Corrections list **stay at
+  v0.3**, and that split **is** the *"cut before you add"* payment. 🔍 The reading that `relink` is the
+  verb the *"fix this match"* case needs — and that `exclude`/`include` are library **membership**,
+  a different complaint — is **marked as inference at its site**, because the owner enumerated no
+  verbs. The ADR fixes the boundary and leaves the widget to the milestone that takes it.
+- **The rationale attributed to him.** §16.0 and the ADR both record *"in case anyone is running
+  kavita"* as **his reasoning on the day**, and say what it is: he does not run the case he is
+  protecting, so this is principle 3 applied by the owner **to a user who is not him**.
+
+**On BookOrbit, which is the constraint most likely to age badly.** It is named **once** in §16.0 and
+once in ADR-0043 clause 4, both times as 🔍 **under live evaluation, nothing decided, §16 assigns it
+nothing**. The decision is worded to turn on **v0.1 having a weak-identity catalogue source** rather
+than on Kavita, so it stands whichever server takes the slot; the ADR states the single fact that
+would reopen it — a v0.1 source supplying strong external ids to the *unpaid* user — and requires the
+same vendored-spec check §6.4 did for Kavita before anyone claims it.
+
+**ADR-0026 was annotated, never rewritten**, per `DECISIONS.md`'s *"How an ADR is amended when the
+world moves under it"*. All four marks are present: **(1)** the index row gains
+`⚠️ amended 2026-08-17 by ADR-0043` with one line on what moved; **(2)** the `Status:` line gains the
+same flag; **(3)** a dated `> ⚠️ **AMENDED …**` block sits directly under it, naming the one bullet
+that falls and listing what survives; **(4)** the falsified sentence keeps an inline flag at its own
+site, `~~`-struck with `🚩 **STRUCK 2026-08-17 by ADR-0043**` beside it — the same shape the preamble's
+own `162dca5` post-mortem prescribes, and the same shape ADR-0041 used on ADR-0035 §1's rider. **No
+sentence of ADR-0026's body was reworded.**
+
+## CORR.4 — §16 swept, not spot-fixed; and what the sweep found
+
+**Amendment 2's sentence was verified against the migration before it was touched, and it is false.**
+`internal/db/migrations/00006_kavita_subtypes.sql` creates `work_book` (`:129`), `work_comic` (`:153`)
+and `work_comic_issue` (`:180`), plus `CREATE INDEX ix_comic_issue_sort` (`:211`), all inside one
+`-- +goose StatementBegin` block — commit `d0a02aa`, *"feat: migration 0006 — the three subtype tables
+Kavita writes — M5-37"*, confirmed an ancestor of `origin/main` by `git merge-base --is-ancestor`.
+
+**Nobody had fixed it, and that was checked rather than assumed.** `git grep` for the phrase across
+**every** remote head found it live on `main`, `70gy9v`, `vn9w7u` and `import-20260817195515` — the
+three non-`main` heads being ancestors or copies of the same text — and **fixed on none**. It was
+**routed to this thread by name**: [`MWP-01`](#mwp-01)'s *Raised, not fixed* list carries it as
+*"a status claim in this thread's own section … falsified by M5-37's migration, not by this
+decision"*, held back precisely so two threads would not edit one sentence.
+
+⚠️ **It had two sites, and the brief named one.** The enumeration's *"none of the three exists in the
+tree today"* is the site the brief points at; the blockquote below it — *"How the library-sync
+migration read the Schema, enumerated clause above"* — closes with **"the three are still absent and
+now owed"**, which is the same claim in the same section. **Both are amended.** Fixing only the first
+would have left the section contradicting itself two paragraphs later, and the blockquote's own
+closing instruction — *"Read `internal/db/migrations` for what exists"* — pointed at a tree that
+disagreed with the sentence immediately above it.
+
+**Both amendments keep the prediction rather than deleting it.** The clause said the tables *"arrive
+in a new migration, because 00005 is merged and a merged migration is never edited"*. **That
+prediction was right and 00006 is it**, so the amendment marks it ✅ **discharged**, quotes what the
+clause used to say, and dates the falsification (`b2dc092` wrote it; `d0a02aa` overtook it the same
+day). A correction that deleted the sentence would have thrown away evidence that §16 predicted the
+tree correctly.
+
+**The rest of the sweep — every tree-status claim in §16, re-measured on `5b22d58`.** No other
+falsified sentence was found, and the negative is recorded so the next pass does not re-derive it:
+
+| §16 claim | Measured against | Verdict |
+|---|---|---|
+| *"nothing writes `write_queue`"* | `grep -rn write_queue internal/ cmd/ --include=*.go` minus tests → only `internal/db/spike/` (`//go:build bench`, and it **reads**) | ✅ Holds |
+| *"no sync channel runs yet, so there is no catalogue … v0.1's own Kavita adapter included"* | `internal/kavita/` landed in `e7c3b0a` and is a **client** — `client.go`, `stream.go`, `resources.go`, `breaker.go`, no importer; the only `INSERT INTO work` anywhere is in `internal/db/migrate_test.go` and `internal/db/queryplan_test.go` | ✅ Holds — and the sentence had already anticipated the adapter by name |
+| *"`work_album`, `work_track` and `work_credit` … wait on Navidrome, **which has no adapter**"* | no `internal/navidrome`; the three tables are absent from `00006` | ✅ Holds |
+| *"**There is no CI** — the gate is `make check`"* | `.github/workflows` does not exist | ✅ Holds |
+| *"What landed is `GET /api/v1/grabs/recent` — six columns, no join, no keyset cursor"* | `internal/httpapi/grabs.go`, and `internal/store/provenance_recent_test.go` pins the shipped `SELECT` list | ✅ Holds |
+| §16.0's *"a brand-new sync channel on top of the \*Arr sync that does not exist yet"* | It is inside the narration of a **rejected earlier answer**, not a claim about today's tree | ✅ Not a live claim; left alone |
+
+## CORR.5 — Raised, not fixed — routed to other threads
+
+**Found while sweeping; deliberately not touched, because none is §16's.**
+
+- 🚩 **`ARCHITECTURE.md` §6.4's flag is now answered and its wording will read as live.** It says the
+  scope call *"is FLAGGED here, not decided"* and *"needs an ADR and an owner decision"* — both true
+  of that pass, and both now discharged by ADR-0043. **It is §6, not §16**, so it is routed rather
+  than edited, exactly as `MWP-01` routed this section's own falsified sentence to this thread. The
+  fix is one sentence: point the flag at ADR-0043. ⚠️ **Until it lands, a reader arriving at §6.4 by
+  anchor is told the question is open when it is closed.**
+- ✅ **§8.5's Search-and-Grab explainer was stale in two places and is now fixed by another thread —
+  routed, then dropped, and the sequence is worth recording.** This entry was drafted on `5b22d58`
+  with both defects **re-checked at their sites rather than relayed** from [`MWP-01`](#mwp-01), and
+  both were live: the table's second row read *"(Sonarr, Radarr — the v0.1 case for every grab)"*, and
+  the closing *"Every input is already computed"* paragraph read *"the request destination is `none`
+  for four types and an \*Arr for two (§6.5, §17.8)"* while its own §17.8 citation said no v0.1
+  service can be a destination at all. **[`EXPL-01`](#expl-01) landed both fixes in `4399609` while
+  this pass was at the gate**, and it was **read rather than assumed** on the rebase: the second row
+  now carries ⚠️ *"not a v0.1 case"* with the re-sequenced-not-cut framing, and the closing paragraph
+  no longer counts destinations. **It also found a third defect neither relay named** — §8.5's *"the
+  `provenance` row is … the only trace the acquisition ever leaves"*, contradicted by
+  `internal/httpapi/grab.go`'s audit row. **Dropped as a routing item**; listed here because an
+  earlier draft of this entry routed it, and because three passes converging on one §8 block is
+  itself the evidence that the routing convention works.
+- 🚩 **The minimal match-correction case has no milestone**, which ADR-0043 raises as its own open
+  question rather than closing. ⚠️ **This is the second unnumbered slot in two days** — ADR-0042 left
+  Sonarr, Radarr **and** the minimal write path on one, and this adds a third commitment to the same
+  kind of gap. **The pattern is worth the owner's attention on its own**, separately from either
+  decision: §16 is authoritative for membership, and three live commitments pointing at milestones
+  that do not exist is a roadmap with a hole in it. **It needs his input, not an agent's guess.**
+- **Nothing was found in `docs/design/`, `docs/PROJECT-INSTRUCTIONS.md` or `ARCHITECTURE.md` §17
+  requiring routing**, and none was edited. `CLAUDE.md` was not edited either: its roadmap line is a
+  summary that §16 overrides by its own terms, and it says nothing about the correction UI.
+
+## CORR.6 — Number and prefix re-read immediately before the commit
+
+**ADR numbers are a shared counter with no lock** (`DEVELOPMENT.md` §11, amended today), so the next
+free number was re-read **after** the last fetch and against **every** remote head rather than at the
+start of the pass: `git show origin/$b:docs/DECISIONS.md | grep -oE 'adr-00[0-9]{2}' | sort -u | tail -1`
+over all twenty refs from `git ls-remote --heads origin`. **The highest anywhere is `adr-0042`**, on
+`main` alone; the next highest on any other head is `adr-0041`. **`0043` is free**, and the same
+command was re-run immediately before the commit. ⚠️ **§11's own caveat applies and is not solved by
+re-reading**: a shared counter's true value includes what nobody has pushed yet, so the guarantee here
+is *"free at the moment of the last read"*, not *"free"*. The entry id needs no such caveat, which is
+§11's whole point — `CORR-` is a fact about this thread, not a claim on a sequence.
+
+## CORR.7 — On the gate
+
+`make check` from a **cleaned lint cache** — `/root/go/bin/golangci-lint cache clean` by absolute
+path first, per `DEVELOPMENT.md` §11's rule that a cached green is a rumour. Binaries, versions and
+the commit are in the commit message.
+
+**Run three times, because `main` moved twice under this pass.** Drafted on `5b22d58`; rebased onto
+`49930dd` (the Home wordmark) and again onto `2ecd7d3` (which carries [`EXPL-01`](#expl-01)), with the
+cache cleaned and the gate re-run on each. **Only the second rebase conflicted**, in this file alone
+and for the reason two threads always conflict here — both entries append at EOF. **Resolved by
+keeping both**, `EXPL-01` then `CORR-01`, with **no existing text altered**; then `EXPL-01` was read
+rather than assumed, because it touches a defect this entry had routed, and it moved one bullet of
+CORR.5 from 🚩 to ✅.
+
+🚩 **State the green at its real size, because on this diff it proves nothing about the work.** The
+diff is **three Markdown files** — `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/REVIEW-LOG.md` —
+and **not one line of Go, TypeScript, Svelte, SQL or `go.mod`**. Of the gate's steps exactly one reads
+any of them: `secrets` runs `gitleaks dir .` from the repo root over the whole working tree, so the
+green attests **that these three files leak no credential**. `fmt-check` lists `.go` files and runs
+`pnpm format:check` scoped to `web/`; `lint`, `modverify`, `test` and `vuln` do not read `docs/` at
+all. **This repo has no markdown linter and no link checker in `make check`**, so **nothing mechanical
+verified a single claim, quotation, anchor or cross-reference in this entry.** What the green attests
+is the **negative** — that the tree these edits sit on was not broken by them, which for a docs-only
+diff was never in doubt.
+
+**The load-bearing verification here is manual, and it is CORR.2 and CORR.4**: reading
+`00006_kavita_subtypes.sql`'s DDL directly, `grep` over `internal/` and `cmd/` for the write-queue and
+importer claims, `git merge-base --is-ancestor` for `d0a02aa`, and a per-head `git grep` for both the
+falsified sentence and the `CORR-` prefix. The `SeriesDto` field list in CORR.2 was read out of
+§6.4's own vendored-spec citation rather than from memory of Kavita's API.
