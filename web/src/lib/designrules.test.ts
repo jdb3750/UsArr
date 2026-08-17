@@ -2246,7 +2246,7 @@ describe('ARCHITECTURE §17.4 rule 7 — over web/src/routes/search', () => {
 		expect(
 			RETIRED_ENUMERATION,
 			'rule 7 was found but no longer records the retired string in backticks. That ' +
-				'string is this rule\'s only positive control: without it the drill below ' +
+				"string is this rule's only positive control: without it the drill below " +
 				'fires on nothing and proves nothing.'
 		).not.toBe('');
 	});
