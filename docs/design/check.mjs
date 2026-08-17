@@ -1793,7 +1793,7 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
                             was two whole panels the sweep had never opened. */
     'placeholder': 245,  /* 288 today, 156 before panel traversal */
     'option': 1400,      /* 1602 today, 1298 before panel traversal */
-    'ARCHITECTURE §17 copy': 45, /* 56 today. Not a rendered source at all; see
+    'ARCHITECTURE §17 copy': 45, /* 57 today. Not a rendered source at all; see
                                     the §17 block below for why it is here. */
   };
   const seenBySource = {};
@@ -1842,7 +1842,7 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
    * exactly as it was, and §17's copy is brought INTO the corpus instead.
    *
    * Shipping copy in §17 is marked `*"…"*`, the italic-quoted form every
-   * specified label and sentence uses; 56 spans today. They run through the
+   * specified label and sentence uses; 57 spans today. They run through the
    * same checkCopy, and the §17 exemption is withheld from them, because a
    * string cannot be its own authority. exempt() itself is untouched: with the
    * source now gated, the mockup exemption can only propagate copy that has
@@ -1859,7 +1859,15 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
      * where a shape rule would silently bless everything shaped like it.
      * Matched after norm(), so a rewrite loses the exemption and a change of
      * emphasis does not: the same property exempt() has. */
-    ['kavita is unreachable — showing cached data from the last full compare at 09:12',
+    /* ⚠️ Re-keyed from Kavita to Komga on 2026-08-17, tracking a ruling made in
+     * §17 rather than here: §17.7's degraded banner may not use Kavita as the
+     * exemplar for "no delta channel at all", because ADR-0035 §2a verified
+     * against a live instance that Kavita HAS a delta (channel 3b's page walk)
+     * and lacks only a changed-since endpoint. The construction this entry
+     * exempts is unchanged and so is its RETIRED BY; only the subject moved,
+     * and it moved because the size check below fails on an exemption that
+     * matches nothing — which is exactly how this file learns that §17 ruled. */
+    ['komga is unreachable — showing cached data from the last full compare at 09:12',
       'The stale-data banner exempt() was built for, at §17 source. Head is the ' +
       'failing component, detail is the observed symptom and its time. ' +
       'RETIRED BY: §13 gaining a construction rule the checker can evaluate.'],
@@ -1874,23 +1882,24 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
     ['music — catalogue source; no request destination',
       'The negative half of the pair above, and it must keep the same shape as ' +
       'its positive or the two stop reading as one column. RETIRED BY: the same.'],
-    /* ⚠️ RAISED, NOT BLESSED. These two are over fifteen words and so were
-     * invisible to this rule under any corpus; dropping the floor for §17 is
-     * what surfaced them. They are recorded rather than rewritten because §17
-     * shipping copy is the owner's to word, not this file's, and a checker that
-     * edits the specification it checks is not a checker. Neither is asserted
-     * to be correct — each is an open copy question carried visibly instead of
-     * silently, which is the only thing this file can honestly do with it. */
-    ['1 more film is on a linked row in the ebooks group: dune (2021). — [show it]',
-      '⚠️ OPEN. §17.5. The em dash separates the sentence from a [Show it] ' +
-      'affordance, so it may be §17 NOTATION for two adjacent elements rather ' +
-      'than one string a user reads. If it is notation the span should not be ' +
-      'quoted as copy at all. RETIRED BY: a ruling on which it is.'],
-    ['editing any proposal marks that library user-managed, after which a later connect can only offer to add sources — never reshape it',
-      '⚠️ OPEN, and the likelier of the two to be a real finding. §17.8. A ' +
-      '22-word UI sentence with a mid-sentence em-dash beat is the construction ' +
-      '§13 bans on its own stated ground, and no word floor was ever going to ' +
-      'catch it. RETIRED BY: a copy decision on the sentence.'],
+    /* ✅ The two entries that used to sit here are RETIRED, both by the ruling
+     * their own RETIRED BY clause asked for, and both in §17 rather than here —
+     * which is the direction that was always right: this file raised them and
+     * did not rewrite them, because a checker that edits the specification it
+     * checks is not a checker.
+     *
+     *   §17.5, "… Dune (2021). — [Show it]"  ruled NOTATION, not one string. The
+     *     em dash was §17's join between a sentence and a control and the
+     *     brackets were the control. §17 now writes them as what they are: two
+     *     `*"…"*` spans, one per element the user sees, so there is no em dash
+     *     to exempt and no ambiguity for the next reader either.
+     *   §17.8, "… can only offer to add sources — never reshape it"  ruled a
+     *     REAL finding, as this file suspected. Rewritten in §17 as three plain
+     *     sentences, same meaning, no mid-sentence beat.
+     *
+     * Both are gone from this map rather than left as passing entries, because
+     * the size check below fails on an exemption that matches nothing — which is
+     * the mechanism that makes this retirement provable rather than asserted. */
   ]);
 
   /* One place the three §13 rules are applied, so the rendered walk, the
@@ -2110,7 +2119,8 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
   } else {
     ok(`§13 copy §17: ${s17Strings} shipping-copy string(s) in ARCHITECTURE §17 clean of banned words, "!" and ` +
       `em dashes at ANY length (the fifteen-word floor is not applied to specified UI copy; ${s17Exempted} ` +
-      `recorded exception(s), 2 of them open copy questions; §17 cannot exempt itself here, which is the point)`);
+      `recorded exception(s), all of them the short-head-then-detail construction ` +
+      `§13's own worked example endorses; §17 cannot exempt itself here, which is the point)`);
   }
   /* Each non-layout source is floored on its own. A source that stops being
    * collected -- an attribute renamed, a selector narrowed, a <title> dropped

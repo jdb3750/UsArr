@@ -65,6 +65,17 @@ type Report struct {
 
 	store.BatchResult
 
+	// CreditItemsRead is how many items the credit pass got metadata for. It is
+	// 0 when the source implements no CreditSource, which is not a failure —
+	// see FullImport's phase 3.
+	CreditItemsRead int
+
+	// Credits is what the credit pass wrote. It is a NAMED FIELD rather than a
+	// second embedded struct because store.BatchResult and store.CreditResult
+	// both carry an Add method, and embedding both would make rep.Add ambiguous
+	// at the call site that already exists.
+	Credits store.CreditResult
+
 	// Completed is true only when the whole stream was read AND every batch
 	// committed. It is what gates last_full_sync_at.
 	Completed bool
@@ -81,7 +92,7 @@ func (r Report) Duration() time.Duration {
 // Progress is one progress observation, published as it happens.
 type Progress struct {
 	InstanceID int64  `json:"instance_id"`
-	Phase      string `json:"phase"` // containers | items | done
+	Phase      string `json:"phase"` // containers | items | credits | done
 	ItemsRead  int    `json:"items_read"`
 	Applied    int    `json:"applied"`
 
@@ -153,7 +164,15 @@ func (im *Importer) publish(p Progress) {
 //     depends on.
 //  2. THEN THE STREAM, in batches. Each batch is one BEGIN IMMEDIATE
 //     transaction committed at min(BatchRows, BatchWindow).
-//  3. ANALYZE, then last_full_sync_at, ON SUCCESS ONLY. Both are skipped on a
+//  3. THEN CREDITS, if the source reports any — phase B, after the item stream
+//     has CLOSED. It is third because a credit is resolved through the
+//     service_item_link the item pass wrote, so nothing can be credited before
+//     its work exists; and it is after the stream rather than inside it because
+//     Kavita reports no creator on the series list, so credits cost one HTTP
+//     GET per series and issuing those from inside the stream callback would
+//     hold the streaming connection open across all of them
+//     (internal/libsync/credits.go carries the endpoint evidence).
+//  4. ANALYZE, then last_full_sync_at, ON SUCCESS ONLY. Both are skipped on a
 //     failed or partial import: a freshness claim written over half a library is
 //     worse than none, because the Services screen renders it as current.
 //
@@ -213,7 +232,12 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (Report, e
 		}
 	}
 
-	if err := im.streamAndApply(ctx, instanceID, bindings, &rep); err != nil {
+	credited, err := im.streamAndApply(ctx, instanceID, bindings, &rep)
+	if err != nil {
+		return rep, err
+	}
+
+	if err := im.streamAndApplyCredits(ctx, instanceID, credited, &rep); err != nil {
 		return rep, err
 	}
 
@@ -256,6 +280,8 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (Report, e
 		"works_created", rep.WorksCreated,
 		"works_reused", rep.WorksReused,
 		"unidentified", rep.Unidentified,
+		"people_created", rep.Credits.PeopleCreated,
+		"credits_written", rep.Credits.CreditsWritten,
 		"declined_containers", len(rep.DeclinedContainers),
 		"identity_conflicts", len(rep.IdentityConflicts),
 		"duration", rep.Duration())
@@ -270,10 +296,25 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (Report, e
 // them at the cost of an unbounded queue between a fast reader and a slow disk,
 // which is the buffering this whole design exists to avoid. Memory stays bounded
 // at BatchRows items.
+// It returns the items that reached a COMMITTED batch, as credit requests. Only
+// those: a credit is resolved through the service_item_link the item pass wrote,
+// so an item from a batch that never committed has nothing to attach to and
+// asking Kavita for its metadata would be a round trip that can only be
+// discarded.
+//
+// ⚠️ THIS IS THE ONE UNBOUNDED ALLOCATION IN THE IMPORT AND IT IS BUDGETED
+// RATHER THAN HIDDEN. Everything else here holds at most BatchRows items; this
+// slice grows with the whole library, because the credit pass CANNOT run inside
+// the stream (see FullImport's phase 3) and therefore needs the list to survive
+// it. Three short strings per item: the reference library's ~2,000 Kavita series
+// is well under a megabyte, and a 100,000-series library is a few megabytes —
+// two orders of magnitude below the 200–400 MB peak reference/sync.md §2
+// measures for the buffering this design exists to avoid. If that ever stops
+// being true the fix is a temp table, not a bigger slice.
 func (im *Importer) streamAndApply(
 	ctx context.Context, instanceID int64,
 	bindings map[string]store.CatalogueBinding, rep *Report,
-) error {
+) ([]CreditRequest, error) {
 	rows := im.BatchRows
 	if rows <= 0 {
 		rows = DefaultBatchRows
@@ -285,6 +326,7 @@ func (im *Importer) streamAndApply(
 
 	batch := make([]store.CatalogueItem, 0, rows)
 	batchStarted := im.now()
+	var credited []CreditRequest
 
 	flush := func() error {
 		if len(batch) == 0 {
@@ -297,6 +339,13 @@ func (im *Importer) streamAndApply(
 		rep.Add(res)
 		rep.ItemsApplied += len(batch)
 		rep.Batches++
+		// AFTER the commit, never before: these are the items whose links now
+		// exist.
+		for _, it := range batch {
+			credited = append(credited, CreditRequest{
+				RemoteKind: it.RemoteKind, RemoteID: it.RemoteID, Kind: it.Kind,
+			})
+		}
 		batch = batch[:0]
 		batchStarted = im.now()
 		im.publish(Progress{
@@ -321,12 +370,85 @@ func (im *Importer) streamAndApply(
 		// The tail is deliberately NOT flushed on a failed stream. A partial
 		// batch from a body that was cut mid-array is not known-good data, and
 		// the rows already committed are enough for the sweep to reconcile from.
-		return fmt.Errorf("full import of service_instance %d: read items (delivered %d, applied %d): %w",
+		return credited, fmt.Errorf("full import of service_instance %d: read items (delivered %d, applied %d): %w",
 			instanceID, read, rep.ItemsApplied, streamErr)
 	}
 	if err := flush(); err != nil {
-		return fmt.Errorf("full import of service_instance %d: final batch (delivered %d, applied %d): %w",
+		return credited, fmt.Errorf("full import of service_instance %d: final batch (delivered %d, applied %d): %w",
 			instanceID, read, rep.ItemsApplied, err)
+	}
+	return credited, nil
+}
+
+// streamAndApplyCredits is phase B: one metadata read per imported item, batched
+// into the same writer on the same sizing as the item pass.
+//
+// IT IS A NO-OP FOR A SOURCE THAT REPORTS NO CREDITS, and that is principle 3 —
+// "every feature degrades honestly when a service is absent" — applied to an
+// adapter. A Source that does not implement CreditSource is not an error and is
+// not logged as one: the Sonarr and Radarr adapters will not implement it, and a
+// Kavita whose operator never filled in any ComicInfo returns empty arrays,
+// which reaches the store as "this series has no credits" rather than as
+// nothing.
+func (im *Importer) streamAndApplyCredits(
+	ctx context.Context, instanceID int64, reqs []CreditRequest, rep *Report,
+) error {
+	src, ok := im.Source.(CreditSource)
+	if !ok || len(reqs) == 0 {
+		return nil
+	}
+
+	rows := im.BatchRows
+	if rows <= 0 {
+		rows = DefaultBatchRows
+	}
+	window := im.BatchWindow
+	if window <= 0 {
+		window = DefaultBatchWindow
+	}
+
+	batch := make([]store.CreditSet, 0, rows)
+	batchStarted := im.now()
+
+	flush := func() error {
+		if len(batch) == 0 {
+			return nil
+		}
+		res, err := im.Store.ApplyCredits(ctx, instanceID, batch, im.now())
+		if err != nil {
+			return err
+		}
+		rep.Credits.Add(res)
+		batch = batch[:0]
+		batchStarted = im.now()
+		im.publish(Progress{
+			InstanceID: instanceID, Phase: "credits",
+			ItemsRead: rep.CreditItemsRead, Applied: rep.Credits.CreditsWritten,
+			Total: len(reqs),
+		})
+		return nil
+	}
+
+	read, streamErr := src.StreamCredits(ctx, reqs, func(set store.CreditSet) error {
+		batch = append(batch, set)
+		if len(batch) >= rows || im.now().Sub(batchStarted) >= window {
+			return flush()
+		}
+		return nil
+	})
+	rep.CreditItemsRead = read
+	if streamErr != nil {
+		// Same rule as the item pass: the tail of a failed read is not
+		// known-good and is not flushed. What differs is what a failure MEANS
+		// here — the works are already imported and correct, and only their
+		// credits are incomplete. The error still propagates, because
+		// last_full_sync_at must not be stamped over a partial import.
+		return fmt.Errorf("full import of service_instance %d: read credits (delivered %d): %w",
+			instanceID, read, streamErr)
+	}
+	if err := flush(); err != nil {
+		return fmt.Errorf("full import of service_instance %d: final credit batch (delivered %d): %w",
+			instanceID, read, err)
 	}
 	return nil
 }

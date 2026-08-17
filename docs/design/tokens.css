@@ -13,8 +13,8 @@
  * check.mjs §2 is what holds the mockup copy to it.
  *
  * This file is the single source of truth for every
- * colour, size, duration and radius the UI will ever use, and it is written so
- * it drops straight into Tailwind v4 (see §0 and ADR-0025).
+ * colour, size, duration and radius the UI will ever use. It is plain custom
+ * properties and depends on no CSS engine — §0 says how it is consumed.
  *
  * Rationale for every value lives in DESIGN-DIRECTION.md, which owns the
  * reasoning; this file owns the numbers. If the two disagree, the design
@@ -63,21 +63,27 @@
 /* -----------------------------------------------------------------------------
  * §0. How this file is consumed
  *
- * Tailwind v4's `@theme` block is static, so a themeable palette is expressed
- * in two layers: raw values that switch with the theme (§1-§3, plain custom
- * properties on :root), and an `@theme inline` mapping that hands those
- * variables to Tailwind so the utilities generate (§9). `inline` is required —
- * without it Tailwind copies the value rather than the reference and the dark
- * theme never applies.
+ * Directly, as plain custom properties, and by hand. §1-§3 declare the raw
+ * values that switch with the theme, §4 aliases them by role, and a component
+ * writes `var(--bg-hover)`. There is no engine and no build step between this
+ * file and the app.
  *
- * In `web/src/app.css`:
+ * `web/src/app.css` and the mockups' `usarr.css` are HAND-PORTS, not imports —
+ * app.css says so in its own voice ("THIS FILE IS A HAND-PORT OF tokens.css,
+ * NOT AN IMPORT"). Nothing here is therefore held in step by a dependency; it
+ * is held by review plus two gates, and knowing which is which matters when one
+ * of them goes green:
  *
- *   @import "tailwindcss";
- *   @import "./tokens.css";
- *   @theme { --*: initial; }     <- deletes Tailwind's ENTIRE default theme.
- *                                   After this, bg-indigo-500, shadow-md and
- *                                   rounded-2xl do not exist as classes. This
- *                                   line is load-bearing (ADR-0025).
+ *   check.mjs §2                     tokens.css vs the mockups   (make design)
+ *   web/src/lib/tokenparity.test.ts  tokens.css vs app.css       (make check)
+ *
+ * ⚠️ This section used to instruct `@import "tailwindcss"` plus
+ * `@theme { --*: initial; }` in app.css, and called that line load-bearing.
+ * THAT CONSUMPTION PATH IS RETIRED. ADR-0025's amendment of 2026-08-16 —
+ * "Tailwind is not used, and the enforcement it was chosen for is gone with it"
+ * — owns the change and what was lost with it, including that the replacement
+ * enforcement is weaker. Read the reasoning there; restating it here is what
+ * left this section wrong for the interval it was wrong (REVIEW-LOG SD-01).
  * --------------------------------------------------------------------------- */
 
 
@@ -109,6 +115,21 @@
                   /*  11.21:1 · 10.37:1 · 9.23:1  (target >= 9)                */
   --n-8: #1c1a17; /* primary ink and the focus ring. Never #000.               */
                   /*  16.50:1 · 15.25:1 · 13.58:1 (target >= 12)               */
+
+  /* Two INTERSTITIALS, not ramp steps. Both were raised by the mockup, recorded
+   * in §4 as undecided, and are now adopted — see §4 for the decision and who
+   * made it. They sit between named steps rather than extending the nine, so
+   * the ramp is still nine values with two interstitials and --n-N keeps its
+   * meaning. Both are FILLS and neither is ever a text ground, so neither is
+   * contrast-bound on its own; what IS measured against them is every status
+   * value, on all five grounds (see --status-* below).                        */
+  --inset: #fdfcfb; /* the interior of an input. One step AWAY from the page
+                     * ground rather than towards it, so a field reads as a well
+                     * rather than as a raised surface: --n-0 on --n-1 chrome is
+                     * invisible and --n-1 on --n-0 is a button.               */
+  --hover: #eceae5; /* row/control hover fill, DISTINCT from --bg-selected so a
+                     * hovered selected row has something to say. Sits between
+                     * --n-1 (#f2f0ec, raised) and --n-2 (#e7e3dd, selected).  */
 
   /* Status. The ONLY saturated colour in the app besides cover art — the
    * protocol chips gave theirs up, see below. Always rendered as icon + text +
@@ -188,6 +209,9 @@
   --n-8: #efece5; /* primary ink + focus ring.
                    *                  15.33:1 · 14.29:1 · 12.47:1 (>= 12)      */
 
+  --inset:  #100f0e; /* interior of an input — see §1                          */
+  --hover:  #26241f; /* row/control hover fill — see §1                        */
+
   --status-ok:    #5cba7d; /*                     7.56 · 7.04 · 6.15           */
   /* Same hue family as the light value, deliberately: Lab hue 58.6° against
    * light's 58.0°. It replaces #e0a33a, which was Lab hue 77.8° — a gold, a
@@ -218,6 +242,9 @@
     --n-7: #d3ccc0;
     --n-8: #efece5;
 
+    --inset: #100f0e;
+    --hover: #26241f;
+
     --status-ok:    #5cba7d;
     --status-warn:  #fb9349;
     --status-error: #f0837a;
@@ -235,11 +262,14 @@
 :root {
   --bg:            var(--n-0); /* page ground                                  */
   --bg-raised:     var(--n-1); /* toolbar, sticky header, sidebar, popover     */
-  --bg-hover:      var(--n-1); /* row/control hover. A FILL change only — hover
-                                * never changes geometry (see §7)              */
+  --bg-hover:      var(--hover); /* row/control hover. A FILL change only —
+                                  * hover never changes geometry (see §7). Was
+                                  * var(--n-1); see the note below §4          */
   --bg-selected:   var(--n-2); /* selected row. Selection is a neutral fill
                                 * step, not a coloured highlight               */
   --bg-pressed:    var(--n-2);
+  --bg-inset:      var(--inset); /* the interior of an input — the alias for the
+                                  * interstitial adopted in §1                 */
 
   --border:        var(--n-3); /* decorative divider between rows/cells        */
   --border-strong: var(--n-4); /* the boundary of an actual control            */
@@ -258,27 +288,38 @@
   --ring-offset:   1px;
 }
 
-/* Raised by docs/design/mockups/usarr.css and recorded here rather than
- * invented there. Building the first five real screens needed two roles this
- * file does not have, and the mockup declares them locally:
+/* ADOPTED. --inset and --hover are declared in §1-§3 above and aliased in §4 as
+ * --bg-inset and --bg-hover. This note used to defer that decision; it now
+ * records how it was answered, because the deferral was the interesting part.
  *
- *   --inset  #fdfcfb light / #100f0e dark — the interior of an input. It is
- *            one step AWAY from the page ground rather than towards it, so a
- *            field reads as a well rather than as a raised surface; --n-0 on
- *            --n-1 chrome is invisible and --n-1 on --n-0 is a button.
- *   --hover  #eceae5 light / #26241f dark — a row/control hover fill DISTINCT
- *            from --bg-selected. §4 currently maps hover and raised to the
- *            same --n-1 and selected to --n-2, which leaves hover-over-a-
- *            selected-row with nothing to say.
+ * The two roles were RAISED by docs/design/mockups/usarr.css, which needed them
+ * to draw the first five real screens and declared them locally rather than
+ * inventing colour silently. This file recorded them and declined to adopt
+ * them, on the ground that adopting meant either two more ramp steps or
+ * admitting the ramp is nine values with two interstitials — "a decision for
+ * the pass that writes web/src/app.css, not for a mockup".
  *
- * Adopting them means either two more ramp steps or admitting the ramp is nine
- * values with two interstitials, and that is a decision for the pass that
- * writes web/src/app.css, not for a mockup. WHETHER IT HAS BEEN TAKEN IS NOT A
- * FACT THIS FILE OWNS: web/src/app.css declares the ramp the running app uses,
- * and it names this note where it declares them — so read the answer there
- * rather than from a status sentence here, which has no mechanism holding it in
- * step. What this note is, and stays, is the record of the two roles and their
- * values, and that the mockup did not invent colour silently.
+ * THAT PASS ANSWERED, BY NAME. web/src/app.css declares both, at these exact
+ * values, in all three of its state blocks, and says so where it declares them:
+ * "This is the pass that writes web/src/app.css, which is the pass tokens.css
+ * names as the one that decides — so both are adopted here". The answer was
+ * never carried back, which is precisely the failure this note predicted when
+ * it wrote WHETHER IT HAS BEEN TAKEN IS NOT A FACT THIS FILE OWNS. It was right
+ * about the risk and the risk landed: --bg-hover then read var(--n-1) here and
+ * var(--hover) there, a real colour divergence in both themes (#f2f0ec/#1e1d1a
+ * against #eceae5/#26241f) that the parity test had to carry as a recorded
+ * exception.
+ *
+ * So this is not a conflict resolved by fiat. The values were always this
+ * file's own — the note above quoted them at these literals — and the mapping
+ * this file has now was the one it argued against in writing, on the ground
+ * that mapping hover and raised both to --n-1 "leaves hover-over-a-selected-row
+ * with nothing to say". The interstitials win, tokens.css moves, and the
+ * deferral is closed rather than left open a second time.
+ *
+ * Adoption direction, for the next role that arrives this way: the mockup or
+ * app.css may prove a role first, but the answer comes back HERE, and the file
+ * that proved it stops being the place the answer lives.
  */
 
 /* -----------------------------------------------------------------------------
@@ -295,7 +336,20 @@
  * --------------------------------------------------------------------------- */
 
 :root {
-  --spacing: 4px;   /* Tailwind's base unit: p-3 == 12px, gap-2 == 8px         */
+  /* `--spacing: 4px` was declared here, commented "Tailwind's base unit: p-3 ==
+   * 12px, gap-2 == 8px", and is REMOVED. It was never a token of this scale:
+   * Tailwind read it to derive those utilities, and nothing else in the
+   * repository ever read it. Established rather than assumed — the only other
+   * match across web/, internal/ and the mockups is the parity test's own
+   * allowlist entry, which exists to record that app.css deliberately does NOT
+   * port it. That is a reader of its absence, not a consumer of its value.
+   *
+   * With the Tailwind path retired (§0, ADR-0025's 2026-08-16 amendment) it had
+   * no reader left, and a token with no reader is not a seam, it is a leftover.
+   * The 4px base unit is not lost: it is the scale below, which is what every
+   * padding, margin, gap and offset actually resolves to. A future Tailwind
+   * adoption re-declares it, and §10 says so rather than leaving it to be
+   * rediscovered. */
 
   --space-0: 0;
   --space-1: 2px;   /* hairline gap: icon-to-label inside a chip               */
@@ -533,48 +587,30 @@
 }
 
 /* -----------------------------------------------------------------------------
- * §10. Tailwind v4 mapping
+ * §10. The seam a utility engine would attach to
  *
- * `inline` is required: it makes Tailwind emit `var(--n-8)` rather than
- * copying #1c1a17, which is what lets the dark theme switch at runtime.
- * Only the namespaces below generate utilities — there is no --color-indigo-*,
- * no --shadow-md, no --radius-2xl, because §0's `@theme { --*: initial; }`
- * deleted them.
+ * There is no mapping block here any more. This section held an `@theme inline`
+ * re-export of 34 tokens under Tailwind's namespaces; §0's amendment retired the
+ * path it fed, so it was mapping this file's tokens into an engine no longer in
+ * the tree. Tokens are consumed directly instead.
+ *
+ * Kept as instruction rather than as dead mapping, because the seam is real and
+ * the re-export was not. WHAT A FUTURE TAILWIND v4 ADOPTION WOULD RESTORE, in
+ * app.css and not here:
+ *
+ *   1. `@theme { --*: initial; }`, to delete the default theme — that line is
+ *      the enforcement ADR-0025 originally chose Tailwind FOR, and without it
+ *      the adoption buys utilities and nothing else.
+ *   2. `--spacing: 4px` (§5), which Tailwind reads to derive `p-3` / `gap-2`.
+ *   3. An `@theme inline` block re-exporting §4's aliases as `--color-*`, §6's
+ *      families and type scale as `--font-*` / `--text-*` (each with its
+ *      `--text-N--line-height` pair), §7's radii and overlay shadow as
+ *      `--radius-*` / `--shadow-*`, and §9's easing as `--ease-*`.
+ *
+ * `inline` is the load-bearing word in (3): without it Tailwind copies the
+ * VALUE rather than the reference, and §2's dark theme never applies.
+ *
+ * Nothing in §1-§9 has to change for any of that, which is the seam — and why
+ * it is worth two dozen lines of instruction and not worth thirty-four lines of
+ * mapping that no build reads.
  * --------------------------------------------------------------------------- */
-
-@theme inline {
-  --color-bg:            var(--bg);
-  --color-bg-raised:     var(--bg-raised);
-  --color-bg-hover:      var(--bg-hover);
-  --color-bg-selected:   var(--bg-selected);
-  --color-border:        var(--border);
-  --color-border-strong: var(--border-strong);
-  --color-fg:            var(--fg);
-  --color-fg-secondary:  var(--fg-secondary);
-  --color-fg-muted:      var(--fg-muted);
-  --color-fg-subtle:     var(--fg-subtle);
-  --color-ring:          var(--ring);
-
-  --color-status-ok:     var(--status-ok);
-  --color-status-warn:   var(--status-warn);
-  --color-status-error:  var(--status-error);
-  --color-status-unset:  var(--status-unset);
-
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
-
-  --text-xs:   var(--text-xs);   --text-xs--line-height:   var(--leading-xs);
-  --text-sm:   var(--text-sm);   --text-sm--line-height:   var(--leading-sm);
-  --text-base: var(--text-base); --text-base--line-height: var(--leading-base);
-  --text-md:   var(--text-md);   --text-md--line-height:   var(--leading-md);
-  --text-lg:   var(--text-lg);   --text-lg--line-height:   var(--leading-lg);
-  --text-xl:   var(--text-xl);   --text-xl--line-height:   var(--leading-xl);
-
-  --radius-none: var(--radius-0);
-  --radius-sm:   var(--radius-sm);
-  --radius-md:   var(--radius-md);
-
-  --shadow-overlay: var(--shadow-overlay);
-
-  --ease-out: var(--ease-out);
-}

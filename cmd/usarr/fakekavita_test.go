@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"testing"
 )
@@ -41,6 +42,12 @@ type fakeKavita struct {
 	// wants a catalogue sets it before the instance is added. It is written only
 	// during setup, before the server can be reached.
 	series []map[string]any
+	// metadata is what GET /api/Series/metadata?seriesId=N answers, keyed by
+	// series id. A series with no entry gets an EMPTY SeriesMetadataDto rather
+	// than a 404, which is what a real Kavita returns for a series nobody has
+	// filled in — the ordinary case on a fresh instance. Written only during
+	// setup, before the server can be reached.
+	metadata map[int]map[string]any
 
 	mu sync.Mutex
 	// keySeen records every x-api-key header value received, so a test can
@@ -107,6 +114,25 @@ func newFakeKavita(t *testing.T, authKey string) *fakeKavita {
 		w.Header().Set("Pagination", fmt.Sprintf(
 			`{"currentPage":1,"itemsPerPage":2147483647,"totalItems":%d,"totalPages":1}`, len(out)))
 		writeJSONBody(w, out)
+	}))
+
+	// The credit path (ADR-0044). One GET per series, which is the only shape
+	// Kavita offers — SeriesDto carries no creator field at all.
+	mux.HandleFunc("GET /api/Series/metadata", k.authed(func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.Atoi(r.URL.Query().Get("seriesId"))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		md := k.metadata[id]
+		if md == nil {
+			// An empty object, NOT a 404 and NOT `null`: a real Kavita returns a
+			// SeriesMetadataDto with every array empty for a series nobody has
+			// tagged, and the adapter must read that as "no credits" rather than
+			// as an error.
+			md = map[string]any{"id": 0, "seriesId": id}
+		}
+		writeJSONBody(w, md)
 	}))
 
 	k.srv = httptest.NewServer(mux)

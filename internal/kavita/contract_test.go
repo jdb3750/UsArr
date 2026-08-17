@@ -151,6 +151,14 @@ func TestStructsCoverSpecProperties(t *testing.T) {
 		{schema: "SeriesFilterV2Dto", typ: reflect.TypeOf(SeriesFilter{})},
 		{schema: "SeriesFilterStatementDto", typ: reflect.TypeOf(SeriesFilterStatement{})},
 		{schema: "SeriesSortOptionDto", typ: reflect.TypeOf(SeriesSortOption{})},
+		// The credit path (ADR-0044). SeriesMetadataDto is the only endpoint
+		// that reports a creator, and its THIRTEEN person arrays are all
+		// declared even though UsArr maps eight of them: an array that is in the
+		// spec and absent from the struct is an upstream change nobody sees.
+		{schema: "SeriesMetadataDto", typ: reflect.TypeOf(SeriesMetadataDto{})},
+		{schema: "PersonDto", typ: reflect.TypeOf(PersonDto{})},
+		{schema: "GenreTagDto", typ: reflect.TypeOf(GenreTagDto{})},
+		{schema: "TagDto", typ: reflect.TypeOf(TagDto{})},
 	}
 
 	for _, tc := range cases {
@@ -211,6 +219,16 @@ func TestEnumsCoverSpecValues(t *testing.T) {
 		{"MangaFormat", []int64{
 			int64(MangaFormatImage), int64(MangaFormatArchive), int64(MangaFormatUnknown),
 			int64(MangaFormatEpub), int64(MangaFormatPdf),
+		}},
+		// PersonRole starts at 3 — there is no 0, 1 or 2 — which is exactly the
+		// shape this test exists for: a Go constant block written from memory
+		// starts at 0 and mislabels every role by three.
+		{"PersonRole", []int64{
+			int64(PersonRoleWriter), int64(PersonRolePenciller), int64(PersonRoleInker),
+			int64(PersonRoleColorist), int64(PersonRoleLetterer), int64(PersonRoleCoverArtist),
+			int64(PersonRoleEditor), int64(PersonRolePublisher), int64(PersonRoleCharacter),
+			int64(PersonRoleTranslator), int64(PersonRoleImprint), int64(PersonRoleTeam),
+			int64(PersonRoleLocation),
 		}},
 		{"LibraryType", []int64{
 			int64(LibraryTypeManga), int64(LibraryTypeComic), int64(LibraryTypeBook),
@@ -339,6 +357,11 @@ func TestEndpointsExistInSpec(t *testing.T) {
 			// UserParams matches these exactly.
 			params: []string{"PageNumber", "PageSize", "context"},
 		},
+		// The credit path. The parameter name is camelCase here and PascalCase
+		// on all-v2 above, which is not an inconsistency this file may tidy:
+		// ASP.NET's binder matches what the controller declares, and the two
+		// controllers declare different things.
+		{path: "/api/Series/metadata", method: "get", params: []string{"seriesId"}},
 	} {
 		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
 			ops, ok := spec.Paths[tc.path]

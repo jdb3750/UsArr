@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -18,21 +20,39 @@ import (
 type KavitaReader interface {
 	Libraries(ctx context.Context) ([]kavita.LibraryDto, error)
 	StreamSeries(ctx context.Context, opts kavita.SeriesListOptions, fn func(kavita.SeriesDto) error) (kavita.SeriesPage, error)
+
+	// SeriesMetadata is the credit path (ADR-0044). It is on this interface and
+	// not on a second one because a Kavita client that could stream series but
+	// not read one series' metadata does not exist — both are the same
+	// controller and the same credential.
+	SeriesMetadata(ctx context.Context, seriesID int32) (kavita.SeriesMetadataDto, error)
 }
 
 // KavitaSource adapts one Kavita instance to Source.
 type KavitaSource struct {
 	Client KavitaReader
 
-	// containerKind remembers each library's declared LibraryType between the
-	// Containers call and the item stream, because SeriesDto reports libraryId
-	// and NOT the library's type — and work.kind comes from the type.
+	// Log is optional and defaults to discard. It is where a REFUSED identity
+	// claim goes — see StreamItems.
+	Log *slog.Logger
+
+	// containerKind remembers each library's declared LibraryType and its
+	// inheritWebLinksFromFirstChapter setting between the Containers call and
+	// the item stream, because SeriesDto reports libraryId and NOT the library's
+	// type — and work.kind comes from the type.
 	containerKind map[string]kindDecision
 }
 
 // NewKavitaSource wraps a client.
 func NewKavitaSource(c KavitaReader) *KavitaSource {
 	return &KavitaSource{Client: c, containerKind: map[string]kindDecision{}}
+}
+
+func (s *KavitaSource) log() *slog.Logger {
+	if s.Log != nil {
+		return s.Log
+	}
+	return slog.New(slog.DiscardHandler)
 }
 
 // kindDecision is what one LibraryType resolves to.
@@ -45,6 +65,14 @@ type kindDecision struct {
 
 	// Reason is why a container was declined. Empty when Kind is non-empty.
 	Reason string
+
+	// InheritsWebLinks is LibraryDto.inheritWebLinksFromFirstChapter, carried
+	// from the container to every series in it because it POISONS
+	// SeriesDto.comicVineId for the whole library — see comicVineIdentity.
+	//
+	// It is NOT part of mapLibraryType's output: it is a per-library setting,
+	// not a property of the LibraryType, and Containers() writes it separately.
+	InheritsWebLinks bool
 }
 
 // mapLibraryType is THE kind decision, and it is UsArr's rather than Kavita's.
@@ -61,19 +89,28 @@ type kindDecision struct {
 // 5 Comic (ComicVine)}, and TestEveryLibraryTypeMemberIsMapped fails if the
 // vendored spec grows a seventh.
 //
-// ⚠️ ARCHITECTURE.md §17.8 CARRIES A WITHDRAWAL THAT CONTRADICTS THE VENDORED
-// SPEC, and this comment says so rather than silently picking a side. §17.8
-// reads: "re-checked against Kavita main on 2026-08-16,
+// ✅ LS-04 IS RESOLVED, AND THE VENDORED SPEC WON. ARCHITECTURE.md §17.8 carries
+// a withdrawal — "re-checked against Kavita main on 2026-08-16,
 // API/Entities/Enums/LibraryType.cs declares exactly Manga = 0, Comic = 1,
-// Book = 2 and no Image member at all". The vendored spec, which is what this
-// repository actually pins and what internal/kavita's contract test asserts
-// against, declares SIX members with x-enum-varnames
-// ["Manga","Comic","Book","Image","LightNovel","ComicVine"]. Both cannot be
-// true of the same tree. This code maps what the pinned artefact says, because
-// that is the artefact CI can check; the §17.8 note is recorded in
-// docs/REVIEW-LOG.md as LS-04 and is NOT resolved here — resolving it needs a
-// fresh read of Kavita's source, which is a network fact this pass could not
-// verify.
+// Book = 2 and no Image member at all" — which contradicted the spec's six
+// members. Both were quoting a real file. Measured 2026-08-17:
+//
+//   - `refs/heads/main` resolves to 9795080, and Kavita.Common/Kavita.Common.csproj
+//     THERE declares <AssemblyVersion>0.7.8.0</AssemblyVersion>. KAVITA'S main
+//     BRANCH IS FROZEN AT v0.7.8 (September 2023); the release line is `develop`
+//     plus tags. §17.8 read a branch three years behind the shipped code.
+//   - At main, API/Entities/Enums/LibraryType.cs does declare exactly those
+//     three members. §17.8 quoted it accurately.
+//   - At tag v0.9.0.2 the file has MOVED to
+//     Kavita.Models/Entities/Enums/LibraryType.cs — the tree left API/ between
+//     v0.8.9.1 and v0.9.0 — and declares all six, matching the vendored spec's
+//     x-enum-varnames exactly, Comic = 1 included with its "Comic (Flexible)"
+//     description.
+//
+// THE GENERAL LESSON, because it will bite again: A KAVITA CITATION WITH AN
+// `API/Entities/…` PATH IS READING THE FROZEN main, NOT THE SHIPPED CODE.
+// §17.8's note is stale rather than wrong, and this is the pointer to that
+// rather than a fresher status claim written into §17.8.
 //
 // The reading direction is 🔍 INFERENCE and is marked as such wherever it lands.
 // SeriesDto reports no reading direction at all; ADR-0030 nevertheless makes
@@ -110,15 +147,15 @@ func mapLibraryType(t kavita.LibraryType) kindDecision {
 		return kindDecision{Kind: "book"}
 
 	case kavita.LibraryTypeLightNovel:
-		// 🔍 INFERENCE, and the weakest mapping here. A light novel is prose
-		// with illustrations — Kavita ships it as a SEPARATE library type from
-		// both Manga and Book, and this pass could not read
-		// LibraryType.cs to learn what that separation buys it. 'book' is chosen
-		// because the content is prose and 'comic' would put a novel in a
-		// comics grid with an issue-contiguity report that can never be
-		// satisfied. The cost of being wrong is one editable library kind
-		// (§6.5 rule 4: "a library's kind is required and editable"), which is
-		// the cheapest place in the design to be wrong.
+		// 'book', and no longer a blind inference: LibraryType.cs at v0.9.0.2
+		// documents the member as "Allows Books to Scrobble with AniList for
+		// Kavita+". The separation from Book buys Kavita a SCROBBLING
+		// capability, not a different content model — the content is prose
+		// either way — so 'book' is what it maps to, and 'comic' would put a
+		// novel in a comics grid with an issue-contiguity report that can never
+		// be satisfied. Should this ever be wrong it is wrong in one editable
+		// library kind (§6.5 rule 4: "a library's kind is required and
+		// editable"), the cheapest place in the design to be wrong.
 		return kindDecision{Kind: "book"}
 
 	case kavita.LibraryTypeImage:
@@ -155,6 +192,11 @@ func (s *KavitaSource) Containers(ctx context.Context) ([]store.CatalogueContain
 	out := make([]store.CatalogueContainer, 0, len(libs))
 	for _, l := range libs {
 		d := mapLibraryType(l.Type)
+		// The flag is read HERE, from the library list this call already makes,
+		// so knowing it costs no extra request. It is exposed by the vendored
+		// spec (LibraryDto.inheritWebLinksFromFirstChapter, api/specs/kavita.json)
+		// and modelled in internal/kavita/resources.go.
+		d.InheritsWebLinks = l.InheritWebLinksFromFirstChapter
 		ref := strconv.FormatInt(int64(l.ID), 10)
 		s.containerKind[ref] = d
 		out = append(out, store.CatalogueContainer{
@@ -195,6 +237,17 @@ func (s *KavitaSource) StreamItems(ctx context.Context, fn func(store.CatalogueI
 			// A series in a declined or unknown library. Skipped here rather
 			// than filtered later so no work row is ever created for it.
 			return nil
+		}
+		// A refused ComicVine id is LOGGED, not swallowed. Principle 3 —
+		// "every feature degrades honestly … it says what is missing and why" —
+		// and this is the one place in the mapping that silently drops an
+		// identity claim on purpose.
+		if _, reason, _ := comicVineIdentity(dto.ComicVineID, d.InheritsWebLinks); reason != "" {
+			s.log().Info("kavita: refused a ComicVine identity claim",
+				"series_id", dto.ID, "series", dto.Name, "library_id", dto.LibraryID,
+				"comic_vine_id", dto.ComicVineID,
+				"inherit_web_links_from_first_chapter", d.InheritsWebLinks,
+				"reason", reason)
 		}
 		return fn(mapSeries(dto, d))
 	})
@@ -282,40 +335,62 @@ func mapSeries(dto kavita.SeriesDto, d kindDecision) store.CatalogueItem {
 		})
 	}
 
-	it.ExternalIDs = kavitaExternalIDs(dto)
+	it.ExternalIDs = kavitaExternalIDs(dto, d)
 	return it
 }
 
-// kavitaExternalIDs projects the Kavita+ identifier fields.
+// kavitaExternalIDs projects SeriesDto's identifier fields.
 //
-// DEGRADED IDENTITY IS THE ORDINARY CASE HERE, NOT AN ERROR. Every one of these
-// fields is written only by the Kavita+ match path, so a free instance returns
-// 0, null or "" for all of them (ARCHITECTURE.md §6.4, ADR-0035 §1) and this
-// function returns an empty slice. The work is still written, still filed into a
-// library, still indexed and still searchable; §6.4's "not identified" state is
-// then simply the absence of an external_id row.
+// ⚠️ THE PREMISE THIS FUNCTION WAS ORIGINALLY WRITTEN ON WAS WRONG, AND THE
+// CORRECTION IS THE REASON comicVineIdentity EXISTS. It read: "every one of
+// these fields is written only by the Kavita+ match path, so a free instance
+// returns 0, null or ” for all of them." That is FALSE FOR TAGGED COMICS.
+// Re-verified 2026-08-17 by reading Kavita's source at tag v0.9.0.2 — the
+// owner's version, ADR-0035 §2a — where a whole-tree grep for `ComicVineId`
+// finds three writers of `Series.ComicVineId` and NOT ONE is behind a licence
+// check:
 //
-// THREE DECISIONS ABOUT WHICH IDS ARE WRITTEN AND AT WHAT CONFIDENCE:
+//	ProcessSeries.cs:162  series.ComicVineId = comicVineSeriesIds[0];
+//	ProcessSeries.cs:365  series.ComicVineId = WeblinkParser.GetComicVineId(...).Item1;
+//	ExternalMetadataIdHelper.cs:38  entity.ComicVineId = dto.ComicVineId;
+//
+// The first two are the PLAIN SCANNER reading ComicInfo.xml's <Web> element,
+// which ComicTagger and Mylar both populate; the third is the Edit Series
+// dialog. At v0.9.0.2 KAVITA+ DOES NOT WRITE Series.ComicVineId AT ALL.
+//
+// DEGRADED IDENTITY IS STILL THE ORDINARY CASE for books and manga, and still
+// not an error. A free instance with untagged files returns 0, null or "" for
+// every field here, this function returns an empty slice, and the work is still
+// written, filed, indexed and searchable; §6.4's "not identified" state is then
+// simply the absence of an external_id row.
+//
+// FOUR DECISIONS ABOUT WHICH IDS ARE WRITTEN AND AT WHAT CONFIDENCE:
 //
 //  1. Confidence 1.0 — a strong, work-level claim that participates in
-//     ux_extid_work_strong — for every id below. §6.4's amendment 3 bars a
-//     STRONG claim from an identifier "parsed out of a free-text field", and
-//     none of these is: they are typed fields Kavita's own matcher wrote, which
-//     is the opposite of Komga's user-typed metadata.links[].
-//  2. mangaBakaEditionId IS DELIBERATELY NOT WRITTEN. It is an EDITION
+//     ux_extid_work_strong — for the NON-ComicVine ids below. ⚠️ The same
+//     re-verification found that `Series.AniListId`, `MalId` and `MangaBakaId`
+//     are ALSO weblink-parsed at v0.9.0.2 (ProcessSeries.cs:363-366) rather than
+//     matcher-written, which means §6.4 amendment 3 arguably reaches them too.
+//     That is NOT changed here: it is a different behaviour change against
+//     different fixtures, and shipping it inside a ComicVine correction would
+//     make neither reviewable. docs/REVIEW-LOG.md LS-12 carries it as the open
+//     follow-up, with the measurement that found it.
+//  2. THE ComicVine ID IS NEVER WRITTEN AT 1.0, and is written only when its
+//     KIND IS PROVEN. comicVineIdentity owns that; its comment owns the why.
+//  3. mangaBakaEditionId IS DELIBERATELY NOT WRITTEN. It is an EDITION
 //     identifier, and §6.4's amendment 4 is categorical that writing an edition
 //     id as a work id "silently claims a paperback and an audiobook are the same
 //     edition". external_id's CHECK requires exactly one of work_id/edition_id,
 //     this commit writes no edition rows, and the honest answer to "there is
 //     nowhere correct to put it" is to not put it anywhere.
-//  3. ⚠️ THE ID NAMESPACES ARE NOT VERIFIED TO BE GLOBAL. MyAnimeList numbers
+//  4. ⚠️ THE ID NAMESPACES ARE NOT VERIFIED TO BE GLOBAL. MyAnimeList numbers
 //     anime and manga separately — myanimelist.net/anime/1 and /manga/1 are
 //     different works — so 'mal' as a bare source is only unambiguous while
 //     every row carrying it comes from a manga/book source, which is true of
 //     Kavita and will stop being true the day an anime source lands. It is
 //     recorded here rather than pre-solved with a namespaced source string the
 //     schema does not list; docs/REVIEW-LOG.md LS-10 carries it.
-func kavitaExternalIDs(dto kavita.SeriesDto) []store.ExternalIdentifier {
+func kavitaExternalIDs(dto kavita.SeriesDto, d kindDecision) []store.ExternalIdentifier {
 	var out []store.ExternalIdentifier
 	add := func(source, value string) {
 		if value == "" || value == "0" {
@@ -331,9 +406,107 @@ func kavitaExternalIDs(dto kavita.SeriesDto) []store.ExternalIdentifier {
 	add("metron", intID(dto.MetronID))
 	add("mangabaka", intID(dto.MangaBakaID))
 	add("cbr", intID(int64(dto.CbrID)))
-	add("comicvine", strings.TrimSpace(dto.ComicVineID))
+
+	// ComicVine does NOT go through add(): add() hard-codes confidence 1.0, and
+	// a ComicVine id must never reach it.
+	if id, _, ok := comicVineIdentity(dto.ComicVineID, d.InheritsWebLinks); ok {
+		out = append(out, id)
+	}
 	return out
 }
+
+// comicVineIdentity decides what, if anything, one SeriesDto.comicVineId value
+// may claim about the work. It returns the identifier, or the reason it was
+// refused.
+//
+// # The trap this function exists to close
+//
+// An external_id row at confidence 1.0 satisfies ux_extid_work_strong, and in
+// UsArr that index IS THE MERGE SIGNAL — store.ApplyCatalogueBatch reuses the
+// work that already holds the id, which makes two works one. v0.1 has no
+// work_merge table and no un-merge. So a ComicVine id of the WRONG KIND written
+// strongly is an unrecoverable, silent merge of unrelated works.
+//
+// `comicVineId` is exactly that hazard, for three separate reasons, all read off
+// Kavita v0.9.0.2's source:
+//
+//  1. THE KIND IS ERASED. WeblinkParser.cs:55-61 returns
+//     `extractedId.Split('-')[1]` — the id with its 4050 (volume) / 4000 (issue)
+//     prefix REMOVED — and the surviving `Item2` bool is the only discriminator.
+//     4050 and 4000 ids come from DIFFERENT number spaces, so "159233" alone
+//     does not say which object it names. Kavita's own test pins the erasure:
+//     WeblinkParserTests.cs:24 expects ".../4000-159233/" -> "159233".
+//  2. THE FIELD IS NULL ON A ComicTagger-ONLY LIBRARY. ProcessSeries.cs:159-163
+//     fills it from ParserInfo.ComicVineSeriesId, and DefaultParser.cs:169-172
+//     sets THAT only when the parsed link was a 4050 one. A library tagged with
+//     issue links only leaves series.ComicVineId empty.
+//  3. 🚩 WITH inheritWebLinksFromFirstChapter ON, IT IS SILENTLY FILLED WITH THE
+//     FIRST CHAPTER'S ISSUE ID. ProcessSeries.cs:359-366 runs inside
+//     UpdateSeriesMetadata, which ProcessSeries.cs:165 calls AFTER the
+//     line-162 assignment, and it writes `GetComicVineId(...).Item1`
+//     unconditionally — discarding Item2. So the flag does not merely add a
+//     value, it OVERWRITES a correct volume id with a first chapter's issue id,
+//     and the DTO carries no discriminator to tell them apart.
+//
+// # What this function does
+//
+// The order is: prove the kind, then decide.
+//
+//   - A value that still carries the discriminator — a full ComicVine URL, or a
+//     bare "4050-112794" token, both of which reach the field through the Edit
+//     Series dialog, which validates nothing (ExternalMetadataIdHelper.cs:36-38)
+//     — is CLASSIFIED. A volume id is written; an issue id is REFUSED, because
+//     an issue is not the work.
+//   - A bare number with the library's inherit flag OFF is a VOLUME id: the only
+//     scanner path that can have written it is ProcessSeries.cs:162, fed by
+//     DefaultParser.cs:169-172's 4050-only branch.
+//   - A bare number with the library's inherit flag ON is REFUSED. Its kind is
+//     unknowable and it may be an issue id.
+//
+// Everything written lands at ComicVineConfidence (0.90), never 1.0, per §6.4
+// amendment 3 — Kavita derived every one of these from a free-text field, so
+// none of them may merge works. That cap is what makes the inherit case a
+// belt-and-braces refusal rather than the only defence.
+func comicVineIdentity(raw string, inheritsWebLinks bool) (store.ExternalIdentifier, string, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "0" {
+		// The ordinary untagged case. Not a refusal and not worth a reason.
+		return store.ExternalIdentifier{}, "", false
+	}
+
+	volume := func(id string) (store.ExternalIdentifier, string, bool) {
+		return store.ExternalIdentifier{
+			Source: ComicVineVolumeSource, Value: id, Confidence: ComicVineConfidence,
+		}, "", true
+	}
+
+	if refs := ParseComicVineWebLinks(raw); len(refs) > 0 {
+		if v, ok := VolumeRef(refs); ok {
+			return volume(v.ID)
+		}
+		return store.ExternalIdentifier{}, "comicVineId carries a ComicVine ISSUE (4000) link and no " +
+			"volume (4050) one; an issue is one level below the work and is never written as a work id", false
+	}
+
+	if !comicVineBareNumber.MatchString(raw) {
+		return store.ExternalIdentifier{}, "comicVineId is neither a ComicVine link nor a bare id " +
+			"(" + raw + "); Kavita stores this field verbatim from the Edit Series dialog and " +
+			"UsArr will not guess at a shape it does not recognise", false
+	}
+
+	if inheritsWebLinks {
+		return store.ExternalIdentifier{}, "the library has inheritWebLinksFromFirstChapter enabled, so " +
+			"Kavita overwrites series.ComicVineId with the FIRST CHAPTER's id and discards the " +
+			"4050/4000 discriminator (ProcessSeries.cs:365); a bare id from such a library may be " +
+			"an issue id and its kind cannot be recovered from the DTO", false
+	}
+
+	return volume(raw)
+}
+
+// comicVineBareNumber matches the shape Kavita's scanner leaves behind once
+// WeblinkParser has stripped the 4050/4000 prefix.
+var comicVineBareNumber = regexp.MustCompile(`^\d+$`)
 
 func intID(v int64) string {
 	if v == 0 {

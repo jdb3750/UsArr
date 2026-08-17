@@ -932,7 +932,10 @@ restated here against the source v0.1 actually has:
   in the vendored `api/specs/kavita.json` carries `aniListId`, `malId`, `hardcoverId`, `metronId` and
   `cbrId` as integers and `comicVineId` and `mangaBakaEditionId` as nullable strings, alongside
   `mangaBakaId` — **all of them written only by the Kavita+ match path**, so a free instance returns
-  `0`, `null` or `""` for every one. [ADR-0035](./DECISIONS.md#adr-0035) §1 states the consequence in
+  `0`, `null` or `""` for every one. ⚠️ **Present-and-empty, never absent**, which matters to whoever
+  writes an adapter: **no code can detect the paid tier by a missing key**, because the keys are all
+  there. The only signal is the VALUE, and `internal/libsync`'s identifier projection treats `0` and
+  `""` as "no claim" for exactly that reason. [ADR-0035](./DECISIONS.md#adr-0035) §1 states the consequence in
   its own words: null identifiers are *"what an ordinary user sees once Kavita lands"*, not an edge
   case. This section already says the same three paragraphs down, about the *"not identified"* badge.
 * **So the honest claim is not a percentage.** How much of v0.1's identity problem tier 1 resolves is
@@ -940,6 +943,14 @@ restated here against the source v0.1 actually has:
   close to none on a free one. What is unchanged is that tier 1 is the only tier v0.1 runs, and that a
   work it cannot resolve is kept, marked *"not identified"* and stays searchable (the rule below),
   which is why v0.1 still ships without tiers 2–5.
+* **And none of this is a regression against the source Kavita replaced.** Read the two bullets above
+  as *"Kavita is weak on identity"* and the comparison they invite is wrong: **Komga — the
+  comics-and-books source [ADR-0035](./DECISIONS.md#adr-0035) chose Kavita over — supplies no external
+  identifiers at all.** Its metadata carries user-typed `links[]`, which
+  [`reference/schema.md`](./reference/schema.md) §6.4 amendment 3 already bars from making a STRONG
+  claim because it is a free-text field. So the floor here is *"no ids"* either way, and Kavita's
+  present-and-empty typed fields are strictly more than the alternative offered — they become real
+  ids the moment the instance has Kavita+, with no adapter change.
 * **Tiers 2–5 and the `work_merge`/un-merge machinery still do not land in v0.1**, and the trigger
   above — *"the first provider that lacks strong ids"* — is not read as having fired. The fuzzy tiers
   *merge rows*, and merging comics on title similarity across a catalogue with no ids is the exact
@@ -947,14 +958,20 @@ restated here against the source v0.1 actually has:
   honest; merging wrongly is not**, so a source with weak ids is an argument for the badge, not for
   the cascade.
 
-🚩 **What this does to the correction UI's v0.3 cap is FLAGGED here, not decided.** §16.0 caps the
-library correction UI at v0.3, describes the cap as *"a scheduling detail"*, and routes the question
-here on this exact sentence — *"§6.4 owns the tier-1 claim and has not been restated against Kavita"*.
-It is restated now, and the restatement **withdraws the support the cap was resting on**: a v0.1 whose
-only source may carry no external ids at all is a v0.1 where a user has something to correct on day
-one, which is not what *"a cap on a declared no-op"* describes. Whether the cap survives is a **scope**
-question, scope is owned by the ADRs with §16 authoritative (`DEVELOPMENT.md` §11), and this pass
-deliberately does not make it: it needs an ADR and an owner decision.
+✅ **What this does to the correction UI's v0.3 cap is DECIDED, by
+[ADR-0043](./DECISIONS.md#adr-0043) (owner, 2026-08-17).** This paragraph used to read *"it needs an
+ADR and an owner decision"* and to leave the question flagged; the ADR exists, so the request is
+discharged. §16.0 capped the library correction UI at v0.3, described the cap as *"a scheduling
+detail"*, and routed the question here on the sentence *"§6.4 owns the tier-1 claim and has not been
+restated against Kavita"*. The restatement above **withdrew the support the cap was resting on** — a
+v0.1 whose only source may carry no external ids at all is a v0.1 where a user has something to
+correct on day one — and ADR-0043 took it from there: **the minimal *"fix this match"* case moves
+earlier than v0.3, and the full four-verb correction surface (`exclude`, `include`, `relink`, `field`)
+plus the Corrections list stay at v0.3.** *"Minimal"* is the owner's own word and ADR-0043 records it
+as a **constraint on scope**, so what moves is bounded by that case and nothing outside it. ⚠️ **The
+ADR deliberately assigns no milestone** — the owner said *"earlier"* and named no version, and §16 is
+authoritative for milestone membership — so the slot is still unassigned, and that gap is ADR-0043's
+own open question rather than a hole in this section.
 
 `normalized_title` and `norm_version`
 are **columns on `work` from the migration that creates it** (adding them later is a backfill over
@@ -2528,9 +2545,18 @@ and `work_comic_issue` (`:180`), with `ix_comic_issue_sort` (`:211`), in commit 
 clause read *"none of the three exists in the tree today, and they arrive in a new migration"*, which
 was true when it was written (`b2dc092`) and was falsified by `d0a02aa` the same day.** Its prediction
 was right and is now **discharged rather than merely stale**: a new migration is exactly what landed,
-because `00005_library_sync.sql` is merged and a merged migration is never edited. **`work_album`, `work_track` and `work_credit` are not v0.1's, and
+because `00005_library_sync.sql` is merged and a merged migration is never edited. **`work_album` and `work_track` are not v0.1's, and
 this clause does not claim them**: they wait on Navidrome, which has no adapter, at #1 in §16.1's
-sequence. ADR-0030, ADR-0031 and ADR-0033 stay authoritative for their **shape** — that is what the
+sequence. ⚠️ **This sentence named `work_credit` as a third, and
+[ADR-0044](./DECISIONS.md#adr-0044) (owner-approved 2026-08-17) falsified that — read the tree, not
+this line: `internal/db/migrations` is the answer to what exists.** The rule did not change; it was
+**applied**. ADR-0040 files each table with the source that WRITES it, and `work_credit` was grouped
+with the music tables when the first catalogue source was assumed to be a music server and *"a
+credit"* meant a performer. Kavita reports writers, cover artists, pencillers, inkers, colorists,
+letterers, editors and translators, so ADR-0040's own rule points at Kavita for this one. **The cost
+is a row rather than a column** — a credit points at a `work` of kind `person`, which nothing in v0.1
+created before — and that cost was put to the owner and accepted. Two of the six subtype tables now
+wait on Navidrome, not three. ADR-0030, ADR-0031 and ADR-0033 stay authoritative for their **shape** — that is what the
 enumeration above states of them, and a shape is owed whenever the table is created, not before.
 Everything else enumerated above is v0.1's, tables included.
 **Identity tier 1 only** — ⚠️ **and what tier 1 is worth in v0.1 is a property of the instance rather
@@ -3001,16 +3027,24 @@ be a different Sonarr`** rather than `needs re-identification`; **`matched by ti
 `no work identity` (§6.4), which reads to a normal person as "something is broken with my copy of
 this book" when it means "the source gave us no ISBN".
 
-⚠️ **`matched by title` is not reachable in v0.1, and the rule is written now because it cannot be
-retrofitted.** v0.1's only sources are Radarr and Sonarr, which carry TMDB and TVDB ids, so every
-v0.1 work resolves at the identifier tier. The state arrives with the first catalogue source — and
-per [ADR-0035](./DECISIONS.md#adr-0035) §1 it arrives as the **ordinary** rendering rather than an
-edge case, because **Kavita's `aniListId`, `malId`, `comicVineId` and the rest are null without a
-paid Kavita+ subscription**, so on a free instance *every* series in those libraries sits at the
-title-and-metadata tier. From that milestone the badge and the gap list are what those screens *look
-like*, and §17 and the mockups must draw them that way. ⚠️ The honest comparison, kept because it
-stops this reading as a regression: **Komga supplies no external identifiers at all**, so comics has
-no strong-identity path under either choice; only paid Kavita beats both. The copy says what is
+⚠️ **`matched by title` is reachable in v0.1 and may be the ORDINARY rendering there, and the rule
+is written now because it cannot be retrofitted.** This paragraph read `matched by title is not
+reachable in v0.1 … v0.1's only sources are Radarr and Sonarr, which carry TMDB and TVDB ids, so
+every v0.1 work resolves at the identifier tier`, and [ADR-0041](./DECISIONS.md#adr-0041) replaced
+those sources: **v0.1's catalogue source is Kavita.** §16.0 flagged the consequence rather than
+answering it — `§6.4 owns the tier-1 claim and has not been restated against Kavita` — and **§6.4 has
+since been restated, so the claim is read there and not restated here**: how much of the identity
+problem the identifier tier resolves is **a property of the instance, not of the design** —
+essentially all of it on a Kavita+ install, close to none on a free one. Two things §6.4 settles that
+this screen must not soften. First, **Kavita's `aniListId`, `malId`, `comicVineId` and the rest are
+present in the payload and empty on a free instance** (`0`, `null` or `""`), written only by the
+Kavita+ match path: **present-and-empty, never absent**, so no adapter can detect the paid tier by a
+missing key and the only signal is the value — which is why per
+[ADR-0035](./DECISIONS.md#adr-0035) §1 this badge is the **ordinary** rendering on such an instance
+rather than an edge case. Second, ⚠️ **it is not a regression against the source Kavita replaced**:
+**Komga supplies no external identifiers at all**, so comics has no strong-identity path under either
+choice and only paid Kavita beats both. The badge and the gap list are therefore what these screens
+*look like* from v0.1 onward, and §17 and the mockups must draw them that way. The copy says what is
 missing and why — the identifier fields are a paid Kavita feature and this instance has not supplied
 them — and then stops. It must never read as a defect in UsArr, and never as nagware.
 
@@ -3246,8 +3280,15 @@ carries eleven groups in a `SearchResultGroup`.
    consequence was unaddressed: a user who types `dune`, clicks **Movies 3** — the most natural
    action for someone looking for the film — gets *Dune: Part Two*, *Dune* (1984) and
    *Jodorowsky's Dune*, and **not** *Dune* (2021), which is filed under Ebooks on a linked row, with
-   nothing on screen explaining the absence. So: *"1 more film is on a linked row in the **Ebooks**
-   group: Dune (2021). — [Show it]"*. The data is already there; it is what renders the
+   nothing on screen explaining the absence. So the group's foot carries **a sentence and, beside
+   it, a link** — *"1 more film is on a linked row in the **Ebooks** group: Dune (2021)."* and
+   *"Show it"*. **Two elements, written here as two.** The earlier form of this line ran them
+   together inside one pair of quotes as `… Dune (2021). — [Show it]`, where the em dash was §17
+   notation for the join between a sentence and a control and the brackets were notation for the
+   control; quoted like that it reads as one string a user is shown, and `check.mjs`'s §13 sweep
+   read it as exactly that. It is notation, so the notation is unambiguous instead: one
+   italic-quoted span per element the user actually sees, and notation kept outside the quotes.
+   The data is already there; it is what renders the
    `also film, 2021` chip.
 
 5. **The library column renders only when it varies *within the group it is in*.** The earlier rule
@@ -3686,10 +3727,17 @@ Each is a named screen, not an accident.
   two hours overstates freshness by exactly the interval that matters. A banner whose number is
   reassuring and wrong is worse than no banner, and it is the precise failure the replica
   principle's honesty rules exist to prevent. Where an instance has **no delta channel at all**
-  (§7.1a), the number is its last full compare and the sentence says so: *"Kavita is unreachable —
-  showing cached data from the last full compare at 09:12"*. ⚠️ **No v0.1 source is in this position**
-  — Sonarr and Radarr both have a delta channel — so this branch of the rule first renders at the
-  milestone the first catalogue source lands in.
+  (§7.1a), the number is its last full compare and the sentence says so: *"Komga is unreachable —
+  showing cached data from the last full compare at 09:12"*. ⚠️ **Kavita was this branch's exemplar
+  and is withdrawn, because the honest distinction is "no channel 3", not "no delta".**
+  [ADR-0035](./DECISIONS.md#adr-0035) §2a verified against the owner's live instance that Kavita
+  **has** a usable delta — channel 3b's ordered page walk (§7.1a) — and what it lacks is only a
+  changed-since endpoint, which is channel 3. An instance reaches this branch only when the
+  **ordering guarantee** fails and it falls back to reconciliation-only, and today that is Komga's
+  open probe rather than Kavita's verified pass. **No v0.1 source is in this position** — Kavita is on
+  3b and Prowlarr carries no catalogue — so the milestone claim survives while its reason does not:
+  it read `Sonarr and Radarr both have a delta channel` before
+  [ADR-0041](./DECISIONS.md#adr-0041) replaced those sources.
 - **Instance needs re-identification** → a blocking banner on that instance's rows and on the Services
   screen, explaining that its identity changed and sync is paused, with a Re-link action. Loud on
   purpose: silently doing the wrong thing here destroys a library.
@@ -3766,9 +3814,16 @@ not restate it** (ADR-0035). Two proposals are decisions rather than defaults:
   inline note** — *"Joining Kavita Manga into Comics as a second source."* **The merge key is stated
   rather than left to be discovered: case-insensitive, whitespace-trimmed, per user.**
   **And the one-way door is marked per row.** *"Editing any proposal marks that library
-  user-managed, after which a later connect can only offer to add sources — never reshape it"* is a
-  permanent decision delivered as helper text beside the Accept button, with no indicator of which
-  rows have crossed it. Each edited row carries the mark, in the row.
+  user-managed. After that, a later connect can only offer to add sources. It can never reshape the
+  library."* is a permanent decision delivered as helper text beside the Accept button, with no
+  indicator of which rows have crossed it. Each edited row carries the mark, in the row.
+  🔍 The wording is three plain sentences because §13 bans the mid-sentence em-dash beat in UI
+  microcopy, and the earlier form was a 22-word sentence built on one, ending
+  `… can only offer to add sources — never reshape it`. The meaning is unchanged; only the beat is
+  gone — and that quotation is in backticks rather than the italic-quoted copy form on purpose,
+  because a retired string quoted as shipping copy is still shipping copy to the sweep. It is the
+  construction §13 bans on its own stated ground, and no word floor was ever going to catch it,
+  which is why `check.mjs` now reads §17's own shipping copy rather than trusting it.
 - ⚠️ **From the milestone Audiobookshelf lands in, not v0.1: Audiobookshelf is offered as *two*
   libraries — Ebooks and Audiobooks — over its one
   `mediaType=book` library**, which ABS itself cannot do: it distinguishes the two only at item
@@ -3781,7 +3836,33 @@ not restate it** (ADR-0035). Two proposals are decisions rather than defaults:
   🔍 *Kavita's `LibraryType 3 (Image)` was the second example here and is withdrawn: re-checked
   against Kavita `main` on 2026-08-16, `API/Entities/Enums/LibraryType.cs` declares exactly `Manga = 0`,
   `Comic = 1`, `Book = 2` and no `Image` member at all, so the claim cannot be sourced. The rule does
-  not depend on it.* **The column holding both outcomes is headed `Decision`, not `Accept`** — accepted rows
+  not depend on it.*
+  ⚠️ **Amendment, 2026-08-17 — the withdrawal is itself withdrawn.** `Image = 3` is real, and
+  `LibraryType 3` returns as the second worked example. At tag **`v0.9.0.2`** (commit **`6bcd5689`**),
+  the version the owner runs, `Kavita.Models/Entities/Enums/LibraryType.cs` declares **six** members —
+  `Manga = 0`, `Comic = 1`, `Book = 2`, `Image = 3`, `LightNovel = 4`, `ComicVine = 5` — and the file
+  is byte-identical at `develop` (`9c3e5400`). Nor is `Image` new: it is already present at tag
+  **`v0.7.11`** (`caf2ba08`, 2023-12-03), so it has shipped in every release for about 2.7 years.
+  UsArr's own client was correct throughout — `internal/kavita` declares all six and
+  `internal/kavita/contract_test.go` asserts them against the vendored spec — so **the document was
+  the only defect**. `internal/libsync/kavita.go` records the contradiction and deliberately declines
+  to pick a side, since resolving it needed a network fact that pass could not verify (REVIEW-LOG
+  LS-04); it is picked here.
+  🚩 **The root cause is the part worth keeping, and the rule goes in the correction: any Kavita
+  re-check must read a TAG or `develop`, never `main`.** Kavita's `main` is frozen at the v0.7.8
+  release commit — `97950804`, dated **2023-09-03**, subject `v0.7.8 - New Filtering System (#2260)`
+  — while its release line is `develop` plus tags. The withdrawal note above was not careless: it is
+  exactly **reproducible**, because `main` at the very path it cites does declare those three members
+  and no more. It read a real file correctly, and the file had been stale for three years. Its own
+  tells confirm which tree it read — `API/Entities/` exists in no v0.9.x layout, and a three-member
+  enum has not been current since 2023.
+  **The general form, because this repo vendors several upstreams: an upstream project's `main` is
+  not necessarily its release line, and a version claim read from the wrong branch is wrong in a way
+  that looks thorough.** That is `DEVELOPMENT.md` §11 rule 5, `name the surface, not just the
+  value`, pointed at someone else's repository: two correct reads of two different trees are not
+  comparable, and the one that is not the release line is not evidence about a release. **Cite a tag
+  and a commit, never a branch name**, for the reason this entry demonstrates.
+  **The column holding both outcomes is headed `Decision`, not `Accept`** — accepted rows
   keep their checkbox, the declined row keeps its word, and an `Accept` header over a cell reading
   `declined` is a header contradicting its own cell.
 
@@ -3896,11 +3977,17 @@ out**) · *all sources down* (fully browsable from the replica — this is the r
 sentence from "not synced yet") · *orphaned* (shown with its reason, Delete offered, never
 auto-deleted) · *no sink* (requests disabled with the reason) · *needs re-identification* (blocking
 banner, membership recompute paused, because membership derived from an untrustworthy id space is
-worse than stale membership) · **no change feed** (*"Kavita has no changed-since endpoint. Last full
-compare 09:12."* — ⚠️ **not reachable in v0.1**, whose only sources are \*Arrs on channel 3; it is the
-steady state for a catalogue source on channel 3b's reconciliation-only fallback from the milestone
-that source lands in, §7.1a, and it must be a named state rather than an absent delta time, because "no number" and "a
-number from four hours ago" read identically otherwise).
+worse than stale membership) · **no change feed** (*"Komga has no change feed. Last full compare
+09:12."* — ⚠️ **Kavita was the exemplar here and is withdrawn, on the same ruling as §17.7's
+degraded banner: the honest distinction is "no channel 3", not "no delta".** Kavita indeed has no
+changed-since endpoint, but [ADR-0035](./DECISIONS.md#adr-0035) §2a verified against the owner's live
+instance that it **has** a usable delta — channel 3b's ordered page walk — so it is not in this
+state. The state is the reconciliation-only fallback a catalogue source drops to when the **ordering
+guarantee** fails, §7.1a, which today is Komga's open probe; **no v0.1 source is in it**, Kavita
+being on 3b and Prowlarr carrying no catalogue. The reason previously read `whose only sources are
+*Arrs on channel 3`, which [ADR-0041](./DECISIONS.md#adr-0041) replaced. It must be a named state
+rather than an absent delta time, because "no number" and "a number from four hours ago" read
+identically otherwise).
 
 **Overrides must be listable in one place** — what was excluded, re-linked or overridden, by whom,
 when and why, each revertible in one click — or they become invisible magic nobody can undo.

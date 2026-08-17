@@ -199,6 +199,13 @@ func TestQueryPlans(t *testing.T) {
 			// Home's unified recently-added table (ADR-0028 block C). The
 			// partial predicate is what keeps the 7-day tombstone window from
 			// degrading exactly this view.
+			//
+			// THIS CASE PINS THE INDEX, NOT THE SHIPPED READ. The statement
+			// GET /api/v1/library/recent actually issues is rendered by
+			// store.recentWorksSQL and EXPLAINed through that function by
+			// internal/store's TestRecentWorksKeysetPlanIsNormative and its
+			// siblings — which is the assertion to change if the read changes.
+			// This one stays because it is the bare property of the index.
 			name:  "recently added, all kinds",
 			index: "ix_work_added",
 			query: `SELECT id, title, kind FROM work WHERE deleted_at IS NULL
@@ -368,6 +375,39 @@ func TestQueryPlans(t *testing.T) {
 			query: `SELECT work_id, number_text FROM work_comic_issue
 			         WHERE number_sort >= ? AND number_sort < ? ORDER BY number_sort`,
 			args: []any{1.0, 60.0},
+		},
+		{
+			// Migration 0007's one index, normative in schema.md §1.1: the
+			// REVERSE read, "everything this creator is credited on". In v0.1
+			// its reader is the credit applier — replacing one work's credits
+			// wholesale needs a person's remaining credits, and a person work
+			// credited on nothing is what a later sweep collects — because
+			// 'person' has no screen in any milestone (§6.1). Without it both
+			// are a full scan of every credit in the library.
+			name:  "everything one creator is credited on",
+			index: "ix_credit_creator",
+			query: `SELECT work_id, role FROM work_credit WHERE creator_work_id = ?`,
+			args:  []any{1},
+		},
+		{
+			// The FORWARD read, and the one the primary key's column ORDER
+			// exists for: one work's credits in billing order. work_credit is
+			// WITHOUT ROWID, so the PK IS the table's storage order and this is a
+			// single range scan with no sort. The plan names it "PRIMARY KEY"
+			// rather than an index name, because on a WITHOUT ROWID table there
+			// is no separate index object to name.
+			//
+			// ⚠️ ORDER BY IS PART OF THE QUERY ON PURPOSE. Asserting the seek
+			// alone would stay green if someone reordered the key to
+			// (work_id, creator_work_id, role, position) — the seek on work_id
+			// survives, and it is the TEMP B-TREE for the ordering that appears.
+			// The shared assertion below fails on a temp b-tree, so this case
+			// covers the column order and not merely the leading column.
+			name:  "one work's credits in billing order",
+			index: "USING PRIMARY KEY",
+			query: `SELECT role, position, creator_work_id, credited_as FROM work_credit
+			         WHERE work_id = ? ORDER BY role, position`,
+			args: []any{1},
 		},
 		{
 			name:  "recent sync reports for one instance",

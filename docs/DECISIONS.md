@@ -91,10 +91,11 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0037](#adr-0037) | TOFU SPKI pin enrolment is removed, not completed; enforcement stays | **Accepted** — 2026-08-16; amends no ADR; reopening conditions stated (a pin field on the update path + the change-acceptance UI) |
 | [0038](#adr-0038) | A list freezes its order while a user is aiming at it | **Accepted** — 2026-08-16; amends no ADR; the argument lives in `design/DESIGN-DIRECTION.md` §9.1a and ARCHITECTURE §17.5, this record holds the rejected alternatives |
 | [0039](#adr-0039) | `write_queue.state` loses its `CHECK`; `work_id` gets its foreign key back | **Accepted** — 2026-08-17; **supersedes** `reference/schema.md` §10 step 1 and the seam in `FUTURE.md` §11 / §11.1; closes `REVIEW-LOG.md` WQ-05; ⚠️ **amended 2026-08-17** — decision 3's ground 1 is **struck**, on a misquotation of `reference/sync.md` §4 that dropped the words *toward the \*Arr*: the decision stands on grounds 2 and 3, which are independent of it; ⚠️ **corrected 2026-08-17** — decision 1 and the first rejected alternative wrote the Go `state` validation as **done**; it is **owed by the first `write_queue` writer** and nothing validates the vocabulary today (`REVIEW-LOG.md` M5-25) |
-| [0040](#adr-0040) | The six subtype tables land with the catalogue source that writes each | **Accepted** — 2026-08-17; records as a decision what `00005_library_sync.sql` did; **in tension with** ARCHITECTURE §16's enumerated v0.1 schema line, which is left to the thread that owns §16 |
+| [0040](#adr-0040) | The six subtype tables land with the catalogue source that writes each | **Accepted** — 2026-08-17; records as a decision what `00005_library_sync.sql` did; **in tension with** ARCHITECTURE §16's enumerated v0.1 schema line, which is left to the thread that owns §16; ⚠️ **amended 2026-08-17 by [ADR-0044](#adr-0044)** — the RULE is confirmed and **applied**, not overridden, and one table moves under it: `work_credit` lands with **Kavita** rather than Navidrome, because Kavita is the source that writes credits. `work_album` and `work_track` are unaffected and this ADR's decision clause 1 is otherwise untouched |
 | [0041](#adr-0041) | The sync core ships with **Kavita** as its first adapter; Sonarr and Radarr re-sequence behind it | **Accepted** — owner-decided 2026-08-17; **amends [ADR-0036](#adr-0036)** (*"No catalogue source ships in v0.1"*) and **amends** ARCHITECTURE §16, whose replacement text is proposed here and routed to the thread that owns §16; **re-sequences, rejects nothing** — Sonarr and Radarr still arrive; confirms [ADR-0035](#adr-0035) and [ADR-0040](#adr-0040); ⚠️ **amended 2026-08-17 by [ADR-0042](#adr-0042)** — the write-path question this ADR flagged as *"NOT decided here"* is now answered: the minimal write path **re-sequences with the \*Arr adapters**, so its consequence bullet and the ⚠️ clause in its proposed §16 text are both settled |
 | [0042](#adr-0042) | v0.1's minimal write path re-sequences with the \*Arr adapters; Sonarr and Radarr stay on the roadmap | **Accepted** — owner-decided 2026-08-17; **answers the question [ADR-0041](#adr-0041) flagged and refused**; **amends** ARCHITECTURE §16, [ADR-0041](#adr-0041), [ADR-0036](#adr-0036) and [ADR-0012a](#adr-0012a); **re-sequences, rejects nothing** — [ADR-0012a](#adr-0012a)'s queue design is untouched, the seam costs **no migration**, and Sonarr and Radarr stay on the roadmap at the owner's explicit condition; raises one open question it does not close (neither \*Arr has a milestone) |
 | [0043](#adr-0043) | A **minimal** match-correction UI moves earlier than v0.3; the full correction surface stays there | **Accepted** — owner-decided 2026-08-17; **answers the scope call ARCHITECTURE §6.4 flagged and routed**; **amends [ADR-0026](#adr-0026)**'s correction-UI consequence and **amends** ARCHITECTURE §16.0, §16.1's v0.1 and v0.3 entries; **re-sequences, rejects nothing** — ADR-0026's model, verbs, tables and scoping are untouched and `library_override` is already in the tree; **source-independent** — it turns on v0.1 having a weak-identity catalogue source, not on that source being Kavita; **assigns no milestone**, which is carried as an open question |
+| [0044](#adr-0044) | Author and creator credits ship in v0.1; `work_credit` lands with **Kavita**, not Navidrome | **Accepted** — owner-decided 2026-08-17; **applies [ADR-0040](#adr-0040)'s rule rather than overriding it** — the landing point is the source that writes the table, and Kavita writes credits; **amends [ADR-0040](#adr-0040)** for `work_credit` **only** — `work_album` and `work_track` still wait for Navidrome; **confirms [ADR-0033](#adr-0033)**, whose `person` kind finally gets a writer; **costs a ROW, not a column** — an author is a `work` of kind `person`, which nothing in v0.1 created before; leaves [ADR-0035](#adr-0035), [ADR-0041](#adr-0041) and [ADR-0042](#adr-0042) untouched; raises one open question it does not close (nothing collects an uncredited person) |
 
 ---
 
@@ -4247,7 +4248,27 @@ ground 1.
 [ADR-0035](#adr-0035) and [ADR-0036](#adr-0036) for *which* source each table waits on and in what
 order, and on [ADR-0030](#adr-0030), [ADR-0031](#adr-0031) and [ADR-0033](#adr-0033) for the `work.kind`
 members and columns that did **not** wait. ⚠️ **In tension with ARCHITECTURE §16's enumerated v0.1
-schema line — see the consequences.**
+schema line — see the consequences.** · ⚠️ **Amended 2026-08-17 by
+[ADR-0044](#adr-0044)** — see the flag below.
+
+> ⚠️ **AMENDED 2026-08-17 by [ADR-0044](#adr-0044): this ADR's RULE is confirmed and APPLIED, and
+> one table moves under it.** Nothing in the Why or the Alternatives is reopened; the sentence below
+> that no longer holds is decision clause 1's placement of **`work_credit`** with the music tables.
+>
+> **What moved.** Clause 1 files `work_credit` with `work_album` and `work_track` under **Navidrome**.
+> That grouping was made when the first catalogue source was assumed to be a music server and *"a
+> credit"* meant a performer. [ADR-0041](#adr-0041) made **Kavita** the first adapter, and Kavita
+> reports writers, cover artists, pencillers, inkers, colorists, letterers, editors and translators on
+> its series metadata — eight roles, every one of them already a member of `work_credit.role`'s own
+> `CHECK`. So **this ADR's rule — the landing point is the SOURCE that writes the table, not a date —
+> points at Kavita for `work_credit` once that fact is on the table.** ADR-0044 applies the rule
+> rather than overruling it; `work_credit` lands in `00007_work_credit.sql`.
+>
+> **What did NOT move, and it is most of this ADR.** `work_album` and `work_track` still wait for
+> Navidrome, which still has no adapter. Decision clause 2 (what is irreversible is created anyway)
+> is untouched. The rejected alternatives stay rejected — in particular *"create all six now"*, which
+> ADR-0044 re-weighed and refused again. The consequence about ARCHITECTURE §16's enumerated v0.1
+> schema line still stands, one table closer to agreement.
 
 ### Context
 
@@ -4270,6 +4291,10 @@ either, on an irreversibility argument. The question here is whether that argume
 > `work_comic_issue` — are not created by the library-sync migration.** Each lands with the catalogue
 > source that writes it, in the §16.1 sequence ADR-0036 established: the music three with **Navidrome**,
 > the books-and-comics three with **Kavita** (ADR-0035).
+>
+> ⚠️ **The rule survives and the grouping does not (2026-08-17, [ADR-0044](#adr-0044)):
+> `work_credit` lands with KAVITA**, because Kavita is the source that writes credits. *"The music
+> three"* now means `work_album` and `work_track`. The rule this clause states is what moved it.
 >
 > **2. What is irreversible is created anyway, and was.** `work.kind` carries its **full twelve-member
 > `CHECK`** in 00005, including the six kinds only those tables serve, and `edition.narrators` /
@@ -4993,3 +5018,204 @@ whole milestone on a catalogue where the badge is the majority state. **This is 
 in two days hung on an unnumbered slot** — [ADR-0042](#adr-0042) left Sonarr, Radarr and the minimal
 write path in the same position — and that pattern is itself worth the owner's attention. It needs his
 input, not an agent's guess.
+
+---
+
+<a id="adr-0044"></a>
+## ADR-0044 — Author and creator credits ship in v0.1; `work_credit` lands with Kavita, not Navidrome
+
+**Status:** Accepted · **owner-decided 2026-08-17** · **Applies [ADR-0040](#adr-0040)'s rule rather
+than overriding it** — the landing point is the source that writes the table, and the source that
+writes `work_credit` turned out to be Kavita · **Amends [ADR-0040](#adr-0040)** for one of its six
+tables and leaves the other five exactly where they were · **Confirms [ADR-0033](#adr-0033)**, whose
+`person` kind finally acquires a writer · **Changes nothing about [ADR-0035](#adr-0035),
+[ADR-0041](#adr-0041) or [ADR-0042](#adr-0042).**
+
+### Context
+
+**A book catalogue with no authors is barely a catalogue, and that is what v0.1 had.**
+[ADR-0040](#adr-0040) scheduled `work_credit` with `work_album` and `work_track` under **Navidrome**,
+and that grouping was reasonable when it was made: the first catalogue source was assumed to be a
+music server, ADR-0031 had introduced `work_credit` in a paragraph about Various-Artists compilations
+and classical roles, and *"a credit"* therefore meant a performer.
+
+**[ADR-0041](#adr-0041) then made Kavita the first adapter, and Kavita writes books and comics.**
+The grouping did not survive that, and the migration that shipped the other three tables said so at
+the time. `00006_kavita_subtypes.sql`'s header states the consequence in terms, and it is quoted here
+because it is the finding this ADR answers:
+
+> ⚠️ AND THE CONSEQUENCE OF DEFERRING work_credit IS STATED RATHER THAN DISCOVERED, because it is the
+> one that bites in a comics milestone and not in a music one: work_credit is where an author, writer,
+> penciller, inker, colorist, letterer or cover artist would be stored (its `role` CHECK in schema.md
+> §1.1 names all of them), and it is not here. So any creator a Kavita series reports has NOWHERE TO
+> LAND in v0.1 — not a lossy landing, none at all.
+
+**Kavita does report them.** `GET /api/Series/metadata?seriesId=N` returns a `SeriesMetadataDto` with
+**thirteen** person arrays — `writers`, `coverArtists`, `publishers`, `characters`, `pencillers`,
+`inkers`, `imprints`, `colorists`, `letterers`, `editors`, `translators`, `teams`, `locations` — each
+an array of `PersonDto`, verified against the vendored `api/specs/kavita.json` rather than recalled.
+Eight of those thirteen are creators and every one of the eight has a member in `work_credit.role`'s
+own `CHECK`.
+
+**So ADR-0040's rule points at Kavita once you notice Kavita writes credits.** That is the shape of
+this decision: not *"pull a deferred table forward"*, which is what ADR-0040 exists to refuse, but
+*"apply ADR-0040's rule to a fact about the source that was not known when the table was filed"*.
+
+**The owner was asked and approved it.** The cost was put to him first — see the Decision's clause 3
+— and his answer was: *"yea that sounds good to me"*.
+
+### Decision
+
+> **1. `work_credit` lands in v0.1, with Kavita, in a new migration
+> (`00007_work_credit.sql`).** ADR-0040's rule is applied, not overridden: each subtype table lands
+> with the catalogue source that writes it, and Kavita is the source that writes this one.
+>
+> **2. `work_album` and `work_track` DO NOT MOVE. They still wait for Navidrome.** They are the two of
+> the music three whose writer really is a music server — an album and a track are music objects, no
+> v0.1 source produces either, and `internal/` still has no `navidrome` package. ADR-0040 stands whole
+> for them, and this ADR reopens neither them nor the four-table half of ADR-0040 it does not touch.
+>
+> **3. THE COST IS A ROW, NOT A COLUMN, AND IT WAS PUT TO THE OWNER IN THOSE TERMS.**
+> `work_credit.creator_work_id` is a foreign key into `work`, and the creator it points at is a work
+> of kind **`person`** ([ADR-0033](#adr-0033)). **Nothing in v0.1 created a `person` work before this
+> change.** So approving authors approves *authors as first-class rows* — the Kavita adapter now
+> creates `work` rows of kind `person` as well as credit rows. That is the honest cost the owner
+> accepted, and it is the reason this is an ADR rather than a migration.
+>
+> **4. `person` gets NO subtype table, and that absence is deliberate.**
+> [`reference/schema.md`](./reference/schema.md) §6.1's rule is *"every `kind` has a subtype table or
+> an explicit justification for not having one"*, and `person` has the justification: a credited human
+> is a name, an optional set of `external_id` rows and the credits that point at it, all of which
+> `work`, `external_id` and `work_credit` already carry. A `work_person` table would hold a birth year
+> and a biography, which **no v0.1 source reports for an author**.
+>
+> **5. `person` stays out of the navigation enum, the Tier 1 client prefix index and the FTS corpus**,
+> exactly as §6.1 already requires, and the search-document builder is what enforces it. A person hit
+> would be a search result with nowhere to land, and — because every document is scoped through
+> `search_doc_library` — an author would otherwise appear inside the user's library grid as an item.
+>
+> **6. The dedupe key is the normalized name**, under `kind = 'person'`, using the same v1 normaliser
+> every other title in the schema is keyed by. Two books by one author are **one** person work. Both
+> directions of error are carried openly rather than hidden: a name variant (*"A. Moore"* vs *"Alan
+> Moore"*) **splits into two people**, and two humans sharing a name **merge into one**. See the
+> consequences.
+>
+> **7. Kavita's own person id is NOT written as an `external_id`.** It is instance-local, so two Kavita
+> installs would both claim person 5 and `ux_extid_work_strong` would read that collision as a **merge
+> signal between two unrelated humans** — worse than the name collision it was meant to fix.
+
+### Why the name is the key, when a stable id would be better
+
+**There is no stable, global person identifier available to v0.1.** `PersonDto` carries `aniListId`,
+`malId`, `hardcoverId` and `asin`, and all four are Kavita+ fields on the same present-and-empty
+footing as the series-level ones (§6.4): a free instance returns `0`, `null` or `""`. The instance's
+own `id` is disqualified by clause 7. So the alternative to the name is not *"a better key"* — it is
+**a person work per credit per series**, which makes `work` a table of strings with foreign keys and
+grows with credits rather than with the catalogue.
+
+**The over-merge direction is the one that actually loses information**, and it is accepted on §6.4
+rule 1's own ground: *"failing to identify is honest; merging wrongly is not"* — except that here the
+merge is over a name, in a table with **no screen in any milestone**, where the visible consequence of
+two John Smiths sharing a row is that a credit link (§17.6) leads somewhere slightly wrong rather than
+that two catalogue items collapse. That is a materially smaller blast radius than a work merge, which
+is why the same project that refuses fuzzy work merging accepts exact-normalized-name person merging.
+
+**The seam for fixing the split direction exists and is not built.** `kavita.PersonDto` carries an
+`aliases` array. Folding aliases into `work_alt_title` rows on the person work would let a later
+matcher resolve *"A. Moore"* and *"Alan Moore"* to one row. That is a matcher, not a column, so it
+waits — and it is cheap to add precisely because the person is already a `work`.
+
+### Alternatives considered
+
+- **Leave `work_credit` with Navidrome and ship v0.1 without authors.** Rejected by the owner. It is
+  what ADR-0040 literally scheduled, and 00006's header already recorded that the result is *"not a
+  lossy landing, none at all"* for every creator a Kavita library reports. A books-and-comics
+  catalogue whose item pages cannot name an author is not the thing v0.1 exists to prove.
+- **Add an `author TEXT` column to `work_book` and a `writer TEXT` to `work_comic`.** Rejected, and
+  it is the tempting one because it costs no `person` rows. It reintroduces the exact defect
+  [ADR-0031](#adr-0031) exists to prevent — *"the moment attribution is a scalar, Various-Artists
+  compilations, collaborations and classical roles are unrepresentable"* — in the medium where it
+  bites hardest: an ordinary comic has a writer AND a penciller AND an inker AND a colorist AND a
+  letterer AND a cover artist, six roles that a scalar column cannot hold and that a comma-joined
+  string turns into a parse. It would also have to be UNDONE, with a backfill, the day `work_credit`
+  lands anyway.
+- **Land all six of ADR-0040's tables now, since one is moving.** Rejected: it is the alternative
+  ADR-0040 already weighed and refused, and nothing about Kavita changes the answer for `work_album`
+  and `work_track`. *"Cut before you add"* is satisfied by moving exactly the table whose writer
+  arrived and no others.
+- **Create the `person` works but skip `work_credit`, storing the link as a `work.parent_work_id`.**
+  Rejected as incoherent: a book has one parent (its series) and many creators, and the parent edge
+  carries no role, no billing order and no co-credit.
+- **Defer the whole thing to v0.2 with the request flow.** Rejected because it is not free to wait:
+  `work_credit` is a brand-new table with no dependants *today*, which is ADR-0040's own reason such a
+  table is cheap to add later — but every Kavita import that runs before it lands throws away credits
+  that would then need a full re-import to recover, on a metadata endpoint that costs one HTTP GET per
+  series.
+- **Read `PersonDto.roles` instead of the array a person arrived in.** Rejected on a checked fact
+  rather than a preference: `roles` is the set of roles that person holds **across the whole
+  instance**, so a person who writes one series and colors another returns `{Writer, Colorist}` in
+  both series' metadata, and reading it would credit a series' writer as its colorist.
+
+### Consequences
+
+* **`work` is no longer a table of catalogue items alone.** Every `SELECT … FROM work` written before
+  this change may now see `person` rows, and the queries that must not — the grids, the corpus, the
+  counts — need `kind <> 'person'` or an explicit kind filter. This is the sharpest consequence of the
+  decision and it is stated first: `cmd/usarr`'s import end-to-end test had two assertions that
+  counted `work` bare and both had to be narrowed.
+* **The Kavita adapter now makes one HTTP GET per series.** `SeriesDto` carries no creator field, and
+  the three bulk-shaped alternatives were checked against the vendored spec and cannot rebuild the
+  mapping: `POST /api/Person/all` returns people with no series linkage, `GET
+  /api/Person/series-known-for` is documented *"the top 20 series"*, and `GET
+  /api/Person/chapters-by-role` is documented *"Limited to 20 results"*. The cost is budgeted the way
+  [`reference/sync.md`](./reference/sync.md) §2 budgets the *Arr episode fetch — *"fetch them per
+  parent, bounded"* — and it runs as a **phase-B pass after the item stream closes**, never inside its
+  callback, which would hold the streaming connection open across N round trips.
+* **Five of Kavita's thirteen person arrays are DROPPED, and every one of the thirteen is accounted
+  for in code.** `publishers`, `imprints` and `teams` are **organisations**; `characters` and
+  `locations` are not people at all. Kavita stores all five in the same table as its writers and UsArr
+  does not inherit that conflation. `publishers` has a home in the schema — `work_comic.publisher`,
+  which migration 0006 created and nothing writes — and this change deliberately does not write it,
+  because that column belongs to the phase-B metadata backfill that also owns `summary` and
+  `releaseYear`.
+* **Kavita's `writers` array maps to two different roles by kind: `author` for a book, `writer` for a
+  comic.** Kavita has **no** `authors` array — its Writer role is where an EPUB's `dc:creator` and a
+  ComicInfo `Writer` element both land — so mapping it to `writer` everywhere would leave
+  `work_credit.role`'s `author` member with no writer at all while filing every novelist under a
+  comics role.
+* **A work that two remote items resolve onto gets LAST-WRITER-WINS credits.** Credits are replaced
+  wholesale per *work*, driven per *remote item*, so when tier 1 merges two Kavita series onto one work
+  the second item's credit set replaces the first's. This is the same shape as
+  [ADR-0041](#adr-0041)-era `work_comic.reading_direction` (`REVIEW-LOG.md` LS-07), it is asserted in
+  a test rather than left to be rediscovered, and the alternative — accumulating across the remote
+  items that share a work — is a merge, which v0.1 explicitly does not have.
+* **`illustrator` and `narrator` remain members of `work_credit.role` with no writer**, alongside the
+  seven music roles. They are in the `CHECK` because SQLite cannot `ALTER` one, not because something
+  produces them.
+* **"Find everything by this author" is still unanswered in v0.1**, and this ADR does not change it.
+  `person` has no screen, so the credit is reachable as a link on an item (§17.6) and nowhere else.
+  `ix_credit_creator` exists anyway and its v0.1 reader is the write path.
+* **No `work.kind` member is added and no `kind_byte` changes.** `00005_library_sync.sql` paid for the
+  full twelve-member `CHECK` — including `person` — precisely so that this would cost a plain
+  `CREATE TABLE`. ADR-0030's and ADR-0033's up-front payment is what makes this migration cheap, which
+  is the clearest vindication those two ADRs have had.
+
+**What this does NOT change:**
+
+- **The music three minus one.** `work_album` and `work_track` still wait for Navidrome, which still
+  has no adapter. ADR-0040 is amended for `work_credit` alone.
+- **[ADR-0035](#adr-0035), [ADR-0041](#adr-0041) and [ADR-0042](#adr-0042) all stand.** Kavita is
+  still the comics-and-books source, still v0.1's first adapter, and the minimal write path is still
+  re-sequenced with the \*Arr adapters. This ADR consumes their results and revisits none of them.
+- **No merge machinery.** `work_merge` is still v1.0 and this change builds none of it; the person
+  dedupe is a lookup on an indexed column, not a merge.
+- **No new screen.** Rendering a credit is the item page's job and the item page is a later commit.
+
+### 🚩 Open question this ADR raises and does not answer
+
+**Nothing collects a `person` work that ends up credited on nothing.** A creator removed upstream
+leaves its `work` row standing — harmless (no document, no library, no screen) and invisible, but
+unbounded over years of re-imports on a churning library. Collecting it inside the per-work credit
+replace is wrong, because the same person may be credited by another work in another batch, so the
+right shape is a sweep, and a sweep is a subsystem this change deliberately does not add. It is
+recorded here rather than guessed at, and `ix_credit_creator` is the index such a sweep would read.
