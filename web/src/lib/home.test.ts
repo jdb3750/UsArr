@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { attention, headline, homeMode, needsAttention } from './home';
+import {
+	attention,
+	hasIndexer,
+	headline,
+	homeMode,
+	HOME_SEARCH_SCOPE_NOTE,
+	needsAttention
+} from './home';
 import { rollup, rollupCount, type ServiceRow } from './services';
 import type { ServiceHealth, ServicesHealth } from './api';
 
@@ -185,5 +192,52 @@ describe('headline', () => {
 
 	it('does not claim Search-and-Grab once a library-bearing service exists', () => {
 		expect(headline('library', 1, '')).not.toMatch(/Search-and-Grab/);
+	});
+});
+
+/**
+ * THE SEARCH ENTRY POINT'S TWO RULES, and both are rules rather than taste.
+ *
+ *  1. A box is drawn only where something can answer it. `hasIndexer` is the
+ *     precondition, NOT the mode: an install with a Sonarr and a Prowlarr is in
+ *     `library` mode and has a perfectly good indexer, and gating on the mode
+ *     would delete a working control the day a Sonarr is accepted.
+ *  2. The box says what it searches. DESIGN-DIRECTION §8.3 keeps library search
+ *     and release search apart — merging them is how a 0 ms local query waits on
+ *     a 30 s indexer — so an unlabelled input, which reads as library search by
+ *     default, is the failure.
+ */
+describe('hasIndexer', () => {
+	it('is false on a fresh install, so Home never draws a box with nothing behind it', () => {
+		expect(hasIndexer(payload())).toBe(false);
+	});
+
+	it('is true whenever an indexer is configured', () => {
+		expect(hasIndexer(payload({ services: [health()] }))).toBe(true);
+	});
+
+	it('stays true in library mode, because an indexer beside a Sonarr still answers', () => {
+		const rows = [health(), health({ id: 2, name: 'Radarr', kind: 'radarr', role: 'library' })];
+		const health_ = payload({ services: rows });
+		expect(homeMode(health_)).toBe('library');
+		expect(hasIndexer(health_)).toBe(true);
+	});
+
+	it('is false when the only service is library-bearing', () => {
+		const rows = [health({ kind: 'radarr', role: 'library' })];
+		expect(hasIndexer(payload({ services: rows }))).toBe(false);
+	});
+});
+
+describe('HOME_SEARCH_SCOPE_NOTE', () => {
+	it('names what is searched and where the results are', () => {
+		expect(HOME_SEARCH_SCOPE_NOTE).toMatch(/indexers/i);
+		expect(HOME_SEARCH_SCOPE_NOTE).toMatch(/Requests/);
+	});
+
+	it('says explicitly that it is not your own library', () => {
+		// The whole point of the string. A box that only says "Search" is the
+		// merge §8.3 forbids, arrived at by omission.
+		expect(HOME_SEARCH_SCOPE_NOTE).toMatch(/not your own library/i);
 	});
 });
