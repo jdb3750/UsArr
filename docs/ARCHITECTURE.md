@@ -3246,8 +3246,15 @@ carries eleven groups in a `SearchResultGroup`.
    consequence was unaddressed: a user who types `dune`, clicks **Movies 3** — the most natural
    action for someone looking for the film — gets *Dune: Part Two*, *Dune* (1984) and
    *Jodorowsky's Dune*, and **not** *Dune* (2021), which is filed under Ebooks on a linked row, with
-   nothing on screen explaining the absence. So: *"1 more film is on a linked row in the **Ebooks**
-   group: Dune (2021). — [Show it]"*. The data is already there; it is what renders the
+   nothing on screen explaining the absence. So the group's foot carries **a sentence and, beside
+   it, a link** — *"1 more film is on a linked row in the **Ebooks** group: Dune (2021)."* and
+   *"Show it"*. **Two elements, written here as two.** The earlier form of this line ran them
+   together inside one pair of quotes as `… Dune (2021). — [Show it]`, where the em dash was §17
+   notation for the join between a sentence and a control and the brackets were notation for the
+   control; quoted like that it reads as one string a user is shown, and `check.mjs`'s §13 sweep
+   read it as exactly that. It is notation, so the notation is unambiguous instead: one
+   italic-quoted span per element the user actually sees, and notation kept outside the quotes.
+   The data is already there; it is what renders the
    `also film, 2021` chip.
 
 5. **The library column renders only when it varies *within the group it is in*.** The earlier rule
@@ -3766,9 +3773,16 @@ not restate it** (ADR-0035). Two proposals are decisions rather than defaults:
   inline note** — *"Joining Kavita Manga into Comics as a second source."* **The merge key is stated
   rather than left to be discovered: case-insensitive, whitespace-trimmed, per user.**
   **And the one-way door is marked per row.** *"Editing any proposal marks that library
-  user-managed, after which a later connect can only offer to add sources — never reshape it"* is a
-  permanent decision delivered as helper text beside the Accept button, with no indicator of which
-  rows have crossed it. Each edited row carries the mark, in the row.
+  user-managed. After that, a later connect can only offer to add sources. It can never reshape the
+  library."* is a permanent decision delivered as helper text beside the Accept button, with no
+  indicator of which rows have crossed it. Each edited row carries the mark, in the row.
+  🔍 The wording is three plain sentences because §13 bans the mid-sentence em-dash beat in UI
+  microcopy, and the earlier form was a 22-word sentence built on one, ending
+  `… can only offer to add sources — never reshape it`. The meaning is unchanged; only the beat is
+  gone — and that quotation is in backticks rather than the italic-quoted copy form on purpose,
+  because a retired string quoted as shipping copy is still shipping copy to the sweep. It is the
+  construction §13 bans on its own stated ground, and no word floor was ever going to catch it,
+  which is why `check.mjs` now reads §17's own shipping copy rather than trusting it.
 - ⚠️ **From the milestone Audiobookshelf lands in, not v0.1: Audiobookshelf is offered as *two*
   libraries — Ebooks and Audiobooks — over its one
   `mediaType=book` library**, which ABS itself cannot do: it distinguishes the two only at item
@@ -3781,7 +3795,33 @@ not restate it** (ADR-0035). Two proposals are decisions rather than defaults:
   🔍 *Kavita's `LibraryType 3 (Image)` was the second example here and is withdrawn: re-checked
   against Kavita `main` on 2026-08-16, `API/Entities/Enums/LibraryType.cs` declares exactly `Manga = 0`,
   `Comic = 1`, `Book = 2` and no `Image` member at all, so the claim cannot be sourced. The rule does
-  not depend on it.* **The column holding both outcomes is headed `Decision`, not `Accept`** — accepted rows
+  not depend on it.*
+  ⚠️ **Amendment, 2026-08-17 — the withdrawal is itself withdrawn.** `Image = 3` is real, and
+  `LibraryType 3` returns as the second worked example. At tag **`v0.9.0.2`** (commit **`6bcd5689`**),
+  the version the owner runs, `Kavita.Models/Entities/Enums/LibraryType.cs` declares **six** members —
+  `Manga = 0`, `Comic = 1`, `Book = 2`, `Image = 3`, `LightNovel = 4`, `ComicVine = 5` — and the file
+  is byte-identical at `develop` (`9c3e5400`). Nor is `Image` new: it is already present at tag
+  **`v0.7.11`** (`caf2ba08`, 2023-12-03), so it has shipped in every release for about 2.7 years.
+  UsArr's own client was correct throughout — `internal/kavita` declares all six and
+  `internal/kavita/contract_test.go` asserts them against the vendored spec — so **the document was
+  the only defect**. `internal/libsync/kavita.go` records the contradiction and deliberately declines
+  to pick a side, since resolving it needed a network fact that pass could not verify (REVIEW-LOG
+  LS-04); it is picked here.
+  🚩 **The root cause is the part worth keeping, and the rule goes in the correction: any Kavita
+  re-check must read a TAG or `develop`, never `main`.** Kavita's `main` is frozen at the v0.7.8
+  release commit — `97950804`, dated **2023-09-03**, subject `v0.7.8 - New Filtering System (#2260)`
+  — while its release line is `develop` plus tags. The withdrawal note above was not careless: it is
+  exactly **reproducible**, because `main` at the very path it cites does declare those three members
+  and no more. It read a real file correctly, and the file had been stale for three years. Its own
+  tells confirm which tree it read — `API/Entities/` exists in no v0.9.x layout, and a three-member
+  enum has not been current since 2023.
+  **The general form, because this repo vendors several upstreams: an upstream project's `main` is
+  not necessarily its release line, and a version claim read from the wrong branch is wrong in a way
+  that looks thorough.** That is `DEVELOPMENT.md` §11 rule 5, `name the surface, not just the
+  value`, pointed at someone else's repository: two correct reads of two different trees are not
+  comparable, and the one that is not the release line is not evidence about a release. **Cite a tag
+  and a commit, never a branch name**, for the reason this entry demonstrates.
+  **The column holding both outcomes is headed `Decision`, not `Accept`** — accepted rows
   keep their checkbox, the declined row keeps its word, and an `Accept` header over a cell reading
   `declined` is a header contradicting its own cell.
 

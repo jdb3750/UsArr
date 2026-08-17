@@ -10058,3 +10058,203 @@ frozen in 2023.
 * **No live Kavita was contacted.** As with `LS-01`, the only live measurement this project has is
   ADR-0035 §2a's channel-3b probe. Everything above is Kavita's **source** and the **vendored spec**,
   which is stronger evidence than a schema alone and weaker than a wire capture.
+
+---
+
+# VN9-03 — `tokens.css`'s retired Tailwind path, the `--bg-hover` deferral carried back, §17's two ruled copy strings, and Kavita's `Image` enum
+
+## VN9.14 `tokens.css`'s three Tailwind sites: one urgent, one cut, one turned back into a seam
+
+**The amendment was verified before anything was acted on**, because the brief's premise was itself a
+claim. `DECISIONS.md` carries *"⚠️ Amendment, 2026-08-16 — Tailwind is not used, and the enforcement
+it was chosen for is gone with it"* inside ADR-0025's body, above the Context. It replaces decision
+points **1** and **5**, leaves **2** (Bits UI), **3** (Tabler) and **4** (IBM Plex) standing, notes
+**6** was always about `embed.FS`, and **no later ADR supersedes it**. Verified independently of the
+amendment too: `web/` has no Tailwind package, no `@theme`, no utility class, and `app.css` says in
+its own voice *"THIS FILE IS A HAND-PORT OF tokens.css, NOT AN IMPORT"*. **So the ADR is fine and
+`tokens.css` is what went stale**, in three places.
+
+✅ **§0, the urgent one.** It instructed `@import "tailwindcss"` plus `@theme { --*: initial; }` and
+called that line *"load-bearing (ADR-0025)"* — a consumption path that has been retired. Rewritten to
+describe how the tokens are actually consumed: directly, by hand, no engine and no build step, with
+the two gates that hold the hand-ports in step named alongside what each can and cannot see —
+`check.mjs` §2 (vs the mockups, `make design`) and `tokenparity.test.ts` (vs `app.css`, `make check`).
+Per **SD-01** it **points at the amendment** for the reasoning and the loss rather than restating it,
+since restating is what left the section wrong for the interval it was wrong. The file header carried
+the same claim a third time (*"it is written so it drops straight into Tailwind v4"*) and went with it.
+
+✅ **§5, `--spacing: 4px` — established, then cut.** ⚠️ **Held off `main` pending VN9.16's
+retirements**, along with VN9.15 — both are on the thread branch and neither is in `main`'s tree
+until the five allowlist entries land. The brief asked for a consumer to be found before
+a decision. There is none. The only other match across `web/`, `internal/` and the mockups is
+`tokenparity.test.ts`'s `TOKENS_ONLY_ALLOWED` entry, whose content is the record that `app.css`
+deliberately does not port it — *"porting it would add a token nothing reads"*. **That is a reader of
+the token's absence, not a consumer of its value**, so it does not keep the declaration alive.
+Removed, with a note saying so, because the next reader's question is where the 4px base unit went
+and the answer is that it never lived there: the `--space-N` scale is what everything resolves to.
+
+✅ **§10, the `@theme inline` block of 34 re-exports — removed, seam kept as instruction.** This was
+the retired path itself, mapping the file's tokens into an engine not in the tree. What replaces it
+is what a future Tailwind v4 adoption would have to restore, in `app.css` and not here: the
+`@theme { --*: initial; }` line that was the enforcement the ADR chose Tailwind *for*, `--spacing`,
+and the re-export block — with `inline` flagged as the load-bearing word, since without it Tailwind
+copies the value rather than the reference and the dark theme never applies. **A seam that is 34
+lines of dead mapping is a leftover; a seam that is a list of instructions is a seam.** Nothing in
+§1-§9 has to change for the adoption, which is what makes the seam real.
+
+⚠️ **Neither §5 nor §10 was load-bearing in the way the brief's stop-and-report clause anticipated,
+but §5 was coupled in a way it did not** — see VN9.16.
+
+## VN9.15 `--bg-hover`: the deferral's answer, carried back
+
+⚠️ **Held off `main` pending VN9.16's retirements** — the change is on the thread branch, not in
+`main`'s tree. **Decision recorded: `--hover` wins and `tokens.css` changes to match**, and the reasoning matters
+more than the verdict because the shape recurs. The values were **already `tokens.css`'s own** — its
+§4 note named `--hover` at exactly `#eceae5` / `#26241f` — and §4 **argued in writing against its own
+mapping**, on the ground that mapping hover and raised both to `--n-1` *"leaves hover-over-a-selected-
+row with nothing to say"*. §4 then deferred to *"the pass that writes `web/src/app.css`"*, and that
+pass answered **by name**. So this is **not a conflict resolved by fiat; it is a deferral whose
+answer was never propagated back** — which is exactly what §4 predicted when it wrote **WHETHER IT
+HAS BEEN TAKEN IS NOT A FACT THIS FILE OWNS**. It was right about the risk, and the risk landed.
+
+Landed: `--inset` and `--hover` in §1, §2 **and** §3 — the `prefers-color-scheme` block included,
+which is where an earlier audit found stale values the first two blocks did not have — as **two
+interstitials rather than two new ramp steps**, so the ramp stays nine values with two interstitials
+and `--n-N` keeps its meaning. §4 gains `--bg-inset: var(--inset)` and repoints
+`--bg-hover: var(--hover)`. §4's note is rewritten from a deferral into the record of how the
+deferral was answered, keeping what it was right about, and it now states the **adoption direction**
+for the next role that arrives this way: the mockup or `app.css` may prove a role first, but the
+answer comes back to `tokens.css`, and the file that proved it stops being where the answer lives.
+
+## VN9.16 The allowlist entry is obsolete — and it is one of five, not one
+
+The brief asked whether `DIVERGENT_ALLOWED['--bg-hover']` is now obsolete. **It is.** But it is not
+alone, and the others fail louder. **Established by simulation, not by reading**: with exactly five
+entries deleted `tokenparity.test.ts` passes 10/10, and with any one present it fails. The test file
+was reverted after the probe and this thread does not touch it.
+
+| Entry | Why it is now dead |
+| --- | --- |
+| `APP_ONLY_ALLOWED['--inset']` | Fails HARD — *"--inset is now in tokens.css — delete its APP_ONLY_ALLOWED entry"*. Its own clause reads **RETIRED BY: tokens.css declaring --inset in its own ramp** |
+| `APP_ONLY_ALLOWED['--hover']` | The same, same clause |
+| `APP_ONLY_ALLOWED['--bg-inset']` | The same; **RETIRED BY: the same adoption that retires --inset** |
+| `DIVERGENT_ALLOWED['--bg-hover']` | **The quiet one.** Its pinned pair no longer matches, but the two files now agree so there is no drift to report — it would sit **dead and passing** |
+| `TOKENS_ONLY_ALLOWED['--spacing']` | Fails HARD — *"--spacing is allowlisted but tokens.css no longer declares it"* |
+
+ℹ️ A sixth is dead but **asserted by nothing** and therefore harmless:
+`TOKENS_CSS_NON_TOKEN_BLOCKS['@theme inline']`, orphaned by §10's removal. It is a skip key; with the
+block gone the skip is simply never taken. Worth deleting on the same pass, not worth a commit.
+
+⚠️ **These two commits leave `make check` RED until the five land**, and that is stated rather than
+discovered. `web/src/lib/tokenparity.test.ts` is frontend-owned and out of this thread's scope, so
+the retirements are **reported for routing and the two coupled commits are held off `main`**. Every
+one of the five is a deletion whose own recorded retirement condition this work satisfies; none
+requires a judgement about what the test checks.
+
+## VN9.17 The two §17 copy strings, ruled
+
+Both were carried in `check.mjs` as **⚠️ RAISED, NOT BLESSED** — recorded rather than rewritten,
+because *"a checker that edits the specification it checks is not a checker"*. That was the right
+call and the ruling belongs in §17, which is where both now live.
+
+✅ **§17.5 — NOTATION, not a copy defect.** *"1 more film is on a linked row in the **Ebooks** group:
+Dune (2021). — [Show it]"* was **one pair of quotes around two things**: a sentence, and a control
+whose brackets were themselves notation. The em dash was §17's join between them, not a beat in a
+sentence a user reads — but quoted that way it is **indistinguishable from one**, which is why the
+sweep flagged it and why the exemption could only say *"it may be notation"*. §17 now writes two
+elements as two: one italic-quoted span for the sentence, one for the `Show it` link, notation
+outside the quotes. The checker and the next reader both stop tripping on it, and the link label
+joins the corpus instead of hiding inside another string.
+
+✅ **§17.8 — a REAL finding, as the exemption suspected.** A 22-word UI sentence built on a
+mid-sentence em-dash beat, delivered as helper text. Rewritten as three plain sentences, meaning
+unchanged, only the beat gone:
+
+> *"Editing any proposal marks that library user-managed. After that, a later connect can only offer
+> to add sources. It can never reshape the library."*
+
+Both `S17_EMDASH_ALLOWED` entries are **deleted rather than left passing**, and the map's note records
+what each was ruled and where the ruling lives. The four that remain are the short-head-then-detail
+construction §13's own worked example endorses; the summary line said *"2 of them open copy
+questions"* and no longer does.
+
+⚠️ **One trap, recorded because it recurred immediately and will recur again.** The sweep matches the
+italic-quoted form **anywhere** in §17, including inside backticks. A first draft explained the
+notation using a literal example of that form and thereby added a phantom `…` shipping-copy string —
+**59 spans where 57 was intended**. It happened a second time one commit later, quoting a Kavita
+commit subject and a `DEVELOPMENT.md` rule name. **Retired strings, rule names and examples of the
+notation are quoted in backticks only.** Caught both times by reading the span count rather than the
+verdict, which is the §11 practice doing its job.
+
+## VN9.18 §17.8's Kavita `Image` withdrawal is itself withdrawn, and `main` is why
+
+§17.8 recorded that `LibraryType 3 (Image)` *"is withdrawn … re-checked against Kavita `main` on
+2026-08-16 … declares exactly `Manga = 0`, `Comic = 1`, `Book = 2` and no `Image` member at all"*.
+**`Image = 3` is real.** Verified here directly rather than taken from the relay, at refs resolved by
+`git ls-remote` and read at each:
+
+| Ref | Commit | Path | Enum |
+| --- | --- | --- | --- |
+| `v0.9.0.2` — the version the owner runs | `6bcd5689` | `Kavita.Models/Entities/Enums/LibraryType.cs` | `Manga=0 Comic=1 Book=2 Image=3 LightNovel=4 ComicVine=5` |
+| `develop` | `9c3e5400` | same | byte-identical |
+| `v0.7.11` (2023-12-03) | `caf2ba08` | `API/Entities/Enums/LibraryType.cs` | `Image = 3` **already present** |
+| `main` | `97950804` (2023-09-03) | `API/Entities/Enums/LibraryType.cs` | `Manga=0 Comic=1 Book=2` — **and nothing else** |
+
+So `Image` has shipped in every release for about **2.7 years**. UsArr's own client was correct
+throughout — `internal/kavita` declares all six and `internal/kavita/contract_test.go` asserts them
+against the vendored spec — **the document was the only defect**. `internal/libsync/kavita.go` records
+the contradiction and deliberately declines to pick a side (**LS-04**); it is picked here.
+**Annotated, not rewritten**, per the amendment convention: the dated claim stands as the dated claim
+it was, with the correction beneath it.
+
+🚩 **The root cause is the part worth keeping.** Kavita's `main` is frozen at the v0.7.8 release
+commit — `97950804`, 2023-09-03, subject `v0.7.8 - New Filtering System (#2260)` — while its release
+line is `develop` plus tags. **The withdrawal note was not careless; it is exactly reproducible.**
+`main` at the very path it cites declares those three members and no more, so the check ran correctly
+against a tree that stopped moving three years ago. Its own tells confirm which tree it read:
+`API/Entities/` exists in no v0.9.x layout, and a three-member enum has not been current since 2023.
+
+**The rule goes into the correction rather than into a reviewer's memory: any Kavita re-check reads a
+TAG or `develop`, never `main`.** And the general form, because this repo vendors several upstreams:
+**an upstream project's `main` is not necessarily its release line, and a version claim read from the
+wrong branch is wrong in a way that looks thorough.** That is `DEVELOPMENT.md` §11 rule 5 — *name the
+surface, not just the value* — pointed at **someone else's repository**: two correct reads of two
+different trees are not comparable, and the one that is not the release line is not evidence about a
+release. **Cite a tag and a commit, never a branch name.**
+
+## VN9.19 On the gate
+
+✅ **`make design`: exit 0, 2m07s**, closing on `all design checks pass`, run four times across this
+pass. Final numbers: **57** shipping-copy strings read from `ARCHITECTURE.md` §17 against a floor of
+**45**, with **4** recorded em-dash exceptions all matched; **6978** user-visible strings against a
+floor of **6750**; token drift **12 shared values identical in both files** in each theme; contrast
+floors clear on 9 foregrounds × 3 grounds in both themes.
+
+⚠️ **What it is evidence for, per item, because three of the four items are outside what it reads.**
+
+- **VN9.17** — **direct evidence.** §17's copy is inside the corpus the sweep reads, and this item
+  changed that copy. The span count moving 56 → 59 → 57 is what caught the phantom-string trap twice.
+- **VN9.18** — **evidence about form only.** The annotation sits in the corpus, so the gate checks it
+  for banned words, `!` and em dashes. It says **nothing** about whether `Image = 3` exists; that
+  rests on the tags and commits cited in the table above, which is the only check that applies.
+- **VN9.14, VN9.15** — **regression check, not evidence.** `make design` §2 does read `tokens.css`,
+  but it compares it against the **mockups**, and the mockups already carried these values; nothing
+  it inspects can see §0, §5 or §10, and it does not cover `web/` at all. The gate that can see this
+  work is `tokenparity.test.ts`, and its verdict is VN9.16's, stated there rather than summarised.
+
+✅ **Both `make design` guards were fired deliberately rather than trusted**, per §11 — a guard that
+has never been triggered is indistinguishable from no guard, and this file has twice found rules that
+matched nothing and printed `ok`.
+
+- Restoring §17.8's em dash: `FAIL §13 copy §17: 1 violation(s) in ARCHITECTURE §17's own shipping
+  copy, out of 57 string(s) read`, **exit 2** — so the sweep genuinely reads §17 rather than exempting it.
+- Adding one bogus exemption: `FAIL §13 copy §17: 5 recorded em-dash exemption(s) but 4 matched — a
+  recorded string no longer appears in §17`, **exit 2** — so the retirement in VN9.17 is **provable
+  rather than asserted**, which is the property that entry claims for itself.
+
+⚠️ **`make check` is NOT green on the full branch, and this is the honest headline.** Two commits
+(VN9-06, VN9-07) turn `tokenparity.test.ts` red until the five allowlist entries in VN9.16 are
+retired, and that file is frontend-owned. **Those two commits are held off `main`**; the four that are
+green (VN9-03, VN9-04, VN9-05 and this log) merge. Reported rather than worked around, because
+`make check` is the stated pre-commit gate and a thread that cannot fix the coupled file should not
+be the thread that lands it red.

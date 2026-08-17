@@ -13,8 +13,8 @@
  * check.mjs §2 is what holds the mockup copy to it.
  *
  * This file is the single source of truth for every
- * colour, size, duration and radius the UI will ever use, and it is written so
- * it drops straight into Tailwind v4 (see §0 and ADR-0025).
+ * colour, size, duration and radius the UI will ever use. It is plain custom
+ * properties and depends on no CSS engine — §0 says how it is consumed.
  *
  * Rationale for every value lives in DESIGN-DIRECTION.md, which owns the
  * reasoning; this file owns the numbers. If the two disagree, the design
@@ -63,21 +63,27 @@
 /* -----------------------------------------------------------------------------
  * §0. How this file is consumed
  *
- * Tailwind v4's `@theme` block is static, so a themeable palette is expressed
- * in two layers: raw values that switch with the theme (§1-§3, plain custom
- * properties on :root), and an `@theme inline` mapping that hands those
- * variables to Tailwind so the utilities generate (§9). `inline` is required —
- * without it Tailwind copies the value rather than the reference and the dark
- * theme never applies.
+ * Directly, as plain custom properties, and by hand. §1-§3 declare the raw
+ * values that switch with the theme, §4 aliases them by role, and a component
+ * writes `var(--bg-hover)`. There is no engine and no build step between this
+ * file and the app.
  *
- * In `web/src/app.css`:
+ * `web/src/app.css` and the mockups' `usarr.css` are HAND-PORTS, not imports —
+ * app.css says so in its own voice ("THIS FILE IS A HAND-PORT OF tokens.css,
+ * NOT AN IMPORT"). Nothing here is therefore held in step by a dependency; it
+ * is held by review plus two gates, and knowing which is which matters when one
+ * of them goes green:
  *
- *   @import "tailwindcss";
- *   @import "./tokens.css";
- *   @theme { --*: initial; }     <- deletes Tailwind's ENTIRE default theme.
- *                                   After this, bg-indigo-500, shadow-md and
- *                                   rounded-2xl do not exist as classes. This
- *                                   line is load-bearing (ADR-0025).
+ *   check.mjs §2                     tokens.css vs the mockups   (make design)
+ *   web/src/lib/tokenparity.test.ts  tokens.css vs app.css       (make check)
+ *
+ * ⚠️ This section used to instruct `@import "tailwindcss"` plus
+ * `@theme { --*: initial; }` in app.css, and called that line load-bearing.
+ * THAT CONSUMPTION PATH IS RETIRED. ADR-0025's amendment of 2026-08-16 —
+ * "Tailwind is not used, and the enforcement it was chosen for is gone with it"
+ * — owns the change and what was lost with it, including that the replacement
+ * enforcement is weaker. Read the reasoning there; restating it here is what
+ * left this section wrong for the interval it was wrong (REVIEW-LOG SD-01).
  * --------------------------------------------------------------------------- */
 
 
@@ -533,48 +539,30 @@
 }
 
 /* -----------------------------------------------------------------------------
- * §10. Tailwind v4 mapping
+ * §10. The seam a utility engine would attach to
  *
- * `inline` is required: it makes Tailwind emit `var(--n-8)` rather than
- * copying #1c1a17, which is what lets the dark theme switch at runtime.
- * Only the namespaces below generate utilities — there is no --color-indigo-*,
- * no --shadow-md, no --radius-2xl, because §0's `@theme { --*: initial; }`
- * deleted them.
+ * There is no mapping block here any more. This section held an `@theme inline`
+ * re-export of 34 tokens under Tailwind's namespaces; §0's amendment retired the
+ * path it fed, so it was mapping this file's tokens into an engine no longer in
+ * the tree. Tokens are consumed directly instead.
+ *
+ * Kept as instruction rather than as dead mapping, because the seam is real and
+ * the re-export was not. WHAT A FUTURE TAILWIND v4 ADOPTION WOULD RESTORE, in
+ * app.css and not here:
+ *
+ *   1. `@theme { --*: initial; }`, to delete the default theme — that line is
+ *      the enforcement ADR-0025 originally chose Tailwind FOR, and without it
+ *      the adoption buys utilities and nothing else.
+ *   2. `--spacing: 4px` (§5), which Tailwind reads to derive `p-3` / `gap-2`.
+ *   3. An `@theme inline` block re-exporting §4's aliases as `--color-*`, §6's
+ *      families and type scale as `--font-*` / `--text-*` (each with its
+ *      `--text-N--line-height` pair), §7's radii and overlay shadow as
+ *      `--radius-*` / `--shadow-*`, and §9's easing as `--ease-*`.
+ *
+ * `inline` is the load-bearing word in (3): without it Tailwind copies the
+ * VALUE rather than the reference, and §2's dark theme never applies.
+ *
+ * Nothing in §1-§9 has to change for any of that, which is the seam — and why
+ * it is worth two dozen lines of instruction and not worth thirty-four lines of
+ * mapping that no build reads.
  * --------------------------------------------------------------------------- */
-
-@theme inline {
-  --color-bg:            var(--bg);
-  --color-bg-raised:     var(--bg-raised);
-  --color-bg-hover:      var(--bg-hover);
-  --color-bg-selected:   var(--bg-selected);
-  --color-border:        var(--border);
-  --color-border-strong: var(--border-strong);
-  --color-fg:            var(--fg);
-  --color-fg-secondary:  var(--fg-secondary);
-  --color-fg-muted:      var(--fg-muted);
-  --color-fg-subtle:     var(--fg-subtle);
-  --color-ring:          var(--ring);
-
-  --color-status-ok:     var(--status-ok);
-  --color-status-warn:   var(--status-warn);
-  --color-status-error:  var(--status-error);
-  --color-status-unset:  var(--status-unset);
-
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
-
-  --text-xs:   var(--text-xs);   --text-xs--line-height:   var(--leading-xs);
-  --text-sm:   var(--text-sm);   --text-sm--line-height:   var(--leading-sm);
-  --text-base: var(--text-base); --text-base--line-height: var(--leading-base);
-  --text-md:   var(--text-md);   --text-md--line-height:   var(--leading-md);
-  --text-lg:   var(--text-lg);   --text-lg--line-height:   var(--leading-lg);
-  --text-xl:   var(--text-xl);   --text-xl--line-height:   var(--leading-xl);
-
-  --radius-none: var(--radius-0);
-  --radius-sm:   var(--radius-sm);
-  --radius-md:   var(--radius-md);
-
-  --shadow-overlay: var(--shadow-overlay);
-
-  --ease-out: var(--ease-out);
-}
