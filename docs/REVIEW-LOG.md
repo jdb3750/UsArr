@@ -4556,6 +4556,35 @@ superseded *"as of §9.7 no such pair ships"*
 is quoted twice above for the same reason and is not a live citation — that sentence no longer
 exists in the tree.
 
+✅ **Promoted to `CLAUDE.md`, and the change of address is the resolution rather than any change of
+wording.** The rule above was stated correctly and went on being broken by people who had read it,
+which is exactly the pattern `MEAS-01` names: *"when a correctly-worded rule is broken repeatedly by
+people who have read it, the next edit to try is a change of address, not a change of emphasis"* —
+and that entry cites this one as the argument it is generalising. 🚩 **This entry's own address was
+the defect it describes.** It sits deep in this log, under the heading *"The two deferred columns,
+decided"*, which is not a place any agent reaches before writing a sentence: the authority existed
+and nothing routed anyone to it, so `SD-01` was being failed by the file that states it. Joe
+approved the wording, and it landed in `CLAUDE.md`'s **Working practice** section at **`32177db`**,
+*"docs: the status rule moves to the file every agent reads first"*, as:
+
+> **Status is read off the tree, not off a document.** No document owns what is built —
+> `web/src/routes`, `internal/` and `internal/db/migrations` do. When you find a status claim that
+> has gone stale, do not write a fresher one; write the pointer.
+
+📎 **Placed directly after *"No invented status"*, chosen rather than defaulted to.** That rule is
+the special case — *never document a feature as existing when it does not* — and this is its general
+form, so the two read as one rule and its scope instead of as a third statement of the same idea in
+a third voice. It also resolves the one apparent conflict on the spot: the paragraph it follows
+names `ARCHITECTURE.md` §16 as authoritative, and §16 owns *which milestone a thing belongs to*,
+which is not a claim that the thing exists. `CLAUDE.md`'s own status summary, rewritten at
+**`0b8637c`** to route to `web/src/routes`, `internal/` and `internal/db/migrations`, is this rule
+applied to that file itself, and is now a worked instance of a stated rule rather than an
+unexplained habit. ℹ️ **Nothing above is reworded, including the heading**, which still reads
+**Applied** and not *promoted*: this is a pure append, per *"nothing above is renumbered, reworded
+or deleted"*. **The rule still lives here as well**, because this log holds its evidence — the
+nineteen non-false rows under `SD-02` and the `SD-02r` row that came due; what changed is that
+`CLAUDE.md` no longer depends on anyone reaching them.
+
 ---
 
 ## SD-01a — the notice was unguarded, not pinned, and the guard gains the properties it was missing. **Applied.**
