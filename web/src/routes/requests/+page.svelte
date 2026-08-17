@@ -118,7 +118,7 @@
 		sortIndexers,
 		unavailableReason
 	} from '$lib/indexercatalog';
-	import { formatAge, formatSize } from '$lib/format';
+	import { formatAge, formatSize, sizeParts } from '$lib/format';
 	import {
 		CODE_OUTCOME_UNKNOWN,
 		DEFAULT_SEARCH_TYPE,
@@ -1740,7 +1740,29 @@
 					<span class="muted">{NOTHING.empty}</span>
 				{/if}
 			{:else if column.id === 'size'}
-				{formatSize(release.sizeBytes) || NOTHING.empty}
+				<!-- A figure and its unit are two slots, not one string — §9.1. Right-
+				     aligning `4.8 GiB` over `820 MiB` as one string aligns the `B`, so
+				     the digits — the one thing compared down this column — land at two
+				     x-positions, and the cell's `tabular-nums` cannot help because it
+				     is the WORD that moves them. The reserved box is the half that
+				     does the work.
+
+				     ⚠️ 3ch, not §9.1's 2.5ch, and that is its own rule applied rather
+				     than disagreed with: §9.1 reserves the widest unit the column can
+				     ever print and derives 2.5ch from the DECIMAL family it measured,
+				     while this column prints BINARY units because that is what every
+				     indexer reports. `MiB` is the wider word — see `.unit--size` in
+				     app.css, which owns the number.
+
+				     The `{:else}` arm is why `sizeParts` returns null rather than an
+				     empty pair: an absent size gets §9.1's em dash, not a 3ch reserve
+				     held open around nothing. -->
+				{@const size = sizeParts(release.sizeBytes)}
+				{#if size}
+					{size.value} <span class="unit unit--size">{size.unit}</span>
+				{:else}
+					{NOTHING.empty}
+				{/if}
 			{:else if column.id === 'grabs'}
 				{release.grabs === undefined ? NOTHING.empty : release.grabs.toLocaleString('en-GB')}
 			{:else if column.id === 'peers'}
