@@ -3676,8 +3676,9 @@ not restate it** (ADR-0035). Two proposals are decisions rather than defaults:
   keep their checkbox, the declined row keeps its word, and an `Accept` header over a cell reading
   `declined` is a header contradicting its own cell.
 
-**Row view:** name · kind · item count · source chips with per-source health · request destination ·
-state · reorder handle, plus **Add library** and the auto-proposal banner.
+**Row view:** name · kind · item count · source chips with per-source health · request destination
+(⚠️ **absent in v0.1** — see the `Request destination` rule below) · state · reorder handle, plus
+**Add library** and the auto-proposal banner.
 
 - **`Add library` is specified rather than named, because it is the recovery path when the
   auto-proposal got it wrong** — which is the single most likely reason a user opens this screen at
@@ -3747,14 +3748,27 @@ definition of each verb is exemplary and is the only place they are defined. ⚠
 defined nowhere**, because that panel is v0.3; if the four verbs appear anywhere in v0.1 copy they
 carry their definitions with them.
 
-**The `Request destination` column states its shared fact once and keeps only the per-row
-exceptions.** Four of six rows read `none` and each carried its own explanatory paragraph, which is
-§17.4 rule 5's own rule (a column whose value is identical for every row is not data) firing on a
-column that survived it — and one of those paragraphs ran to sixty-two words of competitive analysis
-inside a table cell. **Above the table, once:** *"v0.1 connects no request destination for music,
-audiobooks, ebooks or comics. Indexer search still works and the grab ends in your download
-client."* **In the cells:** `None`. **Kept as a per-row footnote:** the Ebooks row's Readarr note,
-which is a real, dated, specific fact a user cannot infer.
+**The `Request destination` column does not render in v0.1, and it returns with the first service
+that can be a destination.** As drawn, most rows read `none` and each of those carried its own
+explanatory paragraph — one of them sixty-two words of competitive analysis inside a table cell —
+which is §17.4 rule 5 (*a column whose value is identical for every row is not data*) firing on the
+column that paragraph was written to defend. **Collapsing the shared fact above the table fixed the
+cells and not the column.** No service v0.1 connects can be a library's request sink at all: a sink
+is a pin inside §8.3's capability filter and must advertise `Add`, which the Prowlarr path does not —
+it posts a release to Prowlarr's own download client (§8.5) — and **§16 is authoritative for the rest
+of the membership, which this section does not restate.** So the value is identical on *every* row,
+and a column that structurally cannot vary is not data at any width; six cells reading `None` look
+like data and carry none, which is the failure rule 5 names.
+
+**In v0.1 the column is absent and the screen says so once, in its own copy** — principle 3's honest
+degradation, which is to say what is missing and why rather than render an empty grid:
+*"No request destination can be set yet: no connected service accepts requests. Indexer search still
+works, and the grab ends in your download client."* ⚠️ **This is sequencing, not a cut.** The column,
+its per-row exceptions and the Ebooks row's Readarr note — a real, dated, specific fact a user cannot
+infer — all return unchanged with the first service that can be a destination, and §16 owns when that
+is. **The detail view's `Requests` panel is unaffected**, because it is one field on one library
+rather than a column across rows: it already specifies **None** with the reason inline, which is the
+same sentence at the point where the user would otherwise set the thing.
 
 **Deleting a library says exactly what it does — including the part that is destructive:** *"This
 removes the library from UsArr. It does not delete anything from Radarr, Sonarr, or your disks. It
