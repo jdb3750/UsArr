@@ -10674,18 +10674,171 @@ proves **nothing whatever** about whether these three sites are now correct.
 each site now points at (§6.4 as restated at `f722054`/`aea2654`, §7.1a, ADR-0035 §2a's live-instance
 run, ADR-0041), and the fact that §17.3's already-correct label was used as the control.
 
-# Round 5 continued — `LS-30`: the other three weblink-parsed ids, and `LS-12` closed
+---
+
+# Round 5 continued — `LS-30`–`LS-37`: the recently-added read, Home's Block C
+
+**Date:** 2026-08-17. **Prefix:** `LS-` (library sync), continuing from `LS-29` above — **re-read at
+merge time**, because `LS-27`–`LS-29` landed on `origin/main` while this pass was in flight and these
+entries were drafted as `LS-27`+ before the merge. Third time this exact collision has been recorded
+(`EXPL-01`, `LS-01`, `LS-17`); the discipline is to re-read, never to trust the number you started
+with.
+
+**Subject:** `GET /api/v1/library/recent` — `internal/store/recent.go`, `internal/httpapi/library.go`
+and their tests. The backend read behind ARCHITECTURE §17.2's **Block C**, as amended by
+[ADR-0028](./DECISIONS.md#adr-0028): one unified recently-added table across every media type, newest
+first, keyset-paginated, rendered from local SQLite and nothing else.
+
+**Scope excluded, by instruction and stated so nobody looks for it:** no `web/` change, no search
+endpoint (§8.2 is its own commit), no image proxying, no delta or sweep, and no Block A or Block B.
+
+## Counts
+
+| id | Finding | Severity | Disposition |
+| --- | --- | --- | --- |
+| **LS-30** | **`w.kind IN (…)` makes SQLite abandon `ix_work_added` and sort the whole catalogue.** Measured, not reasoned: the six-kind allowlist is an indexable predicate, so the planner prefers `ix_work_kind_sort` for the filter and then plans `USE TEMP B-TREE FOR ORDER BY` — on **every page of Home**, degrading as the library grows. This is precisely the failure `schema.md` §1 says the partial predicate on `ix_work_added` exists to prevent, arriving through a different door | **High** | **Applied.** `+w.kind IN (…)` — SQLite's documented "not usable as an index key" unary plus. Both plans are recorded verbatim at `recentWorksSQL`, and `TestRecentWorksPlanGuardFires/unary_plus_removed` strips the character out of the **shipped** statement and asserts the guard rejects the result, so the single most deletable character in the file cannot be deleted silently |
+| **LS-31** | **A plain `(added_at, id) < (?, ?)` keyset walk makes every undated work unreachable.** `work.added_at` is nullable and `store.nullTime` writes NULL for a zero time, so a Kavita series with no `created` gets one. `ix_work_added` is `DESC`, NULL sorts below every value, so those rows form a **tail** — and a row-value comparison against NULL yields NULL, which excludes them. Page 1 can reach them only if the corpus fits in one page; every later page cannot reach them at all | **High** | **Applied.** The cursor is a three-state struct (first page / dated / undated tail) and `ListRecentWorks` performs the handoff at the one boundary, at most once per page. `TestRecentWorksReachesTheUndatedTailThroughTheCursor` walks the corpus at `limit=2`, where page 1 provably cannot reach the tail. The tail's own plan is pinned as a **seek** — `added_at IS NULL` reads as an equality on the leading column — so the tail is not a walk from the top of the index |
+| **LS-32** | **The cursor token carried a raw space and could not survive a query string.** `store.timeLayout` is `2006-01-02 15:04:05` *with a space*, deliberately, because it must match SQLite's `datetime()` byte for byte — so the first cursor minted from a real row was unusable as a parameter | Medium | **Applied**, and it was **caught by execution rather than review**: the first test to walk two pages panicked in `httptest.NewRequest` with `malformed HTTP version "10:00:00 HTTP/1.0"`. The token is base64url over the payload, and `TestRecentWorksCursorRoundTrips` asserts no character in `" +/=&?#%"` survives encoding. The doc comment says plainly that this is **transport, not concealment** |
+| **LS-33** | **`person` works would have dominated the first Home screen, not merely appeared on it.** Migration 0007's credit applier creates a `person` work per credited human, each with the **same `added_at` as the import that created it** — so ADR-0033's exclusion is not a tidiness rule here, it is the difference between Block C rendering the owner's 151 series and rendering several hundred authors that sort above them | **High** | **Applied.** An **allowlist** of six kinds, not a `NOT IN ('person')` denylist, so a kind added to the schema later is invisible until someone maps it. Fired: `person` and `comic_issue` added to the allowlist, three tests red, output quoted below. The fixture's person row is **interleaved by `added_at`** between two visible rows, because an exclusion that only ever had to hold at the end of a list is not tested by a list that ends before it |
+| **LS-34** | **`work` carries no `user_id`, so there was no obvious column for `store.Scope` to constrain** — and the shape that reads "scoped" without filtering (a `Scope` parameter accepted and ignored) is indistinguishable from no scope at all | **High** | **Applied.** `Scope.workVisibilityPredicate` renders an `EXISTS` over `service_item_link.service_instance_id`, mirroring `Scope.instancePredicate`'s three branches exactly: `1=1` for the owner (so v0.1's plan is unchanged), `1=0` for an empty visible set, and the seek otherwise. **Fired by making it `return "1=1", nil` unconditionally**; two tests red, output quoted below. The fixture puts odd work ids on instance 1 and even on instance 2 so that neither scope is a *prefix* of the ordering — a filter doing nothing would still look plausible against a contiguous split |
+| **LS-35** | The task brief stated `schema.md` §1 *"declares the normative plan … `SEARCH work USING INDEX ix_work_added`"*. **§1 declares no such thing.** What §1 declares normative is `ix_work_kind_sort`'s plan for the §13 grid query; `ix_work_added` appears in §1 only in the DDL and in the note on why the partial predicates exist | Medium | **Rebutted as a citation, applied as an instruction.** The plan is right and the pointer is not, so the assertion ships against the **measured** plan of the statement that ships rather than against a sentence that does not exist. `SEARCH … USING INDEX`, never `COVERING INDEX` — that half of §1 *is* normative and *is* quoted. **`schema.md` §1 was not edited**: writing a new normative sentence into a reference document to match a test is the wrong direction, and the pointer belongs in the test, which is where it now is |
+| **LS-36** | **A book with both an EPUB and an M4B has one Type cell and two true answers.** §17.2's "has content" predicates for Ebooks and Audiobooks are two independent `EXISTS` queries, so a mixed book legitimately makes **both** types present in Block A — but a Block C row cannot hold two values | Low | **Decided and written down at the decision site, not deferred.** Mixed renders as **Ebooks**: its format list is the longer one, so the claim stays true of the work, whereas Audiobooks would hide an EPUB the user has. One `MIN(e.format = 'audiobook')` subquery expresses the whole rule (1 = audiobook-only, 0 = mixed or ebook, NULL = no editions). The seam for doing better is already paid for: `library_member` is **edition-grained**, so an edition-grained row is a change to this function's inputs and not to the tables |
+| **LS-37** | **`game` is a `work.kind` with no media type**, so a game work would render a blank Type cell. §17.2's enum has six rows and Games is not one of them | Nit | **Excluded explicitly and named as such**, rather than falling out of a denylist by accident. Nothing writes a game work in v0.1. `recentWorksPage` returns an **error** rather than a blank cell if the SQL allowlist and `mediaTypeOf` ever disagree, and `TestRecentWorkKindsAllMapToAMediaType` is what keeps that error unreachable |
+
+## LS.14 The four guards fired, with verbatim output
+
+Every guard below was broken on purpose, run red, and reverted. The two plan arms run the **same**
+`recentWorksPlanFaults` predicate the passing tests run — a guard asserted one way and fired against
+a different condition has proved nothing.
+
+**Guard 1 — the access scope made to leak** (`LS-34`). The break: `Scope.workVisibilityPredicate`
+given an unconditional `return "1=1", nil` at its head.
+
+```
+--- FAIL: TestRecentWorksScopeActuallyFilters (0.04s)
+    recent_test.go:277: instance 1 scope:
+          got:  [Berserk Vinland Saga Piranesi Project Hail Mary Dune A Book With No Edition Rows Train Dreams Severance OK Computer Another Undated Manga An Undated Manga]
+          want: [Berserk Piranesi Dune Severance An Undated Manga]
+--- FAIL: TestRecentWorksFailsClosedOnAnEmptyScope (0.03s)
+    recent_test.go:315: an empty visible instance set returned 11 rows: [Berserk Vinland Saga Piranesi Project Hail Mary Dune A Book With No Edition Rows Train Dreams Severance OK Computer Another Undated Manga An Undated Manga]
+```
+
+The second line is the one that matters: **"no visible instances" returning every row** is
+`store.go` rule 2's existence oracle, arriving as eleven rows a user cannot see.
+
+**Guard 2 — `person` and `comic_issue` admitted** (`LS-33`). The break: both kinds added to
+`recentWorkKinds`, both mapped to a media type so the drift error could not mask the result.
+
+```
+--- FAIL: TestRecentWorksNeverShowsAPerson (0.04s)
+    recent_test.go:218: a person work reached Block C: {ID:8 Kind:person MediaType:comics Title:Kentaro Miura Year:{Int64:2020 Valid:true} AddedAt:{String:2026-08-03 10:00:00 Valid:true} HaveCount:3 WantCount:1 ...}
+--- FAIL: TestRecentWorksNeverShowsAChildKindOrATombstone (0.04s)
+    recent_test.go:237: a comic_issue work reached Block C: {ID:9 Kind:comic_issue MediaType:comics Title:Berserk #1 ...}
+    recent_test.go:243: a comic_issue reached Block C: {ID:9 Kind:comic_issue MediaType:comics Title:Berserk #1 ...}
+--- FAIL: TestRecentWorkKindsAllMapToAMediaType (0.00s)
+    recent_test.go:658: "person" is in recentWorkKinds and must not be (ADR-0033 / ADR-0030 / §17.2)
+    recent_test.go:658: "comic_issue" is in recentWorkKinds and must not be (ADR-0033 / ADR-0030 / §17.2)
+```
+
+**Guard 3 — `ix_work_added` dropped** (`LS-35`). Not a lookalike query and not a renamed constant:
+`DROP INDEX ix_work_added` against the real migrated database, then `EXPLAIN QUERY PLAN` on the
+statement `recentWorksSQL` renders.
+
+```
+guard fired with ix_work_added dropped:
+  plan:   SCAN w USING INDEX ix_work_pop | CORRELATED SCALAR SUBQUERY 1 | SEARCH e USING INDEX ix_edition_work (work_id=?) | USE TEMP B-TREE FOR ORDER BY
+  faults: [does not use ix_work_added needs a temp b-tree for the ordering]
+```
+
+**Guard 4 — the unary plus removed** (`LS-30`), and a third arm for a real temp b-tree so the
+ordering half of the predicate is executed rather than merely written down.
+
+```
+guard fired without the unary plus:
+  plan:   SEARCH w USING INDEX ix_work_kind_sort (kind=?) | CORRELATED SCALAR SUBQUERY 1 | SEARCH e USING INDEX ix_edition_work (work_id=?) | USE TEMP B-TREE FOR ORDER BY
+  faults: [does not use ix_work_added fell back to ix_work_kind_sort, which serves the kind filter and not the order needs a temp b-tree for the ordering]
+
+guard fired on an unindexed ordering:
+  plan:   SCAN work USING INDEX ix_work_pop | USE TEMP B-TREE FOR ORDER BY
+  faults: [does not use ix_work_added needs a temp b-tree for the ordering]
+```
+
+## LS.15 The plans asserted, measured on SQLite 3.53.4
+
+All four are `EXPLAIN QUERY PLAN` over `store.recentWorksSQL`'s **own output** — the statement that
+ships, not a copy pasted into a test (`DEVELOPMENT.md` §11 rule 1).
+
+| Page | Plan |
+|---|---|
+| first page (no cursor) | `SCAN w USING INDEX ix_work_added` |
+| keyset continuation | `SEARCH w USING INDEX ix_work_added (added_at<?)` |
+| undated tail | `SEARCH w USING INDEX ix_work_added (added_at=? AND id<?)` |
+| scoped (2 instances) | the keyset plan, plus `SEARCH sil EXISTS USING INDEX ix_sil_work (work_id=?)` |
+
+⚠️ **The first page is a `SCAN`, and that is the correct plan rather than a miss.** With no cursor
+predicate there is nothing to seek to; the index supplies the whole order and the `LIMIT` stops the
+walk, which is why `internal/db`'s own "newest audit rows" case is written the same way. What the
+guard forbids on every one of the four is a **`SCAN work`** that is not an index walk, a fallback to
+`ix_work_kind_sort`, and any **`TEMP B-TREE`**. `COVERING INDEX ix_work_added` is forbidden too, for
+`schema.md` §1's stated reason: the `SELECT` list carries `title`, `year`, `have_count`, `want_count`
+and `availability`, so a covering plan means the **query** changed, not that the index improved.
+
+## LS.16 What the response may carry, and why the list is short
+
+The wire shape is a **field-by-field allowlist** and the struct *is* the allowlist —
+`toRecentWorkResponse` copies field by named field, so a column added to `store.RecentWork` cannot
+reach a browser by default. `TestRecentWorksResponseKeysAreTheAllowlist` pins the key set, and
+`TestRecentWorksShipsNothingServiceSide` asserts against the **response bytes** rather than the
+struct, so a field arriving by any route is caught.
+
+`id · media_type · kind · title · year? · added_at? · have_count · want_count · availability?`
+
+**Nothing service-side is present and nothing can be.** `remote_path` lives on `service_item_link`,
+which this read never selects from — it is a filesystem path on the upstream's box and §5's own note
+bars it from a browser. No instance is named either: which Kavita a series came from is not something
+Home renders, and naming it publishes the install's topology to every future non-owner.
+
+**`id` is published deliberately, and it is not `provenance.id`'s shape.** §4.5 ships
+`{id, title, year, kind, availability_state}` for every top-level work to the client *by design*, and
+item routes are `/library/{type}/{id}` — the catalogue is shared, so a gap between two ids says how
+many works exist, not what somebody else acquired. That is exactly the property `provenance.id` lacks,
+which is why `grabs.go` publishes an HMAC there and this does not. Recorded so the difference is a
+decision rather than an inconsistency.
+
+**`media_type` is resolved server-side because §17.2 says it must be.** The Tier 1 client index
+carries no format, so *"the Ebooks/Audiobooks split is server-side only in v0.1"*. Derived in the
+browser from `kind`, two of the six chips would be one chip.
+
+## LS.17 What this pass did NOT do
+
+* **No `?lib=` library scope.** §17.2's chip is a multi-select over `library_member`, whose primary
+  key leads with `sort_title` rather than `added_at` — a different plan and a different commit. The
+  seam is that the scope is a parameter of the store call, not of the SQL string.
+  `TestRecentWorksIsLibraryAgnosticToday` pins the current behaviour so the day it changes, it
+  changes deliberately. The fixture seeds two libraries for exactly this assertion.
+* **No cover art.** There is no image endpoint, so `poster_asset_id` would be an id the client cannot
+  turn into anything.
+* **No Block A and no Block B.** A per-type rollup with a `have/total` grammar, and an attention list.
+  Each is its own read, and Block A's rows 4 and 5 need the `ix_edition_format` index §17.2 says is
+  owed — **read `internal/db/migrations` for whether it exists**, this pass did not add it and did
+  not need it (the per-row lookup here is served by `ix_edition_work`).
+* **No wall-clock number.** `EXPLAIN QUERY PLAN` and row counts are deterministic and are in the
+  gate; the cost of the 151-series read on the owner's hardware is `make bench`'s and was not measured.
+
+# Round 5 continued — `LS-38`: the other three weblink-parsed ids, and `LS-12` closed
 
 **Date:** 2026-08-17. **Prefix:** `LS-` (library sync), continuing from `LS-29` above.
 
-🚩 **AND THESE WERE RENUMBERED TWICE, WHICH IS `LS-17`'s LESSON ARRIVING ON SCHEDULE.** `LS-16` was
+🚩 **AND THESE WERE RENUMBERED THREE TIMES, WHICH IS `LS-17`'s LESSON ARRIVING ON SCHEDULE.** `LS-16` was
 the highest id observable when this pass started. The credits pass landed `LS-17`–`LS-26` while it
 was in flight, so the block was written as `LS-17`… and rewritten as `LS-27`… against the merged
 tree. **Then the §17 pass landed `LS-27`–`LS-29` between that merge and this push**, and the
 collision surfaced as the same `docs/REVIEW-LOG.md` EOF conflict `LS-17` describes — so the block was
-renumbered a second time, to `LS-30`–`LS-38`, against `26a7376`. **Re-reading after the last merge is
-necessary and not sufficient**: the counter can move again between the read and the push, and the
-only reliable check is the one that runs at the moment the conflict appears. The renumber is
+renumbered a second time against `26a7376`. **THEN IT HAPPENED A THIRD TIME**: the recently-added
+read landed its own `LS-30`–`LS-37` at `a6ef254` before this could be pushed, so the block was
+renumbered again and is now `LS-38`–`LS-46`. **Re-reading after the last merge is necessary and NOT
+SUFFICIENT** — the counter moved again between the read and the push, three times in one evening
+here, and the only reliable check is the one that runs at the moment the conflict appears. The renumber is
 mechanical and the six code sites that cite one of these ids moved with it —
 `internal/libsync/weblinkid.go`, `kavita.go`, `kavita_test.go`, `importer_test.go`,
 `cmd/usarr/import_e2e_test.go` and `testdata/cassettes/kavita_series_all_v2_identified.yaml`.
@@ -10743,17 +10896,17 @@ segment, which was spot-checked on one id rather than enumerated.
 
 | # | Finding | Severity | Disposition |
 | --- | --- | --- | --- |
-| **LS-30** | `SeriesDto.aniListId`, `malId` and `mangaBakaId` went through `kavitaExternalIDs`'s `add` closure, which hard-codes `Confidence: 1.0` — satisfying `ux_extid_work_strong` and so **merging works** on a value Kavita may have parsed out of a free-text `<Web>` element. `LS-12`'s hazard, confirmed | **High** | **Applied.** New `weblinkid.go`; all three route through `webLinkIdentity` at `WebLinkConfidence` (0.90) and **cannot reach `add`** |
-| **LS-31** | `'mal'` was written **bare**, and the collision `LS-10` feared is real rather than theoretical: MAL id `1` is *Cowboy Bebop* in the anime space and *Monster* in the manga space | **High** | **Applied.** `MalMangaSource = "mal_manga"`. ⚠️ `AniListSource` and `MangaBakaSource` stay **bare**, on measurement rather than symmetry — AniList's `Media` space is global and MangaBaka keeps its edition ids in a separate DTO field |
-| **LS-32** | 🚩 **A GUARD ASSERTED THE BUG.** `importer_test.go`'s `TestFullImportDeclinesTheImageLibraryAndSaysWhy` required `WorksCreated == 4 && WorksReused == 1`, commented *"the two Berserk rows are one work"* — i.e. it would have failed if the merge stopped happening | **High** | **Applied.** Now `5` and `0`, with the reversal and its reason written at the assertion rather than in a commit message |
-| **LS-33** | The fixture header said the same thing: `kavita_series_all_v2_identified.yaml` described its shared-`aniListId` pair as *"a `ux_extid_work_strong` violation, which migration 0005 calls 'the merge signal, not an error'"* — encoding the false premise, exactly as `LS-15` found for `comicVineId` | Medium | **Applied.** Corrected in place with the measurement and the date, the `LS-15` shape |
-| **LS-38** | 🚩 **THE VENDORED SPEC IS DEVELOP'S, AND TWO FIELDS UsArr MODELS DO NOT EXIST ON THE OWNER'S SERVER.** `api/specs/kavita.json` reports `info.version 0.9.0.20`; a `v0.9.0.2` server reports `0.9.0.0`. `SeriesDto` at the tag (`Kavita.Models/DTOs/SeriesDto.cs:104-109`) declares six ids and **neither `cbrId` nor `mangaBakaEditionId`** | Medium | **Measured and recorded; no behaviour change, because there is no data defect to fix.** Both decode as the Go zero value on the owner's instance, so `add("cbr", …)` is skipped and `mangaBakaEditionId` was never written (decision 4). ⚠️ **What it DOES mean is that a contract test passing against the vendored spec is testing develop rather than the release**, and that one of the three sources still at 1.0 is unreachable on the install it was written for — folded into `LS-35`. **Re-vendoring the spec is deliberately NOT attempted here**; it is a separate decision with its own owner |
-| **LS-34** | ⚠️ `internal/kavita/resources.go`'s `SeriesDto` comment still asserted *"written only by the Kavita+ match path"* — the premise `LS-11` disproved for ComicVine and this pass disproved for three more fields — **immediately above the struct field group labelled "Kavita+ identifiers"** | Medium | **Applied.** Rewritten to say what the six writers actually are, and to state the consequence for a reader of the struct: none of these fields carries its own provenance |
-| **LS-35** | ⚠️ `hardcover_book`, `metron` **and `cbr`** still go out at **1.0**, and all three are worse than "weaker provenance". **`hardcover_book`**: `Series.HardcoverId` has exactly one writer, `ExternalMetadataIdHelper.cs:28` — the Edit Series dialog, free text, no scanner and no provider. **`metron`**: `Series.MetronId` likewise (`:33`), and 🚩 **Metron's identity is ISSUE-LEVEL in practice** — metron-tagger's id parses out of ComicInfo `<Notes>` into `ParserInfo` and lands on the **CHAPTER** (`ProcessSeries.cs:749`), nothing on any scan path writes the series one, and `metron.cloud` is not in the `<Web>` vocabulary. That is §6.4 amendment 4's shape and exactly what `LS-14` refused for a ComicVine issue. **`cbr`**: 🚩 **dead on the owner's version** — `SeriesDto.cs:104-109` at `v0.9.0.2` has no `CbrId`, so the line can never fire on the install it was written for | **High** | **Raised, not fixed**, for the reason `LS-12` was not fixed inside `LS-11`: different fields, different fixtures, and a fourth behaviour in this commit would make none of them reviewable. All three measurements are in `kavitaExternalIDs`'s comment, decision 5 |
-| **LS-36** | `LS-17` recorded that the credits pass now makes `GET /api/Series/metadata` per series, so `SeriesMetadataDto.WebLinks` is decoded and unread — offering `LS-11`'s `ParseComicVineWebLinks` a free feed. **Claimed and measured here rather than left unclaimed** | Medium | **Declined on measurement, not on scope.** See below — the string is empty in the case that needed it |
-| **LS-37** | 🚩 **AND A SECOND GUARD ASSERTED IT, THROUGH THE REAL HTTP PATH.** `cmd/usarr/import_e2e_test.go`'s `TestAddingAKavitaProducesACatalogue` required `catalogue work rows == 4` — *"the two Berserk series are one work"* — plus `search_doc == 4`, one `work_comic` row for the pair, and `work_credit == 4`. **Four separate numbers, all downstream of the same merge.** More seriously, TWO DOCUMENTED FINDINGS WERE DEMONSTRATED ON THAT MERGE and lose their only fixture when it goes: `LS-07` (a shared work's `reading_direction` is last-writer-wins) and `LS-19` (a shared work's credits are last-writer-wins) | **High** | **Applied, and the coverage loss is written at both sites rather than left as a passing number.** Now `5`, `5`, `2` and `6`, each with the reversal and its reason. `LS-07` and `LS-19`'s **findings stand unchanged** — two remote items resolving onto one work still overwrite each other — but reaching that state now needs a genuinely work-strong shared id (`hardcover_book`, `openlibrary_work`, `goodreads_work`), which this fixture does not carry. ✅ One assertion got **stronger**: `person works == 4` used to be carried by the two Berserk rows having merged, and now tests what it says it tests — `store.personWorkID` resolving one human credited on two different works to one row |
+| **LS-38** | `SeriesDto.aniListId`, `malId` and `mangaBakaId` went through `kavitaExternalIDs`'s `add` closure, which hard-codes `Confidence: 1.0` — satisfying `ux_extid_work_strong` and so **merging works** on a value Kavita may have parsed out of a free-text `<Web>` element. `LS-12`'s hazard, confirmed | **High** | **Applied.** New `weblinkid.go`; all three route through `webLinkIdentity` at `WebLinkConfidence` (0.90) and **cannot reach `add`** |
+| **LS-39** | `'mal'` was written **bare**, and the collision `LS-10` feared is real rather than theoretical: MAL id `1` is *Cowboy Bebop* in the anime space and *Monster* in the manga space | **High** | **Applied.** `MalMangaSource = "mal_manga"`. ⚠️ `AniListSource` and `MangaBakaSource` stay **bare**, on measurement rather than symmetry — AniList's `Media` space is global and MangaBaka keeps its edition ids in a separate DTO field |
+| **LS-40** | 🚩 **A GUARD ASSERTED THE BUG.** `importer_test.go`'s `TestFullImportDeclinesTheImageLibraryAndSaysWhy` required `WorksCreated == 4 && WorksReused == 1`, commented *"the two Berserk rows are one work"* — i.e. it would have failed if the merge stopped happening | **High** | **Applied.** Now `5` and `0`, with the reversal and its reason written at the assertion rather than in a commit message |
+| **LS-41** | The fixture header said the same thing: `kavita_series_all_v2_identified.yaml` described its shared-`aniListId` pair as *"a `ux_extid_work_strong` violation, which migration 0005 calls 'the merge signal, not an error'"* — encoding the false premise, exactly as `LS-15` found for `comicVineId` | Medium | **Applied.** Corrected in place with the measurement and the date, the `LS-15` shape |
+| **LS-46** | 🚩 **THE VENDORED SPEC IS DEVELOP'S, AND TWO FIELDS UsArr MODELS DO NOT EXIST ON THE OWNER'S SERVER.** `api/specs/kavita.json` reports `info.version 0.9.0.20`; a `v0.9.0.2` server reports `0.9.0.0`. `SeriesDto` at the tag (`Kavita.Models/DTOs/SeriesDto.cs:104-109`) declares six ids and **neither `cbrId` nor `mangaBakaEditionId`** | Medium | **Measured and recorded; no behaviour change, because there is no data defect to fix.** Both decode as the Go zero value on the owner's instance, so `add("cbr", …)` is skipped and `mangaBakaEditionId` was never written (decision 4). ⚠️ **What it DOES mean is that a contract test passing against the vendored spec is testing develop rather than the release**, and that one of the three sources still at 1.0 is unreachable on the install it was written for — folded into `LS-43`. **Re-vendoring the spec is deliberately NOT attempted here**; it is a separate decision with its own owner |
+| **LS-42** | ⚠️ `internal/kavita/resources.go`'s `SeriesDto` comment still asserted *"written only by the Kavita+ match path"* — the premise `LS-11` disproved for ComicVine and this pass disproved for three more fields — **immediately above the struct field group labelled "Kavita+ identifiers"** | Medium | **Applied.** Rewritten to say what the six writers actually are, and to state the consequence for a reader of the struct: none of these fields carries its own provenance |
+| **LS-43** | ⚠️ `hardcover_book`, `metron` **and `cbr`** still go out at **1.0**, and all three are worse than "weaker provenance". **`hardcover_book`**: `Series.HardcoverId` has exactly one writer, `ExternalMetadataIdHelper.cs:28` — the Edit Series dialog, free text, no scanner and no provider. **`metron`**: `Series.MetronId` likewise (`:33`), and 🚩 **Metron's identity is ISSUE-LEVEL in practice** — metron-tagger's id parses out of ComicInfo `<Notes>` into `ParserInfo` and lands on the **CHAPTER** (`ProcessSeries.cs:749`), nothing on any scan path writes the series one, and `metron.cloud` is not in the `<Web>` vocabulary. That is §6.4 amendment 4's shape and exactly what `LS-14` refused for a ComicVine issue. **`cbr`**: 🚩 **dead on the owner's version** — `SeriesDto.cs:104-109` at `v0.9.0.2` has no `CbrId`, so the line can never fire on the install it was written for | **High** | **Raised, not fixed**, for the reason `LS-12` was not fixed inside `LS-11`: different fields, different fixtures, and a fourth behaviour in this commit would make none of them reviewable. All three measurements are in `kavitaExternalIDs`'s comment, decision 5 |
+| **LS-44** | `LS-17` recorded that the credits pass now makes `GET /api/Series/metadata` per series, so `SeriesMetadataDto.WebLinks` is decoded and unread — offering `LS-11`'s `ParseComicVineWebLinks` a free feed. **Claimed and measured here rather than left unclaimed** | Medium | **Declined on measurement, not on scope.** See below — the string is empty in the case that needed it |
+| **LS-45** | 🚩 **AND A SECOND GUARD ASSERTED IT, THROUGH THE REAL HTTP PATH.** `cmd/usarr/import_e2e_test.go`'s `TestAddingAKavitaProducesACatalogue` required `catalogue work rows == 4` — *"the two Berserk series are one work"* — plus `search_doc == 4`, one `work_comic` row for the pair, and `work_credit == 4`. **Four separate numbers, all downstream of the same merge.** More seriously, TWO DOCUMENTED FINDINGS WERE DEMONSTRATED ON THAT MERGE and lose their only fixture when it goes: `LS-07` (a shared work's `reading_direction` is last-writer-wins) and `LS-19` (a shared work's credits are last-writer-wins) | **High** | **Applied, and the coverage loss is written at both sites rather than left as a passing number.** Now `5`, `5`, `2` and `6`, each with the reversal and its reason. `LS-07` and `LS-19`'s **findings stand unchanged** — two remote items resolving onto one work still overwrite each other — but reaching that state now needs a genuinely work-strong shared id (`hardcover_book`, `openlibrary_work`, `goodreads_work`), which this fixture does not carry. ✅ One assertion got **stronger**: `person works == 4` used to be carried by the two Berserk rows having merged, and now tests what it says it tests — `store.personWorkID` resolving one human credited on two different works to one row |
 
-## `LS-36` — the phase-B `webLinks` opportunity, priced before it was passed over
+## `LS-44` — the phase-B `webLinks` opportunity, priced before it was passed over
 
 The offer is real: `SeriesMetadataDto.webLinks` is declared in the vendored spec, is on the response
 of the exact endpoint `StreamCredits` already calls, and is decoded by nobody. **It was not folded
@@ -10809,8 +10962,8 @@ severity changed.
 
 | # | Original disposition | Amended disposition, and what settles it |
 | --- | --- | --- |
-| **LS-12** | *"**Raised, not fixed.** A behaviour change against different fixtures; shipping it inside a ComicVine correction would make neither reviewable. Recorded in `kavitaExternalIDs`'s comment, decision 1"* | ✅ **CLOSED by `LS-30`/`LS-31`.** The premise is confirmed and the fix shipped: all three land at `0.90`, `mal` is namespaced. Two things the original could not know, both from re-measuring rather than re-reading: **`mangaBakaId` has no provider writer anywhere in Kavita**, and **`aniListId`/`malId` do have one** — which makes their cap an argument about *provenance being unrecoverable and overwritable*, not about the absence of a matcher. The `arguably` is discharged in the strongest available form: the free-text path does not merely coexist with the provider path, `ProcessSeries.cs:358-367` **overwrites it on every scan** |
-| **LS-10** | *"**Raised, not fixed.** Recorded in `kavita.go` rather than pre-solved with a source string the schema does not list — see `LS.8`"* | ✅ **CLOSED by `LS-31`, and the caution turned out to be half right.** `external_id.source` has **no `CHECK`** (`00005:448-454`), so "a source string the schema does not list" was never a schema question — `LS-11` had already shipped `comicvine_volume` on the same column. The worry itself was **correct for MAL and wrong for AniList**, and only a live check could separate them: MAL id `1` names two different works in two spaces; AniList `Media` ids are one space across anime and manga. So `mal` is namespaced and `anilist` is deliberately left bare |
+| **LS-12** | *"**Raised, not fixed.** A behaviour change against different fixtures; shipping it inside a ComicVine correction would make neither reviewable. Recorded in `kavitaExternalIDs`'s comment, decision 1"* | ✅ **CLOSED by `LS-38`/`LS-39`.** The premise is confirmed and the fix shipped: all three land at `0.90`, `mal` is namespaced. Two things the original could not know, both from re-measuring rather than re-reading: **`mangaBakaId` has no provider writer anywhere in Kavita**, and **`aniListId`/`malId` do have one** — which makes their cap an argument about *provenance being unrecoverable and overwritable*, not about the absence of a matcher. The `arguably` is discharged in the strongest available form: the free-text path does not merely coexist with the provider path, `ProcessSeries.cs:358-367` **overwrites it on every scan** |
+| **LS-10** | *"**Raised, not fixed.** Recorded in `kavita.go` rather than pre-solved with a source string the schema does not list — see `LS.8`"* | ✅ **CLOSED by `LS-39`, and the caution turned out to be half right.** `external_id.source` has **no `CHECK`** (`00005:448-454`), so "a source string the schema does not list" was never a schema question — `LS-11` had already shipped `comicvine_volume` on the same column. The worry itself was **correct for MAL and wrong for AniList**, and only a live check could separate them: MAL id `1` names two different works in two spaces; AniList `Media` ids are one space across anime and manga. So `mal` is namespaced and `anilist` is deliberately left bare |
 | **LS-04** | *(in `LS-17`'s "not done" list)* *"`LS-04` is still open — §17.8's `LibraryType` withdrawal versus the vendored spec — and this pass did not revisit it"* | ✅ **Already closed twice over, and the stale line is noted rather than edited.** `LS-11`'s own table resolved it (`✅ RESOLVED`, `mapLibraryType`'s comment), and §17.8 on `main` at `2c7709a` now carries the amendment that withdraws the withdrawal. `mapLibraryType`'s comment is rewritten here to drop the two-documents-disagree hedging, since nothing disagrees any more; the durable half — **a Kavita citation with an `API/Entities/…` path is reading the frozen `main`** — is kept |
 
 ## The guards, fired
@@ -10880,7 +11033,7 @@ Both new files declare **SYNTHETIC** in their own header with the version they c
 fail differently if the cap came off. `kavita_libraries_weblink_ids.yaml` separates the three
 provenance regimes — Kavita+-eligible with the flag off, flag on, and a **Book** library that
 `NonEligibleLibraryTypes` excludes from Kavita+ entirely. `kavita_series_all_v2_identified.yaml` was
-**corrected in place**, not extended — `LS-33`.
+**corrected in place**, not extended — `LS-41`.
 
 ### On the gate
 
@@ -10889,12 +11042,12 @@ first. Binaries, versions, the commit and the verbatim tail are in the commit me
 
 ### What this pass did NOT do
 
-* **`LS-35`** — `hardcover_book`, `metron` and `cbr` at 1.0. Measured, recorded, not changed; and
+* **`LS-43`** — `hardcover_book`, `metron` and `cbr` at 1.0. Measured, recorded, not changed; and
   the measurement got worse rather than better on a second look — `metron`'s only populated level is
   the CHAPTER and `cbr` cannot fire on the owner's version at all.
-* **`LS-38`** — re-vendoring `api/specs/kavita.json` against the owner's release rather than
+* **`LS-46`** — re-vendoring `api/specs/kavita.json` against the owner's release rather than
   develop. Measured and recorded; it is a separate decision with its own owner.
-* **`LS-36`** — the phase-B `webLinks` feed. Measured, priced, declined; see above.
+* **`LS-44`** — the phase-B `webLinks` feed. Measured, priced, declined; see above.
 * **Stale ids are never deleted.** UsArr's `external_id` write is an upsert with no delete path, so
   when Kavita's inherit block **erases** a field to `0` on a later scan, the row UsArr already wrote
   survives. That is protective at 0.90 — identity does not flap — but it means a wrong id outlives
