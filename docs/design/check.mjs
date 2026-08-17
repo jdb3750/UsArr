@@ -9,6 +9,16 @@
  * (folded in whole) and the §13 ban sweep, which up to now was retyped by hand
  * each review round and rediscovered the same four false positives every time.
  *
+ * WHAT INVOKES IT: nothing. A person or an agent types `make design`, and that
+ * is the whole of it — there is no CI in this repo and never has been
+ * (REVIEW-LOG NOCI-01, which established the absence across the tracked tree,
+ * every remote ref and the Actions API), and no document requires this target
+ * the way CLAUDE.md requires `make check` (REVIEW-LOG OPTIN-01). Comments here
+ * used to name a CI as a place this script runs and a place its measurements
+ * are taken from; both are corrected, because a guard that misdescribes its own
+ * invocation is OPTIN-01 stated in the first person. State what runs it, not
+ * what one imagines runs it.
+ *
  * TWO DESIGN RULES FOR THIS FILE, and they are the reason it exists rather than
  * a shell pipeline:
  *
@@ -124,7 +134,7 @@ const URL = 'file://' + join(MOCKUPS, 'prototype.html');
  * This import used to be an ABSOLUTE path into one container's global npm root
  * (/opt/node22/lib/node_modules/playwright/index.mjs). That resolved nowhere
  * else, so `make design` died with a raw ERR_MODULE_NOT_FOUND on the owner's
- * machine and in CI, past the Makefile guard whose whole job is to say
+ * machine and on any other, past the Makefile guard whose whole job is to say
  * something friendlier — and an out-of-tree import cannot be pinned, which the
  * Makefile's "@latest is FORBIDDEN, pin everything" rule forbids on its own.
  *
@@ -1032,8 +1042,8 @@ head('0. chromium.launch() resolves the headless shell, not the full browser');
  * headless_shell. The distinction is not cosmetic: the shell is the build with
  * no window, no compositor surface and no GPU path, and it is the one every
  * measurement in this file assumes. A run that silently fell back to the full
- * browser would measure a different renderer from CI and from every other
- * machine, and nothing else here would notice. */
+ * browser would measure a different renderer from every other machine this has
+ * ever been run on, and nothing else here would notice. */
 {
   const chrome = launchedBinaries.filter((p) => /chrom|headless_shell/i.test(p));
   if (!chrome.length) {
