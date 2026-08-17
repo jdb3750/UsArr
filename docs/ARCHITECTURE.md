@@ -2958,8 +2958,9 @@ exactly that, and drawing them as top-level rows is what took the sidebar to fif
 specified as kind, base URL and API key, and the field the whole screen is keyed on was missing from
 the one flow that creates a row. `service_instance.name` is what tells two Radarrs apart — it is the
 first column of this table, it is what the `Radarr 4K` row is called, and the **"1080p ✓ / 4K ✗"**
-badge §16 names as v0.1's power-user signal is unrenderable if the second instance arrives
-indistinguishable from the first. **The field is defaulted from the probed application and instance
+badge is unrenderable if the second instance arrives indistinguishable from the first. **§16 owns
+which milestone exercises that badge and this section does not restate it**; the name field is owed
+as soon as a second instance of any kind can be added, which the add flow has never prevented. **The field is defaulted from the probed application and instance
 (`Radarr`, then `Radarr (2)` on collision) and is editable in place**, so the common single-instance
 case is still three things typed; it is not an extra question, it is a pre-filled answer. It must be
 unique per user, which the inline settings form's own help text already states and the add flow never
@@ -3151,8 +3152,7 @@ carries eleven groups in a `SearchResultGroup`.
    group contains more than one distinct value; otherwise state it once in the group header.** The
    same applies to any per-group column with one distinct value.
    **When the collapsed value is stated in the header beside the media-type name, the noun
-   `library` is mandatory** — *"all in the **Movies** library · all from Radarr 4K"* (⚠️ the
-   equivalent over an Ebooks library and Audiobookshelf is the post-v0.1 form of the same rule), never
+   `library` is mandatory** — *"all in the **Movies** library · all from Radarr 4K"*, never
    *"all in Ebooks"*. The `<h2>` is a media type (a closed enum of six) and the collapsed value is a
    library (unbounded, user-named); on the common install they are the same string, so without the
    noun the line reads as a tautology and teaches that the two axes ADR-0027 exists to separate are
@@ -3248,10 +3248,10 @@ Search-and-Grab mode, surfaced at the point of use.
 > because music is second-class:** no write-capable service ships in v0.1 at all, so Lidarr,
 > LazyLibrarian and Mylar3 are deferred on identical ground, and Radarr and Sonarr are present as
 > *destinations* in v0.2 only because they are already there as *sources*. ⚠️ **And the catalogue
-> half is deferred for every non-\*Arr type alike** — music, audiobooks, ebooks and comics have **no
-> catalogue source in v0.1**, because the catalogue sources are sequenced after it, one at a time,
-> so the \*Arr sync proves the replica thesis on real data first. Music is not singled out; it is in
-> the same position as the other three, and §16 is authoritative for when each arrives. The
+> half is deferred alike for every type v0.1's one catalogue source does not cover**, because the
+> remaining sources are sequenced after it, one at a time. **§16 is authoritative for which types
+> those are and for when each of the remaining sources arrives, and this section does not restate
+> it.** Music is not singled out; it is in the same position as every other uncovered type. The
 > thin-indexer fact above is narrower still, true, and about the indexer ecosystem rather than about
 > UsArr's design.
 
@@ -3633,15 +3633,16 @@ of a library anywhere. Cost: one line.
 
 They cross-link both ways: a degraded source on a library row links to that instance's Services row,
 and a Services row lists the libraries it feeds and warns before removal — *"Radarr feeds 2
-libraries. Removing it will leave Movies and Kids films with no source."* (⚠️ the same warning over
-an Audiobookshelf feeding Ebooks and Audiobooks is the post-v0.1 form of the identical rule). **No credential field ever
+libraries. Removing it will leave Movies and Kids films with no source."* **No credential field ever
 appears on this screen**; API keys live only behind Services plus sudo mode (§12.1).
 
 **Nothing about libraries is asked before a service exists.** The §17.7 wizard is unchanged; on a
 successful connect and capability probe UsArr **proposes** libraries as one pre-checked "Accept" step,
-each editable inline — **in v0.1, one `movie` library per Radarr and one `series` per Sonarr**, and
-**none for Prowlarr**, which has no library. ⚠️ From the milestone each lands in, one per upstream
-library for Audiobookshelf / Kavita / Navidrome (then Komga, then Jellyfin — ADR-0035, §16). Two proposals are decisions rather than defaults:
+each editable inline — **one proposal per container the connected service itself reports**: one per
+upstream library for a media server (Kavita, Navidrome, Audiobookshelf, Komga, Jellyfin), one `movie`
+library per Radarr and one `series` per Sonarr, and **none for Prowlarr**, which has no library.
+**§16 is authoritative for which of those services a given milestone connects, and this section does
+not restate it** (ADR-0035). Two proposals are decisions rather than defaults:
 
 - **Adding a second instance of the same kind proposes joining the existing library, not creating a
   new one.** Two Radarrs → *one* Movies library with two sources, which is what makes the
