@@ -18,7 +18,16 @@
 		{ id: 'peers', header: 'Peers', width: '8ch', align: 'end' },
 		{ id: 'age', header: 'Age', width: '9ch', align: 'end' },
 		{ id: 'flags', header: 'Flags', width: 'minmax(0, 1fr)' },
-		{ id: 'actions', header: 'Actions', width: 'minmax(max-content, auto)' }
+		// The same 220 px reserve the real Search-and-Grab table declares, for the
+		// same reason this file copies its column set: a content-sized track cannot
+		// align across rows under ADR-0029, and one here made the harness misreport
+		// the primitive — measured, the actions header sat 103.03 px right of every
+		// body row and Indexer through Flags drifted 61.82-82.41 px with it.
+		// Measured in the harness's OWN build, where /fonts/*.woff2 404 and
+		// `document.fonts.check('600 13px "IBM Plex Sans"')` is false, this cell's
+		// three controls span 143.20 px; 220 - 2 × --row-pad-x leaves 196 px, so
+		// nothing wraps and no row height the bench publishes moves.
+		{ id: 'actions', header: 'Actions', width: '220px' }
 	];
 
 	/** One short string per column, for the one-line row shape. */

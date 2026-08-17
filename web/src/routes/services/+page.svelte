@@ -94,11 +94,38 @@
 
 	/**
 	 * The columns, declared. §9.1: `table-layout: auto` has to measure every cell
-	 * in every row, which is the one layout mode no containment can help. The
-	 * action track is `minmax(max-content, auto)` because a fixed track SHEARS
-	 * the buttons attached to the rows that are broken — measured at every
-	 * desktop width — and the screen would then show what is wrong and clip the
-	 * fix.
+	 * in every row, which is the one layout mode no containment can help.
+	 *
+	 * ⚠️ THE ACTION TRACK IS A FIXED RESERVE AND MUST NEVER BE CONTENT-SIZED.
+	 * It read `minmax(max-content, auto)`, on the argument that a fixed track
+	 * shears the buttons attached to exactly the rows that are broken. ADR-0029
+	 * makes EVERY ROW ITS OWN GRID, so that argument buys nothing it claims to:
+	 * a content-sized track resolves against the contents of its own row, and
+	 * the header row's contents are the word "Action". Measured in Chromium at
+	 * 1440 px with the Plex faces served, the action track came out 56 px in the
+	 * header against 201 / 194 / 159 / 151 / 136 / 133 / 127 / 34 px in the eight
+	 * states a body row can take — so every body row sat 145 to 22 px away from
+	 * its own header, and the four tracks left of it drifted 7.66 to 85.11 px
+	 * with them.
+	 *
+	 * THE RESERVE IS MEASURED, NOT CHOSEN. The widest state is `Choose how to
+	 * resolve this`, the re-identification row's button, and it measures 177.00 px
+	 * with `document.fonts.check('600 13px "IBM Plex Sans"')` true and 215.97 px
+	 * with it false — the Plex faces are `font-display: block`, so a build that
+	 * cannot serve them renders on fallback metrics FOREVER and the wider number
+	 * is the one that has to fit. 215.97 + 2 × --row-pad-x (12 px at all three
+	 * densities) = 239.97, plus one --space-4 of headroom rounded up to the next
+	 * --space-4 = 248 px; 8 px is about one character at --text-base, so a
+	 * server-supplied label one character longer still clears the reserve.
+	 *
+	 * The remaining states measure 170 / 135 / 127 / 112 / 109 / 103 / 10 px on
+	 * Plex, and `Working` (the busy label) is narrower than all of them.
+	 *
+	 * §9.1's overflow policy survives the change: `.cell-actions` wraps
+	 * (app.css), so a cell that ever holds two controls drops the second to a
+	 * new line rather than pushing it under `.tablewrap`'s `overflow-x: clip`.
+	 * Nothing wraps at this reserve — it is the floor under it, not a layout
+	 * anything relies on.
 	 */
 	const COLUMNS: ListColumn[] = [
 		{ id: 'service', header: 'Service', width: 'minmax(0, 1.6fr)' },
@@ -106,7 +133,7 @@
 		{ id: 'sync', header: 'Last successful sync', width: '150px' },
 		{ id: 'items', header: 'Items', width: '110px', align: 'end' },
 		{ id: 'problem', header: 'Problem', width: 'minmax(0, 1.9fr)' },
-		{ id: 'action', header: 'Action', width: 'minmax(max-content, auto)' }
+		{ id: 'action', header: 'Action', width: '248px' }
 	];
 
 	/**

@@ -2227,7 +2227,32 @@ select[multiple] {
 	/* A four-line stack costs ~105px per media type, which puts the block that
 	 * reports a rejected API key 914px down an 844px viewport. Two columns makes
 	 * the type summary two lines: identity and count, then availability and sync
-	 * time. The Type label is dropped because the value IS the row's identity. */
+	 * time. The Type label is dropped because the value IS the row's identity.
+	 *
+	 * ⚠️ THE `auto` HERE IS A KNOWN, MEASURED SHEAR, AND IT IS LEFT AS IS BECAUSE
+	 * NOTHING RENDERS IT YET. Every row is its own grid (ADR-0029), so a
+	 * content-sized second track resolves against ONE ROW's contents. There is no
+	 * header to disagree with in this fork — thead is clipped above — but the body
+	 * rows disagree with EACH OTHER. Measured in Chromium on the mockup, which is
+	 * the only document that applies this class today (docs/design/mockups,
+	 * "Library by media type", six rows): the row template resolved three
+	 * different ways — `145px 151px`, `131px 165px`, `123px 173px` — so the second
+	 * column started at three different offsets, a 22px spread, and the same 22px
+	 * spread at 360 / 480 / 600 / 760px.
+	 *
+	 * NO SHIPPED SCREEN CAN REACH IT. `List.svelte` stamps `tbl--stack` and
+	 * `tbl--2line` only; `tbl--2up` could arrive through its `class` prop and
+	 * nothing passes one. The block it was written for is Home's Block A, which
+	 * ADR-0028 and `lib/home.ts` keep undrawn until `work` / `edition` /
+	 * `media_file` exist. Fixing it now would mean choosing a split for content
+	 * that does not exist, from mockup strings that are not the real ones.
+	 *
+	 * SO THE FIX IS OWED BY WHOEVER WIRES BLOCK A UP, at this line: replace the
+	 * `auto` with a fixed second track measured off the real cell — the same
+	 * reserve-plus-`flex-wrap` shape routes/requests, routes/services and
+	 * routes/+page use — because no guard can catch this one. `gridTemplate()`
+	 * refuses content-sized tracks it is given; a hand-written per-row
+	 * `grid-template-columns` never passes through it. */
 	.tbl--2up tbody tr:not([hidden]) {
 		grid-template-columns: minmax(0, 1fr) auto;
 		column-gap: var(--space-4);
