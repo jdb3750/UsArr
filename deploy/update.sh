@@ -21,7 +21,10 @@
 #                       Untracked files never block an update.
 #
 # Usage: deploy/update.sh [--check]
-#   --check  report whether an update is available and exit; change nothing.
+#   --check  report whether an update is available, then exit before building,
+#            installing or restarting anything. It still runs `git fetch`,
+#            because "is an update available?" cannot be answered without one;
+#            that updates remote-tracking refs and nothing in the working tree.
 
 set -euo pipefail
 
@@ -214,7 +217,12 @@ systemctl cat "$SERVICE" >/dev/null 2>&1 ||
 RESTART_MARK="$(date '+%Y-%m-%d %H:%M:%S')"
 step "restarting $SERVICE"
 systemctl restart "$SERVICE" || die "systemctl restart $SERVICE failed" \
-	"Look at: systemctl status $SERVICE ; journalctl -u $SERVICE -n 50"
+	"The NEW binary IS installed at $INSTALL_PATH; only the restart failed." \
+	"The host is half-updated: whatever is running is NOT $NEW_SHORT, and the" \
+	"next restart from any source — a reboot, an operator, systemd — will pick" \
+	"the new binary up. Do not leave it here." \
+	"Look at: systemctl status $SERVICE ; journalctl -u $SERVICE -n 50" \
+	"Then re-run this script, or: systemctl restart $SERVICE && deploy/status.sh"
 
 # ── 8. prove the RUNNING process is the new build ────────────────────────────
 step "verifying the running service"
@@ -269,14 +277,55 @@ for _ in 1 2 3 4 5 6 7 8 9 10; do
 	sleep 1
 done
 
-if [ -z "$LIVE_COMMIT" ]; then
+if [ -z "$LOGLINE" ]; then
 	die "could not read a 'starting UsArr' line from the journal since $RESTART_MARK" \
 		"The service is active, but its build identity is unverified." \
 		"Look at: journalctl -u $SERVICE --since '$RESTART_MARK' -n 50"
 fi
 
+# Distinct from the case above on purpose. "No line" and "a line this script
+# could not parse" have different causes and different fixes, and collapsing
+# them would send the operator hunting for a missing log that is right there.
+if [ -z "$LIVE_COMMIT" ]; then
+	die "found the startup line but could not read a commit out of it" \
+		"The line was: $LOGLINE" \
+		"A binary built without -ldflags reports commit 'unknown', which is not a" \
+		"SHA and cannot be compared. Rebuild with 'make build', never 'go build'."
+fi
+
 [ "$LIVE_COMMIT" = "$NEW_SHORT" ] ||
 	die "the RUNNING process reports commit '$LIVE_COMMIT', expected '$NEW_SHORT'" \
 		"The update did not take effect. Look at: journalctl -u $SERVICE -n 50"
+
+# ── 9. prove it is still running a moment later ──────────────────────────────
+# The startup line proves a process with this commit STARTED. It does not prove
+# one is still up: cmd/usarr/main.go logs "starting UsArr" BEFORE buildApp opens
+# the database and runs migrations, and before the listener binds — so a port
+# clash, a bad migration or an unreadable master key emits exactly the line
+# checked above and then exits non-zero. Without this window the script prints
+# OK at the precise moment the service is crash-looping, which is the false
+# green it exists to remove. Measured: it does, reproducibly.
+#
+# MainPID, not just is-active: a unit with Restart=always flaps back to 'active'
+# between crashes, so the state alone can read healthy mid-loop. A MainPID that
+# has moved since the reading above means systemd has already restarted it.
+step "confirming $SERVICE stays up"
+sleep 3
+ACTIVE_AFTER="$(systemctl is-active "$SERVICE" || true)"
+PID_AFTER="$(systemctl show -p MainPID --value "$SERVICE" || true)"
+
+[ "$ACTIVE_AFTER" = "active" ] ||
+	die "$SERVICE started as $NEW_SHORT and then went '$ACTIVE_AFTER'" \
+		"The new binary is installed and it does not stay up. It logged its" \
+		"startup line and exited, so the failure is after startup: the database," \
+		"a migration, the master key, or the listening port." \
+		"Look at: journalctl -u $SERVICE --since '$RESTART_MARK' -n 100"
+
+[ "$PID_AFTER" = "$MAIN_PID" ] ||
+	die "$SERVICE restarted under us (MainPID $MAIN_PID -> $PID_AFTER)" \
+		"That is a crash loop: systemd is restarting $NEW_SHORT as fast as it dies." \
+		"Look at: journalctl -u $SERVICE --since '$RESTART_MARK' -n 100"
+
+info "still active after 3s, MainPID $PID_AFTER unchanged"
 
 printf '\nupdate: OK — %s is running %s (%s)\n' "$SERVICE" "$NEW_SHORT" "$INSTALL_PATH"
