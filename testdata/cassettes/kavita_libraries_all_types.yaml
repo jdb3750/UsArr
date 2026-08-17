@@ -1,0 +1,52 @@
+---
+# SYNTHETIC — hand-authored from api/specs/kavita.json (develop @ 9c3e540,
+# LibraryDto + LibraryType) and Kavita.Server/Controllers/LibraryController.cs at
+# the same commit. NOT a wire capture. Claimed Kavita version: 0.9.0.20.
+#
+# WHY THIS FIXTURE EXISTS ALONGSIDE kavita_libraries.yaml: that one carries the
+# TWO library types an ordinary install has (Manga and Book), which is the right
+# shape for the happy path and the wrong shape for a mapping test. This one
+# carries ONE LIBRARY OF EVERY LibraryType MEMBER the vendored spec declares —
+# 0 Manga, 1 Comic (Flexible), 2 Book, 3 Image, 4 Light Novel, 5 Comic
+# (ComicVine) — so mapLibraryType is exercised on all six, including the one it
+# DECLINES (Image, which has no work.kind).
+#
+# ⚠️ NO INSTANCE IS KNOWN TO CARRY ALL SIX. This is a constructed shape, not a
+# claim about any install, and it is here to fire code paths rather than to
+# describe reality. That is exactly the limit a synthetic cassette has.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Library/libraries
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            [
+              {"id": 1, "name": "Manga",       "type": 0, "folders": ["/m/manga"],  "coverImage": "", "lastScanned": "2026-08-17T07:00:30.118Z"},
+              {"id": 2, "name": "Comics",      "type": 1, "folders": ["/m/comics"], "coverImage": "", "lastScanned": "2026-08-17T07:00:30.118Z"},
+              {"id": 3, "name": "Ebooks",      "type": 2, "folders": ["/m/books"],  "coverImage": "", "lastScanned": "2026-08-17T07:00:30.118Z"},
+              {"id": 4, "name": "Wallpapers",  "type": 3, "folders": ["/m/img"],    "coverImage": "", "lastScanned": "2026-08-17T07:00:30.118Z"},
+              {"id": 5, "name": "Light novels","type": 4, "folders": ["/m/ln"],     "coverImage": "", "lastScanned": "2026-08-17T07:00:30.118Z"},
+              {"id": 6, "name": "Comic Vine",  "type": 5, "folders": ["/m/cv"],     "coverImage": "", "lastScanned": "2026-08-17T07:00:30.118Z"}
+            ]

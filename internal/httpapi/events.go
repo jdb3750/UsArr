@@ -49,6 +49,18 @@ const (
 	EventSearchDone         = "search.done"
 	EventSearchFailed       = "search.failed"
 	EventStreamMissedEvents = "stream.missed"
+
+	// EventImportProgress carries a catalogue full import's real counts
+	// (ARCHITECTURE.md §7.2: "Progress over SSE with real counts").
+	//
+	// ITS PRODUCER IS cmd/usarr's importProgress, which is the one place in the
+	// process that sees both an outbound catalogue client and this hub — §2.3
+	// rule 1 keeps the two out of the same package, so internal/libsync
+	// publishes through a plain callback and cmd wires that callback to
+	// Publish. The constant lives here and not in libsync because the wire name
+	// belongs to the stream, and the block above is the stream's whole
+	// vocabulary.
+	EventImportProgress = "import.progress"
 )
 
 // Event is one frame on the stream.

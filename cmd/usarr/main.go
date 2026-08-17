@@ -102,6 +102,12 @@ func run() error {
 	// render path can ever wait on it.
 	proberCtx, stopProber := context.WithCancel(context.Background())
 	defer stopProber()
+	// The on-connect full import runs under the PROBER's context, not a
+	// request's: it is minutes of work and a request deadline would kill it
+	// halfway. Arming it here rather than in buildApp keeps buildApp from
+	// returning with a goroutine already writing to a database it might still
+	// fail to finish setting up — the same rule the candidate sweeper follows.
+	a.registry.enableBootstrapImport(proberCtx)
 	go a.registry.RunProber(proberCtx)
 
 	// The release_candidate sweep. It starts here and not inside buildApp

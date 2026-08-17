@@ -53,6 +53,24 @@ type registry struct {
 	log     *slog.Logger
 	version string
 
+	// hub is the SSE stream, attached by buildApp AFTER the server exists.
+	// The registry is constructed first because httpapi.New takes it, so this
+	// is a one-way back-reference rather than a constructor argument. It is set
+	// once during startup and read afterwards, never reassigned.
+	hub *httpapi.Hub
+
+	// importCtx is the process-lifetime context a bootstrap import runs under.
+	// It is NOT the caller's: entry() is reached from probe and request paths
+	// whose deadlines are seconds, and a full import is minutes. Nil disables
+	// the on-connect bootstrap, which is what every test that has not asked for
+	// it gets.
+	importCtx context.Context //nolint:containedctx // see the comment above: this is a lifetime, not a per-call deadline
+
+	// bootstrapped remembers which instances this process has already offered a
+	// bootstrap import, so a client rebuild (an edited base_url) does not queue
+	// a second one while the first is still running. It is guarded by mu.
+	bootstrapped map[int64]bool
+
 	mu      sync.Mutex
 	entries map[int64]*registryEntry
 
@@ -109,8 +127,19 @@ func newRegistry(st *store.Store, keyring *crypto.Keyring, log *slog.Logger, ver
 		entries:  map[int64]*registryEntry{},
 		probes:   map[int64]httpapi.UpstreamHealth{},
 		probeReq: make(chan int64, 32),
+
+		bootstrapped: map[int64]bool{},
 	}
 }
+
+// attachEvents gives the registry the SSE hub, once, during startup. See the
+// field comment for why this is not a constructor argument.
+func (g *registry) attachEvents(h *httpapi.Hub) { g.hub = h }
+
+// enableBootstrapImport arms the on-connect full import under a
+// process-lifetime context. main calls it with the prober's context; a test
+// that does not want a background import simply never calls it.
+func (g *registry) enableBootstrapImport(ctx context.Context) { g.importCtx = ctx }
 
 // ── httpapi.ReleaseServices ─────────────────────────────────────────────────
 
@@ -182,6 +211,15 @@ func (g *registry) entry(ctx context.Context, instanceID int64) (*registryEntry,
 			return nil, err
 		}
 		e.kavita = client
+		// ON CONNECT, and only here: this is the moment a client stack for a
+		// catalogue source comes into existence. bootstrapImport itself is the
+		// gate on "has this instance ever completed a full sync" — the map below
+		// is only the in-process guard against a second goroutine for the same
+		// instance while the first is still running.
+		if g.importCtx != nil && !g.bootstrapped[instanceID] {
+			g.bootstrapped[instanceID] = true
+			go g.bootstrapImport(g.importCtx, instanceID)
+		}
 	default:
 		// httpapi.serviceKinds refuses an unknown kind at the boundary, so this
 		// is a row that predates a kind being removed — or a hand-edited SQLite.
