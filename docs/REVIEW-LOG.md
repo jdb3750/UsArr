@@ -10562,3 +10562,114 @@ credit test that inserted a `work` row directly would take the `ItemsUnresolved`
 nothing about the write path at all.
 
 What it does not attest is everything in `LS.12`.
+
+---
+
+# Round 5 continued — `LS-27`–`LS-29`: §17's three echoes of claims already corrected upstream
+
+**⚠️ Announced, per `DEVELOPMENT.md` §11's ownership map: this is a BACKEND-thread pass into
+`ARCHITECTURE.md` §17, which the design thread leads.** §11's map is explicit that these are *leads,
+not exclusive ownership*, and design's own nine-site §17 pass named these three as resolving from
+sections this thread owns rather than from §17's wording — an effective invitation, taken up here and
+stated rather than assumed. **The fix comes from upstream in every case:** none of the three is a
+defect in how §17 phrases itself, and none was found by re-reading §17. Each is a faithful echo of a
+sentence that §6.4, §7.1a and ADR-0035/0041 have since replaced, which is why the correction is a
+POINTER to the section that now owns the claim rather than a fresh status claim written in §17.
+
+**Scope held deliberately narrow.** Three sites, plus the one mechanical consequence in
+`docs/design/check.mjs` that a changed copy string forces (below). §8.5 and §17.8's `LibraryType`
+passage were both fixed by other threads within the hour and are untouched. Other things noticed in
+§17 while reading are recorded in `LS.16` and left for design.
+
+| # | Finding | Severity | Disposition |
+| --- | --- | --- | --- |
+| **LS-27** | §17.7's `matched by title` rule said the state is **not reachable in v0.1** because *"v0.1's only sources are Radarr and Sonarr, which carry TMDB and TVDB ids, so every v0.1 work resolves at the identifier tier"*. ADR-0041 made **Kavita** v0.1's catalogue source, and §16.0 flagged the consequence without answering it — `§6.4 owns the tier-1 claim and has not been restated against Kavita` | **High** | **Applied.** §6.4 was restated at `f722054` and again at `aea2654`; §17 now **matches** that wording instead of paraphrasing it, so the two cannot drift apart again. The state is reachable in v0.1 and may be the **ordinary** rendering; coverage is **a property of the instance, not of the design** |
+| **LS-28** | §17.7's degraded-instance banner used **Kavita** as the exemplar for *"no delta channel at all"* | **High** | **Applied.** ADR-0035 §2a disproved it against the owner's live instance: **Kavita HAS a usable delta** — channel 3b's ordered page walk — and lacks only a changed-since endpoint. **The honest distinction is "no channel 3", not "no delta"**, which §7.1a already carries. Exemplar moved to **Komga**, whose ordering guarantee is still an open probe |
+| **LS-29** | §17.8's `no change feed` named state used the same wrong exemplar — *"Kavita has no changed-since endpoint"* as the illustration of the reconciliation-only fallback — and justified its v0.1 unreachability with *"whose only sources are \*Arrs on channel 3"* | **High** | **Applied, with the SAME wording as `LS-28`.** One question, not two: an exemplar that is merely less wrong is not fixed, so both sites were rewritten together against one ruling rather than patched independently |
+
+## LS.14 Live prose or dated record — the judgement, site by site
+
+`DEVELOPMENT.md` §11: *a citation inside a dated record is history, not staleness*, and such a record
+is corrected by amending underneath rather than by rewriting. **All three sites were judged LIVE
+PROSE, and none was amended underneath.** The test applied is the one §11's rule implies: a dated
+record carries a date and the tree it was read at, and its value is that it keeps describing that
+tree. None of these three does.
+
+* **`LS-27`** — a normative rule about what the UI must render (*"the rule is written now because it
+  cannot be retrofitted"*), carrying no date and no tree. Its premise about v0.1's sources is a live
+  claim that ADR-0041 falsified, so leaving it standing with an amendment underneath would leave a
+  false sentence on the screen a reader hits first.
+* **`LS-28`** and **`LS-29`** — both are **specifications of shipping UI states**, one a banner and
+  one a named per-library state. A spec is read to be built from; there is no tree it describes. The
+  contrast is instructive and sits two sections away: §7.1a's per-source status **table** IS a dated
+  record — it says what was probed, when and against what — and §7.1a says so in its own words and
+  leaves it alone while amending the framing sentence above it. That is the distinction, not the
+  §-number.
+
+**History is preserved without the dated-record apparatus**, using the house style §6.4 and §7.1a
+already use: each site quotes what it previously read. ⚠️ **Those quotations are in BACKTICKS, never
+in the `*"…"*` italic-quoted form**, because `VN9.17` records that the §17 copy sweep matches that
+form anywhere in §17 and a retired string quoted in it becomes a phantom shipping-copy string. That
+trap fired twice during the pass that discovered it; it did not fire here, and the span count is the
+evidence (`LS.15`).
+
+## LS.15 The one non-§17 file this forced, and why it is not scope creep
+
+`docs/design/check.mjs` carries `S17_EMDASH_ALLOWED`, four recorded em-dash exemptions keyed on the
+**normalised text of the §17 string itself**, and the verdict block fails when the recorded count and
+the matched count differ — *"a recorded string no longer appears in §17, so the record is describing
+copy that is not there"*. `LS-28` changes one of those four strings, so the entry was re-keyed from
+`kavita is unreachable — …` to `komga is unreachable — …`. **The construction it exempts and its
+`RETIRED BY` clause are unchanged; only the subject moved.**
+
+This is the direction that file asks for rather than an edit against it: its own comment rules that
+*"a checker that edits the specification it checks is not a checker"*, and `VN9.17` retired two
+entries **in §17 rather than in the map** for exactly that reason. §17 ruled; the map tracks.
+
+**Verified offline rather than asserted**, because `make design` needs Chromium and is not part of
+`make check`. The §17 span extraction and `norm()` were replicated exactly as `check.mjs` performs
+them and run against the edited file: **57 shipping-copy spans (unchanged, floor 45), 4 carrying an
+em dash, and those 4 normalise to exactly the 4 recorded keys** — `tv — catalogue source, request
+destination`, `music — catalogue source; no request destination`, `grab failed — http 502`, and the
+re-keyed `komga is unreachable — showing cached data from the last full compare at 09:12`. Zero spans
+contain `!`. No banned word entered either new string. `LS-29`'s replacement copy carries **no em
+dash at all**, so it needs no exemption and none was added.
+
+No mockup carries either string: `docs/design/mockups/` uses the Radarr variant, exempted through the
+`DESIGN-DIRECTION` §13 window and untouched by this change. `web/src/lib/services.ts` renders
+`no change feed — full compare at 09:12`, which matches §17.3's label — and §17.3's label was
+**already correct**, distinguishing `page-walk delta` from the no-ordering-guarantee case. It is not
+edited, and that it was already right is what identified §17.7 and §17.8 as the two that had drifted.
+
+## LS.16 Noticed in §17 and deliberately left for design
+
+Recorded rather than fixed, because a wide unannounced diff into another thread's section is the
+thing §11's announce rule exists to prevent. **None of these was touched.**
+
+* **§17.7's degraded-banner example is `Radarr 4K is unreachable`, and §17.7's wizard bullet still
+  reads `1,240 of 10,000 movies`.** Both are \*Arr-shaped illustrations in a v0.1 whose catalogue
+  source is Kavita. Neither is FALSE — §16 keeps Sonarr and Radarr, only re-sequenced — so neither is
+  in this pass's remit, which was echoes of *corrected* claims. Whether §17's running examples should
+  lead with the source v0.1 actually ships is a design question about the document's exemplars.
+* **§17.2's install-position table describes the *"Full stack"* as the mockups' default** and already
+  carries its own caveat that this is later than v0.1. Flagged only because `LS-27`–`LS-29` are three
+  instances of the same underlying hazard — §17 was drafted against a \*Arr-first v0.1 — and the
+  caveat is the pattern that handles it correctly where it is present.
+
+## LS.17 On the gate
+
+`make check` from a cleaned lint cache — `/root/go/bin/golangci-lint cache clean` by absolute path
+first. Binaries, versions, the commit and the verbatim tail are in the commit message.
+
+🚩 **What a green attests about this change is very close to nothing, and saying so is the point.**
+This pass edits two files, `docs/ARCHITECTURE.md` and `docs/design/check.mjs`, and **exactly one step
+of the gate reads `docs/` at all**: `make secrets`, the gitleaks scan, which looks only for
+credential-shaped strings. `fmt-check`, `lint`, `build-tagged`, `modverify`, `test` and `vuln` do not
+read Markdown, and `make design` — the one target that would evaluate §17's copy — is deliberately
+**not part of `check`** because it needs a browser (`Makefile`, the comment above the `design`
+target). So the green proves the tree still builds and tests clean around an unrelated docs edit, and
+proves **nothing whatever** about whether these three sites are now correct.
+
+**What does attest to them** is `LS.15`'s offline replication of the §17 sweep, the primary sources
+each site now points at (§6.4 as restated at `f722054`/`aea2654`, §7.1a, ADR-0035 §2a's live-instance
+run, ADR-0041), and the fact that §17.3's already-correct label was used as the control.

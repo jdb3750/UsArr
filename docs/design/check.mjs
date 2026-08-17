@@ -1859,7 +1859,15 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
      * where a shape rule would silently bless everything shaped like it.
      * Matched after norm(), so a rewrite loses the exemption and a change of
      * emphasis does not: the same property exempt() has. */
-    ['kavita is unreachable — showing cached data from the last full compare at 09:12',
+    /* ⚠️ Re-keyed from Kavita to Komga on 2026-08-17, tracking a ruling made in
+     * §17 rather than here: §17.7's degraded banner may not use Kavita as the
+     * exemplar for "no delta channel at all", because ADR-0035 §2a verified
+     * against a live instance that Kavita HAS a delta (channel 3b's page walk)
+     * and lacks only a changed-since endpoint. The construction this entry
+     * exempts is unchanged and so is its RETIRED BY; only the subject moved,
+     * and it moved because the size check below fails on an exemption that
+     * matches nothing — which is exactly how this file learns that §17 ruled. */
+    ['komga is unreachable — showing cached data from the last full compare at 09:12',
       'The stale-data banner exempt() was built for, at §17 source. Head is the ' +
       'failing component, detail is the observed symptom and its time. ' +
       'RETIRED BY: §13 gaining a construction rule the checker can evaluate.'],
