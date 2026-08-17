@@ -21,6 +21,34 @@ distinctions now matter and are used consistently below:
 - **Superseded / Reversed** — the decision was wrong, or its evidence was. The reversal records what
   changed and why, rather than silently rewriting the original.
 
+### How an ADR is amended when the world moves under it
+
+**An ADR body is a dated record of a decision as taken, so it is annotated, never rewritten.** The
+original text stays standing — struck with `~~` where it is plainly wrong, left as-is where it is
+merely overtaken — and the correction is *added* beside it. **Three marks are always owed**, and a
+fourth where it is needed:
+
+1. **The index row above** gains `⚠️ amended <date> by ADR-NNNN`, with one line on what moved.
+2. **The `Status:` line** gains the same flag, so a reader arriving at the anchor is warned before
+   the first section rather than after it.
+3. **A dated block directly under the `Status:` line** — a `### ⚠️ Amendment, <date>` section or a
+   `> ⚠️ **AMENDED …**` blockquote — naming *which* claims below no longer hold and which survive.
+4. **The falsified sentence itself** keeps a dated inline flag wherever a reader could otherwise
+   take it as live, since anchors and search land people mid-document.
+
+**The decision lives in the superseding ADR; the amendment note points at it and does not re-argue
+it.** This is the rule [`DEVELOPMENT.md`](./DEVELOPMENT.md) §11 already states for `REVIEW-LOG.md` —
+*"a citation inside a dated record is history, not staleness"* — and it is deliberately the opposite
+of how the design documents are handled: [`ARCHITECTURE.md`](./ARCHITECTURE.md), `README.md` and
+`SETUP-CHECKLIST.md` describe the design **as it stands now**, so they are corrected in place, quoting
+what they used to say. An ADR records what was decided **then**.
+
+⚠️ **Where this was not followed it cost something, which is why it is written down.** `162dca5`
+rewrote ADR-0035's title, its §1 heading and its §1 prose in place instead of only annotating them.
+The sentence that rewrite introduced — *"Not in v0.1, which draws no comics or books library at
+all"* — was falsified by [ADR-0041](#adr-0041) the next day, and it traces to **no ADR at all**,
+because no ADR ever decided it. Annotating leaves that failure mode nowhere to hide.
+
 | ADR | Decision | Status |
 |---|---|---|
 | [0001](#adr-0001) | Go for the backend | **Accepted, evidence corrected** (rev 2) |
@@ -58,7 +86,7 @@ distinctions now matter and are used consistently below:
 | [0032](#adr-0032) | Read-only catalogue sources move early; command sinks defer | **Accepted** — **amends** §16; **one member reversed by [ADR-0035](#adr-0035)** |
 | [0033](#adr-0033) | `work.kind` gains `person`; a credit is not a music artist | **Accepted** — owner-decided 2026-08-16; refines ADR-0009, ADR-0031 |
 | [0034](#adr-0034) | The project keeps the name UsArr | **Accepted** — owner-decided 2026-08-16; naming only, nothing in the codebase moves |
-| [0035](#adr-0035) | Kavita, not Komga, is the comics-and-books catalogue source | **Accepted** — owner-decided 2026-08-16; **reverses one member of [ADR-0032](#adr-0032)**, confirms [ADR-0030](#adr-0030); ⚠️ **amended 2026-08-16** — the catalogue sources sequence **after** v0.1 ([ADR-0036](#adr-0036)), so this ADR picks *which* source, and its spike orders the post-v0.1 sequence; ✅ **§2's spike RAN 2026-08-17 and PASSED** — dated result in §2a, with one qualification (no server-side since-filter exists) |
+| [0035](#adr-0035) | Kavita, not Komga, is the comics-and-books catalogue source | **Accepted** — owner-decided 2026-08-16; **reverses one member of [ADR-0032](#adr-0032)**, confirms [ADR-0030](#adr-0030); ⚠️ **amended 2026-08-16** — the catalogue sources sequence **after** v0.1 ([ADR-0036](#adr-0036)), so this ADR picks *which* source, and its spike orders the post-v0.1 sequence; ✅ **§2's spike RAN 2026-08-17 and PASSED** — dated result in §2a, with one qualification (no server-side since-filter exists); ⚠️ **amended 2026-08-17 by [ADR-0041](#adr-0041)** — that spike result moved **Kavita into v0.1**, so the 2026-08-16 amendment below and §1's *"not in v0.1, which draws no comics or books library at all"* rider are both falsified. The choice of Kavita over Komga is untouched |
 | [0036](#adr-0036) | No catalogue source ships in v0.1; they arrive one at a time after it | **Accepted** — owner-decided 2026-08-16; **amends** §16; **re-sequences [ADR-0032](#adr-0032) and [ADR-0035](#adr-0035)** without rejecting any source; ⚠️ **amended 2026-08-17 by [ADR-0041](#adr-0041)** — the owner runs neither Sonarr nor Radarr, so this ADR's *"prove the replica thesis on real data"* criterion was unmeetable as scoped: **Kavita ships in v0.1 as the sync core's first adapter** and the \*Arr adapters re-sequence behind it. The rule — one source, proven on real data, before a second adapter — is kept unchanged |
 | [0037](#adr-0037) | TOFU SPKI pin enrolment is removed, not completed; enforcement stays | **Accepted** — 2026-08-16; amends no ADR; reopening conditions stated (a pin field on the update path + the change-acceptance UI) |
 | [0038](#adr-0038) | A list freezes its order while a user is aiming at it | **Accepted** — 2026-08-16; amends no ADR; the argument lives in `design/DESIGN-DIRECTION.md` §9.1a and ARCHITECTURE §17.5, this record holds the rejected alternatives |
@@ -3294,7 +3322,24 @@ recorded here so the next attempt does not rediscover them the expensive way.
 **[`ARCHITECTURE.md`](./ARCHITECTURE.md) §16** remains authoritative for scope ·
 **re-examines [ADR-0030](#adr-0030)** and confirms it. · 🚩 **The milestone move the amendment below
 records is decided in [ADR-0036](#adr-0036)**, which carries its alternatives, its consequences and
-the §16 rewrite; this ADR restates itself against it and remains the record of *which* source.
+the §16 rewrite; this ADR restates itself against it and remains the record of *which* source. ·
+⚠️ **Amended 2026-08-17 by [ADR-0041](#adr-0041)** — see the flag below.
+
+> ⚠️ **AMENDED 2026-08-17 by [ADR-0041](#adr-0041): Kavita is in v0.1, so every "not in v0.1" rider
+> below is falsified — and the falsifying evidence is this ADR's own spike.** §2a ran on 2026-08-17
+> against the owner's live Kavita and passed; ADR-0036's v0.1 criterion (*"a real Sonarr and a real
+> Radarr, imported"*) turned out unmeetable because **the owner runs neither** (*"thats gonna have to
+> be future"*, 2026-08-17); so ADR-0041 kept ADR-0036's rule — one source, proven on real data,
+> before a second adapter — and changed the source to **Kavita**. **Two sites below are superseded**:
+> the **2026-08-16 amendment**, whose framing (*"v0.1 has no catalogue sources at all"*, *"v0.1 is
+> Sonarr, Radarr and Prowlarr"*, its clause 1 instruction to read every "v0.1" below as *"the
+> milestone Kavita lands in"*, and its clause 3) is overtaken — Kavita's milestone **is** v0.1; and
+> **§1's rider**, flagged again at the site. **Nothing about *which* source is chosen moves**: §1's
+> identity finding, §2/§2a's probe and §3's confirmation of ADR-0030 all stand, and §1 is now
+> exercised in v0.1 rather than deferred with it. ARCHITECTURE §16 and §16.1 carry the sequence.
+>
+> 🚩 **The 2026-08-16 amendment below is left standing and unedited**, per this file's preamble: it
+> is a dated record of what was decided that day, not a description of the design today.
 
 ### ⚠️ Amendment, 2026-08-16 — the milestone moved under this ADR, and the choice inside it did not
 
@@ -3376,8 +3421,12 @@ tier"* case — and the change is one of frequency, not of mechanism. What follo
   identity loss against ADR-0032's plan is therefore near zero, and the honest statement is that
   **comics has no strong-identity path in v0.1 under either choice**.
 - **`ARCHITECTURE.md` §17 and the mockups must render this as the normal case — from the milestone
-  Kavita lands in.** ⚠️ Not in v0.1, which draws no comics or books library at all, because it has no
-  catalogue source for either. The "not identified"
+  Kavita lands in.** ~~⚠️ Not in v0.1, which draws no comics or books library at all, because it has no
+  catalogue source for either.~~ 🚩 **STRUCK 2026-08-17 by [ADR-0041](#adr-0041), and struck rather
+  than deleted because it is the clause the amendment at the top of this ADR exists for.** The
+  milestone Kavita lands in **is v0.1**, so this requirement is v0.1's and is exercised there rather
+  than deferred: free Kavita's null identifier fields make *"not identified"* v0.1's **ordinary**
+  case (ARCHITECTURE §16.0, §16.1). The rest of this bullet is unaffected and gains force. The "not identified"
   badge and the comics gap list are not exception states on a comics library; they are what the
   screen looks like. A design that treats them as edge cases will under-serve the majority path.
 - **It must never read as a defect in UsArr, and it must never read as nagware.** The screen says
