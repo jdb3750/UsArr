@@ -2,7 +2,10 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,6 +25,11 @@ import (
 // IT IS A LOCAL READ (principle 1). One SQLite statement per page, no upstream
 // call, no *Arr, no metadata provider, no image fetch. This is the endpoint that
 // has to be fast, because it is the first thing the browser asks for.
+//
+// THE WIRE CONTRACT IS WRITTEN DOWN WHERE A CONSUMER WILL FIND IT:
+// docs/reference/http-api.md §1. It used to live only in these comments, which
+// is how a client came to model `limit` as the value it sent rather than the
+// value the server echoed — a doc comment is not reachable from a browser tab.
 //
 // WHAT IT DOES NOT DO YET, stated so a caller does not assume it:
 //
@@ -100,20 +108,29 @@ type recentWorkResponse struct {
 	// fraction and a comic's `have` with `total: null`, and §6.3's render rule
 	// (`have == total && total > 0` → ✓) must never fire on the last of those.
 	//
-	// It is omitted when the column is NULL and when the stored text is not
-	// valid JSON. The second case is dropped rather than forwarded because this
-	// struct is marshalled as a whole: one malformed historical blob would
-	// otherwise fail the entire response, which trades the block for its
-	// decoration.
+	// IT IS LEGITIMATELY OPTIONAL: a work may genuinely have no blob, the column
+	// is nullable, and an absent key is that truth. A renderer treats absence as
+	// absence and must not invent a denominator from have_count/want_count.
+	//
+	// It is ALSO omitted when the stored text is corrupt — see
+	// availabilityFor for the four cases and for why every one of them is
+	// LOGGED rather than merely dropped. Dropping is the right thing to do on
+	// the wire (this struct is marshalled whole, so one bad blob would otherwise
+	// fail the entire response and trade the block for its decoration); dropping
+	// it *silently* is not, because it made a writer bug and an honestly-empty
+	// work byte-identical to a consumer.
 	Availability json.RawMessage `json:"availability,omitempty"`
 }
 
 type recentWorksResponse struct {
 	Items []recentWorkResponse `json:"items"`
 
-	// Limit is the limit the SERVER applied, echoed because the server clamps.
-	// A client that asked for 10000 and got 200 rows would otherwise read the
-	// short answer as "that is all there is".
+	// Limit is the page size the SERVER applied, and it is AUTHORITATIVE: a
+	// client pages against this number, never against the one it sent. The
+	// server clamps rather than rejects (recentWorksLimit says why), so a client
+	// that asked for 10000, got 200 rows and trusted its own 10000 would read
+	// the short page as "that is all there is" and stop at the boundary — which
+	// is exactly how this field came to be documented properly.
 	Limit int `json:"limit"`
 
 	// NextCursor is absent when this page is the last one, and its absence is
@@ -129,16 +146,9 @@ func (s *Server) handleRecentWorks(w http.ResponseWriter, r *http.Request) error
 		return errStatus(http.StatusUnauthorized, CodeUnauthorized, "this request has no session")
 	}
 
-	limit, err := queryInt32(r, "limit")
+	effective, err := recentWorksLimit(r)
 	if err != nil {
 		return err
-	}
-	effective := int(limit)
-	switch {
-	case effective <= 0:
-		effective = store.RecentWorksDefaultLimit
-	case effective > store.RecentWorksMaxLimit:
-		effective = store.RecentWorksMaxLimit
 	}
 
 	// A cursor that will not parse is a 400, never a silent reset to page one:
@@ -168,7 +178,7 @@ func (s *Server) handleRecentWorks(w http.ResponseWriter, r *http.Request) error
 		Limit: effective,
 	}
 	for _, row := range rows {
-		out.Items = append(out.Items, toRecentWorkResponse(row))
+		out.Items = append(out.Items, s.toRecentWorkResponse(row))
 	}
 	if next.NullTail || next.AddedAt.Valid {
 		out.NextCursor = store.EncodeRecentWorksCursor(next)
@@ -177,9 +187,150 @@ func (s *Server) handleRecentWorks(w http.ResponseWriter, r *http.Request) error
 	return nil
 }
 
+// recentWorksLimit reads `?limit=` and returns the page size the server will
+// actually apply.
+//
+// ⚠️ `limit` IS A CLAMP, NOT A VALIDATED RANGE, AND THAT IS THE DECISION rather
+// than an accident of the old code. An out-of-range page size is not a request
+// the server cannot answer — it is a request it can answer with fewer rows, and
+// refusing it would fail a whole screen over a number the server was about to
+// ignore anyway. So: any page size at all is served, at most RecentWorksMaxLimit
+// of it, and the response's `limit` field says which. The full table:
+//
+//	absent, empty, or 0   →  RecentWorksDefaultLimit (50). "0" is spelled the
+//	                         same as "unspecified" on purpose: a client that
+//	                         renders `?limit=${n}` with n unset must get a page,
+//	                         not an empty one.
+//	1 … 200               →  as asked
+//	> 200                 →  200, silently, and echoed back in `limit`
+//	negative, or not an
+//	integer at all        →  400. There is no honest clamp target for these:
+//	                         they are not page sizes that came out too big, they
+//	                         are not page sizes.
+//
+// THE CLAMP IS TOTAL OVER THE POSITIVE INTEGERS, which is why this parses at 64
+// bits and treats strconv's range error as the saturation it already is. The
+// shared queryInt32 parses at 32, so `?limit=2147483648` used to 400 while
+// `?limit=2147483647` clamped to 200 — a cliff at 2^31 with a message claiming
+// the value "is not a non-negative integer", which it plainly is. A rule with an
+// invisible exception is not a rule a client can hold. queryInt32 is left alone:
+// it serves the search endpoints, whose parameters are not this parameter.
+func recentWorksLimit(r *http.Request) (int, error) {
+	raw := strings.TrimSpace(r.URL.Query().Get("limit"))
+	if raw == "" {
+		return store.RecentWorksDefaultLimit, nil
+	}
+	// On ErrRange, ParseInt returns the saturated bound — MaxInt64 for an
+	// enormous positive, MinInt64 for an enormous negative — which is exactly
+	// the input the clamp below wants. Any other error means the text was never
+	// an integer.
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil && !errors.Is(err, strconv.ErrRange) {
+		return 0, errStatus(http.StatusBadRequest, CodeBadRequest,
+			fmt.Sprintf("limit=%q is not a whole number of items", raw)).
+			withAction("omit limit for the default page size, or send a whole number from 1 to " +
+				strconv.Itoa(store.RecentWorksMaxLimit))
+	}
+	if n < 0 {
+		return 0, errStatus(http.StatusBadRequest, CodeBadRequest,
+			fmt.Sprintf("limit=%q is negative, which is not a page size", raw)).
+			withAction("omit limit for the default page size, or send a whole number from 1 to " +
+				strconv.Itoa(store.RecentWorksMaxLimit))
+	}
+	switch {
+	case n == 0:
+		return store.RecentWorksDefaultLimit, nil
+	case n > store.RecentWorksMaxLimit:
+		return store.RecentWorksMaxLimit, nil
+	}
+	return int(n), nil
+}
+
+// availabilityKinds is schema.md §1's closed set of `"k"` discriminators, and it
+// is the FIRST Go-side statement of that vocabulary: nothing in internal/ writes
+// an availability blob yet, so until a writer exists this is the only place the
+// three shapes are named in code. §1's own rule is that `k` is required on every
+// non-null blob and that a renderer switches on it — a fourth value is therefore
+// a writer bug, not a newer server, because in v0.1 the writer and this reader
+// are the same binary and ship in the same commit. Adding a shape is an edit
+// HERE as well as at the writer, and TestAvailabilityKindsMatchSchemaMd is what
+// makes that edit deliberate.
+var availabilityKinds = map[string]bool{
+	"tier":    true, // video: per-quality-tier fractions (ARCHITECTURE §6.3)
+	"edition": true, // music: edition-keyed fractions (ADR-0031)
+	"count":   true, // comics and anything with no honest denominator (§6.1)
+}
+
+// availabilityFor decides what the `availability` key carries for one row, and
+// it is where "absent because there is nothing" is separated from "absent
+// because what is stored is garbage".
+//
+// FOUR CASES, ONE WIRE BEHAVIOUR, TWO DIFFERENT SIGNALS:
+//
+//	NULL column              → omitted, SILENTLY. A work may honestly have no
+//	                           blob. This is not a fault and must not be logged,
+//	                           or the log stops being worth reading.
+//	not JSON, or not an
+//	object                   → omitted, LOGGED.
+//	an object with no "k"    → omitted, LOGGED. §1: "k is required on every
+//	                           non-null blob".
+//	an object with a "k"
+//	nobody defined           → omitted, LOGGED. Forwarding it would hand a
+//	                           renderer a discriminator its switch has no arm
+//	                           for, and §6.3's render rule
+//	                           (`have == total && total > 0` → ✓) is exactly the
+//	                           kind of arm that must not fire by accident on a
+//	                           shape nobody specified.
+//
+// WHY A LOG AND NOT A sync_report ROW. sync_report IS reachable from here —
+// s.store.RecordSyncReport exists and takes no Scope — and it was rejected on
+// three counts rather than on ignorance. (1) It requires a
+// service_instance_id, foreign_keys is ON (internal/db/sqlite.go), and this read
+// deliberately never joins service_item_link: naming the instance is the one
+// thing this response refuses to publish, so the row cannot be written without
+// adding the join the endpoint exists without. (2) It is a WRITE, and this is a
+// render path — it would serialise on the single writer connection on the first
+// screen the browser asks for, against principle 1. (3) It would append one row
+// per corrupt work PER PAGE VIEW, so a refresh loop grows the table without
+// bound; migration 0005 calls sync_report "an operational log the sweep writes
+// and the Services screen reads", and a browser refresh is not a sweep.
+//
+// The log line carries the WORK ID, which is what makes the row findable:
+// `SELECT availability FROM work WHERE id = ?`. It does not carry the blob —
+// that text came out of the database and may be arbitrarily long.
+func (s *Server) availabilityFor(w store.RecentWork) json.RawMessage {
+	if !w.Availability.Valid {
+		return nil
+	}
+	raw := w.Availability.String
+
+	// One pass, not two: unmarshalling into this probe validates the whole
+	// document exactly as json.Valid did AND yields the discriminator, so
+	// checking the shape costs nothing over checking the syntax.
+	var probe struct {
+		K string `json:"k"`
+	}
+	if err := json.Unmarshal([]byte(raw), &probe); err != nil {
+		s.log.Warn("work.availability will not decode and was dropped from the response",
+			"work_id", w.ID, "err", redactText(err.Error()))
+		return nil
+	}
+	if probe.K == "" {
+		s.log.Warn(`work.availability has no "k" discriminator and was dropped from the response`,
+			"work_id", w.ID)
+		return nil
+	}
+	if !availabilityKinds[probe.K] {
+		s.log.Warn(`work.availability has an unrecognised "k" discriminator and was dropped from the response`,
+			"work_id", w.ID, "k", redactText(probe.K))
+		return nil
+	}
+	return json.RawMessage(raw)
+}
+
 // toRecentWorkResponse is the allowlist applied. Every field is named; nothing
 // is copied by reflection or embedded.
-func toRecentWorkResponse(w store.RecentWork) recentWorkResponse {
+func (s *Server) toRecentWorkResponse(w store.RecentWork) recentWorkResponse {
 	out := recentWorkResponse{
 		ID:        w.ID,
 		MediaType: w.MediaType,
@@ -201,8 +352,6 @@ func toRecentWorkResponse(w store.RecentWork) recentWorkResponse {
 			out.AddedAt = &at
 		}
 	}
-	if w.Availability.Valid && json.Valid([]byte(w.Availability.String)) {
-		out.Availability = json.RawMessage(w.Availability.String)
-	}
+	out.Availability = s.availabilityFor(w)
 	return out
 }

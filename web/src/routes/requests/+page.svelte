@@ -19,10 +19,12 @@
 	 *
 	 * ⚠️ THERE IS EXACTLY ONE RELEASE-SEARCH SURFACE IN UsArr AND THIS IS IT.
 	 * /search was the other one; it is now an honest account of a screen that is
-	 * not built — §17.4 is search over your OWN library, and there is no local
-	 * index to search yet — plus a pointer here. Two results tables built from
-	 * one SSE stream is how they end up disagreeing about what a de-duplicated
-	 * row is, and this screen already states the counts such a table must match.
+	 * not built — §17.4 is search over your OWN library, and while the catalogue
+	 * sync now replicates that library (libsync, Kavita per ADR-0041), the search
+	 * surface over it is not built yet — plus a pointer here. Two results tables
+	 * built from one SSE stream is how they end up disagreeing about what a
+	 * de-duplicated row is, and this screen already states the counts such a
+	 * table must match.
 	 *
 	 * ⚠️ THIS SCREEN COMPOSES; IT DOES NOT REIMPLEMENT. Four modules arrived with
 	 * the table and every one of them is portable by design:

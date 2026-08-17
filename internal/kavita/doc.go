@@ -99,6 +99,10 @@
 //
 // # Scope
 //
-// This is the CLIENT only. No sync loop, no import, no schema writes. Channels 1,
-// 3b and 4 (ADR-0041) are the commits after this one.
+// This is the CLIENT only. No sync loop, no import, no schema writes — that
+// boundary is unchanged and is what this section is for. What HAS changed is the
+// sentence that used to follow it, "channels 1, 3b and 4 (ADR-0041) are the
+// commits after this one": channel 1 arrived, in internal/libsync, which consumes
+// this package. Channels 3b and 4 are still ahead; internal/libsync's doc.go is
+// the authority on that split, because it is the package the split is about.
 package kavita
