@@ -856,3 +856,71 @@ already determined by three things the current schema fixes:
 user-creation hook that does not exist (v0.1 creates one user, in a migration), and a second
 reserved row nothing reads. Cost of doing it later: one `INSERT … SELECT` over the `user` table, one
 trigger rewrite, and the decision in (2). Nothing about it is a one-way door.
+
+---
+
+## 20. Per-type catalogue coverage on the wire — the array §16's empty-state rule turns on
+
+**What.** One capability array carried with each connected service on `GET /api/v1/services/health`:
+the media types that instance *actually* supplies, derived at ingest from the containers the
+instance itself reported. With it a screen can say *"Ebooks — your Kavita has no book library"*.
+Without it, the most it can say is *"Ebooks — empty"*.
+
+**Why deferred — and it is a wire gap, not a UI failure.** `ARCHITECTURE.md` §16.1's v0.1 entry
+keeps the rule *every screen that would render a library says which source is missing rather than
+drawing an empty one* as a standing requirement, and splits it into the half that is answerable and
+the half that is not. **Answerable:** which source *will* populate a type — §16 is that mapping, it
+covers all six types, and a renderer needs a constant derived from it rather than anything from a
+server. **Not answerable:** whether an already-connected source covers a type. §16 says Kavita
+covers books, so an install whose Kavita holds only comic libraries has an `ebooks` type whose named
+source is connected and healthy with nothing behind it, and **nothing UsArr serves separates that
+from an import that has not run**. `GET /api/v1/library/recent` returns `{items, limit,
+next_cursor}` with no per-type facet (`recentWorksResponse`, `internal/httpapi/library.go`), and
+`GET /api/v1/services/health` carries `kind` plus a `role` whose CHECK admits four values —
+`library|acquisition|indexer|download_client` (migration 0001) — and no media-kind array
+(`serviceHealthResponse`, `internal/httpapi/services.go`).
+
+**Why it is not built now, which is a scope judgement rather than an oversight.** The gap only
+became reachable at all when v0.1 gained a catalogue source: `mapLibraryType`
+(`internal/libsync/kavita.go`) emits exactly two `work.kind` values, `comic` and `book`, so two of
+the six media types have a source and four do not, and the rule has to hold on a mixed screen for
+the first time. But v0.1 connects **one** catalogue source, and with one source the static half
+carries the screen — Ebooks names Kavita, and the residual confusion is one milestone of polish
+rather than a missing capability. The array earns its cost when several sources are connected and
+the answer stops being derivable by hand. *Cut before you add.*
+
+**⚠️ §8.3's `Caps.MediaKinds` is not this, and the resemblance is the trap.** Two independent
+grounds, and the second survives even if the first is fixed. **It is unbuilt:** it occurs zero times
+in Go, and its only non-prose occurrences are two SQL *comments* on
+`library.sink_service_instance_id` (`internal/db/migrations/00005_library_sync.sql` and the schema
+dump in `internal/db/testdata/`). **And it answers a different question:** §8.3 defines it as the
+filter for instances that advertise `Add` for a `(kind, format)` — a **request sink**. §8.3's own
+worked example is why the two must not be folded together: *"Navidrome is an excellent music
+catalogue and cannot accept a request."* A design that reused `Caps.MediaKinds` for catalogue
+coverage would make every read-only source look like a sink, which is the exact error §8.3 was
+written to prevent. (`internal/servarr`'s `Capabilities` field is a third thing again —
+`IndexerCapabilityResource`, Prowlarr's per-*indexer* newznab categories and search-param arrays,
+`internal/servarr/resources.go` — and belongs to §8.5's search filter.)
+
+**What it would cost.** The distinct `work.kind` values each instance's containers map to, retained
+in a queryable shape on `service_instance` or a small join beside it; one field on
+`serviceHealthResponse` plus its key allowlist; and the ingest-side write. No change to `work`, no
+new sync channel, and **no upstream call on a render path** — the value is computed where the
+containers are already being read, and served from SQLite like the rest of that row (principle 1).
+
+**The seam, and it is real rather than aspirational.** The fact this array needs is **already
+produced, once, at ingest**: `mapLibraryType` is documented in its own header as *"THE kind
+decision, and it is UsArr's rather than Kavita's"*, and `library_source` already records the
+container each binding came from as `container_kind` / `container_ref` (§6.5). So the per-container
+kind is decided and the container is retained; what is missing is only the rollup and one wire
+field. Nothing would have to be reconstructed from upstream later, which is the property that keeps
+this a small change whenever it is wanted rather than an archaeology problem.
+
+**Trigger — either of these, whichever comes first.**
+
+* **A second catalogue source lands** (§16.1 #1, Navidrome). With two sources the static §16 mapping
+  stops being a sufficient answer on its own: two instances of the same `kind` can cover different
+  types, and the screen has to say which one is thin rather than which service the roadmap names.
+* **A user reports a type that reads as empty while its source is connected.** That is precisely the
+  confusion this removes, and one report is evidence the static half has stopped carrying the
+  screen.
