@@ -48,10 +48,24 @@
 	 * shown AT ALL, not in Block A, not in the sidebar, not as a search group,
 	 * and nothing on this screen can yet say which types the user has.
 	 *
-	 * ⚠️ §17.2 DOES specify Block A's sourceless rows for a v0.1 install —
-	 * `Comics · no catalogue source · Kavita · after v0.1 · Add` — and that is
-	 * NOT what is missing here. Those rows are the shape for an install where
-	 * the OTHER rows carry real counts, and no per-type count is readable yet.
+	 * ⚠️ §17.2 DOES specify Block A's sourceless rows for a v0.1 install — the
+	 * type, `no catalogue source connected`, the service that will populate it,
+	 * the milestone it arrives in, and a link to Add (§17.2) — and that is NOT
+	 * what is missing here. ⚠️ THE EXEMPLAR HERE READ `Comics · no catalogue
+	 * source · Kavita · after v0.1 · Add`, AND IT IS FALSE ON BOTH OF ITS
+	 * CLAIMS: comics HAS a catalogue source, and that source is IN v0.1.
+	 * ADR-0041 made Kavita v0.1's one catalogue source and the sync core's first
+	 * adapter, so §16 — authoritative for scope — puts v0.1's catalogue at books
+	 * and comics/manga (ARCHITECTURE §16.0, "the catalogue is books and
+	 * comics/manga, because Kavita is the source that ships"), and §16.1's
+	 * post-v0.1 table no longer lists Kavita because it moved INTO v0.1 rather
+	 * than being cut. §17.2 has stopped naming which types are sourceless at all
+	 * and defers to §16, so the exemplar has to come from there: `Music · no
+	 * catalogue source connected · Navidrome · after v0.1 · Add`, Navidrome
+	 * being §16.1's slot #1 and the source that lights music up. Those rows are
+	 * the shape for an install where the OTHER rows carry real counts, and no
+	 * per-type count is readable yet — not for books and comics either, whose
+	 * counts a rollup read would now have something true to put in.
 	 * Rendering six rows of which six are `no catalogue source` is not §17.2's
 	 * screen; it is a table with no data in it, and rule 13's own bound — the
 	 * ban is on a region that says NOTHING — does not rescue a block whose every
@@ -320,6 +334,19 @@
 	let grabs = $state<RecentGrab[]>([]);
 	let grabsLoaded = $state(false);
 	let grabsError = $state('');
+
+	/**
+	 * WHETHER THE RECENT-GRABS REGION IS ON SCREEN AT ALL, DERIVED ONCE.
+	 *
+	 * The separator below has to draw only where it has two regions to sit
+	 * between, so it needs this predicate — and a second hand-written copy of
+	 * the `{#if}` conditions is exactly the pair of facts that must agree and
+	 * therefore can disagree, which is the argument `grabsLoaded` above is
+	 * already written against. So the arms read these and nothing restates them:
+	 * `grabsListed` is the list arm, `grabsDrawn` is either arm.
+	 */
+	const grabsListed = $derived(grabsLoaded && grabs.length > 0);
+	const grabsDrawn = $derived(grabsError !== '' || grabsListed);
 
 	/**
 	 * BLOCK C's STATE. `$lib/library`'s `RecentFeed` is the whole of the paging
@@ -895,6 +922,35 @@
 {/snippet}
 
 <!--
+	THE SEPARATOR BETWEEN `Recently added` AND `Recent grabs`, AND IT IS THERE
+	BECAUSE THE DEFECT IS COMPOSITIONAL RATHER THAN LEXICAL. Design ruled on
+	Home's composition: both regions stay, `Recently added` keeps its name
+	because it is conventional and accurate, and the headings are NOT asked to
+	carry the distinction between the two. The screen already tells the truth —
+	the columns diverge and so does the typography — and what was missing is
+	that two adjacent regions, each opening on a past-tense adverb of recency
+	with no copy in between, scan as one thing in two parts. A rule between them
+	is the smallest thing that stops that read, and it costs one line.
+
+	IT DRAWS ONLY WHERE IT HAS TWO REGIONS TO SIT BETWEEN. `Recently added` is
+	`library` mode only and recent grabs is hidden when empty, so on the install
+	that has one and not the other a separator would be a stray rule under
+	whatever happened to precede it — a mark whose only content is that it is a
+	mark, which is rule 13's own ban read onto a one-pixel region.
+
+	AN <hr> RATHER THAN A BORDER ON THE SECTION BELOW, and the reason is the
+	line above rather than semantics: a `border-top` belongs to `#home-grabs`
+	and would therefore draw whenever that section does, including in
+	`search-and-grab` mode where the thing above it is the search block. The
+	separator is a fact about the PAIR, so it is its own element with the pair's
+	own condition on it, and `<hr>` is what a thematic break between two content
+	regions already means.
+-->
+{#if mode === 'library' && grabsDrawn}
+	<hr class="home-sectionsep" />
+{/if}
+
+<!--
 	RECENT GRABS, AND IT IS NOT BLOCK C. Block C is `Recently added` over the
 	catalogue and is drawn above; this is the local record a grab leaves, read
 	from GET /api/v1/grabs/recent. It used to occupy Block C's slot on an install
@@ -931,7 +987,7 @@
 			</div>
 		</div>
 	</section>
-{:else if grabsLoaded && grabs.length > 0}
+{:else if grabsListed}
 	<section class="section" id="home-grabs">
 		<div class="section__head">
 			<h2>Recent grabs</h2>
@@ -1007,18 +1063,38 @@
 		<div class="empty">
 			<h2 class="empty__title">No services configured</h2>
 			<!--
-				Only Prowlarr is named, and that is a correctness call rather than
-				brevity. `internal/httpapi.serviceKinds` accepts exactly two kinds —
-				`prowlarr` and `kavita` — so a sentence offering Sonarr, Radarr or a
-				media server here would send a brand-new user to a dialog that
-				refuses all three. Kavita is not named either, and that is the same
-				call applied honestly: a Kavita can be ADDED today and nothing
-				imports from it yet, so pointing the very first thing a new user
-				sees at a catalogue that stays empty would promise what the
-				milestone does not yet ship. So the condition for naming it is in
-				the sentence rather than on a calendar: Kavita belongs here the
-				moment adding one gets the user a catalogue, which is the same
-				test that keeps it out today.
+				Prowlarr AND Kavita are named, and naming exactly those two is a
+				correctness call rather than brevity.
+				`internal/httpapi.serviceKinds` (internal/httpapi/services.go:50-53)
+				accepts exactly two kinds — `prowlarr` with role `indexer`, `kavita`
+				with role `library` — so a sentence offering Sonarr, Radarr or a
+				media server BY NAME here would send a brand-new user to a dialog
+				that refuses all three.
+
+				⚠️ KAVITA WAS DELIBERATELY LEFT OUT OF THIS SENTENCE, AND THE
+				CONDITION FOR PUTTING IT IN WAS WRITTEN HERE RATHER THAN ON A
+				CALENDAR. The text that stood here read: "Kavita is not named
+				either, and that is the same call applied honestly: a Kavita can be
+				ADDED today and nothing imports from it yet, so pointing the very
+				first thing a new user sees at a catalogue that stays empty would
+				promise what the milestone does not yet ship. So the condition for
+				naming it is in the sentence rather than on a calendar: Kavita
+				belongs here the moment adding one gets the user a catalogue, which
+				is the same test that keeps it out today." THAT TEST IS NOW MET, so
+				the condition was SATISFIED rather than dropped: `internal/libsync`
+				imports a Kavita catalogue, and `cmd/usarr` fires that import when a
+				Kavita client stack is built (`bootstrapImport`, wired at
+				cmd/usarr/services.go, gated on `last_full_sync_at`). Adding a
+				Kavita gets the user a catalogue, which is the sentence's own test.
+
+				⚠️ AND WHAT IS STILL NOT CLAIMED, because the corrected sentence is
+				one word away from claiming it. One adapter, one trigger a user can
+				reach, and NO TIMER — `cmd/usarr/import.go` says exactly that. The
+				import runs at most once per instance per database, there is no
+				scheduler and no periodic re-import, and the manual trigger is a Go
+				call with no HTTP or CLI route in front of it. "once, when you
+				connect it" is the whole of what may be said here, and it must not
+				grow into a promise of freshness.
 			-->
 			<p class="empty__text">
 				UsArr talks to the services you already run, and none of them is connected yet.
@@ -1027,10 +1103,11 @@
 				<a class="btn btn--primary" href={servicesPath}>Add a service</a>
 			</div>
 			<p class="note home-note">
-				The service this build connects is Prowlarr, which gives you free-text search across your
-				indexers and a grab that goes to Prowlarr's own download client. Adding one takes four
-				things: which application it is, a name for it, its base URL and an API key. The connection
-				is tested before anything is saved, and a service that fails its test is never stored.
+				This build connects two services. Prowlarr gives you free-text search across your indexers
+				and a grab that goes to Prowlarr's own download client. Kavita gives you a library: its
+				catalogue is imported once, when you connect it. Adding either takes four things: which
+				application it is, a name for it, its base URL and an API key. The connection is tested
+				before anything is saved, and a service that fails its test is never stored.
 			</p>
 		</div>
 	</div>
@@ -1038,9 +1115,19 @@
 
 <!--
 	§8.5's NAMED CONFIGURATION, activated when no configured instance advertises
-	LibrarySync. It is not an empty screen and it is not a stage of setting one
-	up, and the copy has to say the second part as plainly as the first or the
-	user reads the whole screen as a loading state for a library that is coming.
+	LibrarySync. It is not an empty screen and it is not a loading state, and the
+	copy has to say so as plainly as it says what the mode does, or the user reads
+	the whole screen as a library that is coming and does not need asking for.
+
+	⚠️ THIS COMMENT ALSO SAID "it is not a stage of setting one up", AND THAT HALF
+	IS FALSE NOW. It was true while every kind the API accepted was an indexer:
+	with no library-bearing kind to add, this state could not be a step toward
+	anything. `internal/httpapi.serviceKinds` (internal/httpapi/services.go:50-53)
+	now accepts `kavita` with role `library`, and `homeMode` ($lib/home.ts) leaves
+	`search-and-grab` as soon as one configured service is not an indexer, so this
+	state IS one service away from `library` and the copy below has to say which
+	service. What survives of the original is the part still true: the mode is a
+	real configuration to be used, not a spinner.
 -->
 {#if mode === 'search-and-grab'}
 	<div class="section">
@@ -1078,17 +1165,54 @@
 			</div>
 			<!--
 				§8.5 ends this state "Add a Sonarr, Radarr or media server to get a
-				library", and that instruction is NOT shipped here, deliberately.
-				The API accepts one kind, so the sentence would be an action the
-				product refuses one click later — the "no invented status" failure
-				reached by offering rather than by asserting. What replaces it says
-				the same thing truthfully: a library is what those services would
-				give you, and this build cannot connect them yet.
+				library", and what ships here is that instruction NARROWED to the one
+				media server the API actually accepts. Sonarr and Radarr are still
+				not named as an action, because offering an action the product
+				refuses one click later is the "no invented status" failure reached
+				by offering rather than by asserting.
+
+				⚠️ WHAT SHIPPED HERE SAID THE OPPOSITE, AND IT WAS FALSE ON THE
+				CENTRAL FACT. This comment read: "that instruction is NOT shipped
+				here, deliberately. The API accepts one kind, so the sentence would
+				be an action the product refuses one click later ... What replaces
+				it says the same thing truthfully: a library is what those services
+				would give you, and this build cannot connect them yet." And the
+				paragraph it justified read: "A Sonarr, a Radarr or a media server
+				is what would give UsArr a library to replicate, and this build does
+				not accept those kinds yet. Prowlarr is the only one it can connect,
+				so this is the configuration rather than a stage on the way to
+				another one."
+
+				`internal/httpapi.serviceKinds` (internal/httpapi/services.go:50-53)
+				accepts TWO kinds, and the second is `kavita` with role `library`. So
+				every clause above fails on the same fact: the build DOES accept a
+				media server, that media server IS library-bearing, Prowlarr is NOT
+				the only kind it can connect, and adding a Kavita leaves this mode
+				outright, because `homeMode` ($lib/home.ts) returns `search-and-grab`
+				only while EVERY configured service is an indexer. The screen was
+				telling a user standing in exactly the state the remedy applies to
+				that there is no remedy, and "this is the configuration rather than a
+				stage on the way to another one" was the load-bearing part of the
+				lie. Falsified by ADR-0041, which put Kavita in v0.1 as the sync
+				core's first adapter, and by `internal/libsync`, which imports its
+				catalogue.
+
+				⚠️ AND THE REPLACEMENT IS BOUNDED ON THE OTHER SIDE, because the
+				correction's own failure mode is promising a sync that does not
+				exist. One adapter, one trigger, NO TIMER — `cmd/usarr/import.go` in
+				those words. The import fires when a Kavita client stack is built, is
+				gated on `last_full_sync_at` so it runs at most once per instance per
+				database, and has no scheduler and no periodic re-read behind it. The
+				copy below therefore says a first import and says it is not a running
+				sync, and it names no milestone and no date for the one that is not
+				built.
 			-->
 			<p class="note home-note">
-				A Sonarr, a Radarr or a media server is what would give UsArr a library to replicate, and
-				this build does not accept those kinds yet. Prowlarr is the only one it can connect, so this
-				is the configuration rather than a stage on the way to another one.
+				This build does connect a library-bearing service: Kavita, a media server UsArr replicates
+				from rather than commands. Add one on Services and UsArr imports its catalogue on that first
+				connect, which is what takes an install out of this mode. It is a first import and not a
+				running sync: nothing re-reads the catalogue on a schedule yet. Sonarr and Radarr are not
+				accepted, so they are not the way out today.
 			</p>
 		</div>
 	</div>
@@ -1232,9 +1356,35 @@
 
 	/* The note sits between the section head and the table, so it needs the gap
 	 * on the table side rather than the paragraph spacing `.note` carries for a
-	 * paragraph following a button row. */
+	 * paragraph following a button row. It is the region's SUBTITLE and is read
+	 * before the rows it governs, which is the placement design ruled for: a
+	 * reader has to know what a region is before reading it, not after. Nothing
+	 * here makes it one — `.note` supplies the muted colour and the small size,
+	 * and the source order supplies the rest. */
 	.home-grabnote {
 		margin-bottom: var(--space-4);
+	}
+
+	/*
+	 * THE SEPARATOR BETWEEN THE TWO RECENCY REGIONS. `--border` is the token's
+	 * own stated job — "decorative divider between rows/cells" — and this is
+	 * that at region scale; `--border-strong` is reserved for the boundary of an
+	 * actual control, which a thematic break is not.
+	 *
+	 * THE MARGINS PUT IT EQUIDISTANT RATHER THAN NEAR ONE OF ITS NEIGHBOURS,
+	 * which is what makes it read as belonging to the pair instead of as a
+	 * decoration on the region below. `.section` carries
+	 * `padding: 0 var(--space-6) var(--space-7)`, so the gap ABOVE this rule is
+	 * already --space-7 from the section that precedes it, and the same value
+	 * below is the whole of what this needs to be symmetric. The horizontal
+	 * --space-6 is that same padding restated, because an <hr> between sections
+	 * is not inside either one and would otherwise run the full width and cross
+	 * the content edge every other region on this page starts at.
+	 */
+	.home-sectionsep {
+		margin: 0 var(--space-6) var(--space-7);
+		border: 0;
+		border-top: 1px solid var(--border);
 	}
 
 	/*

@@ -12014,6 +12014,541 @@ The `LS.82` divergences and the `LS.83` guard firing are unaffected and remain o
 
 ---
 
+# LS-90 — a count written from recollection, three times in one day
+
+**Date:** 2026-08-17. **Prefix:** `LS-` (library sync), id `LS-90` from this thread's reserved
+`LS-90`–`LS-99` block. **Requested by the code thread and assigned by the project coordinator** —
+`docs/DEVELOPMENT.md` maps to whoever lands `internal/`, `cmd/` and the build, which is this thread,
+so this is announced rather than taken.
+
+| # | Finding | Severity | Disposition |
+| --- | --- | --- | --- |
+| **LS-90** | **Three counts in one day, in three different threads, each contradicted by the list printed beside it** — twice low, once high, and one of the three contradicted by its own commit message as well. The common mechanism, not the individual slips: the number was formed at one moment and the list moved afterwards, and nothing recomputed it before the commit. §11's guard rules covered the instrument (rule 2), the surface (rule 5) and the transcription (rule 7), but **no rule said the figure itself has to be re-derived at write time**; the `wc`/`grep`-it-now instruction lived only in per-brief boilerplate, so it held exactly as often as the brief's author remembered it | Medium | **Applied as `docs/DEVELOPMENT.md` §11 rule 8, *"A count is a measurement — compute it from the artefact, never from recollection"*.** Placed after rule 7 and before the closing *"the pattern worth carrying"* paragraph, so the numbered list stays contiguous and rules 2, 5 and 7 keep their cross-references — the topically nearer slot beside rule 5 was rejected because inserting there renumbers 6 and 7 and breaks the *"rule 5 names what it was pointed at"* references. The three instances are cited **by count, not re-told**, per the subsection's own register. No renumbering of existing entries or rules |
+
+---
+
+
+---
+
+# Round 5 continued — `LS-70`–`LS-79`: the last two Kavita ids at 1.0, and the one that keeps it
+
+**Date:** 2026-08-17. **Prefix:** `LS-` (library sync). **Ids `LS-70`–`LS-79` were RESERVED for this
+pass before it started, and the file was deliberately NOT read to find the next free one** — that
+read is the race, and it has now collided five times in this round alone (`EXPL-01`, `LS-01`,
+`LS-17`, `LS-30`, `LS-47`). `LS-53`–`LS-69` are unallocated here and that is correct, not a gap to
+close.
+
+**What this pass was handed.** `LS-43` measured three sources still going out at confidence 1.0 —
+`hardcover_book`, `metron` and `cbr` — and raised them without fixing them, for the reason `LS-12`
+was not fixed inside `LS-11`. This is that fix for two of the three, and the third is decided rather
+than deferred again.
+
+**The brief was right about the measurement and wrong about the rule, and that is the finding.** It
+handed over Metron as `ARCHITECTURE.md` §6.4 **amendment 4**'s shape — an identifier one level below
+the work, the rule that made `LS-14` refuse a ComicVine `4000` issue outright — and instructed that
+the premise be verified at the tag first. Verifying it is what broke it: the premise is true and its
+consequence does not follow, because the chapter-level id and the field UsArr reads never meet.
+
+| # | Finding | Severity | Disposition |
+| --- | --- | --- | --- |
+| **LS-70** | **The handed-over Metron premise is TRUE and it does not reach the field UsArr reads.** Re-verified at tag `v0.9.0.2` (`6bcd568`): a whole-tree `MetronId` grep, migrations excluded, finds exactly two assignment sites — `ProcessSeries.cs:749` (`chapter.MetronId = info.MetronId ?? 0`) and `ExternalMetadataIdHelper.cs:31-33`. 🚩 **Nothing on any scan path writes `Series.MetronId`**, exactly as relayed. But the scanner's id is parsed out of ComicInfo `<Notes>` and lands on `Chapter.MetronId` → `ChapterDto.metronId`, **a field UsArr never reads**, and Kavita has no `ProcessSeries.cs:162` analogue promoting it to the series. So the only writer of `SeriesDto.metronId` is the Edit Series dialog, and **the field is series-level by construction** | **High** | **Applied as a CAP, not a refusal — §6.4 amendment 3 rather than amendment 4.** Amendment 4 bars an id from a level *below* the work; nothing below the work reaches this field, so it has nothing to bite on. What is left is a hand-typed number: `metron_series` at `EditableIDConfidence` **0.90**, via the new `editableIdentity` in `internal/libsync/editableid.go`. The ASCII diagram of the two non-meeting write paths is in that file, because the next reader will be handed the same premise |
+| **LS-71** | **`cbr` is Comic Book Roundup, it is SERIES-level, and it is provider-supplied *and* free-text at once.** Established at both refs as instructed. Level, from three independent readings: `KavitaPlusConfiguration.MetadataProvidersForLibraryTypes` offers `MetadataProvider.ComicBookRoundup` to the **Comic**, **Image** and **ComicVine** library types and matches per SERIES (`ExternalMetadataService.cs:205-223`, `match.Series.CbrId`); `HasRequiredId` gates the provider on `series.CbrId > 0` (`:264`); Kavita's link builder is `comicbookroundup.com/comic-books/reviews/${id}` (`provider-url.util.ts:8`) and that path is a **series** page on the site, with issues one segment deeper (fetched 2026-08-17). Writers at develop `9c3e540`: `ExternalMetadataService.cs:223` and `:1773-75` (**provider**, licence-gated) and `ExternalMetadataIdHelper.cs:15` (**Edit dialog**). No scanner writer at either ref | **High** | **Applied. 0.90, on `weblinkid.go`'s reason 1 standing alone.** Amendment 4 does not reach it either — it is not an edition or issue id. It is capped because **`SeriesDto` carries no provenance**: UsArr cannot tell a Kavita+ match from a typed number, so the weakest writer must govern or the amendment is unenforceable by construction. 🚩 **And the free-text writer is strictly worse on develop than at the tag** — `ExternalMetadataIdHelper` guards every assignment with `is > 0` at `v0.9.0.2` and rewrites all six as `dto.X ?? 0` on develop, so on the very releases where `cbrId` is reachable, **saving the Edit Series dialog overwrites a Kavita+ match and can clear it to zero** |
+| **LS-72** | 🚩 **A SHIPPED TEST REQUIRED THE BUG — the third instance in one round.** `kavita_test.go`'s `weakSources` table listed the four already-capped sources, and its `!weakSources[…] && x.Confidence < 1.0` arm therefore **errored if `cbr` came out below 1.0**. It would have failed the moment the cap it exists to protect was applied | **High** | **Applied, with the reversal and its reason written at the assertion site** — the `LS-40`/`LS-45` shape. The root cause is recorded because it will recur: the table was written as *"the four fields we have just capped"* rather than as *"every field §6.4 does not name work-strong"*, so an unmeasured field defaulted to the strong side. Fired deliberately as **Break D** below |
+| **LS-73** | ✅ **ADR-0046's second open question, settled.** It read: *"`external_id.source = 'cbr'` is not enumerated anywhere as a legal source … the `cbr` that does appear in `00005_library_sync.sql` is `edition.format`'s `CHECK`, a different thing entirely."* 🚩 **That clause names the defect without noticing it: `cbr` ALREADY MEANS the Comic Book RAR archive format inside this schema** — an `edition.format` `CHECK` value, listed beside `cbz` and `pdf` at `internal/store/recent.go:390`. One token, two unrelated meanings, one database | Medium | **Applied. `ComicBookRoundupSource = "comicbookroundup"`.** The site's own name cannot be read as a file extension. ⚠️ **The rename was free EXACTLY NOW and never again**: `cbrId` is absent from `SeriesDto` at the floor (`LS-46`, `LS-48`, machine-checked by `ceilingOnlyProperties`), so no `cbr` row has ever been written and there is nothing to migrate — the same rename after one develop user syncs needs a migration. ADR-0046 and both Kavita comment sites now say so |
+| **LS-74** | ⚠️ **`hardcover_book` KEEPS 1.0, and the tension is recorded rather than resolved quietly.** On provenance it is the **weakest** of the six — `ExternalMetadataIdHelper.cs:28` at `v0.9.0.2` is its only writer, with neither a scanner nor a provider one — so amendment 3 would reach it on the same argument that capped the other five | **High** | **Not changed, deliberately.** §6.4 **amendment 4 NAMES it**: *"work-strong book sources are `openlibrary_work`, `hardcover_book` and `goodreads_work`, and nothing else."* That is the architecture electing a source, and an adapter overruling it is the wrong place for the decision. 🚩 **The unresolved half, stated plainly rather than left implicit: amendment 4 names it work-strong for the BOOK cascade and says nothing about what a HAND-TYPED Kavita field carrying it is worth.** Closing that is an amendment to §6.4 with its own owner, not a line in a Kavita adapter. Pinned by `TestHardcoverIsTheONLYRemainingStrongKavitaSource`, which is **two-sided** — a new field at 1.0 fails it, and so does `hardcover_book` quietly losing its 1.0 |
+| **LS-75** | **Refusing was considered for Metron and rejected on measurement.** The brief warned against copying `LS-11`'s refusal or `LS-12`'s cap reflexively, so both were tested against the facts. `LS-11` refused two shapes and **both rest on something absent here**: a value whose text *proves* it names an issue (`LS-14`), or one Kavita **itself** filled from a chapter after erasing the discriminator (`LS-13`). Neither applies. And `SeriesDto.metronId` has exactly one writer, so **refusing would refuse 100% of what the source can produce** | **High** | **Cap, and the argument is written where the refusal would have gone.** `comicvine.go`'s own test for a refusal — *"there is no source string under which a value of unknown kind is a true statement"* — fails here in the other direction: `metron_series` **is** a true statement about every value that writer can produce |
+| **LS-76** | ⚠️ **The residual Metron risk is real and 0.90 is exactly its defence.** A user pasting an **issue** id into the series box, because the form gives them nothing to go on: the Edit modal renders one bare numeric input per id from a **shared component used at series, volume and chapter level**, labelled only *"Metron Id"* (`edit-external-metadata-form.component.html`; `en.json`). And Metron's `Issue` and `Series` are **separate Django models with separate auto primary keys** (`Metron-Project/metron` `comicsdb/models/{issue,series}.py`, checked 2026-08-17), so issue 42 and series 42 are different objects — **ComicVine's `4050`/`4000` hazard with no prefix to distinguish them** | Medium | **Named as an ACCURACY risk, which the cap covers**, in `weblinkid.go`'s own words for the identical `MalMangaSource` case: *"at 0.90 a user who pastes an anime id gets a wrong row that cannot merge anything"* |
+| **LS-77** | **`metron_series` is namespaced on measurement, not on symmetry** — the distinction `LS-39` drew when it kept `anilist` and `mangabaka` bare. Metron has two numeric spaces and **UsArr is one phase from holding both**: `Chapter.MetronId` is an ISSUE id, named as such by the token itself in metron-tagger (`create_notes()` writes `[issue_id:{issue_id}]`, fetched 2026-08-17) and by Kavita's regex (`Parser.cs:725`, `MetronTagger-.*\[issue_id:(?<Id>\d+)\]`), and it reaches `ChapterDto.metronId`, which `doc.go`'s phase-B chapter walk will decode | Medium | **Applied.** Under a bare `metron`, Metron series 42 and Metron issue 42 would collide on `(source, value)` — the exact key `ux_extid` and `ux_extid_work_strong` are built on. ⚠️ **The constant carries the forward instruction**: a commit that writes the chapter id **must not reuse the string**, because it is an issue id and amendment 4 bars it from a work row at **any** confidence |
+| **LS-78** | **One shared cap constant where ComicVine and the weblink three got two, and the departure is argued rather than assumed.** `weblinkid.go` says the existing two are separate *"on purpose: the two caps rest on different measurements of different Kavita code paths"* | Nit | **`EditableIDConfidence` covers both, because they rest on ONE measurement** — the Edit Series dialog reaches both and `SeriesDto` carries no provenance for either, so the weakest writer governs both for the same reason. ⚠️ The constant's comment carries the condition: **their writer sets already differ** (Metron has no provider writer at any ref; ComicBookRoundup has one on develop), so **if a future measurement separates them the constant SPLITS rather than moves** |
+| **LS-79** | **`ARCHITECTURE.md` §6.4 still carries the falsified premise, in the bullet this pass's rule is quoted from.** It reads that `SeriesDto`'s identifier fields are *"all of them written only by the Kavita+ match path"* — disproved for `comicVineId` by `LS-11`, for three more fields by `LS-38`, and now for `metronId` and `cbrId` | Medium | **Recorded, not back-edited**, on `LS-38`'s and `LS-47`'s precedent: this file is a historical record, a docs sweep was in flight in another worktree, and `LS-11`/`LS-38` both fixed the equivalent claim at the **code** site (`resources.go`, `kavitaExternalIDs`) rather than in §6.4. The amendments this pass applies — 3 and 4 — are unaffected by that bullet. **The pointer is the entry; a fresher status sentence is not written** |
+
+## LS.20 The four guards fired, with verbatim output
+
+Every guard was broken on purpose, run red, and reverted. The breaks are chosen so that **no two
+fail for the same reason** — a set of breaks that all trip the same assertion proves one guard, not
+four.
+
+**Break A — the original wrong behaviour restored** (`add("metron", …)` and `add("cbr", …)`, i.e.
+1.0 *and* the bare source strings):
+
+```
+--- FAIL: TestEditableIDsAreNeverWorkStrong (0.00s)
+    editableid_test.go:58: inherit=false: no metron_series identifier at all; [{Source:metron Value:156409 Confidence:1} {Source:cbr Value:7 Confidence:1}]
+    editableid_test.go:78: inherit=false: an id was written under the BARE source "metron"
+    editableid_test.go:78: inherit=false: an id was written under the BARE source "cbr"
+--- FAIL: TestHardcoverIsTheONLYRemainingStrongKavitaSource (0.00s)
+    editableid_test.go:127: the sources written at confidence >= 1.0 are map[cbr:7 hardcover_book:445 metron:156409]; want exactly {hardcover_book:445}. ...
+--- FAIL: TestEditableIDEndToEndAgainstTheDatabase (0.05s)
+    editableid_test.go:257: series 401 and 402 resolved to 1 distinct works, want 2 — they share metronId 156409, and a strong write MERGED THEM: a Metron id is hand-typed into an untyped "Metron Id" box, and Metron numbers issues and series separately
+    editableid_test.go:257: series 403 and 404 resolved to 1 distinct works, want 2 — they share cbrId 7, and a strong write MERGED THEM: a ComicBookRoundup id is indistinguishable on the DTO from one the Edit Series dialog typed over the Kavita+ match
+    editableid_test.go:276: 3 work rows, want 5 — weakening an identity claim must not drop the work
+--- FAIL: TestIdentifiedCassetteMapsEveryIDSourceAndDropsTheEditionID (0.00s)
+    kavita_test.go:348: Saga external ids = map[cbr:7 comicvine_volume:42563]
+```
+
+⚠️ **`3 work rows, want 5` is the whole point of the fixture** and the reason the pair assertions
+count `DISTINCT work_id` rather than rows: five series collapsed into three works, unrecoverably,
+and a `count(*)` over `service_item_link` would still have read five.
+
+**Break B — the 0.90 cap KEPT, only the two namespaces reverted.** This is the one that matters: it
+proves the namespace guards test the **string** and not the confidence, so a future change that
+keeps the cap and reverts a source name cannot pass unnoticed.
+
+```
+--- FAIL: TestEditableIDsAreNeverWorkStrong (0.00s)
+    editableid_test.go:58: inherit=false: no metron_series identifier at all; [{Source:metron Value:156409 Confidence:0.9} {Source:cbr Value:7 Confidence:0.9}]
+    editableid_test.go:78: inherit=false: an id was written under the BARE source "metron"
+--- FAIL: TestEditableIDEndToEndAgainstTheDatabase (0.06s)
+    editableid_test.go:222: series 401 claim 0 = {source:metron value:156409 confidence:0.9}, want {source:metron_series value:156409 confidence:0.9}
+    editableid_test.go:267: 2 rows carry the bare source "metron"; "metron" would collide with Metron's separate ISSUE number space, and "cbr" already names the Comic Book RAR archive format in edition.format's CHECK
+    editableid_test.go:267: 2 rows carry the bare source "cbr"; ...
+```
+
+🚩 **`TestHardcoverIsTheONLYRemainingStrongKavitaSource` did NOT fire on Break B, and the drill rule
+adopted from design's `c56c8e4` says that must be answered rather than passed over.** It is a
+correct non-firing and not an absorbed one: that test asks *which sources come out at ≥ 1.0*, Break B
+left both ids at 0.90, so the strong set really is still exactly `{hardcover_book}` and there was
+nothing for it to catch. The property Break B attacks — the source **string** — is not one it
+asserts, and it is covered by the two tests above that did fire, on the strings themselves. The
+distinction is checked rather than asserted: **Break A moved the confidence and the same test fired
+immediately**, which is what an absorbed firing could not do.
+
+**Break C — `hardcover_book` quietly routed through `editableIdentity` too**, i.e. the pass
+over-applying its own rule. It proves `LS-74`'s guard is **two-sided** rather than a floor:
+
+```
+--- FAIL: TestHardcoverIsTheONLYRemainingStrongKavitaSource (0.00s)
+    editableid_test.go:127: the sources written at confidence >= 1.0 are map[]; want exactly {hardcover_book:445}. A source at 1.0 satisfies ux_extid_work_strong and can MERGE TWO WORKS, and §6.4 amendment 4 names only openlibrary_work, hardcover_book and goodreads_work as work-strong — so a new name here is an adapter overruling §6.4, and a missing hardcover_book is the same thing in the other direction
+--- FAIL: TestIdentifiedCassetteMapsEveryIDSourceAndDropsTheEditionID (0.00s)
+    kavita_test.go:327: 103: hardcover_book=445 came out at confidence 0.9; want 1.0
+```
+
+ⓘ The first attempt at this break **did not compile** — `declared and not used: add` — which is a
+finding worth keeping: with `metron` and `cbr` rerouted, `hardcover_book` is the **only** remaining
+caller of the 1.0 closure, so removing it makes the closure dead code and Go says so. The break was
+re-applied with `_ = add` to get past the compiler and reach the assertions.
+
+**Break D — `LS-72`'s reversal undone, the production fix KEPT.** The proof that the shipped test
+required the bug, rather than merely being silent about it:
+
+```
+--- FAIL: TestIdentifiedCassetteMapsEveryIDSourceAndDropsTheEditionID (0.00s)
+    kavita_test.go:325: 104: comicbookroundup=7 came out at confidence 0.9; want 1.0
+```
+
+## LS.21 Fixtures
+
+Two new cassettes, **both synthetic and both saying so in their own headers**, along with the Kavita
+version each claims — and here that version is **`0.9.0.20` (develop), where the other two identity
+fixture pairs claim the owner's tag.** ⚠️ **That is forced, not a preference: `cbrId` does not exist
+on `SeriesDto` at `v0.9.0.2`**, so a fixture claiming the floor and carrying one would assert a shape
+the floor cannot emit — the class of error `LS-15` found in the `comicVineId` fixture.
+
+* `kavita_libraries_editable_ids.yaml` — libraries 30 (Comic) and 31 (ComicVine), the two regimes
+  `KavitaPlusConfiguration` offers the ComicBookRoundup provider to. `inheritWebLinksFromFirstChapter`
+  is **false on both, and the header says why that is the point rather than an omission**: the flag
+  drives `ProcessSeries.cs:358-367`, and **neither field is in that block at either ref**, so it
+  cannot change either outcome. Setting it true on one library would imply it was a variable under
+  test.
+* `kavita_series_all_v2_editable_ids.yaml` — 401/402 share `metronId` **156409**, the value from
+  Kavita's **own doc comment** for the regex that reads it (`Parser.cs:722-726`, verbatim: *"Tagged
+  with MetronTagger-4.4.0 using info from Metron on 2025-12-24 12:32:18. [issue_id:156409]"*);
+  403/404 share `cbrId 7`; 405 is the untagged control. **Each capped field gets its own merge pair**,
+  because one constant caps both and a single pair would let one regress unobserved. `hardcoverId` is
+  0 on all five deliberately — the one field still at 1.0 does not belong in the fixture for the two
+  being capped.
+
+**The database side is not synthetic.** `TestEditableIDEndToEndAgainstTheDatabase` runs the whole
+channel-1 path against a real migrated SQLite, populates it, then asks SQLite in
+`ux_extid_work_strong`'s **own predicate** what it holds — and counts `DISTINCT work_id` for each
+pair, because a row count still adds up after a merge.
+
+## LS.22 What this pass did NOT do
+
+* **No ADR.** Both changes apply rules `ARCHITECTURE.md` §6.4 already states, which is what `LS-11`
+  and `LS-38` did without one; the only decision that closed an alternative is ADR-0046's own open
+  question 2, and it is answered **in ADR-0046**. **This also avoids taking a number from the shared
+  counter that moved mid-pass twice tonight** (`LS-52`).
+* **No migration.** `external_id.source` is free `TEXT` with no `CHECK`, and no row under either old
+  string has ever been written — `cbr` is unreachable at the floor and no catalogue source has
+  shipped. **The migration comment's source list is left stale rather than edited**: a merged
+  migration is never edited, it is already stale for `comicvine_volume`, `mal_manga` and
+  `hardcover_book`, and the vocabulary now lives on named Go constants the compiler checks.
+* **`ChapterDto.metronId` is not read**, and the seam for it is left explicit rather than filled.
+  Reading it needs `doc.go`'s phase-B chapter walk, an N+1 upstream call `LS-11` already priced and
+  declined; what ships is the namespace that will keep the issue space from colliding with this one.
+* **`hardcover_book` is not capped** — `LS-74`, and the §6.4 amendment it would take is not written
+  here.
+* **No live Kavita was contacted.** Everything above is Kavita's **source at both refs** in a full
+  working tree, the two vendored specs, and four first-party fetches recorded at their assertions
+  (metron-tagger's `talker.py`, Metron's `comicsdb` models, Metron's URL routes, and a
+  comicbookroundup.com series page).
+
+---
+
+## LS-53 ADR-0046 is sound and is not a template: the assumption it rests on is that upstream regenerates its spec per release
+
+**Applied** — 2026-08-17, as an **amendment to [ADR-0046](./DECISIONS.md#adr-0046)**, not a new ADR
+and not a reversal. The finding came from another thread trying to apply ADR-0046's floor/ceiling
+pattern to Prowlarr and finding it could not — a limitation of the ADR rather than a Prowlarr quirk.
+
+**What ADR-0046 assumed without saying so: that upstream regenerates its OpenAPI spec per release.**
+Two pins are two points only if the tag and the branch tip are two *documents*. Kavita satisfies it
+(462 paths at `v0.9.0.2` against 488 on `develop`). Prowlarr does not.
+
+**Verified here, independently of the reporting thread, on 2026-08-17:**
+
+| Claim | How it was checked | Result |
+| --- | --- | --- |
+| `src/Prowlarr.Api.V1/openapi.json` is one blob at tag and at `develop` | `git ls-remote` → `develop` `1f7db1e`, `refs/tags/v2.5.2.5491` `c0f8c2c`; blobless fetch of both; `git ls-tree <commit> <path>` | **Both `134d31d7df5e80714c454a6224e7449df512c55e`** |
+| The vendored file is that same blob | `git hash-object api/specs/prowlarr.json` | **`134d31d7…`**, 145360 bytes |
+| The spec self-reports a placeholder version | read `info` from `api/specs/prowlarr.json` | **`"version": "1.0.0"`** — the Swashbuckle default |
+| Last regeneration, and how far back | `git log up/develop -- <path>` | **`60740fa25`, 2025-06-07**, *"Automated API Docs update"*; `git tag --contains 60740fa25` → **33** tags |
+| `SearchResource.Limit`/`Offset` are `int?` upstream | `git show up/develop:src/Prowlarr.Api.V1/Search/SearchResource.cs`; `git log`/`git tag --contains` on that file | **`public int? Limit`/`Offset`**, commit `c687bdb1f` (*"Fixed: Don't send limit=0 to Newznab indexers (#2654)"*), first tag **`v2.3.6.5351`**, ancestor of `v2.5.2.5491` |
+| The vendored document still says otherwise | `/api/v1/search` GET parameters in `api/specs/prowlarr.json` | `limit` and `offset` are plain `{"type":"integer","format":"int32"}` — **no `nullable`** |
+| UsArr is nonetheless correct | `internal/servarr/search.go:189-190,224-234` | `Limit *int32` / `Offset *int32`, both omitted from the query when nil — **no live bug** |
+
+**Taken on trust: nothing load-bearing.** The reporting thread's third check (a bogus ref returning
+404) was not repeated, because git content addressing is strictly stronger evidence than a raw-URL
+fetch and it agreed. Kavita's 462/488 path counts are quoted from ADR-0046 and `api/specs/SOURCES.md`
+rather than re-measured; they are not what the finding turns on.
+
+**Why this is an amendment and not an ADR.** The decision is unchanged for Kavita — no file moves,
+no test changes, no runtime behaviour is touched. What is recorded is a **boundary**: the remedy is
+chosen per upstream, and the Prowlarr counter-example belongs to the thread that measured it, which
+is landing its own remedy and its own ADR. This amendment points at that work rather than retelling
+it, per `DECISIONS.md`'s own rule that *"the decision lives in the superseding ADR; the amendment
+note points at it and does not re-argue it"*.
+
+**The second, sharper half: identity is by blob SHA where the document declares no version.**
+ADR-0046's method for telling its two files apart is `info.version`, machine-checked by
+`TestBothSpecsAreTheDocumentsSOURCESSays`. Prowlarr's `"1.0.0"` carries **no** version information
+rather than stale information, so a version assertion there would assert nothing while looking like
+it asserted something — a harder case than Kavita's floor, which declares a stale-but-real `0.9.0.0`.
+
+**The three marks `DECISIONS.md` owes an amendment were all written**, plus the fourth: the index row
+for 0046, the `Status:` line, a dated `> ⚠️ **AMENDED …**` blockquote directly under it, and a dated
+inline flag on the falsified sentence itself — open question 1's *"has the same shape of gap"*. The
+gap is real; the shape is not the same, and the implied remedy does not apply. That question's last
+sentence — *"nothing here should be read as evidence that the Prowlarr contract tests attest anything
+about 2.5.2"* — survives, and survives more strongly than it was written: **no contract test over
+that document could ever have caught the `int?` change, because the document never moved.**
+
+**Deliberately not touched.** `api/specs/prowlarr.json`, `api/specs/SOURCES.md`, the
+`internal/servarr` suite and anything under `web/` — the Prowlarr remedy is another thread's
+in-flight change, and duplicating it here would produce two answers to one question.
+
+# Round 5 continued — `WIRE-01`–`WIRE-05`: §16's empty-state clause, measured against the wire
+
+**Date:** 2026-08-17. **Prefix:** `WIRE-` (the wire capability the clause turns on). Verified unused
+across `docs/` and across all **21** remote heads (`git for-each-ref refs/remotes/origin`, HEAD
+excluded) before the pass started, and checked for near-collision against this thread's earlier
+prefixes — `NOCI-`, `RG-`, `ADRC-`, `MWP-`, `CORR-`, `TRIAD-`, `CH1-` — and against the log's own
+`LS-`, `LAT-`, `SD-`, `M5-`, `C-`.
+
+**The relayed finding, and it is half right.** §16.1's v0.1 entry carries, as a standing requirement
+restored by `CH1-04`, *every screen that would render a library says which source is missing rather
+than drawing an empty one*. It was reported that **nothing on the wire can know which source is
+missing**, so the clause can only ever pass vacuously, and that this is a wording defect in the
+requirement rather than a UI failure. The three supporting wire claims are true. The conclusion
+drawn from them is not, and the difference is what this pass turns on.
+
+### WIRE-01 The three wire claims hold, measured at `96227f6`, re-verified at `39b0dae`
+
+* **`GET /api/v1/library/recent` carries no per-type facet.** Its envelope is
+  `recentWorksResponse{Items, Limit, NextCursor}` (`internal/httpapi/library.go`), and the row
+  struct is a hand-copied **allowlist** pinned by `TestRecentWorksResponseKeysAreTheAllowlist`, so
+  nothing reaches that wire by accident.
+* **`GET /api/v1/services/health` carries only a coarse role.** Its row is `serviceHealthResponse`
+  (`internal/httpapi/services.go`): `kind` (`prowlarr` | `kavita`) and `role`, whose CHECK admits
+  four values — `library`, `acquisition`, `indexer`, `download_client`
+  (`internal/db/migrations/00001_initial.sql:134`). No media-kind array.
+* **No source-to-media-types mapping exists in the codebase.** `MediaKinds` occurs **zero** times in
+  Go. `web/src/lib/library.ts` holds a flat `MEDIA_TYPES` of six and `web/src/lib/api.ts` a flat
+  `SERVICE_KINDS` of two; **nothing joins them.**
+
+**Re-measured after `39b0dae` landed**, because that commit rewrote 90 lines of
+`internal/libsync/kavita.go` — the file two of these findings rest on — between the first pass and
+this commit. All three still hold: `MediaKinds` is still zero in Go, `Caps.MediaKinds` is still
+exactly the two SQL comments, the `role` CHECK is unchanged, and `mapLibraryType` still emits
+exactly two distinct `work.kind` values, `comic` and `book`. **A measurement taken against a tree
+that has since moved is not a measurement**, which is why this line exists rather than being
+assumed.
+
+### WIRE-02 §8.3's capability filter does not exist, and would answer a different question if it did
+
+The task asked specifically whether §8.3's `Caps.MediaKinds` is the mapping the finding says is
+absent. **It is not**, on two independent grounds, and the second survives even if the first is
+fixed.
+
+1. **It is unbuilt.** `Caps.MediaKinds` occurs **zero** times in Go. Its only non-prose occurrences
+   are **two SQL comments** on `library.sink_service_instance_id` —
+   `internal/db/migrations/00005_library_sync.sql:558` and the schema dump at
+   `internal/db/testdata/schema.sql:366`. `internal/servarr` *does* carry a `Capabilities` field and
+   it is a decoy: it is `IndexerCapabilityResource` (`internal/servarr/resources.go:121`) —
+   Prowlarr's per-**indexer** newznab categories, `*SearchParams` arrays and `LimitsMax` — which is
+   §8.5's search filter, not §8.3's routing filter.
+2. **It is a request-sink capability, not a catalogue-coverage one.** §8.3 defines it as the filter
+   over instances that advertise `Add` for a `(kind, format)`. §8.3's own worked example supplies
+   the counterexample — *"Navidrome is an excellent music catalogue and cannot accept a request"* —
+   so even a fully built `Caps.MediaKinds` would still not say which media types a source
+   **supplies**. Reusing it for coverage would make every read-only catalogue source look like a
+   sink, which is the error §8.3 exists to prevent.
+
+**So this does not materially change the fix** — but it does change which seam gets named, and
+naming the wrong one would have been worse than naming none.
+
+### WIRE-03 The clause conflates two questions and only one is blocked — so it is split, not lowered
+
+**The premise "it can only ever pass vacuously" does not hold for the whole clause.** Half of *which
+source is missing* is answerable today with no wire change at all, and **§17.2 already demands the
+stronger form of that half**: its per-type `unconfigured` row renders *"the type, `no catalogue
+source connected`, **the service that will populate it and the milestone it arrives in**, and a link
+to Add"*, and it explicitly declines to restate the membership — *"§16 is authoritative for which
+source that is and which types it covers, and this section does not restate it."* **§16 is the
+mapping**, and it covers all six of §1's types: `movies` and `tv` → Sonarr and Radarr at **v0.2**
+(ADR-0045); `music` → Navidrome (§16.1 #1); `audiobooks` → Audiobookshelf (§16.1 #2); `ebooks` and
+`comics` → Kavita at **v0.1**, with Komga a second comics source (§16.1 #3). That half needs a
+constant derived from §16, not a field from a server.
+
+**The genuinely unanswerable half is narrower than the one that was stated.** It is not *which
+source is missing* but ***does the connected source actually cover this type***. §16 says Kavita
+covers books, so an install whose Kavita holds only comic libraries has an `ebooks` type whose named
+source is connected and healthy with nothing behind it — and `WIRE-01` is why nothing served
+separates that from an import that has not run. This became reachable only when v0.1 gained a
+catalogue source: `mapLibraryType` (`internal/libsync/kavita.go`) emits exactly two `work.kind`
+values, `comic` and `book`, so **two of the six media types have a source and four do not**, which
+is the mixed screen `CH1-04` flagged.
+
+**Applied**, as a split rather than a rewording, at §16.1's v0.1 entry. **The alternative — rewording
+the clause down to *"say the library is empty"* — was rejected**: it would retire principle 3 at
+screen level in the guise of a wording fix, and it would have put §16 in direct contradiction with
+§17.2, which has required the stronger form all along. §16.0's weaker restatement of the same rule
+gets a one-sentence pointer to the split (see `WIRE-05`).
+
+### WIRE-04 No ADR, and the reason is the `WIRE-03` measurement rather than a preference
+
+The task flagged that an ADR is owed **if the fix closes off the alternative of weakening the
+requirement**. On the measurement above, it does not — because **§17.2 closed that alternative
+already and independently.** The per-type row's *"the service that will populate it and the
+milestone it arrives in"* is the stronger form of the same rule, it is satisfiable today with no
+wire change, it long predates this pass, and nothing here proposes to touch it. §16's clause was a
+**lossy paraphrase of a standing §17.2 requirement**, not a separate commitment that was at risk of
+being lowered, so correcting the paraphrase forecloses nothing that was open. What remains is a
+deferred capability with a seam, and this repo records those in `FUTURE.md` (§20) rather than by
+minting an ADR. `docs/DECISIONS.md` is at **ADR-0046** and this commit does not touch the counter.
+
+**Had the finding's premise held whole** — had *no* part of the clause been satisfiable — the answer
+would have gone the other way, because keeping an entirely unmeetable requirement over deleting it
+*is* a decision that closes an alternative. It is recorded here so the reasoning is inspectable
+rather than implied by an absence.
+
+### WIRE-05 Swept, and what was deliberately not touched
+
+**Counted from the artefact, not from recollection.** §16 in full — §16.0 and §16.1 — states the
+empty-state rule in **three** places, plus **one** historical quotation of it:
+
+* **§16.0's prose** (*"A screen for a media type with no configured source says so … rather than
+  rendering an empty grid"*). Not falsified — true and less specific. **Given a one-sentence pointer
+  to the split**, because it sits ~380 lines earlier in a different subsection and would otherwise
+  read as the requirement having been quietly lowered to its weaker form.
+* **The *"what six media types means"* blockquote** in §16.1 (*"A media type with no configured
+  source says so on screen rather than rendering an empty grid"*). **Left alone** — a deliberately
+  compressed summary sitting in the same subsection as the split, a few screens above it. A third
+  copy of the pointer is noise.
+* **The clause itself**, split as `WIRE-03` describes.
+* **The historical quotation** ending *"drawing an empty one"* is inside a ⚠️-marked quote of a
+  sentence recorded as **falsified** at `01969ed`. It must stay verbatim and was not touched.
+
+**Two dangling `§17.7` citations — a finding, routed rather than fixed.** `ARCHITECTURE.md` uses the
+term `unconfigured` exactly **twice** — §16.1's clause and §17.2's Block A note — and **both cite
+§17.7 for it, while §17.7 contains the string zero times**. The state is actually specified in
+§17.2. §16's citation is **left verbatim**: re-pointing one of a matched pair unilaterally creates
+the split it would be meant to fix, and §17 is another owner's section. The new §16.1 text routes
+the reader to §17.2 by describing what that section requires, without editing the old citation.
+**Routed to §17's owner.**
+
+**Not touched, and out of this thread's sections.** No change under `web/` or `internal/`, and **no
+capability built** — the array is recorded as a seam in [`FUTURE.md`](./FUTURE.md) §20 and nothing
+more.
+
+**`CH1-04`'s routed item closed itself while this pass was in flight, and re-checking it is what
+found that.** The claim drafted here was that `web/src/routes/+page.svelte`'s Block A exemplar was
+*"still open and still stale"*. **It is not**, as of `8d1b9e1`: the exemplar that read *"Comics · no
+catalogue source · Kavita · after v0.1 · Add"* is corrected in place and marked ⚠️ **false on both
+of its claims** — comics has a catalogue source, and that source is in v0.1 — with the replacement
+drawn from §16.1's slot #1, *"Music · no catalogue source connected · Navidrome · after v0.1 ·
+Add"*. Recorded because the draft was wrong for about an hour and re-measurement is the only reason
+it did not ship that way.
+
+**And that correction is independent corroboration of `WIRE-03`, reached from the opposite end.**
+The frontend side arrived at the same split without this pass: *"§17.2 has stopped naming which
+types are sourceless at all and defers to §16, so the exemplar has to come from there"* — which is
+the **answerable** half, sourced from §16 exactly as `WIRE-03` argues — and, in the same comment,
+*"no per-type count is readable yet"*, which is the **unanswerable** half. Two threads converging on
+the same two-part shape from opposite directions is the strongest available evidence that the split
+is the requirement's real structure rather than this pass's preference, and it is the reason the
+clause was split rather than either lowered or left standing whole.
+# VN9-06 — Search promised six media types on an install that can hold two
+
+**Date:** 2026-08-17. **Prefix:** `VN9-`, continuing from
+[`VN9-05`](#vn9-05--13s-colour-ban-named-four-families-and-css-names-them-seven-so-orchid-plum-and-magenta-walked-through),
+which is the highest `VN9-` **entry** on `main`. ⚠️ `VN9-03`'s VN9.19 names two *commits* as
+"VN9-06, VN9-07"; those were held off `main` and are commit labels rather than entry ids, so this
+entry takes `VN9-06` under the "never renumber, never reuse" rule as the next free entry id. Flagged
+rather than silently resolved.
+
+## VN9.23 The brief located the defect in §17 and the defect is not in §17
+
+The string was hunted before it was rewritten, and it is worth recording that the search moved it:
+
+- A word-bounded grep for `every film, episode, album` across `*.svelte`, `*.md`, `*.html`, `*.go`
+  and `*.py`, excluding `node_modules/`, `web/build/` and `web/.svelte-kit/`, returns **exactly one
+  source hit**: `web/src/routes/search/+page.svelte:75`. The three other hits are build output of
+  that same file.
+- **`docs/ARCHITECTURE.md` §17 does not contain it.** All 57 of §17's italic-quoted shipping-copy
+  spans were extracted and read; none enumerates media types as a claim about what is present. The
+  nearest neighbours are `*"Radarr is connected and reports 0 films"*` (§17.8) and
+  `*"TV — catalogue source, request destination"*`, which are a service's own report and a per-kind
+  gloss, not a promise about the catalogue.
+
+So the copy defect was fixed where the copy lives, in the SPA, and §17 gained the **rule** that
+forbids it, which is the half this thread owns and the half that stops it recurring.
+
+## VN9.24 What the tree says a v0.1 install can hold, which is what makes the copy false
+
+Read off the tree rather than off a document, per CLAUDE.md. Roots searched:
+`internal/db/migrations/`, `internal/`, `cmd/usarr/`, `web/src/routes/` and §16/§16.1.
+
+- **One catalogue source.** `internal/libsync/doc.go` opens *"UsArr's catalogue sync core — channel
+  1, the full import — with Kavita as its first adapter (ADR-0041)"*, and the adapter directory holds
+  `kavita.go` and no sibling. `cmd/usarr/import.go` refuses anything else at runtime, in words:
+  `"%q has kind %q; v0.1 imports a catalogue from kavita and from nothing else (ADR-0041)"`.
+  ⚠️ **Sharper than "one source", and added after a concurrent read-only pass reported it:** that
+  import has **one trigger**, `bootstrapImport` on a first successful connect to a Kavita, with no
+  timer and no HTTP route behind it (`cmd/usarr/import.go`'s own doc comment: *"TWO TRIGGERS"*, the
+  second being an in-process call). So a v0.1 install has a catalogue only for what a connected
+  Kavita supplies, **and only after that connect has succeeded once**. The new copy is unaffected
+  because it makes no claim about *when* the library exists: it claims only what the services
+  supply. Recorded because the next author to reword this screen will be tempted to.
+- **That source produces two `work.kind` values.** `internal/libsync/kavita.go`'s `kindDecision`
+  returns `Kind: "comic"` (three branches, including manga, which is `reading_direction` and not a
+  kind per ADR-0030) and `Kind: "book"` (two branches). There is no third.
+- **Nothing else carries a catalogue.** `internal/servarr/doc.go` states *"Only Prowlarr is
+  implemented"*, and §16.1 confirms Prowlarr's v0.1 role is Search-and-Grab, which is an indexer
+  path over releases rather than a library. §16.1 also confirms Sonarr and Radarr re-sequenced **out**
+  of v0.1 (ADR-0041) and into v0.2 (ADR-0045), and that Navidrome, Audiobookshelf and Komga are all
+  after v0.1.
+- **The six navigation types are still six**, and correctly so: §17.2's table derives them from
+  `work.kind` plus `edition.format`, and migration `00006_kavita_subtypes.sql` keeps audiobook as an
+  `edition` format rather than a kind. Six is the enum's size; it is not a claim that six are filled.
+
+The measurement in the brief matches: on the built SPA against a healthy Kavita and a healthy
+Prowlarr, rows appear under two of the six types. **`comic` and `book` are exactly the two the
+adapter can write**, so the observation and the source agree, and the copy named five types of which
+four could not exist.
+
+## VN9.25 The rewrite, and the two things it deliberately does not say
+
+**Before** (`web/src/routes/search/+page.svelte:75`, verbatim):
+
+> This screen searches what UsArr has replicated locally — every film, episode, album, book and
+> comic your services already own — and renders it from SQLite, so it never waits on an \*Arr.
+> That local index exists now, and the recently-added table on Home is read straight out of it.
+> What is missing is the query over it: nothing in UsArr answers a search against your own
+> catalogue yet, so an input here would return nothing for reasons that are UsArr's rather than
+> yours.
+
+**After**, verbatim:
+
+> This screen searches the library UsArr has replicated from your services. It covers what those
+> services supply and nothing else, and it renders from SQLite, so it never waits on one of
+> them. That local index exists now, and the recently-added table on Home is read straight out
+> of it. What is missing is the query over it: nothing in UsArr answers a search against your
+> own catalogue yet, so an input here would return nothing for reasons that are UsArr's rather
+> than yours.
+
+**No shorter list was substituted**, and that was the tempting fix. Naming *books and comics* would
+be true today and false the day Navidrome lands (§16.1 slot 1), and false in the other direction on
+a Prowlarr-only install where it names two types nothing supplies. The failure is enumeration, not
+arity, so the claim is relocated onto *your services* and the type set is left to the install.
+
+**It does not distinguish zero rows from no source.** Nothing in the schema or on the wire separates
+*no rows matched* from *no source can supply this type* — the catalogue adapters report no per-type
+capability, and `work.kind` is silent about which kinds an instance could ever produce. So a sentence
+like *"no comics source configured"* would be an assertion the product cannot make. It is recorded
+as a seam in §17.4 rule 7 and built by nothing here.
+
+Two incidental corrections came with the rewrite, both inside the sentence being replaced: the two
+em dashes go (§13 bans them in UI microcopy, and an empty state is named in that ban), and *"never
+waits on an \*Arr"* becomes *"never waits on one of them"*, because the service v0.1 actually reads
+is Kavita and the replica principle is about upstreams generally.
+
+## VN9.26 §17.4 gains rule 7, which is the durable half
+
+`docs/ARCHITECTURE.md` §17.4 now carries a seventh rule: Search's copy never enumerates media types;
+the corpus it names is *your services*; a shorter list is the same defect; rule 1's silence for an
+unsupplied type is correct and may not be explained, on the ground that the distinction is not
+representable today. The retired string is quoted there **in backticks rather than in the
+italic-quoted form**, because that form is what `check.mjs` reads as shipping copy and a retired
+string is not shipping copy.
+
+## VN9.27 The gate was fired deliberately, and it attests less than it looks like it does
+
+`make design` on the finished tree, verbatim tail:
+
+```
+ok    §13 copy: 6978 user-visible strings clean of banned words, "!" and short-string em dashes (floor 6750 over both installs; 24 short em-dash string(s) exempt because ARCHITECTURE §17 fixes their wording verbatim; 0 bare "—" string(s) read as a glyph rather than prose, a structural exemption no sentence can hide in)
+ok    §13 copy §17: 58 shipping-copy string(s) in ARCHITECTURE §17 clean of banned words, "!" and em dashes at ANY length (the fifteen-word floor is not applied to specified UI copy; 4 recorded exception(s) and 0 bare "—" glyph(s), the exception(s) all §17's existing wording of the head-and-detail construction §1.4 prescribes — whose beat is a colon since 2026-08-17, so these are carried, not blessed; §17 cannot exempt itself here, which is the point)
+ok    §13 copy corpus: 58 ARCHITECTURE §17 copy string(s) read (floor 45), a source the rendered walk cannot see
+
+all design checks pass
+```
+
+Exit **0**; the §17 corpus went **57 → 58**, which is the new span being counted.
+
+**The §17 corpus was shown to read the new string rather than assumed to.** `seamlessly` was planted
+inside it and the gate was re-run:
+
+```
+FAIL  §13 copy: 1 violation(s) in user-visible text
+      ARCHITECTURE §17: banned word "seamlessly" in "This screen seamlessly searches the library UsArr has replicated from "
+FAIL  §13 copy §17: 1 violation(s) in ARCHITECTURE §17's own shipping copy, out of 58 string(s) read
+```
+
+Exit **2**, and the failure names this entry's own sentence. The plant was then removed.
+
+⚠️ **What the green does NOT attest.** `check.mjs`'s `SOURCES` is `docs/design/tokens.css`, the four
+`docs/design/mockups/` assets and the mockup HTML files. **`web/src/` is not in any corpus**, so the
+SPA string this entry actually fixed **did not go through the gate at all**. What went through is the
+§17 rule's italic-quoted wording. The two are the same sentence today by hand, not by a check, and
+nothing in the repo would notice if they diverged tomorrow. Stated rather than implied, because a
+green that is read as covering the file it does not read is worse than no green.
+
+## VN9.28 What this pass did NOT do, including two real findings left standing
+
+* **No mockup change**, because the same string is in none of them. `docs/design/mockups/search.html`
+  states its scope as `No library-bearing service is connected.` and the top-bar placeholder is
+  `Search your library` — both already free of enumeration. `prototype.html` was therefore not
+  regenerated; `build_prototype.py` was not run and did not need to be.
+* ⚠️ **The mockups' v0.1 install is stale, and it is left alone.** The design gate prints it:
+  `install: the switcher offers exactly the two installs the sweeps run — full "Full stack: a later
+  milestone", v01 "v0.1: Sonarr, Radarr, Prowlarr"`. That predates ADR-0041, and it is why
+  `search.html`'s v01 variant reads `Dune: Prophecy season 1, 6 episodes, all held.` — episodes, on
+  an install that can hold none. This is a real finding and a **large** one: it is the whole v01
+  dataset across five screens, plus the README's *"What each install is for"* argument, not a string.
+  Recorded here for whoever owns that pass; it is not the defect this entry was sent for and
+  rewriting it inside this one would have been the "and also" CLAUDE.md warns about.
+* ⚠️ **`web/src/routes/search/+page.svelte:59` still carries an em dash in microcopy** — the
+  `pagehead__meta` line *"Not built yet — below is what it is waiting on"*. §13 bans it there. Left
+  untouched: it is outside the sentence this brief names, and it is one character that the owner of
+  the SPA copy should take with the rest of that screen's sweep.
+* **No copy that explains an absence** was written, anywhere. See VN9.25.
+* **No `check.mjs` or `DESIGN-DIRECTION.md` change.** Both were being edited concurrently by another
+  agent; neither was touched, staged or reverted here.
+
+---
+
 # `search_fts.people` — the column the document builder wrote blank
 
 **2026-08-17**, branch `people-1787008364`, cut from `origin/main` at `999f538`. Id `LS-100`

@@ -2347,7 +2347,11 @@ catalogue is books and comics/manga**, because Kavita is the source that ships
 ([ADR-0041](./DECISIONS.md#adr-0041); it read *"film and TV"* while Sonarr and Radarr were v0.1's
 sources, and they are not). A screen for a media type with no configured source says so — principle
 3, degrade honestly — rather than rendering an empty grid, and that behaviour is the same one an
-install without Navidrome would get in any case.
+install without Navidrome would get in any case. **What it says is set out in §16.1's v0.1 entry,
+which splits the rule rather than stating it once**: *naming the source that will populate the type*
+is answerable out of this section, and *knowing whether an already-connected source covers it* is
+not answerable on any wire UsArr has. Neither half is dropped; only one of them can be satisfied
+today.
 
 **The order within the catalogue sequence was left to the Kavita `LastChapterAdded` watermark
 probe** ([ADR-0035](./DECISIONS.md#adr-0035) §2, §7.1a) — **Kavita first if it passed, Navidrome
@@ -2734,6 +2738,46 @@ now have a source and four do not**, and the rule now has to hold on a mixed scr
 empty one. **That is §17's to re-measure, and it is flagged rather than assumed here** (REVIEW-LOG
 CH1-04). (The query-plan assertions are in
 place for the tables that exist, in `make test` — the gate named above, not a CI.)
+
+⚠️ **That clause asks two questions in one breath and only one of them has an answer, so it is split
+here rather than lowered to fit the answerable one.** *"Which source is missing"* reads as one
+question and is two.
+
+* **Which source *will* populate a type is answerable today, out of this section, with no wire
+  change at all** — and §17.2 already asks for the stronger form of it: its per-type row renders
+  *"the service that will populate it and the milestone it arrives in"*, and it deliberately points
+  back here rather than restating the membership. **§16 is that mapping**, and it covers all six of
+  §1's types: `movies` and `tv` → **Sonarr and Radarr, v0.2**
+  ([ADR-0045](./DECISIONS.md#adr-0045)); `music` → **Navidrome**, §16.1 #1; `audiobooks` →
+  **Audiobookshelf**, §16.1 #2; `ebooks` and `comics` → **Kavita, v0.1**, with Komga a second comics
+  source at §16.1 #3. What a renderer needs for this half is a constant derived from this section,
+  not a field from a server. **It is unblocked and it stays a requirement with no caveat on it.**
+* **Whether an *already connected* source in fact covers a type is not answerable on any wire UsArr
+  has**, and Kavita is what creates the case: this section says Kavita covers books, so an install
+  whose Kavita holds only comic libraries has an `ebooks` type whose named source is connected,
+  healthy, and behind no rows — and nothing served separates that from an import that has not run.
+  `GET /api/v1/library/recent` returns `{items, limit, next_cursor}` and carries no per-type facet
+  (`recentWorksResponse`, `internal/httpapi/library.go`); `GET /api/v1/services/health` carries
+  `kind` and a `role` whose CHECK admits four values — `library|acquisition|indexer|download_client`
+  (migration 0001) — and no media-kind array (`serviceHealthResponse`,
+  `internal/httpapi/services.go`). **This half is a standing requirement that cannot be satisfied
+  yet, which is a different thing from a dropped one, and it is written down as the former.**
+
+**It is not lowered to what is knowable, and what would unblock it is named rather than left as
+"some day": one capability array on the health row** — the media types each connected instance
+actually supplies, derived at ingest from the containers that instance itself reported. ⚠️ **§8.3's
+`Caps.MediaKinds` is not that array, and the resemblance is the trap.** It is unbuilt — it occurs
+**zero** times in Go, and its only non-prose occurrences are two SQL *comments* on
+`library.sink_service_instance_id` (`internal/db/migrations/00005_library_sync.sql` and the schema
+dump under `internal/db/testdata/`) — and, more durably, it answers a **request-sink** question:
+whether an instance advertises `Add` for a `(kind, format)`. §8.3's own worked example is why the
+two must never be folded together — *"Navidrome is an excellent music catalogue and cannot accept a
+request"* — so *supplies this type* and *accepts a request for this type* are different facts about
+the same row, and a filter that conflated them would make every read-only source look like a sink.
+**Build neither here.** The seam is recorded in [`FUTURE.md`](./FUTURE.md) §20, and it is real
+rather than aspirational: the per-container kind decision already happens once at ingest
+(`mapLibraryType`, `internal/libsync/kavita.go`), so nothing would have to be reconstructed later.
+*Cut before you add* — the seam ships, the array does not.
 
 **v0.2 — "Requests."** Request model, routing rules, approval workflow, quotas, single-user
 auto-approve. **One search box over owned and unowned** (§8.6). One Add that routes; availability
@@ -3435,6 +3479,28 @@ carries eleven groups in a `SearchResultGroup`.
    user has learned *nothing* was found; this rule covers the case where the product has told them,
    correctly and prominently, that they do not have the thing they searched for. That is the
    difference between a catalogue and a hub, and it is one link.
+
+7. **Search's own copy never enumerates media types, and the corpus it names is *your services*.**
+   The set of types behind that phrase is whatever the connected services supply, which is a
+   different set on a Prowlarr-only install than on a full stack, so any fixed list is a promise the
+   install may not keep. **A shorter list is the same defect with fewer words** — the failure is
+   enumeration, not arity. The standing wording is
+   *"This screen searches the library UsArr has replicated from your services. It covers what those
+   services supply and nothing else."* ⚠️ This is the rule's origin rather than an illustration of
+   it: the shipped screen read `every film, episode, album, book and comic your services already
+   own` until 2026-08-17. That is in backticks and not in this section's italic-quoted form, because
+   the italic-quoted form marks copy that ships and this string is retired. On the install v0.1
+   actually draws it named four types nothing can
+   supply. §16.1 gives v0.1 **one** catalogue source, Kavita, and `internal/libsync/kavita.go` maps
+   its series onto `work.kind` `'comic'` and `'book'` and onto nothing else; Prowlarr carries no
+   catalogue at all. Measured on the built SPA against a healthy Kavita and a healthy Prowlarr, rows
+   appeared under two of the six media types.
+   **And the silence for the rest is correct, so this rule does not license copy that explains it.**
+   Rule 1 stands: a group with zero hits does not render. A media type no service supplies is not an
+   empty region the user is owed a sentence about, and — decisively — **nothing in the schema or on
+   the wire today separates *no rows matched* from *no source can supply this type***, so no string
+   may claim to. 🔍 That separation is a seam, not a feature: it wants a per-type source capability
+   the catalogue adapters do not report yet, and it is out of scope here.
 
 **Every result row is one template *within its group*, and the claim needs that qualifier.** Type
 chip, title, secondary metadata, availability, library — varying only in data. But the six groups

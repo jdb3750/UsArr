@@ -72,12 +72,12 @@
 	<div class="empty">
 		<h2 class="empty__title">Searching your own library is not built yet</h2>
 		<p class="empty__text">
-			This screen searches what UsArr has replicated locally — every film, episode, album, book and
-			comic your services already own — and renders it from SQLite, so it never waits on an *Arr.
-			That local index exists now, and the recently-added table on Home is read straight out of it.
-			What is missing is the query over it: nothing in UsArr answers a search against your own
-			catalogue yet, so an input here would return nothing for reasons that are UsArr’s rather than
-			yours.
+			This screen searches the library UsArr has replicated from your services. It covers what those
+			services supply and nothing else, and it renders from SQLite, so it never waits on one of
+			them. That local index exists now, and the recently-added table on Home is read straight out
+			of it. What is missing is the query over it: nothing in UsArr answers a search against your
+			own catalogue yet, so an input here would return nothing for reasons that are UsArr’s rather
+			than yours.
 		</p>
 		<p class="empty__text">
 			Searching your <em>indexers</em> for something you do not own is a different thing, and it does

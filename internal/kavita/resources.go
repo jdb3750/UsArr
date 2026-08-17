@@ -202,8 +202,16 @@ type LibraryDto struct {
 //     value — no error, no warning. But NOTHING MAY TREAT A ZERO HERE AS A FACT
 //     ABOUT THE UPSTREAM ITEM, because on the stable line it is the ABSENCE of
 //     the field rather than a value the server chose. The consequence that is
-//     already live: libsync.kavitaExternalIDs writes a `cbr` external_id from
-//     CbrID, and that row is unreachable on the owner's install.
+//     already live: libsync.kavitaExternalIDs writes a `comicbookroundup`
+//     external_id from CbrID, and that row is unreachable on the owner's
+//     install. ⚠️ THE SOURCE STRING WAS `cbr` UNTIL 2026-08-17 AND THE RENAME IS
+//     A CONSEQUENCE OF THIS BLOCK: because the field is unreachable at the
+//     floor, no such row has ever been written, so ADR-0046's second open
+//     question — `cbr` also being edition.format's CHECK value for the Comic
+//     Book RAR archive — was free to settle now and would have needed a
+//     migration after the first develop user syncs. libsync/editableid.go's
+//     ComicBookRoundupSource owns it, along with the 0.90 cap that field and
+//     MetronID now share (REVIEW-LOG.md LS-71, LS-73).
 //     contract_test.go's ceilingOnlyProperties is the machine-checked list.
 type SeriesDto struct {
 	ID            int32  `json:"id"`
