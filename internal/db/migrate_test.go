@@ -444,8 +444,8 @@ func TestDeferredTablesAreAbsent(t *testing.T) {
 	}
 
 	// Deferred, with the milestone that owns each. The six work_* subtypes wait
-	// for the catalogue source that writes them (ADR-0035, ADR-0036); the rest
-	// is schema.md's "later tables" appendix.
+	// for the catalogue source that writes them (ADR-0040); the rest is
+	// schema.md's "later tables" appendix.
 	deferred := []string{
 		// music — lands with Navidrome (§16.1 position 1 or 2)
 		"work_album", "work_track", "work_credit",

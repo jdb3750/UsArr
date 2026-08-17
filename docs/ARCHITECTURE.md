@@ -1249,8 +1249,10 @@ Budget rows for the walk are in §13. **This channel is specified here but built
 catalogue adapter, not in v0.1** — v0.1's services are Sonarr, Radarr and Prowlarr, for which
 channels 1, 3 and 4 are the whole story. It is written ahead of its milestone because the watermark
 column and the overlap rule are what the adapters are written against, and because the probe that
-decides whether Kavita or Navidrome goes first has to have its pass condition on paper before it
-runs.
+decided whether Kavita or Navidrome went first had to have its pass condition on paper before it
+ran. ✅ **It has since run** — 2026-08-17, against a live Kavita — **and it passed**, ordering the
+sequence **Kavita, then Navidrome** ([ADR-0035](./DECISIONS.md#adr-0035) §2a). The rule stands
+regardless of that result: the next probe writes its pass condition down first too.
 
 ### 7.2 Channel 1 — full import
 
