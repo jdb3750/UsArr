@@ -493,6 +493,34 @@ func (c *Client) Libraries(ctx context.Context) ([]LibraryDto, error) {
 	return out, err
 }
 
+// SeriesMetadata calls GET /api/Series/metadata?seriesId=N.
+//
+// It is the ONLY endpoint that reports a series' creators — see
+// SeriesMetadataDto for the three alternatives that were checked and cannot
+// rebuild the mapping.
+//
+// IT GOES THROUGH `do`, NOT THROUGH `stream`, AND THAT IS THE RIGHT SIDE OF THE
+// LINE. `do` buffers the whole body and is documented as being for "the small,
+// fixed-shape endpoints only". This response is one series' metadata: a summary,
+// a handful of tag arrays and thirteen person arrays, all of them bounded by how
+// many people a single comic credits. POST /api/Series/all-v2 is the opposite —
+// the whole library in one response — which is why that one streams.
+//
+// THE COST IS N ROUND TRIPS FOR N SERIES AND IT IS BUDGETED RATHER THAN HIDDEN.
+// docs/reference/sync.md §2 already settled this shape for the *Arrs: "the rule
+// is not 'never fetch children per-parent' — it is 'fetch them per parent,
+// bounded'". The caller in internal/libsync runs it as a phase-B pass AFTER the
+// item stream has closed, so it never holds the streaming connection open, and
+// the breaker and the per-call timeout in `do` bound each one.
+func (c *Client) SeriesMetadata(ctx context.Context, seriesID int32) (SeriesMetadataDto, error) {
+	var out SeriesMetadataDto
+	err := c.do(ctx, request{
+		op: "SeriesMetadata", method: http.MethodGet, path: apiPrefix + "/Series/metadata",
+		query: url.Values{"seriesId": []string{strconv.FormatInt(int64(seriesID), 10)}},
+	}, &out)
+	return out, err
+}
+
 // SeriesListOptions is one POST /api/Series/all-v2 read.
 type SeriesListOptions struct {
 	// Sort names the ordering key. Zero means SeriesSortFieldLastChapterAdded,

@@ -932,7 +932,10 @@ restated here against the source v0.1 actually has:
   in the vendored `api/specs/kavita.json` carries `aniListId`, `malId`, `hardcoverId`, `metronId` and
   `cbrId` as integers and `comicVineId` and `mangaBakaEditionId` as nullable strings, alongside
   `mangaBakaId` — **all of them written only by the Kavita+ match path**, so a free instance returns
-  `0`, `null` or `""` for every one. [ADR-0035](./DECISIONS.md#adr-0035) §1 states the consequence in
+  `0`, `null` or `""` for every one. ⚠️ **Present-and-empty, never absent**, which matters to whoever
+  writes an adapter: **no code can detect the paid tier by a missing key**, because the keys are all
+  there. The only signal is the VALUE, and `internal/libsync`'s identifier projection treats `0` and
+  `""` as "no claim" for exactly that reason. [ADR-0035](./DECISIONS.md#adr-0035) §1 states the consequence in
   its own words: null identifiers are *"what an ordinary user sees once Kavita lands"*, not an edge
   case. This section already says the same three paragraphs down, about the *"not identified"* badge.
 * **So the honest claim is not a percentage.** How much of v0.1's identity problem tier 1 resolves is
@@ -940,6 +943,14 @@ restated here against the source v0.1 actually has:
   close to none on a free one. What is unchanged is that tier 1 is the only tier v0.1 runs, and that a
   work it cannot resolve is kept, marked *"not identified"* and stays searchable (the rule below),
   which is why v0.1 still ships without tiers 2–5.
+* **And none of this is a regression against the source Kavita replaced.** Read the two bullets above
+  as *"Kavita is weak on identity"* and the comparison they invite is wrong: **Komga — the
+  comics-and-books source [ADR-0035](./DECISIONS.md#adr-0035) chose Kavita over — supplies no external
+  identifiers at all.** Its metadata carries user-typed `links[]`, which
+  [`reference/schema.md`](./reference/schema.md) §6.4 amendment 3 already bars from making a STRONG
+  claim because it is a free-text field. So the floor here is *"no ids"* either way, and Kavita's
+  present-and-empty typed fields are strictly more than the alternative offered — they become real
+  ids the moment the instance has Kavita+, with no adapter change.
 * **Tiers 2–5 and the `work_merge`/un-merge machinery still do not land in v0.1**, and the trigger
   above — *"the first provider that lacks strong ids"* — is not read as having fired. The fuzzy tiers
   *merge rows*, and merging comics on title similarity across a catalogue with no ids is the exact
@@ -947,14 +958,20 @@ restated here against the source v0.1 actually has:
   honest; merging wrongly is not**, so a source with weak ids is an argument for the badge, not for
   the cascade.
 
-🚩 **What this does to the correction UI's v0.3 cap is FLAGGED here, not decided.** §16.0 caps the
-library correction UI at v0.3, describes the cap as *"a scheduling detail"*, and routes the question
-here on this exact sentence — *"§6.4 owns the tier-1 claim and has not been restated against Kavita"*.
-It is restated now, and the restatement **withdraws the support the cap was resting on**: a v0.1 whose
-only source may carry no external ids at all is a v0.1 where a user has something to correct on day
-one, which is not what *"a cap on a declared no-op"* describes. Whether the cap survives is a **scope**
-question, scope is owned by the ADRs with §16 authoritative (`DEVELOPMENT.md` §11), and this pass
-deliberately does not make it: it needs an ADR and an owner decision.
+✅ **What this does to the correction UI's v0.3 cap is DECIDED, by
+[ADR-0043](./DECISIONS.md#adr-0043) (owner, 2026-08-17).** This paragraph used to read *"it needs an
+ADR and an owner decision"* and to leave the question flagged; the ADR exists, so the request is
+discharged. §16.0 capped the library correction UI at v0.3, described the cap as *"a scheduling
+detail"*, and routed the question here on the sentence *"§6.4 owns the tier-1 claim and has not been
+restated against Kavita"*. The restatement above **withdrew the support the cap was resting on** — a
+v0.1 whose only source may carry no external ids at all is a v0.1 where a user has something to
+correct on day one — and ADR-0043 took it from there: **the minimal *"fix this match"* case moves
+earlier than v0.3, and the full four-verb correction surface (`exclude`, `include`, `relink`, `field`)
+plus the Corrections list stay at v0.3.** *"Minimal"* is the owner's own word and ADR-0043 records it
+as a **constraint on scope**, so what moves is bounded by that case and nothing outside it. ⚠️ **The
+ADR deliberately assigns no milestone** — the owner said *"earlier"* and named no version, and §16 is
+authoritative for milestone membership — so the slot is still unassigned, and that gap is ADR-0043's
+own open question rather than a hole in this section.
 
 `normalized_title` and `norm_version`
 are **columns on `work` from the migration that creates it** (adding them later is a backfill over
@@ -2528,9 +2545,18 @@ and `work_comic_issue` (`:180`), with `ix_comic_issue_sort` (`:211`), in commit 
 clause read *"none of the three exists in the tree today, and they arrive in a new migration"*, which
 was true when it was written (`b2dc092`) and was falsified by `d0a02aa` the same day.** Its prediction
 was right and is now **discharged rather than merely stale**: a new migration is exactly what landed,
-because `00005_library_sync.sql` is merged and a merged migration is never edited. **`work_album`, `work_track` and `work_credit` are not v0.1's, and
+because `00005_library_sync.sql` is merged and a merged migration is never edited. **`work_album` and `work_track` are not v0.1's, and
 this clause does not claim them**: they wait on Navidrome, which has no adapter, at #1 in §16.1's
-sequence. ADR-0030, ADR-0031 and ADR-0033 stay authoritative for their **shape** — that is what the
+sequence. ⚠️ **This sentence named `work_credit` as a third, and
+[ADR-0044](./DECISIONS.md#adr-0044) (owner-approved 2026-08-17) falsified that — read the tree, not
+this line: `internal/db/migrations` is the answer to what exists.** The rule did not change; it was
+**applied**. ADR-0040 files each table with the source that WRITES it, and `work_credit` was grouped
+with the music tables when the first catalogue source was assumed to be a music server and *"a
+credit"* meant a performer. Kavita reports writers, cover artists, pencillers, inkers, colorists,
+letterers, editors and translators, so ADR-0040's own rule points at Kavita for this one. **The cost
+is a row rather than a column** — a credit points at a `work` of kind `person`, which nothing in v0.1
+created before — and that cost was put to the owner and accepted. Two of the six subtype tables now
+wait on Navidrome, not three. ADR-0030, ADR-0031 and ADR-0033 stay authoritative for their **shape** — that is what the
 enumeration above states of them, and a shape is owed whenever the table is created, not before.
 Everything else enumerated above is v0.1's, tables included.
 **Identity tier 1 only** — ⚠️ **and what tier 1 is worth in v0.1 is a property of the instance rather

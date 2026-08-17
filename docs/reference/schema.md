@@ -175,7 +175,16 @@ scheduled all six remaining subtype tables as *"later tables"*. Both were falsif
 `work_book`, `work_comic` and `work_comic_issue` are the tables Kavita writes, so they ship in v0.1
 and exist in the tree. [ADR-0040](../DECISIONS.md#adr-0040) is confirmed rather than reopened — each
 subtype table still lands with the source that writes it, and only the *date* of three of them moved.
-**`work_album`, `work_track` and `work_credit` still wait for Navidrome**, which has no adapter.
+
+⚠️ **A FOURTH FOLLOWED, on the same rule ([ADR-0044](../DECISIONS.md#adr-0044), owner-approved
+2026-08-17): `work_credit` also lands with Kavita**, in `00007_work_credit.sql`. This paragraph read
+*"`work_album`, `work_track` and `work_credit` still wait for Navidrome"* and that is now false for
+the third of the three. Kavita's `SeriesMetadataDto` reports writers, cover artists, pencillers,
+inkers, colorists, letterers, editors and translators — eight roles, every one already a member of
+`work_credit.role`'s `CHECK` below — so ADR-0040's rule points at Kavita for this table. The cost is
+stated where it belongs, under `creator_work_id`: a credit points at a `work` of kind `person`, so the
+Kavita adapter now creates person rows. **`work_album` and `work_track` still wait for Navidrome**,
+which has no adapter; `internal/db/migrations` is the answer to what exists.
 
 Rule: **every `kind` has a subtype table or an explicit justification for not having one.**
 `season`, `artist` and `game` have none and need none today. **`person` (ADR-0033) has none by
@@ -338,13 +347,23 @@ and the cheap candidate — folding credited names into the FTS `alt_titles` of 
 credited on, so the query returns the books — belongs to whoever writes the document builder and is
 not specified here.
 
+⚠️ **The document builder now exists and did NOT take that candidate**
+([ADR-0044](../DECISIONS.md#adr-0044)). `internal/store/catalogue.go`'s `rebuildSearchDoc` writes
+`search_fts.people` as the empty string, and the credit path does not go back and rewrite it: the
+credits are written in a **phase-B pass after** the item pass, so folding names in would mean
+re-running the whole document build for every credited work — a second FTS write per item, in the
+transaction the 100 ms batch window exists to keep short. The exclusion itself is enforced and
+asserted (`TestPeopleNeverEnterTheSearchCorpus`); the *enrichment* is still owed, and the seam is the
+`people` column, which exists and is empty.
+
 **Doing this in the migration that creates `work` costs one CHECK member and one byte allocation. Doing it later costs a
 CHECK-constraint change (a SQLite table rebuild), an FTS re-index, a rebuild of every client prefix
 index, and a change to the `kind_byte` codec that ARCHITECTURE §5.3 states is unchangeable once
 clients cache ids** — which is ADR-0030's argument, in a second place, for the same reason.
 
-**The three below ship in v0.1** — Kavita writes them ([ADR-0041](../DECISIONS.md#adr-0041)), and
-`internal/db/migrations` is the answer to whether they exist yet.
+**`work_credit` above and the three below all ship in v0.1** — Kavita writes all four
+([ADR-0041](../DECISIONS.md#adr-0041) for the three, [ADR-0044](../DECISIONS.md#adr-0044) for
+`work_credit`), and `internal/db/migrations` is the answer to whether they exist yet.
 
 ```sql
 

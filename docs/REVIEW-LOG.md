@@ -10258,3 +10258,307 @@ retired, and that file is frontend-owned. **Those two commits are held off `main
 green (VN9-03, VN9-04, VN9-05 and this log) merge. Reported rather than worked around, because
 `make check` is the stated pre-commit gate and a thread that cannot fix the coupled file should not
 be the thread that lands it red.
+
+# Round 5 continued — `LS-17`: author and creator credits (ADR-0044, migration 0007)
+
+**Date:** 2026-08-17. **Prefix:** `LS-` (library sync), continuing from `LS-16` above — re-read after
+this thread's last merge with `origin/main`, which is where the counter's true value lives
+(`DEVELOPMENT.md` §11).
+
+🚩 **AND THAT RE-READ IS THE POINT: these entries were written as `LS-11`–`LS-20` and RENUMBERED to
+`LS-17`–`LS-26` at merge time.** `LS-10` was the highest id observable when this pass started; the
+ComicVine thread landed `LS-11`–`LS-16` on `origin/main` while it was in flight, and the collision
+surfaced as a `docs/REVIEW-LOG.md` conflict at EOF — the same shape `EXPL-01` and `LS-01` describe
+for the prefix itself. **An id counter is a shared counter and its true value includes what nobody
+has pushed yet**, so re-reading after the *last* merge rather than before the *first* commit is what
+catches it. The renumber is mechanical and the two code sites that cite an id
+(`internal/libsync/credits.go`'s publisher drop, `cmd/usarr/import_e2e_test.go`'s last-writer-wins
+note) moved with it.
+
+⚠️ **One direct interaction with the ComicVine entry above, recorded because that entry's own words
+are now partly overtaken.** It refuses to fetch `webLinks` on the ground that every `webLinks`-bearing
+endpoint — `GET /api/Series/metadata` among them — is *"per series or per chapter — an N+1 upstream
+call across the whole library"*, and concludes *"the seam ships, the fetch does not"*. **This pass
+ships that fetch**, for credits, because for credits there is no alternative endpoint at all (`LS.10`
+lists the three that were checked and rejected). So the N+1 that entry priced now exists, once, in
+`StreamCredits` — which means `webLinks` is available on a response UsArr already decodes, and the
+ComicVine classifier could read it without a second call. **That is a follow-up for whoever owns the
+ComicVine path, not a change made here**: the two passes were concurrent, `SeriesMetadataDto.WebLinks`
+is decoded and unread, and wiring one thread's classifier into another thread's pass without its
+author is exactly the "and also" `CLAUDE.md` refuses.
+**Target:** `internal/db/migrations/00007_work_credit.sql`, `internal/store/credits.go`,
+`internal/libsync/credits.go`, `internal/kavita`'s credit DTOs, and the four documents that described
+`work_credit` as deferred.
+
+**What this pass is.** The owner approved authors into v0.1 on 2026-08-17 — *"yea that sounds good to
+me"* — after the cost was put to him: `work_credit.creator_work_id` points at a `work` of kind
+`person`, and nothing in v0.1 created one, so this is **authors as first-class rows, not one column**.
+ADR-0044 records the decision; migration 0007 creates the table; the Kavita adapter fills it.
+
+**The finding that shaped the whole change** is `LS-17`: the deferral was correct when it was made
+and had been falsified by a source change nobody had re-read it against. `00006`'s own header had
+already written down the consequence in terms — *"any creator a Kavita series reports has NOWHERE TO
+LAND in v0.1 — not a lossy landing, none at all"* — so this pass did not discover the gap so much as
+act on a note the previous pass had left for it.
+
+---
+
+## Counts
+
+| # | Finding, in one line | Severity | Disposition |
+|---|---|---|---|
+| **LS-17** | `ADR-0040` filed `work_credit` with the **music** tables under Navidrome, on the assumption that "a credit" is a performer. `ADR-0041` made **Kavita** first, and Kavita reports **eight** creator roles that have no other home | **High** | **Applied.** ADR-0044 **applies ADR-0040's rule rather than overriding it** — the landing point is the source that writes the table. `work_album` and `work_track` do not move |
+| **LS-18** | Kavita's `publishers` array has a real home in the schema — `work_comic.publisher`, created by `00006` and **written by nothing** — and this pass does not write it | Low | **Raised, not fixed.** It belongs to the phase-B metadata backfill that also owns `summary` and `releaseYear`; writing it here would be "and also". Recorded in `internal/libsync/credits.go` at the drop site |
+| **LS-19** | A work that **two remote items** resolve onto (tier-1 reuse) gets **last-writer-wins** credits: the replace is per-*work*, the drive is per-*remote item* | Low | **Recorded as a deliberate consequence**, asserted in `cmd/usarr`'s end-to-end test rather than left to be rediscovered. Same shape as `LS-07` in a second column |
+| **LS-20** | `INSERT OR IGNORE` swallows the **`role` CHECK** as well as the duplicate, so an adapter emitting an illegal role would be dropped silently with nothing to count | Medium | **Applied**, and it was **measured, not reasoned**: the guard read `CreditsRejected = 0` against the first version. `ON CONFLICT (…) DO NOTHING` scopes the tolerance to uniqueness |
+| **LS-21** | The task brief stated there is *"an existing CI assertion"* that people stay out of the FTS corpus. **There was not one** — `person`'s exclusion existed only as a comment on `search_doc.kind` in `00005` | Medium | **Applied.** It could not have failed before, because nothing created a `person`. Three assertions now exist, at the store, importer and end-to-end levels; the store one was fired |
+| **LS-22** | `cmd/usarr`'s end-to-end test counted `SELECT COUNT(*) FROM work` **bare**, twice. Person rows are `work` rows, so both assertions broke on the first import that credited anyone | Medium | **Applied.** Both narrowed to `kind <> 'person'`, with the reason written at the assertion rather than in a commit message. This is ADR-0044's sharpest consequence and it surfaced as a red test on the first run |
+| **LS-23** | `PersonDto.roles` is the obvious input to the role mapping and is **wrong**: it is instance-wide, so a person who writes one series and colors another returns `{Writer, Colorist}` in both | Medium | **Avoided by construction.** The mapping keys on the ARRAY a person arrived in, and every fixture person in `credits_test.go` carries a deliberately wrong `roles` so the mistake cannot pass |
+| **LS-24** | Nothing collects a `person` work that ends up credited on nothing | Low | **Raised, not fixed**, and carried as ADR-0044's open question. The right shape is a sweep and a sweep is a subsystem; `ix_credit_creator` is the index it would read |
+| **LS-25** | `TestMigrate0006DownAndUp` calls `MigrateDown` once and asserts version 5. With `0007` on top it walked to 6 and asserted 5 | Nit | **Applied.** It steps past `0007` first and back up past it at the end; a migration landing on top of a Down/Up test is a foreseeable break and this is the second time it will happen |
+| **LS-26** | `TestDeferredTablesAreAbsent`'s failure message said *"migrations 0001-0006"* | Nit | **Applied.** A message naming a stale range is how a reader concludes the test is stale |
+
+---
+
+## LS.9 The seven guards fired, with verbatim output
+
+`DEVELOPMENT.md` §11's rule: a guard that has never been triggered is indistinguishable from no
+guard. Each break below was made, run, and reverted; the reverts are proven by the final green.
+
+**Guard 1 — a person leaking into the FTS corpus** (`LS-21`). The break: `personWorkID` calls
+`rebuildSearchDoc` for the person it just created, which is exactly what a builder that had not read
+§6.1 would do.
+
+```
+=== GUARD 1: a person leaking into the FTS corpus ===
+--- FAIL: TestPeopleNeverEnterTheSearchCorpus (0.04s)
+    credits_test.go:243: search_doc has 4 rows, want 2 — populate before asserting
+    credits_test.go:246: 2 person work(s) have a search_doc row. schema.md §6.1 excludes 'person' from the FTS corpus because there is no person screen in any milestone, so the hit is a result with nowhere to land — and search_doc_library would also put the author inside the user's library grid as an item
+    credits_test.go:252: 2 search_doc rows carry kind='person'
+    credits_test.go:260: corpus = doc 4 / fts 4 / trgm 4, want 2/2/2 — the two BOOKS and neither of their creators
+```
+
+It also fires one layer up and end to end, which is the point of asserting it three times — the store
+call, the importer's phase-B wiring and the real HTTP path can each acquire the bug independently:
+
+```
+--- FAIL: TestFullImportWritesCredits (0.05s)
+    credits_test.go:477: search_doc = 5 rows, want 3
+    credits_test.go:477: 2 person work(s) reached the search corpus through the importer. docs/reference/schema.md §6.1 excludes 'person' from the FTS corpus, the navigation enum and the Tier 1 prefix index, because there is no person screen in any milestone
+--- FAIL: TestAddingAKavitaProducesACatalogue (0.12s)
+    import_e2e_test.go:343: 4 person work(s) reached the search corpus through the real import
+    import_e2e_test.go:356: search_doc rows = 8, want 4
+    import_e2e_test.go:369: search_doc_library rows = 9, want 5
+```
+
+**Guard 2 — a duplicate person work.** The break: delete the database lookup from `personWorkID`,
+leaving the per-transaction cache as the only dedupe. This is the version that *looks* right — it
+dedupes within a batch, and a real import batches at 2,000 rows.
+
+```
+=== GUARD 2: a duplicate person work ===
+--- FAIL: TestTwoWorksByOneAuthorShareOnePersonWork (0.05s)
+    credits_test.go:129: a second ApplyCredits call created 1 person work(s); the dedupe is a per-transaction cache and not a database lookup
+    credits_test.go:135: `work` holds 2 person rows for one author, want 1.
+        The dedupe key is work.normalized_title under kind='person'; if this is 2 or 3, either the key is not being used or the lookup is not seeing committed rows.
+    credits_test.go:147: the two credits point at 2 distinct creators, want 1
+```
+
+⚠️ **And the honest limit of the OTHER guard, measured rather than assumed: the end-to-end test did
+NOT catch guard 2.** `cmd/usarr`'s five series all land in one credit batch, so the cache dedupes them
+and the run stayed green:
+
+```
+=== GUARD 2 also fires end to end ===
+ok  	github.com/jdb3750/UsArr/cmd/usarr	0.172s
+```
+
+That is recorded rather than papered over. The cross-batch case is the one that matters and only
+`TestTwoWorksByOneAuthorShareOnePersonWork`'s second half covers it, which is why that half exists as
+a separate `ApplyCredits` call with its own message.
+
+**Guard 3 — DB-01, the `CHECK (x IN (NULL, …))` defect, for the third time.** The break: one `NULL,`
+added to the head of `role`'s IN list. Note what the first run showed — the **schema snapshot** fired
+before the CHECK test could, so the break was re-run with the snapshot regenerated, to prove the
+constraint test is what speaks and not just the golden file:
+
+```
+--- FAIL: TestMigrate0007RoleCheckIsEnforced (0.03s)
+    migrate_test.go:2530: work_credit.role accepted 'TOTAL-GARBAGE' — the CHECK is a no-op.
+        role is NOT NULL, so the correct form is the bare `role IN (...)`; if someone rewrote it as `role IS NULL OR role IN (...)` that is harmless, but if a NULL reached the IN list itself this is DB-01 for the third time.
+```
+
+⚠️ **The store-side vocabulary guard did NOT fire on that break at first**, because a bare `NULL` is
+not a quoted literal and the comparison only saw the eighteen roles. That gap was closed in the same
+pass — an explicit `NULL` check — and the break re-run against it:
+
+```
+--- FAIL: TestWorkCreditRoleVocabularyMatchesTheReference (0.05s)
+    credits_test.go:505: work_credit.role's CHECK contains NULL. `x IN (NULL, …)` evaluates to NULL for every non-matching value and a CHECK passes on NULL, so the constraint accepts anything at all. This is DB-01, which shipped twice already. `role` is NOT NULL, so the bare IN list is correct and complete.
+```
+
+**Guard 4 — the primary key's column ORDER.** The break: `PRIMARY KEY (work_id, creator_work_id,
+role, position)` — same four columns, same uniqueness, same leading column, and a full loss of the
+covered range scan the key exists for. This is why the query-plan case carries an `ORDER BY`:
+
+```
+--- FAIL: TestMigrate0007WorkCreditShape (0.06s)
+    migrate_test.go:2475: work_credit PRIMARY KEY = (work_id,creator_work_id,role,position), want (work_id,role,position,creator_work_id).
+        The order is load-bearing: this is a WITHOUT ROWID table, so the key IS the storage order, and the hot read is one work's credits in billing order.
+--- FAIL: TestQueryPlans (0.05s)
+    --- FAIL: TestQueryPlans/one_work's_credits_in_billing_order (0.00s)
+        queryplan_test.go:438: plan needs a temp b-tree:
+              SEARCH work_credit USING PRIMARY KEY (work_id=?) | USE TEMP B-TREE FOR ORDER BY
+```
+
+**Guard 5 — `ix_credit_creator` deleted**, the normative index schema.md §1.1 declares:
+
+```
+--- FAIL: TestQueryPlans (0.07s)
+    --- FAIL: TestQueryPlans/everything_one_creator_is_credited_on (0.00s)
+        queryplan_test.go:423: plan does not use ix_credit_creator:
+              SCAN work_credit
+```
+
+**Guard 6 — `WITHOUT ROWID` dropped**, leaving the same five columns, the same primary key and the
+same constraints — and turning the key from the table's storage order into a secondary index. Note
+what the first version of this assertion did: it ran `QueryContext` and checked for a nil error,
+which `rowserrcheck` flagged and which would have passed anyway, because the *query* succeeds and it
+is the *scan* that reports the missing column. The rewritten form is what actually fires:
+
+```
+--- FAIL: TestMigrate0007WorkCreditShape (0.04s)
+    migrate_test.go:2469: SELECT rowid FROM work_credit gave sql: no rows in result set, want a "no such column: rowid" error. work_credit must be WITHOUT ROWID: with a rowid the PRIMARY KEY becomes a secondary index and the covered range scan it exists for is gone.
+```
+
+**Guard 7 — the whole table removed**, which is the deferred-tables list from the other side:
+
+```
+--- FAIL: TestDeferredTablesAreAbsent (0.05s)
+    migrate_test.go:505: work_credit is missing; it should be created by migrations 0001-0007
+```
+
+## LS.10 The Kavita role mapping, and why the array and not the role field
+
+`GET /api/Series/metadata?seriesId=N` is the **only** endpoint that reports a creator, verified
+against the vendored `api/specs/kavita.json`. `SeriesDto` — what the item stream reads — carries no
+creator field at all, and the three bulk-shaped alternatives cannot rebuild the mapping:
+`POST /api/Person/all` returns `BrowsePersonDto` with no series linkage, `GET
+/api/Person/series-known-for` is documented *"the top 20 series"*, and `GET
+/api/Person/chapters-by-role` is documented *"Limited to 20 results"*. So the cost is one GET per
+series, run as a **phase-B pass after the item stream closes** — never inside its callback, which
+would hold the streaming connection open across N round trips.
+
+`PersonRole` has **thirteen** members and every one is accounted for, in code, with a test that reads
+the vendored spec and fails on a fourteenth:
+
+| Kavita array | `PersonRole` | `work_credit.role`, comic | `work_credit.role`, book |
+|---|---|---|---|
+| `writers` | `Writer` (3) | `writer` | **`author`** |
+| `pencillers` | `Penciller` (4) | `penciller` | `penciller` |
+| `inkers` | `Inker` (5) | `inker` | `inker` |
+| `colorists` | `Colorist` (6) | `colorist` | `colorist` |
+| `letterers` | `Letterer` (7) | `letterer` | `letterer` |
+| `coverArtists` | `CoverArtist` (8) | `cover_artist` | `cover_artist` |
+| `editors` | `Editor` (9) | `editor` | `editor` |
+| `translators` | `Translator` (12) | `translator` | `translator` |
+| `publishers` | `Publisher` (10) | **dropped** — an organisation, not a creator; home is `work_comic.publisher` (LS-18) | same |
+| `imprints` | `Imprint` (13) | **dropped** — a publisher's sub-brand; no column anywhere | same |
+| `teams` | `Team` (14) | **dropped** — a studio or a fictional super-team, depending on who filled in the ComicInfo | same |
+| `characters` | `Character` (11) | **dropped** — FICTIONAL; a subject of the work, not a creator of it. Home is the tag system (v1.0) | same |
+| `locations` | `Location` (15) | **dropped** — a place. Same argument, same eventual home | same |
+
+**The one line worth arguing about is `writers`.** Kavita has **no** `authors` array; its Writer role
+is where an EPUB's `dc:creator` and a ComicInfo `Writer` element both land. Mapping it to `writer`
+everywhere would leave `work_credit.role`'s `author` member with **no writer at all** while filing
+every novelist under a comics role.
+
+**Two members of the vocabulary get no writer from Kavita and keep their `CHECK` membership:**
+`illustrator` (the interior artist — Kavita has no array for it, and a cover artist is not one) and
+`narrator` (Kavita serves no audio). They are in the `CHECK` because SQLite cannot `ALTER` one.
+
+**The mapping keys on the ARRAY, not on `PersonDto.roles`** (`LS-23`). `roles` is the set of roles a
+person holds **across the whole instance**, so a person who writes one series and colors another
+comes back `{Writer, Colorist}` in both series' metadata; reading it would credit a series' writer as
+its colorist. Every fixture person in `internal/libsync/credits_test.go` therefore carries
+`{Writer, Colorist, Publisher}` regardless of which array it sits in, so the mistake cannot pass.
+
+## LS.11 The person dedupe, and what it costs in both directions
+
+**The key is `work.normalized_title` under `kind = 'person'`** — the same v1 normaliser every other
+title in the schema uses (casefold, NFKD, strip combining marks, strip punctuation, collapse
+whitespace), served as a seek by `ix_work_norm`. Two books by one author are one person work; the
+per-transaction cache is an optimisation and the database lookup is the dedupe, which is exactly what
+guard 2 fired on.
+
+**It is wrong in both directions and both are carried, not hidden:**
+
+* **A name variant SPLITS.** *"A. Moore"* and *"Alan Moore"* become two people. Asserted, as a known
+  loss, in `TestCaseAndPunctuationVariantsAreOnePerson`. The seam for fixing it exists and is not
+  built: `kavita.PersonDto` carries an `aliases` array, and folding aliases into `work_alt_title` rows
+  on the person work would let a later matcher resolve both to one row. That is a matcher, not a
+  column.
+* **Two people with ONE name MERGE.** Two John Smiths become one row. This is the direction that
+  loses information, and it is accepted because the alternative is not a better key — no source v0.1
+  reads gives a person a stable global identifier — it is *a person work per credit per series*, which
+  makes `work` a table of strings with foreign keys. The blast radius is materially smaller than a
+  work merge: `person` has no screen, so the visible consequence is a credit link leading somewhere
+  slightly wrong, not two catalogue items collapsing.
+
+**Kavita's own person id is NOT written as an `external_id`**, and that is the sharpest sub-decision
+here. It is **instance-local**, so two Kavita installs would both claim person 5 — and
+`ux_extid_work_strong` (`UNIQUE(source, value) WHERE work_id IS NOT NULL AND confidence >= 1.0`)
+reads that collision as a **merge signal between two unrelated humans**, which is worse than the name
+collision it was meant to fix. `PersonDto`'s `aniListId` / `malId` / `hardcoverId` / `asin` are
+Kavita+ fields on the same present-and-empty footing as the series-level ones and are not written
+either.
+
+## LS.12 What this pass did NOT verify
+
+* **That any of it matches a real Kavita.** Every fixture and every cassette in this repository is
+  synthetic, `LS.8`'s qualification is unchanged, and a synthetic fixture proves a mapping and not a
+  server's behaviour. Specifically unverified: that a real `SeriesMetadataDto` populates `writers` for
+  an EPUB rather than leaving it empty, and whether Kavita ever returns `null` for a person array
+  rather than `[]`. The Go decoder treats both as empty, so the mapping is unaffected either way, but
+  the claim about which one arrives is untested.
+* **The end-to-end cost of one GET per series on a real library.** It is budgeted against
+  `reference/sync.md` §2's *Arr numbers and measured against nothing. The concurrency seam is one
+  `for` loop in `StreamCredits` and nothing above it changes if a real library measures slow.
+* **`ARCHITECTURE.md` §17.6's credit rendering.** No screen renders a credit; `web/` was out of scope
+  by instruction and was not touched.
+* **`LS-04` is still open** — §17.8's `LibraryType` withdrawal versus the vendored spec — and this
+  pass did not revisit it. It needs a fresh read of Kavita's source, which is a network fact.
+
+## LS.13 §6.4's correction-UI flag, discharged
+
+Folded into this pass at the coordinator's request, in a section it was already editing. `§6.4`'s
+🚩 read *"What this does to the correction UI's v0.3 cap is FLAGGED here, not decided … it needs an
+ADR and an owner decision."* **[ADR-0043](./DECISIONS.md#adr-0043) landed at `4d352ce`** and was read
+before the edit rather than taken on trust: the owner approved a **minimal** *"fix this match"* UI
+earlier than v0.3, with *"minimal"* recorded as a constraint on scope, ADR-0026's full four-verb
+surface staying at v0.3, and **no milestone assigned** (ADR-0043's own open question). §6.4 now says
+that instead of asking for the ADR.
+
+Two framings in the same section were tightened while there, because both bear on how §6.4's identity
+claim reads:
+
+* **Present-and-empty, never absent.** Kavita's identifier fields are all in the payload with `0` /
+  `null` / `""` values on a free instance, so **no adapter can detect the paid tier by a missing
+  key** — the only signal is the value. Said explicitly now, where it was previously only implied.
+* **Komga supplies no external identifiers at all**, so free Kavita is not a regression against the
+  source ADR-0035 chose it over. Komga's user-typed `metadata.links[]` is barred from a STRONG claim
+  by §6.4's own amendment 3. The honest framing — already half-present in §6.4 and now stated in
+  full — is that **identity coverage is a property of the instance, not of the design**.
+
+### On the gate for `LS-17`
+
+`make check` from a **cleaned lint cache** — `/root/go/bin/golangci-lint cache clean` by absolute path
+first. Binaries, versions, the commit and the verbatim tail are in the commit message.
+
+What it attests: the migration round-trips Up and Down against a real database, the six guards above
+fire, and every credit test populates before it asserts — `internal/store/credits_test.go` runs the
+real `ApplyCatalogueBatch` first so that a credit set has a `service_item_link` to resolve, because a
+credit test that inserted a `work` row directly would take the `ItemsUnresolved` branch and assert
+nothing about the write path at all.
+
+What it does not attest is everything in `LS.12`.
