@@ -1,0 +1,39 @@
+---
+# SYNTHETIC — hand-authored from api/specs/kavita.json (develop @ 9c3e540,
+# info.version 0.9.0.20) and Kavita.Server/Controllers/HealthController.cs at the
+# same commit. NOT a wire capture.
+#
+# Claimed Kavita version: 0.9.0.20. Kavita sends no version response header, so
+# that fact is written here by hand rather than captured.
+#
+# GET /api/Health is [AllowAnonymous] at CLASS level and the action is
+# `return Ok("Ok")` — a bare string, not JSON. It answers with no Auth Key at
+# all, which is what makes it the probe that separates 'host down' from 'key
+# wrong', and it is why Health() discards the body: `Ok` is not evidence about
+# anything, including whether this host is a Kavita.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+        url: http://kavita.test:5000/api/Health
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - text/plain; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: Ok

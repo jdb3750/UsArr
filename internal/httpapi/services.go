@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -25,10 +26,25 @@ import (
 //     the key is cosmetic against it.
 //  3. Every read takes an access scope in its signature.
 
-// serviceKinds is what v0.1 can actually talk to. Rejecting an unknown kind at
-// the API boundary beats storing a row nothing can ever open.
+// serviceKinds is what v0.1 can actually talk to, and the ROLE each kind takes.
+// Rejecting an unknown kind at the API boundary beats storing a row nothing can
+// ever open.
+//
+// The role is not decoration: it is what `cmd/usarr`'s registry branches on to
+// decide which client to build and what an instance may be asked to do, and it is
+// stored in service_instance.role, whose CHECK admits
+// library|acquisition|indexer|download_client (migration 0001).
+//
+//   - prowlarr → `indexer`. It is searched and grabbed from; it has no library.
+//   - kavita   → `library`. It is a CATALOGUE SOURCE: a media backend that owns
+//     bytes and names containers, replicated FROM and never commanded. It is not
+//     `acquisition`, which is for the library-bearing *Arrs that also take
+//     add/monitor/delete commands — Kavita is read-only and has no command sink
+//     (ADR-0032), so filing it under acquisition would promise a write path that
+//     does not exist. ADR-0041 puts it in v0.1 as the sync core's first adapter.
 var serviceKinds = map[string]string{
 	"prowlarr": "indexer",
+	"kavita":   "library",
 }
 
 type serviceResponse struct {
@@ -140,8 +156,8 @@ func (s *Server) handleCreateService(w http.ResponseWriter, r *http.Request) err
 	}
 	if strings.TrimSpace(req.APIKey) == "" {
 		return errStatus(http.StatusBadRequest, CodeBadRequest,
-			"an API key is required: UsArr cannot talk to an *Arr without one").
-			withAction("Paste the key from the service's Settings → General")
+			"an API key is required: every service UsArr talks to authenticates with one").
+			withAction(credentialAction(kind))
 	}
 
 	// The wizard's connection test is MANDATORY (ARCHITECTURE.md §11.3, §17.7),
@@ -884,12 +900,27 @@ func notFoundOr(err error, what string) error {
 		"the "+what+" could not be read").wrapping(err)
 }
 
+// knownKinds renders the supported kinds for an error message, SORTED. Map
+// iteration order is randomised, and an error message that reorders itself
+// between two identical requests is one a user cannot search for or report.
 func knownKinds() string {
 	names := make([]string, 0, len(serviceKinds))
 	for k := range serviceKinds {
 		names = append(names, k)
 	}
+	sort.Strings(names)
 	return strings.Join(names, ", ")
+}
+
+// credentialAction names WHERE the user finds the credential for a kind. The
+// *Arrs and Kavita keep it in completely different places, and "Paste the key
+// from Settings → General" sends a Kavita user hunting through a screen that does
+// not have it.
+func credentialAction(kind string) string {
+	if kind == "kavita" {
+		return "Paste the Auth Key from Kavita's User Settings → Manage Auth Keys"
+	}
+	return "Paste the key from the service's Settings → General"
 }
 
 func boolOr(p *bool, def bool) bool {

@@ -67,14 +67,16 @@ import {
  *                      §8.5's named configuration, not an implicit empty app.
  *   `library`          at least one library-bearing service is configured.
  *
- * `library` is unreachable in this build and is deliberately still computed.
- * `internal/httpapi.serviceKinds` maps exactly one kind — `prowlarr` → role
- * `indexer` — so every instance that can exist today is an indexer, and the
- * screen's third arm cannot be driven from a real install. It is derived
- * rather than assumed away because the alternative is a hard-coded
- * "Search-and-Grab always", which would go on claiming no library exists on
- * the first build that connects a Sonarr. The arm renders one honest sentence
- * and no catalogue, which is what is true of it.
+ * `library` BECAME REACHABLE when `kavita` → role `library` joined
+ * `internal/httpapi.serviceKinds` (ADR-0041), and this comment used to say the
+ * opposite — that every instance which could exist was an indexer. The mode was
+ * derived rather than assumed away precisely so that this day needed no change
+ * here, and it did not.
+ *
+ * What the arm renders is still one honest sentence and NO catalogue, and that
+ * is still what is true of it: a Kavita can be added and probed, and nothing
+ * imports from it yet. Read `internal/db/migrations` and `web/src/routes` for
+ * what exists, never this comment.
  */
 export type HomeMode = 'unconfigured' | 'search-and-grab' | 'library';
 

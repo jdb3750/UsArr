@@ -1,0 +1,36 @@
+---
+# SYNTHETIC — hand-authored from Kavita.Server/Controllers/ServerController.cs
+# (develop @ 9c3e540): [Authorize(PolicyGroups.AdminPolicy)] at class level.
+# NOT a wire capture. Claimed Kavita version: 0.9.0.20.
+#
+# THE CASE THIS CASSETTE EXISTS FOR: a PERFECTLY VALID non-admin Auth Key. The
+# policy handler rejects it with 403 and an empty body — not 401 — while every
+# series and library read that key needs succeeds. Collapsing this into
+# ErrUnauthorized would tell the user to re-enter a key that is fine, which is
+# why this package has an ErrForbidden the *Arr client does not need.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Server/server-info-slim
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        headers: {}
+        status: 403 Forbidden
+        code: 403
+        duration: 1ms
+        body: ""

@@ -9,12 +9,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/jdb3750/UsArr/internal/crypto"
 	"github.com/jdb3750/UsArr/internal/httpapi"
+	"github.com/jdb3750/UsArr/internal/kavita"
 	"github.com/jdb3750/UsArr/internal/releases"
 	"github.com/jdb3750/UsArr/internal/servarr"
 	"github.com/jdb3750/UsArr/internal/servarr/mapping"
@@ -60,14 +62,42 @@ type registry struct {
 	probeReq chan int64
 }
 
+// registryEntry is one instance's live client stack.
+//
+// EXACTLY ONE of prowlarr and kavita is non-nil, chosen by instance.Kind. They
+// are separate fields rather than one interface because the two clients have
+// almost nothing in common at the call site — one is searched and grabbed from,
+// the other is replicated from — and an interface wide enough for both would be
+// the union of two APIs with no shared caller.
 type registryEntry struct {
 	// fingerprint changes whenever base_url or the stored envelope changes, so
 	// an edited instance gets a fresh client rather than one pinned to the old
 	// host with the old key.
 	fingerprint string
-	client      *servarr.Client
-	service     *releases.Service
-	instance    store.ServiceInstance
+
+	// prowlarr and its Search-and-Grab service. Non-nil only for kind=prowlarr.
+	prowlarr *servarr.Client
+	service  *releases.Service
+
+	// kavita is the catalogue-source client. Non-nil only for kind=kavita.
+	// Nothing reads a library through it yet — ADR-0041's sync channels are the
+	// commits after this one — but the health prober does, so an added instance
+	// gets a real row on the Services screen instead of a permanent error.
+	kavita *kavita.Client
+
+	instance store.ServiceInstance
+}
+
+// breakerState reports the entry's circuit-breaker state and next retry,
+// whichever client it holds. The Services screen renders one column for both.
+func (e *registryEntry) breakerState() (string, time.Time) {
+	switch {
+	case e.prowlarr != nil:
+		return e.prowlarr.Breaker().State().String(), e.prowlarr.Breaker().RetryAt()
+	case e.kavita != nil:
+		return e.kavita.Breaker().State().String(), e.kavita.Breaker().RetryAt()
+	}
+	return "closed", time.Time{}
 }
 
 func newRegistry(st *store.Store, keyring *crypto.Keyring, log *slog.Logger, version string) *registry {
@@ -85,10 +115,22 @@ func newRegistry(st *store.Store, keyring *crypto.Keyring, log *slog.Logger, ver
 // ── httpapi.ReleaseServices ─────────────────────────────────────────────────
 
 // For returns the Search-and-Grab service fronting one instance.
+//
+// THE ROLE GATE LIVES HERE, not in entry(). It used to sit in entry(), where it
+// refused every non-indexer instance before a client was ever built — which was
+// correct while `indexer` was the only role UsArr could talk to, and became a bug
+// the moment a second kind landed: it also blocked the background health prober,
+// so an added Kavita would have shown a permanent "only indexer services can be
+// searched today" on the Services screen. Searching is what needs an indexer;
+// existing is not.
 func (g *registry) For(ctx context.Context, instanceID int64) (httpapi.ReleaseSearcher, error) {
 	entry, err := g.entry(ctx, instanceID)
 	if err != nil {
 		return nil, err
+	}
+	if entry.service == nil {
+		return nil, fmt.Errorf("%q is a %s service; only indexer services can be searched today",
+			entry.instance.Name, entry.instance.Role)
 	}
 	return entry.service, nil
 }
@@ -104,9 +146,6 @@ func (g *registry) entry(ctx context.Context, instanceID int64) (*registryEntry,
 	if !si.Enabled {
 		return nil, fmt.Errorf("%q is disabled", si.Name)
 	}
-	if si.Role != "indexer" {
-		return nil, fmt.Errorf("%q is a %s service; only indexer services can be searched today", si.Name, si.Role)
-	}
 	print := fingerprint(si)
 
 	g.mu.Lock()
@@ -119,21 +158,38 @@ func (g *registry) entry(ctx context.Context, instanceID int64) (*registryEntry,
 	if err != nil {
 		return nil, err
 	}
-	client, err := g.newClient(si, apiKey)
-	if err != nil {
-		return nil, err
-	}
-	service, err := releases.NewService(releases.Config{
-		InstanceID: si.ID,
-		Client:     client,
-		Store:      releases.NewStoreAdapter(g.st),
-		Logger:     g.log.With("instance_id", si.ID, "instance", si.Name),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("building release service for %q: %w", si.Name, err)
+
+	e := &registryEntry{fingerprint: print, instance: si}
+	switch si.Kind {
+	case "prowlarr":
+		client, err := g.newProwlarr(si, apiKey)
+		if err != nil {
+			return nil, err
+		}
+		service, err := releases.NewService(releases.Config{
+			InstanceID: si.ID,
+			Client:     client,
+			Store:      releases.NewStoreAdapter(g.st),
+			Logger:     g.log.With("instance_id", si.ID, "instance", si.Name),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("building release service for %q: %w", si.Name, err)
+		}
+		e.prowlarr, e.service = client, service
+	case "kavita":
+		client, err := g.newKavita(si, apiKey)
+		if err != nil {
+			return nil, err
+		}
+		e.kavita = client
+	default:
+		// httpapi.serviceKinds refuses an unknown kind at the boundary, so this
+		// is a row that predates a kind being removed — or a hand-edited SQLite.
+		// Either way it is a configuration problem and must say so rather than
+		// producing a nil client that panics three frames later.
+		return nil, fmt.Errorf("%q has kind %q, which this build has no client for", si.Name, si.Kind)
 	}
 
-	e := &registryEntry{fingerprint: print, client: client, service: service, instance: si}
 	g.entries[instanceID] = e
 	return e, nil
 }
@@ -171,8 +227,13 @@ func (g *registry) openCredential(si store.ServiceInstance) (string, error) {
 	return string(plain), nil
 }
 
-// newClient builds the SSRF-policy HTTP client and the *Arr client over it.
-func (g *registry) newClient(si store.ServiceInstance, apiKey string) (*servarr.Client, error) {
+// newEgressClient builds the SSRF-policy HTTP client for one instance.
+//
+// It is shared by both service clients on purpose: the egress policy is a
+// property of the INSTANCE — its validated host:port, its pin, its byte ceiling —
+// not of which protocol runs over it. A second copy of these options is how one
+// client ends up with a different ceiling from the other against the same host.
+func (g *registry) newEgressClient(si store.ServiceInstance) (*http.Client, error) {
 	hostPort, err := crypto.NormalizeHostPort(si.BaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("normalising %q's base URL: %w", si.Name, err)
@@ -188,6 +249,34 @@ func (g *registry) newClient(si store.ServiceInstance, apiKey string) (*servarr.
 	})
 	if err != nil {
 		return nil, fmt.Errorf("building the egress client for %q: %w", si.Name, err)
+	}
+	return httpClient, nil
+}
+
+// newKavita builds the Kavita client over that instance's egress client.
+func (g *registry) newKavita(si store.ServiceInstance, apiKey string) (*kavita.Client, error) {
+	httpClient, err := g.newEgressClient(si)
+	if err != nil {
+		return nil, err
+	}
+	return kavita.New(kavita.Options{
+		BaseURL:    si.BaseURL + si.URLBase,
+		APIKey:     apiKey,
+		HTTPClient: httpClient,
+		AppVersion: g.version,
+		// An egress-policy refusal never reached the network, so it is a
+		// configuration bug rather than upstream flakiness and must not trip
+		// the breaker.
+		IsPolicyError: ssrf.IsPolicyError,
+		Logger:        g.log.With("instance_id", si.ID),
+	})
+}
+
+// newProwlarr builds the *Arr client over that instance's egress client.
+func (g *registry) newProwlarr(si store.ServiceInstance, apiKey string) (*servarr.Client, error) {
+	httpClient, err := g.newEgressClient(si)
+	if err != nil {
+		return nil, err
 	}
 	return servarr.NewProwlarr(servarr.Options{
 		BaseURL:    si.BaseURL + si.URLBase,
@@ -223,12 +312,6 @@ func fingerprint(si store.ServiceInstance) string {
 // picked up.
 func (g *registry) Test(ctx context.Context, req httpapi.TestRequest) (httpapi.TestResult, error) {
 	kind := strings.ToLower(strings.TrimSpace(req.Kind))
-	if kind != "" && kind != "prowlarr" {
-		return httpapi.TestResult{
-			Message: fmt.Sprintf("UsArr cannot talk to %q yet; v0.1 supports prowlarr", req.Kind),
-			Action:  "Choose a supported service kind",
-		}, nil
-	}
 
 	si := store.ServiceInstance{
 		ID:      req.InstanceID,
@@ -256,9 +339,35 @@ func (g *registry) Test(ctx context.Context, req httpapi.TestRequest) (httpapi.T
 		}
 		si.Name = stored.Name
 		si.TLSSPKIPin = stored.TLSSPKIPin
+		if kind == "" {
+			// A re-test of a saved instance whose caller did not echo the kind
+			// back. Take it from the STORED ROW rather than defaulting: while
+			// prowlarr was the only kind a default was harmless, and with two it
+			// would test a Kavita with an *Arr client and report "did not answer"
+			// about a service that is answering perfectly.
+			kind = stored.Kind
+		}
+	}
+	if kind == "" {
+		return httpapi.TestResult{
+			Message: "no service kind was supplied, and there is no saved instance to read it from",
+			Action:  "Choose a supported service kind",
+		}, nil
 	}
 
-	client, err := g.newClient(si, apiKey)
+	switch kind {
+	case "kavita":
+		return g.testKavita(ctx, req, si, apiKey)
+	case "prowlarr":
+		// falls through to the *Arr path below
+	default:
+		return httpapi.TestResult{
+			Message: fmt.Sprintf("UsArr cannot talk to %q yet; v0.1 supports kavita and prowlarr", kind),
+			Action:  "Choose a supported service kind",
+		}, nil
+	}
+
+	client, err := g.newProwlarr(si, apiKey)
 	if err != nil {
 		return httpapi.TestResult{Message: err.Error(), Action: "Check the base URL"}, nil
 	}
@@ -309,6 +418,109 @@ func (g *registry) Test(ctx context.Context, req httpapi.TestRequest) (httpapi.T
 		result.Message = fmt.Sprintf("connected to %s %s (api %s)", status.AppName, status.Version, apiInfo.Current)
 	}
 	return result, nil
+}
+
+// testKavita is the connection test for a catalogue source.
+//
+// It answers three DIFFERENT questions in order, and keeping them apart is the
+// whole point — each has a different fix, and §17.3 requires the result to name
+// the ONE button that applies:
+//
+//  1. Is anything there? GET /api/Health is [AllowAnonymous] and returns the bare
+//     string Ok, so it separates "host down" from "host up, key wrong". It proves
+//     nothing else, including that the host is a Kavita.
+//  2. Is the Auth Key valid? GET /api/Library/libraries is [Authorize] with no
+//     admin policy, so it answers for ANY valid key and 401s for an invalid one.
+//     THIS IS THE CREDENTIAL PROOF, and it is why the test does not stop at (1).
+//  3. What version is it? GET /api/Server/server-info-slim is ADMIN-ONLY, so a
+//     valid non-admin key gets 403 here. That is NOT a failure: the test still
+//     passes, the version is reported as unknown, and the message says why —
+//     because telling a user to re-enter a working key is worse than not knowing
+//     a version.
+//
+// Note what is NOT called: GET /api/Plugin/version, the non-admin version
+// fallback, puts the Auth Key in the query string. A version number does not
+// justify writing a credential into every access log between here and there.
+func (g *registry) testKavita(ctx context.Context, req httpapi.TestRequest, si store.ServiceInstance, apiKey string) (httpapi.TestResult, error) {
+	client, err := g.newKavita(si, apiKey)
+	if err != nil {
+		return httpapi.TestResult{Message: err.Error(), Action: "Check the base URL"}, nil
+	}
+
+	if err := client.Health(ctx); err != nil {
+		return httpapi.TestResult{
+			Message: fmt.Sprintf("%s did not answer: %s", req.BaseURL, err.Error()),
+			Action:  "Check the base URL and that Kavita is running",
+		}, nil
+	}
+
+	libs, err := client.Libraries(ctx)
+	if err != nil {
+		return httpapi.TestResult{
+			Reachable: true,
+			Message:   err.Error(),
+			Action:    kavitaTestAction(err),
+		}, nil
+	}
+
+	// Past here the key is PROVEN: an invalid one cannot reach this line, because
+	// LibraryController refuses it with a 401 before the handler runs. Unlike an
+	// *Arr, Kavita has no "disabled for local addresses" mode that would let an
+	// unauthenticated request through, so there is no honesty caveat to attach.
+	result := httpapi.TestResult{
+		OK: true, Reachable: true, KeyProvenValid: true,
+		AppName: "Kavita",
+	}
+
+	info, err := client.ServerInfo(ctx)
+	switch {
+	case err == nil:
+		result.AppVersion = info.KavitaVersion
+		result.Message = fmt.Sprintf("connected to Kavita %s; %s visible to this account",
+			info.KavitaVersion, pluralLibraries(len(libs)))
+	case errors.Is(err, kavita.ErrForbidden):
+		// A valid NON-ADMIN Auth Key. Everything the sync needs works; only the
+		// version endpoint is out of reach. Say so exactly rather than failing.
+		result.Message = fmt.Sprintf(
+			"connected to Kavita; %s visible to this account. The version could not be read: "+
+				"server-info-slim is admin-only, so this Auth Key belongs to a non-admin account",
+			pluralLibraries(len(libs)))
+	default:
+		result.Message = fmt.Sprintf("connected to Kavita; %s visible to this account. "+
+			"The version could not be read: %s", pluralLibraries(len(libs)), err.Error())
+	}
+
+	if len(libs) == 0 {
+		// Reachable, credential proven, and nothing to sync. That is a real
+		// configuration problem and it must not read as success with no comment.
+		result.Message += ". This account can see NO libraries, so there is nothing for UsArr to replicate"
+		result.Action = "Grant this Kavita account access to a library"
+	}
+	return result, nil
+}
+
+func pluralLibraries(n int) string {
+	if n == 1 {
+		return "1 library"
+	}
+	return fmt.Sprintf("%d libraries", n)
+}
+
+// kavitaTestAction maps a Kavita failure onto the ONE button that fixes it.
+func kavitaTestAction(err error) string {
+	switch {
+	case errors.Is(err, kavita.ErrUnauthorized):
+		return "Update the Auth Key (Kavita → User Settings → Manage Auth Keys)"
+	case errors.Is(err, kavita.ErrForbidden):
+		return "Use an Auth Key whose account can see at least one library"
+	case errors.Is(err, kavita.ErrTimeout):
+		return "Check the base URL and that Kavita is running"
+	case errors.Is(err, kavita.ErrDecode):
+		// A 200 that is not the shape Kavita returns almost always means the URL
+		// points at something else — a reverse-proxy landing page, another app.
+		return "Check the base URL: that host answered, but not like a Kavita"
+	}
+	return "Test connection"
 }
 
 // testAction maps a failure onto the ONE button that fixes it (§17.3).
@@ -397,14 +609,17 @@ func (g *registry) probe(ctx context.Context, instanceID int64) {
 		g.recordProbe(ctx, instanceID, health, nil)
 		return
 	}
-	health.BreakerState = entry.client.Breaker().State().String()
-	health.BreakerRetryAt = entry.client.Breaker().RetryAt()
+	health.BreakerState, health.BreakerRetryAt = entry.breakerState()
 
-	status, err := entry.client.SystemStatus(ctx)
+	if entry.kavita != nil {
+		g.probeKavita(ctx, entry, health, now)
+		return
+	}
+
+	status, err := entry.prowlarr.SystemStatus(ctx)
 	if err != nil {
 		health.Error = err.Error()
-		health.BreakerState = entry.client.Breaker().State().String()
-		health.BreakerRetryAt = entry.client.Breaker().RetryAt()
+		health.BreakerState, health.BreakerRetryAt = entry.breakerState()
 		g.recordProbe(ctx, instanceID, health, nil)
 		return
 	}
@@ -412,7 +627,7 @@ func (g *registry) probe(ctx context.Context, instanceID int64) {
 
 	// The *Arr's own health warnings. A failure here is soft: a missing warning
 	// list must not turn a healthy instance into a red row.
-	if warnings, err := entry.client.Health(ctx); err != nil {
+	if warnings, err := entry.prowlarr.Health(ctx); err != nil {
 		g.log.Debug("upstream health warnings unavailable", "instance_id", instanceID, "err", err)
 	} else {
 		for _, wr := range warnings {
@@ -438,7 +653,7 @@ func (g *registry) probe(ctx context.Context, instanceID int64) {
 	// saying how old it is rather than claiming a refresh that did not happen.
 	// The names are reused below so the blocked list costs no second call.
 	names := map[int32]string{}
-	if ixs, err := entry.client.Indexers(ctx); err != nil {
+	if ixs, err := entry.prowlarr.Indexers(ctx); err != nil {
 		g.log.Debug("indexer list unavailable; the local catalogue keeps its last good copy",
 			"instance_id", instanceID, "err", err)
 	} else {
@@ -454,7 +669,7 @@ func (g *registry) probe(ctx context.Context, instanceID int64) {
 	// Blocked indexers. GET /api/v1/indexerstatus returns ONLY blocked ones, so
 	// an empty array means everything is healthy — that is not the same as the
 	// call having failed, and the two are reported differently.
-	if statuses, err := entry.client.IndexerStatus(ctx); err != nil {
+	if statuses, err := entry.prowlarr.IndexerStatus(ctx); err != nil {
 		g.log.Debug("indexerstatus unavailable", "instance_id", instanceID, "err", err)
 	} else if len(statuses) > 0 {
 		for _, st := range statuses {
@@ -467,8 +682,53 @@ func (g *registry) probe(ctx context.Context, instanceID int64) {
 		}
 	}
 
-	health.BreakerState = entry.client.Breaker().State().String()
-	health.BreakerRetryAt = entry.client.Breaker().RetryAt()
+	health.BreakerState, health.BreakerRetryAt = entry.breakerState()
+	g.recordProbe(ctx, instanceID, health, &now)
+}
+
+// probeKavita is the catalogue source's health probe.
+//
+// It is deliberately SMALLER than the *Arr one, and the difference is not an
+// omission: Kavita has no health-warnings endpoint and no indexer catalogue to
+// replicate, so there is nothing to project. What it does read is
+// GET /api/Library/libraries, for the same two reasons the connection test does —
+// it PROVES THE AUTH KEY still works (an expired one fails here and nowhere
+// else), and it is the container list §17.8's library binding is drawn from.
+//
+// The version read is a soft failure. server-info-slim is admin-only, so a valid
+// non-admin key gets a 403 that must leave the row HEALTHY with an unknown
+// version rather than painting a red row over a service that is working.
+func (g *registry) probeKavita(ctx context.Context, entry *registryEntry, health httpapi.UpstreamHealth, now time.Time) {
+	instanceID := entry.instance.ID
+
+	libs, err := entry.kavita.Libraries(ctx)
+	if err != nil {
+		health.Error = err.Error()
+		health.BreakerState, health.BreakerRetryAt = entry.breakerState()
+		g.recordProbe(ctx, instanceID, health, nil)
+		return
+	}
+
+	if info, err := entry.kavita.ServerInfo(ctx); err != nil {
+		g.log.Debug("kavita version unavailable (server-info-slim is admin-only)",
+			"instance_id", instanceID, "err", err)
+	} else {
+		health.AppVersion = info.KavitaVersion
+	}
+
+	if len(libs) == 0 {
+		// Reachable and authenticated, with nothing to replicate. Surfaced as a
+		// warning rather than swallowed: an empty catalogue that looks healthy is
+		// exactly the "empty screen that looks broken" CLAUDE.md's third principle
+		// refuses.
+		health.Warnings = append(health.Warnings, httpapi.UpstreamWarning{
+			Source:  "UsArr",
+			Type:    "warning",
+			Message: "this Kavita account can see no libraries, so there is nothing to replicate",
+		})
+	}
+
+	health.BreakerState, health.BreakerRetryAt = entry.breakerState()
 	g.recordProbe(ctx, instanceID, health, &now)
 }
 

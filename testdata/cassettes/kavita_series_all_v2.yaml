@@ -1,0 +1,190 @@
+---
+# SYNTHETIC — hand-authored from api/specs/kavita.json (develop @ 9c3e540,
+# SeriesDto) and Kavita.Server/Controllers/SeriesController.cs +
+# Kavita.Server/Extensions/HttpExtensions.cs at the same commit. NOT a wire
+# capture. Claimed Kavita version: 0.9.0.20.
+#
+# Two facts this fixture carries that the OpenAPI document does not:
+#
+#  1. THE Pagination RESPONSE HEADER. It is middleware
+#     (HttpExtensions.AddPaginationHeader serialises Kavita.Common.Helpers.
+#     PaginationHeader with a camelCase policy) and appears nowhere in the spec.
+#     The client reads it when present and never requires it.
+#  2. THE CLOCK CLUSTER. The three lastChapterAddedUtc values below sit within
+#     microseconds of each other at 07:00:30, which is what ADR-0035 §2a measured
+#     on the owner's live instance: Kavita's watermark moves on the SCAN JOB's
+#     clock, not on the moment each chapter appeared. It is the reason
+#     ARCHITECTURE.md §7.1a's overlap window is not optional, and it is
+#     reproduced here so a walk that resumes exactly at the watermark can be seen
+#     dropping siblings.
+#
+# The external ids are 0 / null / "" throughout. That is not laziness: they are
+# written only by the Kavita+ match path, so on a free instance degraded identity
+# is the ORDINARY case (ARCHITECTURE.md §6.4, ADR-0035 §1).
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            Content-Type:
+                - application/json
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/all-v2?context=1
+        method: POST
+        body: '{"id":0,"name":null,"statements":[],"combination":1,"sortOptions":{"sortField":4,"isAscending":false},"entityType":0,"limitTo":0}'
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+            Pagination:
+                - '{"currentPage":1,"itemsPerPage":2147483647,"totalItems":3,"totalPages":1}'
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            [
+              {
+                "id": 41,
+                "name": "Frieren: Beyond Journey's End",
+                "originalName": "葬送のフリーレン",
+                "localizedName": "Frieren",
+                "sortName": "Frieren Beyond Journey's End",
+                "pages": 3812,
+                "coverImageLocked": false,
+                "lastChapterAdded": "2026-08-17T03:00:30.118",
+                "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
+                "userRating": 0,
+                "hasUserRated": false,
+                "totalReads": 0,
+                "pagesRead": 0,
+                "latestReadDate": "0001-01-01T00:00:00",
+                "format": 1,
+                "created": "2026-02-11T18:22:04.771Z",
+                "sortNameLocked": false,
+                "localizedNameLocked": false,
+                "nameLocked": false,
+                "wordCount": 0,
+                "libraryId": 1,
+                "libraryName": "Manga",
+                "minHoursToRead": 4,
+                "maxHoursToRead": 9,
+                "avgHoursToRead": 6.5,
+                "folderPath": "/mnt/user/media/manga/Frieren",
+                "lowestFolderPath": "/mnt/user/media/manga/Frieren",
+                "lastFolderScanned": "2026-08-17T07:00:30.118Z",
+                "dontMatch": false,
+                "isBlacklisted": false,
+                "isStandAlone": false,
+                "coverImage": "series41",
+                "primaryColor": "#3d5a80",
+                "secondaryColor": "#98c1d9",
+                "aniListId": 0,
+                "malId": 0,
+                "hardcoverId": 0,
+                "metronId": 0,
+                "comicVineId": null,
+                "mangaBakaId": 0,
+                "mangaBakaEditionId": null,
+                "cbrId": 0
+              },
+              {
+                "id": 42,
+                "name": "Blame!",
+                "originalName": "BLAME!",
+                "localizedName": "",
+                "sortName": "Blame!",
+                "pages": 2100,
+                "coverImageLocked": false,
+                "lastChapterAdded": "2026-08-17T03:00:30.119",
+                "lastChapterAddedUtc": "2026-08-17T07:00:30.119Z",
+                "userRating": 0,
+                "hasUserRated": false,
+                "totalReads": 0,
+                "pagesRead": 0,
+                "latestReadDate": "0001-01-01T00:00:00",
+                "format": 1,
+                "created": "2026-03-01T09:14:52.003Z",
+                "sortNameLocked": false,
+                "localizedNameLocked": false,
+                "nameLocked": false,
+                "wordCount": 0,
+                "libraryId": 1,
+                "libraryName": "Manga",
+                "minHoursToRead": 3,
+                "maxHoursToRead": 6,
+                "avgHoursToRead": 4.5,
+                "folderPath": "/mnt/user/media/manga/Blame",
+                "lowestFolderPath": "/mnt/user/media/manga/Blame",
+                "lastFolderScanned": "2026-08-17T07:00:30.119Z",
+                "dontMatch": false,
+                "isBlacklisted": false,
+                "isStandAlone": false,
+                "coverImage": "series42",
+                "primaryColor": "#1b2430",
+                "secondaryColor": "#51557e",
+                "aniListId": 0,
+                "malId": 0,
+                "hardcoverId": 0,
+                "metronId": 0,
+                "comicVineId": null,
+                "mangaBakaId": 0,
+                "mangaBakaEditionId": null,
+                "cbrId": 0
+              },
+              {
+                "id": 77,
+                "name": "The Hobbit",
+                "originalName": "",
+                "localizedName": "",
+                "sortName": "Hobbit, The",
+                "pages": 310,
+                "coverImageLocked": false,
+                "lastChapterAdded": "2026-08-17T03:00:30.119",
+                "lastChapterAddedUtc": "2026-08-17T07:00:30.119Z",
+                "userRating": 0,
+                "hasUserRated": false,
+                "totalReads": 0,
+                "pagesRead": 0,
+                "latestReadDate": "0001-01-01T00:00:00",
+                "format": 3,
+                "created": "2026-01-04T11:02:19.442Z",
+                "sortNameLocked": true,
+                "localizedNameLocked": false,
+                "nameLocked": false,
+                "wordCount": 95022,
+                "libraryId": 2,
+                "libraryName": "Ebooks",
+                "minHoursToRead": 5,
+                "maxHoursToRead": 8,
+                "avgHoursToRead": 6.3,
+                "folderPath": "/mnt/user/media/books/Tolkien",
+                "lowestFolderPath": "/mnt/user/media/books/Tolkien/The Hobbit",
+                "lastFolderScanned": "2026-08-17T07:00:31.004Z",
+                "dontMatch": false,
+                "isBlacklisted": false,
+                "isStandAlone": true,
+                "coverImage": "series77",
+                "primaryColor": "#5c4327",
+                "secondaryColor": "#a68a64",
+                "aniListId": 0,
+                "malId": 0,
+                "hardcoverId": 0,
+                "metronId": 0,
+                "comicVineId": null,
+                "mangaBakaId": 0,
+                "mangaBakaEditionId": null,
+                "cbrId": 0
+              }
+            ]

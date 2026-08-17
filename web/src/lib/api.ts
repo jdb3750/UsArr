@@ -942,8 +942,16 @@ function toTestResult(value: unknown): ConnectionTestResult {
 	};
 }
 
-/** Every service kind v0.1 can talk to — `serviceKinds` in internal/httpapi/services.go. */
-export const SERVICE_KINDS = ['prowlarr'] as const;
+/**
+ * Every service kind v0.1 can talk to — `serviceKinds` in
+ * internal/httpapi/services.go, which is authoritative. Keep this list in step
+ * with it: a kind offered here and refused there is a picker that 400s.
+ *
+ * The ORDER is the picker's order, and `prowlarr` stays first because
+ * `SERVICE_KINDS[0]` is the add-form's default and Prowlarr is the one every
+ * install needs. `kavita` joins it as v0.1's catalogue source (ADR-0041).
+ */
+export const SERVICE_KINDS = ['prowlarr', 'kavita'] as const;
 
 const DEFAULT_PORTS: Record<string, string> = { 'http:': '80', 'https:': '443' };
 

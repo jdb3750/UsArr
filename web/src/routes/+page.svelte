@@ -618,13 +618,14 @@
 			<h2 class="empty__title">No services configured</h2>
 			<!--
 				Only Prowlarr is named, and that is a correctness call rather than
-				brevity. `internal/httpapi.serviceKinds` accepts exactly one kind, so
-				a sentence offering Sonarr, Radarr or a media server here would send
-				a brand-new user to a dialog that refuses all three. The mockup makes
-				the same call in its own comment for the same reason: naming a
-				service the install cannot read a library from is this screen
-				promising, on the very first thing a new user sees, something the
-				milestone does not ship.
+				brevity. `internal/httpapi.serviceKinds` accepts exactly two kinds —
+				`prowlarr` and `kavita` — so a sentence offering Sonarr, Radarr or a
+				media server here would send a brand-new user to a dialog that
+				refuses all three. Kavita is not named either, and that is the same
+				call applied honestly: a Kavita can be ADDED today and nothing
+				imports from it yet, so pointing the very first thing a new user
+				sees at a catalogue that stays empty would promise what the
+				milestone does not yet ship. Name it here when the sync lands.
 			-->
 			<p class="empty__text">
 				UsArr talks to the services you already run, and none of them is connected yet.

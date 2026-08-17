@@ -1,0 +1,43 @@
+---
+# SYNTHETIC — hand-authored from api/specs/kavita.json (develop @ 9c3e540) and
+# Kavita.Server/Controllers/ServerController.cs at the same commit. NOT a wire
+# capture. Claimed Kavita version: 0.9.0.20.
+#
+# There is no /api/Server/server-info. The endpoint is server-info-slim, and
+# ServerController carries [Authorize(PolicyGroups.AdminPolicy)] at class level,
+# so this shape is only reachable with an ADMIN Auth Key.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Server/server-info-slim
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            {
+              "installId": "5a4f2b1c-9e83-4d17-a6b0-2c7d1e4f8a90",
+              "isDocker": true,
+              "kavitaVersion": "0.9.0.20",
+              "firstInstallDate": "2025-11-02T19:41:07.512Z",
+              "firstInstallVersion": "0.8.6.2"
+            }

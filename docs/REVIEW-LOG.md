@@ -7077,3 +7077,225 @@ its only `readFileSync` targets past `SOURCES` are `prototype.html`, `tokens.css
 `ARCHITECTURE.md` — so every prose judgement in §NOCI-02.1 is carried by the reading and by the
 grep whose root is named above, not by an exit code. A green here says the mockups still render and
 the bans still hold; it says nothing about whether a sentence about CI is true.
+
+---
+
+# M5-33 — the Kavita client, built against the controller and not the schema, and the timestamp that made the whole series list undecodable
+
+**Date:** 2026-08-17. **Worktree:** `claude/hearth-thread-93bfq1`, reset from `origin/main` at
+`075db37`, then merged with `origin/main` at `556a029` before the gate. **This is the first
+implementation commit of [ADR-0041](./DECISIONS.md#adr-0041)** — the client only. No sync loop, no
+import, no schema writes, no migration. Channels 1, 3b and 4 are the commits after this one.
+
+`M5-33` is the next free id, checked with the standing method —
+`grep -on "M5-[0-9]\+" docs/REVIEW-LOG.md | sed 's/.*M5-//' | sort -n | tail -1` — which returned
+`31` before the merge and `32` after it, `M5-32` having landed on `main` in between.
+
+## M5.29 The finding this commit exists to record: the spec says `date-time`, and half of them are not
+
+**Every date-time field in Kavita's OpenAPI document is declared `format: date-time`. Go's
+`encoding/json` unmarshals a `time.Time` with `time.RFC3339` and nothing else. System.Text.Json
+serialises a .NET `DateTime` according to its `Kind`, and a `DateTime` whose `Kind` is `Unspecified`
+— which is what EF Core hands back for an ordinary `DATETIME` column — is written WITH NO ZONE AT
+ALL.**
+
+This was not reasoned out. It was **fired**: the first run of the series-list fixture failed with
+
+```
+StreamSeries: kavita SeriesList: POST /api/Series/all-v2 -> 200: decoding response:
+parsing time "2026-08-17T03:00:30.118" as "2006-01-02T15:04:05Z07:00": cannot parse "" as "Z07:00"
+```
+
+and because `encoding/json` aborts the whole document on one bad field, **that ONE property made the
+ENTIRE series list undecodable**. A client that had shipped with `time.Time` here would have failed
+100% of imports on 100% of instances, with an error naming a layout string rather than the cause.
+
+| | Finding | Disposition |
+|---|---|---|
+| **M5-33a** | **High. `SeriesDto.lastChapterAdded` is offset-less on the wire and cannot parse into `time.Time`.** The spec declares it `date-time`; `latestReadDate`'s .NET default `0001-01-01T00:00:00` is the same shape on every instance | **APPLIED.** New `Timestamp` type (`internal/kavita/timestamp.go`) accepting RFC 3339 **and** the offset-less .NET forms, on **every** date-time field of `SeriesDto`, `LibraryDto` and `ServerInfoSlimDto`. It exports **`HasZone()`**, because an offset-less value is a WALL CLOCK on the Kavita host and not an instant — smoothing that away is how a replica compares a UTC+2 value against a UTC watermark and decides a series changed six hours ago. `MarshalJSON` re-emits the **raw** wire string rather than re-rendering, so nothing manufactures a `Z` the value never carried. Fired by reinstating `time.Time` on one field: the test printed the error above, verbatim |
+| **M5-33b** | **This is `DEVELOPMENT.md` §5's rule in a new subsystem.** §5 and §7.2 record `GET /api/v3/episode` rejecting a parameterless call although the spec marks its parameters `required: false` — *"the constraint lives in the controller, not the schema"*. [ADR-0041](./DECISIONS.md#adr-0041) quotes that as its reason for distrusting a spec-derived design | **APPLIED as method.** Every behavioural fact this client is built on was read from Kavita's **controller source** at the pinned commit, not from the schema, and each is cited in the code beside the thing it justifies: `HealthController`'s class-level `[AllowAnonymous]`; `ServerController`'s class-level `[Authorize(PolicyGroups.AdminPolicy)]`; `GetAllSeriesV2`'s unconditional `seriesFilterDto.Statements.Add(stmt)`; `UserParams`' `int.MaxValue` PageSize default **and its coercion of an explicit `0` to the same**; and `HttpExtensions.AddPaginationHeader`, whose `Pagination` header is middleware and appears **nowhere** in the OpenAPI document |
+| **M5-33c** | ⚠️ **NOT VERIFIED, and stated as such rather than assumed away: WHICH fields carry a zone on a real Kavita.** This project's one live Kavita run ([ADR-0035](./DECISIONS.md#adr-0035) §2a) recorded ordering and ids, not raw timestamp bytes, so whether `lastChapterAddedUtc` — the field channel 3b's watermark is built on — arrives with a `Z` is **unknown** | **ACCEPTED as a bound.** `Timestamp` accepts both forms rather than guessing per field, and an unparseable value degrades to "no time here" while keeping the raw bytes instead of failing the read. That asymmetry with every other bound in the package is deliberate and documented: a byte bound FAILS because a truncated list is indistinguishable from a deletion, and one unreadable timestamp is one unusable field |
+
+## M5.30 What was vendored, and what a green contract test here is worth
+
+`api/specs/kavita.json`, 900763 bytes, `openapi: 3.0.4`, `info.version` **0.9.0.20**, 488 paths.
+`develop` @ `9c3e5400007f8a0282f7d883f2ad5e71716e514d`, SHA-256
+`3bd8363f0a4e847bf159127dbd9f9972725a5a0efb8d69831d2513ed3bab946d`. Provenance, the re-check
+commands and the skew warning are in `api/specs/SOURCES.md`, following that file's own recipe.
+
+- **It was verified against upstream rather than trusted.** A copy was supplied in scratch; the file
+  was re-downloaded from `raw.githubusercontent.com/Kareadita/Kavita/develop/openapi.json` and
+  `diff`ed — **byte-identical**, and the hash above is of the downloaded bytes.
+- ⚠️ **The skew is worse than the Prowlarr row's, and it is recorded, not smoothed.** The owner's
+  instance runs **stable v0.9.0.2**. Fetching the same file at tag `v0.9.0.2` gives `info.version`
+  **0.9.0.0** and **462 paths** — so the checked-in spec lags even its own release tag, and the
+  vendored develop copy is **26 paths ahead of the stable line**. A green contract test here is
+  evidence about `develop`, two steps from the server the owner actually runs.
+- ℹ️ **Kavita differs from every \*Arr in one useful way**: `openapi.json` is a checked-in file at
+  the repository root, not a debug-only endpoint, so the drift job for this spec needs no running
+  instance.
+- ✅ **One existing citation re-verified clean against the vendored bytes.** `ARCHITECTURE.md` §7.1a
+  and `RESEARCH.md` both claim `sortByLastModified` appears on exactly two Kavita operations and on
+  none of Series/Volume/Chapter. Across all 488 paths, exactly two operations carry a parameter
+  matching `since|modified|updated|changed`: `GET /api/Collection` and `POST /api/ReadingList/lists`,
+  both named `sortByLastModified`. The claim holds.
+- ⚠️ **Both of those documents call the file `kavita-openapi.json` and both say the claim was "read
+  from the vendored specs" — while no Kavita spec was in `api/specs/` until this commit.** The file
+  is named `kavita.json` to match the directory's own convention (`prowlarr.json`); the discrepancy
+  is recorded in `SOURCES.md` and here rather than by editing two documents this thread does not own.
+
+## M5.31 The outbound body: the same class of bug as the Prowlarr grab, with the polarity inverted
+
+`docs/reference/arr-apis.md` §7.1 — *"build it from a type that can only express what the endpoint
+reads"* — applies unchanged, and its **fix does not**.
+
+- **\*Arr enums are STRINGS.** Go's zero marshals as `""`, System.Text.Json rejects `""` as a member,
+  and the fix is `omitempty`.
+- **Kavita's enums are INTEGERS.** Go's zero marshals as `0`, which for `FilterCombination.Or` and
+  `FilterEntityType.Series` **is** the member UsArr wants. **`omitempty` here would be the bug**: it
+  drops a meaningful zero. For `SeriesSortField` (members 1–11) and `QueryContext` (members 1, 2, 4)
+  there is no zero member at all, so the fix is a constructor that cannot produce one.
+
+`TestEnumFieldsCannotMarshalAsEmpty` is ported to that polarity rather than copied: it looks up each
+enum's members **in the vendored spec**, permits `0` where `0` is a member, and where it is not,
+**calls the constructor and requires a refusal** — a real call, not a source grep, because a comment
+promising a guard and a guard are different things.
+
+🚩 **And Kavita adds a hazard the \*Arrs do not have.** `GetAllSeriesV2`'s **first act** is
+`seriesFilterDto.Statements.Add(stmt)`. A JSON `null` overwrites the C# initializer with null and
+that call nil-derefs into a **500** — and a nil Go slice marshals as exactly `null`. `SeriesFilter`
+therefore implements `MarshalJSON` to substitute `[]`, making the fatal value **unrepresentable**
+rather than merely unlikely, for every caller including one writing a struct literal by hand.
+
+## M5.32 Three gates unblocked, and none of them simply deleted
+
+`ADR-0041` needs a Kavita to be addable. Three places refused everything but Prowlarr. Each was
+**verified against the tree** first, and each was replaced by a narrower refusal rather than removed:
+
+1. **`internal/httpapi/services.go`'s `serviceKinds`** mapped `{"prowlarr": "indexer"}`. It now also
+   maps `{"kavita": "library"}`. **The role is a decision, recorded in the code:** Kavita is a
+   catalogue source — replicated FROM, never commanded — and filing it under `acquisition` would
+   promise a write path that does not exist ([ADR-0032](./DECISIONS.md#adr-0032)). Unknown kinds are
+   still 400, and `knownKinds()` now **sorts**, because it renders from a map and an error message
+   that reorders itself between two identical requests is one a user cannot report.
+2. **`cmd/usarr/services.go`'s `si.Role != "indexer"`** sat in `registry.entry()`, which is also the
+   path the **background health prober** takes. It moved to `registry.For()`, where searching is what
+   asks for an indexer. Left where it was, an added Kavita would have been accepted, stored, and then
+   reported permanently broken.
+3. **`cmd/usarr/services.go`'s `kind != "prowlarr"`** in `registry.Test()`. The connection test is
+   server-enforced and mandatory, so this is what made a Kavita unsaveable. It now dispatches on
+   kind, and an **empty** kind on a re-test is taken from the STORED ROW rather than defaulting to
+   prowlarr — harmless while there was one kind, a wrong-client bug with two.
+
+**The Kavita connection test answers three different questions, because each has a different fix.**
+`GET /api/Health` is `[AllowAnonymous]` and returns the bare string `Ok`, so it separates "host down"
+from "key wrong" and proves nothing else. `GET /api/Library/libraries` is `[Authorize]` with no admin
+policy, so it answers for any valid key and 401s for an invalid one — **that is the credential
+proof**. `GET /api/Server/server-info-slim` is **admin-only**, so a valid non-admin key gets a 403
+there: the test still **passes**, the version is reported unknown, and the message says why. Telling
+a user to re-enter a working key is the worst thing this screen could do, which is why this package
+has an `ErrForbidden` the \*Arr client does not need.
+
+`GET /api/Plugin/version` is deliberately **not** called by anything automatic: it takes the Auth Key
+in the **query string** because the controller offers no header path, and a version number does not
+justify writing a credential into every access log between here and there.
+
+## M5.33 Every new guard was fired
+
+Each was broken deliberately, the failure observed, and the break reverted. Verbatim output is in the
+commit message; what each one caught, in one line:
+
+| Guard | The break | What it printed |
+|---|---|---|
+| `TestOutboundBodiesAreSpecLegal`, `TestSeriesFilterNeverMarshalsNullStatements` | `MarshalJSON` stops substituting `[]` | *"sends statements=&lt;nil&gt; … null nil-derefs into a 500"* |
+| `TestEnumFieldsCannotMarshalAsEmpty` | `NewSeriesFilter` stops refusing a non-member | *"members are [1 2 … 11] — 0 is not one, so a zero value is a 400 on every call"* |
+| `TestQueryContextZeroIsNotSendable`, `TestSeriesListSendsTheVerifiedBody` | `resolve()` stops defaulting `Context` | *"context=\"0\"; a zeroed SeriesListOptions must send QueryContext.None (1), never 0"* |
+| the `Timestamp` guards | one field back to `time.Time` | the `cannot parse "" as "Z07:00"` failure quoted in M5.29 |
+| `TestStreamSeriesCutOnAnElementBoundaryStillFails` | closing bracket assumed, not read | *"returned (2, nil): the closing bracket must be read, not assumed"* |
+| both byte bounds | `limitedBody` → `io.LimitReader` | *"invalid character 'x'"* and *"stream ended mid-array after 6 elements"* — the two misdiagnoses the typed bound exists to prevent |
+| `TestBreakerIgnores4xxAndTripsOn5xx` | `recordStatus` trips on `>= 400` | *"after 5×403 the breaker is open, want closed"* |
+| `TestSeriesViewIsAnAllowlist` | `SeriesView` gains `folder_path` | *"leaked \"/mnt/user\" — folderPath is a HOST FILESYSTEM PATH"* |
+| `TestAuthKeyGoesInTheHeaderAndNeverTheQuery` + the e2e | the anonymous probe sends the key | *"it is the [AllowAnonymous] probe and must be answerable with no key"* |
+| `TestTransportErrorNeverCarriesTheURL` | `transportError` wraps verbatim | the full `?apiKey=…` URL, with the key in it |
+| `TestAPIKeyQueryIsNotGeneralAuth` | a second endpoint sends `?apiKey=` | *"client.go mentions \"apiKey\" 2 times"* |
+| `TestRecentlyUpdatedSeriesIsNotWired` | the endpoint is referenced | *"it is a 12-day window, not a delta feed"* |
+| `TestMaxStreamBytesTracksTheSSRFCeiling` | client cap dropped to 32 MB | *"33554432 … 209715200: … must be the same number"* |
+| `TestStructsCoverSpecProperties`, `TestAuthIsOneGlobalHeaderScheme` | drop a property; re-case the header | *"[mangaBakaEditionId]"*; *"this client sends \"X-Api-Key\""* |
+| `TestScrubInteraction`, `TestPluginVersionURLIsRedacted` | drop the scrub; rename the query param | both printed the Auth Key in a URL |
+| the three gates, one at a time | `kavita`→`indexer`; unsorted `knownKinds`; `Test()` re-refuses; role gate back in `entry()` | *"role = \"indexer\", want library"*; *"v0.1 supports: prowlarr, kavita"* unsorted; *"UsArr cannot talk to \"kavita\" yet"*; and — the one that only the **prober** reaches — *"state=down … \"Kavita\" is a library service; only indexer services can be searched today"* |
+
+ℹ️ **One guard did not fire on its first attempt, and that is recorded rather than quietly fixed.**
+Breaking gate (2) by putting the role check back into `registry.entry()` left every test green,
+because the connection test builds a **throwaway** client stack and never goes through `entry()` —
+only the background prober does. The e2e test was extended to wait for a real health row, and the
+break then printed the line above. A guard that cannot be made to fail is indistinguishable from no
+guard (`DEVELOPMENT.md` §11).
+
+## M5.34 The cassettes are synthetic, and the file says so
+
+`testdata/cassettes/kavita_*.yaml` were hand-authored from the vendored spec and the controller
+source. **A synthetic cassette proves this client's parsing, not the server's behaviour** — the
+convention `internal/servarr/vcr_test.go` set, kept verbatim. Each file's header comment names the
+version it claims (0.9.0.20) and says it is not a wire capture. ⚠️ **That is not free here as it is
+for the \*Arrs**: Kavita sends **no version response header** — `Kavita.Common/Constants/Headers.cs`
+declares `x-kavita-version`, but the only custom header `Startup.cs` puts on an `/api/*` response is
+`Pagination` — so a recorder has to write the version down by hand.
+
+**One thing this package's cassette harness had to do differently, and it is a security property.**
+`GET /api/Plugin/version` carries the credential IN THE URL, so the saved interaction's URL is
+scrubbed to `?apiKey=REDACTED` while a live request carries the real key. Matching on raw URLs would
+mean a cassette could only match **by storing the credential**. The matcher therefore redacts BOTH
+sides, which is a no-op for every URL that carries none.
+
+ℹ️ **`make secrets` fired on this work, unprompted, and was obeyed rather than waived.** The first
+fixture Auth Key was a realistic GUID and `gitleaks` flagged it (`generic-api-key`). `.gitleaks.toml`
+gives the rule for that case in its own words — *"make it obviously fake rather than extending this
+list"* — so the fixture became the repository's existing sequential-hex value, which the shared
+allowlist already covers. **No waiver was added.** The cost is recorded in the code: the fixture is
+deliberately not GUID-shaped although a real Auth Key is.
+
+## M5.35 Deliberate costs, stated rather than buried
+
+- **`internal/kavita/breaker.go` is a near-verbatim copy of `internal/servarr/breaker.go`.** Importing
+  the \*Arr package would put `servarr: circuit breaker open` inside a Kavita error, and that
+  package's `doc.go` declares it *"UsArr's single client for the \*Arr family"*. The seam is named in
+  the file: lift it into `internal/breaker` with an injected sentinel **the first time a THIRD client
+  needs one**. Two copies is cheaper than a package existing to serve two callers; three is not.
+  `TestBreakerDefaultsMatchTheArchitectureNumbers` pins the §7.5 tuning so the copies cannot drift on
+  the thing that matters.
+- **`MaxStreamBytes` is duplicated from `ssrf.MaxListBytes` rather than imported**, for the same
+  reason `internal/servarr` duplicates it — this package must not be able to reach around the
+  injected policy client. `TestMaxStreamBytesTracksTheSSRFCeiling` pins the two together.
+
+## M5.36 Raised, not fixed
+
+- **`ARCHITECTURE.md` §7.1a still closes with *"This channel is specified here but built with the
+  first catalogue adapter, not in v0.1"*, and its ⚠️ per-source note still reads *"No source in this
+  table ships in v0.1"*.** [M5-32](#m5-32) amended §16; §7.1a is the paragraph
+  [ADR-0041](./DECISIONS.md#adr-0041) also names as amended and it has not been edited. Not touched
+  here — this is an implementation commit and §7.1a belongs to the design thread. **The pointer, not
+  a fresher claim.**
+- **`docs/reference/arr-apis.md` §7.1's rule now has a second dialect.** Its worked example is the
+  \*Arr string-enum one; Kavita's integer-enum inversion and the `Statements.Add` null hazard are
+  documented in `internal/kavita/resources.go` and here, and that file may want a cross-reference.
+- **Nothing reads a Kavita library yet.** `StreamSeries` exists and no caller imports from it; the
+  Home screen's `library` mode became reachable (a `library`-role instance can now exist) and still
+  renders one honest sentence and no catalogue, which is what is true of it. **Status is read off the
+  tree** — `web/src/routes`, `internal/`, `internal/db/migrations` — not off this entry.
+- **`web/src/lib/api.ts`'s `SERVICE_KINDS` gained `kavita`** so the wizard can offer it, and three
+  stale comments asserting *"exactly one kind"* were corrected. The first-run empty state still names
+  only Prowlarr, deliberately: a Kavita can be **added** today and nothing imports from it, so
+  pointing a brand-new user at a catalogue that stays empty would promise what the milestone does not
+  yet ship.
+
+### On the gate for M5-33
+
+`make check` was run on this tree and is green — command, absolute tool paths, versions, SHA and the
+verbatim tail are in the commit message, per the standing M5-01…M5-11 gate note. **The green IS
+load-bearing here**, unlike M5-31's and M5-32's: this diff is a new Go package, a vendored spec, two
+gate files, five web files and eight cassettes, so `lint-go`, `test`, `vuln`, `svelte-check` and
+`secrets` all have something real to say about it. What it does **not** attest is the only thing that
+matters most: **no byte of this has touched a real Kavita.** The evidence behind it is the vendored
+spec, the controller source at the pinned commit, and one live run
+([ADR-0035](./DECISIONS.md#adr-0035) §2a) that measured ordering and ids on Kavita **0.9.0.2** — two
+steps from the `develop` line vendored here.

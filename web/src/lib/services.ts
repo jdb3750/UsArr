@@ -213,10 +213,11 @@ function pausedDetail(failures: number, retryAt: string | undefined, now: Date):
 /**
  * The application's own name, capitalised, for a sentence about it.
  *
- * SERVICE_KINDS is one entry today. The map is a lookup rather than a
- * capitalise() because `audiobookshelf` is `Audiobookshelf` and `lazylibrarian`
- * is `LazyLibrarian`, and a rule derived from the first three would be wrong on
- * the fourth.
+ * The map is a lookup rather than a capitalise() because `audiobookshelf` is
+ * `Audiobookshelf` and `lazylibrarian` is `LazyLibrarian`, and a rule derived
+ * from the first three would be wrong on the fourth. It deliberately covers more
+ * kinds than SERVICE_KINDS accepts, so a row written by a later build renders
+ * with a name rather than a slug.
  */
 const APPLICATION_NAMES: Record<string, string> = {
 	prowlarr: 'Prowlarr',

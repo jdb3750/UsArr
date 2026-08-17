@@ -1,0 +1,91 @@
+---
+# SYNTHETIC — hand-authored from api/specs/kavita.json (develop @ 9c3e540,
+# LibraryDto) and Kavita.Server/Controllers/LibraryController.cs at the same
+# commit. NOT a wire capture. Claimed Kavita version: 0.9.0.20.
+#
+# GET /api/Library/libraries is the CREDENTIAL HANDSHAKE. LibraryController is
+# [Authorize] at class level and this action carries no admin policy, so it
+# answers for any valid Auth Key and 401s for an invalid one — which is what
+# ServerInfo cannot do for a non-admin.
+#
+# The two libraries here are the shape ADR-0041 puts in v0.1: an Ebooks library
+# and a Comics/manga one, which §17.8 binds a user-defined UsArr library to.
+# folders[] is a HOST FILESYSTEM PATH and is why LibraryView exists.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Library/libraries
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            [
+              {
+                "id": 1,
+                "name": "Manga",
+                "type": 0,
+                "lastScanned": "2026-08-17T07:00:30.118Z",
+                "coverImage": "",
+                "folderWatching": true,
+                "includeInDashboard": true,
+                "includeInRecommended": true,
+                "manageCollections": true,
+                "manageReadingLists": true,
+                "includeInSearch": true,
+                "allowScrobbling": false,
+                "folders": ["/mnt/user/media/manga"],
+                "collapseSeriesRelationships": false,
+                "libraryFileTypes": [1],
+                "excludePatterns": [],
+                "allowMetadataMatching": false,
+                "enableMetadata": true,
+                "removePrefixForSortName": false,
+                "inheritWebLinksFromFirstChapter": false,
+                "defaultLanguage": "en",
+                "metadataProvider": 0
+              },
+              {
+                "id": 2,
+                "name": "Ebooks",
+                "type": 2,
+                "lastScanned": "2026-08-17T07:00:31.004Z",
+                "coverImage": "",
+                "folderWatching": true,
+                "includeInDashboard": true,
+                "includeInRecommended": false,
+                "manageCollections": false,
+                "manageReadingLists": false,
+                "includeInSearch": true,
+                "allowScrobbling": false,
+                "folders": ["/mnt/user/media/books"],
+                "collapseSeriesRelationships": false,
+                "libraryFileTypes": [3],
+                "excludePatterns": [],
+                "allowMetadataMatching": false,
+                "enableMetadata": true,
+                "removePrefixForSortName": true,
+                "inheritWebLinksFromFirstChapter": false,
+                "defaultLanguage": "en",
+                "metadataProvider": 0
+              }
+            ]

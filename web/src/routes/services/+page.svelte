@@ -1315,9 +1315,11 @@
 					{/each}
 				</select>
 				<span class="field__help">
-					Which application this is. v0.1 binds Prowlarr, which uses
-					<span class="mono">/api/v1</span>. The API version does not track the application version,
-					and it is probed rather than assumed.
+					Which application this is. v0.1 binds <span class="mono">prowlarr</span>, which uses
+					<span class="mono">/api/v1</span> — the API version does not track the application
+					version, and it is probed rather than assumed — and
+					<span class="mono">kavita</span>, whose paths carry no version segment at all and whose
+					credential is an Auth Key from User Settings → Manage Auth Keys.
 				</span>
 			</div>
 

@@ -1,0 +1,62 @@
+---
+# SYNTHETIC — hand-authored. NOT a wire capture. Claimed Kavita version: 0.9.0.20.
+#
+# THE DEGRADED CASE, and it is deliberate: a paged read whose response carries NO
+# Pagination header. The header is middleware and is not in the OpenAPI document,
+# so a reverse proxy that strips unknown headers — or an upstream that stops
+# sending it — must leave the read succeeding with the total reported as UNKNOWN,
+# never as zero. SeriesPage.Pagination is nil here and Count is still right.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            Content-Type:
+                - application/json
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/all-v2?PageNumber=1&PageSize=1&context=1
+        method: POST
+        body: '{"id":0,"name":null,"statements":[],"combination":1,"sortOptions":{"sortField":4,"isAscending":false},"entityType":0,"limitTo":0}'
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            [
+              {
+                "id": 41,
+                "name": "Frieren: Beyond Journey's End",
+                "sortName": "Frieren Beyond Journey's End",
+                "pages": 3812,
+                "lastChapterAdded": "2026-08-17T03:00:30.118",
+                "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
+                "format": 1,
+                "created": "2026-02-11T18:22:04.771Z",
+                "libraryId": 1,
+                "libraryName": "Manga",
+                "folderPath": "/mnt/user/media/manga/Frieren",
+                "coverImage": "series41",
+                "primaryColor": "#3d5a80",
+                "secondaryColor": "#98c1d9",
+                "aniListId": 0,
+                "malId": 0,
+                "comicVineId": null,
+                "mangaBakaEditionId": null,
+                "cbrId": 0
+              }
+            ]

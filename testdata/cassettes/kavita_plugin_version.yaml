@@ -1,0 +1,41 @@
+---
+# SYNTHETIC — hand-authored from Kavita.Server/Controllers/PluginController.cs
+# (develop @ 9c3e540). NOT a wire capture. Claimed Kavita version: 0.9.0.20.
+#
+# 🚩 THE AUTH KEY IS IN THE URL, and the recorded URL below shows it REDACTED —
+# by the scrubbing hook, not by hand. GetVersion takes `[Required] string apiKey`
+# from the query and looks the user up by it; there is no header path. That is
+# why nothing calls PluginVersion automatically and why every error path in this
+# client reconstructs rather than wraps.
+#
+# The action is [AllowAnonymous] but is NOT unauthenticated: it throws
+# KavitaUnauthenticatedUserException when the key resolves to no user. The
+# response is a bare JSON string.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Plugin/version?apiKey=REDACTED
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: '"0.9.0.20"'
