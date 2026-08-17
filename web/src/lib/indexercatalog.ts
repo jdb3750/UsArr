@@ -141,15 +141,24 @@ export interface IndexerCatalog {
  * rename with a documented contract rather than a filter, and it exists so the
  * page never has to remember that `catalog.instances` is already role-scoped.
  *
- * ⚠️ ORDER IS THE CATALOGUE'S, WHICH IS `name ASC` (`store/indexers.go`'s
- * ReadIndexerCatalog) — and that is NOT the order `resolveIndexerInstance`
- * picks its own default from, which is `ListServiceInstances`' priority-then-
- * name. Measured on two services named "Prowlarr Private" (priority 20) and
- * "Prowlarr Public" (priority 10): the catalogue lists Private first, the
- * search path would have defaulted to Public.
+ * ORDER IS THE CATALOGUE'S, AND IT IS THE SEARCH PATH'S TOO. Both read the one
+ * `listServiceInstances` statement — `ORDER BY priority DESC, name ASC`, in
+ * `store/serviceinstance.go`, the only ORDER BY over `service_instance` in the
+ * tree — `ReadIndexerCatalog` through the shared body, `resolveIndexerInstance`
+ * through the exported wrapper. The `name ASC` in `store/indexers.go` is
+ * `indexerListSQL`, which orders indexers INSIDE one instance; this comment
+ * once read it as the instance order and drew the wrong divergence from it.
+ * (`service_instance.priority` is highest-wins, the opposite of the per-indexer
+ * priority in `PRIORITY_NOTE`, which is what made that misreading easy.)
+ *
+ * ⚠️ WHAT DIVERGES IS MEMBERSHIP, NOT SORT. The catalogue keeps a DISABLED
+ * service as a row, deliberately — see above. `resolveIndexerInstance` drops
+ * disabled instances from its candidates. So `instances[0]` still is not
+ * necessarily what an un-parameterised search hits: when the top row is turned
+ * off, the search falls to the next enabled one down.
  *
  * Which is exactly why the client names the instance instead of leaning on
- * either order. Anything here that pre-selects a radio is a CLIENT default the
+ * position. Anything here that pre-selects a radio is a CLIENT default the
  * screen then states in words; it is not a prediction of what an
  * un-parameterised search would have hit, and writing it as one would be the
  * same silent-agreement assumption that produced the bug.
