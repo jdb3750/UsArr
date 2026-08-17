@@ -67,7 +67,22 @@ var timestampFields = map[string]bool{
 const (
 	placeholderSearchID = "SEARCH_ID"
 	placeholderTime     = "2026-08-16T00:00:00Z"
+	// placeholderDurationMS must not be 0. duration_ms is `omitempty` on an
+	// int64 (search.go), so 0 is the one value the wire can never carry:
+	// recording it would pin a value that no later run can reproduce, and
+	// covers() — which requires every recorded key to still be PRESENT — would
+	// then fail with "field is gone from the wire" on any run whose legs
+	// finished inside a millisecond. Any non-zero placeholder is fine, because
+	// duration_ms is volatile and only its presence is compared.
+	placeholderDurationMS = 1
 )
+
+// searchLegDelay is held by the Prowlarr double on every search leg, so
+// duration_ms is deterministically non-zero and therefore deterministically ON
+// the wire. Without it the field rounds to 0, omitempty drops it, and the
+// recording cannot pin its spelling at all — the SPA reads value.duration_ms
+// (web/src/lib/api.ts) against nothing.
+const searchLegDelay = 2 * time.Millisecond
 
 type recordedFrame struct {
 	Name string          `json:"name"`
@@ -93,6 +108,7 @@ func TestSSEFramesMatchTheClientContract(t *testing.T) {
 	// One blocked indexer, so the run produces the degraded report the client has
 	// to be able to render — an all-green run would never exercise it.
 	prowlarr.blockIndexer(2)
+	prowlarr.slowSearches(searchLegDelay)
 
 	stream := env.openStream(t)
 	defer stream.close()
@@ -167,6 +183,16 @@ func TestSSEFramesMatchTheClientContract(t *testing.T) {
 		if !anyResultHasField(t, live, field) {
 			t.Errorf("no release on the stream carries %q; web/src/lib/api.ts reads it", field)
 		}
+	}
+
+	// duration_ms is `omitempty`, so it is on the wire only when a leg took a
+	// whole millisecond — which is why slowSearches is set above. Asserting it
+	// by name here is what stops a future regeneration from quietly dropping the
+	// field back out of the recording and leaving its spelling unobserved: a
+	// fixture that does not carry it cannot fail when it is renamed.
+	if !anyIndexerOutcomeHasField(t, live, "duration_ms") {
+		t.Errorf("no indexer outcome on the stream carries %q even though the Prowlarr double "+
+			"was made to take %s per leg; web/src/lib/api.ts reads it", "duration_ms", searchLegDelay)
 	}
 }
 
@@ -273,6 +299,25 @@ func anyResultHasField(t *testing.T, frames []recordedFrame, field string) bool 
 	return false
 }
 
+// anyIndexerOutcomeHasField reports whether any search.indexer frame's outcome
+// object carries the named key.
+func anyIndexerOutcomeHasField(t *testing.T, frames []recordedFrame, field string) bool {
+	t.Helper()
+	for _, f := range frames {
+		if f.Name != httpapi.EventSearchIndexer {
+			continue
+		}
+		var payload struct {
+			Indexer map[string]any `json:"indexer"`
+		}
+		mustUnmarshal(t, string(f.Data), &payload)
+		if _, ok := payload.Indexer[field]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 func readSSEFixture(t *testing.T) []recordedFrame {
 	t.Helper()
 	blob, err := os.ReadFile(sseFixturePath)
@@ -326,7 +371,7 @@ func stabilise(v any) any {
 			case k == "search_id":
 				out[k] = placeholderSearchID
 			case k == "duration_ms":
-				out[k] = 0
+				out[k] = placeholderDurationMS
 			case timestampFields[k]:
 				out[k] = placeholderTime
 			default:

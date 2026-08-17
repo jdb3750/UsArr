@@ -17,7 +17,7 @@
 				"count": 0,
 				"indexer_id": 2,
 				"name": "Broken Tracker",
-				"reason": "Prowlarr has this indexer blocked until 2026-08-16T08:37:53Z",
+				"reason": "Prowlarr has this indexer blocked until 2026-08-17T02:46:36Z",
 				"status": "blocked"
 			},
 			"phase": "indexer_done",
@@ -97,6 +97,7 @@
 			"indexer": {
 				"answered": true,
 				"count": 1,
+				"duration_ms": 1,
 				"indexer_id": 1,
 				"name": "Working Tracker",
 				"status": "ok"
@@ -120,7 +121,7 @@
 						"count": 0,
 						"indexer_id": 2,
 						"name": "Broken Tracker",
-						"reason": "Prowlarr has this indexer blocked until 2026-08-16T08:37:53Z",
+						"reason": "Prowlarr has this indexer blocked until 2026-08-17T02:46:36Z",
 						"status": "blocked"
 					},
 					{
@@ -134,6 +135,7 @@
 					{
 						"answered": true,
 						"count": 1,
+						"duration_ms": 1,
 						"indexer_id": 1,
 						"name": "Working Tracker",
 						"status": "ok"
