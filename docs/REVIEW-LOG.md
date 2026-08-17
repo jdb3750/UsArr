@@ -12389,3 +12389,160 @@ the **answerable** half, sourced from §16 exactly as `WIRE-03` argues — and, 
 the same two-part shape from opposite directions is the strongest available evidence that the split
 is the requirement's real structure rather than this pass's preference, and it is the reason the
 clause was split rather than either lowered or left standing whole.
+# VN9-06 — Search promised six media types on an install that can hold two
+
+**Date:** 2026-08-17. **Prefix:** `VN9-`, continuing from
+[`VN9-05`](#vn9-05--13s-colour-ban-named-four-families-and-css-names-them-seven-so-orchid-plum-and-magenta-walked-through),
+which is the highest `VN9-` **entry** on `main`. ⚠️ `VN9-03`'s VN9.19 names two *commits* as
+"VN9-06, VN9-07"; those were held off `main` and are commit labels rather than entry ids, so this
+entry takes `VN9-06` under the "never renumber, never reuse" rule as the next free entry id. Flagged
+rather than silently resolved.
+
+## VN9.23 The brief located the defect in §17 and the defect is not in §17
+
+The string was hunted before it was rewritten, and it is worth recording that the search moved it:
+
+- A word-bounded grep for `every film, episode, album` across `*.svelte`, `*.md`, `*.html`, `*.go`
+  and `*.py`, excluding `node_modules/`, `web/build/` and `web/.svelte-kit/`, returns **exactly one
+  source hit**: `web/src/routes/search/+page.svelte:75`. The three other hits are build output of
+  that same file.
+- **`docs/ARCHITECTURE.md` §17 does not contain it.** All 57 of §17's italic-quoted shipping-copy
+  spans were extracted and read; none enumerates media types as a claim about what is present. The
+  nearest neighbours are `*"Radarr is connected and reports 0 films"*` (§17.8) and
+  `*"TV — catalogue source, request destination"*`, which are a service's own report and a per-kind
+  gloss, not a promise about the catalogue.
+
+So the copy defect was fixed where the copy lives, in the SPA, and §17 gained the **rule** that
+forbids it, which is the half this thread owns and the half that stops it recurring.
+
+## VN9.24 What the tree says a v0.1 install can hold, which is what makes the copy false
+
+Read off the tree rather than off a document, per CLAUDE.md. Roots searched:
+`internal/db/migrations/`, `internal/`, `cmd/usarr/`, `web/src/routes/` and §16/§16.1.
+
+- **One catalogue source.** `internal/libsync/doc.go` opens *"UsArr's catalogue sync core — channel
+  1, the full import — with Kavita as its first adapter (ADR-0041)"*, and the adapter directory holds
+  `kavita.go` and no sibling. `cmd/usarr/import.go` refuses anything else at runtime, in words:
+  `"%q has kind %q; v0.1 imports a catalogue from kavita and from nothing else (ADR-0041)"`.
+  ⚠️ **Sharper than "one source", and added after a concurrent read-only pass reported it:** that
+  import has **one trigger**, `bootstrapImport` on a first successful connect to a Kavita, with no
+  timer and no HTTP route behind it (`cmd/usarr/import.go`'s own doc comment: *"TWO TRIGGERS"*, the
+  second being an in-process call). So a v0.1 install has a catalogue only for what a connected
+  Kavita supplies, **and only after that connect has succeeded once**. The new copy is unaffected
+  because it makes no claim about *when* the library exists: it claims only what the services
+  supply. Recorded because the next author to reword this screen will be tempted to.
+- **That source produces two `work.kind` values.** `internal/libsync/kavita.go`'s `kindDecision`
+  returns `Kind: "comic"` (three branches, including manga, which is `reading_direction` and not a
+  kind per ADR-0030) and `Kind: "book"` (two branches). There is no third.
+- **Nothing else carries a catalogue.** `internal/servarr/doc.go` states *"Only Prowlarr is
+  implemented"*, and §16.1 confirms Prowlarr's v0.1 role is Search-and-Grab, which is an indexer
+  path over releases rather than a library. §16.1 also confirms Sonarr and Radarr re-sequenced **out**
+  of v0.1 (ADR-0041) and into v0.2 (ADR-0045), and that Navidrome, Audiobookshelf and Komga are all
+  after v0.1.
+- **The six navigation types are still six**, and correctly so: §17.2's table derives them from
+  `work.kind` plus `edition.format`, and migration `00006_kavita_subtypes.sql` keeps audiobook as an
+  `edition` format rather than a kind. Six is the enum's size; it is not a claim that six are filled.
+
+The measurement in the brief matches: on the built SPA against a healthy Kavita and a healthy
+Prowlarr, rows appear under two of the six types. **`comic` and `book` are exactly the two the
+adapter can write**, so the observation and the source agree, and the copy named five types of which
+four could not exist.
+
+## VN9.25 The rewrite, and the two things it deliberately does not say
+
+**Before** (`web/src/routes/search/+page.svelte:75`, verbatim):
+
+> This screen searches what UsArr has replicated locally — every film, episode, album, book and
+> comic your services already own — and renders it from SQLite, so it never waits on an \*Arr.
+> That local index exists now, and the recently-added table on Home is read straight out of it.
+> What is missing is the query over it: nothing in UsArr answers a search against your own
+> catalogue yet, so an input here would return nothing for reasons that are UsArr's rather than
+> yours.
+
+**After**, verbatim:
+
+> This screen searches the library UsArr has replicated from your services. It covers what those
+> services supply and nothing else, and it renders from SQLite, so it never waits on one of
+> them. That local index exists now, and the recently-added table on Home is read straight out
+> of it. What is missing is the query over it: nothing in UsArr answers a search against your
+> own catalogue yet, so an input here would return nothing for reasons that are UsArr's rather
+> than yours.
+
+**No shorter list was substituted**, and that was the tempting fix. Naming *books and comics* would
+be true today and false the day Navidrome lands (§16.1 slot 1), and false in the other direction on
+a Prowlarr-only install where it names two types nothing supplies. The failure is enumeration, not
+arity, so the claim is relocated onto *your services* and the type set is left to the install.
+
+**It does not distinguish zero rows from no source.** Nothing in the schema or on the wire separates
+*no rows matched* from *no source can supply this type* — the catalogue adapters report no per-type
+capability, and `work.kind` is silent about which kinds an instance could ever produce. So a sentence
+like *"no comics source configured"* would be an assertion the product cannot make. It is recorded
+as a seam in §17.4 rule 7 and built by nothing here.
+
+Two incidental corrections came with the rewrite, both inside the sentence being replaced: the two
+em dashes go (§13 bans them in UI microcopy, and an empty state is named in that ban), and *"never
+waits on an \*Arr"* becomes *"never waits on one of them"*, because the service v0.1 actually reads
+is Kavita and the replica principle is about upstreams generally.
+
+## VN9.26 §17.4 gains rule 7, which is the durable half
+
+`docs/ARCHITECTURE.md` §17.4 now carries a seventh rule: Search's copy never enumerates media types;
+the corpus it names is *your services*; a shorter list is the same defect; rule 1's silence for an
+unsupplied type is correct and may not be explained, on the ground that the distinction is not
+representable today. The retired string is quoted there **in backticks rather than in the
+italic-quoted form**, because that form is what `check.mjs` reads as shipping copy and a retired
+string is not shipping copy.
+
+## VN9.27 The gate was fired deliberately, and it attests less than it looks like it does
+
+`make design` on the finished tree, verbatim tail:
+
+```
+ok    §13 copy: 6978 user-visible strings clean of banned words, "!" and short-string em dashes (floor 6750 over both installs; 24 short em-dash string(s) exempt because ARCHITECTURE §17 fixes their wording verbatim; 0 bare "—" string(s) read as a glyph rather than prose, a structural exemption no sentence can hide in)
+ok    §13 copy §17: 58 shipping-copy string(s) in ARCHITECTURE §17 clean of banned words, "!" and em dashes at ANY length (the fifteen-word floor is not applied to specified UI copy; 4 recorded exception(s) and 0 bare "—" glyph(s), the exception(s) all §17's existing wording of the head-and-detail construction §1.4 prescribes — whose beat is a colon since 2026-08-17, so these are carried, not blessed; §17 cannot exempt itself here, which is the point)
+ok    §13 copy corpus: 58 ARCHITECTURE §17 copy string(s) read (floor 45), a source the rendered walk cannot see
+
+all design checks pass
+```
+
+Exit **0**; the §17 corpus went **57 → 58**, which is the new span being counted.
+
+**The §17 corpus was shown to read the new string rather than assumed to.** `seamlessly` was planted
+inside it and the gate was re-run:
+
+```
+FAIL  §13 copy: 1 violation(s) in user-visible text
+      ARCHITECTURE §17: banned word "seamlessly" in "This screen seamlessly searches the library UsArr has replicated from "
+FAIL  §13 copy §17: 1 violation(s) in ARCHITECTURE §17's own shipping copy, out of 58 string(s) read
+```
+
+Exit **2**, and the failure names this entry's own sentence. The plant was then removed.
+
+⚠️ **What the green does NOT attest.** `check.mjs`'s `SOURCES` is `docs/design/tokens.css`, the four
+`docs/design/mockups/` assets and the mockup HTML files. **`web/src/` is not in any corpus**, so the
+SPA string this entry actually fixed **did not go through the gate at all**. What went through is the
+§17 rule's italic-quoted wording. The two are the same sentence today by hand, not by a check, and
+nothing in the repo would notice if they diverged tomorrow. Stated rather than implied, because a
+green that is read as covering the file it does not read is worse than no green.
+
+## VN9.28 What this pass did NOT do, including two real findings left standing
+
+* **No mockup change**, because the same string is in none of them. `docs/design/mockups/search.html`
+  states its scope as `No library-bearing service is connected.` and the top-bar placeholder is
+  `Search your library` — both already free of enumeration. `prototype.html` was therefore not
+  regenerated; `build_prototype.py` was not run and did not need to be.
+* ⚠️ **The mockups' v0.1 install is stale, and it is left alone.** The design gate prints it:
+  `install: the switcher offers exactly the two installs the sweeps run — full "Full stack: a later
+  milestone", v01 "v0.1: Sonarr, Radarr, Prowlarr"`. That predates ADR-0041, and it is why
+  `search.html`'s v01 variant reads `Dune: Prophecy season 1, 6 episodes, all held.` — episodes, on
+  an install that can hold none. This is a real finding and a **large** one: it is the whole v01
+  dataset across five screens, plus the README's *"What each install is for"* argument, not a string.
+  Recorded here for whoever owns that pass; it is not the defect this entry was sent for and
+  rewriting it inside this one would have been the "and also" CLAUDE.md warns about.
+* ⚠️ **`web/src/routes/search/+page.svelte:59` still carries an em dash in microcopy** — the
+  `pagehead__meta` line *"Not built yet — below is what it is waiting on"*. §13 bans it there. Left
+  untouched: it is outside the sentence this brief names, and it is one character that the owner of
+  the SPA copy should take with the rest of that screen's sweep.
+* **No copy that explains an absence** was written, anywhere. See VN9.25.
+* **No `check.mjs` or `DESIGN-DIRECTION.md` change.** Both were being edited concurrently by another
+  agent; neither was touched, staged or reverted here.
