@@ -4468,3 +4468,47 @@ Three items: the `43 px` in `web/src/lib/format.ts` is the mockups' `months` (`S
 *"Home's `Items` is 107.375px"* in `web/src/app.css` is a mockup measurement of a block that file's
 own `+page.svelte` declares `NOT DRAWN`; and if the app takes the `Age` split, its reserve sits in a
 **44px** content box with **1px** of slack, not the design tree's 13px.
+
+---
+
+## SD-01 — `DESIGN-DIRECTION.md` restated a fact it is not authoritative for. **Applied.**
+
+**Found.** The header of `docs/design/DESIGN-DIRECTION.md` read *"**Status:** design document,
+pre-alpha. **None of this design is implemented.** A `web/` directory now exists and carries a
+SvelteKit shell — sign-in, a search page and a scaffold `/services` route whose own header says to
+delete it when §17.3 lands — but it implements none of the system below: not the tokens, not the
+density model, not the component set, not the state sets. Treat every value here as still ahead of
+the code."* Every clause of that was false on the tree it sat on: `web/src/app.css` is ~2,556 lines
+of ported tokens and components, `web/src/routes/services/+page.svelte`'s header is a §17.3
+implementation rather than a delete-me note, and `web/src/routes/` carries `libraries`, `requests`
+and `settings` besides. **This is the second correction of this line's class**, which is the finding
+— the first correction replaced a wrong status with a right one and bought roughly a day.
+
+**The rule, and it is the point rather than the edit.** *A document that is not authoritative for a
+fact should not restate it — it should name the document that is.* A restated fact has no mechanism
+holding it in step with the original; it is correct only until the original moves, and nothing
+signals when that happens. `ARCHITECTURE.md` §16 owns milestone status and the tree owns what exists
+today, so the design document's job is to point at them, not to mirror them. **Applied as wording
+that asserts no status at all** rather than as a hedged or dated one, because a carefully hedged
+status claim decays on the same schedule as a careless one. The header now opens *"Where
+implementation status lives — not here, deliberately"* and routes the reader to §16 and to the code;
+the "upstream of the UI" framing and the §17-wins rule below it are unchanged.
+
+**Swept the rest of the file for the same shape, two more applied.** Both in §7.4, both about the
+list bench: *"it is not on `main` and does not yet complete a full run (a 25,000-row Chromium
+out-of-memory)"* and *"`bench:list` currently exits non-zero on a full run because of a 25,000-row
+Chromium out-of-memory, so the OOM is fixed first"*. `pnpm bench:list` is on `main`
+(`web/scripts/list-bench.mjs`, `web/package.json`), the OOM is handled as a named ceiling with
+`recyclePage`, and the 2% drift gate the passage called *"once it lands"* is section **2b** of that
+script. The design content — why `check.mjs` cannot host the assertion, the 2% budget, and the
+fix→assert→enforce sequencing — is kept verbatim in substance; only the dated status is gone, with
+`bench:list` and ADR-0029 named as the authorities for their own state. Two headings lost a status
+clause with them: *"the fact that it is not enforced today"* → *"the one place it cannot be"*, and
+*"Threshold, once it lands"* → *"Threshold"*.
+
+⏭️ **Reported, not applied.** §11's contrast rule still says *"as of §9.7 **no such pair ships**, so
+the assertion currently has nothing to run over"*. It is the same shape, but the surrounding
+prescription (a runtime WCAG solver over `dominant_color`) is itself superseded by §9.7 moving the
+title off the fill — `docs/design/mockups/prototype.html` records `constrainDominant` as deleted —
+so rewriting the status sentence alone would tidy a passage whose design content needs a decision
+first. That is a design change, out of scope for a status sweep.
