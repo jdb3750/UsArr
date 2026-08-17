@@ -9686,3 +9686,189 @@ What it still does not attest: that the mappings match a real Kavita (LS.8), tha
 progress frames (LS-05 — it does not), or that any prose in this entry is true. The prose was
 established by reading `00005_library_sync.sql`, `api/specs/kavita.json`, `internal/kavita/stream.go`
 and §17.8 directly, and by `go tool cover` for the coverage numbers in LS.4.
+---
+
+# VN9-02 — the stack question answered off the tree, `--bg-hover` traced to its literals, and the em-dash rule's laundering channel closed
+
+**Date:** 2026-08-17. **Branch:** `claude/hearth-thread-vn9w7u`, off `origin/main` at `d8130d2`
+(this thread's own [`VN9-01`](#vn9-01--the-entry-id-convention-17s-five-remaining-restatements-and-the-request-destination-column-decided)).
+**One commit:** `7df1f76` (the copy rule). ⚠️ **Two of the three items end in a report rather than an
+edit, deliberately** — both are decisions the brief reserved, and this entry is the record of what
+was established for them, not of anything applied.
+
+## VN9.9 The stack question: neither predicted case holds, and the tree says why
+
+The brief set two cases and asked which. **Neither.** ADR-0025 *has* been superseded, and it *was*
+recorded — an **amendment dated 2026-08-16 sits in the ADR body**, above the Context, headed
+*"⚠️ Amendment, 2026-08-16 — Tailwind is not used, and the enforcement it was chosen for is gone
+with it"*. It states: *"There is no `@tailwindcss/vite`, no `@theme`, no utility class anywhere in
+`web/`"*, owner-confirmed with the quoted words *"if custom css is what it wants that's probably
+fine; I only suggested tailwind for speed"*. It replaces decision points **1** and **5**, leaves
+**2** (Bits UI), **3** (Tabler) and **4** (IBM Plex) standing, and the index row at the top of
+`DECISIONS.md` already carries it. **No later ADR supersedes it.**
+
+**Verified independently of the ADR, because an amendment is a claim too.** `web/package.json` lists
+no Tailwind package in `devDependencies`; `grep -i tailwind web/pnpm-lock.yaml` returns nothing; the
+only match under `web/src` is `web/src/lib/tokenparity.test.ts`, which mentions Tailwind in the
+*reason string* of the very exemption at issue. `web/src/app.css` says so in its own voice —
+*"THIS FILE IS A HAND-PORT OF tokens.css, NOT AN IMPORT"*.
+
+**So the third thing is this: the decision was amended and the token file was not.** `tokens.css`
+is stale against its own governing ADR, in three places, and they are one finding rather than three
+loose ends:
+
+| Site in `tokens.css` | What it still says |
+| --- | --- |
+| §0, *"How this file is consumed"* | Instructs `@import "tailwindcss"` and `@theme { --*: initial; }` in `web/src/app.css`, and calls that line *"load-bearing (ADR-0025)"* |
+| §5 | `--spacing: 4px;` — *"Tailwind's base unit: p-3 == 12px, gap-2 == 8px"* |
+| §10, *"Tailwind v4 mapping"* | An `@theme inline` block of 34 re-exports |
+
+⚠️ **This is not the "vestigial, delete it" conclusion, and the difference matters.** The frontend
+thread's parity work read `--spacing` as a cut candidate. What the tree actually shows is a **file
+describing a consumption path that a recorded decision retired** — so the change is a documentation
+correction to §0 with a pointer to the amendment, and only then a question about §5 and §10.
+✅ **Nothing was deleted and no ADR was touched**, per the brief. **Routing note:** ADR-0025 needs no
+amendment; it is already correct. `tokens.css` is what is behind.
+
+ℹ️ **One thing worth keeping in view before §10 is cut.** The amendment's own "What is gained" list
+leads with *"The token layer is unchanged, because it never depended on Tailwind … it was consumed
+through `@theme inline` and is now consumed directly"*, and calls that the seam being used for what
+it was left for. `CLAUDE.md`'s *"Build the base with intentional space for what comes later"* cuts
+both ways on a 34-line block that costs nothing and documents the seam.
+
+## VN9.10 `--bg-hover`: a real colour divergence, not a naming one
+
+Traced to literals in every theme block of both files. **They differ, in both themes.**
+
+| | light | dark (`[data-theme='dark']` and `prefers-color-scheme: dark`) |
+| --- | --- | --- |
+| `tokens.css` `--bg-hover: var(--n-1)` | `#f2f0ec` | `#1e1d1a` |
+| `app.css` `--bg-hover: var(--hover)` | `#eceae5` | `#26241f` |
+
+`app.css` declares `--hover` in all three of its state blocks (`:root`, `:root[data-theme='dark']`,
+and the `prefers-color-scheme` block), at the same pair each time, so the divergence is uniform
+rather than theme-specific. **`tokens.css` has no `--hover` at all**; the token exists only in
+`app.css`.
+
+⚠️ **But neither file is wrong about the design, and that is the finding.** `tokens.css` §4 carries a
+note that names both roles, gives these exact values — *"`--hover` `#eceae5` light / `#26241f` dark —
+a row/control hover fill DISTINCT from `--bg-selected`"* — explains the problem with its own mapping
+(*"§4 currently maps hover and raised to the same `--n-1` … which leaves hover-over-a-selected-row
+with nothing to say"*), and then **explicitly defers**: *"that is a decision for the pass that writes
+`web/src/app.css`, not for a mockup"*, adding in capitals that whether it has been taken *"IS NOT A
+FACT THIS FILE OWNS"*. `app.css` §1 answers it by name — *"This is the pass that writes
+`web/src/app.css`, which is the pass tokens.css names as the one that decides — so both are adopted
+here, at tokens.css's own stated values."*
+
+**So it is a decision that was taken correctly and never propagated back.** The divergence is the
+gap between a deferral and its answer, which is why the parity test could pin both values honestly
+and why its recorded reason ends *"RETIRED BY: the same adoption that retires `--hover`."*
+
+**Which token would be canonical, asked and not acted on**, per the brief. `--hover`, and
+`tokens.css` §4 should read `--bg-hover: var(--hover)` with `--hover` promoted into the ramp section
+as an interstitial beside `--inset`. Two reasons, both from the files rather than from taste: the
+values are already **tokens.css's own**, quoted in its §4 note, so nothing is invented by adopting
+them; and the mapping being replaced is one `tokens.css` **itself argues against in writing**.
+⚠️ **Not applied — three tokens (`--hover`, `--inset`, `--bg-inset`) and the §4 note move together,
+and the brief reserved this.**
+
+## VN9.11 The copy rule: the hole was the corpus, and the floor reads backwards
+
+⚠️ **The brief's diagnosis inverts the code, and the correction is load-bearing rather than
+pedantic.** The rule is `t.includes('—') && t.split(/\s+/).length < 15` — **`< 15` is what fires.**
+It does not exempt short strings; it *confines the rule to them*, which is §13's stated position that
+*"the em dash is fine in prose and banned in UI microcopy"*. Removing the floor wholesale would fire
+on every legitimate paragraph, so the brief's caution was right even though its reading was not.
+
+**What was actually broken is the order of operations.** A UI label is authored in §17 and copied
+into a mockup afterwards, and §17 was in `check.mjs` **only as the source of an exemption**:
+`exempt()` blesses a short em-dash string when §17 contains its two-words-either-side window. So
+writing the em dash into §17 *first* made every mockup copy of it exempt **because §17 said so** — a
+**laundering channel**, and a §17-originated em dash could not be caught by construction. `VN9.8`
+records the instance from the other side.
+
+**Two changes, and the second exists because the first was tested rather than trusted.**
+
+1. **§17's shipping copy is now a corpus of its own** — the `*"…"*` spans, **56** today — running
+   through the same `checkCopy` with the §17 exemption **withheld**, because a string cannot be its
+   own authority. `exempt()` is untouched: with the source gated, it can only propagate copy that has
+   already been through the rule.
+2. ✅ **That alone was not sufficient, and planting it is how that was found rather than argued.**
+   The drafted sentence `VN9.8` quotes runs to **twenty-four words**. Restored verbatim into §17, the
+   corpus fix passed it with **exit 0**. So the floor is **narrowed to the corpus it was meant for
+   and nowhere widened**: it is a proxy for *"is this a UI string"*, worth having only where a corpus
+   mixes microcopy with prose, and every `*"…"*` span in §17 is a specified UI string by
+   construction. §13 grounds the floor on *"a sentence long enough to need one is already too long
+   for a button, a tooltip, a toast or an empty state"* — a claim about the **element**, not the
+   count. The rendered walk keeps it exactly as it was.
+
+**Six §17 strings are recorded individually, each with a reason and what retires it.** Four are the
+head-and-detail error form §13 prescribes and then writes as the copy to imitate
+(*"Sonarr unreachable — connection refused at 10.0.0.4:8989"*), which no word count can distinguish
+from prose: `Kavita is unreachable — showing cached data…`, `Grab failed — HTTP 502`, and the
+`TV — catalogue source…` / `Music — catalogue source…` pair. Matched after `norm()`, so a rewrite
+loses the exemption and a change of emphasis does not — the same property `exempt()` has.
+
+## VN9.12 Raised, not fixed — two §17 copy questions the narrowing surfaced
+
+Dropping the floor for §17 surfaced two strings over fifteen words that were invisible to this rule
+under **any** corpus. ⚠️ **Both are recorded as open questions, not blessings**, and neither is
+asserted to be correct. They are carried visibly rather than rewritten because **§17 shipping copy is
+the owner's to word, and a checker does not edit the specification it checks** — the same ownership
+line `f9b038f` worked under.
+
+1. **§17.5** — *"1 more film is on a linked row in the **Ebooks** group: Dune (2021). — [Show it]"*.
+   The em dash separates the sentence from a `[Show it]` affordance, so it may be §17 **notation for
+   two adjacent elements** rather than one string a user reads. If it is notation, the span should not
+   be quoted as copy at all.
+2. **§17.8** — *"Editing any proposal marks that library user-managed, after which a later connect
+   can only offer to add sources — never reshape it"*. **The likelier real finding.** A twenty-two-word
+   UI sentence with a mid-sentence em-dash beat is the construction §13 bans on its own stated ground,
+   and no word floor was ever going to catch it.
+
+## VN9.13 On the gate
+
+**`make design` was run six times**, `/opt/node22/bin/node`, target `docs/design/check.mjs`, all on
+this tree: a **baseline before any edit (exit 0, 132 s)**; after the corpus fix (exit 0, 131 s); a
+**planted short label** (exit 2); after gating the `ok` line so the §17 sweep cannot print *"clean"*
+beside its own failure (exit 2, re-fired); the **real twenty-four-word sentence under the corpus fix
+alone (exit 0 — the residue that forced change 2)**; and the same sentence after the narrowing
+(**exit 2**). The final tree closes on `all design checks pass`, **exit 0, 127 s**.
+
+✅ **Fired deliberately, and the message is quoted rather than summarised.** The planted label
+`*"Accept 4 proposals — 2 need review"*` produces:
+
+```
+FAIL  §13 copy: 1 violation(s) in user-visible text
+      ARCHITECTURE §17: em dash in specified UI copy — "Accept 4 proposals — 2 need review"
+FAIL  §13 copy §17: 1 violation(s) in ARCHITECTURE §17's own shipping copy, out of 56 string(s) read
+```
+
+**The counts were measured on both sides, because a widened rule that moves them is inspecting
+something else.** Rendered corpus **6,978 before and 6,978 after**; rendered exemptions **24 before
+and 24 after** — the rendered rule inspects exactly what it did. The new source is **56 §17 strings
+against a floor of 45**, with **6** recorded exceptions. §17 is counted apart from `strings` on
+purpose: `STRING_FLOOR`'s margin is **derived** — 6978 − 6750 = 228, argued against a 293-string
+regression — and folding documentation strings into that total would move the number the derivation
+is about while claiming the derivation still held.
+
+⚠️ **What `make design` is and is not evidence for, per item.** For **VN9.11** it is direct evidence:
+the rule changed, and both its pass and its deliberate failure were observed on this tree. For
+**VN9.9** and **VN9.10** it is a **regression check only** — neither item changed a file, and the
+check reads `ARCHITECTURE.md` §17 and the mockups, not `tokens.css` §0/§5/§10 or `app.css`. It says
+nothing about the stack finding or the hover trace; those were established by reading
+`DECISIONS.md`, `package.json`, `pnpm-lock.yaml`, `tokens.css` and `app.css` directly, and the
+citations are above.
+
+⚠️ **`make design` does not cover `web/` at all**, which bears on VN9.10: it runs against
+`docs/design/mockups/prototype.html`, so the `--bg-hover` divergence is outside everything it
+inspects. The check that *does* hold those two files together is `web/src/lib/tokenparity.test.ts`,
+inside `make check`.
+
+✅ **`make check`: exit 0, 80 s**, closing on `check: OK`, **417** frontend tests passed,
+`govulncheck` **v1.7.0 asserted against the pin** reporting *"No vulnerabilities found"*, `pnpm audit`
+*"No known vulnerabilities found"*. ⚠️ **Its scope over this diff is narrow:** the one commit touches
+two files under `docs/design/`, no Go and no `web/`, so every language gate reads files it does not
+touch. **What the green attests is that the parity test still passes** — which matters here, because
+VN9.10 deliberately left `--bg-hover` alone and a green parity run is the evidence that the recorded
+exception still matches both pinned values.
