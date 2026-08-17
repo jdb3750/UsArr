@@ -442,21 +442,31 @@ lazy loading as the best-performing pattern. Three consequences, all normative:
    reads a custom property — measured on desktop x86 Chromium against the real markup at **153 ms
    at 1,000 rows, 1,199 ms at 5,000 and 6,508 ms at 25,000** for density, and **1,356–4,514 ms at
    25,000** for theme. Both are top-bar controls present on every screen, both are pure-local
-   no-data interactions, and both are therefore **Tier 0 by the design's own definition, whose hard
-   fail is 100 ms** (`design/DESIGN-DIRECTION.md` §7.2). So the required line measures, at 1k / 5k /
+   no-data interactions, and both are therefore governed by **the design's *Controls* budget — target
+   < 100 ms, hard fail at 400 ms** (`design/DESIGN-DIRECTION.md` §7.2). ⚠️ **This read *"Tier 0 by
+   the design's own definition, whose hard fail is 100 ms"*, and §7.2 carried no such definition
+   until it was given one.** Tier 0 is scoped to reads out of local SQLite, and a control that
+   fetches nothing is not a read; the claim is replaced rather than re-pointed, because the citation
+   was never the broken part. So the required line measures, at 1k / 5k /
    25k rows, in both themes and at all three densities, on the §13 reference hardware:
    **(a)** density-toggle wall clock, **(b)** theme-toggle wall clock, **(c)** filter and sort
    wall clock, **(d)** scroll frame time, and **(e)** scrollbar drift as
    `|scrollHeight after a full scroll − scrollHeight at load| / scrollHeight`, which must stay
    under 2%. Frame time alone cannot detect (e), and none of (a)–(c) is visible from a scroll test.
 
-   🔍 **The honest DOM-row ceiling is in the hundreds, not the tens of thousands — inference, with
-   the extrapolation shown.** The measured desktop cost is 0.15–0.26 ms per row for a density
-   change. A Pi 5 is conservatively 3–5× slower at style recalculation and layout, which puts the
-   100 ms Tier-0 hard fail at roughly **100–300 rows in the DOM** as the markup stands, or **300–600**
-   with `table-layout: fixed` and a working containment path. **That number, not the scroll
-   threshold, is what the benchmark exists to settle**, and the earlier text's implied 25,000-row
-   ceiling was reading the wrong operation.
+   🔍 **The honest DOM-row ceiling is in the high hundreds to low thousands, not the tens of
+   thousands — inference, with the extrapolation shown.** The measured desktop cost is 0.15–0.26 ms
+   per row for a density change. A Pi 5 is conservatively 3–5× slower at style recalculation and
+   layout, which puts the **400 ms** *Controls* hard fail at roughly **400–1,200 rows in the DOM** as
+   the markup stands, or **1,200–2,400** with `table-layout: fixed` and a working containment path.
+   ℹ️ **Those are this paragraph's previous 100–300 and 300–600 multiplied by four, and that is the
+   entire derivation** — the ceiling is a budget divided by a per-row cost, so it is linear in the
+   budget, and moving the budget from 100 ms to 400 ms moves the ceiling by exactly 4×. Nothing was
+   re-measured, and no per-row figure changed. **That number, not the scroll threshold, is what the
+   benchmark exists to settle**, and the earlier text's implied 25,000-row ceiling was reading the
+   wrong operation. ⚠️ **ADR-0029's amendments carry the current arithmetic**, including a measured
+   cost for the shipped 200-row page; this paragraph is the shape of the reasoning, not the operative
+   number.
 4. ✅ **`contain-intrinsic-size` has measured values now, and the previously prescribed one was
    wrong three ways.** The browser uses it as the placeholder height for skipped elements; when it is
    wrong the scrollbar drifts as content scrolls in, which reads as *slowness*. The earlier

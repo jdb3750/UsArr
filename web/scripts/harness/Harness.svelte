@@ -3,12 +3,33 @@
 	 * The measurement harness's only screen: one List of fabricated release
 	 * rows, at whatever row count the driver asks for.
 	 *
-	 * The column set is deliberately the Search-and-Grab release table's, since
-	 * that is the widest list v0.1 ships and the one ADR-0029's row-height
-	 * finding was measured against.
+	 * The column set MODELS the Search-and-Grab release table — the widest list
+	 * v0.1 ships, and the one ADR-0029's row-height finding was measured against
+	 * — but it is NOT a copy of it, and the gap is written down here rather than
+	 * left for the next reader to find in a number.
+	 *
+	 * ⚠️ SEVEN COLUMNS WHERE THE TABLE IS NOW ELEVEN. `routes/requests` has since
+	 * gained Protocol, Category and Grabs, and gives Age / Size / Peers MEASURED
+	 * px tracks (68 / 88 / 112) where this carries 9ch / 9ch / 8ch. That matters
+	 * for exactly one thing and not for the rest: a row's height is set by its
+	 * TALLEST cell, and the bimodality this harness measures — 44px×1308 and
+	 * 48px×692 at compact — is the FLAGS cell wrapping its chips, not the
+	 * controls and not any text cell, every one of which is `trunc`/nowrap and
+	 * cannot grow. So the intrinsic figures published from here are the right
+	 * statistic for a chip-and-controls row, and they are NOT an instrument for
+	 * the 112px Peers track, which the real table widened from 88px precisely
+	 * because `Not applicable` wrapped there. Matching these tracks would move
+	 * width out of the `fr` pool and shift where the chips wrap — i.e. it would
+	 * move the published mean, for a case this harness still could not render.
+	 * Stated, therefore, rather than papered over.
 	 */
 	import List from '../../src/lib/List.svelte';
 	import { NOTHING, capChips, type ListColumn } from '../../src/lib/list';
+	// The APP'S OWN formatters, never a local copy: Size and Age are the two
+	// cells whose text the product derives rather than receives, and a harness
+	// that spelled them itself would be measuring its own spelling. `formatSize`
+	// (not `sizeParts`) is what the release table renders today.
+	import { formatAge, formatSize } from '../../src/lib/format';
 	import { harness, type Release } from './state.svelte';
 
 	const columns: ListColumn[] = [
@@ -38,11 +59,11 @@
 			case 'indexer':
 				return row.indexer;
 			case 'size':
-				return row.size;
+				return formatSize(row.sizeBytes);
 			case 'peers':
 				return String(row.seeders);
 			case 'age':
-				return row.age;
+				return formatAge(row.ageDays);
 			case 'flags':
 				return row.flags[0] ?? NOTHING.empty;
 			default:
@@ -79,12 +100,12 @@
 			{:else if column.id === 'indexer'}
 				<span class="trunc" title={row.indexer}>{row.indexer}</span>
 			{:else if column.id === 'size'}
-				{row.size}
+				{formatSize(row.sizeBytes)}
 			{:else if column.id === 'peers'}
 				<span>{row.seeders} / {row.leechers}</span>
 				<span class="sr">{row.seeders} seeders, {row.leechers} leechers</span>
 			{:else if column.id === 'age'}
-				{row.age}
+				{formatAge(row.ageDays)}
 			{:else if column.id === 'flags'}
 				{#if row.flags.length === 0}
 					{NOTHING.empty}

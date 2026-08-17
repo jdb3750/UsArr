@@ -4556,6 +4556,35 @@ superseded *"as of §9.7 no such pair ships"*
 is quoted twice above for the same reason and is not a live citation — that sentence no longer
 exists in the tree.
 
+✅ **Promoted to `CLAUDE.md`, and the change of address is the resolution rather than any change of
+wording.** The rule above was stated correctly and went on being broken by people who had read it,
+which is exactly the pattern `MEAS-01` names: *"when a correctly-worded rule is broken repeatedly by
+people who have read it, the next edit to try is a change of address, not a change of emphasis"* —
+and that entry cites this one as the argument it is generalising. 🚩 **This entry's own address was
+the defect it describes.** It sits deep in this log, under the heading *"The two deferred columns,
+decided"*, which is not a place any agent reaches before writing a sentence: the authority existed
+and nothing routed anyone to it, so `SD-01` was being failed by the file that states it. Joe
+approved the wording, and it landed in `CLAUDE.md`'s **Working practice** section at **`32177db`**,
+*"docs: the status rule moves to the file every agent reads first"*, as:
+
+> **Status is read off the tree, not off a document.** No document owns what is built —
+> `web/src/routes`, `internal/` and `internal/db/migrations` do. When you find a status claim that
+> has gone stale, do not write a fresher one; write the pointer.
+
+📎 **Placed directly after *"No invented status"*, chosen rather than defaulted to.** That rule is
+the special case — *never document a feature as existing when it does not* — and this is its general
+form, so the two read as one rule and its scope instead of as a third statement of the same idea in
+a third voice. It also resolves the one apparent conflict on the spot: the paragraph it follows
+names `ARCHITECTURE.md` §16 as authoritative, and §16 owns *which milestone a thing belongs to*,
+which is not a claim that the thing exists. `CLAUDE.md`'s own status summary, rewritten at
+**`0b8637c`** to route to `web/src/routes`, `internal/` and `internal/db/migrations`, is this rule
+applied to that file itself, and is now a worked instance of a stated rule rather than an
+unexplained habit. ℹ️ **Nothing above is reworded, including the heading**, which still reads
+**Applied** and not *promoted*: this is a pure append, per *"nothing above is renumbered, reworded
+or deleted"*. **The rule still lives here as well**, because this log holds its evidence — the
+nineteen non-false rows under `SD-02` and the `SD-02r` row that came due; what changed is that
+`CLAUDE.md` no longer depends on anyone reaching them.
+
 ---
 
 ## SD-01a — the notice was unguarded, not pinned, and the guard gains the properties it was missing. **Applied.**
@@ -5020,3 +5049,578 @@ so neither is remaining, and the eighteen-still-open figure above is unaffected.
 number of sites **inventoried** — 24 (21 tabled + 3 closed during compilation) becomes **26**. ℹ️
 The heading's *"three that closed while it was being written"* also stands as worded: these two
 closed **after** it was written, which is the distinction that clause draws.
+
+---
+
+# One animation frame was not enough: a density-invalidation fix that measured as no fix
+
+**Date:** 2026-08-17. **Branch:** `claude/hearth-thread-d247f2-revlog`. **Prefix `DI-` has not been
+used before.** Records what implementing `design/DESIGN-DIRECTION.md` §7.4's invalidation rule
+actually cost, on the tree merged as `1869f05` (`dff20fd`). **Follows `SW-22`**, which reported the
+stale remembered size and wrote §7.4's rule; this is the implementation side of it. **`DI-02` is the
+one worth reading** — `DI-01` is the bug, `DI-02` is the shape it shares with two others on this same
+feature. Every table and per-sample figure is in
+[`web/scripts/measurements/2026-08-17-density-invalidation.md`](../web/scripts/measurements/2026-08-17-density-invalidation.md)
+and is **not** restated here.
+
+| # | Finding | Resolution |
+|---|---|---|
+| **DI-01** | 🚩 **A single-`requestAnimationFrame` version of the fix measured as NO FIX AT ALL: 14.59% scrollbar error, against the 14.57% of doing nothing.** The mechanism is scheduling rather than CSS. A rAF callback scheduled *inside an event handler* runs in **that same frame's** rendering steps, **before** style and layout, so the single rAF took the `content-visibility: visible` class back off before the frame that was supposed to record the new sizes ever rendered. ⚠️ **Forcing a synchronous layout first is not a substitute, and that is the non-obvious half**: it gives correct **geometry** immediately — `document.scrollHeight` read **271,870 px** right after it, which is ground truth — but it does not reliably make the browser **record** that geometry as the row's last remembered size against `contain-intrinsic-size: auto`. Three frames later the same document read **232,198 px**. Only a completed rendering opportunity does the recording | **Shipped holding the class for TWO frames**, which guarantees one such opportunity: **0.00%** error at every size measured. The second frame is nearly free — the rows laid out in the first and the layout is cached, so it costs a style pass rather than a relayout. Written down where it can be re-broken: `web/src/lib/List.svelte` carries the ⚠️ **TWO FRAMES, NOT ONE** comment with these two numbers in it, and `web/src/app.css` carries the mechanism at `.tbl--remeasure`. §5 of the measurement record is the long form |
+| **DI-02** | 🚩 **THIS IS THE PROJECT'S RECURRING FAILURE SHAPE — a mitigation that silently does nothing while looking performed — AND IT IS THE THIRD INSTANCE ON ONE FEATURE.** The single-rAF version compiled, ran, threw nothing and reported success; **nothing distinguished it from the working fix except measuring the scrollbar error against the do-nothing baseline.** Its two siblings, both on this same density toggle: `content-visibility: auto` was **inert on `<tr>`** while reading back as applied (`P-04`, reproduced as a deliberate control in `SW-23`), and `web/scripts/list-bench.mjs:926` asserts against a hard-coded `const PAGE_SIZE = 200` while its failure message names *"`LOAD_MORE_PAGE_SIZE` in src/lib/list.ts is too large"* — so it reads as a guard on that constant and would not follow it if it moved | **Recorded as a class rather than as three incidents, because the defence is one thing and it is not code review.** A mitigation of a *measured* defect is not done until it has been **measured against the un-mitigated baseline**; a green that only shows the mitigation ran shows nothing. All three of these passed reading. ℹ️ The hard-coded 200 is **real on `main`, fixed but held**: `f32b283` (`claude/hearth-thread-d247f2-bench`) imports it, **fired not assumed** — at 137 the gate reports *"= 137 rows"*. Held off `main` while the design thread replaces the threshold it derives from |
+| **DI-03** | **It surfaced as the implementer's own measurement disagreeing with itself**, not as a failing test: the per-row sections showed a working fix while the document-level drift section showed none | **Resolved by instrumenting rather than by re-running, and saying so is the point of this row.** A contradiction between two sections of one measurement is **evidence, not noise**, and a re-run is the response that destroys it. Both sections were correct, about different things, and only reading `scrollHeight` synchronously **and** three frames later separated them |
+| **DI-04** | **The un-invalidated error is 7.53% at 100 rows — already 3.8× over §7.4's 2% budget at the smallest page size under discussion.** Recorded because the natural reading of `SW-22`'s 14.57%-at-5,000-rows is that this is a large-list problem that a smaller page size would dodge | **It is not, and no smaller `LOAD_MORE_PAGE_SIZE` could have avoided it.** The error does rise with page size — **7.53 / 8.70 / 10.18 / 11.07%** at 100 / 120 / 160 / 200 rows — but it is over budget before the curve starts, and with the fix it is **0.00% at all four**. §6 of the measurement record carries the cost curve that goes with it |
+
+**Gates, and exactly what they cover.** This entry is **markdown only** — one added entry in
+`docs/REVIEW-LOG.md`, nothing else in the diff — so `make check`, `pnpm bench:list` and
+`docs/design/check.mjs` were **not** run, and nothing above is claimed on their authority.
+`pnpm exec prettier --check .` (prettier 3.9.6, private install) was run from `web/` and is green,
+but ⚠️ **it covers nothing in this diff, and that was checked rather than assumed**: prettier's root
+here is `web/`, so `make fmt-check`'s `pnpm format:check` never reaches `docs/` — and pointing
+prettier at `docs/REVIEW-LOG.md` explicitly reports style issues **on the unmodified `e15cd6a` copy
+too**, so this file has never been formatter-gated and this entry does not change that. **Every
+figure quoted above is taken from the measurement record and from the code comments at `1869f05`;
+none of it was re-measured here.**
+
+---
+
+## LAT-01 — three documents extended a budget that its owner never defined. **Applied.**
+
+**Found.** `DESIGN-DIRECTION.md` §7.4, ADR-0029 and `ARCHITECTURE.md` §4.5 each argued that the
+density and theme toggles are *"pure-local no-data interactions"* and concluded that they are
+therefore **"Tier 0 by §7.2's own definition, whose hard fail is 100 ms."** §7.2 contains four
+latency tiers **keyed to where the data lives**, and its Tier 0 reads, verbatim: *"the data is in
+local SQLite. Nearly every read."* Its stated diagnostic for a breach is *"a query-plan bug"*
+belonging in the `EXPLAIN QUERY PLAN` assertions.
+
+**The density toggle is not a read and touches no data.** It has no query plan to be a bug in, so
+the tier's own diagnostic is meaningless for it — which is the tell that the category was never
+there. **The budget was extended to controls by the three documents that wanted a budget, not by the
+document that owns latency tiers.**
+
+**The general rule, which is the point of this entry:** *a budget belongs to the document that
+defines the category, and a document that wants a budget must not extend someone else's by
+inference.* The §7.4 sentence was written by people who needed a threshold and reached for the
+nearest one; the cost was three documents asserting an authority that did not exist, and one of them
+then deriving a page size from it.
+
+### LAT-01.1 Why a citation swap could never have been the fix
+
+**The 100 ms was not decorative in those sentences — it was the input to every downstream number.**
+This is the most useful thing in the finding and it was not visible from the sentences themselves:
+
+- §7.4's *"100–300 rows in the DOM"* Pi extrapolation is `100 ms ÷ (0.15–0.26 ms/row × 3–5)`;
+- `ARCHITECTURE.md` §4.5 carries the same computation independently;
+- ADR-0029's **≈ 6,400 rows**, **≈ 500 rows** and **100–167 rows** are all `100 ms ÷ a per-row cost`;
+- and ADR-0029's *"roughly six presses of headroom"* — the justification for `LOAD_MORE_PAGE_SIZE`
+  at 200 — is that ceiling divided by the page size.
+
+**A threshold quoted in prose was silently load-bearing for a page size nobody thought they were
+deriving from it.** So the available fixes were never "swap the citation" versus "rewrite the
+sentence": correcting the pointer would have left three documents claiming the wrong tier, and
+correcting the tier without showing the arithmetic would have moved a page-size justification in
+silence. Every site therefore has its **claim** replaced, and every downstream figure is shown with
+its new derivation rather than quietly recomputed.
+
+### LAT-01.2 The number, and the order it was chosen in
+
+**Written reasoning first, number second, and the number is not derived from what the toggles cost
+today.** §6 already carries both anchors from primary sources, so nothing new was imported:
+
+- **Target — Nielsen's 0.1 s**, *"the limit for having the user feel that the system is reacting
+  instantaneously… no special feedback is necessary except to display the result"*
+  (<https://www.nngroup.com/articles/response-times-3-important-limits/>).
+- **Hard fail — Doherty and Thadani's 400 ms** flow limit (*The Economic Value of Rapid Response
+  Time*, IBM Systems Journal, 1982; <https://lawsofux.com/doherty-threshold/>), which §6 already
+  treats as this document's flow threshold when it rejects a 250 ms decorative transition for landing
+  *"two thirds of the way to"* it.
+
+A rare, deliberate, user-initiated control is exactly the case where the flow limit governs: the user
+asked for the change and is not mid-thought waiting on data. Falling short of *instantaneous* costs
+polish; crossing the *flow* limit costs the user their place.
+
+🚩 **The brief for this work proposed a 1 s hard fail, sourced to §7.1, and that was wrong twice
+over — the correction is recorded because catching it was the whole value of the verification
+step.** §7.1 cites NN/g's **skeleton-screens** article, whose *"under 1 second, show nothing"* is a
+rule about **when a loading affordance is worth showing**, not a budget for how long an interaction
+may take. §7.1 contains no "100 ms feels instantaneous" statement and never uses the phrase "flow of
+thought"; the instantaneous anchor is in **§6**, from a different NN/g article. **And §6 pairs it
+with Doherty's 400 ms, not with 1 s** — so a 1 s hard fail in §7.2 would have contradicted §6 of the
+same document, which is precisely the defect being repaired. **Reading an indicator-necessity rule as
+a latency budget is the same category slip as reading a read budget as a control budget.**
+
+### LAT-01.3 The consequence, which is a consequence and not the purpose
+
+📏 **Measured by the frontend thread, not by this one.**
+`web/scripts/measurements/2026-08-17-density-invalidation.md`, added by
+**`dff20fd0eb4df707593da36fb9c2f8b1450c0a90`**, measuring **tree `3ff8151` plus that change** on
+**Chromium 141.0.7390.37 headless** (`playwright-core` 1.56.1), **Node v22.22.2**, **1440×900**,
+machine class **x86-64 container, 4 vCPU (Intel Xeon @ 2.80 GHz), 15 GB RAM, shared host** — which
+that record calls *"a reasonable proxy for a ThinkCentre under Proxmox"* and expressly ***"not a
+proxy for a Pi 5."***
+
+| Rows in the page | 100 | 120 | 160 | 200 |
+|---|---|---|---|---|
+| Density toggle, shipped path | **32.1 ms** | **37.4 ms** | **49.3 ms** | **75.7 ms** |
+
+Every size clears 400 ms outright on that instrument. 🔍 At ADR-0029's pessimistic 5× Pi-5 factor the
+shipped 200-row page is **378.5 ms against 400 ms — 21.5 ms, about 5%** — and that scaling is
+inference, since the source scaled nothing to a Pi and §13 forbids quoting a Pi-derived figure as
+measured. ⚠️ **The 5% is written into all three documents at full precision rather than rounded to
+"passes."** A budget a real configuration clears by 21 ms is a budget doing work, and a threshold
+chosen to flatter a measurement would not have landed 5% above it — which answers the
+"moved-so-it-would-pass" suspicion better than any assurance could.
+
+🚩 **What the old framing would have implied is the strongest evidence it was wrong.** Tier 0's
+100 ms under the same 5× factor is a **20 ms** desktop-equivalent budget — a figure the measurement
+record names in its own §7 — and against it **every page size in the measured range fails, 100 rows
+included at 32.1 ms**, by 1.6× at the smallest setting and 3.8× at the shipped one. **A rule that
+fails at every available setting is not a strict rule, it is a misapplied one.**
+
+ℹ️ **Two limits the source imposes on itself and this entry keeps**: its runner is noisy, **100 and
+120 rows overlap and must not be read apart**, and it declines to support a page-size decision on
+that instrument. The curve is used here as a budget check only. **`LOAD_MORE_PAGE_SIZE` is
+untouched, and Tier 0 is untouched at 100 ms for reads.**
+
+### LAT-01.4 Sites swept
+
+| Site | Change |
+|---|---|
+| `DESIGN-DIRECTION.md` §7.2 | **The category added**, on §7.2's own authority — *Controls*, target < 100 ms, hard fail 400 ms — with the derivation, the consequence and the old framing's failure. §7's preamble now says a non-tier budget lives there, so the heading no longer hides it |
+| `DESIGN-DIRECTION.md` §7.4 | Claim replaced; the 100–300 / 300–600 row ceilings shown as **400–1,200 / 1,200–2,400** with the ×4 derivation stated; the *"if it still exceeds 100 ms"* applying-state trigger moved to the 400 ms fail |
+| `DECISIONS.md` ADR-0029 | A marked **2026-08-17 amendment** in the ADR's existing style, plus three inline supersession markers. See **LAT-02** |
+| `ARCHITECTURE.md` §4.5 | Claim replaced; its own independent 100–300 / 300–600 extrapolation shown with the same derivation |
+
+⚠️ **`ARCHITECTURE.md` §4.5 was initially reported as another owner's and held back.** Ownership was
+then assigned to this thread on the grounds that the substance is the performance budget and that
+splitting one claim across owners would guarantee the three drift apart — which is the failure this
+entry documents, so shipping the sweep four-sited was the point. The edit was announced to the code
+thread.
+
+### LAT-01.5 An absence reported without its search roots — the third tonight
+
+🚩 **The four measured figures were first reported as existing "nowhere in the tree." They were on
+`main` the whole time**, in `web/scripts/measurements/`. **The search covered `docs/`, `web/src` and
+`internal/`** — three roots that exclude `web/scripts` — so the finding was true of where it looked
+and false of the tree.
+
+**The rule, because this is the third instance of the same shape in one session:** a `*.md` grep that
+missed citations living in code comments; a `grep -ril` that could not follow symlinks; and now three
+roots that excluded `web/scripts`. **When you report an absence, name the roots you searched in the
+same sentence.** An unqualified *"nowhere in the tree"* is a claim the reader cannot check, and it
+has now been wrong twice.
+
+ℹ️ **The near-miss is worth stating plainly**: on the strength of that absence the consequence
+paragraph was about to be deferred as unciteable, and §7.2 would have shipped with its budget intact
+but its evidence missing — a correct document made weaker by a search scope. ⚠️ **The related record
+`web/scripts/measurements/2026-08-17-density-toggle.md` is genuinely not on `main`** — verified with
+`git cat-file -e origin/main:…`, which reports *"does not exist in 'origin/main'"* — and is
+deliberately not cited anywhere in this sweep.
+
+**[Update, 2026-08-17.** The sentence above is left standing as the dated record of *why* the
+citation was deferred, per §6.1's convention that nothing above is reworded or deleted — but it is
+written in the present tense and no longer describes the tree.
+`web/scripts/measurements/2026-08-17-density-toggle.md` **landed on `main` at
+`1b8942645e50a11dfebdd0af0637436181b6d507`** (2026-08-17 07:56 UTC, *"the density gate measured a
+setAttribute, not the toggle"*), verified as an ancestor of `origin/main` with `git merge-base
+--is-ancestor` and absent from that merge's first parent. **The deferral it justified is therefore
+closed**: the record is citeable, and a later entry may cite it without repeating the check. Nothing
+else in LAT-01.5 changes — the finding it reports is about search roots, not about this file, and no
+entry above depends on the record's absence.**]**
+
+---
+
+## LAT-02 — ADR-0029's arithmetic all divides by the borrowed number. **Applied, as a marked amendment.**
+
+**This is the half of LAT-01 that changes numbers rather than claims**, and it gets its own entry
+because ADR-0029 is a decision record: its figures are cited elsewhere, so moving them silently would
+be worse than the defect.
+
+**Found.** Every row ceiling in ADR-0029 is `a budget ÷ a per-row cost`, and the budget in every one
+of them is Tier 0's 100 ms. The per-row costs are sound and measured; the numerator was never this
+ADR's to use.
+
+**Applied.** A **⚠️ Amendment, 2026-08-17** at the top of the ADR, in the style its 2026-08-16
+amendment established — the Decision restated as untouched, then what moves, with the derivation
+shown rather than the numbers swapped:
+
+| Figure | Against 100 ms | Against 400 ms |
+|---|---|---|
+| Curve `0.0146 ms/row + 6.4 ms`, desktop | ≈ 6,400 rows | ≈ 27,000 rows |
+| Same curve, 🔍 Pi-class 3–5× | 930–1,840 rows | **5,000–8,700 rows** |
+| Worst row shape `0.214 ms/row`, desktop | ≈ 500 rows | ≈ 1,870 rows |
+| Same worst case, 🔍 Pi-class 3–5× | **100–167 rows** | **374–623 rows** |
+
+**Nothing was re-measured and no per-row figure changed** — the ceiling is linear in the budget, so
+100 ms → 400 ms is exactly ×4, and the amendment says so instead of presenting new numbers.
+
+⚠️ **The residual-risk note is weakened, not deleted, and the amendment says which.** §3 read *"on
+the worst-case row shape, one 200-row page is already at the Pi-class limit (200 against 100–167)."*
+Against 374–623 a 200-row page sits at **roughly half** the worst-case Pi-class ceiling instead of
+over it. Heavy row shapes still carry the least headroom and `make bench` still settles whether such
+a list needs a smaller page. 🚩 **Kept rather than removed, because the sentence was right about the
+ratio and wrong only about the threshold it measured against** — deleting it would have hidden that
+the risk was overstated by a borrowed number rather than found to be absent.
+
+⚠️ **One warning gets stronger.** ≈ 27,000 rows is further past the linear fit's range than ≈ 6,400
+was — the 25,000-row point is superlinear — so raising the budget made the curve-derived ceiling
+*less* usable, not more. The amendment states that rather than letting the bigger number read as more
+headroom.
+
+⚠️ **And the curve is superseded for the shipped page size by a direct measurement of it.** The curve
+predicts ≈ **9.3 ms** for a 200-row density toggle; the shipped path measures **75.7 ms**. Two
+contributors are visible — a different machine class, and `dff20fd`'s forced re-measurement, which is
+the cost of *complying* with §7.4's invalidation rule and postdates the curve — **and the amendment
+declines to apportion between them**, because nothing in either record separates the two. What it
+states is the conclusion that does not depend on the split: the curve's remaining value is its shape,
+not its constant.
+
+✅ **Index row consistency checked, since the ADR table is generated from nothing and drifts by
+hand.** The `docs/DECISIONS.md` row for 0029 now carries the 2026-08-17 amendment alongside the
+2026-08-16 one, and both the row and the ADR's own **Status** line state that the decision is
+unchanged and the page size is still 200 rows.
+
+**`LOAD_MORE_PAGE_SIZE` is not touched by this entry, and no threshold in `web/` is.**
+
+### LAT-02.1 What this unblocks, and the rename it now requires
+
+⏭️ **Routing, not done here — `web/` is the frontend thread's tree.** `DI-02` records
+`f32b283` on `claude/hearth-thread-d247f2-bench` as *"fixed but held … while the design thread
+replaces the threshold it derives from."* **This entry is that replacement**, so the hold is
+released — but the branch cannot merge as written. Per `2262237`'s own description it introduces
+**`TIER0_HARD_FAIL_MS` / `PI5_FACTOR`** in `web/scripts/list-bench.mjs`, and after this amendment
+**that constant is misnamed and its value is wrong**: the toggles are not Tier 0, and the budget is
+400 ms rather than 100 ms.
+
+🚩 **The margin changes character, which is the part worth carrying across.** The derived desktop
+budget goes from `100 ÷ 5 = 20 ms` to `400 ÷ 5 = 80 ms`, and the shipped 200-row page measures
+**75.7 ms** — so the guard flips from **failing at every page size** to **passing at the shipped one
+by 4.3 ms**. ⚠️ **A guard with 4.3 ms of headroom on a runner whose own record calls it noisy will
+flap**, and that is a design question for whoever lands it — the honest options are to assert against
+the desktop figure directly rather than a Pi-scaled one, or to widen the tolerance and say why.
+**Naming it `CONTROLS_HARD_FAIL_MS` is the minimum; deciding what it asserts is not this entry's
+call.**
+
+---
+
+### On the gate for LAT-01 and LAT-02
+
+`node docs/design/check.mjs` was run on the merged tree. ⚠️ **State plainly what that green is: a
+regression check, and not evidence about this edit.** `check.mjs` is §13's enforcement mechanism — it
+lints the mockups, `tokens.css` and the shipped component CSS against the ban list, the token floors
+and the geometry assertions. **Every change in LAT-01 and LAT-02 is prose in three Markdown files
+that `check.mjs` does not read.** A green here attests that the four documents' edits broke nothing
+the checker covers, which is worth having and is a different claim from the edits being correct.
+Nothing in this pair of entries is evidenced by it.
+
+---
+
+## MEAS-01 — "name the surface" was written in the wrong file three times running. **Applied, as a promotion rather than a rewording.**
+
+**Found.** Three separate incidents, all inside a week, all the same defect: a figure quoted without
+the artifact it was measured on, or two figures compared across artifacts that were never the same.
+
+* **`Age` track width.** `.cols-requests-releases` in `docs/design/mockups/usarr.css` declares it
+  80 px; `COLUMNS` in `web/src/routes/requests/+page.svelte` declares it 68 px. *"The `Age` track is
+  68 px"* is not a complete claim in a repo holding both, and both readings are correct — recorded
+  as **SU-10**, where nine of the ten columns the two trees share carry different widths.
+* **A row-height result taken on the mockups' 80 px track was applied to the product's 68 px one.**
+  Right about the tree it came from, wrong about the tree it was quoted for.
+* **A shipped-path density toggle (~75.7 ms at 200 rows) was compared against a budget being applied
+  at the bench's own measurement site (~18 ms).** That site, in `web/scripts/list-bench.mjs`, is a
+  bare `setAttribute` plus a forced layout, and skips the invalidation the shipped path is required
+  to perform. 🚩 **This is the sharpest of the three, because both numbers were individually correct
+  and independently verified.** Nothing was wrong except the assumption that they described the same
+  surface — and the conclusion drawn from subtracting them was wrong. See **LAT-02.1**, where the
+  same pair decides what a guard constant may assert.
+
+**Why this is a finding about location and not about wording.** The rule was already written, in
+`DESIGN-DIRECTION.md` §7.4, in about as forceful a form as prose gets — *"a row height quoted
+without its box is not a measurement"*, and a standing rule in capitals demanding every number be
+recorded with its box. ⚠️ **In each of the three incidents the person who broke it had written or
+read that section the same night.** A rule that strongly worded, broken that soon by its own
+readers, is not evidence that it needs restating harder; it is evidence about where it lives. §7.4
+is a section on row geometry, so its rule reads as a rule about boxes, and a column width, a bench
+site and a code path are none of them boxes. **The general form had no home, so it was re-derived
+locally each time and each derivation stopped at that instance's shape.**
+
+**Applied.** Promoted to `docs/DEVELOPMENT.md` §11, "Writing a guard that can be trusted", as
+**rule 5, "Name the surface, not just the value"** — the repo's home for measurement and gate
+mechanics, and read across threads rather than by whoever is working on the list. It sits next to
+rule 2 deliberately: rule 2 names the *instrument*, rule 5 names what the instrument was pointed at,
+and rule 2's *"a gate result without a commit sha attached is not a result"* is stated there as the
+gate-output instance of the same standard. ℹ️ **All three incidents are written into the rule
+concretely, with their files and their figures**, because the abstract form is precisely the version
+that demonstrably did not stick.
+
+📎 **`DESIGN-DIRECTION.md` §7.4 now names §11 as the authority and does not restate the rule** — one
+sentence, added under the box paragraph, covering §7.2's instrument-and-tree requirement in the same
+breath since §7.2 already routes through §7.4 for it. **That is SD-01's rule applied to this
+promotion**: a document that is not authoritative for a fact should not restate it. The local box
+discipline stays where it is, because it is a fact about row geometry that §7.4 does own.
+
+🚩 **This is the same argument that moved SD-01's rule towards `CLAUDE.md`**, and it is worth naming
+as a pattern rather than a coincidence: when a correctly-worded rule is broken repeatedly by people
+who have read it, the next edit to try is a change of address, not a change of emphasis.
+
+### On the gate for MEAS-01
+
+`node docs/design/check.mjs` was run on the merged tree. ⚠️ **State plainly what that green is: a
+regression check, and not evidence about this edit.** `check.mjs` lints the mockups, `tokens.css`
+and the shipped component CSS; **it does not read `docs/DEVELOPMENT.md` at all**, and both changes
+here are prose. A green attests that nothing the checker covers was broken, which is a different
+claim from the edit being right.
+
+---
+
+# A tripwire passed comfortably while measuring nothing: `DI-02`'s clearest demonstration
+
+**Date:** 2026-08-17. **Branch:** `claude/revlog-pc-d247f2-1786953682`. **Prefix `PC-` has not been
+used before** — checked rather than assumed, with `git grep -nE '\bPC-[0-9]' origin/main`, which
+returns nothing. Records the demonstration that arrived with the bench work merged as `1b89426`.
+**This entry exists for `DI-02` and should be read with it**: `DI-02` states the class — *"a
+mitigation that silently does nothing while looking performed"* — and this is the single run in
+which both halves of that shape were visible at once. Every figure, both transcripts and the
+`setAttribute`-versus-`prefs.setDensity` mechanism behind them are in
+[`web/scripts/measurements/2026-08-17-density-toggle.md`](../web/scripts/measurements/2026-08-17-density-toggle.md)
+§2, §5 and §6, and are **not** restated here.
+
+| # | Finding | Resolution |
+|---|---|---|
+| **PC-01** | 🚩 **Both halves of `DI-02`'s shape fired in ONE run, and the broken half is the one that announced a comfortable pass.** `pnpm bench:list` under `USARR_BENCH_FORCE_ATTR_PATH=1` failed the positive control — *"`.tbl--remeasure` was applied in only 0 of 4 measured windows"*, which is to say the measurement was not going through the shipped density path at all — while on **that same run** the wall-clock tripwire passed and reported itself *"30.3× under"*. **A budget assertion is perfectly happy measuring nothing whatever, and it reports that state as a wide margin.** ⚠️ The margin is wide *because* the quantity is wrong — the unshipped path is the cheaper one — so this failure makes a guard look **healthier**, not sicker, and nothing in the output invites a second look | **Nothing but the explicit positive control distinguishes the two, and that is the whole finding.** A green from a budget assertion is evidence about a number, never evidence that the number is of the right thing; only an assertion about the *measurement* can carry that, and it has to be an assertion rather than a log line. Both switches were fired deliberately rather than reasoned about — the drill and the bug are the same event, since `USARR_BENCH_FORCE_ATTR_PATH=1` re-measures at the old site rather than simulating it. §4 and §6 of the measurement record are the long form |
+| **PC-02** | ⚠️ **The bench's own first draft pre-toggled to a known density before measuring**, so every measured value would be a real change. That paid the expensive cold change **outside** the measured window and reported **32.4 ms** — roughly half the honest figure — from four warm repeat toggles. 🚩 **It is worth recording because warming up before measuring is ORDINARILY GOOD PRACTICE.** The wrong version looks *more* careful than the correct one, which is exactly why reading it does not catch it: the mistake is a virtue applied to the wrong interval, and the interval is the thing the reader has to supply | **Fixed by rotating the sequence against the current density instead of pre-toggling**, which guarantees four real changes without spending the cold one first. The general form, since a warm-up is right about as often as it is wrong: **a warm-up is only correct when the operation being priced is the warm one** — here a user toggles density on a page they have been reading, so the cold change *is* the product's cost. This is `MEAS-01`'s rule 5 with time in place of surface, and it is written where it can be re-broken: `web/scripts/list-bench.mjs`'s `densityToggleCostShipped` carries the ⚠️ **NO WARM-UP TOGGLE HERE, DELIBERATELY, AND THE FIRST DRAFT HAD ONE** comment with the figure in it. §5 of the measurement record is the long form |
+
+**Gates, and exactly what they cover.** This entry is **markdown only** — one added entry in
+`docs/REVIEW-LOG.md`, nothing else in the diff — so `make check`, `docs/design/check.mjs` and
+`pnpm bench:list` were **not** run, and nothing above is claimed on their authority. ⚠️ **No
+formatter is claimed either, because none covers this file**: prettier's root here is `web/`, so
+`make fmt-check`'s `pnpm format:check` never reaches `docs/`, and `docs/REVIEW-LOG.md` has never been
+formatter-gated. **Every figure and every quoted line above is taken from
+`web/scripts/measurements/2026-08-17-density-toggle.md` and from the bench's own comments at
+`1b89426`; nothing was re-measured here, and the bench was deliberately not run.**
+
+---
+
+# MEAS-02 — ten overnight guard rules get an address, and three of the staged claims did not survive being checked. **Applied by `8d426cd`, as a pure append.**
+
+**Date:** 2026-08-17. **Records the promotion carried by `8d426cd`**, *"docs: fold the overnight
+guard rules into DEVELOPMENT §11"*, verified against that tree. **`MEAS-02` is the next free id in
+the `MEAS-` prefix** — checked rather than assumed, with
+`git grep -hoE '\bMEAS-[0-9]+[a-z]?\b' origin/main | sort -u`, which returns `MEAS-01` and nothing
+else. **Read it with `MEAS-01`**, whose disposition it repeats at scale: the same
+promotion-rather-than-rewording move, ten items instead of one, and the same reason — a rule that
+lives in message history has no address, and a rule with no address is re-derived from scratch by
+whoever next needs it.
+
+**Promoted.** Ten rules earned across the code, design, frontend and Requests threads on 2026-08-16
+→17 lived only in cross-session message history and a staging file that is not in the tree — which
+is to say they were correct, expensive, and unreachable. They land in `docs/DEVELOPMENT.md` §11,
+*"Writing a guard that can be trusted"*, and in §11's *"Working alongside other threads"*. ℹ️ **Ten
+items across nine sites, at four different granularities**, because the granularity is the decision:
+a rule that is a case of an existing rule earns a bullet, not a number, and a rule about
+collaboration does not belong on the guard list at all.
+
+| # | Staged item | Landed as |
+|---|---|---|
+| 1 | Checks that share one stimulus agree for free — five independent-looking checks all missed one transient, because every one of them could read only files that were present and committed, and the file was written unstaged and deleted before it was ever staged | **New rule 6**, *"Corroboration is coverage, not repetition"*, first bullet. Framed against rule 4: rule 4 asks what one check should find, rule 6 asks how many **different** things a set of checks can see between them |
+| 2 | *"None of my workers wrote that file"* is not establishable from the tree, because the tree is precisely where the evidence is absent — the unexplained `ZZ-probe.md` came from a worker whose own transcript had to be read before its four unstaged writes surfaced | **New rule 6**, second bullet. Kept under one number rather than given its own, because both halves are the same arithmetic: count the stimuli, not the checks |
+| 3 | Quote the tool; do not paraphrase it — the `ZZ-probe.md` investigation burned its first pass on a theory about a filename gitleaks had never printed, because the real output, `leaks found: 1` with no path in it at all, had been summarised | **New rule 7**, *"Quote the tool; do not paraphrase it"*. Written as the rest of rule 2's sentence: name the instrument, then report its output in the instrument's own characters |
+| 4 | An absence claim carries the roots it searched — *"the four figures exist nowhere in the tree"* came from a search that never entered `web/scripts/`, one of three scope-wrong searches in a single night | **Bullet under rule 5**, in rule 5's existing pairing with rule 2. ℹ️ It is filed as rule 4 with the sign flipped: a check that found nothing and a check that looked at nothing must not produce the same exit code |
+| 5 | A probe carries the gate that has to reject it — firing a guard on purpose (rule 3) is evidence only when the stimulus is one that guard would actually catch | **Bullet under rule 5.** ⚠️ **Measured at promotion time rather than relayed, and the measurement corrected the staged claim** — see the corrections below |
+| 6 | Key the worktree decision to the **operation**, not to the size of your change: any whole-tree git operation belongs in a worktree of your own, however small your edit | **Bullet under *Working alongside other threads*.** `ec4298d` carries the case — a one-file edit whose diff holds a second hunk its own commit message never mentions, because the sweep took whatever the tree was holding |
+| 7 | Give a throwaway branch a name nobody else will pick, because a branch name is a shared mutable ref across worktrees and git's protection against reuse is uneven | **Bullet under *Working alongside other threads*.** ⚠️ **The staged SHAs were wrong and the mechanism was right** — see the corrections below |
+| 8 | Cite the author commit for when a thing was done and the merge commit for when it reached `main` | **Bullet under *Working alongside other threads*,** carrying one verified pair. ⚠️ **A second offered pair was not a pair at all** — see the corrections below |
+| 9 | A citation inside a dated record is history, not staleness — do not "fix" the line numbers and SHAs inside an entry that already carries a date and a tree | **Bullet under *Working alongside other threads*,** naming this file's own §6.1 *Amended dispositions* as the mechanism: amend underneath, leave the original standing |
+| 10 | What a green `make check` attests on a documentation commit, which is very nearly nothing | **Unnumbered scope note at the end of the guard section**, immediately before *"Consistency is a property of the read"*. Unnumbered deliberately: it is a fact about this repo's gate, not a rule about writing guards |
+
+**The constraint that held: append, never renumber.** §11's rule numbers are load-bearing in two
+directions at once. **Inward**, rule 3's text cites *"the same `make design` guard from rule 1"*, so
+a renumber would break the section against itself. **Outward**, this log cites *"DEVELOPMENT §11
+rule 4"* and *"`DEVELOPMENT.md` §11's rule 1"*, and six more sites cite rule numbers besides. ✅ **So
+the promotion was constrained to append**, and the diff proves it rather than asserting it:
+`git show --stat 8d426cd` reports **`1 file changed, 86 insertions(+)`** — **86 insertions and zero
+deletions**, one file. Rules 1–5 are byte-identical before and after; rules 6 and 7 are new numbers
+at the end of the list, and everything else went in as a bullet under an existing rule or under an
+existing subsection.
+
+✅ **The outward citations were enumerated and re-read on both trees rather than assumed safe.**
+`git grep -nE "§11('s)? rule [0-9]"` at `6b904e1` (the parent) and at `8d426cd` returns **the same
+eight lines, byte for byte, across seven files**:
+
+| Site | Cites |
+|---|---|
+| `docs/REVIEW-LOG.md:3451` | *"cannot produce the same green (DEVELOPMENT §11 rule 4)."* |
+| `docs/REVIEW-LOG.md:4989` | *"is `DEVELOPMENT.md` §11's rule 1 — "probe the condition, not a proxy for it""* |
+| `docs/design/DESIGN-DIRECTION.md:1046` | *"one general rule that `docs/DEVELOPMENT.md` §11 rule 5 now owns"* |
+| `docs/reference/tags.md:84` | *"tests the wrong thing and answers confidently. `DEVELOPMENT.md` §11 rule 1."* |
+| `internal/httpapi/grabs_test.go:239` | *"(docs/DEVELOPMENT.md §11 rule 4): assert the floor first"* |
+| `internal/store/audit_notsent_test.go:116` | *"docs/DEVELOPMENT.md §11 rule 3: a"* |
+| `internal/store/provenance_recent_test.go:206` | *"docs/DEVELOPMENT.md §11 rule 3: a"* |
+| `internal/store/releases.go:406` | *"docs/DEVELOPMENT.md §11 rule 1: a"* |
+
+📌 **Eight citations in seven files, and the distinction is worth keeping straight** — the promotion
+was described in its own commit message as *"REVIEW-LOG, DESIGN-DIRECTION, reference/tags.md and
+four Go files"*, which counts **files**, and this log carries two of them. A restatement of that
+count as "seven citations" is off by one; the measured figure is eight lines across seven paths.
+ℹ️ Line numbers here are dated to `8d426cd` per §11's own shelf-life bullet; the quoted strings are
+the durable half.
+
+## The three staged claims that did not survive checking
+
+🚩 **This section is the reason the entry exists.** A promotion whose own supporting claims were
+never re-derived would be `MEAS-01`'s defect committed by `MEAS-01`'s fix — and two of the three
+below are exactly the shape §11 rule 5 was being extended to catch: a probe that proves nothing
+while looking like proof, and a SHA quoted for a tree it was never read on. **All three were
+re-measured for this entry rather than copied from the routing message.**
+
+**1. The `ghp_` probe claim was two-thirds wrong, and only the measurement could tell.** The staged
+note said a `ghp_`-shaped token fires gitleaks where the canonical AWS documentation pair does not.
+⚠️ **The AWS half is right and the `ghp_` half is right only for a high-entropy body.** Measured
+2026-08-17 on `/root/go/bin/gitleaks`, build-info `github.com/zricethezav/gitleaks/v8 v8.30.1` (from
+`go version -m`, which reads the file on disk — the binary answers `version is set by build process`
+to `gitleaks version`), one planted line per directory under
+`gitleaks dir <dir> --redact=100 --no-banner --exit-code 1`:
+
+```
+########## aws ##########      # AKIAIOSFODNN7EXAMPLE / wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+INF scanned ~106 bytes (106 bytes) in 4.84ms
+INF no leaks found
+EXIT=0
+########## ghpseq ##########   # ghp_0123456789abcdefghijklmnopqrstuvwxyz
+INF scanned ~48 bytes (48 bytes) in 4.43ms
+INF no leaks found
+EXIT=0
+########## ghprand ##########  # ghp_ + 36 random chars, NOT quoted here — see the note below
+INF scanned ~48 bytes (48 bytes) in 4.45ms
+WRN leaks found: 1
+EXIT=1
+```
+
+🚩 **Two of the three obvious probes exit 0.** The AWS pair is allowlisted upstream — already
+recorded in this file under *"What a `make check` green on a docs-only commit does and does not
+attest"* — and the sequential `ghp_` body clears the rule's **length** and not its **entropy floor**,
+which is a second, independent way to hand yourself a silent false negative. Only `ghp_` plus a
+random 36-character body reports `leaks found: 1` and exit 1. ⚠️ **A reviewer who reached for either
+of the first two would have "proven" that `make secrets` does not read `docs/`** — the exact claim
+the older entry exists to correct — through a scanner behaving perfectly. §11's rule-5 bullet is
+written with all three probes in it for that reason.
+
+ℹ️ **The third probe's literal body is deliberately not written into this file, and the reason is a
+measurement rather than caution.** The first draft of this entry quoted the generated token in full;
+`make check` then failed at `secrets` — `gitleaks dir .` over the worktree reporting
+`scanned ~6914820 bytes (6.91 MB) in 1.84s` and `leaks found: 1`, `make: *** [Makefile:562: secrets]
+Error 1`. ✅ **Which is the scope note two sections down demonstrated from the other side**: the one
+gate step that reads `docs/` read this entry, found the planted credential in it, and stopped the
+commit. **A random high-entropy body is not reproducible from a written record anyway** — generate
+one at probe time; the two that do **not** fire are the ones worth quoting exactly, and both are
+above.
+
+**2. `c2cefa3` / `a29a07f` was offered as an author-vs-merge pair and is not one.** ⚠️ **Dropped
+from the promotion rather than written in.** Verified with `git log -1 --format='%h %p | %s'`:
+
+```
+a29a07f 22f86bf | docs: cross-reference SD-02r, whose verdict this sweep invalidated
+c2cefa3 0656bd9 | docs(design): the same status claim, in the two places it was not reported
+```
+
+`a29a07f` has **one** parent, `22f86bf`, so it is not a merge at all, and `c2cefa3` is nowhere among
+its parents — `c2cefa3`'s own parent is `0656bd9`. Both sit on `main`'s first-parent line as
+ordinary commits. ✅ **The pair that is correct, and the one §11 now carries alone:**
+
+```
+c9610e2 a29a07f | docs: SD-01a said "pinned" where its own evidence said "unguarded"
+cda979c ec4298d c9610e2 | Merge the §9.7→§9.2 citation sweep and the SD-01a framing fix
+```
+
+`c9610e2` is the work (single parent), `cda979c` is the merge that put it on `main` (two parents,
+the second being `c9610e2`). ℹ️ **Where the wrong pair came from is legible and instructive**:
+`a29a07f` and `c2cefa3` appear together all over `SD-02r`, as *the commit where a verdict was
+noticed to be false* and *the commit that made it false*. That is a real and useful relation. It is
+not the author/merge relation, and two SHAs that keep appearing in one sentence acquire an implied
+relation nobody ever checked.
+
+**3. `ac7f534` → `6b53791` does not support the branch-name-reuse hazard; the mechanism does, and it
+was reproduced.** Verified the same way:
+
+```
+ac7f534 4fb96e0 f23bf66 | Merge branch 'claude/hearth-thread-4vbzaj': a dev guard refuses content-sized list column tracks
+6b53791 fd9d334 2262237 | Merge branch 'claude/hearth-thread-d247f2-revlog-fix': correct DI-02's claim that the bench page-size fix is unowned and unfixed
+```
+
+`6b53791`'s parents are `fd9d334` and `2262237`; `ac7f534` is neither, and is itself an unrelated
+merge. ✅ **So §11 records the mechanism with a reproduction and not the SHAs** — which is the
+stronger form anyway, because a reproduction can be re-run and a SHA pair can only be re-read.
+Reproduced 2026-08-17 on `git version 2.43.0` in a scratch repo, with branch `shared` checked out in
+a second worktree:
+
+```
+=== second worktree HEAD ===
+d00050d2c78c739837238479859a53ceab6d6578
+=== 1. git branch -f shared main ===
+fatal: cannot force update the branch 'shared' used by worktree at '…/gitrepro/second'
+EXIT=128
+=== 2. git worktree add -b shared ===
+Preparing worktree (new branch 'shared')
+fatal: a branch named 'shared' already exists
+EXIT=255
+=== 3. git checkout -B shared (from primary) ===
+Switched to and reset branch 'shared'
+EXIT=0
+=== second worktree AFTER ===
+729f4f19d7dc44e185b68fd815153852cfd7351a
+M  f.txt
+```
+
+🚩 **Two verbs refuse and the third succeeds silently.** `git branch -f` and `git worktree add -b`
+both decline; **`git checkout -B` from the primary checkout returns exit 0**, moves the other
+worktree's `HEAD` from `d00050d` to `729f4f1`, and leaves a **staged** modification (`M  f.txt`) that
+nobody in that worktree made. ⚠️ **The one unprotected verb is the one everybody types**, and the
+damage lands in a tree whose occupant gets no message at all. That is why the rule is *suffix the
+branch with your agent id or a timestamp* rather than *be careful*.
+
+## Two of the ten were already recorded here, measured, and §11 points rather than restates
+
+📎 **Staged items 5 and 10 — the probe-carries-its-gate half of rule 5, and the scope note on what a
+docs-only green attests — are not new findings.** Both were measured and written up in this file
+under the `SD-02` method note, *"What a `make check` green on a docs-only commit does and does not
+attest — measured, because the absolute version of this claim is wrong"*: the `secrets` step runs
+`gitleaks dir .` over the whole working tree and does read `docs/`, `fmt-check`'s prettier half runs
+with its cwd in `web/` and never sees a Markdown file under `docs/`, and the first probe of that
+guard was the AWS false negative. ✅ **So §11 states both compactly and names this file as the long
+form**, in both places — *"The full case … is in `docs/REVIEW-LOG.md` under …"* on the rule-5 bullet,
+and *"The measured version of this, fired in both directions, is in `docs/REVIEW-LOG.md` under …"* on
+the scope note. **That is `SD-01`'s rule applied to this promotion**, the same way `MEAS-01` applied
+it to `DESIGN-DIRECTION.md` §7.4: a document that is not authoritative for a fact should not restate
+it, it should name the document that is. §11 owns the *rule*; this log owns the *measurement*, and
+the measurement is where the numbers decay.
+
+🚩 **The pattern `MEAS-01` named is now attested twice, which makes it a pattern.** `MEAS-01`'s
+closing observation was that when a correctly-worded rule is broken repeatedly by people who have
+read it, the next edit to try is a change of address rather than a change of emphasis. Every one of
+the ten items here had already been *stated*, correctly, in a message thread; not one of them was
+reachable by a thread that had not been in that conversation. ℹ️ **Nine of the ten are a paragraph or
+less**, which is the other half of the finding: the expensive part was never the wording, and
+writing them longer would not have helped.
+
+## On the gate for MEAS-02
+
+`make check` was run on this entry's tree — `8d426cd` plus this diff — and reported **`check: OK`**.
+✅ **The binaries it asserted, since a green that names neither its tool nor its tree is a rumour:**
+gofumpt **v0.11.0** over **135 `.go` files**; golangci-lint **2.12.2** over **11 Go packages**, `0
+issues`, cache cleaned first via `/root/go/bin/golangci-lint cache clean` because the `PATH` copy is
+the wrong version; prettier `All matched files use Prettier code style!`; svelte-check **236 files,
+0 errors, 0 warnings**; `go mod verify` → `all modules verified`; gitleaks **v8.30.1** (build-info,
+`--version` is unstamped) scanning **~8,493,690 bytes (8.49 MB) in 2.24s**, `no leaks found`;
+**11 Go packages `ok`**; **386 web tests in 9 files passed**; govulncheck **v1.7.0**, `No
+vulnerabilities found`; `pnpm audit` → `No known vulnerabilities found`.
+
+⚠️ **State plainly what that green is
+worth here, because this entry adds a section to §11 that says exactly this.** The diff is one
+Markdown file — `docs/REVIEW-LOG.md`, nothing else. **Exactly one step of the gate read it**:
+`secrets`, which runs `gitleaks dir .` from the repo root over the whole working tree. `fmt-check`'s
+Go half globs `*.go` and its prettier half runs with cwd in `web/`, so **no Markdown under `docs/` is
+formatter-gated at all**; `lint`, `test`, `modverify` and `vuln` never leave the Go module and
+`web/`. **So the green attests one thing — no credential-shaped string anywhere in the tree — and
+nothing whatever about whether the prose above is true, current, or well formed.** ✅ **Every claim
+in this entry is instead carried by its own quoted transcript**: the three `gitleaks` runs, the four
+`git log -1 --format='%h %p'` reads, the `git version 2.43.0` worktree reproduction, the
+`git show --stat 8d426cd` insertion count, and the `git grep` citation sweep run on both trees.

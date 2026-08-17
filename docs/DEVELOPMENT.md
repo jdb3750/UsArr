@@ -944,6 +944,76 @@ have exited 0 while scanning nothing, which is the most convincing green there i
 roughly how much a check ought to see, encode that — "found nothing" and "looked at nothing" must
 never produce the same exit code.
 
+**5. Name the surface, not just the value.** Rule 2 names the *instrument*; this names what the
+instrument was pointed at, and it is the half that has been broken three times here — each time by
+someone who had written or read the rule the same night. **A measurement is meaningless without the
+artifact it was taken on, and two correct numbers taken on different surfaces cannot be compared,
+subtracted, or checked against one another's budget.**
+
+* **Two trees declare the same column.** *"The `Age` track is 68 px"* is not a complete claim in a
+  repo holding two declarations of it: `.cols-requests-releases` in `docs/design/mockups/usarr.css`
+  reads 80 px, `COLUMNS` in `web/src/routes/requests/+page.svelte` reads 68 px, and **both are
+  correct**. Nine of the ten columns the two trees share carry different widths.
+* **A row-height result measured on the mockups' 80 px `Age` track was applied to the product's
+  68 px one.** Right about the tree it came from, wrong about the tree it was quoted for.
+* **The sharpest of the three, because nothing about either number was wrong.** A shipped-path
+  density toggle — **~75.7 ms** at 200 rows, `prefs.setDensity` → Svelte flush → forced layout — was
+  compared against a budget being applied at the bench's own measurement site, **~18 ms**, which in
+  `web/scripts/list-bench.mjs` is a bare `setAttribute` plus a forced layout and skips the
+  invalidation the shipped path is required to perform. Both figures were individually correct and
+  independently verified. Nothing was wrong except the assumption that they were about the same
+  thing, and the conclusion drawn from subtracting them was.
+
+So: **every figure carries the artifact it was measured on** — which file, which tree, which code
+path, which instrument — and **a comparison between two figures is valid only once you have checked
+that they describe the same surface.** Rule 2's *"a gate result without a commit sha attached is not
+a result"* is this rule applied to gate output; the same standard governs every other number.
+
+**The same question, asked of two claims that do not look like measurements.** Rule 2 names the
+instrument and rule 5 names what it was pointed at; both of these are the second half, in prose
+rather than in a number.
+
+* **An absence claim carries the roots it searched.** *"The four figures exist nowhere in the tree"*
+  came from a search that never entered `web/scripts/` — one of three scope-wrong searches in a
+  single night. The surface of a search is its roots, so report an absence as *"not under `docs/`,
+  `web/src/` or `web/scripts/`"* and never as *"nowhere"*: the second is a claim about the whole
+  tree that the search did not make. Rule 4 says a check that found nothing and a check that looked
+  at nothing must not produce the same exit code. This is that failure with the sign flipped.
+* **A probe carries the gate that has to reject it.** Firing a guard on purpose (rule 3) is evidence
+  only when the stimulus is one that guard would catch, and *looks like a credential* is not that
+  test. Measured 2026-08-17 on `/root/go/bin/gitleaks`, build-info
+  `github.com/zricethezav/gitleaks/v8 v8.30.1`, one planted line per file under `gitleaks dir <dir>
+  --redact=100 --no-banner --exit-code 1`: AWS's own documentation pair `AKIAIOSFODNN7EXAMPLE` /
+  `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY` scans **`no leaks found`, exit 0**, because gitleaks
+  allowlists it upstream — **and so does `ghp_` followed by 36 sequential characters**, which clears
+  the length the rule wants but not its entropy floor. Only a `ghp_` token with a random
+  36-character body reports **`leaks found: 1`, exit 1**. Two of those three probes prove nothing
+  about the scanner while looking exactly like proof. The full case — including the false negative
+  that nearly "proved" `make secrets` ignores `docs/` — is in `docs/REVIEW-LOG.md` under *"What a
+  `make check` green on a docs-only commit does and does not attest"*.
+
+**6. Corroboration is coverage, not repetition.** Rule 4 asks what one check should find; this asks
+how many *different* things a set of checks could see between them. Agreement is worth what the
+distinct stimuli behind it are worth, and nothing more.
+
+* **Checks that share a stimulus agree for free.** Five independent-looking checks all missed the
+  same transient, because every one of them could read only files that were present and committed —
+  a file written unstaged and deleted before it was ever staged was invisible to all five. Five
+  agreeing answers, one stimulus. Count the stimuli, not the checks, and when they are all the same
+  stimulus say so instead of reporting five confirmations.
+* **A negative claim about other workers has to have visited each one.** *"None of my workers wrote
+  that file"* is not establishable from the tree, because the tree is precisely where the evidence
+  is absent. The unexplained `ZZ-probe.md` came from a worker whose own transcript had to be read
+  before its four unstaged writes were found. Vouch for a set of agents only by naming which ones
+  you read and what you read of them; otherwise say you do not know, which is cheaper and true.
+
+**7. Quote the tool; do not paraphrase it.** This is the rest of rule 2's sentence: name the
+instrument, then report its output in the instrument's own characters. Paraphrase is where
+mis-transcription hypotheses breed — the `ZZ-probe.md` investigation burned its first pass on a
+theory about a filename gitleaks had never printed, because the actual output, `leaks found: 1`
+with no path in it at all, had been summarised rather than quoted. A summary silently adds detail
+the tool did not give you and drops the detail it did. Paste the line.
+
 **The pattern worth carrying: two of the first three were introduced by the fixes for the other
 two.** That is not bad luck. A fix is written under the assumption that the failure mode is now
 understood, and that is precisely the moment people stop checking for it. Treat a guard you just
@@ -974,6 +1044,17 @@ twice: once reporting findings, once clearing a cache.
   from a fresh one, so the failure you would never notice is the one that matters. That last point
   alone is inference from the same mechanism, not a case anyone has caught here, and it is why this
   is a rule rather than a note.
+
+**And a green `make check` attests almost nothing about a documentation commit.** Exactly one step
+of the gate reads `docs/`: `secrets` runs `$(GITLEAKS) dir .` from the repo root, over the whole
+working tree. Everything else stops short of it — `fmt-check` counts `*.go` for gofumpt and runs
+prettier through `pnpm_if_web`, which `cd`s into `web/` first, so `prettier --check .` never sees a
+file outside that directory and **no Markdown in `docs/` is formatter-gated at all**; `lint`,
+`test`, `modverify` and `vuln` read Go packages and `web/`. So green on a docs-only diff attests one
+thing — no credential-shaped string anywhere in the tree — and nothing whatever about whether the
+prose is true, current, or even well formed. Quote it at that size. The measured version of this,
+fired in both directions, is in `docs/REVIEW-LOG.md` under *"What a `make check` green on a
+docs-only commit does and does not attest"*.
 
 ### Consistency is a property of the read, not only of the write
 
@@ -1024,6 +1105,36 @@ paragraph describing a repo that no longer exists.
   rebasing instead of assuming they still held (`6afe583`). A line number is a claim with a shelf
   life; a symbol name is one that does not decay. Cite the symbol; if you give a line too, date it to
   the commit you read it at.
+* **A citation inside a dated record is history, not staleness.** The bullet above governs citations
+  you are making now. It does not license a sweep through `docs/REVIEW-LOG.md` "fixing" the line
+  numbers and SHAs inside an entry that already carries a date and a tree — those describe the tree
+  they were taken on and are supposed to keep describing it, and editing them destroys the evidence
+  the entry rests on. Correct such a record the way that file already does it: amend underneath,
+  with the new date and the new tree, leaving the original standing (`docs/REVIEW-LOG.md` §6.1
+  *Amended dispositions*, whose closing line is *"No existing entry's id, text or severity
+  changed"*).
+* **Key the worktree decision to the operation, not to the size of your change.** Any *whole-tree*
+  git operation — `git add -A`, a `git commit` of an index somebody else may have added to,
+  `git checkout <branch>` — belongs in a detached worktree of your own. Targeted single-path
+  operations can stay in a shared checkout. The hazard is what the **operation** sweeps, not how
+  much you personally edited: `ec4298d` is a one-file edit whose diff carries a second hunk — a
+  scope caveat on a different entry — that its own commit message never mentions, because the
+  sweep took whatever the tree was holding.
+* **Give a throwaway branch a name nobody else will pick.** Reusing something generic like
+  `main-merge` can move a ref another worktree is standing on, and git's protection against that is
+  uneven — reproduced 2026-08-17 on `git version 2.43.0` in a scratch repo: with `shared` checked
+  out in a second worktree, `git branch -f shared main` **refuses** (*"fatal: cannot force update
+  the branch 'shared' used by worktree at …"*) and `git worktree add -b shared` refuses on the name
+  alone, but **`git checkout -B shared` from the primary checkout succeeds** — *"Switched to and
+  reset branch 'shared'"*, exit 0 — moving the other worktree's `HEAD` under it and leaving a
+  staged modification there that nobody in that worktree made. The one unprotected verb is the one
+  everybody types. Suffix the branch with your agent id or a timestamp.
+* **Cite the author commit for when a thing was done and the merge commit for when it reached
+  `main`.** They are different commits and swapping them mis-dates history: `c9610e2` *("SD-01a said
+  'pinned' where its own evidence said 'unguarded'")* is the work, `cda979c` is the merge that put
+  it on `main`. Branches here are also pushed straight to `main` as often as they are merged, so
+  plenty of commits are both — which is exactly why the one you cite has to be the one you looked
+  at (`git log --first-parent` and `git log -1 --format=%p` settle it in two commands).
 
 Who leads which area, roughly. **The map is keyed by area of the repo, not by thread name**, and
 deliberately so: thread names churn — the three this table first named are now five, spread across
