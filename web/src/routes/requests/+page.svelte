@@ -226,10 +226,30 @@
 			stackLine: 'hidden'
 		},
 		{ id: 'flags', header: 'Indexer flags', width: 'minmax(0, 1.2fr)', stackLine: 'hidden' },
-		// minmax(max-content, auto), never a fixed track: §9.1's overflow policy.
-		// A fixed track shears the buttons attached to exactly the rows that are
-		// in trouble, with no scrollbar and no way to reach what was cut.
-		{ id: 'actions', header: 'Actions', width: 'minmax(max-content, auto)', stackLine: 1 }
+		// ⚠️ A FIXED RESERVE, AND IT CANNOT BE CONTENT-SIZED HERE. This column read
+		// `minmax(max-content, auto)` to honour §9.1's overflow policy — a fixed
+		// track shears the buttons attached to exactly the rows that are in
+		// trouble. But ADR-0029 makes EVERY ROW ITS OWN GRID, so a content-sized
+		// track has no cross-row agreement to appeal to: it resolves against the
+		// content of that row alone, and the header row's content is the word
+		// "Actions". Measured at 1440 px, header vs body: the actions track came
+		// out 61 px in the header and 155.02 px in a body row, and the 94.02 px
+		// difference was handed to the four fr tracks in the header row only —
+		// +37.59 title, +23.50 indexer, +14.11 category, +18.81 flags — so every
+		// column from Indexer rightwards sat 37-94 px right of its own header.
+		// Body rows disagreed with EACH OTHER too: a release with no info_url has
+		// no "Indexer page" link, and its track measured 63 px against its
+		// siblings' 155.02 px.
+		//
+		// 198px = the widest state this cell can hold, measured in the real cell:
+		// "Search again" + "Indexer page" is 174 px of content, plus 2 ×
+		// --row-pad-x, which is 12 px at all three densities. The other states
+		// measure 131 / 150 / 86 / 39 px and fit inside it.
+		//
+		// §9.1's policy is kept by `.cell-actions` wrapping instead of by an
+		// unbounded track: content that outgrows the reserve drops to a second
+		// line, so it is still reachable rather than cut.
+		{ id: 'actions', header: 'Actions', width: '198px', stackLine: 1 }
 	];
 
 	// ⚠️ `Time`, NEVER `Downloaded`, AND THE UNION IS WHY IT MATTERS RATHER THAN

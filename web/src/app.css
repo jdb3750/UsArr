@@ -2013,8 +2013,25 @@ select[multiple] {
 	line-height: var(--leading-sm);
 }
 
+/*
+ * `flex-wrap: wrap`, and it is what lets an actions column declare a FIXED
+ * track without breaking §9.1's overflow policy.
+ *
+ * Every row is its own grid (ADR-0029), so a content-sized track — `auto`,
+ * `max-content`, `fit-content` — has nothing to agree with: it resolves against
+ * one row's content, and the header row's content is the column name. An
+ * actions column sized that way therefore CANNOT line up with its own header,
+ * and body rows holding different controls cannot line up with each other. The
+ * fix is a fixed reserve, which is only safe if outgrowing it is survivable.
+ *
+ * Wrapping is what makes it survivable: controls that do not fit drop to a
+ * second line and stay reachable, rather than being sheared off the end of a
+ * cell that has no scrollbar. Nothing wraps at the declared reserves today —
+ * this is the floor under them, not a layout anything relies on.
+ */
 .tbl .cell-actions {
 	display: flex;
+	flex-wrap: wrap;
 	gap: var(--space-3);
 	align-items: center;
 }
