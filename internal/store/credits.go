@@ -22,8 +22,11 @@ import (
 //   - NO search_doc / search_fts / search_trgm ROW. 'person' is excluded from
 //     the FTS corpus because there is no person screen in any milestone, so a
 //     person hit would be a search result with nowhere to land. This path never
-//     calls rebuildSearchDoc, and TestPeopleNeverEnterTheSearchCorpus is the
-//     assertion — fired deliberately against a builder that did index them.
+//     builds a document FOR the person — step 4 of applyOneCreditSet rebuilds
+//     the document of the work the person is credited ON, never the person's
+//     own — and writeSearchDoc refuses kind 'person' outright if a future caller
+//     tries. TestPeopleNeverEnterTheSearchCorpus is the assertion, fired
+//     deliberately against a builder that did index them.
 //   - NO library_member ROW. A person is not a catalogue item and belongs to no
 //     library. Nothing files one, which also means no search_doc_library row
 //     could exist for one even if a doc did.
@@ -101,6 +104,17 @@ type CreditResult struct {
 	// that is not a member of work_credit.role's CHECK. The credit is dropped,
 	// the rest of the set stands, and the count is what the report surfaces.
 	CreditsRejected int
+
+	// DocsRebuilt counts search documents this call rewrote because the credited
+	// names changed. It is NOT the number of sets processed: a re-import that
+	// rewrites identical credit rows leaves the rendered name list identical and
+	// rebuilds nothing, so on a steady-state import this is 0 while
+	// CreditsWritten is not. That gap is the only externally visible difference
+	// between "the doc is kept current" and "the doc is rewritten every import",
+	// which is the cost schema.md §6.1 weighs, so it is reported rather than
+	// inferred from FTS row counts — search_fts is contentless and its rows are
+	// replaced in place, so no count outside this struct can see the difference.
+	DocsRebuilt int
 }
 
 func (r *CreditResult) add(o CreditResult) {
@@ -109,6 +123,7 @@ func (r *CreditResult) add(o CreditResult) {
 	r.CreditsWritten += o.CreditsWritten
 	r.ItemsUnresolved += o.ItemsUnresolved
 	r.CreditsRejected += o.CreditsRejected
+	r.DocsRebuilt += o.DocsRebuilt
 }
 
 // Add merges another result into r, so an importer can accumulate across
@@ -180,7 +195,16 @@ func applyOneCreditSet(
 		return res, fmt.Errorf("look up link: %w", err)
 	}
 
-	// ── 2. Replace this work's credits wholesale, for work_alt_title's reason:
+	// ── 2. The document's `people` column BEFORE the rewrite, so step 4 can tell
+	// a credit change from a re-import that rewrote identical rows. Step 2
+	// deletes and re-inserts unconditionally, so "did anything change" cannot be
+	// read off a row count.
+	before, err := creditedNames(ctx, tx, workID)
+	if err != nil {
+		return res, err
+	}
+
+	// ── 3. Replace this work's credits wholesale, for work_alt_title's reason:
 	// an upstream that DROPS a credit must not leave it standing forever. A
 	// diff would be cheaper and would also silently keep a penciller the
 	// operator deleted in Kavita last week.
@@ -251,6 +275,42 @@ func applyOneCreditSet(
 		if n > 0 {
 			res.CreditsWritten++
 		}
+	}
+
+	// ── 4. The search document, when and only when the names changed.
+	//
+	// THIS IS WHAT MAKES THE `people` COLUMN CURRENT, and the answer to "does a
+	// later credit change update the document" is YES, in the same transaction
+	// as the credit — not on the next import. The item pass cannot do it alone:
+	// it runs BEFORE this one and, on a first import, before any credit exists.
+	//
+	// IT IS A SECOND FTS WRITE PER CREDITED ITEM, which is the exact cost
+	// schema.md §6.1 weighed when it left the enrichment owed ("a second FTS
+	// write per item, in the transaction the 100 ms batch window exists to keep
+	// short"). The two SELECTs above and below are what stop it being a second
+	// write per item FULL STOP: a re-import of an unchanged library rewrites
+	// identical credit rows, and comparing the RENDERED NAME LIST rather than the
+	// rows means the doc is rebuilt only when a name actually entered or left. An
+	// uncredited item compares "" to "" and touches no FTS table at all. On a
+	// steady-state re-import DocsRebuilt is therefore 0 while CreditsWritten is
+	// not, which is what TestARepeatCreditImportRebuildsNothing pins.
+	//
+	// The whole document is rebuilt rather than the one column, because fts5
+	// refuses a partial update of a contentless-delete table and its stored text
+	// cannot be read back. See writeSearchDoc.
+	after, err := creditedNames(ctx, tx, workID)
+	if err != nil {
+		return res, err
+	}
+	if after != before {
+		d, err := readSearchDocText(ctx, tx, workID)
+		if err != nil {
+			return res, err
+		}
+		if err := writeSearchDoc(ctx, tx, workID, d); err != nil {
+			return res, err
+		}
+		res.DocsRebuilt++
 	}
 	return res, nil
 }

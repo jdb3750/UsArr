@@ -12546,3 +12546,239 @@ green that is read as covering the file it does not read is worse than no green.
 * **No copy that explains an absence** was written, anywhere. See VN9.25.
 * **No `check.mjs` or `DESIGN-DIRECTION.md` change.** Both were being edited concurrently by another
   agent; neither was touched, staged or reverted here.
+
+---
+
+# EXPL-02 — Prowlarr's spec-skew guard, and why the two-spec split ([ADR-0046](./DECISIONS.md#adr-0046)) does not port
+
+**Prefix note.** `EXPL-` = *explainer*, this thread's prefix, already carrying [`EXPL-01`](#expl-01);
+this is `EXPL-02`. The ADR counter was re-scanned against `origin/main` immediately before writing —
+and again immediately before the merge below, after `origin/main` advanced past `cf5fab5`: ADR-0046
+is still its highest and `cf5fab5` **amends** it rather than adding one, so this work is **ADR-0047**,
+verified free (`grep -c adr-0047 docs/DECISIONS.md` → 0 before the write).
+
+**What this entry is.** The task was to build the honest remedy for Prowlarr's spec-skew after
+[ADR-0046](./DECISIONS.md#adr-0046) left it as an open question — and to do it *without* copying
+Kavita's floor/ceiling split, which turns out to be impossible here. A previous run wrote the code,
+the Makefile target and the three docs edits but died before the ADR and this log entry. This entry
+records the salvage, the independent re-verification of every Prowlarr claim, and each new guard fired
+deliberately against the reason it exists.
+
+**Corroboration, and a reference closed.** While this was in flight the library thread amended
+ADR-0046 (`cf5fab5`, `LS-53`) to record that it stands for Kavita and is **not a template**,
+deferring the Prowlarr remedy to *"its own ADR from the thread that took it"* — a pointer that
+dangled until ADR-0047 landed. ADR-0047 now names `cf5fab5`/`LS-53` in its Status line, and the
+amendment names ADR-0047, so the reference runs both ways. That the two threads measured the same
+blob identity by two independent methods (`git ls-tree` there, `git hash-object` on a raw fetch here)
+is corroboration of the fact, not a shared assumption inherited from one place.
+
+## EXPL2.1 — Every Prowlarr claim re-verified against a primary source, not the dead run's word
+
+Nothing was carried over on trust. Each figure below was re-measured before the work was committed.
+
+| Claim | How re-verified | Result |
+|---|---|---|
+| `openapi.json` is one blob at both refs and vendored | `git hash-object api/specs/prowlarr.json`; raw fetch of the file at `v2.5.2.5491` and `develop` through the proxy, each piped to `git hash-object` | all three = `134d31d7df5e80714c454a6224e7449df512c55e` |
+| `develop` tip | `git ls-remote … refs/heads/develop` | `1f7db1e` |
+| `info.version` | parsed the vendored JSON | `1.0.0` (Swashbuckle placeholder); `openapi` = `3.0.4` |
+| `Limit`/`Offset` non-nullable in the spec | parsed `GET /api/v1/search` params | both `{type: integer, format: int32}`, no `nullable` |
+| `Limit`/`Offset` became `int?` | GitHub PR #2654 | title *"Fixed: Don't send limit=0 to Newznab indexers"*, merge `c687bdb1f`, `int`→`int?`, `NewznabRequestGenerator` guards `Limit is > 0`, offset kept `HasValue` |
+| First release with the fix | `git ls-remote --tags … v2.3.6.5351` | the tag sits **directly on** `c687bdb1f` — so `v2.3.6.5351` is the first release, and it is nullable on the owner's `v2.5.2.5491` and on `develop` |
+| Last regenerated | GitHub file history + `git log -1 60740fa` | `2025-06-07`, `60740fa259a…`, *"Automated API Docs update"* |
+| Releases since | `git tag --contains 60740fa` (shallow-since fetch) | **33**, none pointing at it |
+| Highest released tag | `git ls-remote --tags` | `v2.6.1.5509` |
+| UsArr code is independently correct | read `internal/servarr/search.go` | `SearchRequest.{Limit,Offset}` are `*int32`; `Values()` omits when nil; `<= 0` guard on limit — a documented divergence, **not a live bug** |
+
+**One correction to ADR-0046's framing, applied in ADR-0047.** ADR-0046's open question 1 called
+`prowlarr.json` *"develop at v2.6.2 … a minor version behind"* the deployment. Measured, it tracks
+neither by version: it is byte-identical at the owner's tag and at `develop`, and stale by 33
+releases against both. ADR-0047 records the corrected premise.
+
+## EXPL2.2 — The guard, split across the network line
+
+The whole design turns on one constraint from the top of the `Makefile`: `make check` makes exactly
+two network calls, both to vulnerability databases, and `check-offline` is those two removed. A third
+would let a GitHub outage redden an unrelated commit. So the guard is split, following the shape
+`integration` and `bench` already use:
+
+| Guard | File | In `make check`? | Network | Catches |
+|---|---|---|---|---|
+| `TestVendoredSpecIsThePinnedBlob` | `internal/servarr/contract_test.go` | **yes** | no | the vendored bytes changing under the suite |
+| `TestKnownSpecDivergencesStillHold` | `internal/servarr/contract_test.go` | **yes** | no | the `Limit`/`Offset` `int?` gap silently closing (spec regenerated) or UsArr's pointers being "corrected" to match the stale spec |
+| `TestUpstreamRefsStillShareThePinnedBlob` | `internal/servarr/specdrift_upstream_test.go` (`//go:build upstream`) | **no** — `make spec-drift`, opt-in on `USARR_SPEC_DRIFT=1` | **yes** | the day either ref stops carrying the pinned blob |
+
+`build-tagged` gained `go vet -tags=upstream ./...`, because `go build` does not compile `_test.go`
+files and the `upstream` test is one — so the gate can *type-check* the network test without being
+allowed to *run* it.
+
+## EXPL2.3 — Each new guard fired before it was trusted, against the reason it exists
+
+A planted violation absorbed by a different exemption is indistinguishable from a working rule, so
+each guard was made to fail for its intended reason and the message judged against the 2am bar. The
+verbatim output is in the thread; the summary:
+
+* **Blob pin** — pointed `vendoredSpecBlob` at a wrong SHA: `TestVendoredSpecIsThePinnedBlob` failed
+  naming the computed blob, the pinned blob, and the two different actions (re-vendored → update the
+  constant and re-read `knownSpecDivergences`; not re-vendored → `git checkout -- api/specs/prowlarr.json`).
+* **Nullability persistence** — set the spec's `limit` param to `nullable: true`:
+  `TestKnownSpecDivergencesStillHold/SearchResource.Limit` failed calling it *the GOOD failure*,
+  telling the reader the spec was regenerated for the first time since 2025-06-07 and to delete the
+  entry, re-read the whole document, and update ADR-0047.
+* **Pointer** — changed `SearchRequest.Limit` to a plain `int32`: the same test failed telling the
+  reader *the spec is the stale one*, that `limit=0` would go back on the wire, and to restore the pointer.
+* **Three-outcome skew message** — deleted a modelled schema so `specSkewAdvice` printed: the message
+  laid out all three of *their Prowlarr is too old / our expectation is too new / the document is
+  simply stale*, each with a different fix.
+* **Drift check** — ran `make spec-drift` with `vendoredSpecBlob` set to a wrong value:
+  `TestUpstreamRefsStillShareThePinnedBlob` failed against the network naming its three readings
+  (local mistake first, upstream regenerated, one ref moved) and stating a failure there is news, not
+  a gate.
+* **Opt-in refusal** — `make spec-drift` without `USARR_SPEC_DRIFT=1` refused with the pointer to §7.2,
+  and the `upstream` test skipped rather than hanging on the network.
+
+## EXPL2.4 — What this pass did NOT do
+
+* **No `web/` change**, and no change to any vendored spec file — `api/specs/prowlarr.json` is
+  byte-for-byte what upstream serves (`134d31d7…`); the guard pins it, it does not edit it.
+* **No third network call in `make check`.** The drift check is opt-in behind a build tag and its own
+  target; the gate's two-call contract is intact and `check-offline` still drops to zero.
+* **No runtime behaviour change.** `SearchRequest`'s pointers, `Values()`'s omit-when-nil and the
+  `Limit is > 0` guard are exactly as they were; only what a green *means* changed, plus a proof that
+  the divergence is still live.
+
+---
+
+# `search_fts.people` — the column the document builder wrote blank
+
+**2026-08-17**, branch `people-1787008364`, cut from `origin/main` at `999f538`. Id `LS-100`
+(allocated to this thread; `LS-101`–`LS-109` were reserved and are unused — they stay as gaps).
+
+**The premise this pass attacked** is one sentence carried identically by two reference documents:
+*"find everything by this author" is unanswered in v0.1.* It was true, and the reason was one
+literal: `internal/store/catalogue.go` inserted `""` into `search_fts.people` on every document it
+built, so no credited name was searchable anywhere in the product.
+
+## LS-100 The credited names now fill `search_fts.people`, and stay current
+
+`creditedNames` renders the column out of `work_credit` — the person work's title `UNION`ed with
+`credited_as` where the two differ, newline-joined — and both writers of the search document supply
+it. The behaviour, and the guard that fired against each half:
+
+| Behaviour | Guard | Fired by breaking |
+| --- | --- | --- |
+| A work is found by a creator's name that is nowhere in its own text | `TestAWorkIsFoundByItsAuthorsName` | `creditedNames` → `""`; step 4 disabled |
+| Every role, not an authorship subset | `TestEveryRoleReachesTheColumnNotJustAuthorship` | same |
+| `credited_as` beside the canonical name | `TestThePrintedVariantIsIndexedBesideTheCanonicalName` | same |
+| A credit change updates the column, in both directions | `TestAChangedCreditUpdatesTheDocument` | step 4 disabled |
+| An unchanged re-import rebuilds nothing | `TestARepeatCreditImportRebuildsNothing` | step 4 made unconditional |
+| The item pass does not blank the column mid-import | `TestAReimportKeepsTheCreditedNamesInTheDocument` | item pass forced to write `""` |
+| The credit-pass rebuild loses no other column | `TestTheCreditPassRebuildKeepsEveryOtherColumn` | each of `original_title`, `alt_titles`, `overview` dropped from the re-derivation, and `Overview` un-persisted from `work` |
+| The five excluded kinds are refused at the writer | `TestTheDocumentWriterRefusesAnExcludedKind` | the refusal deleted |
+
+**Every one of those breaks was executed and the failure output read**, per `CLAUDE.md`'s rule that a
+guard which has never been triggered is indistinguishable from no guard. Two non-firings are recorded
+below rather than papered over, because both are correct and both say something.
+
+## LS-100.1 It takes the `people` column, NOT the `alt_titles` candidate both documents named
+
+`schema.md` §6.1 and `search.md` §2 each proposed folding credited names into `alt_titles`. That is
+refused. A name in `alt_titles` is indistinguishable from a title at query time, so it could never be
+weighted, filtered or explained apart from one; `people` is its own fts5 column and `bm25()` takes one
+weight per column, so `search.md` §4's fusion query can down-weight it when retrieval lands. The
+ranking objection — a long name list diluting a title match — is real, and this is the shape that
+leaves it answerable.
+
+**Every role in the vocabulary is indexed, and the obvious filter is refused on two grounds.**
+"Authorship-ish roles only" would be a second vocabulary in Go beside the `CHECK` that defines the
+first, free to drift from it — which `credits.go`'s own `Role` comment already refuses for the same
+reason — and in a comics-first v0.1 it would empty the column, because the roles Kavita reports are
+mostly the comics ones. A library of manga whose pencillers, letterers and cover artists are
+unsearchable *while the column looks populated* is the worst of the available failures.
+
+## LS-100.2 The cost `schema.md` weighed is paid only when a name changed
+
+`schema.md` §6.1 left this owed because folding names in means *"a second FTS write per item, in the
+transaction the 100 ms batch window exists to keep short"*. The answer is that step 3 of
+`applyOneCreditSet` replaces credit rows unconditionally, so "did anything change" cannot be read off
+a row count — but it can be read off the **rendered name list**, compared before and after. A
+steady-state re-import rebuilds nothing; an uncredited item compares `""` to `""` and touches no FTS
+table.
+
+`CreditResult.DocsRebuilt` was added to report it, and it is load-bearing rather than decorative:
+`search_fts` is contentless and its rows are replaced in place, so **no query outside the store can
+tell a rebuild that produced identical text from no rebuild at all.** The counter is the only witness
+the negative assertion has, which is why the test that uses it also asserts retrieval — otherwise a
+step 4 that never fires would satisfy it by doing nothing.
+
+## LS-100.3 Two claims in the salvaged draft were measured and found overstated
+
+* **"DELETE-THEN-INSERT IS THE ONLY MECHANISM AVAILABLE."** Not true as stated. The probe the draft's
+  own author ran shows a *partial* update failing (`cannot UPDATE a subset of columns on fts5
+  contentless-delete table: search_fts`) and an **all-column `UPDATE` succeeding with no error**. What
+  is actually forced is that every writer supply all five columns — the stored text cannot be read
+  back (`SELECT people FROM search_fts` returns `NULL`), so the columns an update would leave alone
+  cannot be reconstructed. Delete-then-insert remains the mechanism *here* for a different reason:
+  `search_doc.rowid` is the allocator for all three tables and this function rewrites `search_doc` and
+  `search_doc_library` beside the two index rows. The comment now says that instead.
+* **"the bm25 weight vector in search.md §4."** §4 has no weight vector; its query calls
+  `bm25(search_fts)` with no weights at all. The comment now says that fts5's `bm25()` *takes* one
+  weight per column and that §4 can carry them when retrieval lands.
+
+**Both are the same failure mode**: a measurement generalised one step past what it measured. They
+are recorded rather than quietly fixed because the draft asserted them in capitals.
+
+## LS-100.4 The ADR the draft cited does not exist
+
+The salvaged comments cited **ADR-0047** twice. `docs/DECISIONS.md` stops at ADR-0046, and this repo
+has had five collisions on that shared counter. **No number was allocated.** Both citations were
+rewritten to stand on `schema.md` §6.1, `search.md` §2 and this entry, which is where the reasoning
+actually lives.
+
+⚠️ **This plausibly deserves an ADR anyway** — it closes off the `alt_titles` candidate that two
+reference documents named, and it closes off the authorship-only role filter. The argument is written
+in full in `creditedNames`' doc comment and in `LS-100.1` above; what it lacks is a number, and
+allocating one is not this thread's to do.
+
+## LS-100.5 The writer-side exclusion, and the guard that could not have caught it
+
+`writeSearchDoc` now refuses `search.md` §2's five excluded kinds outright. The existing guard,
+`TestPeopleNeverEnterTheSearchCorpus`, is a query over the corpus: it can only report a corpus that
+has **already** been corrupted, and the FTS tables carry no foreign key, so nothing cascades the bad
+rows away afterwards.
+
+**Measured, not assumed:** deleting the refusal leaves `TestPeopleNeverEnterTheSearchCorpus` GREEN.
+That is a correct non-firing — no shipped path routes a person through the builder, so the corpus
+really is clean — and it is also the precise demonstration that the CI query is not a substitute for
+the refusal. `TestTheDocumentWriterRefusesAnExcludedKind` calls the writer directly, which is the
+honest option: Kavita's adapter maps containers to `comic` and `book` only, so nothing shipped reaches
+the branch, and the caller that will — the phase-B `comic_issue` walk — is a later commit.
+
+## LS-100.6 The other correct non-firing
+
+Disabling step 4 (the credit pass's rebuild) leaves `TestAReimportKeepsTheCreditedNamesInTheDocument`
+green. That is correct: that test's subject is the **item** pass reading `work_credit` instead of
+writing `""`, and under a disabled step 4 the item pass still does exactly that. Conversely, forcing
+the item pass to write `""` fires that test and **nothing else**. The two halves of the mechanism have
+one guard each and neither absorbs the other's break.
+
+⚠️ One break in this pass was initially a **no-op and looked like an absorbed guard**: `d.altTitles`
+was zeroed on a line that a later assignment overwrote, and the drift test passed. Re-broken at the
+assignment itself, it fired. Recorded because "the guard did not fire" and "the break did not break
+anything" are indistinguishable from the test output alone, and only re-reading the patched source
+tells them apart.
+
+## LS-100.7 What this pass did NOT do
+
+* **No reader.** Nothing queries either FTS table yet. This is an indexing change with no consumer,
+  and the retrieval path — which is what will set the per-column weights — is a later commit. The
+  tests query `search_fts MATCH` directly for that reason.
+* **No existing test reversed.** The repo was searched for an assertion pinning the old empty-`people`
+  behaviour as correct (this has happened three times here). There is none: before this branch, no
+  test in `internal/` referenced the `people` column at all.
+* **No fix for one pre-existing divergence, REPORTED instead.** `applyOneItem`'s `UPDATE` of an
+  existing work does not set `work.kind`, so a container an operator retypes in Kavita leaves
+  `work.kind` at the old value while `search_doc.kind` takes the new one. `readSearchDocText` reads
+  `work.kind`, i.e. what the subtype table and `recent.go` already believe. Reconciling the two means
+  moving a subtype row and is a separate question; the divergence is noted at the function.
+* **No `alt_titles` change**, no `search_trgm` change, and no migration. `search_fts.people` has
+  existed since migration 0005 and was reserved for exactly this.

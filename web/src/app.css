@@ -813,7 +813,12 @@ textarea {
 .app {
 	display: grid;
 	grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
-	grid-template-rows: var(--toolbar-h) minmax(0, 1fr);
+	/* minmax rather than a fixed track: the top bar wraps below 560px, and a
+	 * fixed row lets its later lines render UNDER the page instead of pushing it
+	 * down. --toolbar-h stays the MINIMUM and the sticky offset; the row grows
+	 * with what is actually in the bar. The mockup hit this first and fixed it
+	 * the same way (docs/design/mockups/usarr.css). */
+	grid-template-rows: minmax(var(--toolbar-h), auto) minmax(0, 1fr);
 	grid-template-areas:
 		'topbar topbar'
 		'sidebar main';
