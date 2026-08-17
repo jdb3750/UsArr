@@ -22,6 +22,7 @@ import {
 	categoryTree,
 	clearScopeLabel,
 	formatPairs,
+	indexerCategoryTitle,
 	indexerFacts,
 	indexerNames,
 	indexerPickerLegend,
@@ -225,6 +226,115 @@ describe('the category tree', () => {
 		expect(names.get(2000)).toBe('Movies');
 		expect(names.get(2040)).toBe('Movies/HD');
 		expect(names.get(9999)).toBeUndefined();
+	});
+});
+
+describe('a release row’s own indexer’s wording for its categories', () => {
+	const movies = {
+		id: 2000,
+		name: 'Movies',
+		children: [{ id: 2040, name: 'Movies/HD', children: [] }]
+	};
+
+	it('gives each row its OWN indexer’s wording when two indexers disagree', () => {
+		// 🔍 THIS IS THE TEST THE FEATURE EXISTS FOR, and it is the one case that
+		// can tell the correct join apart from a lookup over `categoryTree`'s
+		// union. Both indexers advertise 2040; they name it differently, which is
+		// ordinary. The union resolves 2040 to ONE of these by arrival order and
+		// keeps no record of whose it kept, so a tooltip built on it would print
+		// the same string on both rows and look entirely right.
+		const catalogue = [
+			indexer({
+				indexerId: 1,
+				categories: [{ id: 2040, name: 'Movies/HD', children: [] }]
+			}),
+			indexer({
+				indexerId: 2,
+				categories: [{ id: 2040, name: 'HD Movies', children: [] }]
+			})
+		];
+		expect(indexerCategoryTitle(catalogue, 1, 1, [2040])).toBe('Movies/HD');
+		expect(indexerCategoryTitle(catalogue, 1, 2, [2040])).toBe('HD Movies');
+		// And the union really is the thing being avoided: it answers with one
+		// wording for the id, whichever row asked.
+		expect(categoryTree(catalogue).map((c) => c.name)).toEqual(['Movies/HD']);
+	});
+
+	it('reads the pair, so an id 3 in one service never answers for an id 3 in another', () => {
+		// Prowlarr numbers its indexers per install — the same fact `IndexerPair`
+		// exists for. Instance 2's indexer 1 is a different tracker.
+		const catalogue = [
+			indexer({
+				instanceId: 1,
+				indexerId: 1,
+				categories: [{ id: 2040, name: 'Movies/HD', children: [] }]
+			}),
+			indexer({
+				instanceId: 2,
+				indexerId: 1,
+				categories: [{ id: 2040, name: 'HD Movies', children: [] }]
+			})
+		];
+		expect(indexerCategoryTitle(catalogue, 1, 1, [2040])).toBe('Movies/HD');
+		expect(indexerCategoryTitle(catalogue, 2, 1, [2040])).toBe('HD Movies');
+	});
+
+	it('walks into the children, where the ids that carry the signal live', () => {
+		// 3030 under Audio is the audiobook signal; a lookup that only read the
+		// parents would have nothing to say about the one id that matters most.
+		const audio = {
+			id: 3000,
+			name: 'Audio',
+			children: [{ id: 3030, name: 'Audio/Audiobook', children: [] }]
+		};
+		expect(indexerCategoryTitle([indexer({ categories: [audio] })], 1, 1, [3000, 3030])).toBe(
+			'Audio · Audio/Audiobook'
+		);
+	});
+
+	it('keeps the release’s own order and prints a repeated name once', () => {
+		const catalogue = [indexer({ categories: [movies] })];
+		expect(indexerCategoryTitle(catalogue, 1, 1, [2040, 2000])).toBe('Movies/HD · Movies');
+		expect(indexerCategoryTitle(catalogue, 1, 1, [2000, 2000])).toBe('Movies');
+	});
+
+	it('says nothing when the row’s indexer is not in the catalogue', () => {
+		const catalogue = [indexer({ indexerId: 1, categories: [movies] })];
+		// Deleted upstream, or a `never_fetched` replica. Both are ordinary.
+		expect(indexerCategoryTitle(catalogue, 1, 9, [2000])).toBe('');
+		expect(indexerCategoryTitle([], 1, 1, [2000])).toBe('');
+	});
+
+	it('says nothing when the row or the search names no id to join on', () => {
+		const catalogue = [indexer({ categories: [movies] })];
+		// A frame that carried no `indexer_id`, and a search whose instance is not
+		// resolved yet. Neither is an error and neither may be guessed past.
+		expect(indexerCategoryTitle(catalogue, 1, undefined, [2000])).toBe('');
+		expect(indexerCategoryTitle(catalogue, 0, 1, [2000])).toBe('');
+	});
+
+	it('says nothing when this indexer has no wording for these ids', () => {
+		const catalogue = [indexer({ categories: [movies] })];
+		// An id the indexer does not advertise, and an id it advertises unnamed.
+		expect(indexerCategoryTitle(catalogue, 1, 1, [7020])).toBe('');
+		expect(indexerCategoryTitle(catalogue, 1, 1, [])).toBe('');
+		expect(
+			indexerCategoryTitle(
+				[indexer({ categories: [{ id: 8000, name: '', children: [] }] })],
+				1,
+				1,
+				[8000]
+			)
+		).toBe('');
+	});
+
+	it('answers for a disabled indexer, because a row from it is still on screen', () => {
+		// 🔍 Deliberately NOT `isSearchable`. That gate belongs to the picker,
+		// which offers what a FUTURE search could ask; this describes a release
+		// that has already come back, and an indexer switched off since the search
+		// ran still named the category it filed that release under.
+		const off = indexer({ enabled: false, supportsSearch: false, categories: [movies] });
+		expect(indexerCategoryTitle([off], 1, 1, [2000])).toBe('Movies');
 	});
 });
 
