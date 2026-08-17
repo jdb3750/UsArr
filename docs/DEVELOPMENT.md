@@ -1270,7 +1270,10 @@ default to.
 
 That is the whole procedure. The script fetches, fast-forwards, builds, installs and restarts, and
 **refuses to half-update**: every step is checked, and each failure names what state the host was
-left in. Pass `--check` to find out whether an update is available without applying one.
+left in — including the one failure that genuinely does leave a half-updated host, an `install` that
+succeeded followed by a `systemctl restart` that did not. Pass `--check` to find out whether an
+update is available without applying one; it still runs `git fetch`, because the question cannot be
+answered without one, but it touches nothing in the working tree and builds nothing.
 
 **Untracked files do not stop it, modified tracked files do**, and the split is deliberate rather
 than lenient. A server accumulates scratch files — the owner's checkout carries a
@@ -1289,8 +1292,17 @@ favour of `go build` and produce a binary with no SPA in it; `install` replaces 
 while the running process keeps the one it already has open, so a forgotten `systemctl restart` looks
 exactly like a successful deploy. That last one is the failure that prompted this: the owner's host
 repeatedly ended up not running `main`, with nothing on the machine willing to say so. The script's
-final act is therefore not "restart succeeded" but **"the running process reports commit `X`, and `X`
-is what the checkout is on"** — read out of the process's own startup log line, not off the disk.
+final act is therefore not "restart succeeded" but **"the running process reports commit `X`, `X` is
+what the checkout is on, and it is still that process three seconds later"** — read out of the
+process's own startup log line, not off the disk.
+
+That last clause is not padding. `cmd/usarr/main.go` logs `starting UsArr` **before** `buildApp`
+opens the database and runs migrations, and before the listener binds — so a port clash, a failed
+migration or an unreadable master key emits a perfectly good startup line carrying the new commit and
+*then* exits. Checking only the log line reports `update: OK` over a service that is already dead or
+crash-looping, which was measured, not theorised. The script therefore re-reads `is-active` **and**
+`MainPID` after a short settle: a state that is no longer `active` means it started and died, and a
+`MainPID` that has moved means systemd is restarting it as fast as it dies.
 
 **The underlying three steps**, still true and still worth knowing, because that is what the script
 runs and what you fall back to when something in it breaks:
@@ -1351,17 +1363,32 @@ the binary was replaced under a process that was never restarted — and the scr
 name. Exit status is `0` when all three agree, `1` when something is stale, and **`2` when a reading
 could not be taken**: an absent `systemctl`, an unreadable journal or a binary too old to answer
 `--version` cannot confirm anything, and reporting "up to date" off a partial reading is the false
-green the script exists to remove.
+green the script exists to remove. A unit that is not `active` is `1`, not `2` — a service that is
+down is an answer, not a missing reading, and letting it fall through to "unverified" would bury it.
+
+The journal line is selected by **`_PID` of the running process, read forwards**, rather than out of
+the last *N* lines of the unit. The distinction is load-bearing: `starting UsArr` is logged exactly
+once, at start, so any fixed window drops it as soon as the host logs past that window, and a fully
+current deployment then reports `UNVERIFIED` forever after. That was measured against an `-n 2000`
+window and is the reason the query is shaped the way it is; raising the number only moves the
+threshold. There is a windowed `-u` fallback for a unit whose logging PID is not `MainPID`.
 
 ### 12.1.2 `usarr --version`, and what the scripts do with it
 
 ```
 $ usarr --version
-usarr v0.1.0-12-gf722054
-commit: f722054
-built:  2026-08-17T19:43:18Z
+usarr e77c4ad
+commit: e77c4ad
+built:  2026-08-17T20:05:43Z
 go:     go1.25.13
 ```
+
+That is a real capture, and the first line looks the way it does for a reason worth knowing: `VERSION`
+is `git describe --tags --always --dirty`, **this repo has no tags at all** (`git tag` is empty), so
+`describe` falls through to `--always` and yields the bare short SHA — the same value as `commit:`.
+The day someone cuts the first tag the first line becomes `usarr v0.1.0-12-gabc1234` and `commit:`
+stays a bare short SHA; the scripts read only `commit:`, so that change does not affect them. Do not
+copy a `v…` string out of this block today expecting to see one — no release has been tagged.
 
 The values are the ones `-ldflags` stamps in (`Makefile`'s `LDFLAGS` → `main.version`, `main.commit`,
 `main.buildDate`), so `commit:` is the short SHA the checkout was on **at build time** — which is

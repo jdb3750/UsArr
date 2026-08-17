@@ -7651,3 +7651,127 @@ in its own words and the measured version is under *"What a `make check` green o
 does and does not attest"*. What the prose rests on instead is named per claim above: `git` output for
 §M5.42, `grep`/`uniq` over this file for §M5.43, `api/specs/kavita.json` for §M5.45, and §11's own
 area map for §M5.46.
+
+## M5.60 The deploy scripts, adversarially reviewed — one false green reproduced, one predicted bug rebutted
+
+Review of `83ec9e0`, `61291e4`, `e77c4ad` on `claude/hearth-thread-70gy9v` (`usarr --version`,
+`deploy/update.sh`, `deploy/status.sh`, the `make deploy` wrappers, `DEVELOPMENT.md` §12). Everything
+below was **executed**, not reasoned about: a fixture host — bare origin + clone, fake `systemctl`
+and `journalctl` backed by state files, a `make build` stand-in that stamps the real short `HEAD`
+into a `--version`-answering binary — let every branch of both scripts be fired deliberately. Bash
+5.2.21, git 2.43.0, shellcheck 0.9.0, GNU coreutils `install`.
+
+### Rebutted — the predicted mid-run self-rewrite does not happen
+
+The review brief predicted the sharpest bug in the change: `deploy/update.sh` lives inside the
+checkout it updates, so `git merge --ff-only` rewrites the file bash is executing, and bash reads a
+script lazily by byte offset. It does not reproduce, and the reason is specific.
+
+**Measured.** A fixture whose script printed markers, slept, and fast-forwarded a commit that grew
+`deploy/update.sh` by 2 471 bytes — shifting every subsequent offset — ran to completion on the old
+content, exit 0. `strace` gives the mechanism: git does `unlink("deploy/probe.sh")` then
+`openat(..., O_WRONLY|O_CREAT|O_EXCL)`. It never truncates in place. The running shell keeps its
+descriptor on the now-orphaned inode and reads the file it started with.
+
+🚩 **A negative from a test that cannot detect anything is worth nothing**, so the detector was fired
+against the case git *doesn't* do — an in-place truncating rewrite of the same path. Same inode
+before and after, and bash resumed at the stale offset and executed a fragment of a padding line:
+`./p.sh: line 7: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA: command not found`, exit 127. The fixture
+detects the bug; git's checkout does not commit it. `status.sh`'s `git fetch` was checked separately
+and leaves the worktree byte-identical (inode, size and mtime unchanged; zero worktree-path syscalls
+in its `strace`). **No change made.**
+
+### Applied — `update.sh` reported `update: OK` over a dead service
+
+The one real false green, and it is the exact failure the script exists to remove. `cmd/usarr/main.go`
+logs `starting UsArr` at **:98**, but `buildApp` — database open, migrations — is at **:114** and the
+listener at **:155**. A port clash, a failed migration or an unreadable master key therefore emits a
+perfectly good startup line carrying the *new* commit and then exits. The script's final check read
+that line and stopped.
+
+**Measured.** A fixture service that logged the new commit and died two seconds later:
+`update: OK — usarr is running d0b54e7`, exit 0, with the unit `failed` a second afterwards. A unit
+with `Restart=always` is worse, because it flaps back to `active` between crashes and `is-active`
+alone reads healthy mid-loop.
+
+Fixed by re-reading **both** `is-active` and `MainPID` after a three-second settle: a state that is
+no longer `active` means it started and died; a `MainPID` that has moved means systemd is restarting
+it as fast as it dies. Both branches were then fired and both now stop the script with a message
+naming which shape it is. The happy path stays green.
+
+### Applied — `status.sh` reported `UNVERIFIED` on healthy long-running hosts
+
+`journalctl -u "$SERVICE" -n 2000` windowed the search for a line that is emitted **once, at start**.
+Any host that has logged past the window loses it. **Measured**: a fully current fixture — checkout,
+binary and process all at the same commit — reported `VERDICT: UNVERIFIED`, exit 2, with 2 100 lines
+in the journal. That is the steady state on a box that has been up a while, not an edge case.
+
+The first fix was wrong in the same way and is recorded because it was: raising the window to `-n
+5000` and pinning it to `_PID` still dropped the line at 6 000 lines. Windowing is the defect;
+raising the number moves the threshold. It now reads **forwards** from the process's own journal
+(`journalctl _PID=… | grep -m1`), unbounded, because the startup line is among the first things that
+process logs — verified green at 20 000 lines. A windowed `-u` fallback remains for a unit whose
+logging PID is not `MainPID`.
+
+### Applied — three smaller ones, each fired before being trusted
+
+- **A failed `systemctl restart` did not name the state it left.** It is the *only* failure in the
+  script that genuinely half-updates the host — `install` already succeeded, so the new binary is on
+  disk and the next restart from any source picks it up — yet its message was the one that said least,
+  while the `systemctl`-absent and unit-unknown paths above it both spelled it out. §12.1's claim that
+  "each failure names what state the host was left in" was false at exactly this point; it is now
+  true.
+- **"Found the line, could not parse a commit from it" was reported as "could not read a line".** A
+  binary built with `go build` instead of `make build` stamps `commit=unknown`, which is not hex, so
+  the extraction yields nothing while the line sits right there in the journal. Two causes, two fixes,
+  now two messages.
+- **A unit that is not `active` exited 2 (`UNVERIFIED`) rather than 1 (`STALE`)**, because a dead
+  service leaves no `MainPID` and so no journal reading. A service that is down is an answer, not a
+  missing reading.
+
+### Applied — the `--version` sample in §12.1.2 was invented
+
+The block showed `usarr v0.1.0-12-gf722054`. **`git tag` on this repo is empty**, so
+`git describe --tags --always --dirty` falls through to `--always` and yields a bare short SHA. The
+sample implied a `v0.1.0` release that has not been cut — invented status, and the kind a reader
+would copy. Replaced with a real capture from a binary built at `e77c4ad`, plus what the line becomes
+once someone does tag, and why the scripts are unaffected either way (they read `commit:`, which stays
+a bare short SHA).
+
+### Checked and found sound — recorded so the next pass does not re-derive it
+
+- **The commit assertion is not vacuous.** `Makefile:78-79` stamps `COMMIT` from
+  `git rev-parse --short HEAD`; `update.sh` compares against the same command in the same repo at the
+  same moment, so the abbreviation length cannot disagree. `-dirty` lands on `VERSION` only, never on
+  `COMMIT`, so `USARR_ALLOW_DIRTY=1` still gets a real comparison. A `COMMIT=` overridden in the
+  environment (`?=`) makes the assertion *fail loudly*, which is the correct direction. Detached HEAD
+  is caught earlier by the branch check.
+- **The journal regex survives both real log formats.** Not asserted — the actual binary was run
+  under `USARR_LOG_FORMAT=json` and `=text` with a `url_base` set, and the `sed` lifted `e77c4ad` from
+  both. `auto`, `text`, `json` are the only values `config.go:416` admits.
+- **Nothing either script runs is destructive.** No `git clean`, no `reset --hard`, no `checkout --`,
+  no `cp`/`mv` onto a busy path. `install -m755` was straced over a *running* binary: `unlinkat` then
+  `openat(O_CREAT|O_EXCL)`, inode replaced, the running process unharmed — which is what makes the
+  `(deleted)` check in both scripts mean what it claims.
+- **`ErrVersionRequested` cannot be swallowed or mistaken.** `config.Load` is called from exactly two
+  places — `LoadOS` (`main.go:77`) and tests that pass explicit `Args` — so the nil `Config` returned
+  alongside the sentinel is unreachable by any other caller. It is returned unwrapped and matched with
+  `errors.Is`.
+- **Nothing assumes `sudo`, a TTY or `/config`.** `sudo` appears in `update.sh` only in a comment
+  explaining its absence. The corepack download prompt is already disabled in the `Makefile`, so
+  `make build` under the script does not block on stdin.
+- **`shellcheck -S style` is clean on both scripts**, before and after these changes.
+
+### Raised, not fixed
+
+- **`usarr --help` exits 1**, printing `usarr: parse flags: flag: help requested` to stderr before the
+  usage block. `flag.ErrHelp` is wrapped by `parseFlags` like any parse failure. Pre-existing, not
+  touched by this change, and `--version` did not make it worse — but the two flags are now a pair an
+  operator will reach for together, and one of them answers on stderr with a failure status.
+- **A shallow clone is not handled.** `BEHIND="$(git rev-list --count …)"` on a grafted history can
+  fail, and under `set -e` the assignment aborts the script with no message of its own. The documented
+  target is a full clone, so this is a real gap in an undocumented configuration rather than a defect
+  in the one that ships.
+- **§12's "`install` replaces the destination by creating and renaming"** is right about the effect and
+  wrong about the mechanism — it is unlink-then-create, per the `strace` above, with no rename. The
+  sentence predates this change and the conclusion drawn from it holds, so it was left alone.
