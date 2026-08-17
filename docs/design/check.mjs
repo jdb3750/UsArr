@@ -1566,6 +1566,23 @@ head('8b. The install switcher: two installs, and every screen answers to it');
         ok(`install: the ${install} mockup notice makes no implementation-status claim`);
       }
     }
+
+    /* The same property over document.title, and it is here rather than in the
+     * §13 corpus below because that corpus COUNTS strings and does not read
+     * them. The title carried the identical claim — "UsArr screen mockups:
+     * static, invented data, nothing implemented" — for the same reason and
+     * for the same length of time, and it is the one user-visible string a
+     * rendered DOM walk cannot see, so it is the one most likely to be missed
+     * again. One document, one assertion. */
+    const docTitle = await page.title();
+    const titleStatus = docTitle.match(/\b(pre-alpha|unimplemented|implemented|shipped|ships)\b/i);
+    if (titleStatus) {
+      fail(`document.title makes an implementation-status claim ("${titleStatus[0]}") — "${docTitle}". ` +
+        `§16 and the tree own that fact (SD-01); the tab is not the place to restate it`);
+    } else {
+      ok(`document.title makes no implementation-status claim — "${docTitle}"`);
+    }
+
     await setInstall(page, 'full');
   }
 }

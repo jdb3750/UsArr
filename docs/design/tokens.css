@@ -1,9 +1,18 @@
 /* =============================================================================
  * UsArr — canonical design tokens
  *
- * Status: design document, pre-alpha. None of these tokens is implemented. A
- * `web/` directory exists and carries a SvelteKit shell, but it does not
- * consume this file. This file is the single source of truth for every
+ * Where implementation status lives: not here, deliberately. ARCHITECTURE.md
+ * §16 owns which milestone owns a thing, and the tree owns what exists. This
+ * header used to answer that question itself — "None of these tokens is
+ * implemented" — and it was still saying so long after `web/src/app.css` had
+ * ported them, which is what a restated fact does (REVIEW-LOG SD-01).
+ *
+ * What IS worth stating here, because it does not go stale: nothing IMPORTS
+ * this file. `web/src/app.css` and the mockups' `usarr.css` both PORT it, so
+ * this file being canonical is a review rule rather than a build dependency —
+ * check.mjs §2 is what holds the mockup copy to it.
+ *
+ * This file is the single source of truth for every
  * colour, size, duration and radius the UI will ever use, and it is written so
  * it drops straight into Tailwind v4 (see §0 and ADR-0025).
  *

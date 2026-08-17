@@ -4590,6 +4590,48 @@ the notice and the old *"which is pre-alpha software"* put back, `node docs/desi
 Both repeat for `v01`, and the pre-existing install check stayed green throughout — which is the
 other half of the evidence: the old guard could not see either defect.
 
+**Counted rather than assumed, because a green over one fixed instance and eleven unfixed ones is
+the failure this whole entry is about.** Measured against `30cd8db`, the tree before the sweep, and
+against the tree after it:
+
+| String | Before | After |
+|---|---|---|
+| the notice, long form — *"…none of these screens is implemented and every value on them is invented"* | **12**, in **6 files** (5 source pages × 2 installs, plus `prototype.html` × 2) | **0** |
+| the notice, compact form — *"Pre-alpha mockup, invented data, …"* | **12**, same 6 files | **0** carrying a status word |
+| `prototype.html`'s `<title>` — *"…static, invented data, **nothing implemented**"* | **1** generated, from **1** f-string in `build_prototype.py` | **0** |
+| `tokens.css`'s header — *"Status: design document, pre-alpha. **None of these tokens is implemented.**"* | **1** | **0** |
+
+**The last two are the point of counting.** The footer was the instance that was reported; the
+`<title>` and the token header carried the same claim, in the same defect class, and would have
+survived a pass that fixed only what it was pointed at — and the check would have gone green over
+them. The `<title>` is the worse of the two, because it is the one user-visible string a rendered
+DOM walk **cannot see**: §13's corpus counts `document.title` but does not read it. So the guard is
+extended to it — *"document.title makes an implementation-status claim"* — and **fired deliberately
+too**, by restoring the old title alone: `node docs/design/check.mjs` exits **1** with **1 FAILURE**,
+
+> `FAIL  document.title makes an implementation-status claim ("implemented") — "UsArr screen mockups:
+> static, invented data, nothing implemented". §16 and the tree own that fact (SD-01); the tab is not
+> the place to restate it`
+
+while all six notice assertions stayed green — the two guards are independent, and neither covers
+the other. `tokens.css`'s header is rewritten to the SD-01 shape and keeps the claim that does **not**
+go stale: nothing *imports* that file, `web/src/app.css` and the mockups' `usarr.css` both *port* it,
+so its canonicity is a review rule rather than a build dependency.
+
+**Four occurrences of the old wording are retained deliberately**, each framed as history rather
+than as a claim: two superseded titles quoted in `build_prototype.py`'s comment, one in `check.mjs`'s
+new comment, one in `tokens.css`'s new header. A record of what a string used to say is not a
+restatement of it. **One is left for another pass and named here rather than stretched into this
+one:** `docs/design/mockups/README.md:269` presents *"UsArr screen mockups: static, invented data,
+nothing implemented"* as the **current** title in its changelog of the previous title fix, so it goes
+stale with this change. That file is being swept separately. It quotes the same two strings this
+entry corrects, in the same wording — **one sentence, not two variants**. ⚠️ **`SD-02r` records that
+line and verdicts it *"True — `docs/design/mockups/prototype.html:6` matches byte for byte"*; that
+was true when it was measured and is not true after this entry's `<title>` change, so `SD-02r` needs
+re-verdicting by the pass that owns it.** `SD-02` is otherwise disjoint from this sweep — no row of
+it names `tokens.css`, which is the one site here that was found by counting rather than by being
+reported.
+
 ---
 
 ## DS-07 and DS-14 — closed by `0b8637c`. **Amended dispositions.**
