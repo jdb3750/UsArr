@@ -1,6 +1,9 @@
 # Reference — The sync engine
 
-**Status:** designed, not implemented. **Scope:** channels 1, 3 and 4 plus the write queue are
+**Status:** partly implemented — **channel 1 only, behind one adapter**. `internal/libsync` runs the
+full import; nothing there polls a delta, tombstones, detects drift or drains a queue, and its
+`doc.go` is the authority on that split rather than this line. Channels 3 / 3b, channel 4 and the
+write queue below are **still design**. **Scope:** channels 1, 3 and 4 plus the write queue are
 **v0.1**; SignalR (channel 2) and the webhook receiver (4b) are **v1.0**.
 **Parent:** [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §7.
 

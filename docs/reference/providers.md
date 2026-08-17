@@ -309,9 +309,12 @@ confirmation before it is bound to a credential**.
 >
 > **And "covered" describes what a manifest *could* express, not how anything ships.** The manifest
 > tier does not exist until v0.3, so Audiobookshelf, Kavita and Komga are each a **hand-written
-> Tier 0 Go adapter**, written in the milestone that source lands in. ⚠️ **None of them is v0.1** —
-> per [ADR-0036](../DECISIONS.md#adr-0036) no catalogue source ships in v0.1; they arrive one at a
-> time afterwards, in ARCHITECTURE §16.1's sequence.
+> Tier 0 Go adapter**, written in the milestone that source lands in. ⚠️ **This read *"None of them
+> is v0.1 — per [ADR-0036](../DECISIONS.md#adr-0036) no catalogue source ships in v0.1"*, and
+> [ADR-0041](../DECISIONS.md#adr-0041) amended it**: **Kavita is v0.1's one catalogue source**, and
+> its hand-written Tier 0 adapter is the worked example of this paragraph rather than a
+> counter-example to it — `internal/kavita` is the client and `internal/libsync` holds the adapter.
+> Audiobookshelf and Komga are still after v0.1, one at a time, in ARCHITECTURE §16.1's sequence.
 
 This replaces an earlier "real diversity of the ecosystem" table that listed cookie-session,
 409-challenge, JSON-RPC and XML as *axes the manifest accommodates*, immediately next to a manifest
