@@ -970,8 +970,11 @@ earlier than v0.3, and the full four-verb correction surface (`exclude`, `includ
 plus the Corrections list stay at v0.3.** *"Minimal"* is the owner's own word and ADR-0043 records it
 as a **constraint on scope**, so what moves is bounded by that case and nothing outside it. ⚠️ **The
 ADR deliberately assigns no milestone** — the owner said *"earlier"* and named no version, and §16 is
-authoritative for milestone membership — so the slot is still unassigned, and that gap is ADR-0043's
-own open question rather than a hole in this section.
+authoritative for milestone membership. ✅ **That slot is now assigned: [ADR-0045](./DECISIONS.md#adr-0045)
+(owner-delegated, 2026-08-17) puts the minimal match-correction UI in v0.2**, closing ADR-0043's open
+question along with the two others left unslotted; ADR-0045 records that v0.2 was reached **by
+elimination** — the only slot both earlier than v0.3 and not v0.1 — and that the cost is v0.1 shipping
+the *"not identified"* badge without its remedy for one milestone.
 
 `normalized_title` and `norm_version`
 are **columns on `work` from the migration that creates it** (adding them later is a backfill over
