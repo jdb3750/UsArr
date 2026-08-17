@@ -2334,9 +2334,22 @@ shifted up **without reordering**.
 
 **What is kept, with its remaining cost stated rather than argued away.** The libraries subsystem
 (§6.5) and the auto-proposal flow stay in v0.1. Its four tables are owed by v0.1 either way, its
-screen is one of the five `CLAUDE.md` names as essential, and **a library binding carries
-the request destination** that v0.1's one write path routes on — so it is load-bearing in v0.1
-regardless of which source feeds it. ⚠️ **Its best demonstration is still not in v0.1:** the
+screen is one of the five `CLAUDE.md` names as essential — so it is load-bearing in v0.1 regardless
+of which source feeds it.
+⚠️ **This justification stood on three grounds and now stands on two, and the third is withdrawn
+outright rather than quietly narrowed.** It read *"and **a library binding carries the request
+destination that v0.1's one write path routes on**"*, where that write path was the four \*Arr verbs
+on the durable command queue. [ADR-0042](./DECISIONS.md#adr-0042) re-sequenced those out of v0.1, so
+**nothing in v0.1 routes on a request destination.** **The first two grounds are untouched and the
+subsystem stays** — the four tables are owed by v0.1 either way, and the screen is one of the five.
+🚩 **And the ground is gone more completely than this decision alone would have taken it**, which is
+worth recording because two threads reached it from opposite directions on the same day: §17.8 has
+since established that **no service v0.1 connects can be a library's request sink at all** — a sink
+must advertise `Add` under §8.3's capability filter, and the Prowlarr path does not, because it posts
+a release to Prowlarr's own download client (§8.5). So the destination is not merely un-routed-on in
+v0.1; it **cannot be set**, and §17.8 removes its column from the Libraries row view for the
+milestone. **Both are sequencing, not cuts:** the column and the routing return with the first
+service that can be a destination. ⚠️ **Its best demonstration is still not in v0.1:** the
 Ebooks/Audiobooks split over one Audiobookshelf library was the concrete improvement over upstream's
 own organisation, and that demonstration moves with Audiobookshelf. **But v0.1 gets a real one back**
 ([ADR-0041](./DECISIONS.md#adr-0041)) — an **Ebooks library and a Comics library derived from one
@@ -2396,6 +2409,12 @@ after v0.1** — what changed is that v0.1 now proves the sync core on a catalog
 rather than on an \*Arr, so these three land on machinery already run against a real library.
 
 **v0.1 — "It reads your library, it is fast, and you can act on it."**
+⚠️ **What *"act on it"* means in v0.1 narrowed, and the label is kept deliberately rather than by
+inattention.** It was funded by two things: the Prowlarr Search-and-Grab request path, and the minimal
+\*Arr write path (`monitor`, `unmonitor`, `delete`, `add`). **The second re-sequences out**
+([ADR-0042](./DECISIONS.md#adr-0042)), so acting in v0.1 means **searching indexers and grabbing a
+release** — not toggling monitored or deleting through an \*Arr. That is still a real action that
+changes the world outside UsArr, which is what the label claims; it is one verb rather than five.
 Go binary + embedded SPA; SQLite + WAL with the §7.7 discipline; goose migrations. **The sync core,
 with one Tier 0 Go adapter in front of it: Kavita** — which is what proves the replica thesis on real
 data, because it is the source the owner runs and the only one whose delta has been verified against
@@ -2403,18 +2422,35 @@ a live instance ([ADR-0035](./DECISIONS.md#adr-0035) §2a) — plus **Prowlarr i
 (§8.5), which is the request path for **all six** media types. **Sonarr and Radarr re-sequence out of
 v0.1** (ADR-0041): the owner runs neither, so *"a real Sonarr and a real Radarr, imported"* was a
 criterion no v0.1 could meet. **They are re-sequenced, not cut** — they arrive onto a sync core
-already proven on real data. **No command sinks** — no Lidarr, no LazyLibrarian, no Mylar3, no
-Kapowarr.
+already proven on real data. **No command sinks — none at all**, not merely the four §16.0 defers.
+⚠️ **This read *"No command sinks — no Lidarr, no LazyLibrarian, no Mylar3, no Kapowarr"***, which
+enumerated the four deferred by [ADR-0032](./DECISIONS.md#adr-0032) at a time when Sonarr and Radarr
+were v0.1's *kept* sinks. [ADR-0041](./DECISIONS.md#adr-0041) removed those two and
+[ADR-0042](./DECISIONS.md#adr-0042) re-sequenced the write path that addressed them, so the honest
+statement is **zero command sinks and no command path to one** — Lidarr, LazyLibrarian, Mylar3 and
+Kapowarr are still out, and Sonarr and Radarr are out with them.
 Sync channels **1, 3b and 4**: full import; **channel 3b (§7.1a) — the ordered page walk with a
 client-side stop — for Kavita**, which is every library-bearing service v0.1 has, and which is
 therefore **built here rather than only specified** (ADR-0041). **Channel 3 (`/history/since`) is not
 applicable to Kavita** (§7.1a) and lands with the first \*Arr adapter. **Reconciliation with 7-day
 tombstones and both sweep guards** for everything — and it carries more weight here than it would for
 an \*Arr, because a page walk cannot observe a deletion (§7.1a) and Kavita's watermark moves on a
-chapter *add* only (ADR-0035 §2a clause (c)). SignalR and webhooks are **out**. ⚠️ **The minimal
-write path** (`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue **had only \*Arr
-targets and now has none** — whether it re-sequences with them or stays for Prowlarr's grab path
-alone is this section's call to make; no optimistic apply either way.
+chapter *add* only (ADR-0035 §2a clause (c)). SignalR and webhooks are **out**. **The minimal write path**
+(`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue **re-sequences out of v0.1 and
+lands with the first \*Arr adapter — specified, not built** ([ADR-0042](./DECISIONS.md#adr-0042)); no
+optimistic apply when it does. ⚠️ **This clause carried an open question and now carries its answer.**
+It read *"had only \*Arr targets and now has none — whether it re-sequences with them or stays for
+Prowlarr's grab path alone is this section's call to make"*, flagged by
+[ADR-0041](./DECISIONS.md#adr-0041) when that ADR took Sonarr and Radarr out of v0.1 and left all four
+Servarr-shaped verbs addressing nothing. **The call is made**, on the owner's answer of 2026-08-17 and
+on one measurement: **the shipped Prowlarr grab path never used the queue**, so keeping the write path
+"for the grab path alone" would have meant *building* v0.1's first queue writer, worker and
+verification loop for a path that completes synchronously inside `handleGrab` and is barred from
+retrying (§7.6, `grab` is max one attempt). **v0.1 still has a write path — Search-and-Grab is it, and
+it is now the only one.** **`write_queue` stays in the schema with no writer for the whole milestone,
+deliberately**: that is the seam, and [ADR-0039](./DECISIONS.md#adr-0039) left both `state` and `kind`
+unconstrained, so the first writer costs **no migration at all**. **Sonarr and Radarr are re-sequenced,
+not cut, and neither is this write path** — the owner's explicit condition, recorded in ADR-0042.
 
 > **What "six media types" does and does not mean in v0.1**, because the phrase is load-bearing and
 > was previously overstated. The **schema** is six-type — it has to be, migration 0001 cannot be
@@ -2496,7 +2532,12 @@ read joining `write_queue` to `provenance`, one index to serve it, one API endpo
 an existing screen.** That is the whole of it. ⚠️ **The cost estimate held; the shape it costed did
 not ship whole.** What landed is `GET /api/v1/grabs/recent` — **six columns, no join, no keyset
 cursor, a server-clamped `LIMIT`** — because nothing writes `write_queue` yet and the category
-resolver is behind a layering boundary `internal/httpapi` may not cross. §17.5 carries the full
+resolver is behind a layering boundary `internal/httpapi` may not cross. ⚠️ **And the word *yet* has
+since stopped being accurate about v0.1.** That clause was written when a v0.1 queue writer was still
+scoped; [ADR-0042](./DECISIONS.md#adr-0042) re-sequenced the write path out, so **no v0.1 work will
+write `write_queue` at all** and the queue-state column is a **post-v0.1 addition rather than a gap
+v0.1 still owes**. The estimate's other half is unaffected: the `provenance` rows are real, they are
+what the shipped endpoint reads, and the block works without the join. §17.5 carries the full
 shipped-against-target table and is authoritative for the difference; the estimate is left standing
 above rather than retro-fitted, because a cost note rewritten after the fact stops being evidence
 about estimating. **This is a deliberate addition to v0.1 and it is
@@ -2958,8 +2999,9 @@ exactly that, and drawing them as top-level rows is what took the sidebar to fif
 specified as kind, base URL and API key, and the field the whole screen is keyed on was missing from
 the one flow that creates a row. `service_instance.name` is what tells two Radarrs apart — it is the
 first column of this table, it is what the `Radarr 4K` row is called, and the **"1080p ✓ / 4K ✗"**
-badge §16 names as v0.1's power-user signal is unrenderable if the second instance arrives
-indistinguishable from the first. **The field is defaulted from the probed application and instance
+badge is unrenderable if the second instance arrives indistinguishable from the first. **§16 owns
+which milestone exercises that badge and this section does not restate it**; the name field is owed
+as soon as a second instance of any kind can be added, which the add flow has never prevented. **The field is defaulted from the probed application and instance
 (`Radarr`, then `Radarr (2)` on collision) and is editable in place**, so the common single-instance
 case is still three things typed; it is not an extra question, it is a pre-filled answer. It must be
 unique per user, which the inline settings form's own help text already states and the add flow never
@@ -3151,8 +3193,7 @@ carries eleven groups in a `SearchResultGroup`.
    group contains more than one distinct value; otherwise state it once in the group header.** The
    same applies to any per-group column with one distinct value.
    **When the collapsed value is stated in the header beside the media-type name, the noun
-   `library` is mandatory** — *"all in the **Movies** library · all from Radarr 4K"* (⚠️ the
-   equivalent over an Ebooks library and Audiobookshelf is the post-v0.1 form of the same rule), never
+   `library` is mandatory** — *"all in the **Movies** library · all from Radarr 4K"*, never
    *"all in Ebooks"*. The `<h2>` is a media type (a closed enum of six) and the collapsed value is a
    library (unbounded, user-named); on the common install they are the same string, so without the
    noun the line reads as a tautology and teaches that the two axes ADR-0027 exists to separate are
@@ -3248,10 +3289,10 @@ Search-and-Grab mode, surfaced at the point of use.
 > because music is second-class:** no write-capable service ships in v0.1 at all, so Lidarr,
 > LazyLibrarian and Mylar3 are deferred on identical ground, and Radarr and Sonarr are present as
 > *destinations* in v0.2 only because they are already there as *sources*. ⚠️ **And the catalogue
-> half is deferred for every non-\*Arr type alike** — music, audiobooks, ebooks and comics have **no
-> catalogue source in v0.1**, because the catalogue sources are sequenced after it, one at a time,
-> so the \*Arr sync proves the replica thesis on real data first. Music is not singled out; it is in
-> the same position as the other three, and §16 is authoritative for when each arrives. The
+> half is deferred alike for every type v0.1's one catalogue source does not cover**, because the
+> remaining sources are sequenced after it, one at a time. **§16 is authoritative for which types
+> those are and for when each of the remaining sources arrives, and this section does not restate
+> it.** Music is not singled out; it is in the same position as every other uncovered type. The
 > thin-indexer fact above is narrower still, true, and about the indexer ecosystem rather than about
 > UsArr's design.
 
@@ -3633,15 +3674,16 @@ of a library anywhere. Cost: one line.
 
 They cross-link both ways: a degraded source on a library row links to that instance's Services row,
 and a Services row lists the libraries it feeds and warns before removal — *"Radarr feeds 2
-libraries. Removing it will leave Movies and Kids films with no source."* (⚠️ the same warning over
-an Audiobookshelf feeding Ebooks and Audiobooks is the post-v0.1 form of the identical rule). **No credential field ever
+libraries. Removing it will leave Movies and Kids films with no source."* **No credential field ever
 appears on this screen**; API keys live only behind Services plus sudo mode (§12.1).
 
 **Nothing about libraries is asked before a service exists.** The §17.7 wizard is unchanged; on a
 successful connect and capability probe UsArr **proposes** libraries as one pre-checked "Accept" step,
-each editable inline — **in v0.1, one `movie` library per Radarr and one `series` per Sonarr**, and
-**none for Prowlarr**, which has no library. ⚠️ From the milestone each lands in, one per upstream
-library for Audiobookshelf / Kavita / Navidrome (then Komga, then Jellyfin — ADR-0035, §16). Two proposals are decisions rather than defaults:
+each editable inline — **one proposal per container the connected service itself reports**: one per
+upstream library for a media server (Kavita, Navidrome, Audiobookshelf, Komga, Jellyfin), one `movie`
+library per Radarr and one `series` per Sonarr, and **none for Prowlarr**, which has no library.
+**§16 is authoritative for which of those services a given milestone connects, and this section does
+not restate it** (ADR-0035). Two proposals are decisions rather than defaults:
 
 - **Adding a second instance of the same kind proposes joining the existing library, not creating a
   new one.** Two Radarrs → *one* Movies library with two sources, which is what makes the
@@ -3675,8 +3717,9 @@ library for Audiobookshelf / Kavita / Navidrome (then Komga, then Jellyfin — A
   keep their checkbox, the declined row keeps its word, and an `Accept` header over a cell reading
   `declined` is a header contradicting its own cell.
 
-**Row view:** name · kind · item count · source chips with per-source health · request destination ·
-state · reorder handle, plus **Add library** and the auto-proposal banner.
+**Row view:** name · kind · item count · source chips with per-source health · request destination
+(⚠️ **absent in v0.1** — see the `Request destination` rule below) · state · reorder handle, plus
+**Add library** and the auto-proposal banner.
 
 - **`Add library` is specified rather than named, because it is the recovery path when the
   auto-proposal got it wrong** — which is the single most likely reason a user opens this screen at
@@ -3746,14 +3789,27 @@ definition of each verb is exemplary and is the only place they are defined. ⚠
 defined nowhere**, because that panel is v0.3; if the four verbs appear anywhere in v0.1 copy they
 carry their definitions with them.
 
-**The `Request destination` column states its shared fact once and keeps only the per-row
-exceptions.** Four of six rows read `none` and each carried its own explanatory paragraph, which is
-§17.4 rule 5's own rule (a column whose value is identical for every row is not data) firing on a
-column that survived it — and one of those paragraphs ran to sixty-two words of competitive analysis
-inside a table cell. **Above the table, once:** *"v0.1 connects no request destination for music,
-audiobooks, ebooks or comics. Indexer search still works and the grab ends in your download
-client."* **In the cells:** `None`. **Kept as a per-row footnote:** the Ebooks row's Readarr note,
-which is a real, dated, specific fact a user cannot infer.
+**The `Request destination` column does not render in v0.1, and it returns with the first service
+that can be a destination.** As drawn, most rows read `none` and each of those carried its own
+explanatory paragraph — one of them sixty-two words of competitive analysis inside a table cell —
+which is §17.4 rule 5 (*a column whose value is identical for every row is not data*) firing on the
+column that paragraph was written to defend. **Collapsing the shared fact above the table fixed the
+cells and not the column.** No service v0.1 connects can be a library's request sink at all: a sink
+is a pin inside §8.3's capability filter and must advertise `Add`, which the Prowlarr path does not —
+it posts a release to Prowlarr's own download client (§8.5) — and **§16 is authoritative for the rest
+of the membership, which this section does not restate.** So the value is identical on *every* row,
+and a column that structurally cannot vary is not data at any width; six cells reading `None` look
+like data and carry none, which is the failure rule 5 names.
+
+**In v0.1 the column is absent and the screen says so once, in its own copy** — principle 3's honest
+degradation, which is to say what is missing and why rather than render an empty grid:
+*"No request destination can be set yet: no connected service accepts requests. Indexer search still
+works, and the grab ends in your download client."* ⚠️ **This is sequencing, not a cut.** The column,
+its per-row exceptions and the Ebooks row's Readarr note — a real, dated, specific fact a user cannot
+infer — all return unchanged with the first service that can be a destination, and §16 owns when that
+is. **The detail view's `Requests` panel is unaffected**, because it is one field on one library
+rather than a column across rows: it already specifies **None** with the reason inline, which is the
+same sentence at the point where the user would otherwise set the thing.
 
 **Deleting a library says exactly what it does — including the part that is destructive:** *"This
 removes the library from UsArr. It does not delete anything from Radarr, Sonarr, or your disks. It

@@ -276,6 +276,13 @@ func (c *Config) TrustedProxyWarnings() []string {
 	return out
 }
 
+// ErrVersionRequested is returned by Load when --version was passed. It is a
+// control-flow signal rather than a failure: the caller prints the build
+// identity and exits 0. It is a sentinel and not a bool on Config because Load
+// deliberately returns a nil Config in that case — there is no configuration to
+// speak of, and handing back a half-resolved one invites a caller to use it.
+var ErrVersionRequested = errors.New("config: --version requested")
+
 // Options are the inputs to Load. Both Args and Env are supplied explicitly so
 // the whole of level 1 is testable without touching the process environment.
 type Options struct {
@@ -325,6 +332,15 @@ func Load(o Options) (*Config, error) {
 	f, set, err := parseFlags(o.Args)
 	if err != nil {
 		return nil, err
+	}
+
+	// --version returns here, before anything below can fail. Everything after
+	// this line reads the environment, resolves and creates directories, and can
+	// reach for the master key — all of which need privileges and a config dir
+	// that an operator asking "what is installed?" may not have. Answering that
+	// question must never depend on being able to start the service.
+	if f.showVersion {
+		return nil, ErrVersionRequested
 	}
 
 	env := o.Env

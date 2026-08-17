@@ -24,6 +24,12 @@ type flags struct {
 	secretKeyFile     string
 	trustedProxies    string
 	metadataUserAgent string
+
+	// showVersion is not a configuration value at all: it is a request to print
+	// the build identity and exit. It lives here anyway so that ONE parser owns
+	// the command line — a second, hand-rolled scan of os.Args would drift from
+	// this FlagSet's idea of what a valid argument is.
+	showVersion bool
 }
 
 func parseFlags(args []string) (flags, map[string]bool, error) {
@@ -53,6 +59,8 @@ func parseFlags(args []string) (flags, map[string]bool, error) {
 		"comma-separated CIDRs whose X-Forwarded-* headers are believed; empty trusts nothing (USARR_TRUSTED_PROXIES)")
 	fs.StringVar(&f.metadataUserAgent, "metadata-user-agent", "",
 		"contact string sent to MusicBrainz and Open Library (USARR_METADATA_USER_AGENT)")
+	fs.BoolVar(&f.showVersion, "version", false,
+		"print the build identity (version, commit, build date, Go version) and exit")
 
 	// There is deliberately no --secret-key. A command line is world-readable
 	// through ps(1) and appears in container inspect output; the master key
