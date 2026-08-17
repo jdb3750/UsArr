@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"testing"
 
 	"github.com/jdb3750/UsArr/internal/kavita"
@@ -264,30 +263,40 @@ func TestIdentifiedCassetteMapsEveryIDSourceAndDropsTheEditionID(t *testing.T) {
 
 	// ⚠️ THE CONFIDENCE RULE IS NOT UNIFORM, and it used to be asserted here as
 	// though it were — on the premise that every one of these is "a typed
-	// Kavita+ field, not free text". That premise is FALSE FOR ComicVine:
-	// Series.ComicVineId has three writers at Kavita v0.9.0.2
-	// (ProcessSeries.cs:162, ProcessSeries.cs:365,
-	// ExternalMetadataIdHelper.cs:38), none behind a licence check, and all
-	// three free text. §6.4 amendment 3 therefore caps it below 1.0, and
-	// comicvine_test.go owns that rule in full.
+	// Kavita+ field, not free text". That premise was false for ComicVine and,
+	// LS-38 measured, false for AniList, MyAnimeList and MangaBaka too: all four
+	// have plain-scanner writers at v0.9.0.2 reading ComicInfo.xml's <Web>
+	// element, and every one of the six has an Edit-Series-dialog writer. §6.4
+	// amendment 3 caps all four below 1.0.
+	//
+	// THE SPLIT IS ASSERTED HERE BY TABLE rather than by prefix, so that a field
+	// silently moving from one side to the other fails rather than being
+	// absorbed by a startsWith. comicvine_test.go and weblinkid_test.go own the
+	// two rules in full; this asserts only that the mapping applies the right one
+	// to the right source.
+	weakSources := map[string]bool{
+		ComicVineVolumeSource: true,
+		AniListSource:         true,
+		MalMangaSource:        true,
+		MangaBakaSource:       true,
+	}
 	ids := func(remoteID string) map[string]string {
 		out := map[string]string{}
 		for _, x := range byID[remoteID].ExternalIDs {
-			isComicVine := strings.HasPrefix(x.Source, "comicvine")
-			if !isComicVine && x.Confidence < 1.0 {
-				t.Errorf("%s: %s=%s came out at confidence %v; want 1.0", remoteID, x.Source, x.Value, x.Confidence)
-			}
-			if isComicVine && x.Confidence >= 1.0 {
-				t.Errorf("%s: %s=%s came out at confidence %v; a ComicVine id is parsed out of a "+
-					"free-text field and at 1.0 it satisfies ux_extid_work_strong and MERGES WORKS",
+			switch {
+			case weakSources[x.Source] && x.Confidence >= 1.0:
+				t.Errorf("%s: %s=%s came out at confidence %v; Kavita parses that field out of a "+
+					"free-text <Web> element, and at 1.0 it satisfies ux_extid_work_strong and MERGES WORKS",
 					remoteID, x.Source, x.Value, x.Confidence)
+			case !weakSources[x.Source] && x.Confidence < 1.0:
+				t.Errorf("%s: %s=%s came out at confidence %v; want 1.0", remoteID, x.Source, x.Value, x.Confidence)
 			}
 			out[x.Source] = x.Value
 		}
 		return out
 	}
 
-	if got := ids("101"); got["anilist"] != "30013" || got["mal"] != "2" || len(got) != 2 {
+	if got := ids("101"); got[AniListSource] != "30013" || got[MalMangaSource] != "2" || len(got) != 2 {
 		t.Errorf("Berserk external ids = %v", got)
 	}
 	// Library 6 does not set inheritWebLinksFromFirstChapter, so the bare
@@ -295,8 +304,18 @@ func TestIdentifiedCassetteMapsEveryIDSourceAndDropsTheEditionID(t *testing.T) {
 	if got := ids("104"); got[ComicVineVolumeSource] != "42563" || got["cbr"] != "7" || len(got) != 2 {
 		t.Errorf("Saga external ids = %v", got)
 	}
-	if got := ids("106"); got["mal"] != "9115" || len(got) != 1 {
+	if got := ids("106"); got[MalMangaSource] != "9115" || len(got) != 1 {
 		t.Errorf("Spice and Wolf external ids = %v", got)
+	}
+	// The bare 'mal' namespace is GONE, not merely unused. LS-10 is closed by
+	// the source string, so a regression to it has to fail somewhere.
+	for _, remote := range []string{"101", "106"} {
+		if v, ok := ids(remote)[malBareSource]; ok {
+			t.Errorf("series %s carries the BARE source %q=%s; MyAnimeList numbers anime and "+
+				"manga separately (myanimelist.net/anime/1 is Cowboy Bebop, /manga/1 is Monster), "+
+				"so a bare namespace lets two different works collide on (source, value)",
+				remote, malBareSource, v)
+		}
 	}
 
 	// mangaBakaEditionId is set on 103 and MUST NOT appear: it is an EDITION

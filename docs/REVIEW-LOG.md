@@ -10824,3 +10824,360 @@ browser from `kind`, two of the six chips would be one chip.
   not need it (the per-row lookup here is served by `ix_edition_work`).
 * **No wall-clock number.** `EXPLAIN QUERY PLAN` and row counts are deterministic and are in the
   gate; the cost of the 151-series read on the owner's hardware is `make bench`'s and was not measured.
+
+# Round 5 continued — `LS-38`: the other three weblink-parsed ids, and `LS-12` closed
+
+**Date:** 2026-08-17. **Prefix:** `LS-` (library sync), continuing from `LS-29` above.
+
+🚩 **AND THESE WERE RENUMBERED THREE TIMES, WHICH IS `LS-17`'s LESSON ARRIVING ON SCHEDULE.** `LS-16` was
+the highest id observable when this pass started. The credits pass landed `LS-17`–`LS-26` while it
+was in flight, so the block was written as `LS-17`… and rewritten as `LS-27`… against the merged
+tree. **Then the §17 pass landed `LS-27`–`LS-29` between that merge and this push**, and the
+collision surfaced as the same `docs/REVIEW-LOG.md` EOF conflict `LS-17` describes — so the block was
+renumbered a second time against `26a7376`. **THEN IT HAPPENED A THIRD TIME**: the recently-added
+read landed its own `LS-30`–`LS-37` at `a6ef254` before this could be pushed, so the block was
+renumbered again and is now `LS-38`–`LS-46`. **Re-reading after the last merge is necessary and NOT
+SUFFICIENT** — the counter moved again between the read and the push, three times in one evening
+here, and the only reliable check is the one that runs at the moment the conflict appears. The renumber is
+mechanical and the six code sites that cite one of these ids moved with it —
+`internal/libsync/weblinkid.go`, `kavita.go`, `kavita_test.go`, `importer_test.go`,
+`cmd/usarr/import_e2e_test.go` and `testdata/cassettes/kavita_series_all_v2_identified.yaml`.
+
+**Target:** `internal/libsync/weblinkid.go` (new), `internal/libsync/kavita.go`,
+`internal/kavita/resources.go`, two new cassettes, and the three tests that encoded the old premise.
+`web/` untouched by instruction.
+
+## What this closes
+
+`LS-12` read, in full:
+
+> The same measurement found `Series.AniListId`, `MalId` and `MangaBakaId` are **also**
+> weblink-parsed at v0.9.0.2 (`ProcessSeries.cs:363-366`) rather than matcher-written, so §6.4
+> amendment 3 arguably reaches them too — and they are still written at 1.0.
+
+**It does reach them, all three, and the "arguably" is now measured away.** But the answer is not
+uniform, and the two places it differs from ComicVine are the reason this is a separate pass rather
+than a search-and-replace of `LS-11`'s constant.
+
+## What was verified, and against what
+
+Kavita's source at tag **`v0.9.0.2`** (`6bcd568`, `Kareadita/Kavita`), a full working tree, whole-tree
+`grep` per property rather than per keyword. Namespace facts were checked against the **live
+services**, because no amount of reading Kavita settles whether two numbering systems collide.
+
+| Claim | Verified how |
+| --- | --- |
+| `Series.AniListId` has **three** writers | `ProcessSeries.cs:363` (scanner, free text) · `ExternalMetadataService.cs:1106` (Kavita+) · `ExternalMetadataIdHelper.cs:13` (Edit Series dialog) |
+| `Series.MalId` has **three** | `ProcessSeries.cs:364` · `ExternalMetadataService.cs:1112` · `ExternalMetadataIdHelper.cs:18` |
+| `Series.MangaBakaId` has **two**, and **no provider writer at all** | `ProcessSeries.cs:366` · `ExternalMetadataIdHelper.cs:23`. `UpdateExternalIds` (`ExternalMetadataService.cs:1101-1118`) writes `AniListId` and `MalId` and stops |
+| The provider path is real and **licence-gated** | `UpdateExternalIds` ← `WriteExternalMetadataToSeries` (`:532`) ← `:465`, inside a flow gated at `:249` on `IsPlusEligible(libraryType) && HasActiveLicense()` |
+| …and unreachable for **Comic, Book and Image** libraries | `ExternalMetadataService.cs:55-56`: `NonEligibleLibraryTypes = [LibraryType.Comic, LibraryType.Book, LibraryType.Image]` |
+| ⚠️ These three have **no `ProcessSeries.cs:162` analogue** — the inherit block is their ONLY scanner path | `grep -rn "series\.AniListId\|series\.MalId\|series\.MangaBakaId"` returns `ProcessSeries.cs:363-366` and nothing else in the scanner |
+| 🚩 The inherit block **overwrites** a Kavita+ value, on every scan | `ProcessSeries.cs:358-367` is inside `UpdateSeriesMetadata`, which `ProcessSeries.cs:165` calls unconditionally each scan. Assignments are unconditional |
+| 🚩 …and **erases**, to `0`, when the first chapter has no link for that site | `?? 0` on `:363` and `:364`; `GetMangaBakaId` returns `long` with its own `?? 0` (`WeblinkParser.cs:88-91`) |
+| The parsers are **kind-restricted** to the series space | `WeblinkParser.cs:11-12,20`: `"https://anilist.co/manga/"`, `"https://myanimelist.net/manga/"`, `"https://mangabaka.org/"`. `StartsWith` prefix match, so an `anilist.co/anime/…` link never matches |
+| Kavita itself calls `MalId` a **manga** id | `Kavita.Models/Entities/Interfaces/IHasMetadataIds.cs`, doc comment on the property: `https://myanimelist.net/store/manga/{MalId}/Blue_Lock` |
+| **AniList's id space is GLOBAL** across anime and manga | Live `POST https://graphql.anilist.co`, 2026-08-17: `Media(id: 1)` → `{id 1, type ANIME, "Cowboy Bebop"}`; `Media(id: 1, type: MANGA)` → `404 Not Found`; `Media(id: 30002)` → `{id 30002, type MANGA, "Berserk"}` |
+| **MyAnimeList's is NOT** — anime and manga are separate spaces that collide | First-party, 2026-08-17: `https://myanimelist.net/anime/1` → `og:title "Cowboy Bebop"`; `https://myanimelist.net/manga/1` → `og:title "Monster"`. Both `HTTP 200`, no redirect |
+| MangaBaka's series URL is the **numeric site root**, which is the shape the parser reads | `https://mangabaka.org/3391` → `HTTP 200`, `<title>The Greatest Estate Developer … \| MangaBaka</title>`, no redirect. Kavita pins the same shape at `WeblinkParserTests.cs:32` |
+| `Series` at v0.9.0.2 declares **no `CbrId` and no `MangaBakaEditionId`** | `Kavita.Models/Entities/Series.cs:120-125` — six id properties, and those two are not among them. Both are develop-only and modelled from the vendored spec |
+| `external_id.source` has **no `CHECK`** | `00005_library_sync.sql:448-454` — plain `TEXT` with a comment. A namespace is a naming decision, not a migration |
+| ⚠️ The **erasure is v0.9.0.2-specific**; develop guards it | At the tag, `ProcessSeries.cs:746-749` assigns `chapter.AniListId/MalId/MangaBakaId/MetronId = info.X ?? 0` **unconditionally**, and `:359-366` does the same at series level. Develop guards them (`if (info.MetronId is > 0)`, series block reworked to `:421-443`) |
+| ⚠️ The parser class is `Kavita.Common/Helpers/WeblinkParser.cs` **at the tag** | `find . -name ExternalIdParser.cs` returns **nothing** at `v0.9.0.2` — that is develop's rename. Both names are carried wherever this pass cites it |
+| 🚩 `SeriesDto` at the tag declares **six** ids, and **neither `cbrId` nor `mangaBakaEditionId`** | `Kavita.Models/DTOs/SeriesDto.cs:104-109`: `AniListId`, `MalId`, `HardcoverId`, `MetronId`, `ComicVineId`, `MangaBakaId`. At the tag `CbrId` exists only on Kavita+ DTOs and `ExternalSeriesMetadata`, never on the series shape `all-v2` serves. The vendored spec is **develop's** (`info.version 0.9.0.20`; a v0.9.0.2 server reports `0.9.0.0`) |
+| 🚩 **Nothing on any scan path writes `Series.MetronId`** | `grep -rn "MetronId"` over the tag: `DefaultParser.cs:178-179` parses metron-tagger's id out of ComicInfo `<Notes>` (`Parser.cs:1350`) into `ParserInfo`, and `ProcessSeries.cs:749` lands it on the **CHAPTER**. `metron.cloud` is not in `WeblinkParser`'s `<Web>` vocabulary at all |
+
+**Taken on trust, not verified here:** that AutoMapper's `ProjectTo<SeriesMetadataDto>` populates
+`WebLinks` by convention (the property exists on both sides and the vendored spec declares it, but no
+mapping profile was read); and that no *other* `mangabaka.org` resource lives at a numeric first path
+segment, which was spot-checked on one id rather than enumerated.
+
+## Findings
+
+| # | Finding | Severity | Disposition |
+| --- | --- | --- | --- |
+| **LS-38** | `SeriesDto.aniListId`, `malId` and `mangaBakaId` went through `kavitaExternalIDs`'s `add` closure, which hard-codes `Confidence: 1.0` — satisfying `ux_extid_work_strong` and so **merging works** on a value Kavita may have parsed out of a free-text `<Web>` element. `LS-12`'s hazard, confirmed | **High** | **Applied.** New `weblinkid.go`; all three route through `webLinkIdentity` at `WebLinkConfidence` (0.90) and **cannot reach `add`** |
+| **LS-39** | `'mal'` was written **bare**, and the collision `LS-10` feared is real rather than theoretical: MAL id `1` is *Cowboy Bebop* in the anime space and *Monster* in the manga space | **High** | **Applied.** `MalMangaSource = "mal_manga"`. ⚠️ `AniListSource` and `MangaBakaSource` stay **bare**, on measurement rather than symmetry — AniList's `Media` space is global and MangaBaka keeps its edition ids in a separate DTO field |
+| **LS-40** | 🚩 **A GUARD ASSERTED THE BUG.** `importer_test.go`'s `TestFullImportDeclinesTheImageLibraryAndSaysWhy` required `WorksCreated == 4 && WorksReused == 1`, commented *"the two Berserk rows are one work"* — i.e. it would have failed if the merge stopped happening | **High** | **Applied.** Now `5` and `0`, with the reversal and its reason written at the assertion rather than in a commit message |
+| **LS-41** | The fixture header said the same thing: `kavita_series_all_v2_identified.yaml` described its shared-`aniListId` pair as *"a `ux_extid_work_strong` violation, which migration 0005 calls 'the merge signal, not an error'"* — encoding the false premise, exactly as `LS-15` found for `comicVineId` | Medium | **Applied.** Corrected in place with the measurement and the date, the `LS-15` shape |
+| **LS-46** | 🚩 **THE VENDORED SPEC IS DEVELOP'S, AND TWO FIELDS UsArr MODELS DO NOT EXIST ON THE OWNER'S SERVER.** `api/specs/kavita.json` reports `info.version 0.9.0.20`; a `v0.9.0.2` server reports `0.9.0.0`. `SeriesDto` at the tag (`Kavita.Models/DTOs/SeriesDto.cs:104-109`) declares six ids and **neither `cbrId` nor `mangaBakaEditionId`** | Medium | **Measured and recorded; no behaviour change, because there is no data defect to fix.** Both decode as the Go zero value on the owner's instance, so `add("cbr", …)` is skipped and `mangaBakaEditionId` was never written (decision 4). ⚠️ **What it DOES mean is that a contract test passing against the vendored spec is testing develop rather than the release**, and that one of the three sources still at 1.0 is unreachable on the install it was written for — folded into `LS-43`. **Re-vendoring the spec is deliberately NOT attempted here**; it is a separate decision with its own owner |
+| **LS-42** | ⚠️ `internal/kavita/resources.go`'s `SeriesDto` comment still asserted *"written only by the Kavita+ match path"* — the premise `LS-11` disproved for ComicVine and this pass disproved for three more fields — **immediately above the struct field group labelled "Kavita+ identifiers"** | Medium | **Applied.** Rewritten to say what the six writers actually are, and to state the consequence for a reader of the struct: none of these fields carries its own provenance |
+| **LS-43** | ⚠️ `hardcover_book`, `metron` **and `cbr`** still go out at **1.0**, and all three are worse than "weaker provenance". **`hardcover_book`**: `Series.HardcoverId` has exactly one writer, `ExternalMetadataIdHelper.cs:28` — the Edit Series dialog, free text, no scanner and no provider. **`metron`**: `Series.MetronId` likewise (`:33`), and 🚩 **Metron's identity is ISSUE-LEVEL in practice** — metron-tagger's id parses out of ComicInfo `<Notes>` into `ParserInfo` and lands on the **CHAPTER** (`ProcessSeries.cs:749`), nothing on any scan path writes the series one, and `metron.cloud` is not in the `<Web>` vocabulary. That is §6.4 amendment 4's shape and exactly what `LS-14` refused for a ComicVine issue. **`cbr`**: 🚩 **dead on the owner's version** — `SeriesDto.cs:104-109` at `v0.9.0.2` has no `CbrId`, so the line can never fire on the install it was written for | **High** | **Raised, not fixed**, for the reason `LS-12` was not fixed inside `LS-11`: different fields, different fixtures, and a fourth behaviour in this commit would make none of them reviewable. All three measurements are in `kavitaExternalIDs`'s comment, decision 5 |
+| **LS-44** | `LS-17` recorded that the credits pass now makes `GET /api/Series/metadata` per series, so `SeriesMetadataDto.WebLinks` is decoded and unread — offering `LS-11`'s `ParseComicVineWebLinks` a free feed. **Claimed and measured here rather than left unclaimed** | Medium | **Declined on measurement, not on scope.** See below — the string is empty in the case that needed it |
+| **LS-45** | 🚩 **AND A SECOND GUARD ASSERTED IT, THROUGH THE REAL HTTP PATH.** `cmd/usarr/import_e2e_test.go`'s `TestAddingAKavitaProducesACatalogue` required `catalogue work rows == 4` — *"the two Berserk series are one work"* — plus `search_doc == 4`, one `work_comic` row for the pair, and `work_credit == 4`. **Four separate numbers, all downstream of the same merge.** More seriously, TWO DOCUMENTED FINDINGS WERE DEMONSTRATED ON THAT MERGE and lose their only fixture when it goes: `LS-07` (a shared work's `reading_direction` is last-writer-wins) and `LS-19` (a shared work's credits are last-writer-wins) | **High** | **Applied, and the coverage loss is written at both sites rather than left as a passing number.** Now `5`, `5`, `2` and `6`, each with the reversal and its reason. `LS-07` and `LS-19`'s **findings stand unchanged** — two remote items resolving onto one work still overwrite each other — but reaching that state now needs a genuinely work-strong shared id (`hardcover_book`, `openlibrary_work`, `goodreads_work`), which this fixture does not carry. ✅ One assertion got **stronger**: `person works == 4` used to be carried by the two Berserk rows having merged, and now tests what it says it tests — `store.personWorkID` resolving one human credited on two different works to one row |
+
+## `LS-44` — the phase-B `webLinks` opportunity, priced before it was passed over
+
+The offer is real: `SeriesMetadataDto.webLinks` is declared in the vendored spec, is on the response
+of the exact endpoint `StreamCredits` already calls, and is decoded by nobody. **It was not folded
+in, and the reason is a measurement rather than a scope call.**
+
+`SeriesMetadata.WebLinks` has exactly two writers at v0.9.0.2:
+
+* `ProcessSeries.cs:362` — `series.Metadata.WebLinks = firstChapter.WebLinks`, **only inside the
+  `InheritWebLinksFromFirstChapter` block**;
+* `SeriesService.cs:137,140` — the Edit Series dialog, comma-joined from what the user typed.
+
+So take the two cases `LS-11` cares about:
+
+* **Flag OFF** — the ComicTagger-tagged library whose bare `comicVineId` `LS-11` writes as a volume at
+  0.90. **The scanner never touches `SeriesMetadata.WebLinks` here at all**: `ProcessSeries.cs:162`
+  fills `series.ComicVineId` from `ParserInfo.ComicVineSeriesId` without going near the metadata
+  row. The string is **empty** unless a user typed one in by hand. It cannot confirm anything.
+* **Flag ON** — the case `LS-11` refuses outright. `webLinks` there is the first chapter's `<Web>`
+  element, which for ComicVine is an **issue** link, so feeding it to the classifier re-derives the
+  refusal that is already made. No change in outcome.
+
+**The residual value is one narrow case** — flag off, plus a user who pasted a `4050` URL into the
+Edit Series dialog — and buying it costs a second identity-write path running *after*
+`ApplyCatalogueBatch` has committed, with its own ordering and report semantics. That is not free,
+and it is not this commit's subject. **It is recorded here as measured-and-declined so it is neither
+silently lost nor silently duplicated**, and whoever picks it up should start from the two writers
+above rather than from the availability of the field.
+
+## The confidence assigned, and why each — the answer differs per field
+
+| Field | Provider writer? | Namespace | Confidence | The argument |
+| --- | --- | --- | --- | --- |
+| `aniListId` | **Yes**, licence-gated | `anilist`, **bare** | `0.90` | The provider path is real, and it still does not buy 1.0: the DTO carries no provenance, and the free-text path **overwrites** the provider one on the next scan. Bare namespace because AniList's `Media` id space is global — proven, not assumed |
+| `malId` | **Yes**, licence-gated | `mal_manga`, **namespaced** | `0.90` | Same confidence argument. The namespace is the part that differs: MAL's two spaces genuinely collide, and every writer of the field puts a *manga* id in it — Kavita's own interface doc says so |
+| `mangaBakaId` | **No, none** | `mangabaka`, **bare** | `0.90` | The easiest of the three: at v0.9.0.2 nothing but free text can write it. Bare because the edition space lives in a **separate DTO field**, so the kind is never erased the way `comicVineId` erases it |
+
+**And the refusal machinery is deliberately NOT transferred**, which is the finding most likely to be
+mistaken for an omission. `comicVineIdentity` refuses because a *kind* was unrecoverable — 4050 and
+4000 are different number spaces and Kavita strips the prefix. These three have **no chapter-level URL
+space** for `WeblinkParser` to read, so an inherited link names the series the chapter belongs to: an
+accuracy risk when a file is misfiled, not a kind confusion, and 0.90 already covers accuracy risk.
+
+Worse, refusing on the inherit flag would be **actively harmful here**, and this is the asymmetry
+that took the longest to see: these three have **no `ProcessSeries.cs:162` analogue**, so the inherit
+block is the *only* scanner path they have. Refusing on the flag, as ComicVine does, would refuse
+every AniList, MAL and MangaBaka id a free Kavita instance is capable of producing — in a library
+that is books and manga.
+
+## Amended dispositions
+
+Appended, never rewritten in place — this file's §6.1 mechanism. No existing entry's id, text or
+severity changed.
+
+| # | Original disposition | Amended disposition, and what settles it |
+| --- | --- | --- |
+| **LS-12** | *"**Raised, not fixed.** A behaviour change against different fixtures; shipping it inside a ComicVine correction would make neither reviewable. Recorded in `kavitaExternalIDs`'s comment, decision 1"* | ✅ **CLOSED by `LS-38`/`LS-39`.** The premise is confirmed and the fix shipped: all three land at `0.90`, `mal` is namespaced. Two things the original could not know, both from re-measuring rather than re-reading: **`mangaBakaId` has no provider writer anywhere in Kavita**, and **`aniListId`/`malId` do have one** — which makes their cap an argument about *provenance being unrecoverable and overwritable*, not about the absence of a matcher. The `arguably` is discharged in the strongest available form: the free-text path does not merely coexist with the provider path, `ProcessSeries.cs:358-367` **overwrites it on every scan** |
+| **LS-10** | *"**Raised, not fixed.** Recorded in `kavita.go` rather than pre-solved with a source string the schema does not list — see `LS.8`"* | ✅ **CLOSED by `LS-39`, and the caution turned out to be half right.** `external_id.source` has **no `CHECK`** (`00005:448-454`), so "a source string the schema does not list" was never a schema question — `LS-11` had already shipped `comicvine_volume` on the same column. The worry itself was **correct for MAL and wrong for AniList**, and only a live check could separate them: MAL id `1` names two different works in two spaces; AniList `Media` ids are one space across anime and manga. So `mal` is namespaced and `anilist` is deliberately left bare |
+| **LS-04** | *(in `LS-17`'s "not done" list)* *"`LS-04` is still open — §17.8's `LibraryType` withdrawal versus the vendored spec — and this pass did not revisit it"* | ✅ **Already closed twice over, and the stale line is noted rather than edited.** `LS-11`'s own table resolved it (`✅ RESOLVED`, `mapLibraryType`'s comment), and §17.8 on `main` at `2c7709a` now carries the amendment that withdraws the withdrawal. `mapLibraryType`'s comment is rewritten here to drop the two-documents-disagree hedging, since nothing disagrees any more; the durable half — **a Kavita citation with an `API/Entities/…` path is reading the frozen `main`** — is kept |
+
+## The guards, fired
+
+Every one broken deliberately and reverted. Verbatim red, `go test ./internal/libsync/...`.
+
+**1 — the cap itself (`WebLinkConfidence` 0.90 → 1.0).** Four tests, and note the *last* line: the
+consequence, not the number.
+
+```
+--- FAIL: TestFullImportDeclinesTheImageLibraryAndSaysWhy (0.04s)
+    importer_test.go:229: works: created 4 reused 1, want 5 and 0 — the two Berserk rows share an AniList id parsed out of free text, and merging on one is unrecoverable in v0.1
+--- FAIL: TestWeblinkIdentityEndToEndAgainstTheDatabase (0.04s)
+    weblinkid_test.go:186: 4 weblink-parsed rows satisfy ux_extid_work_strong's predicate (work_id IS NOT NULL AND confidence >= 1.0); want 0
+    weblinkid_test.go:200: series 301 and 302 resolved to 1 distinct works, want 2 — they share aniListId 30002, and a strong write on a free-text-derived id MERGED THEM
+    weblinkid_test.go:216: 4 work rows, want 5 — weakening an identity claim must not drop the work
+```
+
+**2 — the namespace (`MalMangaSource` back to `"mal"`).**
+
+```
+--- FAIL: TestIdentifiedCassetteMapsEveryIDSourceAndDropsTheEditionID (0.00s)
+    kavita_test.go:314: series 101 carries the BARE source "mal"=2; MyAnimeList numbers anime and manga separately (myanimelist.net/anime/1 is Cowboy Bebop, /manga/1 is Monster), so a bare namespace lets two different works collide on (source, value)
+--- FAIL: TestWeblinkIdentityEndToEndAgainstTheDatabase (0.04s)
+    weblinkid_test.go:208: 2 rows carry the bare source 'mal'; MyAnimeList numbers anime and manga separately (myanimelist.net/anime/1 is Cowboy Bebop, /manga/1 is Monster), so a bare namespace lets two different works collide on (source, value)
+```
+
+**3 — `mangaBakaId` alone, routed back through `add()`.** Fired for `mangabaka` and *only* for
+`mangabaka`, which is what proves the three are guarded separately rather than as a block.
+
+```
+--- FAIL: TestWeblinkParsedIDsAreNeverWorkStrong (0.00s)
+    weblinkid_test.go:65: inherit=false: mangabaka confidence 1, want WebLinkConfidence (0.9)
+--- FAIL: TestWeblinkIdentityEndToEndAgainstTheDatabase (0.04s)
+    weblinkid_test.go:174: series 303 claim 0 = {source:mangabaka value:3391 confidence:1}, want {source:mangabaka value:3391 confidence:0.9}
+    weblinkid_test.go:186: 1 weblink-parsed rows satisfy ux_extid_work_strong's predicate (work_id IS NOT NULL AND confidence >= 1.0); want 0
+```
+
+**4 — `aniListId` alone.** The merge assertion is what fires here, because 301 and 302 share it.
+
+```
+--- FAIL: TestWeblinkIdentityEndToEndAgainstTheDatabase (0.05s)
+    weblinkid_test.go:169: series 302 holds [{anilist 30002 1} {mal_manga 2 0.9}], want [{anilist 30002 0.9}]
+    weblinkid_test.go:186: 1 weblink-parsed rows satisfy ux_extid_work_strong's predicate (work_id IS NOT NULL AND confidence >= 1.0); want 0
+    weblinkid_test.go:200: series 301 and 302 resolved to 1 distinct works, want 2 — they share aniListId 30002, and a strong write on a free-text-derived id MERGED THEM
+```
+
+**5 — `malId` alone.** Two rows, from two different libraries, one of which Kavita+ cannot reach.
+
+```
+--- FAIL: TestWeblinkIdentityEndToEndAgainstTheDatabase (0.04s)
+    weblinkid_test.go:174: series 301 claim 1 = {source:mal_manga value:2 confidence:1}, want {source:mal_manga value:2 confidence:0.9}
+    weblinkid_test.go:174: series 304 claim 0 = {source:mal_manga value:1 confidence:1}, want {source:mal_manga value:1 confidence:0.9}
+    weblinkid_test.go:186: 2 weblink-parsed rows satisfy ux_extid_work_strong's predicate (work_id IS NOT NULL AND confidence >= 1.0); want 0
+```
+
+**Why the structural assertion is asked of SQLite in the index's own terms**, and not as a row count:
+`ux_extid_work_strong` is `UNIQUE(source, value) WHERE work_id IS NOT NULL AND confidence >= 1.0`, so
+the test selects on exactly that predicate. A count of `external_id` rows would still add up after a
+merge; `count(DISTINCT work_id)` over the two series sharing `aniListId 30002` is the assertion that
+cannot.
+
+### The cassettes
+
+Both new files declare **SYNTHETIC** in their own header with the version they claim
+(`0.9.0.2`, the owner's), and both say what they are constructed to fire and why each series would
+fail differently if the cap came off. `kavita_libraries_weblink_ids.yaml` separates the three
+provenance regimes — Kavita+-eligible with the flag off, flag on, and a **Book** library that
+`NonEligibleLibraryTypes` excludes from Kavita+ entirely. `kavita_series_all_v2_identified.yaml` was
+**corrected in place**, not extended — `LS-41`.
+
+### On the gate
+
+`make check` from a cleaned lint cache — `/root/go/bin/golangci-lint cache clean` by absolute path
+first. Binaries, versions, the commit and the verbatim tail are in the commit message.
+
+### What this pass did NOT do
+
+* **`LS-43`** — `hardcover_book`, `metron` and `cbr` at 1.0. Measured, recorded, not changed; and
+  the measurement got worse rather than better on a second look — `metron`'s only populated level is
+  the CHAPTER and `cbr` cannot fire on the owner's version at all.
+* **`LS-46`** — re-vendoring `api/specs/kavita.json` against the owner's release rather than
+  develop. Measured and recorded; it is a separate decision with its own owner.
+* **`LS-44`** — the phase-B `webLinks` feed. Measured, priced, declined; see above.
+* **Stale ids are never deleted.** UsArr's `external_id` write is an upsert with no delete path, so
+  when Kavita's inherit block **erases** a field to `0` on a later scan, the row UsArr already wrote
+  survives. That is protective at 0.90 — identity does not flap — but it means a wrong id outlives
+  its source. Deleting identity rows on upstream absence is a design decision with a much larger
+  blast radius and belongs to whoever owns channel 3b, not here.
+* **`web/`** — out of scope by instruction, and nothing here renders.
+
+---
+
+# TRIAD — the three unslotted commitments get a milestone (2026-08-17)
+
+Scope: assign a milestone to the three commitments left unslotted by [ADR-0042](./DECISIONS.md#adr-0042)
+and [ADR-0043](./DECISIONS.md#adr-0043), after the owner delegated the call — *"idk lets just slot
+them in somewhere i reckon? i don't really care, whatever you think is best"*, 2026-08-17. Base
+`2c7709a`. Prefix `TRIAD-`, checked unused across `docs/` and all **21** remote heads
+(`git ls-remote --heads origin`) before the first entry was written.
+
+## TRIAD.1 The proposed argument was checked against §16 rather than adopted, and two thirds of it hold
+
+The brief proposed v0.2 for all three and asked for the argument to be verified rather than accepted.
+It was, clause by clause.
+
+| # | Entry | Severity | Finding | Disposition |
+|---|---|---|---|---|
+| `TRIAD-01` | §16 v0.2 / §8.3 | **Confirmed** | **v0.2's headline *is* the \*Arr-backed request flow, and it cannot ship without Sonarr or Radarr.** §16's v0.2 entry reads *"Request model, routing rules, approval workflow, quotas … One Add that routes; availability states; per-season TV."* §8.3's routing can only choose an instance whose probed capabilities *"advertise `Add`"*; §16.0 and §17.8 both already record that **no service v0.1 connects passes that filter** — Prowlarr posts a release to its own download client (§8.5). Every other roadmap sink is later than v0.2: LazyLibrarian v0.3, Lidarr/Mylar3/Kapowarr v1.0. *"Per-season TV"* names Sonarr outright. | **Applied.** §16's v0.2 entry names Sonarr and Radarr and states that this **writes down a dependency rather than adding one**, so *"cut before you add"* has no payment to demand. |
+| `TRIAD-02` | §16 v0.2 / §7.6 | **Confirmed** | **The minimal write path follows for the same reason, not as a second decision.** ADR-0042 slotted it *relatively* — *"lands with the first \*Arr adapter"* — and an Add that routes to Radarr **is** a `write_queue` row, a worker and a `verifying` state (§7.6). | **Applied.** v0.2, and §16 now names v0.2 as the milestone that first writes `write_queue`. |
+| `TRIAD-03` | §16.0 / ADR-0043 | **Confirmed, with the argument restated** | **The correction UI is v0.2 by elimination, and the brief was right to insist that be said out loud.** The owner's constraint is *"earlier than v0.3"*; the only other candidate is v0.1; v0.1 has no *"cut before you add"* payment to name after ADR-0041 (Kavita) and ADR-0044 (`work_credit`). | **Applied**, with `TRIAD-04`'s cost attached. |
+| `TRIAD-04` | §16.0, §16 v0.2 | 🔴 **Cost the recommendation did not price** | **v0.1 ships the *"not identified"* badge without its remedy for a whole milestone.** ADR-0035 §1 makes that state the **majority path** on free Kavita, and ADR-0043's alternative (a) rejected *"the badge alone"* as *"a screen that is honest about a defect it forbids you to fix"*. v0.2 is a shorter version of the same defect, not the absence of it. §16.0's own sentence — *"a user has something to correct on **day one** and now has somewhere to do it"* — quietly assumed the two were the same milestone. | **Applied, not rebutted.** §16.0's sentence carries a ⚠️ saying the two halves are one milestone apart; §16's v0.2 entry states the cost; ADR-0045 clause 4 records it as accepted rather than solved, with the one real mitigation — **nothing in v0.2 gates the correction UI, so it can and should land first**. |
+| `TRIAD-05` | §16.1 | 🟡 **Alternative the brief asked to be checked** | **Is there a milestone between v0.1 and v0.2 that the recommendation missed?** §16.1's catalogue sequence is numbered separately and *"expected to interleave with v0.2"* — so yes, in the sense that Navidrome (#1) may land first. But it is the **read-only catalogue** sequence: four Tier 0 adapters on channel 3b, gated by a per-source watermark probe. Sonarr and Radarr are library sources **and** command sinks on channel 3 with a write path; neither the `Gate` column nor the success criterion fits them, and slot #4 sits after Komga, which §16.1 pins last — so it would leave v0.2 with no sink anyway. | **Checked and rejected**, recorded as ADR-0045 alternative (a). §16.1 gains a note saying the two \*Arrs are not slots in that table **and no longer need to be**. |
+
+## TRIAD.2 The §16 sweep found more than the brief named, again
+
+The brief warned that every §16 pass that day had found more sites than it was sent for. It held. Nine
+sites were amended, of which the brief named three.
+
+* **Named:** the v0.2 entry, ADR-0042's and ADR-0043's no-milestone clauses.
+* **Found by sweep, all in §16 and all now carrying a ⚠️ with the text they used to hold:**
+  §16.0's *"Sonarr and Radarr arrive too"* (no version attached); §16.0's *"re-sequenced, not cut"*
+  paragraph; §16.0's libraries paragraph, whose *"the column and the routing return with the first
+  service that can be a destination"* is the **same dependency as `TRIAD-01` read from the other end**;
+  §16.0's *"a user has something to correct on day one"* (`TRIAD-04`); §16.0's ***"Three things that
+  decision does not say"*** heading, one of whose three has now been said; §16.1's table note;
+  the v0.1 entry's channel-3 clause, its write-path clause, its `write_queue`-seam clause, its
+  correction-UI clause and its *"1080p ✓ / 4K ✗"* badge clause; the `Recent grabs` block's
+  *"post-v0.1 addition"*; and the v0.3 entry's *"its milestone is not assigned"*.
+
+`TRIAD-06` · 🟡 · **The heading *"Three things that decision does not say"* was itself falsified by
+the first of its three bullets.** A list that counts its own members goes stale when a member moves,
+and the count is easy to miss when only the bullet is edited. Flagged in place rather than renumbered
+to two, because renumbering would erase what the bullet used to claim. **Applied.**
+
+## TRIAD.3 Sites outside this pass's remit, found and routed rather than fixed
+
+`TRIAD-07` · 🔴 · **`ARCHITECTURE.md` §6.4 now contains a sentence this pass falsified, and §6 was
+out of remit.** Its correction-UI paragraph ends *"⚠️ **The ADR deliberately assigns no milestone** …
+so the slot is still unassigned, and that gap is ADR-0043's own open question rather than a hole in
+this section."* **The slot is assigned — v0.2** ([ADR-0045](./DECISIONS.md#adr-0045)). This is a
+**different** staleness from the §6.4 flag `LS.13` discharged, and it was created by this pass rather
+than inherited. **Routed to §6's owner, not fixed here.**
+
+`TRIAD-08` · 🟢 · **Two sites that name the relative slot are *not* falsified and were deliberately
+left alone.** §7.1's channel table (`| 3 | Delta poll (/history/since) | … | **with the first \*Arr
+adapter** |`, and the ⚠️ note under it) and `README.md`'s v0.1 sync-channel row both say channel 3
+*"lands with the first \*Arr adapter"*. That stays true; it is now also nameable as v0.2. **Offered as
+a follow-up, not taken** — a true sentence is not a finding, and `CLAUDE.md`'s scope rule says so.
+
+## TRIAD.4 How big v0.2 got, stated because the owner delegated rather than because he asked
+
+`TRIAD-09` · 🟡 · **Naming the three makes v0.2 the third-largest milestone in the plan** — behind
+v0.1 and v1.0, **ahead of v0.3**. It now holds two hand-written \*Arr adapters (`/api/v3` for both),
+sync channel 3, the first `write_queue` writer with its worker and settlement loop, one correction
+screen, **and** the request model, routing, approval, quotas and unified search box it already
+carried. **Most of that was already true and merely unwritten**, since `TRIAD-01` and `TRIAD-02` show
+the two \*Arr items are v0.2's own prerequisites — but *"already true"* is not *"already visible"*.
+**Applied**: §16's v0.2 entry states the size, states the ordering inside the milestone (adapters and
+write path before the request flow; correction UI independent), and **names the seam a split would
+use**. Whether to split is ADR-0045's open question and is **not** taken here — it is a scope
+decision with the owner's name on it.
+
+## TRIAD.5 Whether this needed its own ADR — argued, then written
+
+`TRIAD-10` · 🟡 · **It did, and the reasoning is worth recording because §16 alone was a defensible
+answer.** Against an ADR: §16 is authoritative for milestone membership, so a scheduling call the
+owner delegated could have lived there with the two existing ADRs merely annotated to point at it.
+**For an ADR, three grounds, and the third is decisive:** (a) `CLAUDE.md` says *"add one for any
+decision that closes off an alternative"*, and this closes v0.1 for the correction UI — a candidate
+ADR-0043's own open question named as **not equivalent** to v0.2; (b) it adopts an alternative two
+ADRs had explicitly **rejected** (ADR-0042 (e), ADR-0043 (c)), and adopting a rejected alternative on
+new information is the ADR-shaped event this log exists for; (c) `DECISIONS.md`'s preamble states that
+***"the decision lives in the superseding ADR; the amendment note points at it and does not re-argue
+it"*** — with no ADR, both amendment blocks would have had to point at a document section and carry
+the argument themselves, inverting the file's own convention. **One ADR for all three**, not three,
+because they are one call. **Applied as [ADR-0045](./DECISIONS.md#adr-0045)**; the number was re-read
+against every remote head immediately before the push, per `DEVELOPMENT.md` §11.
+
+## TRIAD.6 On the gate
+
+`make check` from a lint cache cleaned first with `/root/go/bin/golangci-lint cache clean` by absolute
+path. Binaries, versions and the commit are in the commit message.
+
+**What a green covers on this diff, stated plainly: almost nothing about it.** The diff is three
+markdown files. `make check` compiles no changed Go, runs no changed test, and **this repo has no
+markdown linter and no link checker** — so the anchors this pass introduced are verified by eye and by
+`grep`, not by a tool: **one `<a id="adr-0045"></a>`, 15 `./DECISIONS.md#adr-0045` links from §16, 15
+`(#adr-0045)` links inside `DECISIONS.md` and 3 from this file**, counted with `grep -c` on the tree
+that was pushed. What the
+green actually attests is that **the tree still builds, lints, tests and scans clean around a
+docs-only change** — i.e. that nothing was broken, not that anything here is right. The claims in
+this pass are checkable by reading §16, §8.3 and `DECISIONS.md`, and that is the only check they have.
+
+## TRIAD.7 Amended disposition — `TRIAD` undercounted its own edits, twice and differently
+
+`TRIAD-11` · 🟡 · **Self-correction, appended rather than applied in place**, per this file's
+*"amend underneath, leaving the original standing"* rule (§6.1) and `DEVELOPMENT.md` §11's *"a
+citation inside a dated record is history, not staleness"*. `TRIAD.2` above opens *"Nine sites were
+amended"* and then lists thirteen; commit `3c0e7f9`'s message says *"fifteen sites"*. **Neither
+number is right, and they are not right in different directions**, which is exactly the defect
+§11's *"report what you measured, not just the verdict"* is about — a count asserted from memory
+rather than taken from the diff.
+
+**Measured on the landed tree** (`git diff 87a01e8 60d093e -- docs/ARCHITECTURE.md | grep -c '^@@'`):
+**13 hunks, all inside §16**, carrying **17 distinct amended clauses** — §16.0 ×6 (*"arrive too"*;
+*"re-sequenced, not cut"* plus its new *"not in that table"* sentence; the libraries paragraph's
+request destination; *"day one"*; the *"Three things that decision does not say"* heading; its first
+bullet), §16.1 ×1 (the new table note), the **v0.1 entry ×8** (the \*Arrs' re-sequencing, channel 3,
+the write path's relative slot, the `write_queue` seam, the correction-UI clause, the badge clause,
+the `Recent grabs` *"post-v0.1"* clause, and *"all three now have a milestone"*), the **v0.2 entry
+×1** (the addition), and the **v0.3 entry ×1**.
+
+**The original sentences above are left standing**, including the wrong counts, because the entry is
+a dated record and the failure is more instructive than a tidy number would be. **Three of those
+sites were named in the brief; the other fourteen came from the sweep** — which is the claim
+`TRIAD.2` was actually making, and it is stronger at 14 than it was at nine.

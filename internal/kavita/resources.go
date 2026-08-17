@@ -159,10 +159,29 @@ type LibraryDto struct {
 //     LastChapterAddedUtc and nothing else time-of-change shaped. Use the Utc
 //     one — the other is the server's local clock and this is a replica that has
 //     to compare across machines.
-//  2. THE EXTERNAL IDS ARE USUALLY EMPTY. AniListID, MalID, HardcoverID,
-//     MetronID, ComicVineID, MangaBakaID, MangaBakaEditionID and CbrID are
-//     written only by the Kavita+ match path, so on a free instance they are 0,
-//     null or "". Degraded identity is the ORDINARY case here, not an error
+//
+//  2. THE EXTERNAL IDS ARE USUALLY EMPTY, BUT ⚠️ "USUALLY EMPTY" IS NOT
+//     "KAVITA+ ONLY", AND THIS COMMENT SAID SO FOR A WHILE. It read: AniListID,
+//     MalID, HardcoverID, MetronID, ComicVineID, MangaBakaID, MangaBakaEditionID
+//     and CbrID "are written only by the Kavita+ match path". FALSE, measured
+//     against Kavita's source at tag v0.9.0.2 — the owner's version, ADR-0035
+//     §2a — by grepping the whole tree for assignments to each Series property:
+//
+//     ComicVineID, AniListID, MalID and MangaBakaID all have PLAIN-SCANNER
+//     writers reading ComicInfo.xml's <Web> element (ProcessSeries.cs:162 and
+//     :363-366), and every one of the six has a writer behind the Edit Series
+//     dialog (ExternalMetadataIdHelper.cs:11-39), which validates `is > 0` and
+//     nothing else. Only AniListID and MalID have a Kavita+ writer at all
+//     (ExternalMetadataService.cs:1101-1118), and HardcoverID and MetronID have
+//     NO writer but the dialog. A free instance can therefore return a fully
+//     populated identifier set for a ComicTagger-tagged library.
+//
+//     WHAT THAT MEANS FOR A READER OF THIS STRUCT: none of these fields carries
+//     its own provenance, so none of them may be treated as a strong identity
+//     claim on arrival. libsync.kavitaExternalIDs owns that decision and
+//     libsync/weblinkid.go owns the per-field measurement behind it.
+//
+//     Degraded identity is still the ORDINARY case here, and still not an error
 //     (ARCHITECTURE.md §6.4, ADR-0035 §1).
 type SeriesDto struct {
 	ID            int32  `json:"id"`

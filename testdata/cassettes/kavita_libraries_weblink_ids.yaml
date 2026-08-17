@@ -1,0 +1,69 @@
+---
+# SYNTHETIC — hand-authored from api/specs/kavita.json (develop @ 9c3e540,
+# LibraryDto) and from Kavita's source at tag v0.9.0.2. NOT a wire capture.
+# Claimed Kavita version: 0.9.0.2 — the OWNER'S version (ADR-0035 §2a), because
+# every behaviour this fixture is built to exercise was verified there.
+#
+# WHY THIS FIXTURE EXISTS ALONGSIDE kavita_libraries_comicvine.yaml: that one
+# separates one variable for comicVineId, whose hazard is a KIND that the DTO
+# erases. This one separates the variable that matters for aniListId, malId and
+# mangaBakaId, whose hazard is PROVENANCE — which writer put the number there.
+# The three libraries below are the three provenance regimes at v0.9.0.2:
+#
+#   20  Manga (type 0), inheritWebLinksFromFirstChapter FALSE
+#       Kavita+ ELIGIBLE, and the plain scanner CANNOT write these three fields
+#       here at all: unlike series.ComicVineId, which ProcessSeries.cs:162 fills
+#       from an aggregate over parsed files, AniListId/MalId/MangaBakaId have no
+#       such writer — their only scanner path is the inherit block at
+#       ProcessSeries.cs:358-367. So a value here is Kavita+ or the Edit Series
+#       dialog, and the DTO does not say which.
+#
+#   21  Manga (type 0), inheritWebLinksFromFirstChapter TRUE
+#       The scanner writes all three from the FIRST CHAPTER's <Web> element
+#       (ProcessSeries.cs:363-366) on every scan, unconditionally, overwriting
+#       whatever Kavita+ or the user put there — and setting the field to 0 when
+#       that chapter has no link for that site, because each assignment ends
+#       `?? 0`. Free text, and it wins.
+#
+#   22  Book (type 2), inheritWebLinksFromFirstChapter FALSE
+#       ⚠️ NOT Kavita+ ELIGIBLE AT ALL. ExternalMetadataService.cs:55-56 declares
+#       `NonEligibleLibraryTypes = [Comic, Book, Image]` and :249 returns early
+#       on `!IsPlusEligible(libraryType)`, so no provider writer can reach a
+#       series in this library. Any id here is free text with no alternative
+#       explanation.
+#
+# Libraries 20 and 21 are the SAME LibraryType and differ only in the flag, so a
+# difference in outcome between series 301 and 302 can only be the flag.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Library/libraries
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            [
+              {"id": 20, "name": "Manga",            "type": 0, "folders": ["/m/manga"],  "coverImage": "", "lastScanned": "2026-08-17T07:00:30.118Z", "inheritWebLinksFromFirstChapter": false},
+              {"id": 21, "name": "Manga (inherited)","type": 0, "folders": ["/m/manga2"], "coverImage": "", "lastScanned": "2026-08-17T07:00:30.118Z", "inheritWebLinksFromFirstChapter": true},
+              {"id": 22, "name": "Ebooks",           "type": 2, "folders": ["/m/books"],  "coverImage": "", "lastScanned": "2026-08-17T07:00:30.118Z", "inheritWebLinksFromFirstChapter": false}
+            ]

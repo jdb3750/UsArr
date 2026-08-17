@@ -46,8 +46,12 @@ func kavitaSeries(id, libraryID int, name string, extra map[string]any) map[stri
 		// The UTC watermark, not the server's local clock.
 		"lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
 		"lastChapterAdded":    "2026-08-17T09:00:30.118Z",
-		// DEGRADED IDENTITY IS THE DEFAULT HERE because it is the ordinary case:
-		// a free Kavita writes none of the Kavita+ identifier fields.
+		// DEGRADED IDENTITY IS THE DEFAULT HERE because it is the ordinary case
+		// for an UNTAGGED library. ⚠️ Not because "a free Kavita writes none of
+		// the Kavita+ identifier fields", which is what this said and is false:
+		// LS-38 found that four of these six have plain-scanner writers reading
+		// ComicInfo.xml's <Web> element, so a ComicTagger-tagged free instance
+		// fills them in.
 		"aniListId": 0, "malId": 0, "hardcoverId": 0, "metronId": 0,
 		"comicVineId": "", "mangaBakaId": 0, "cbrId": 0,
 	}
@@ -130,7 +134,11 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 		kavitaSeries(42, 2, "Saga", nil),
 		kavitaSeries(43, 3, "The Hobbit", map[string]any{"pages": 310}),
 		// Two series in DIFFERENT libraries of the SAME kind carrying the SAME
-		// strong id: §6.4 tier 1 must resolve them onto one work.
+		// AniList id. ⚠️ They must NOT resolve onto one work: this said "§6.4
+		// tier 1 must resolve them onto one work", on the premise that aniListId
+		// is matcher-written. LS-38 measured otherwise, so §6.4 amendment 3 caps
+		// it at 0.90 and tier 1 skips it. The pair is kept precisely to prove
+		// that — a deluxe re-release must not swallow the original.
 		kavitaSeries(44, 1, "Berserk", map[string]any{"aniListId": 30013}),
 		kavitaSeries(45, 2, "Berserk (Deluxe)", map[string]any{"aniListId": 30013}),
 	}
@@ -192,16 +200,27 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 		t.Errorf("library_source rows = %d, want 3", n)
 	}
 
-	// Five series, FOUR CATALOGUE works: the two Berserk rows share an AniList id
-	// and tier 1 resolves them onto one work across two libraries.
+	// Five series, FIVE CATALOGUE works.
+	//
+	// ⚠️ THIS ASSERTED FOUR, AND THE FOURTH WAS A MERGE THAT SHOULD NEVER HAVE
+	// HAPPENED. It read: "Five series, FOUR CATALOGUE works: the two Berserk rows
+	// share an AniList id and tier 1 resolves them onto one work across two
+	// libraries." They do share `aniListId: 30013` — but LS-38 measured
+	// Series.AniListId at Kavita v0.9.0.2 and found a plain-scanner writer
+	// (ProcessSeries.cs:363) and an Edit-Series-dialog writer
+	// (ExternalMetadataIdHelper.cs:13) beside the Kavita+ one, so §6.4 amendment
+	// 3 caps it at 0.90, tier 1 skips anything below 1.0, and A DELUXE
+	// RE-RELEASE NO LONGER SWALLOWS THE ORIGINAL. v0.1 has no work_merge table
+	// and no un-merge, which is why that mattered.
 	//
 	// ⚠️ THE PREDICATE EXCLUDES 'person' AND THAT IS ADR-0044's COST, STATED.
 	// `work` is no longer a table of catalogue items alone: a credited author is
 	// a work of kind 'person' (ADR-0033), so `SELECT COUNT(*) FROM work` counts
 	// people too. The people are asserted separately below rather than swept
 	// into this number.
-	if n := countIn(t, env, `SELECT COUNT(*) FROM work WHERE kind <> 'person'`); n != 4 {
-		t.Errorf("catalogue work rows = %d, want 4 — the two Berserk series are one work", n)
+	if n := countIn(t, env, `SELECT COUNT(*) FROM work WHERE kind <> 'person'`); n != 5 {
+		t.Errorf("catalogue work rows = %d, want 5 — the two Berserk series share an AniList id "+
+			"parsed out of free text, and merging on one is unrecoverable in v0.1", n)
 	}
 	if n := countIn(t, env, `SELECT COUNT(*) FROM service_item_link`); n != 5 {
 		t.Errorf("service_item_link rows = %d, want 5 — one per remote series", n)
@@ -219,22 +238,40 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 	if frierenDir != "rtl" {
 		t.Errorf("Frieren reading_direction = %q, want rtl — LibraryType 0 is the only input there is", frierenDir)
 	}
-	// ⚠️ THE SHARED WORK'S reading_direction IS LAST-WRITER-WINS, and this
-	// asserts it rather than pretending otherwise. One work now sits in a Manga
-	// library (rtl) and a Comic library (ltr), and work_comic holds exactly one
-	// value; the second container to claim the work overwrites the first. That is
-	// inherent to tier-1 reuse across containers of different reading conventions
-	// — the alternative would be to refuse the merge, which §6.4 rules out for
-	// works of the same kind. It lands in a column §6.5 rule 4 makes editable,
-	// which is the cheapest place in the design to be wrong; see LS-07.
+	// ⚠️ THE TWO BERSERK ROWS EACH KEEP THEIR OWN reading_direction, and LS-07's
+	// last-writer-wins case IS NO LONGER EXERCISED BY THIS FIXTURE. Said plainly
+	// rather than left as a passing number, because losing coverage quietly is
+	// worse than losing it.
+	//
+	// This assertion read `!= 1`, with the note: "THE SHARED WORK'S
+	// reading_direction IS LAST-WRITER-WINS … one work now sits in a Manga library
+	// (rtl) and a Comic library (ltr), and work_comic holds exactly one value".
+	// That was true only while the two rows merged on a 0.90-capped AniList id,
+	// which LS-38 stopped. The FINDING stands — two remote items that resolve onto
+	// one work still overwrite each other's reading_direction, and it still lands
+	// in a column §6.5 rule 4 makes editable — but reaching it now needs a
+	// genuinely work-strong shared id (`hardcover_book`, `openlibrary_work`,
+	// `goodreads_work`), which this fixture does not carry. A fixture that
+	// exercises it deliberately belongs to whoever revisits LS-07 or LS-43.
 	if n := countIn(t, env, `
 		SELECT COUNT(*) FROM work_comic wc JOIN work w ON w.id = wc.work_id
-		 WHERE w.title LIKE 'Berserk%'`); n != 1 {
-		t.Errorf("the shared Berserk work has %d work_comic rows, want exactly 1", n)
+		 WHERE w.title LIKE 'Berserk%'`); n != 2 {
+		t.Errorf("the two Berserk works have %d work_comic rows between them, want 2 — one each, "+
+			"because a free-text-derived AniList id no longer merges them", n)
+	}
+	// And they are genuinely two, with the two DIFFERENT reading directions their
+	// two libraries imply — which is the positive form of the same fact.
+	if n := countIn(t, env, `
+		SELECT COUNT(DISTINCT wc.reading_direction) FROM work_comic wc
+		  JOIN work w ON w.id = wc.work_id WHERE w.title LIKE 'Berserk%'`); n != 2 {
+		t.Errorf("the two Berserk works share %d distinct reading_directions, want 2 (rtl from the "+
+			"Manga library, ltr from the Comic one)", n)
 	}
 
-	// DEGRADED IDENTITY IS THE ORDINARY CASE. Three of the four works carry no
-	// external id at all, and all four are still filed and still indexed.
+	// DEGRADED IDENTITY IS THE ORDINARY CASE. Three of the five works carry no
+	// external id at all, and all five are still filed and still indexed. The
+	// other two are the Berserk pair, which now hold ONE 0.90 `anilist` row each
+	// instead of one shared 1.0 row — see LS-38.
 	//
 	// A PERSON CARRIES NO external_id EITHER, by design — see
 	// store.personWorkID: Kavita's person id is instance-local, so writing it
@@ -250,40 +287,43 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 
 	// ── credits, through the real HTTP path (ADR-0044) ──────────────────────
 	//
-	// FOUR people. Kentaro Miura writes AND pencils Berserk and is credited on
-	// both remote rows, which resolve onto ONE work — so he is one person work,
-	// not two.
+	// FOUR people, and this number is now a STRONGER assertion than it was.
+	// Kentaro Miura is credited on BOTH Berserk rows, and since LS-38 those are
+	// two separate works — so the person dedupe can no longer be carried by the
+	// works having merged. He is one person work because store.personWorkID
+	// resolves him to one, which is the thing worth testing.
 	if n := countIn(t, env, `SELECT COUNT(*) FROM work WHERE kind = 'person'`); n != 4 {
 		t.Errorf("person works = %d, want 4 (Yamada, Abe, Tolkien, Miura). If this is 5 the "+
-			"dedupe did not survive the two Berserk rows resolving onto one work.", n)
+			"person dedupe did not survive one human being credited on two different works.", n)
 	}
 
-	// ⚠️ A WORK SHARED BY TWO REMOTE ITEMS GETS LAST-WRITER-WINS CREDITS, and
-	// this asserts it rather than pretending otherwise. It is the exact shape of
-	// LS-07's reading_direction finding, in a second column, and it falls out of
-	// the same tier-1 reuse: ApplyCredits replaces one WORK's credits wholesale
-	// per REMOTE ITEM, so remote 44 writes Miura as writer AND penciller, and
-	// remote 45 — the same work, a different Kavita row with a thinner metadata
-	// entry — then clears both and writes writer alone.
+	// ⚠️ LS-19's LAST-WRITER-WINS CREDIT CASE IS ALSO NO LONGER EXERCISED HERE,
+	// for the same reason as LS-07's above, and is recorded rather than quietly
+	// dropped. The note read: "A WORK SHARED BY TWO REMOTE ITEMS GETS
+	// LAST-WRITER-WINS CREDITS … remote 44 writes Miura as writer AND penciller,
+	// and remote 45 — the same work, a different Kavita row with a thinner
+	// metadata entry — then clears both and writes writer alone. FOUR credits,
+	// not five: Frieren 2, The Hobbit 1, Berserk 1, Saga 0."
 	//
-	// FOUR credits, not five: Frieren 2, The Hobbit 1, Berserk 1, Saga 0.
+	// Since LS-38 remotes 44 and 45 are two works, so nothing overwrites anything:
+	// SIX credits — Frieren 2, The Hobbit 1, Berserk 2 (writer + penciller),
+	// Berserk (Deluxe) 1 (writer), Saga 0.
 	//
-	// The alternative was weighed and rejected: accumulating a work's credits
-	// across the remote items that share it would have to hold state across
-	// batch boundaries and across the whole import, which turns a wholesale
-	// replace into a merge — and a merge is the thing v0.1 explicitly does not
-	// have (ApplyCatalogueBatch's doc comment, work_merge is v1.0). The loss is
-	// bounded to works that two remote items resolve onto, it lands in a table
-	// the operator can see, and re-importing after the thinner row is fixed
-	// upstream repairs it. Recorded as LS-19.
-	if n := countIn(t, env, `SELECT COUNT(*) FROM work_credit`); n != 4 {
-		t.Errorf("work_credit rows = %d, want 4 — see the last-writer-wins note above", n)
+	// LS-19's FINDING STANDS UNCHANGED — ApplyCredits still replaces one WORK's
+	// credits wholesale per REMOTE ITEM, and the alternative it rejected
+	// (accumulating across remote items, which turns a wholesale replace into a
+	// merge v0.1 does not have) is still rejected. What changed is only that this
+	// fixture no longer produces a shared work to demonstrate it on. Whoever
+	// revisits LS-19 needs a fixture with a genuinely work-strong shared id.
+	if n := countIn(t, env, `SELECT COUNT(*) FROM work_credit`); n != 6 {
+		t.Errorf("work_credit rows = %d, want 6 — see the note above; the Berserk pair no longer "+
+			"share a work, so neither clears the other's credits", n)
 	}
 	if n := countIn(t, env, `
 		SELECT COUNT(*) FROM work_credit c JOIN work w ON w.id = c.work_id
-		 WHERE w.title LIKE 'Berserk%'`); n != 1 {
-		t.Errorf("the shared Berserk work has %d credits, want 1 — the LAST remote item to "+
-			"be applied is the one whose credit set stands", n)
+		 WHERE w.title LIKE 'Berserk%'`); n != 3 {
+		t.Errorf("the two Berserk works hold %d credits between them, want 3 — Miura as writer "+
+			"and penciller on remote 44, and as writer alone on remote 45's thinner entry", n)
 	}
 	// The kind-dependent role: The Hobbit is in a BOOK library, so Kavita's
 	// `writers` array becomes an 'author'. Frieren is in a MANGA library, so the
@@ -352,8 +392,10 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 	docs := countIn(t, env, `SELECT COUNT(*) FROM search_doc`)
 	fts := countIn(t, env, `SELECT COUNT(*) FROM search_fts`)
 	trgm := countIn(t, env, `SELECT COUNT(*) FROM search_trgm`)
-	if docs != 4 {
-		t.Errorf("search_doc rows = %d, want 4", docs)
+	// Five, not four: the Berserk pair are two works since LS-38, and a work that
+	// exists is a work that is indexed.
+	if docs != 5 {
+		t.Errorf("search_doc rows = %d, want 5", docs)
 	}
 	if docs != fts || docs != trgm {
 		t.Errorf("§7 invariant 2 broken through the wiring: doc %d / fts %d / trgm %d", docs, fts, trgm)
