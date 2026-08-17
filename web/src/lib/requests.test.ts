@@ -21,6 +21,15 @@ import { describe, expect, it } from 'vitest';
 // been the obvious way and is not available: this workspace ships no
 // `@types/node`, and adding one to read one file is a dependency for nothing.
 import SCREEN_SOURCE from '../routes/requests/+page.svelte?raw';
+// AND THE ROW MARKUP, which is no longer in the screen. It moved to a component
+// so Home could render the same rows rather than a second copy of them, and the
+// ban has to move with it — see the block near the bottom of this file. A guard
+// that reads only the screen after a move like that stays green while the copy
+// it protects leaves its scope, which is the one failure a copy guard cannot
+// survive.
+import GRABS_SOURCE from './RecentGrabs.svelte?raw';
+// The stripping itself, shared with Home's guard so the two cannot drift.
+import { userFacingMarkup } from './copyguard';
 import {
 	PRIORITY_NOTE,
 	clearScopeLabel,
@@ -55,6 +64,7 @@ import {
 	grabOutcome,
 	isFreeTextOnly,
 	legReasons,
+	requestsSearchHref,
 	searchEmptyState,
 	searchTypeParam,
 	type IndexerLeg
@@ -813,7 +823,10 @@ describe('the banned vocabulary', () => {
  * `<script>`, `<style>` and HTML comments — none of which reaches a user — and
  * hold the remainder against the list. Attributes stay in, deliberately:
  * `emptyTitle`, `emptyText` and `loadingNote` are user-facing strings that live
- * in attributes.
+ * in attributes. That stripping is `$lib/copyguard`'s `userFacingMarkup` rather
+ * than a local function, because Home now runs the same ban over its own
+ * Recent-grabs chrome and two guards that strip differently disagree about what
+ * a user can see while both stay green.
  *
  * TWO REGIONS, TWO RULE SETS, AND THE DISTINCTION IS THE POINT.
  *
@@ -826,14 +839,27 @@ describe('the banned vocabulary', () => {
  * `<section id="recent-grabs">`, where every string is about a grab — carries
  * the full list, and the rest of the screen carries the subset that is a claim
  * about a download no matter what sentence it appears in.
+ *
+ * ⚠️ AND THE GRAB REGION IS NOW TWO FILES, WHICH IS THE FAILURE MODE THIS
+ * PARAGRAPH EXISTS TO STOP RECURRING. The rows themselves moved out of
+ * `+page.svelte` into `$lib/RecentGrabs.svelte` so that Home could draw the same
+ * markup instead of a second copy of it — and a guard that had gone on reading
+ * only the screen would have stayed GREEN while every string it protects walked
+ * out of its scope. Nothing would have failed; the ban would simply have stopped
+ * applying to the grab copy. So the region is the SECTION ON THE SCREEN PLUS THE
+ * COMPONENT, both stripped the same way, and the anchor test below pins a string
+ * from EACH half so that neither can go quiet on its own. If the component is
+ * renamed or split again, this import moves with it.
  */
-const SCREEN_MARKUP = SCREEN_SOURCE.replace(/<script[\s\S]*?<\/script>/gi, ' ')
-	.replace(/<style[\s\S]*?<\/style>/gi, ' ')
-	.replace(/<!--[\s\S]*?-->/g, ' ');
+const SCREEN_MARKUP = userFacingMarkup(SCREEN_SOURCE);
 
-/** Everything inside the Recent-grabs section, which is the region where every
- * string on screen is a statement about a grab. */
-const GRAB_BLOCK_MARKUP = (() => {
+/** The row markup itself, which both the Requests block and Home's narrower
+ * projection render. Every string in it is a statement about a grab. */
+const COMPONENT_MARKUP = userFacingMarkup(GRABS_SOURCE);
+
+/** The Recent-grabs section ON THE SCREEN: the heading, the two notes, the
+ * unreadable-list banner and the component's call site. */
+const GRAB_SECTION_MARKUP = (() => {
 	const open = SCREEN_MARKUP.indexOf('id="recent-grabs"');
 	const close = SCREEN_MARKUP.indexOf('</section>', open);
 	// A guard that silently matches nothing is indistinguishable from no guard,
@@ -843,9 +869,13 @@ const GRAB_BLOCK_MARKUP = (() => {
 	return SCREEN_MARKUP.slice(open, close);
 })();
 
+/** Both halves of the grab region, held against the full ban list as one. */
+const GRAB_BLOCK_MARKUP = `${GRAB_SECTION_MARKUP}\n${COMPONENT_MARKUP}`;
+
 /** The rest of the screen: the toolbar, the fan-out line, every banner and the
- * block-3 placeholder. */
-const NON_GRAB_MARKUP = SCREEN_MARKUP.replace(GRAB_BLOCK_MARKUP, ' ');
+ * block-3 placeholder. Derived from the SCREEN alone, so the component can never
+ * leak into the region that takes only the subset. */
+const NON_GRAB_MARKUP = SCREEN_MARKUP.replace(GRAB_SECTION_MARKUP, ' ');
 
 /**
  * The words that are a claim about a download wherever they appear, so they are
@@ -860,13 +890,18 @@ const NEVER_ANYWHERE_ON_THIS_SCREEN = FORBIDDEN_OUTCOME_WORDS.filter(
 );
 
 describe('the banned vocabulary, in the screen’s own markup', () => {
-	it('is reading the file it thinks it is reading', () => {
-		// The failure mode of a text guard is matching nothing at all. These are
-		// strings only the Requests template carries.
-		expect(SCREEN_MARKUP).toContain('Recent grabs');
-		expect(GRAB_BLOCK_MARKUP).toContain('No grabs recorded yet');
+	it('is reading the files it thinks it is reading', () => {
+		// The failure mode of a text guard is matching nothing at all, and after
+		// the row markup moved into its own component there are TWO ways to match
+		// nothing rather than one. Both halves are pinned to a string only that
+		// half carries, so a move that empties either one fails HERE rather than
+		// leaving the ban list quietly holding an empty string.
+		expect(GRAB_SECTION_MARKUP).toContain('Recent grabs');
+		expect(GRAB_SECTION_MARKUP).toContain('Your recent grabs could not be read');
+		expect(COMPONENT_MARKUP).toContain('No grabs recorded yet');
+		expect(COMPONENT_MARKUP).toContain('Search again');
 		expect(NON_GRAB_MARKUP).toContain('There is no indexer service to search');
-		expect(NON_GRAB_MARKUP).not.toContain('No grabs recorded yet');
+		expect(NON_GRAB_MARKUP).not.toContain('Your recent grabs could not be read');
 	});
 
 	it.each(FORBIDDEN_OUTCOME_WORDS)('never says “%s” about a grab', (word) => {
@@ -1144,5 +1179,39 @@ describe('RECENT_GRAB_ROW_INTRINSIC', () => {
 		for (const density of ['compact', 'standard', 'relaxed']) {
 			expect(RECENT_GRAB_ROW_INTRINSIC[density]).toBeGreaterThan(0);
 		}
+	});
+});
+
+/**
+ * THE `?q=` CONTRACT, which §17.4 fixes twice — the `Search indexers →` action
+ * on an incomplete result row, and the zero-results state — and which Home now
+ * also uses. It is one function so the three call sites cannot encode a query
+ * three ways; the Requests screen's `onMount` reads `?q=`, trims it and runs the
+ * search, so anything this builds must survive a middle-click into a new tab.
+ */
+describe('requestsSearchHref', () => {
+	it('carries the query on the parameter Requests reads', () => {
+		expect(requestsSearchHref('/requests', 'dune')).toBe('/requests?q=dune');
+	});
+
+	it('preserves a configured base path rather than rebuilding one', () => {
+		expect(requestsSearchHref('/usarr/requests', 'dune')).toBe('/usarr/requests?q=dune');
+	});
+
+	it('encodes what would otherwise change the URL', () => {
+		// A release name is arbitrary text: `&`, `#` and a space all break a
+		// hand-built link, and `#` would drop everything after it.
+		expect(requestsSearchHref('/requests', 'S&M #2 live')).toBe('/requests?q=S%26M%20%232%20live');
+	});
+
+	it('drops the parameter entirely for an empty or blank query', () => {
+		// `?q=` would make Requests echo a search for nothing back at the user
+		// instead of showing its idle state.
+		expect(requestsSearchHref('/requests', '')).toBe('/requests');
+		expect(requestsSearchHref('/requests', '   ')).toBe('/requests');
+	});
+
+	it('trims, so a pasted query does not travel with its whitespace', () => {
+		expect(requestsSearchHref('/requests', '  dune  ')).toBe('/requests?q=dune');
 	});
 });

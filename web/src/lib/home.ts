@@ -17,8 +17,21 @@
  * exist to carry would have to be invented, and DESIGN-DIRECTION §9.6 closes
  * that off in as many words: never fabricated data in a shipped product
  * surface. A zeroed table and a skeleton are the same fabrication with
- * different punctuation. Block B is the one block with a real source today —
- * GET /api/v1/services/health — so Block B is what this file computes.
+ * different punctuation. Block B is the one of the three with a real source
+ * today — GET /api/v1/services/health — so Block B is what this file computes.
+ *
+ * ⚠️ TWO THINGS ON HOME ARE NOT ONE OF THE THREE BLOCKS, and saying so here is
+ * the point rather than a caveat. A release-search entry point and the recent
+ * grabs list both have real sources in this build and neither is Block A or
+ * Block C: `Recently added` is a catalogue read that does not exist yet, and a
+ * grab is a request handed to a download client rather than an item that
+ * arrived. Filing recent grabs under Block C's heading would be the invented
+ * status the rest of this file is written against. What this module adds for
+ * them is the two rules that are rules — whether a search box may be drawn at
+ * all (`hasIndexer`) and what it must say it searches
+ * (`HOME_SEARCH_SCOPE_NOTE`) — because a rule inside a `{#if}` in a template is
+ * a rule nothing can test. The grabs themselves are `$lib/requests`'
+ * vocabulary, reused rather than restated.
  *
  * §17.2's hard rule points the same way and is worth restating because it is
  * the one an implementer breaks first: a media type the user does not have is
@@ -72,6 +85,53 @@ export function homeMode(health: ServicesHealth): HomeMode {
 	if (health.services.every(isIndexer)) return 'search-and-grab';
 	return 'library';
 }
+
+/**
+ * WHETHER HOME MAY OFFER A RELEASE SEARCH AT ALL, and it is deliberately NOT
+ * `mode === 'search-and-grab'`.
+ *
+ * The precondition for the box is that something can answer it: at least one
+ * configured service is an indexer. That is a narrower test than the mode and a
+ * different one — `library` mode means a library-bearing service exists, and an
+ * install with a Sonarr AND a Prowlarr is in `library` mode with a perfectly
+ * good indexer to search. Gating on the mode would delete a working control on
+ * the first build that connects a Sonarr, which is the same class of mistake
+ * `homeMode` exists to avoid on the other side.
+ *
+ * The inverse matters more: on an `unconfigured` install this is false, so Home
+ * never draws an input that has nothing behind it. A search box that accepts a
+ * query and can only fail is the invented status CLAUDE.md forbids, expressed
+ * as a control rather than as a number — the same reason `routes/search` draws
+ * a sentence instead of an input over an index that does not exist.
+ */
+export function hasIndexer(health: ServicesHealth): boolean {
+	return health.services.some(isIndexer);
+}
+
+/**
+ * WHAT THE BOX SEARCHES, SAID ON THE BOX.
+ *
+ * DESIGN-DIRECTION §8.3 keeps two things apart that the *Arrs also keep apart:
+ * **library search** — the persistent input, jumping to something you already
+ * have — and **release search**, a dedicated screen. *"Merging them is how a
+ * 0 ms local query ends up waiting on a 30 s indexer."* Home's box is the
+ * second kind and must say so, because an unlabelled input on a home screen
+ * reads as the first kind by default.
+ *
+ * It is also why the box is a ROUTE and not a search field. Nothing on Home
+ * fans out to an indexer; submitting navigates to Requests with `?q=`, which is
+ * §17.4's own mechanism (`requestsSearchHref`). Home stays a local read.
+ *
+ * ⚠️ THIS STRING IS THE SEAM, AND IT IS THE ONLY THING THAT CHANGES WHEN THE
+ * LIBRARY INDEX LANDS. §8.3 gives that index a persistent input, at which point
+ * Home's box becomes library search: same element, same submit, a different
+ * destination and this sentence rewritten. Keeping the destination in
+ * `requestsSearchHref` and the scope in a constant is what makes that a
+ * two-line change rather than a rebuild. The seam ships; the feature does not.
+ */
+export const HOME_SEARCH_SCOPE_NOTE =
+	'This searches releases on your indexers, not your own library. Results, the indexer and ' +
+	'category pickers and the grab are on Requests, and pressing Search takes you there.';
 
 /**
  * One row of Block B. §17.2: the block is the differentiator and no surveyed

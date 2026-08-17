@@ -5951,3 +5951,118 @@ else's file.
 * **`CLAUDE.md`'s one-line description of `make check` now under-counts the gate** — it lists five
   offline steps and there are six. Left for the owner: it is the project instruction file, and this
   entry does not edit it on its own initiative.
+
+---
+
+# PROMO-01 — the shared-class split was argued out three times in one night and written down none of them. **Applied, as a promotion rather than a new rule.**
+
+**Date:** 2026-08-17. **Branch:** `claude/hearth-thread-vn9w7u`. **`PROMO-` has not been used
+before** — checked rather than assumed, with `git grep -nE '\bPROMO-[0-9]' origin/main`, which exits
+1 with no output. Records the rule added to `docs/design/DESIGN-DIRECTION.md` **§9.8, "Promoting a
+page-scoped style into a shared class"**, verified against `f5154fe`. **Read it with `MEAS-01` and
+`MEAS-02`**, whose disposition it repeats a third time: the defect is the rule's *address*, not its
+wording.
+
+**The finding is not the rule. It is that the rule was reached three separate times in one night, by
+argument, and left behind in three different places that cannot be read from each other.** In every
+case the question was the same one — *what may a shared thing hold, and what has to stay with its
+callers?* — and in every case it was re-derived from first principles, correctly, at the cost of a
+long argument, and then filed where only that thread would find it.
+
+| Occasion | Where it was argued | Where the reasoning ended up |
+|---|---|---|
+| **The shared class.** Which of ten declarations may go into `.searchfield`, and which stay on Home and on Requests | `07f89b0`, the search-bar promotion | The commit message, and `app.css`'s own class comment |
+| **The unit reserve.** How wide a shared reserve must be — settled by measuring the widest member of the family the column *actually prints*, three times over, after three families assembled from the wrong strings (`SU-05`, `SU-08`, `SU-10`) | `DESIGN-DIRECTION.md` §9.1's reserve bullets | A bullet inside a section about tables |
+| **The density budget.** Whether a budget derived at one measurement site may be applied at another — `~18 ms` at `web/scripts/list-bench.mjs`'s `setAttribute` site against `~75.7 ms` on the shipped `prefs.setDensity` path | `LAT-02`, `MEAS-01`, `0d70dd4` | `DEVELOPMENT.md` §11 rule 5 |
+
+🚩 **The three are the same decision wearing three costumes, and nobody in the moment could see
+that.** Each asks what a value held in common may be, and each answers it the same way: **enumerate
+the real callers and let them decide, rather than reasoning about the shared thing on its own.** The
+callers are two screens, or the strings one column can print, or the two code paths a number was
+taken on. ℹ️ **A rule that is re-derived correctly every time still costs the full derivation every
+time**, and the third derivation in a night is the signal that it has no address — `MEAS-02` states
+the general form, *"a rule that lives in message history has no address, and a rule with no address
+is re-derived from scratch by whoever next needs it."*
+
+**Applied.** `DESIGN-DIRECTION.md` gains **§9.8**, at the end of §9 where the component conventions
+live. It carries the rule (*a promoted class owns what the thing looks like; the caller owns where it
+sits and how big it is*), the acceptance test (*if a second caller in a different container would
+have to undo a declaration, it is not appearance*), the `min-width: 0` worked example, the
+already-disagree test, the no-new-behaviour constraint, and the modifier decision.
+
+📌 **Why §9.8 and not §9.7, §5, or `DEVELOPMENT.md` §11.** §9 is the home for component conventions,
+and §9.7 already answers the adjacent question — *which* components exist and where per-type
+divergence is allowed. §9.8 answers the next one down: what belongs *inside* one once a page-scoped
+style is promoted into it. It is **not** §5, *Space, density and geometry*, even though the three
+declarations that failed the test are all geometry: §5 owns the *values* — the unit, padding by
+role, the density steps — while this rule governs which declarations may be shared at all, whatever
+they are. Filing it under the shape of its own instances is `MEAS-01`'s exact defect, where a rule
+that lived in §7.4 read as a rule about row boxes and so was not applied to a column width, a bench
+site or a code path. It is **not** `DEVELOPMENT.md` §11 either: §11 is about guards and measurement,
+and this is a design-review standard read while looking at CSS.
+
+⚠️ **The example carried in full is `min-width: 0`, and that is the whole reason the section is
+usable.** The rule sounds obvious. It is not, because the hard case does not look like layout: a
+zero, no visible effect, nothing that reads as size. It overrides the flex automatic minimum size,
+which for an `<input>` is its `size`-derived intrinsic width. **Someone applying "appearance versus
+layout" by intuition puts it in the shared class every time.** The figures in §9.8 are the frontend
+thread's, taken at `07f89b0` in Chromium against the real `pnpm build` output of
+`web/src/routes/+page.svelte`'s search input at `--text-md` (14 px), and are attributed there rather
+than presented as this thread's: intrinsic width **177 px**; with `min-width: auto` at a **160 px**
+viewport the field held 177 px and the document's `scrollWidth` went **160 → 193**; it binds below
+roughly a **209 px** viewport and is inert above it. **`DEVELOPMENT.md` §11 rule 5 landed earlier
+the same night and §9.8 is the first new prose written since**, so naming the surface on every
+figure is the rule's first live test rather than a retrofit.
+
+**The second test is free and was nearly missed.** The two copies' flex `basis` already disagreed —
+`1 1 20rem` on Requests, whose toolbar carries a label, a select and two buttons, against
+`1 1 24rem` on Home, whose row holds the field and one button. ✅ **A property the copies already
+disagree on is proven to belong to the caller**, because the disagreement is the two containers
+reporting in advance that a shared value would be wrong for one of them. A shared basis would have
+been wrong for a caller **on the day it landed**. So: diff the copies before promoting, and read the
+differences as evidence rather than as an inconsistency to reconcile.
+
+**The scope constraint is recorded because the omission is the part that is easy to lose.**
+`.searchfield` ships **exactly seven declarations** — `min-height`, `padding`, `background`, `color`,
+`border`, `border-radius`, `font-size` — and §10's state set names a `::placeholder` treatment, a
+disabled surface, an invalid border and an icon slot that this component will want. **Neither copy
+had any of them**; both screens render the placeholder on the UA default. The promotion named that
+gap in the class comment as a seam and **authored none of the four**. The frontend thread's phrase is
+quoted in §9.8 verbatim: **"a restyle wearing a promotion's clothes"**. A promotion moves what
+exists; anything else is a new design decision arriving inside a commit whose subject says refactor,
+which no reviewer was asked to look at.
+
+📎 **Recorded with it: `.searchfield` is deliberately not a modifier of `.input`.** `.input` is eight
+declarations, **four identical** here and **four different** — `--control-h` against
+`--control-h-sm`, `--space-4` against the `--space-2`/`--space-3` pair, `--text-md` against
+`--text-base`, and `max-width: 100%` absent. **A modifier that disagrees with its base as often as it
+agrees is not a modifier**, and two classes on every caller to save four declarations in one place is
+not the cheaper arrangement.
+
+### What was verified against `f5154fe`, and what was not re-measured
+
+✅ **The tree was read rather than taken from the routing message**, and all four claims hold at
+`f5154fe` (`07f89b0` is the promotion, `40f78d9` the copy guard):
+
+* `.searchfield` in `web/src/app.css` §2.3 declares **exactly** `min-height`, `padding`,
+  `background`, `color`, `border`, `border-radius`, `font-size` — seven, no eighth.
+* `min-width: 0` is page-side on **both** callers: `.homesearch__input` in
+  `web/src/routes/+page.svelte` and `.searchbar__input` in `web/src/routes/requests/+page.svelte`.
+* The flex bases are page-side and still disagree — `flex: 1 1 24rem` on Home, `flex: 1 1 20rem` on
+  Requests.
+* Home's `max-width: 42rem` survives in `.homesearch__input` with its value untouched.
+
+⚠️ **Nothing was re-measured here.** Every figure above is the frontend thread's, read off
+`07f89b0`'s commit message and `app.css`'s class comment at `f5154fe`. No browser was driven for this
+entry, and the numbers are cited on that thread's authority rather than on this one's.
+
+### On the gate for PROMO-01
+
+`node docs/design/check.mjs` was run on the merged tree. ⚠️ **State plainly what that green is: a
+regression check, and not evidence about this edit.** `check.mjs`'s sources are
+`docs/design/mockups/usarr.css`, `fonts.css`, `usarr.js` and the mockup HTML, plus
+`docs/design/tokens.css`, and it reads `docs/ARCHITECTURE.md` §17 for one copy-drift exemption. **It
+does not read `DESIGN-DIRECTION.md` and it does not read `REVIEW-LOG.md`** — the two files this
+change touches. A green attests that nothing the checker covers was broken, which is a different
+claim from the edit being right. **No formatter is claimed either**: prettier's root is `web/`, so
+`make fmt-check` never reaches `docs/`.

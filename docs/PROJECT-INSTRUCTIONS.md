@@ -15,17 +15,19 @@ This file records the instruction text only. The design detail lives in `CLAUDE.
 
 | Version | Date | State | Size |
 | --- | --- | --- | --- |
-| v1.5 | 2026-08-17 | **Proposed — supersedes v1.4, not yet applied** | 8124 bytes |
-| v1.4 | 2026-08-17 | Applied 2026-08-17 04:52 UTC, superseded by v1.5 | 8118 bytes |
+| v1.5 | 2026-08-17 | **Applied to project settings** — 2026-08-17 05:05 UTC | 8124 bytes |
+| v1.4 | 2026-08-17 | Applied 2026-08-17 04:52 UTC, superseded by v1.5 the same day | 8118 bytes |
 | v1.3 | 2026-08-16 | Applied 2026-08-16 16:34 UTC, superseded by v1.4 | 7844 bytes |
 | v1.2 | 2026-08-16 | Applied 2026-08-16 07:57 UTC, superseded by v1.3 the same day | 7585 bytes |
 | v1.1 | 2026-08-16 | Superseded by v1.2, never applied | 7022 bytes |
 | v1.0 | 2026-08-16 | Superseded by v1.2 — applied 2026-08-16, replaced the same day | 3849 bytes |
 
-## v1.5 — proposed
+## v1.5 — as applied
 
-This is the text to paste into the Project's settings, replacing v1.4 — 8124 bytes, md5
-`77f2d90247d00395dea77e94076bc84e`.
+The text applied verbatim to the Project's settings at 05:05 UTC on 2026-08-17, replacing v1.4,
+and live in the settings now. It was verified byte-identical to this block by checksum on both
+sides of the apply: 8124 bytes, md5 `77f2d90247d00395dea77e94076bc84e`, measured on the extract
+before applying and on the settings read-back afterwards.
 
 ````
 You are working on UsArr: a fast, self-hosted, unified hub and gateway over the media-acquisition ecosystem, running on a single self-hoster's own server. It aggregates the *Arrs (Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian) and media backends (Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita) into one local library you can browse, search and request from, and it exposes protocol surfaces (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend individually. It is meant to coexist with the rest of the ecosystem, not replace it. The stack is Go compiled to a single static binary with a SvelteKit SPA embedded in it, over SQLite in WAL mode. Do not state a Go minimum from memory: the go directive in go.mod is authoritative, 1.25.13 at the time of writing, and it is a moving floor raised by the gating govulncheck step rather than by the dependency floor beneath it, with the reasoning in docs/DEVELOPMENT.md. Implementation on main moves faster than the prose describing it. Section 16 stays authoritative for scope; status is a separate question, and no document owns it — the tree does. Treat any claim in the docs that something is or is not built as unverified: read the tree — web/src/routes for a screen, internal/ for a backend surface, internal/db/migrations for the schema — and name the commit you read. Do not write a fresher one; write the pointer. A milestone label is scope, not status.
@@ -58,11 +60,10 @@ On interface design, read section 17 of ARCHITECTURE.md before touching a screen
 ## v1.4 — superseded
 
 The text applied verbatim to the Project's settings at 04:52 UTC on 2026-08-17, replacing v1.3 —
-8118 bytes. It was superseded by v1.5 above; v1.5 has not been applied yet, so this remains the
-text live in the settings until v1.5 is pasted in. The applied text was verified byte-identical to
-this block by checksum on both sides of the apply: 8118 bytes, md5
-`2d52321ed5c04b8481df6eb4c0ccb8e8`, measured on the extract before applying and on the settings
-read-back afterwards.
+8118 bytes. It was live in the settings until v1.5 above replaced it at 05:05 UTC the same day, and
+is no longer live. The applied text was verified byte-identical to this block by checksum on both
+sides of the apply: 8118 bytes, md5 `2d52321ed5c04b8481df6eb4c0ccb8e8`, measured on the extract
+before applying and on the settings read-back afterwards.
 
 ````
 You are working on UsArr: a fast, self-hosted, unified hub and gateway over the media-acquisition ecosystem, running on a single self-hoster's own server. It aggregates the *Arrs (Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian) and media backends (Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita) into one local library you can browse, search and request from, and it exposes protocol surfaces (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend individually. It is meant to coexist with the rest of the ecosystem, not replace it. The stack is Go compiled to a single static binary with a SvelteKit SPA embedded in it, over SQLite in WAL mode. Do not state a Go minimum from memory: the go directive in go.mod is authoritative, 1.25.13 at the time of writing, and it is a moving floor raised by the gating govulncheck step rather than by the dependency floor beneath it, with the reasoning in docs/DEVELOPMENT.md. Implementation on main moves faster than the prose describing it. Section 16 stays authoritative for scope; status is a separate question, and the landed/not-yet split in section 16, the README's status column and CLAUDE.md's status paragraph are hand-edited after the fact and lag the tree. Treat a "not yet" in any of the three as unverified: read the tree — web/src/routes for a screen, internal/ for a subsystem — and name the commit you read. A milestone label is scope, not status.
@@ -222,7 +223,7 @@ On interface design: utilitarian over stylish. The bar is tried-and-true, easy t
 
 ## Changelog
 
-### v1.5 — 2026-08-17 (proposed)
+### v1.5 — 2026-08-17 (applied 05:05 UTC)
 
 A correctness fix, not a refinement — v1.4's live text pointed agents at a landed/not-yet inventory
 in `docs/ARCHITECTURE.md` §16 that commit `0b8637c` had already deleted. An adversarial review
@@ -255,6 +256,11 @@ confirmed the dangling referent and recommended the authority framing.
   operative content, that `CLAUDE.md`'s list is the list rather than a sample, exists nowhere else,
   whereas §17.1's constraints arrive one read later via the instruction to read §17 before touching
   a screen.
+- **The record lagged the apply by eleven hours.** v1.5 went into the settings at 05:05 UTC, but this
+  file kept calling it proposed and kept naming v1.4 as the live text until the 16:02 UTC drift check
+  caught it — so for eleven hours the canonical record of which version was live named the wrong one.
+  That is the same defect this entry is about, in the file that documents it, and the fix is the
+  same: the record has to be updated as part of the apply, not after it.
 
 ### v1.4 — 2026-08-17 (applied 04:52 UTC)
 
