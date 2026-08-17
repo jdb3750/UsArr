@@ -11181,6 +11181,404 @@ the `Recent grabs` *"post-v0.1"* clause, and *"all three now have a milestone"*)
 a dated record and the failure is more instructive than a tidy number would be. **Three of those
 sites were named in the brief; the other fourteen came from the sweep** — which is the claim
 `TRIAD.2` was actually making, and it is stronger at 14 than it was at nine.
+# VN9-04 — §13 argued with itself about the em dash, the centring exemption loses `toast`, a bare `—` is a glyph, and §17.7's exemplars move to the install v0.1 ships
+
+## VN9.20 §13 endorsed a construction and banned its punctuation — the defect is the shape, not the incident
+
+**The relay was verified before anything moved**, because the finding was a claim about this
+thread's own document, and the report was second-hand. It holds, and in a sharper shape than
+reported: §13 does not merely fail to name the punctuation, **it prescribes the banned one, in a UI
+string of its own, three bullets above the rule that bans it.**
+
+The ban, in §13's **Copy** block:
+
+> - `[grep]` No `—` (U+2014) in any string under 15 words, **except where
+>   [`ARCHITECTURE.md`](../ARCHITECTURE.md) §17.7 fixes the wording** …
+
+The endorsement, in §13's **Controls and links** block, three bullets above it — `[review]` **No raw
+schema identifier in running copy**, whose prescribed replacement read:
+
+> `sort_title` → "sort title", `no work identity` → "matched by title", `breaker open` → "paused —
+> 7 failed attempts, retrying 14:19".
+
+Seven words, an em dash, and a UI string the checklist instructs an author to write. **An author
+reading §13 alone obeys the nearer bullet and violates the farther one, and nothing on the page tells
+them.** A second endorsement sits in §13.0 and points *out* of §13 — *"Four are the head-and-detail
+error form this section prescribes two paragraphs above (`Grab failed — HTTP 502`)"* — where two
+paragraphs above is the fifteen-word floor, which prescribes nothing. The form is prescribed by
+**§1.4**, whose worked example read *"Sonarr unreachable — connection refused at 10.0.0.4:8989"*, and
+that sentence is what `check.mjs` cites as *"the construction §13's own worked example endorses"* to
+justify its four §17 exemptions. So the endorsement was already load-bearing two files away.
+
+**Resolved in favour of the colon, at the endorsement rather than at the ban** — a statement and its
+**reason** take a colon; a statement and an **instruction** takes a full stop and two sentences,
+because an instruction is a second thing to do, not a subordinate clause. §1.4's worked example is
+re-punctuated and states the rule in place; §13's Copy block gains the positive form; the
+`breaker open` replacement becomes `paused: 7 failed attempts, retrying 14:19`; §13.0's mislocated
+pointer is corrected to §1.4.
+
+⚠️ **The point is the shape, and it is why no reviewer of either half would have found it. A section
+that endorses a construction and bans its punctuation will produce correct-looking violations
+forever, and every author will hit it independently.** Three did, without contact: the frontend in
+five live strings, §13 in its own prescribed replacement, and `check.mjs` by inheriting the
+endorsement as a rationale. Neither half was wrong on its own. **The general form is worth carrying
+past this incident — whenever a document both prescribes a construction and constrains how it is
+written, the constraint belongs at the prescription, not only at the rule.**
+
+One false collision was disarmed while there: §1.4's own anti-goal list rejects
+*"bolded-label-plus-colon bullets"*, which is a **document mannerism**, not a colon inside a
+sentence. Said explicitly, because the next reader will otherwise read the ruling as contradicting
+the list two paragraphs up.
+
+## VN9.21 The centring exemption drops `toast`, and the reason generalises
+
+`check.mjs` exempted `/dialog|modal|toast/i` from §13's *"No `text-align: center` outside dialog
+components"*. §13 names **one** component. `modal` is that component under another word and stays;
+**`toast` is a different component that entered by regex convenience**, and §9.4 specifies toasts
+without asking for centring anywhere in it.
+
+**The exemption was inert, which is the argument for narrowing it now rather than the argument
+against.** An unused exemption grants everything on the day someone builds the component, and it
+grants it *silently* — the rule it disables never fired while the component did not exist, so nothing
+in the log ever mentioned it. **An exemption is a claim about a component that has been argued; this
+one had not been.** The reasoning is in the comment beside the change, not only in the commit, since
+the comment is what the next reader has.
+
+## VN9.22 A bare `—` is a glyph, not a sentence
+
+`NOTHING.empty` in the shipped app is a single `—` used as a cell value meaning *"no value here"*.
+That is a typographic convention; §13's rule is about **prose**, and there is no sentence in a
+one-character string to carry a beat. Exempted **by shape** — `t.trim() === '—'` — never by name,
+file or token, so nothing can launder through it: **no sentence fits in one character.** The contrast
+with the exemption beside it is the useful part: the §17 exemption is a claim about a *document* and
+can go stale, this is a claim about the *string* and cannot.
+
+**The mockups do use the convention** — 28 bare dashes, every one inside a `<td>`, which the corpus
+already excludes as data. So the exemption fires **zero** times on today's tree, and it is
+deliberately **not floored**: the file's floors exist because a rule that matches nothing reads like
+a rule that passed, and that argument is about rules, not about exemptions of shape. The count is
+printed either way, so the day it stops being zero is visible. §13 gains the line that documents the
+convention, because a tacit convention is what a later author "fixes" into a word.
+
+## VN9.23 §17.7's exemplars, retargeted — and the one that keeps its \*Arr
+
+§17.7 illustrated first run with *"1,240 of 10,000 movies"* and the degraded banner with
+*"Radarr 4K is unreachable"*, in a v0.1 whose services are Kavita and Prowlarr. **Neither was false**
+— ADR-0041 re-sequenced the \*Arrs rather than cutting them — so this is a judgement about
+recognisability, recorded as one rather than as a correction: an exemplar naming a service the reader
+cannot have teaches the screen with furniture that is not in the room. Both retargeted; the three
+sites in `DESIGN-DIRECTION.md` that quote §17.7 went with them, including §13's, which claims to
+quote *verbatim* and now does.
+
+**The queued-write label keeps `Radarr 4K`, with a clause saying why**: writes to a media backend do
+not exist — §7.6's writes are request, toggle monitored and delete, which only an acquisition app
+accepts — so converting that one would describe a write UsArr cannot make. ⚠️ **Where an \*Arr is
+specifically the point, the clause has to be written down**, or the next reader converts it
+helpfully. Raised and not fixed: §8.4's sketch still names `Radarr 4K` on its re-identification line,
+and §17.3–§17.5 use it as a sample instance name — a sample **name** in a table is not an exemplar
+teaching a screen, and the ruling was scoped to §17.7.
+
+## VN9.24 Three statements of one rule, and no mechanism holding them together
+
+The em-dash rule now exists in three places in one tree, and **it is worth being exact about what
+that does and does not buy.**
+
+| Where | What it says | Over which files |
+|---|---|---|
+| §1.4 + §13 (prose) | The head-and-detail construction is prescribed; its beat is a **colon** for statement-plus-reason, a full stop and two sentences for statement-plus-instruction; the em dash stays legal in prose; a lone `—` is a glyph | — |
+| `docs/design/check.mjs` | Bans U+2014 in a rendered string under 15 words; §17's wording exempts by run-time window; §17's own spans checked with that exemption **withheld**; lone `—` exempt by shape | `docs/design/tokens.css`, `docs/design/mockups/**` |
+| `web/src/lib/designrules.test.ts` (frontend's, not ours) | Same ban, same fifteen-word floor, same run-time §17 exemption, `if (s.text === '—') continue;` as the same structural glyph rule | `web/src/**` |
+
+⚠️ **The two checkers have no file overlap at all.** `check.mjs` reads `tokens.css` and the mockups;
+the vitest port reads `web/src`. So "the two checkers agree" must not be read as one corroborating
+the other — **they are two disjoint coverages of one rule, and neither can catch the other drifting,
+because they never inspect the same input.** Coherence between all three is maintained **by writing,
+and by nothing else.** That is the honest state, and it is stated here so the next reader verifies it
+by reading rather than by re-deriving the ruling.
+
+**Deliberately not closed with a shared module.** A rule definition imported across the
+`docs/design` ↔ `web/` boundary is the same coupling refused for the tokens, for the same reason: it
+trades a visible duplication for an invisible dependency. **What would close it, if the divergence
+ever bites:** a single data file of rule literals — the banned family list, the word floor, the
+centring exemption regex, the glyph test — vendored into both trees by a generator rather than
+imported at run time, so the duplication stays visible and a stale copy is a diff rather than a
+silent behaviour change. Recorded as the seam, not built.
+
+**One pattern from the frontend's side is worth naming here because it generalises.** Their
+`.th__arrow` removal was drilled **twice** — once on a fresh violation, and once by restoring the
+exact deleted declaration. The second drill is the one that matters: it proves the rule is green
+because **the tree is clean**, not because deleting the exception moved the goalposts. **Every
+exception we retire should be drilled that way**, since a retired exception and a broken rule look
+identical from the outside.
+
+## VN9.25 On the gate
+
+Every rule touched was **fired deliberately**, each plant reverted afterwards, and every message is
+quoted verbatim in its own commit rather than summarised here. In short:
+
+* **The centring rule** — three planted selectors in one run. `.vn9probe-plain` and `.vn9probe-toast`
+  both failed and were named with file and line; `.dialog__vn9probe` was absorbed, visible as
+  *"(1 exempt: §9.6 allows centring inside a dialog)"*. The `toast` selector is the one that would
+  have passed an hour earlier.
+* **The glyph exemption** — fired on **both** corpora, a bare `—` planted outside a `<td>` in the
+  mockup and a `*"—"*` span planted in §17.7, both passing and both printing their count. Then the
+  negative half: `— Show it` and `Sync paused — five failures` both still fail, on every combo.
+  ⚠️ **A first attempt used `Grab failed — HTTP 502` as the mid-sentence probe and it passed —
+  correctly, because §17 fixes that wording and a *different* exemption granted it.** A probe another
+  exemption absorbs proves nothing about the one under test. Recorded because the first run looked
+  like evidence.
+* **The §17 retarget** — the risk was silent revocation of the mockup banner's exemption, which is
+  granted on a window of §17's text. Measured rather than assumed: every count identical across the
+  change.
+
+**Counts before and after, so a change in what the checker inspects cannot pass unnoticed:** §17
+spans **57 → 57**, recorded §17 em-dash exemptions **4 → 4** (all four matched, both runs), rendered
+corpus **6978 → 6978** strings against a floor of 6750, short em-dash strings exempted by §17
+**24 → 24**, bare-glyph exemptions **0 → 0** on the clean tree. The planted runs moved exactly what
+was planted and nothing else — 6982 and 58.
+
+---
+
+# Round 5 continued — `LS-47`–`LS-52`: which Kavita spec the contract tests pin, settled with ADR-0046
+
+**Date:** 2026-08-17. **Prefix:** `LS-` (library sync), continuing from **`LS-46`**, which is the
+finding this pass was commissioned to settle — **re-read at merge time**, as this file's own
+discipline requires: `LS-38`–`LS-46` landed on `origin/main` while this pass was in flight and these
+entries were drafted as `LS-38`+ before the merge. Fifth recorded instance of that collision
+(`EXPL-01`, `LS-01`, `LS-17`, `LS-30`). **The ADR number collided too** — see `LS-52`.
+
+**What this pass was handed, and what it did with it.** `LS-46` measured the skew and deliberately
+declined to act: *"Re-vendoring the spec is deliberately NOT attempted here; it is a separate
+decision with its own owner."* This is that decision. Every fact in `LS-46` was **re-established
+independently before being built on**, and one of them was extended.
+
+| # | Finding | Severity | Disposition |
+| --- | --- | --- | --- |
+| **LS-47** | 🚩 **`api/specs/SOURCES.md` ALREADY CARRIED THE POLICY, IN BOLD, AND THE TREE HAD NOT IMPLEMENTED IT.** Its Kavita section read *"A green contract test here is evidence about `develop`, and the owner's server is two steps away from it"*, and it even recorded the 462-vs-488 path measurement. The contract tests still read one file | **High** | **Applied — and it is the reason alternative (c), *"keep develop and state it plainly"*, was rejected rather than chosen for being cheapest.** (c) is what the repo already did. A warning that has been read and not acted on is indistinguishable from no warning, which is `DEVELOPMENT.md` §11's own argument about guards that have never fired. [ADR-0046](./DECISIONS.md#adr-0046) vendors the floor instead |
+| **LS-48** | **`LS-46`'s claim re-verified, and it is right in the spec AND in the source.** `cbrId` and `mangaBakaEditionId` are absent from `SeriesDto`, `ChapterDto` and `VolumeDto` at tag `v0.9.0.2`. Checking the tag's *spec* alone would not have settled it — that file declares `info.version` **0.9.0.0**, so it could itself have been stale | **High** | **Confirmed at source, which is the check that matters.** `Kavita.Models/DTOs/SeriesDto.cs` and `Kavita.Models/Entities/Series.cs` at `6bcd568` declare `MangaBakaId` and neither of the two; at that tag `CbrId` lives on the Kavita+ side table `ExternalSeriesMetadata` and surfaces on `ExternalSeriesDetailDto` alone; `ExternalMetadataIdHelper.SetExternalMetadataIds` writes six ids and `CbrId` is not one. **Two more develop-only `SeriesDto` properties `LS-46` did not name — `isStandAlone` and `nameLocked` — plus `LibraryDto.metadataProvider`** |
+| **LS-49** | **Does any UsArr code read the two fields? Yes, one — and the honest answer is that it is NOT a live defect, which is worth stating as plainly as a defect would be.** `libsync.kavitaExternalIDs` writes a `cbr` external_id from `SeriesDto.CbrID` | Medium | **Documented as UNREACHABLE, not removed.** An absent JSON property leaves the Go field at zero, `intID(0)` returns `""`, `add` skips it: the row is unreachable on the owner's box, not wrong. `MangaBakaEditionID` is modelled and deliberately never written. Nothing reads `isStandAlone`, `nameLocked` or `metadataProvider` outside the DTO. The line stays because it is correct for anyone on develop or a later release; what changes is that `internal/kavita/resources.go` now says where it is dead. **Inflating this into a bug would have been the easier report and a false one** |
+| **LS-50** | 🚩 **A SECOND CLAIM WAS DEVELOP'S AND WAS WRITTEN AS KAVITA'S, and nobody had asked about it.** `internal/kavita/doc.go` stated `?apiKey=` appears on *"exactly 9 operations"* | Medium | **Applied.** True on develop; **on v0.9.0.2 it is 20**, because all twelve `/api/Image/*` cover routes still accept the key in the query string there and develop has since dropped it. The bullet now names both counts and the reason, and `TestAPIKeyQueryIsNotGeneralAuth` was already asserting the property true on both — *"a small set, not the whole API"* — rather than either number. **Found by running the suite against the tag's spec rather than by reading the comment**, which is the argument for alternative (b) in one line |
+| **LS-51** | **The decision hinged on a measurement taken BEFORE the decision: does the existing suite pass unmodified against the tag's spec?** If it did not, (b) would have been a far larger change and (a) or (c) would have deserved another look | **High** | **Measured first, then decided.** The floor spec was swapped in over `kavita.json` and `go test ./internal/kavita/... ./internal/libsync/...` ran green — all six pinned endpoints present with identical parameter casing, all seven pinned enums identical, auth identical. So the second arm cost **parameterisation and no new assertions to satisfy**. Recorded because a design chosen on an assumption about test cost, with the test never run, is exactly this project's stated failure mode |
+| **LS-52** | ⚠️ **ADR-0046 WAS DRAFTED AS ADR-0045 AND THE NUMBER WAS TAKEN MID-PASS.** All remote heads were scanned before drafting; the maximum was `0044`. `ADR-0045` (the three unslotted commitments → v0.2) landed on `origin/main` while this pass was in flight | Nit | **Caught by re-scanning before writing, not after.** Renumbered to `0046` across the ADR, five source comments and this file. **The mitigation is the scan's timing, not the scan**: an up-front scan of a shared counter is a snapshot, and the only safe read is the one taken immediately before the write. Same class as this file's own entry-id collisions, and now recorded for ADR numbers too |
+
+## LS.18 The four guards fired, with verbatim output
+
+Every guard below was broken on purpose, run red, and reverted. `TestEndpointsExistInSpec` is the
+one that carries the ADR: it must go red on the **floor** arm and stay green on the **ceiling** arm,
+because if both arms always agree the second file proves nothing.
+
+**1. `TestCeilingOnlyPropertiesAreDeclared`** — dropped `"cbrId"` from the hand-written
+`ceilingOnlyProperties`:
+
+```
+--- FAIL: TestCeilingOnlyPropertiesAreDeclared (0.02s)
+    --- FAIL: TestCeilingOnlyPropertiesAreDeclared/SeriesDto (0.00s)
+        contract_test.go:356: SeriesDto: develop declares [cbrId isStandAlone mangaBakaEditionId nameLocked] that stable v0.9.0.2 does not; ceilingOnlyProperties says [isStandAlone mangaBakaEditionId nameLocked]. These fields DECODE TO NOTHING on the owner's server, so the list is a decision, not documentation: update it, and check whether anything reads a field that just joined or left it
+```
+
+**2. `TestBothSpecsAreTheDocumentsSOURCESSays`** — copied the ceiling over the floor, the exact
+mistake that would leave a suite green while printing two subtest names. Both halves fired, and
+`TestCeilingOnlyPropertiesAreDeclared` independently caught the same sabotage:
+
+```
+--- FAIL: TestBothSpecsAreTheDocumentsSOURCESSays (0.01s)
+    contract_test.go:178: kavita-v0.9.0.2.json declares info.version "0.9.0.20", this suite is pinned to "0.9.0.0". Either the file was re-vendored without updating pinnedSpecs, or the wrong file is in api/specs — update both, and api/specs/SOURCES.md's row with it
+    contract_test.go:184: kavita-develop.json and kavita-v0.9.0.2.json are the same document (info.version "0.9.0.20"). The floor/ceiling split is the point: two copies of one spec prove exactly what one copy proved
+--- FAIL: TestCeilingOnlyPropertiesAreDeclared (0.02s)
+    --- FAIL: TestCeilingOnlyPropertiesAreDeclared/SeriesDto (0.00s)
+        contract_test.go:356: SeriesDto: develop declares [] that stable v0.9.0.2 does not; ceilingOnlyProperties says [cbrId isStandAlone mangaBakaEditionId nameLocked]. ...
+```
+
+**3. `TestEndpointsExistInSpec` — the load-bearing one.** Added `GET /api/Library/metadata-providers`
+to the pinned list; it is one of the 32 paths develop has and v0.9.0.2 does not. **The floor arm
+failed and the ceiling arm passed**, which is the whole of ADR-0046 demonstrated in four lines:
+
+```
+--- FAIL: TestEndpointsExistInSpec (0.02s)
+    --- FAIL: TestEndpointsExistInSpec/kavita-v0.9.0.2.json (0.01s)
+        --- FAIL: TestEndpointsExistInSpec/kavita-v0.9.0.2.json/get_/api/Library/metadata-providers (0.00s)
+        --- PASS: TestEndpointsExistInSpec/kavita-develop.json/get_/api/Library/metadata-providers (0.00s)
+        contract_test.go:582: /api/Library/metadata-providers is not in kavita-v0.9.0.2.json — the FLOOR (stable v0.9.0.2 — the release the owner runs)
+```
+
+**4. `TestEnumsCoverSpecValues`** — dropped `LibraryTypeComicVine` from the Go list, to check the two
+arms fail **differently** rather than the asymmetric rule being decorative:
+
+```
+    --- FAIL: TestEnumsCoverSpecValues/kavita-v0.9.0.2.json/LibraryType (0.00s)
+        contract_test.go:448: LibraryType: kavita-v0.9.0.2.json — the FLOOR (stable v0.9.0.2 — the release the owner runs) — declares [5], which Go does not model. A value from the server the owner actually runs would be mislabelled (spec [0 1 2 3 4 5], Go [0 1 2 3 4])
+    --- FAIL: TestEnumsCoverSpecValues/kavita-develop.json/LibraryType (0.00s)
+        contract_test.go:437: LibraryType: kavita-develop.json — the CEILING (develop — where the API is defined) — has [0 1 2 3 4 5], Go has [0 1 2 3 4]
+```
+
+## LS.19 What this pass did NOT do
+
+* **`prowlarr.json` is untouched, and it has the same gap.** It tracks `develop` at v2.6.2 while the
+  only known deployment runs stable 2.5.2.5491, under a SOURCES.md warning that is word-for-word
+  the one that failed to work for Kavita. Carried as ADR-0046's first open question. **Nothing here
+  is evidence that the Prowlarr contract tests attest anything about 2.5.2.**
+* **`external_id.source = 'cbr'` is not enumerated as a legal source anywhere** — the column is free
+  `TEXT` and `cbr` is not in its comment. Unreachable on the owner's install today, so it is
+  recorded (ADR-0046 open question 2) rather than fixed inside a spec-pinning change.
+* **No back-editing of stale file names.** `ARCHITECTURE.md` §6.4 and §7.1a, `RESEARCH.md`,
+  `SETUP-CHECKLIST.md`, ADR-0035, ADR-0044 and every entry in this file above name `kavita.json` or
+  `kavita-openapi.json`. The pointer is written once in `api/specs/SOURCES.md`; this file is a
+  historical record and is not rewritten.
+* **`ARCHITECTURE.md` §6.4's one stale sentence was fixed, and it is unrelated to the spec pin.**
+  Routed in mid-pass: the *"the slot is still unassigned"* clause was falsified by ADR-0045. It now
+  points at ADR-0045. **Verified against `DECISIONS.md` rather than taken on the routing** — and one
+  detail differed from how it was relayed: ADR-0045 is **owner-DELEGATED** (*"whatever you think is
+  best"*), not owner-chosen, and the amended sentence says so.
+
+---
+
+# CH1 — the sync-status claim went stale when channel 1 landed
+
+**Date:** 2026-08-17. **Prefix:** `CH1-` (channel 1), verified unused across `docs/` and all 21
+remote heads before it was chosen.
+
+**Trigger.** The frontend thread landed Home's Block C at `2b6e739` and reported that the Home empty
+state's *"because the library sync is not built in this version"* had become false. They fixed
+`web/`'s copy and flagged that the same claim probably lived in the prose docs. It did.
+
+### CH1-01 The premise, measured before anything was edited
+
+The report said *"the sync is built"*. That is broader than what the tree carries, and a correction
+written to the broader claim would have been the next stale sentence. What runs, measured at
+`c56c8e4`:
+
+| Question | Where it is answered | Answer |
+|---|---|---|
+| Is there a sync core? | `internal/libsync`, `doc.go` | Yes — **channel 1 only**, `Importer.FullImport` (`importer.go:190`) |
+| How many adapters? | `libsync.NewKavitaSource`, `kavita.go` | **One, Kavita.** `(*registry).FullImport` (`cmd/usarr/import.go:41`) returns an error for any other kind |
+| Does anything run on its own? | `cmd/usarr/import.go` header, `cmd/usarr/services.go:221` | **A bootstrap, not a timer.** `go g.bootstrapImport(...)` fires at the moment a Kavita client stack is built, gated on `last_full_sync_at` being unset — at most once per instance per database |
+| Is there a manual trigger? | `(*registry).FullImport` | Yes, by call |
+| Channel 3b (ordered page walk)? | `doc.go`, "NOT HERE" | **Not built** |
+| Channel 4 (reconciliation sweep)? | `doc.go`, "NOT HERE" — `remote_hash` is *written* here and read by nothing | **Not built** |
+| The write queue? | `doc.go`, "NOT HERE" | **Not built** |
+| Phase B (§7.2)? | `doc.go` | Empty for Kavita's series list, and argued rather than deferred |
+
+So the accurate sentence is **"a first-import channel exists for Kavita, fires on connect, and has
+no periodic re-sync behind it"** — not "the sync is built", and not "an import runs when you connect
+Kavita" alone either, since the manual trigger is the other half. Every correction below is written
+to that sentence and to no larger one.
+
+### CH1-02 Three sites, counted from the grep that found them
+
+`grep -rn -iE "no sync channel runs|nothing syncs a library|no catalogue behind|nothing replicates"`
+over `CLAUDE.md`, `README.md`, `docs/` at `c56c8e4` returned **6 hits in 4 files**, which is
+**3 live claims** plus this log's own superseded row (CH1-03) — `CLAUDE.md` and
+`docs/ARCHITECTURE.md` each match on two lines of one sentence. ⚠️ **This paragraph first said
+"five hits", from memory rather than from the grep**, which is the defect two other sweeps hit
+today; the number above is the `git grep` output pasted back, and both counts are stated because a
+hit count and a claim count are not the same number.
+
+* **`CLAUDE.md`, Status.** *"No sync channel runs yet, so there is no catalogue behind any of it."*
+  → replaced with a pointer at `internal/libsync` and `cmd/usarr/import.go`, per this file's own
+  rule that a stale status claim is replaced by the pointer and not by a fresher claim. The
+  paragraph's *"such a list is false within days, and this one was"* now reads *"has been twice"*.
+* **`README.md`, the status blockquote.** *"Nothing syncs a library in yet, so there is no
+  catalogue."* → the narrow true statement, with its commit. The bold line's *"One path works"* went
+  with it: a count is the shape of claim that goes stale, and *"Parts of it run"* does not.
+* **`docs/ARCHITECTURE.md` §16, v0.1.** *"no sync channel runs yet, so there is no catalogue —
+  nothing replicates from any source, v0.1's own Kavita adapter included."* → a pointer, plus a ⚠️
+  quoting what it said and dating the falsification.
+
+### CH1-02a Grep for the premise, not the feature
+
+Sharpened mid-sweep by the frontend thread, who found the same staleness in **three** `web/` files,
+**none of them near the changed code**. The generalisation is worth keeping: `internal/libsync`
+landing falsified sentences that never mention sync, libsync, or any symbol it introduced. **A grep
+for the feature finds the code that changed; only a grep for the premise finds the prose that
+depended on it.** Their sections carried the claim as the literal strings *"has not shipped"* and
+*"not built"*, which no sync-shaped pattern would have matched.
+
+Re-run over this thread's three files with those literals added. **3 hits, all read, none stale** —
+recorded so the next pass does not re-derive the negative:
+
+| Hit | Reads | Verdict |
+|---|---|---|
+| `CLAUDE.md`, principle 4 | *"the UI simply hides what has not shipped yet"* | About **multi-user**, not the catalogue. Untouched by channel 1 |
+| `README.md`, feature-status preamble | *"Most of this table is not built yet … for that, read the tree"* | Still true of most rows, **and already a pointer** — the form CH1 is converting other sentences *into* |
+| `docs/ARCHITECTURE.md` §16, v0.1 | the write path *"specified, not built"* | ✅ Holds — `libsync/doc.go` lists the write queue under "NOT HERE": *"§7.6's verbs have no target in v0.1"* |
+
+A second pass for premise-shaped wordings that name no feature at all (*"nothing to show"*, *"no
+data"*, *"empty library"*, *"in this version"*, *"currently"*, *"for now"*) returned **one** hit —
+§16 returned none — and it is `README.md`'s Search-and-Grab row describing that mode as working
+*"with no library"*, which is a statement about the **mode's design**, not about the tree. Left.
+
+### CH1-03 The uncomfortable part: §16 argued against itself and this log signed it off
+
+§16's v0.1 entry opens by explaining that it **used to carry a landed/not-yet inventory**, that the
+inventory went stale, and that *"the tree answers the question and cannot go stale"*. It then keeps
+**one** inventory sentence, on the grounds that the milestone's central gap is worth stating at that
+altitude. That sentence is the one that went stale. The exception a correction carves out for itself
+is where the next instance of the same defect lives.
+
+And this log ratified it. The MWP sweep's table recorded *"no sync channel runs yet … v0.1's own
+Kavita adapter included"* as **✅ Holds**, measured against `internal/kavita/` being a client with no
+importer. **That measurement was correct when it was made** — `5b22d58` is 2026-08-17 20:16:41 UTC,
+`01969ed` (the first `internal/libsync` snapshot) is 20:24:54, and `f77ea2a` finished channel 1
+after it. The row is left standing, unedited: it is true of the tree it names, and rewriting it
+would destroy the evidence that a green measurement has a shelf life measured in minutes here.
+
+**What generalises.** A verdict in this log is a statement about a commit, not about the repository.
+The MWP row names its tree and is therefore still readable; a row that had said only *"✅ Holds"*
+would now be indistinguishable from a wrong one. That is the same rule as `DEVELOPMENT.md` §11's
+*"a gate result without a commit sha attached is not a result"*, applied to prose findings.
+
+### CH1-04 One clause was a requirement, not a status claim — flagged, not rewritten
+
+**The distinction that governs this sweep**, and it can change what a correction does: *"the doc says
+no sync runs and a sync now runs"* is stale prose, fix it; *"the doc says the sync must not do X and
+the shipped sync does X"* is a **finding**, and the sentence stays standing with the flag, because a
+stale sentence is sometimes the only surviving witness that code stopped matching its intent.
+Rewriting it destroys the evidence and closes the question in the same stroke.
+
+**Checked, and the sync core is clean on that test.** Everything `libsync/doc.go` lists under "NOT
+HERE" matches what §7 and §16 say v0.1 owes — channel 3b and channel 4 unbuilt, the write queue with
+no target, no timer. The one shape that *looks* like a violation is not: `remote_hash` and
+`remote_identity_hash` are **written by the importer and read by nothing**, which is channel 4's
+comparison basis being laid down ahead of the sweep, declared in the package doc rather than
+discovered. Phase B is empty for Kavita and **argued** (§7.2's fields are absent from
+`POST /api/Series/all-v2`) rather than silently skipped. No finding.
+
+**But one clause of the sentence CH1-02 corrected was a requirement in a status claim's clothes**,
+and correcting the sentence around it would have deleted it: *"every screen that would render a
+library says so rather than drawing an empty one."* That is principle 3 and §17.7's `unconfigured`
+state, not an observation. **Its truth conditions changed even though its text did not.** While
+nothing replicated, it held vacuously. Now `mapLibraryType` (`internal/libsync/kavita.go`) emits
+exactly two `work.kind` values — `comic` and `book` — so **two of §1's six media types have a source
+and four do not**, and the rule has to hold on a **mixed** screen for the first time. It is restored
+to §16 as a standing requirement with the arithmetic attached, and **routed to §17 to re-measure
+rather than declared satisfied here**.
+
+**One concrete thing for whoever takes that**, found while confirming the above and **not touched,
+because `web/` is another thread's section**: `web/src/routes/+page.svelte` carries a Block A
+exemplar in a comment reading *"Comics · no catalogue source · Kavita · after v0.1 · Add"*. Comics
+has a catalogue source **in** v0.1 as of ADR-0041, so the exemplar's *"after v0.1"* is the same
+staleness one layer down. Reported, not edited.
+
+### CH1-05 Deliberately not touched
+
+* **`README.md`'s feature-status table** (the sync-core row, the sync-channels row). Both read
+  `📋 Planned — v0.1`, and the table's own header states that status is the **planned milestone, not
+  progress**, "except where a row says otherwise". Under that contract neither row is falsified by
+  channel 1 landing — the milestone that owns the sync core is still v0.1. Changing them would
+  import a progress axis the table explicitly refuses.
+* **§16's other `not built` / `does not exist yet` clauses.** Re-read and left: §16.0's *"the \*Arr
+  sync that does not exist yet"* is inside the narration of a **rejected** earlier answer (already
+  ruled on by the MWP sweep); the write path's *"specified, not built"* is still true, per
+  `libsync/doc.go`; §16's *"channel 3b … built here rather than only specified"* is a statement about
+  which milestone owns the channel, not about today's tree.
+* **§17, and everything under `web/`** — out of this thread's sections. Routed rather than edited:
+  §17's `v0.1` phrasing around *"no catalogue source"* per media type (§17.2's Block A note, §17.7's
+  `unconfigured` state) is still true of the media types Kavita does not cover — `mapLibraryType`
+  (`internal/libsync/kavita.go:117`) emits exactly two `work.kind` values, `comic` and `book`, so of
+  §1's six types (movies, TV, music, ebooks, audiobooks, comics) **two are covered and four are
+  not**. Two of §17's rows are therefore now wrong and four are right, which is §17's owner's call
+  to make rather than this thread's.
+
 
 # Round 5 continued — `LS-60`–`LS-64`: the recently-added read's wire contract
 

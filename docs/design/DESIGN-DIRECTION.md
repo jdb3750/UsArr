@@ -143,12 +143,23 @@ lint checklist in §13.
   grounds that a sentence long enough to need one is already too long for a button, a tooltip, a
   toast or an empty state.
 
-**UI copy states facts about system state.** "Sonarr unreachable — connection refused at
+**UI copy states facts about system state.** "Sonarr unreachable: connection refused at
 10.0.0.4:8989" beats "We couldn't connect. Let's get you back on track!" No exclamation marks, no
 first-person plural: the application is a tool, not a company. Error copy names **the failing
 component, the observed symptom, and the next action** — which is CLAUDE.md principle 3 expressed
 as microcopy, and conveniently the strongest anti-slop signal available, because generated copy is
 systematically vague about failure.
+
+**The head-and-detail shape is the copy to imitate; the beat that joins its two halves is a colon,
+not the em dash the bullet above bans.** A statement and its **reason** take the colon — *"Sonarr
+unreachable: connection refused at 10.0.0.4:8989"*. A statement and an **instruction** take a full
+stop and two sentences — *"Sonarr unreachable. Check the host and port on Services."* — because an
+instruction is a second thing to do, not a subordinate clause. ⚠️ **This example carried an em dash
+until 2026-08-17**, and it is the sentence `check.mjs` cited as the construction §13 endorsed while
+§13 banned its punctuation. That is why the punctuation is named here rather than left to be
+inferred from the ban: an author who reads the endorsement and never reaches §13's Copy block must
+still land on the right glyph. (The mannerism the Copy bullet above rejects is the
+bolded-label-plus-colon *bullet*, a document tic; a colon inside a sentence is not that.)
 
 ### 1.5 The tell that most directly threatens UsArr: marketing grammar inside an application
 
@@ -866,7 +877,7 @@ flicker rather than hiding speed.
 
 **Tier 3 — over 10 s, or a known N-of-M.** Indexer fan-out across nine indexers; the initial full
 import. **Determinate progress with real counts**: "4 of 9 indexers responded", "1,240 of 10,000
-movies". **Never a fake bar.** Partial results are usable as they arrive — §8.4 already requires
+comics". **Never a fake bar.** Partial results are usable as they arrive — §8.4 already requires
 per-indexer streaming over SSE, and §17.7 already requires home sections to populate live as import
 phase A commits.
 
@@ -1574,7 +1585,7 @@ are real screens the design owes; neither is the other's placeholder.
 ┌───────────────────────────────────────────────────────────────────────────────────────┐
 │ Home                                                    [ Table | Posters ]  [Filter] │  40px toolbar
 ├───────────────────────────────────────────────────────────────────────────────────────┤
-│ Radarr 4K is unreachable — showing cached data from 14:02          [Open Services]    │  banner, only when degraded
+│ Kavita is unreachable — showing cached data from 14:02             [Open Services]    │  banner, only when degraded
 ├───────────────────────────────────────────────────────────────────────────────────────┤
 │ Your library                                                                          │  BLOCK A
 │ ───────────────────────────────────────────────────────────────────────────────────── │
@@ -2230,9 +2241,10 @@ recovery action is reachable:
 - System tags render as chips you can filter by but not delete (`is_system`, ADR-0015). Tag chips
   are neutral; `tag.color` is the only colour field in the data model and is user-controlled, not
   chrome.
-- **Degraded instance → a small non-modal banner** naming it: "Radarr 4K is unreachable — showing
+- **Degraded instance → a small non-modal banner** naming it: "Kavita is unreachable — showing
   cached data from 14:02", linking to Services. **The catalogue does not grey out** and shows no
-  spinner. Writes are accepted with the label "queued — Radarr 4K is unreachable".
+  spinner. Writes are accepted with the label "queued — Radarr 4K is unreachable" — which keeps an
+  \*Arr on purpose, because writes to a media backend do not exist (§17.7).
 - **Needs re-identification → a blocking banner** on that instance's rows and on Services, because
   §7.4's guard 2 exists precisely to stop a silent library-destroying sweep. Loud on purpose.
 
@@ -2894,9 +2906,14 @@ for a button, a tooltip, a toast or an empty state"*, which is a claim about the
 about the count. The rendered walk keeps the floor exactly as it was.
 
 **Six §17 strings are recorded individually in `check.mjs`, each with a reason and what retires it.**
-Four are the head-and-detail error form this section prescribes two paragraphs above
-(`Grab failed — HTTP 502`), which no word count can distinguish from prose. ⚠️ **Two are open copy
-questions rather than blessings** — §17.5's `— [Show it]`, which may be notation for two adjacent
+Four are the head-and-detail error form **§1.4** prescribes — not, as this paragraph read until
+2026-08-17, "two paragraphs above", which pointed at the fifteen-word floor and prescribed nothing —
+(`Grab failed — HTTP 502`), which no word count can distinguish from prose. ⚠️ **The form is still
+prescribed; its punctuation no longer is.** §1.4 and the Copy block below now write that beat as a
+colon, so these four are §17's **existing wording** rather than a licence for new copy: they predate
+the ruling, §17's shipping copy is the owner's to word, and a checker does not edit the
+specification it checks. ⚠️ **Two are open copy questions rather than blessings** — §17.5's
+`— [Show it]`, which may be notation for two adjacent
 elements rather than one string, and §17.8's twenty-two-word `add sources — never reshape it`, which
 is the likelier real finding. They are carried visibly because §17 shipping copy is the owner's to
 word and a checker does not edit the specification it checks. A seventh fails and asks a human, which
@@ -3025,8 +3042,10 @@ widened, and nothing else. The `[review]` rules below are still human judgement 
   Measured: H2 → H4 on the Libraries detail screen, with `Identity` appearing as both.
 - `[review]` **No raw schema identifier in running copy**, outside an explicitly-labelled
   Diagnostics panel where identifiers are the content: `managed_by user` → "user-managed",
-  `sort_title` → "sort title", `no work identity` → "matched by title", `breaker open` → "paused —
-  7 failed attempts, retrying 14:19".
+  `sort_title` → "sort title", `no work identity` → "matched by title", `breaker open` → "paused:
+  7 failed attempts, retrying 14:19". The replacement obeys the Copy block below like any other UI
+  string, so its beat is a colon; it carried an em dash until 2026-08-17, which is a seven-word
+  violation this checklist was prescribing three bullets above the rule that bans it.
 - `[review]` **One label per action across the whole product.** Shipped: four labels for "test",
   three for "retry", two for "add a service", four for a destructive action, and `Run full sync now`
   beside `Run full sync`. A verb that reads as a task description (`Confirm your password`) is a
@@ -3053,9 +3072,20 @@ widened, and nothing else. The `[review]` rules below are still human judgement 
   comprehensive, "AI-powered".
 - `[grep]` No `—` (U+2014) in any string under 15 words, **except where
   [`ARCHITECTURE.md`](../ARCHITECTURE.md) §17.7 fixes the wording**: its degraded-instance banner
-  is quoted verbatim as *"Radarr 4K is unreachable — showing cached data from 14:02"*, which is
+  is quoted verbatim as *"Kavita is unreachable — showing cached data from 14:02"*, which is
   eight words. §17 wins over this checklist, so the rule carries the exception rather than the
-  banner carrying a rewrite.
+  banner carrying a rewrite. **What the ban forbids is the punctuation, never the construction:**
+  §1.4's head-and-detail form is prescribed, and in a UI string its beat is a **colon** for a
+  statement and its reason (*"Grab failed: HTTP 502"*), or a full stop and two sentences for a
+  statement and an instruction (*"Grab failed. Check the indexer on Services."*). Stated here as
+  well as at §1.4 because a section that endorses a construction and bans its punctuation produces
+  correct-looking violations forever, and this one did.
+  **And a string whose entire content is one `—` is a glyph, not a sentence.** It is the empty-cell
+  convention — *"no value here"* — used by the app (`NOTHING.empty`) and by every `<td>` in the
+  mockups that has nothing to print, and it is exempt **by shape**: no sentence fits in one
+  character, so nothing can launder through it, and no name, file or token appears in the exemption.
+  Recorded here because the convention was tacit, and a tacit convention is what a later author
+  "fixes" into a word.
 - `[grep]` No `!` in UI strings.
 - `[grep]` **The UI locale is en-GB** — `catalogue`, `behaviour`, `colour`, `organisation` —
   **with one exception: a string quoted verbatim from an \*Arr keeps the \*Arr's spelling**

@@ -35,7 +35,7 @@ const (
 )
 
 // kavitaSeries builds one POST /api/Series/all-v2 element. Field names are
-// SeriesDto's, from api/specs/kavita.json.
+// SeriesDto's, from api/specs/kavita-develop.json.
 func kavitaSeries(id, libraryID int, name string, extra map[string]any) map[string]any {
 	s := map[string]any{
 		"id": id, "libraryId": libraryID, "name": name, "sortName": name,

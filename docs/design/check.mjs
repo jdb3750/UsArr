@@ -676,8 +676,18 @@ rule('§13 type: no uppercase transform on a label, no italic heading',
  *   · `…selector… { …decls… text-align: center`  — a CSS rule
  *   · `<div class="dialog__foot" style="…text-align:center`  — inline */
 const CENTER = /(?<where>[^{}]{0,200}\{[^{}]{0,400}?|<[a-z][^<>]{0,300}?)text-align\s*:\s*center/i;
+/* ⚠️ NARROWED 2026-08-17, from /dialog|modal|toast/ to /dialog|modal/. §13
+ * names ONE component — "no text-align: center outside dialog components" —
+ * and `modal` is that component under another word, so it stays. `toast` is a
+ * DIFFERENT component: it arrived by regex convenience, nobody has argued for
+ * centring one, and §9.4 specifies toasts without asking for it. The exemption
+ * is inert today, which is precisely the reason to narrow it now rather than
+ * later — an unused exemption grants everything on the day someone builds the
+ * component, and it grants it silently, because the rule it disables never
+ * fired while the component did not exist. An exemption is a claim about a
+ * component that has been argued; this one had not been. */
 rule('§13 type: no text-align:center outside dialog', CENTER, {
-  exempt: { group: 'where', match: /dialog|modal|toast/i, why: '§9.6 allows centring inside a dialog' },
+  exempt: { group: 'where', match: /dialog|modal/i, why: '§9.6 allows centring inside a dialog' },
 });
 rule('§13 type: no bordered / filled empty state',
   /\.empty[a-z-]*[^{}]*\{[^}]*(border\s*:|border-style\s*:\s*dashed|background\s*:|box-shadow\s*:)/i);
@@ -1726,11 +1736,15 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
   const fixedBy17 = norm(s17Body);
   if (fixedBy17.length < 5000) fail('§13 copy: ARCHITECTURE §17 could not be located, so the fixed-wording exemption is not being applied');
   /* What §17 fixes is the CONSTRUCTION, not the instance. Its banner is quoted
-   * as "Radarr 4K is unreachable — showing cached data from 14:02"; the mockup
-   * renders the same banner over different sample data. So the exemption is
-   * granted on the em dash's own two-words-either-side window, which survives a
-   * substituted service name and a substituted timestamp and does not survive a
-   * rewritten phrase. */
+   * as "Kavita is unreachable — showing cached data from 14:02"; the mockup
+   * renders the same banner over different sample data, and over a different
+   * service — it draws a Radarr. So the exemption is granted on the em dash's
+   * own two-words-either-side window, which survives a substituted service name
+   * and a substituted timestamp and does not survive a rewritten phrase. ⚠️ The
+   * subject moved on 2026-08-17, from `Radarr 4K` to `Kavita`, and the window
+   * "is unreachable — showing cached" did not — which is the property this
+   * design was chosen for, demonstrated rather than asserted: the mockup's
+   * banner kept its exemption across a §17 edit that renamed its subject. */
   const exempt = (t) => {
     const w = norm(t).split(' ');
     for (let i = 0; i < w.length; i++) {
@@ -1799,13 +1813,13 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
   const seenBySource = {};
   const countSource = (src, n) => { seenBySource[src] = (seenBySource[src] || 0) + n; };
 
-  let strings = 0, exempted = 0; const bad = [];
+  let strings = 0, exempted = 0, glyphs = 0; const bad = [];
   /* §17's copy is counted apart from `strings` on purpose. STRING_FLOOR's
      margin below is DERIVED from the rendered corpus — 6978 − 6750 = 228,
      argued against a 293-string regression — and folding documentation strings
      into that total would move the number the derivation is about while
      claiming the derivation still held. */
-  let s17Strings = 0, s17Exempted = 0, s17Bad = 0;
+  let s17Strings = 0, s17Exempted = 0, s17Bad = 0, s17Glyphs = 0;
   /* 2000 against 4203 while no panel was ever opened; 5800 against 6685 once
      the traversal landed; 6750 against 6978 now the unit is a run of inline
      content rather than a childless block element.
@@ -1849,10 +1863,23 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
    * already been through the rule, which is the layering it always implied.
    * ------------------------------------------------------------------- */
   const S17_EMDASH_ALLOWED = new Map([
-    /* All four predate this sweep and are the construction §13's own worked
-     * example endorses. DESIGN-DIRECTION §13 states the ban and then writes
-     * "Sonarr unreachable — connection refused at 10.0.0.4:8989" as the copy to
-     * imitate: a short head, an em dash, the observed detail. The fifteen-word
+    /* All four predate this sweep and are the head-and-detail construction
+     * DESIGN-DIRECTION prescribes — §1.4's "UI copy states facts about system
+     * state", whose worked example this file used to cite as §13 endorsing the
+     * EM DASH: it read "Sonarr unreachable — connection refused at
+     * 10.0.0.4:8989" and was the copy to imitate, two sections from §13's ban
+     * on that punctuation in the same string.
+     *
+     * ⚠️ RULED 2026-08-17, and the four entries below are unchanged by it. The
+     * construction stays prescribed; its beat is now a COLON for a statement
+     * and its reason ("Sonarr unreachable: connection refused at …"), or a full
+     * stop and two sentences for a statement and an instruction. §1.4 and §13's
+     * Copy block both say so at the endorsement, so an author who never reaches
+     * the ban still lands on the right glyph. That makes these four §17's
+     * EXISTING wording rather than a licence for new copy — they are carried,
+     * not blessed, because §17's shipping copy is the owner's to word and a
+     * checker does not edit the specification it checks. A fifth is a finding.
+     * The fifteen-word
      * proxy cannot see that construction, so each instance is recorded here
      * rather than generalised into a grammar rule this file would then have to
      * be right about — an enumerated four fails on the fifth and asks a human,
@@ -1916,6 +1943,29 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
       }
     }
     if (t.includes('!')) bad.push(`${where}: "!" in "${t.slice(0, 70)}"`);
+    /* STRUCTURAL EXEMPTION: A BARE EM DASH IS A GLYPH, NOT A SENTENCE.
+       `—` alone, as the WHOLE trimmed string, is the typographic convention for
+       "no value here" — the shipped app's NOTHING.empty, and the mockups' own
+       cell filler. §13's em-dash rule is a rule about PROSE: it bans a beat
+       inside a sentence, and there is no sentence here to carry a beat.
+
+       It is exempted BY SHAPE, never by name, file or token, which is what
+       makes it unable to launder anything: the test is that the string is one
+       character long, and no sentence fits in one character. Contrast the
+       exemption above it, which needs §17 to have written the wording — that
+       one is a claim about a document and can go stale; this one is a claim
+       about the string itself and cannot. It applies to both corpora for the
+       same reason: a glyph in §17 is a glyph too, and withholding it there
+       would be withholding it from a rule that was never about §17.
+
+       Deliberately NOT floored. Every count in this file has a floor because a
+       check that matches nothing reads like a check that passed — but that
+       argument is about RULES, not about exemptions of shape. The mockups keep
+       their bare dashes inside `<td>`, which the corpus already excludes as
+       data, so this fires zero times today and firing zero times is the honest
+       answer rather than a stale one. The number is printed regardless, so the
+       day it stops being zero is visible. */
+    if (t.trim() === '—') { if (isS17) s17Glyphs++; else glyphs++; return; }
     /* ⚠️ The fifteen-word floor is a PROXY for "is this a UI string", and it
        earns its keep only where the corpus MIXES microcopy with prose — the
        rendered walk reads paragraphs as well as buttons, and firing on those
@@ -2102,7 +2152,8 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
   if (uniq.length) { fail(`§13 copy: ${uniq.length} violation(s) in user-visible text`); uniq.slice(0, 10).forEach((b) => note(b)); }
   else if (floorOk('§13 copy', strings, STRING_FLOOR, 'user-visible string(s)')) {
     ok(`§13 copy: ${strings} user-visible strings clean of banned words, "!" and short-string em dashes ` +
-      `(floor ${STRING_FLOOR} over both installs; ${exempted} short em-dash string(s) exempt because ARCHITECTURE §17 fixes their wording verbatim)`);
+      `(floor ${STRING_FLOOR} over both installs; ${exempted} short em-dash string(s) exempt because ARCHITECTURE §17 fixes their wording verbatim; ` +
+      `${glyphs} bare "—" string(s) read as a glyph rather than prose, a structural exemption no sentence can hide in)`);
   }
   /* Reported separately from the line above because it is a separate corpus
      with a separate exemption, and one combined number would hide which of the
@@ -2119,8 +2170,9 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
   } else {
     ok(`§13 copy §17: ${s17Strings} shipping-copy string(s) in ARCHITECTURE §17 clean of banned words, "!" and ` +
       `em dashes at ANY length (the fifteen-word floor is not applied to specified UI copy; ${s17Exempted} ` +
-      `recorded exception(s), all of them the short-head-then-detail construction ` +
-      `§13's own worked example endorses; §17 cannot exempt itself here, which is the point)`);
+      `recorded exception(s) and ${s17Glyphs} bare "—" glyph(s), the exception(s) all §17's existing wording of the head-and-detail construction ` +
+      `§1.4 prescribes — whose beat is a colon since 2026-08-17, so these are carried, not blessed; ` +
+      `§17 cannot exempt itself here, which is the point)`);
   }
   /* Each non-layout source is floored on its own. A source that stops being
    * collected -- an attribute renamed, a selector narrowed, a <title> dropped

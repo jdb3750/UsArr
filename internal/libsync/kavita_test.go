@@ -11,19 +11,40 @@ import (
 	"github.com/jdb3750/UsArr/internal/store"
 )
 
-// TestEveryLibraryTypeMemberIsMapped reads the VENDORED SPEC and requires a
-// decision for every member it declares.
+// kavitaSpecFiles is BOTH vendored Kavita specs (ADR-0046): the FLOOR
+// (`kavita-v0.9.0.2.json`, the stable release the owner runs) and the CEILING
+// (`kavita-develop.json`, where the API is defined). Every spec-reading test in
+// this package runs against both, in a subtest named for the file, because a
+// green against develop alone is evidence about a branch nobody deploys.
+// api/specs/SOURCES.md owns the provenance of each.
+var kavitaSpecFiles = []string{"kavita-v0.9.0.2.json", "kavita-develop.json"}
+
+func readKavitaSpec(t *testing.T, file string) []byte {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "..", "api", "specs", file))
+	if err != nil {
+		t.Fatalf("read the vendored spec %s (see api/specs/SOURCES.md): %v", file, err)
+	}
+	return raw
+}
+
+// TestEveryLibraryTypeMemberIsMapped reads BOTH VENDORED SPECS and requires a
+// decision for every member either one declares.
 //
 // This is the guard that makes the mapping's "every member is accounted for"
-// claim mechanical rather than a comment. Kavita adds enum members; when
-// api/specs/kavita.json is refreshed and LibraryType grows a seventh, this test
-// goes red and someone has to decide what it is, rather than the default branch
-// quietly declining a library type the user can see in Kavita.
+// claim mechanical rather than a comment. Kavita adds enum members; when either
+// spec is refreshed and LibraryType grows a seventh, this test goes red and
+// someone has to decide what it is, rather than the default branch quietly
+// declining a library type the user can see in Kavita.
 func TestEveryLibraryTypeMemberIsMapped(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "api", "specs", "kavita.json"))
-	if err != nil {
-		t.Fatalf("read the vendored spec: %v", err)
+	for _, file := range kavitaSpecFiles {
+		t.Run(file, func(t *testing.T) { everyLibraryTypeMemberIsMapped(t, file) })
 	}
+}
+
+func everyLibraryTypeMemberIsMapped(t *testing.T, file string) {
+	t.Helper()
+	raw := readKavitaSpec(t, file)
 	var doc struct {
 		Components struct {
 			Schemas struct {
@@ -35,17 +56,17 @@ func TestEveryLibraryTypeMemberIsMapped(t *testing.T) {
 		} `json:"components"`
 	}
 	if err := json.Unmarshal(raw, &doc); err != nil {
-		t.Fatalf("decode the vendored spec: %v", err)
+		t.Fatalf("decode %s: %v", file, err)
 	}
 	members := doc.Components.Schemas.LibraryType.Enum
 	if len(members) == 0 {
-		t.Fatal("the vendored spec declares no LibraryType members; this test would pass vacuously")
+		t.Fatalf("%s declares no LibraryType members; this test would pass vacuously", file)
 	}
 	if len(members) != 6 {
-		t.Errorf("the vendored spec declares %d LibraryType members (%v), and mapLibraryType was "+
+		t.Errorf("%s declares %d LibraryType members (%v), and mapLibraryType was "+
 			"written against 6. Decide what the new member is — do NOT let the default branch "+
 			"decline a library type the user can see in Kavita",
-			len(members), doc.Components.Schemas.LibraryType.EnumVarNames)
+			file, len(members), doc.Components.Schemas.LibraryType.EnumVarNames)
 	}
 
 	// Kind for each member, and the DECLINE for the one that has none. Written
@@ -63,7 +84,7 @@ func TestEveryLibraryTypeMemberIsMapped(t *testing.T) {
 		got := mapLibraryType(kavita.LibraryType(m))
 		w, known := want[m]
 		if !known {
-			t.Errorf("LibraryType %d is in the vendored spec and this test has no expectation for it", m)
+			t.Errorf("LibraryType %d is in %s and this test has no expectation for it", m, file)
 			continue
 		}
 		if got.Kind != w {

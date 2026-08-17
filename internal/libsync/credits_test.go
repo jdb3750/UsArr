@@ -30,19 +30,23 @@ func person(name string) kavita.PersonDto {
 	}
 }
 
-// TestEveryKavitaPersonRoleIsAccountedFor reads the VENDORED SPEC and requires a
-// decision for every PersonRole member it declares — the same guard shape
-// TestEveryLibraryTypeMemberIsMapped uses, for the same reason.
+// TestEveryKavitaPersonRoleIsAccountedFor reads BOTH VENDORED SPECS (ADR-0046)
+// and requires a decision for every PersonRole member either declares — the same
+// guard shape TestEveryLibraryTypeMemberIsMapped uses, for the same reason.
 //
 // "Accounted for" means the member appears in kavitaCreditRoles, either with a
 // role (it becomes a credit) or with empty roles (it is dropped, and the table
 // says why). A fourteenth member added upstream goes red here rather than being
 // quietly ignored by a mapping that never looks at it.
 func TestEveryKavitaPersonRoleIsAccountedFor(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "..", "api", "specs", "kavita.json"))
-	if err != nil {
-		t.Fatalf("read the vendored spec: %v", err)
+	for _, file := range kavitaSpecFiles {
+		t.Run(file, func(t *testing.T) { everyKavitaPersonRoleIsAccountedFor(t, file) })
 	}
+}
+
+func everyKavitaPersonRoleIsAccountedFor(t *testing.T, file string) {
+	t.Helper()
+	raw := readKavitaSpec(t, file)
 	var doc struct {
 		Components struct {
 			Schemas struct {
@@ -57,12 +61,12 @@ func TestEveryKavitaPersonRoleIsAccountedFor(t *testing.T) {
 		} `json:"components"`
 	}
 	if err := json.Unmarshal(raw, &doc); err != nil {
-		t.Fatalf("decode the vendored spec: %v", err)
+		t.Fatalf("decode %s: %v", file, err)
 	}
 	names := doc.Components.Schemas.PersonRole.EnumVarNames
 	if len(names) != len(doc.Components.Schemas.PersonRole.Enum) || len(names) == 0 {
-		t.Fatalf("the spec's PersonRole has %d members and %d names; the assertion below "+
-			"would be vacuous", len(doc.Components.Schemas.PersonRole.Enum), len(names))
+		t.Fatalf("%s's PersonRole has %d members and %d names; the assertion below "+
+			"would be vacuous", file, len(doc.Components.Schemas.PersonRole.Enum), len(names))
 	}
 
 	// Kavita's PersonRole member names and SeriesMetadataDto's array names are
@@ -84,7 +88,7 @@ func TestEveryKavitaPersonRoleIsAccountedFor(t *testing.T) {
 	for _, member := range names {
 		array, ok := arrayFor[member]
 		if !ok {
-			t.Errorf("PersonRole.%s is a member of the vendored spec and this test does not "+
+			t.Errorf("PersonRole.%s is a member of "+file+" and this test does not "+
 				"know which SeriesMetadataDto array carries it. Kavita added a role; decide "+
 				"what it is — a credit or a drop — in kavitaCreditRoles, and add the array "+
 				"name here.", member)

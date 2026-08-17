@@ -970,8 +970,11 @@ earlier than v0.3, and the full four-verb correction surface (`exclude`, `includ
 plus the Corrections list stay at v0.3.** *"Minimal"* is the owner's own word and ADR-0043 records it
 as a **constraint on scope**, so what moves is bounded by that case and nothing outside it. ⚠️ **The
 ADR deliberately assigns no milestone** — the owner said *"earlier"* and named no version, and §16 is
-authoritative for milestone membership — so the slot is still unassigned, and that gap is ADR-0043's
-own open question rather than a hole in this section.
+authoritative for milestone membership. ✅ **That slot is now assigned: [ADR-0045](./DECISIONS.md#adr-0045)
+(owner-delegated, 2026-08-17) puts the minimal match-correction UI in v0.2**, closing ADR-0043's open
+question along with the two others left unslotted; ADR-0045 records that v0.2 was reached **by
+elimination** — the only slot both earlier than v0.3 and not v0.1 — and that the cost is v0.1 shipping
+the *"not identified"* badge without its remedy for one milestone.
 
 `normalized_title` and `norm_version`
 are **columns on `work` from the migration that creates it** (adding them later is a backfill over
@@ -2711,9 +2714,25 @@ after the screen had shipped, on a page whose own §17.3 describes that screen's
 tree answers the question and cannot go stale — `web/src/routes` is the set of screens, `internal/`
 the set of backend surfaces, `internal/db/migrations` the schema that actually exists, and
 `git log` the order they arrived in. What is worth stating at this altitude is the gap the whole
-milestone is about, and it is one sentence: **no sync channel runs yet, so there is no catalogue** —
-nothing replicates from any source, v0.1's own Kavita adapter included, and every screen that
-would render a library says so rather than drawing an empty one. (The query-plan assertions are in
+milestone is about, and the durable form of it is a pointer rather than a sentence: **read
+`internal/libsync`'s package doc, which names channel by channel what the sync core has and what it
+deliberately has not, and `cmd/usarr/import.go`'s, which names what triggers an import and what does
+not.** ⚠️ **This passage carried that gap as a claim and the claim went stale — which is the
+failure the paragraph immediately above describes, committed by the paragraph itself.** It read
+*"no sync channel runs yet, so there is no catalogue — nothing replicates from any source, v0.1's
+own Kavita adapter included, and every screen that would render a library says so rather than
+drawing an empty one"*. That was re-measured and recorded as still holding at `5b22d58`
+(2026-08-17 20:16 UTC, REVIEW-LOG MWP); `01969ed` falsified it **eight minutes later**, and
+`f77ea2a` finished the channel it started. Corrected at `c56c8e4`.
+
+**One clause of that sentence was a requirement wearing a status claim's clothes, and it survives as
+a requirement**: *every screen that would render a library says which source is missing rather than
+drawing an empty one* (principle 3, §17.7's `unconfigured` state). While nothing replicated it was
+vacuously satisfied. It is no longer vacuous — Kavita's adapter emits exactly two `work.kind` values,
+`comic` and `book` (`mapLibraryType`, `internal/libsync/kavita.go`), so **two of §1's six media types
+now have a source and four do not**, and the rule now has to hold on a mixed screen rather than an
+empty one. **That is §17's to re-measure, and it is flagged rather than assumed here** (REVIEW-LOG
+CH1-04). (The query-plan assertions are in
 place for the tables that exist, in `make test` — the gate named above, not a CI.)
 
 **v0.2 — "Requests."** Request model, routing rules, approval workflow, quotas, single-user
@@ -3805,7 +3824,7 @@ Each is a named screen, not an accident.
   live connection test that must pass before Save is enabled, **whose four result states are
   specified in §17.3 rather than left to the implementer**. On
   save the import starts, the wizard hands off to home, and a progress affordance shows real counts
-  ("1,240 of 10,000 movies") fed by SSE. **Sections populate live as import phase A commits** — it is
+  ("1,240 of 10,000 comics") fed by SSE. **Sections populate live as import phase A commits** — it is
   not a spinner in front of an empty screen. If the only configured instance advertises no
   `LibrarySync`, the wizard lands on Search-and-Grab mode with the line quoted in §8.5.
 - **No services configured** → the wizard. Never an empty home page.
@@ -3813,10 +3832,20 @@ Each is a named screen, not an accident.
   because an empty library with a healthy service means the import has not run and the user should
   see that, not a blank grid.
 - **Import in progress** → the populated-so-far sections plus the progress affordance.
-- **Instance degraded / backend offline** → a non-modal banner naming it ("Radarr 4K is unreachable —
+- **Instance degraded / backend offline** → a non-modal banner naming it ("Kavita is unreachable —
   showing cached data from 14:02") linking to the Services screen. **The catalogue does not grey
-  out**; browse, search, sort and filter keep working from the replica. Writes to that instance are
-  accepted with the label "queued — Radarr 4K is unreachable" (§7.5).
+  out**; browse, search, sort and filter keep working from the replica. The banner names the
+  **instance**, by the name the user gave it (§17.3), never the kind — which is what makes it
+  legible on a stack running two of the same thing. ⚠️ **The write half of this state keeps an \*Arr
+  deliberately, and it is not an oversight**: writes to a media backend do not exist — §7.6's writes
+  are request, toggle monitored and delete, which only an acquisition app accepts — so the queued
+  label is "queued — Radarr 4K is unreachable" (§7.5), and the two-Radarr instance name is the whole
+  point of the example. Do not convert this one to a v0.1 service. ⚠️ The banner and the count above
+  read `Radarr 4K` and `movies` until 2026-08-17; they were retargeted because **v0.1's reader has
+  Kavita and Prowlarr** (§16, ADR-0041), and an exemplar naming a service that reader cannot have
+  teaches the screen with furniture that is not in the room. Neither was false — [ADR-0041](./DECISIONS.md#adr-0041)
+  re-sequenced the \*Arrs rather than cutting them — so this is a judgement about recognisability,
+  not a correction.
   **The timestamp in a degraded banner is that instance's own last successful sync, never the global
   delta time.** It looks like a detail and it is the whole job of the banner: the number tells the
   user how stale the data is, and quoting the global time on an instance that has been failing for

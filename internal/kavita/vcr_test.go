@@ -13,7 +13,7 @@ import (
 )
 
 // ⚠️ THE KAVITA CASSETTES IN testdata/cassettes ARE SYNTHETIC. Every one of them
-// was hand-authored from the vendored OpenAPI document (api/specs/kavita.json,
+// was hand-authored from the vendored OpenAPI document (api/specs/kavita-develop.json,
 // develop @ 9c3e540, info.version 0.9.0.20) and from Kavita's controller source
 // at that same commit. None was captured off a wire.
 //
