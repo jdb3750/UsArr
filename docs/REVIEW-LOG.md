@@ -11432,6 +11432,392 @@ arms fail **differently** rather than the asymmetric rule being decorative:
 
 ---
 
+# VN9-05 — §13's colour ban named four families and CSS names them seven, so `orchid`, `plum` and `magenta` walked through
+
+## VN9.21 The claim was verified before anything moved, and it held exactly as reported
+
+Three facts were checked first, because the change is only correct if all three hold:
+
+- **§13's **Colour** block named exactly four.** Its rule text read, verbatim:
+
+  > - `[grep]` No `indigo|violet|purple|fuchsia` class or equivalent hex/oklch anywhere in the app.
+
+- **`check.mjs` matched the same four**, in one rule: `rule('§13 colour: no
+  indigo/violet/purple/fuchsia', /\b(indigo|violet|purple|fuchsia)\b/i);`. Same list, same order, no
+  synonyms.
+- **None of `orchid`, `plum` or `magenta` appeared anywhere in `docs/`** — a word-bounded
+  case-insensitive grep over the whole tree returned **zero** hits outside `web/` and
+  `node_modules/`.
+
+CSS names the family seven ways, not four. `orchid` is `#da70d6`, `plum` is `#dda0dd`, and `magenta`
+is the exact synonym of `fuchsia` — the same `#f0f`. All three are the banned family under another
+keyword, and all three were legal to type.
+
+## VN9.22 Banned outright rather than scoped to colour contexts, because `\b` already does the scoping
+
+The instruction to check for collateral damage was taken seriously, since these are English words as
+well as CSS keywords and **a rule that fires on prose gets turned off**. `plum` is the live risk. It
+is not a live risk here:
+
+- **Zero word-bounded hits across all of `docs/`**, the mockups and `tokens.css` included. The
+  corpus `check.mjs` actually scans is nine CSS/JS/HTML sources with comments stripped — not prose —
+  which narrows it further.
+- **`\b` declines the compounds that matter.** `plumbing` (which does appear, four times, in
+  `ARCHITECTURE.md`, `DECISIONS.md` and `docs/reference/providers.md`, and in none of the nine
+  scanned files), `plummet`, `plumber`, `implement`, `complement` and `magentaBright` are all
+  non-matches; verified by running the pattern against each.
+
+So no colour-context narrowing was added. **Adding one would have been the worse change**: it would
+have made this rule structurally unlike the four words beside it, for a hazard that does not exist
+in the corpus. The reasoning is recorded in a comment above the rule so the next reader does not
+re-derive it.
+
+## VN9.23 Fired three times, deliberately and separately
+
+A pattern that catches `magenta` and silently misses `orchid` reads exactly like one that catches
+all three, so each word was planted on its own and the check run three times — not once with three
+plants. Each plant was `.deliberate-firing { color: <word>; }` appended to
+`docs/design/mockups/usarr.css`, a file already in the scanned set.
+
+All three exited **1**, naming the file, the line and the word:
+
+```
+FAIL  §13 colour: no indigo/violet/purple/fuchsia/orchid/plum/magenta — 1 hit(s)
+      docs/design/mockups/usarr.css:1906  orchid
+FAIL  §13 colour: no indigo/violet/purple/fuchsia/orchid/plum/magenta — 1 hit(s)
+      docs/design/mockups/usarr.css:1906  plum
+FAIL  §13 colour: no indigo/violet/purple/fuchsia/orchid/plum/magenta — 1 hit(s)
+      docs/design/mockups/usarr.css:1906  magenta
+```
+
+⚠️ **The failure line names file, line and word — not the selector.** `rule()`'s printed snippet is
+`m[0]`, the match itself, and this rule's pattern captures only the bare word. The line number is
+real (`strip()` preserves line count), so the selector is one jump away, but it is not in the
+message. Reported rather than fixed: widening what `rule()` prints changes every rule's output and
+is a different change.
+
+## VN9.24 The corpus did not move
+
+Reported before and after so a change in **what** the rule inspects could not pass unnoticed behind
+a change in what it forbids:
+
+| | files | chars scanned | violations |
+| --- | --- | --- | --- |
+| before | 9 | 843,447 | 0 |
+| after | 9 | 843,447 | 0 |
+
+Same nine files, same character count, same zero. **The rule now forbids more and inspects exactly
+the same thing** — which is the whole claim this change makes.
+
+## VN9.25 What this pass did NOT do
+
+- **The frontend chroma rule was not touched and not reasoned about.** It is a separate mechanism
+  with its own open question about how its floor was derived, and the two rules are deliberately
+  independent. This change is the word list only.
+- **`web/` was not touched**, including `web/src/lib/designrules.test.ts`, which already documents
+  this exact escape in a comment (*"`orchid`, `plum` and `magenta` are word-banned by neither … and
+  value-banned by neither"*). That file is another thread's; the finding it records is now closed on
+  this side of the fence only.
+- **§1's table row and §3's prose were left alone.** Both name the four families
+  (*"Indigo/violet/purple as the default accent"*; *"§1.1, which bans indigo, violet, purple and
+  fuchsia outright"*), and both are narrative about the AI-design tell rather than statements of the
+  rule. The ban is stated in two places on our side — §13's `[grep]` bullet and `check.mjs` — and
+  both now carry all seven.
+
+---
+
+# CH1 — the sync-status claim went stale when channel 1 landed
+
+**Date:** 2026-08-17. **Prefix:** `CH1-` (channel 1), verified unused across `docs/` and all 21
+remote heads before it was chosen.
+
+**Trigger.** The frontend thread landed Home's Block C at `2b6e739` and reported that the Home empty
+state's *"because the library sync is not built in this version"* had become false. They fixed
+`web/`'s copy and flagged that the same claim probably lived in the prose docs. It did.
+
+### CH1-01 The premise, measured before anything was edited
+
+The report said *"the sync is built"*. That is broader than what the tree carries, and a correction
+written to the broader claim would have been the next stale sentence. What runs, measured at
+`c56c8e4`:
+
+| Question | Where it is answered | Answer |
+|---|---|---|
+| Is there a sync core? | `internal/libsync`, `doc.go` | Yes — **channel 1 only**, `Importer.FullImport` (`importer.go:190`) |
+| How many adapters? | `libsync.NewKavitaSource`, `kavita.go` | **One, Kavita.** `(*registry).FullImport` (`cmd/usarr/import.go:41`) returns an error for any other kind |
+| Does anything run on its own? | `cmd/usarr/import.go` header, `cmd/usarr/services.go:221` | **A bootstrap, not a timer.** `go g.bootstrapImport(...)` fires at the moment a Kavita client stack is built, gated on `last_full_sync_at` being unset — at most once per instance per database |
+| Is there a manual trigger? | `(*registry).FullImport` | Yes, by call |
+| Channel 3b (ordered page walk)? | `doc.go`, "NOT HERE" | **Not built** |
+| Channel 4 (reconciliation sweep)? | `doc.go`, "NOT HERE" — `remote_hash` is *written* here and read by nothing | **Not built** |
+| The write queue? | `doc.go`, "NOT HERE" | **Not built** |
+| Phase B (§7.2)? | `doc.go` | Empty for Kavita's series list, and argued rather than deferred |
+
+So the accurate sentence is **"a first-import channel exists for Kavita, fires on connect, and has
+no periodic re-sync behind it"** — not "the sync is built", and not "an import runs when you connect
+Kavita" alone either, since the manual trigger is the other half. Every correction below is written
+to that sentence and to no larger one.
+
+### CH1-02 Three sites, counted from the grep that found them
+
+`grep -rn -iE "no sync channel runs|nothing syncs a library|no catalogue behind|nothing replicates"`
+over `CLAUDE.md`, `README.md`, `docs/` at `c56c8e4` returned **6 hits in 4 files**, which is
+**3 live claims** plus this log's own superseded row (CH1-03) — `CLAUDE.md` and
+`docs/ARCHITECTURE.md` each match on two lines of one sentence. ⚠️ **This paragraph first said
+"five hits", from memory rather than from the grep**, which is the defect two other sweeps hit
+today; the number above is the `git grep` output pasted back, and both counts are stated because a
+hit count and a claim count are not the same number.
+
+* **`CLAUDE.md`, Status.** *"No sync channel runs yet, so there is no catalogue behind any of it."*
+  → replaced with a pointer at `internal/libsync` and `cmd/usarr/import.go`, per this file's own
+  rule that a stale status claim is replaced by the pointer and not by a fresher claim. The
+  paragraph's *"such a list is false within days, and this one was"* now reads *"has been twice"*.
+* **`README.md`, the status blockquote.** *"Nothing syncs a library in yet, so there is no
+  catalogue."* → the narrow true statement, with its commit. The bold line's *"One path works"* went
+  with it: a count is the shape of claim that goes stale, and *"Parts of it run"* does not.
+* **`docs/ARCHITECTURE.md` §16, v0.1.** *"no sync channel runs yet, so there is no catalogue —
+  nothing replicates from any source, v0.1's own Kavita adapter included."* → a pointer, plus a ⚠️
+  quoting what it said and dating the falsification.
+
+### CH1-02a Grep for the premise, not the feature
+
+Sharpened mid-sweep by the frontend thread, who found the same staleness in **three** `web/` files,
+**none of them near the changed code**. The generalisation is worth keeping: `internal/libsync`
+landing falsified sentences that never mention sync, libsync, or any symbol it introduced. **A grep
+for the feature finds the code that changed; only a grep for the premise finds the prose that
+depended on it.** Their sections carried the claim as the literal strings *"has not shipped"* and
+*"not built"*, which no sync-shaped pattern would have matched.
+
+Re-run over this thread's three files with those literals added. **3 hits, all read, none stale** —
+recorded so the next pass does not re-derive the negative:
+
+| Hit | Reads | Verdict |
+|---|---|---|
+| `CLAUDE.md`, principle 4 | *"the UI simply hides what has not shipped yet"* | About **multi-user**, not the catalogue. Untouched by channel 1 |
+| `README.md`, feature-status preamble | *"Most of this table is not built yet … for that, read the tree"* | Still true of most rows, **and already a pointer** — the form CH1 is converting other sentences *into* |
+| `docs/ARCHITECTURE.md` §16, v0.1 | the write path *"specified, not built"* | ✅ Holds — `libsync/doc.go` lists the write queue under "NOT HERE": *"§7.6's verbs have no target in v0.1"* |
+
+A second pass for premise-shaped wordings that name no feature at all (*"nothing to show"*, *"no
+data"*, *"empty library"*, *"in this version"*, *"currently"*, *"for now"*) returned **one** hit —
+§16 returned none — and it is `README.md`'s Search-and-Grab row describing that mode as working
+*"with no library"*, which is a statement about the **mode's design**, not about the tree. Left.
+
+### CH1-03 The uncomfortable part: §16 argued against itself and this log signed it off
+
+§16's v0.1 entry opens by explaining that it **used to carry a landed/not-yet inventory**, that the
+inventory went stale, and that *"the tree answers the question and cannot go stale"*. It then keeps
+**one** inventory sentence, on the grounds that the milestone's central gap is worth stating at that
+altitude. That sentence is the one that went stale. The exception a correction carves out for itself
+is where the next instance of the same defect lives.
+
+And this log ratified it. The MWP sweep's table recorded *"no sync channel runs yet … v0.1's own
+Kavita adapter included"* as **✅ Holds**, measured against `internal/kavita/` being a client with no
+importer. **That measurement was correct when it was made** — `5b22d58` is 2026-08-17 20:16:41 UTC,
+`01969ed` (the first `internal/libsync` snapshot) is 20:24:54, and `f77ea2a` finished channel 1
+after it. The row is left standing, unedited: it is true of the tree it names, and rewriting it
+would destroy the evidence that a green measurement has a shelf life measured in minutes here.
+
+**What generalises.** A verdict in this log is a statement about a commit, not about the repository.
+The MWP row names its tree and is therefore still readable; a row that had said only *"✅ Holds"*
+would now be indistinguishable from a wrong one. That is the same rule as `DEVELOPMENT.md` §11's
+*"a gate result without a commit sha attached is not a result"*, applied to prose findings.
+
+### CH1-04 One clause was a requirement, not a status claim — flagged, not rewritten
+
+**The distinction that governs this sweep**, and it can change what a correction does: *"the doc says
+no sync runs and a sync now runs"* is stale prose, fix it; *"the doc says the sync must not do X and
+the shipped sync does X"* is a **finding**, and the sentence stays standing with the flag, because a
+stale sentence is sometimes the only surviving witness that code stopped matching its intent.
+Rewriting it destroys the evidence and closes the question in the same stroke.
+
+**Checked, and the sync core is clean on that test.** Everything `libsync/doc.go` lists under "NOT
+HERE" matches what §7 and §16 say v0.1 owes — channel 3b and channel 4 unbuilt, the write queue with
+no target, no timer. The one shape that *looks* like a violation is not: `remote_hash` and
+`remote_identity_hash` are **written by the importer and read by nothing**, which is channel 4's
+comparison basis being laid down ahead of the sweep, declared in the package doc rather than
+discovered. Phase B is empty for Kavita and **argued** (§7.2's fields are absent from
+`POST /api/Series/all-v2`) rather than silently skipped. No finding.
+
+**But one clause of the sentence CH1-02 corrected was a requirement in a status claim's clothes**,
+and correcting the sentence around it would have deleted it: *"every screen that would render a
+library says so rather than drawing an empty one."* That is principle 3 and §17.7's `unconfigured`
+state, not an observation. **Its truth conditions changed even though its text did not.** While
+nothing replicated, it held vacuously. Now `mapLibraryType` (`internal/libsync/kavita.go`) emits
+exactly two `work.kind` values — `comic` and `book` — so **two of §1's six media types have a source
+and four do not**, and the rule has to hold on a **mixed** screen for the first time. It is restored
+to §16 as a standing requirement with the arithmetic attached, and **routed to §17 to re-measure
+rather than declared satisfied here**.
+
+**One concrete thing for whoever takes that**, found while confirming the above and **not touched,
+because `web/` is another thread's section**: `web/src/routes/+page.svelte` carries a Block A
+exemplar in a comment reading *"Comics · no catalogue source · Kavita · after v0.1 · Add"*. Comics
+has a catalogue source **in** v0.1 as of ADR-0041, so the exemplar's *"after v0.1"* is the same
+staleness one layer down. Reported, not edited.
+
+### CH1-05 Deliberately not touched
+
+* **`README.md`'s feature-status table** (the sync-core row, the sync-channels row). Both read
+  `📋 Planned — v0.1`, and the table's own header states that status is the **planned milestone, not
+  progress**, "except where a row says otherwise". Under that contract neither row is falsified by
+  channel 1 landing — the milestone that owns the sync core is still v0.1. Changing them would
+  import a progress axis the table explicitly refuses.
+* **§16's other `not built` / `does not exist yet` clauses.** Re-read and left: §16.0's *"the \*Arr
+  sync that does not exist yet"* is inside the narration of a **rejected** earlier answer (already
+  ruled on by the MWP sweep); the write path's *"specified, not built"* is still true, per
+  `libsync/doc.go`; §16's *"channel 3b … built here rather than only specified"* is a statement about
+  which milestone owns the channel, not about today's tree.
+* **§17, and everything under `web/`** — out of this thread's sections. Routed rather than edited:
+  §17's `v0.1` phrasing around *"no catalogue source"* per media type (§17.2's Block A note, §17.7's
+  `unconfigured` state) is still true of the media types Kavita does not cover — `mapLibraryType`
+  (`internal/libsync/kavita.go:117`) emits exactly two `work.kind` values, `comic` and `book`, so of
+  §1's six types (movies, TV, music, ebooks, audiobooks, comics) **two are covered and four are
+  not**. Two of §17's rows are therefore now wrong and four are right, which is §17's owner's call
+  to make rather than this thread's.
+
+
+# Round 5 continued — `LS-60`–`LS-64`: the recently-added read's wire contract
+
+**Date:** 2026-08-17. **Prefix:** `LS-` (library sync). **The id range `LS-60`–`LS-69` was reserved
+for this pass before it started, and `LS-65`–`LS-69` are deliberately left unused** — the three
+renumberings recorded at `LS-38` are what a discovered-at-write-time id costs, and a gap is cheaper
+than a collision. Nothing below is renumbered to close it.
+
+**Subject:** `GET /api/v1/library/recent` — `internal/httpapi/library.go` and its tests, plus the
+new `docs/reference/http-api.md`. **Two findings reported by the frontend thread after wiring Home's
+Block C against the endpoint**, and both are about what a *consumer* can rely on rather than about
+what the server computes. `web/` untouched by instruction: Block C is shipped and live.
+
+**Every behaviour below was measured before it was changed**, by execution against a real migrated
+database seeded through raw SQL — including a work with `NULL` availability, one with a valid blob,
+one with deliberately malformed text, one with a `k`-less object, one with a fourth `k`, and one
+whose blob is a JSON array.
+
+## Findings
+
+| id | Finding | Severity | Disposition |
+| --- | --- | --- | --- |
+| **LS-60** | **`limit` was documented as a validated range `<1..200>` and implemented as a clamp.** Measured: absent, empty and `0` all take the server default of 50; anything above 200 is silently clamped to 200 and echoed back in the response's `limit`. A client that pages against the number it **sent** rather than the number it was **given** reads a full 200-row page as a short one and stops at the boundary — which is exactly what the frontend hit | **Medium** | **Applied, and the clamp is kept rather than replaced by a 4xx.** Justification is in `recentWorksLimit`'s comment and in `http-api.md` §1.2: a page size that came out too big is not a request the server cannot answer, it is one it can answer with fewer rows, and the honest recovery ("ask for fewer") is precisely what the clamp already performs. Rejecting it fails a whole screen over a number the server was about to ignore. What changes is that the behaviour is now **stated** — the full table is in the contract doc, the echoed `limit` is documented as **authoritative**, and `TestRecentWorksLimitIsAClampNotAValidatedRange` pins every row of that table by execution rather than by prose |
+| **LS-61** | **The clamp had an invisible cliff at 2³¹, and the message on the far side of it was false.** `?limit=2147483647` → `200`, clamped to 200. `?limit=2147483648` → `400 "limit=\"2147483648\" is not a non-negative integer"` — of a value that plainly is a non-negative integer. The cause is that the handler borrowed `queryInt32` from `search.go`, so the parse width leaked into the endpoint's contract. **Found by this pass, not reported** | **Medium** | **Applied.** A rule with an undocumented exception is not a rule a client can hold, and "too big is served short" was false at exactly one boundary and true either side of it. `recentWorksLimit` parses at 64 bits and treats `strconv.ErrRange` as the saturation `ParseInt` already performs, so `?limit=9223372036854775808` clamps like every other over-large value. **`queryInt32` is left alone** — it serves the search endpoints, whose parameters are not this parameter, and widening it would change contracts this pass did not measure. The 400s that remain (negative, non-integer) now carry an `action`, which they did not before |
+| **LS-62** | 🚩 **`availability` had two omission paths and one of them was a silent failure.** The key was dropped both when the column is `NULL` and when the stored text will not parse — so a work that honestly has no blob and a work whose writer wrote garbage were **byte-identical on the wire**, with no log, no report and no way for anyone to find the bad row. This is the same failure shape the rest of this endpoint spends a page refusing: an unparseable `added_at` is dropped *and* documented, and `grabs.go` **logs** an actorless audit row rather than swallowing it | **High** | **Applied.** The wire behaviour is unchanged and deliberately so — this struct is marshalled whole, so forwarding a bad blob would fail the entire block for the sake of its decoration, and the consumer already handles absence correctly. What is added is **observability**: `availabilityFor` logs `WARN` with the `work_id`, which is what makes the row findable (`SELECT availability FROM work WHERE id = ?`). The `NULL` case stays **silent**, because it is not a fault and a warning per honestly-empty work would make the log worthless — that half is pinned too. The blob's own text is **not** logged: it came out of the database and has no length bound |
+| **LS-63** | **An unrecognised `"k"` discriminator was forwarded to the browser verbatim.** Measured: a row storing `{"k":"sardine","have":1}` crossed to the client untouched, as did `[1,2,3]` and a `k`-less `{"have":1,"total":2}`. `schema.md` §1 names three shapes and states that `k` is **required on every non-null blob** and that a renderer switches on it, so all three are writer bugs reaching a renderer that has no arm for them — and §6.3's render rule (`have == total && total > 0` → ✓) is exactly the kind of arm that must not fire by accident on a shape nobody specified | **Medium** | **Applied, and given the same treatment as `LS-62`**: dropped from the wire, logged with the work id. **The forward-compatibility objection was considered and does not hold in v0.1** — the writer and this reader are the same binary and ship in the same commit, so there is no version skew for a fourth `k` to be a newer server's shape; it can only be a bug or a hand-edited row. `availabilityKinds` is the **first Go-side statement of that vocabulary** (nothing in `internal/` writes an availability blob yet), and `TestAvailabilityKindsMatchSchemaMd` reads `docs/reference/schema.md` itself and fails if the two disagree, so adding a shape cannot be done in one place only |
+| **LS-64** | **No document owned the endpoint's contract.** It existed in the handler's doc comments, in `LS.16` above and in a handover message — and a client author can reach none of the three. That is the root cause of `LS-60`: `limit`'s clamp *was* written down, in a Go comment, and the browser mis-paged anyway | **Medium** | **Applied.** New `docs/reference/http-api.md`, linked from the README's documentation table and from the handler's own header. It documents **semantics**, not inventory — its preamble points at `internal/httpapi/server.go`'s route table for *which* endpoints exist, per this repo's "status is read off the tree, not off a document" rule — and §1 covers `library/recent` whole: parameters, the clamp table, the response shape with **an example row carrying every optional key absent**, the availability vocabulary and its four corruption cases, the paging walk, and the error table |
+
+## LS.18 `sync_report` was reachable from this path, and was rejected on three counts
+
+The brief asked that this be checked rather than assumed, so: **it is reachable.**
+`store.RecordSyncReport` takes no `Scope`, `s.store` is in scope in the handler, and nothing
+structural prevents the call. It is still the wrong signal here, for three reasons that are recorded
+at `availabilityFor` so the next person does not have to re-derive them:
+
+1. **It needs a `service_instance_id`**, `foreign_keys` is `ON` (`internal/db/sqlite.go`), and this
+   read deliberately never joins `service_item_link` — naming the instance is the one thing `LS.16`
+   says this response refuses to publish. The row cannot be written without adding the join the
+   endpoint exists without.
+2. **It is a write, and this is a render path.** It would serialise on the single writer connection
+   on the first screen the browser asks for, against principle 1.
+3. **It would append one row per corrupt work per page view**, so a refresh loop grows the table
+   without bound. Migration 0005's own header calls `sync_report` *"an operational log the sweep
+   writes and the Services screen reads"*; a browser refresh is not a sweep.
+
+`s.log.Warn` is the codebase's existing signal for exactly this shape — `indexers.go` logs
+`indexer_catalog.search_types will not decode` and degrades the field, and `grabs.go` logs an
+actorless audit row rather than dropping it quietly. This follows both.
+
+## LS.19 The five guards fired, with verbatim output
+
+Every guard below was broken on purpose, run red, and reverted.
+
+**Guard 1 — the 2³¹ cliff put back** (`LS-61`). The break: `recentWorksLimit`'s 64-bit parse replaced
+by the `queryInt32` call it used to make.
+
+```
+--- FAIL: TestRecentWorksLimitIsAClampNotAValidatedRange (0.04s)
+    library_test.go:386: GET /api/v1/library/recent?limit=2147483648 = 400, want 200: {"error":"bad_request","message":"limit=\"2147483648\" is not a non-negative integer"}
+    library_test.go:386: GET /api/v1/library/recent?limit=9223372036854775808 = 400, want 200: {"error":"bad_request","message":"limit=\"9223372036854775808\" is not a non-negative integer"}
+    library_test.go:396: ?limit=-1: the 400 names no action: {"error":"bad_request","message":"limit=\"-1\" is not a non-negative integer"}
+    library_test.go:396: ?limit=-9223372036854775809: the 400 names no action: {"error":"bad_request","message":"limit=\"-9223372036854775809\" is not a non-negative integer"}
+    library_test.go:396: ?limit=abc: the 400 names no action: {"error":"bad_request","message":"limit=\"abc\" is not a non-negative integer"}
+    library_test.go:396: ?limit=1.5: the 400 names no action: {"error":"bad_request","message":"limit=\"1.5\" is not a non-negative integer"}
+    library_test.go:396: ?limit=0x10: the 400 names no action: {"error":"bad_request","message":"limit=\"0x10\" is not a non-negative integer"}
+```
+
+**Guard 2 — the silent drop restored** (`LS-62`, `LS-63`), and this is the one that proves the
+malformed case is now *observable* rather than merely *dropped*. The break:
+`out.Availability = s.availabilityFor(w)` replaced by the shipped-until-today
+`if w.Availability.Valid && json.Valid(…)`.
+
+```
+--- FAIL: TestRecentWorksAvailabilityAbsenceIsHonestAndCorruptionIsLogged (0.04s)
+    library_test.go:482: work 4 put {"have":1,"total":2} on the wire
+    library_test.go:482: work 8 put {"k":"sardine","have":1} on the wire
+    library_test.go:482: work 9 put [1,2,3] on the wire
+    library_test.go:486: an unrecognised discriminator reached the browser: {"items":[…,{"id":4,…,"availability":{"have":1,"total":2}},{"id":8,…,"availability":{"k":"sardine","have":1}},{"id":9,…,"availability":[1,2,3]}],"limit":50}
+    library_test.go:499: the log does not carry "work.availability will not decode and was dropped from the response\" work_id=3":
+    library_test.go:499: the log does not carry "work.availability will not decode and was dropped from the response\" work_id=9":
+    library_test.go:499: the log does not carry "work.availability has no \\\"k\\\" discriminator and was dropped from the response\" work_id=4":
+    library_test.go:499: the log does not carry "work.availability has an unrecognised \\\"k\\\" discriminator and was dropped from the response\" work_id=8 k=sardine":
+```
+
+🚩 **Read the last four lines against work 3.** Work 3's blob is the truncated `{"k":"count","have":`
+and it is the one row that does **not** appear in the on-the-wire complaints above — under the old
+code it was absent from the response *and* absent from the log, with an **empty** log printed after
+the colon. That is the exact silence this finding is about: indistinguishable from work 2's honest
+`NULL`.
+
+**Guard 3 — a fourth discriminator admitted** (`LS-63`). The break: `"sardine": true` added to
+`availabilityKinds`. Two arms fire, and the passing arms' real output is visible in the middle of it.
+
+```
+--- FAIL: TestRecentWorksAvailabilityAbsenceIsHonestAndCorruptionIsLogged (0.04s)
+    library_test.go:482: work 8 put {"k":"sardine","have":1} on the wire
+    library_test.go:486: an unrecognised discriminator reached the browser: {"items":[…,{"id":8,…,"availability":{"k":"sardine","have":1}},…],"limit":50}
+    library_test.go:499: the log does not carry "work.availability has an unrecognised \\\"k\\\" discriminator and was dropped from the response\" work_id=8 k=sardine":
+        time=2026-08-17T22:44:18.565Z level=WARN msg="work.availability will not decode and was dropped from the response" work_id=3 err="unexpected end of JSON input"
+        time=2026-08-17T22:44:18.565Z level=WARN msg="work.availability has no \"k\" discriminator and was dropped from the response" work_id=4
+        time=2026-08-17T22:44:18.565Z level=WARN msg="work.availability will not decode and was dropped from the response" work_id=9 err="json: cannot unmarshal array into Go value of type struct { K string \"json:\\\"k\\\"\" }"
+--- FAIL: TestAvailabilityKindsMatchSchemaMd (0.00s)
+    library_test.go:538: availabilityKinds carries "sardine" and schema.md defines no such shape
+```
+
+**Guard 4 — the honest-absence case made noisy** (`LS-62`, the other half). The break: a
+`s.log.Warn("work.availability is NULL", …)` added to the `!w.Availability.Valid` branch. A signal
+that fires on every empty work is the same as no signal, so this half is asserted too.
+
+```
+--- FAIL: TestRecentWorksAvailabilityAbsenceIsHonestAndCorruptionIsLogged (0.04s)
+    library_test.go:506: a NULL availability was logged as a fault:
+        time=2026-08-17T22:44:29.890Z level=WARN msg="work.availability is NULL" work_id=2
+        time=2026-08-17T22:44:29.890Z level=WARN msg="work.availability will not decode and was dropped from the response" work_id=3 err="unexpected end of JSON input"
+        time=2026-08-17T22:44:29.890Z level=WARN msg="work.availability has no \"k\" discriminator and was dropped from the response" work_id=4
+        time=2026-08-17T22:44:29.890Z level=WARN msg="work.availability has an unrecognised \"k\" discriminator and was dropped from the response" work_id=8 k=sardine
+        time=2026-08-17T22:44:29.890Z level=WARN msg="work.availability will not decode and was dropped from the response" work_id=9 err="json: cannot unmarshal array into Go value of type struct { K string \"json:\\\"k\\\"\" }"
+```
+
+**Guard 5 — the vocabulary guard made to measure the document** (`LS-63`). A test that reads a file
+and compares it to a constant proves nothing unless it is shown to fail when the **file** changes, so
+the break was made in `docs/reference/schema.md` rather than in Go: `"k":"tier"` → `"k":"TIER"` and
+`"k":"edition"` → `"k":"EDITION"` in §1's examples. Reverted immediately; `git diff --stat`
+afterwards shows the two Go files and nothing else.
+
+```
+--- FAIL: TestAvailabilityKindsMatchSchemaMd (0.00s)
+    library_test.go:538: availabilityKinds carries "tier" and schema.md defines no such shape
+    library_test.go:538: availabilityKinds carries "edition" and schema.md defines no such shape
+```
+
+## LS.20 What this pass did NOT do
+
+* **No `web/` change.** Block C is shipped and its files are live; the frontend already models
+  `limit` as the server's echo and already renders an absent `availability` as absence.
+* **No change to `queryInt32`** and therefore none to the search endpoints' parameters (`LS-61`).
+* **No change to the wire** beyond three cases that used to carry a malformed or undiscriminated
+  blob and now carry nothing. The response's key set, ordering, paging and scope are untouched, and
+  `TestRecentWorksResponseKeysAreTheAllowlist` still pins the allowlist unchanged.
+* **No inventory in `http-api.md`.** It documents the semantics of one endpoint and points at the
+  router for which endpoints exist. A hand-maintained endpoint list in a document is the status claim
+  this repo's own rule tells you not to write.
+
+---
+
 # Round 5 continued — `LS-70`–`LS-79`: the last two Kavita ids at 1.0, and the one that keeps it
 
 **Date:** 2026-08-17. **Prefix:** `LS-` (library sync). **Ids `LS-70`–`LS-79` were RESERVED for this

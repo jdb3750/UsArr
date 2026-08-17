@@ -887,8 +887,11 @@
 
 	⚠️ AND THE SAFE BRANCH IS THE ONE THIS BUILD CANNOT PERFORM. There is no
 	re-link endpoint: the HTTP surface is create, list, health, test, update and
-	delete, and `needs_reidentification` is written by the sync engine, which has
-	not shipped. The button is therefore aria-disabled and says why (§9.3: never
+	delete. `needs_reidentification` is written by §7.4 guard 2, which belongs to
+	the reconciliation sweep — channel 4, and `internal/libsync/doc.go` names it
+	as NOT here, so nothing sets the state today either. Do not read that as "the
+	sync engine has not shipped": channel 1 imports a catalogue and Home renders
+	it. The button is therefore aria-disabled and says why (§9.3: never
 	`disabled`, or a keyboard user never meets the blocked control) — and a third,
 	genuinely safe control is offered so the only live button on a destructive
 	prompt is not the destructive one (§9.4).
@@ -917,8 +920,7 @@
 					<p class="verbatim">{row.health.problem}</p>
 				{/if}
 				<p class="cell-sub for-the-record" id={`reident-why-${String(row.health.id)}`}>
-					Re-linking arrives with the sync engine, which has not shipped, so this build can only
-					remove and re-add.
+					Re-linking is not built yet, so this build can only remove and re-add.
 				</p>
 			</div>
 			<div class="banner__actions">

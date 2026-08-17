@@ -1,12 +1,15 @@
 # UsArr
 
-> **Status: pre-alpha. One path works; the rest is still design and its evidence base.**
+> **Status: pre-alpha. Parts of it run; the rest is still design and its evidence base.**
 > What runs today is Prowlarr Search-and-Grab: free-text indexer search, results streaming in per
 > indexer, and grab — served by a Go binary with an embedded SPA shell. There is no release and no
-> container image yet, so running it means building it (`make build`). Nothing syncs a library in
-> yet, so there is no catalogue — and the rest moves week to week, so what exists is whatever is in
-> the tree (`web/src/routes`, `internal/`) rather than whatever this paragraph last claimed. If you
-> are here to install something finished, come back later.
+> container image yet, so running it means building it (`make build`). A catalogue import exists as
+> of `c56c8e4` — for Kavita and for nothing else, and only the first-import channel: it fires once
+> when you connect a Kavita, or on demand, and there is no periodic re-sync behind it. Which
+> channels the sync core has is a question for `internal/libsync` and `cmd/usarr/import.go`, whose
+> package docs answer it channel by channel. The rest moves week to week, so what exists is
+> whatever is in the tree (`web/src/routes`, `internal/`) rather than whatever this paragraph last
+> claimed. If you are here to install something finished, come back later.
 
 **One unified, searchable catalogue over everything you own and everything you might want —
 that plugs into the players you already use.**
@@ -223,7 +226,7 @@ layout.
 | Document | What it is |
 |---|---|
 | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | The authoritative design: principles, components, the gateway, the data model, sync, search and requests, cross-media, tags, providers, security, deployment, **the roadmap (§16 is authoritative for scope)** and **the screens**. |
-| **[docs/reference/](docs/reference/)** | The load-bearing detail the architecture links to: full DDL, sync mechanics, search query construction, the gateway endpoint map, cross-media, tags, providers, \*Arr API facts, and the security model. |
+| **[docs/reference/](docs/reference/)** | The load-bearing detail the architecture links to: full DDL, sync mechanics, search query construction, the gateway endpoint map, cross-media, tags, providers, \*Arr API facts, and the security model. **[`http-api.md`](docs/reference/http-api.md) is UsArr's own northbound wire contract** — what a client may rely on, per endpoint. |
 | **[docs/design/](docs/design/)** | The visual system: `DESIGN-DIRECTION.md`, `tokens.css` (the canonical values) and the v0.1 screen mockups. `ARCHITECTURE.md` §17 stays authoritative over all three. |
 | **[docs/FUTURE.md](docs/FUTURE.md)** | Deferred features — what each is, why it waited, what it would cost, and **the seam in the current design that keeps it cheap**. |
 | **[docs/DECISIONS.md](docs/DECISIONS.md)** | The ADRs. Context, decision, consequences, and **what was rejected and why** — including reversals, which record what falsified the original rather than quietly rewriting it. |

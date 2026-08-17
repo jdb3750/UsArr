@@ -2928,7 +2928,9 @@ widened, and nothing else. The `[review]` rules below are still human judgement 
 ---
 
 **Colour**
-- `[grep]` No `indigo|violet|purple|fuchsia` class or equivalent hex/oklch anywhere in the app.
+- `[grep]` No `indigo|violet|purple|fuchsia` class or equivalent hex/oklch anywhere in the app —
+  and none of `orchid`, `plum` or `magenta` either, which are the same four families wearing
+  another CSS keyword and escape the word list otherwise.
 - `[grep]` No `bg-gradient`, `linear-gradient`, `radial-gradient` or `bg-clip-text` in app CSS.
 - `[grep]` No `box-shadow` with a non-neutral colour; no `text-shadow`; no hued `drop-shadow`.
 - `[grep]` No `#fff`, `#ffffff`, `#000`, `#000000`, `white` or `black` literals — use tokens.
