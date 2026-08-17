@@ -212,13 +212,29 @@ func TestFullImportDeclinesTheImageLibraryAndSaysWhy(t *testing.T) {
 	if rep.ItemsApplied != 5 {
 		t.Errorf("ItemsApplied = %d, want 5", rep.ItemsApplied)
 	}
-	// Two series claim the same AniList id: tier 1 resolves them onto one work.
-	if rep.WorksCreated != 4 || rep.WorksReused != 1 {
-		t.Errorf("works: created %d reused %d, want 4 and 1 — the two Berserk rows are one work",
+	// ⚠️ THIS ASSERTION USED TO EXPECT A MERGE, AND THE MERGE WAS THE BUG.
+	// It read: "Two series claim the same AniList id: tier 1 resolves them onto
+	// one work … created 4 reused 1". The two Berserk rows in
+	// kavita_series_all_v2_identified.yaml both carry aniListId 30013, and that
+	// fixture's own header calls the pair "a ux_extid_work_strong violation,
+	// which migration 0005 calls 'the merge signal, not an error'".
+	//
+	// It is NOT a merge signal when the id was parsed out of a free-text <Web>
+	// element, which LS-27 measured Series.AniListId to be at Kavita v0.9.0.2.
+	// §6.4 amendment 3 caps such an id at 0.90, store.ApplyCatalogueBatch's
+	// tier-1 lookup skips anything below 1.0, and A DELUXE RE-RELEASE NO LONGER
+	// SWALLOWS THE ORIGINAL — which is the whole point, because v0.1 has no
+	// work_merge table and no un-merge.
+	if rep.WorksCreated != 5 || rep.WorksReused != 0 {
+		t.Errorf("works: created %d reused %d, want 5 and 0 — the two Berserk rows share an "+
+			"AniList id parsed out of free text, and merging on one is unrecoverable in v0.1",
 			rep.WorksCreated, rep.WorksReused)
 	}
+	// No conflict is reported either: the second 0.90 row is just another weak
+	// row. ux_extid's (source, value, work, edition) key separates them and
+	// ux_extid_work_strong's predicate excludes both.
 	if len(rep.IdentityConflicts) != 0 {
-		t.Errorf("IdentityConflicts = %+v; tier 1 absorbs the in-batch case", rep.IdentityConflicts)
+		t.Errorf("IdentityConflicts = %+v; a sub-1.0 id cannot conflict", rep.IdentityConflicts)
 	}
 }
 

@@ -89,28 +89,21 @@ type kindDecision struct {
 // 5 Comic (ComicVine)}, and TestEveryLibraryTypeMemberIsMapped fails if the
 // vendored spec grows a seventh.
 //
-// ✅ LS-04 IS RESOLVED, AND THE VENDORED SPEC WON. ARCHITECTURE.md §17.8 carries
-// a withdrawal — "re-checked against Kavita main on 2026-08-16,
-// API/Entities/Enums/LibraryType.cs declares exactly Manga = 0, Comic = 1,
-// Book = 2 and no Image member at all" — which contradicted the spec's six
-// members. Both were quoting a real file. Measured 2026-08-17:
+// ✅ LS-04 IS SETTLED, AND NOTHING DISAGREES ANY MORE. THE ENUM HAS SIX MEMBERS
+// AND Image = 3 IS ONE OF THEM. The vendored spec and ARCHITECTURE.md §17.8 now
+// say the same thing: §17.8 carried a withdrawal of the Image example, and its
+// 2026-08-17 amendment withdraws the withdrawal on the same measurement this
+// mapping was built on — at tag v0.9.0.2,
+// Kavita.Models/Entities/Enums/LibraryType.cs declares Manga = 0, Comic = 1,
+// Book = 2, Image = 3, LightNovel = 4, ComicVine = 5, byte-identical at develop
+// (9c3e5400), and Image has shipped since tag v0.7.11 (2023-12-03).
 //
-//   - `refs/heads/main` resolves to 9795080, and Kavita.Common/Kavita.Common.csproj
-//     THERE declares <AssemblyVersion>0.7.8.0</AssemblyVersion>. KAVITA'S main
-//     BRANCH IS FROZEN AT v0.7.8 (September 2023); the release line is `develop`
-//     plus tags. §17.8 read a branch three years behind the shipped code.
-//   - At main, API/Entities/Enums/LibraryType.cs does declare exactly those
-//     three members. §17.8 quoted it accurately.
-//   - At tag v0.9.0.2 the file has MOVED to
-//     Kavita.Models/Entities/Enums/LibraryType.cs — the tree left API/ between
-//     v0.8.9.1 and v0.9.0 — and declares all six, matching the vendored spec's
-//     x-enum-varnames exactly, Comic = 1 included with its "Comic (Flexible)"
-//     description.
-//
-// THE GENERAL LESSON, because it will bite again: A KAVITA CITATION WITH AN
-// `API/Entities/…` PATH IS READING THE FROZEN main, NOT THE SHIPPED CODE.
-// §17.8's note is stale rather than wrong, and this is the pointer to that
-// rather than a fresher status claim written into §17.8.
+// THE GENERAL LESSON IS THE PART WORTH KEEPING, because it will bite again: A
+// KAVITA CITATION WITH AN `API/Entities/…` PATH IS READING THE FROZEN main, NOT
+// THE SHIPPED CODE. Kavita's main is pinned at the v0.7.8 release commit
+// (97950804, 2023-09-03) while its release line is develop plus tags, and at
+// main that path really does declare only three members — which is why the
+// withdrawal was reproducible rather than careless. Read a TAG or develop.
 //
 // The reading direction is 🔍 INFERENCE and is marked as such wherever it lands.
 // SeriesDto reports no reading direction at all; ADR-0030 nevertheless makes
@@ -364,32 +357,46 @@ func mapSeries(dto kavita.SeriesDto, d kindDecision) store.CatalogueItem {
 // written, filed, indexed and searchable; §6.4's "not identified" state is then
 // simply the absence of an external_id row.
 //
-// FOUR DECISIONS ABOUT WHICH IDS ARE WRITTEN AND AT WHAT CONFIDENCE:
+// FIVE DECISIONS ABOUT WHICH IDS ARE WRITTEN AND AT WHAT CONFIDENCE:
 //
-//  1. Confidence 1.0 — a strong, work-level claim that participates in
-//     ux_extid_work_strong — for the NON-ComicVine ids below. ⚠️ The same
+//  1. ✅ LS-12 IS CLOSED, AND THE ANSWER DIFFERED PER FIELD. It read: "the same
 //     re-verification found that `Series.AniListId`, `MalId` and `MangaBakaId`
 //     are ALSO weblink-parsed at v0.9.0.2 (ProcessSeries.cs:363-366) rather than
-//     matcher-written, which means §6.4 amendment 3 arguably reaches them too.
-//     That is NOT changed here: it is a different behaviour change against
-//     different fixtures, and shipping it inside a ComicVine correction would
-//     make neither reviewable. docs/REVIEW-LOG.md LS-12 carries it as the open
-//     follow-up, with the measurement that found it.
-//  2. THE ComicVine ID IS NEVER WRITTEN AT 1.0, and is written only when its
+//     matcher-written, which means §6.4 amendment 3 arguably reaches them too."
+//     Re-measured writer by writer (LS-27): it does reach all three, they now go
+//     through webLinkIdentity at WebLinkConfidence (0.90), and weblinkid.go's
+//     comment owns the measurement — including the two places the answer is NOT
+//     ComicVine's. MangaBaka has no provider writer at all; AniList and MAL each
+//     have a real, licence-gated one and still do not earn 1.0.
+//  2. ✅ LS-10 IS CLOSED TOO, because it is the same line of code. 'mal' is no
+//     longer bare: MyAnimeList really does number anime and manga separately
+//     (verified first-party — myanimelist.net/anime/1 is "Cowboy Bebop" and
+//     /manga/1 is "Monster"), so it lands under MalMangaSource. AniList's id
+//     space really IS global, so AniListSource stays bare. LS-10 could only
+//     guess at both; both are now measured, and weblinkid.go cites each.
+//  3. THE ComicVine ID IS NEVER WRITTEN AT 1.0, and is written only when its
 //     KIND IS PROVEN. comicVineIdentity owns that; its comment owns the why.
-//  3. mangaBakaEditionId IS DELIBERATELY NOT WRITTEN. It is an EDITION
+//  4. mangaBakaEditionId IS DELIBERATELY NOT WRITTEN. It is an EDITION
 //     identifier, and §6.4's amendment 4 is categorical that writing an edition
 //     id as a work id "silently claims a paperback and an audiobook are the same
 //     edition". external_id's CHECK requires exactly one of work_id/edition_id,
 //     this commit writes no edition rows, and the honest answer to "there is
-//     nowhere correct to put it" is to not put it anywhere.
-//  4. ⚠️ THE ID NAMESPACES ARE NOT VERIFIED TO BE GLOBAL. MyAnimeList numbers
-//     anime and manga separately — myanimelist.net/anime/1 and /manga/1 are
-//     different works — so 'mal' as a bare source is only unambiguous while
-//     every row carrying it comes from a manga/book source, which is true of
-//     Kavita and will stop being true the day an anime source lands. It is
-//     recorded here rather than pre-solved with a namespaced source string the
-//     schema does not list; docs/REVIEW-LOG.md LS-10 carries it.
+//     nowhere correct to put it" is to not put it anywhere. It is also
+//     develop-only: Kavita.Models/Entities/Series.cs:120-125 at v0.9.0.2
+//     declares AniListId, MalId, HardcoverId, MetronId, ComicVineId and
+//     MangaBakaId — and NO MangaBakaEditionId and no CbrId. Both are modelled on
+//     the vendored develop spec and simply absent on the owner's instance.
+//  5. ⚠️ 'hardcover_book' AND 'metron' STILL GO OUT AT 1.0, AND PROBABLY SHOULD
+//     NOT. The same whole-tree grep found Series.HardcoverId written by
+//     ExternalMetadataIdHelper.cs:28 ALONE and Series.MetronId by
+//     ExternalMetadataIdHelper.cs:33 alone — the Edit Series dialog, i.e. free
+//     text and nothing else, with neither a scanner nor a provider writer. That
+//     is a WEAKER provenance than the three capped above, and the last thing
+//     going out at 1.0 from here on the strength of an unexamined premise. It is
+//     not changed in this commit for exactly the reason LS-12 was not changed
+//     inside LS-11 — different fields, different fixtures, and a third behaviour
+//     bundled in would make none of them reviewable. docs/REVIEW-LOG.md LS-32
+//     carries it with the measurement.
 func kavitaExternalIDs(dto kavita.SeriesDto, d kindDecision) []store.ExternalIdentifier {
 	var out []store.ExternalIdentifier
 	add := func(source, value string) {
@@ -398,17 +405,30 @@ func kavitaExternalIDs(dto kavita.SeriesDto, d kindDecision) []store.ExternalIde
 		}
 		out = append(out, store.ExternalIdentifier{Source: source, Value: value, Confidence: 1.0})
 	}
-	add("anilist", intID(int64(dto.AniListID)))
-	add("mal", intID(dto.MalID))
 	// 'hardcover_book' rather than 'hardcover': §6.4's amendment 4 names
 	// "hardcover_book" as one of exactly three work-strong book sources.
 	add("hardcover_book", intID(int64(dto.HardcoverID)))
 	add("metron", intID(dto.MetronID))
-	add("mangabaka", intID(dto.MangaBakaID))
 	add("cbr", intID(int64(dto.CbrID)))
 
-	// ComicVine does NOT go through add(): add() hard-codes confidence 1.0, and
-	// a ComicVine id must never reach it.
+	// The weblink-parsed three do NOT go through add(): add() hard-codes
+	// confidence 1.0 and §6.4 amendment 3 forbids any of these reaching it.
+	// Routing them through a call that CANNOT return 1.0 is what makes the cap
+	// structural rather than three call sites remembering a number.
+	for _, w := range []struct{ source, value string }{
+		{AniListSource, intID(int64(dto.AniListID))},
+		{MalMangaSource, intID(dto.MalID)},
+		{MangaBakaSource, intID(dto.MangaBakaID)},
+	} {
+		if id, ok := webLinkIdentity(w.source, w.value); ok {
+			out = append(out, id)
+		}
+	}
+
+	// ComicVine does not go through add() either — and unlike the three above it
+	// can be REFUSED outright rather than merely weakened, because its KIND can
+	// be unknowable. weblinkid.go's comment records why that refusal does not
+	// transfer to AniList, MAL or MangaBaka.
 	if id, _, ok := comicVineIdentity(dto.ComicVineID, d.InheritsWebLinks); ok {
 		out = append(out, id)
 	}
