@@ -59,7 +59,7 @@ func TestMigrationRoundTrip(t *testing.T) {
 // asserted rather than derived so that adding a migration is a deliberate edit
 // here too — a version the tests do not know about is a migration nobody
 // round-tripped.
-const latestSchemaVersion int64 = 5
+const latestSchemaVersion int64 = 6
 
 // Down is not a supported user path, but it must work, because it is the
 // cheapest way to test a migration locally. A Down that leaves objects behind
@@ -422,7 +422,9 @@ func TestSystemSentinelUserExists(t *testing.T) {
 // The tables deferred past the library-sync migration must NOT be here, and the
 // ones it ships must. A migration that creates a table nothing queries is a
 // schema claim nobody has tested — 00001's own rule, and the one 00005 quotes
-// when it leaves the six unbuilt subtype tables out.
+// when it leaves the unbuilt subtype tables out. 0006 moved three of the six
+// across, because Kavita — the source that writes them — became v0.1's first
+// adapter (ADR-0041); the same rule decided both.
 //
 // BOTH LISTS ARE EXHAUSTIVE ON PURPOSE, and they were not before 0005: the
 // deferred list named neither the music/books/comics subtype tables nor the
@@ -443,14 +445,19 @@ func TestDeferredTablesAreAbsent(t *testing.T) {
 		present[n] = true
 	}
 
-	// Deferred, with the milestone that owns each. The six work_* subtypes wait
-	// for the catalogue source that writes them (ADR-0040); the rest is
-	// schema.md's "later tables" appendix.
+	// Deferred, with the milestone that owns each. The work_* subtypes wait for
+	// the catalogue source that writes them (ADR-0040); the rest is schema.md's
+	// "later tables" appendix.
+	//
+	// THREE OF THE SIX MOVED OUT OF THIS LIST IN 0006 AND THE LIST ITSELF IS THE
+	// RECORD OF WHY: ADR-0041 made Kavita v0.1's first adapter, Kavita writes
+	// books and comics/manga, and ADR-0040's rule — the landing point is the
+	// source, not the date — put work_book, work_comic and work_comic_issue in
+	// `want` below. The music three did not move: Navidrome still has no
+	// adapter in internal/.
 	deferred := []string{
 		// music — lands with Navidrome (§16.1 position 1 or 2)
 		"work_album", "work_track", "work_credit",
-		// books and comics — lands with Kavita (§16.1 position 1 or 2)
-		"work_book", "work_comic", "work_comic_issue",
 		// v0.2
 		"request", "request_quota",
 		// v0.3
@@ -463,7 +470,7 @@ func TestDeferredTablesAreAbsent(t *testing.T) {
 	for _, name := range deferred {
 		if present[name] {
 			t.Errorf("%s exists, but no shipped migration should create it; "+
-				"see 00005's header for which milestone owns it", name)
+				"see 00005's and 00006's headers for which source owns it", name)
 		}
 	}
 
@@ -481,10 +488,12 @@ func TestDeferredTablesAreAbsent(t *testing.T) {
 		"library", "library_source", "library_member", "library_override",
 		"search_doc", "search_fts", "search_trgm", "search_doc_library",
 		"sync_report",
+		// 0006 — the subtype tables Kavita writes (ADR-0040 + ADR-0041)
+		"work_book", "work_comic", "work_comic_issue",
 	}
 	for _, name := range want {
 		if !present[name] {
-			t.Errorf("%s is missing; it should be created by migrations 0001-0005", name)
+			t.Errorf("%s is missing; it should be created by migrations 0001-0006", name)
 		}
 	}
 
@@ -1333,17 +1342,35 @@ func dumpWriteQueue(ctx context.Context, q *sql.DB) (string, error) {
 func migrateTo0004(t *testing.T, ctx context.Context) *DB {
 	t.Helper()
 	d := openTestDB(t)
-	if err := d.MigrateDown(ctx); err != nil {
-		t.Fatalf("MigrateDown 5→4: %v", err)
-	}
-	v, err := d.Version(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if v != 4 {
-		t.Fatalf("schema version = %d, want 4", v)
-	}
+	migrateDownTo(t, ctx, d, 4)
 	return d
+}
+
+// migrateDownTo steps a database down one migration at a time until it is at
+// `target`, checking the version after each step.
+//
+// It is a loop and not a single MigrateDown because it used to be the latter,
+// and that made "step down to the migration under test" mean "step down once" —
+// a coincidence that held only while 0005 was the head. Adding 0006 broke both
+// callers with `schema version = 5, want 4`, which is the failure mode worth
+// removing rather than re-hardcoding: the next migration would break them again.
+func migrateDownTo(t *testing.T, ctx context.Context, d *DB, target int64) {
+	t.Helper()
+	for {
+		v, err := d.Version(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v == target {
+			return
+		}
+		if v < target {
+			t.Fatalf("schema version = %d, below the target %d", v, target)
+		}
+		if err := d.MigrateDown(ctx); err != nil {
+			t.Fatalf("MigrateDown %d→%d: %v", v, v-1, err)
+		}
+	}
 }
 
 // TestMigrate0005WriteQueueCopyIsLossless is the test the rebuild never had.
@@ -1761,9 +1788,9 @@ func TestMigration0005DownPreservesEveryRow(t *testing.T) {
 		t.Fatalf("fixture: %v", err)
 	}
 
-	if err := d.MigrateDown(ctx); err != nil {
-		t.Fatalf("MigrateDown 5→4: %v", err)
-	}
+	// Down to 4, which is 0005's Down block — 0006 sits above it now and its own
+	// Down touches nothing here.
+	migrateDownTo(t, ctx, d, 4)
 
 	var n int
 	if err := d.Read().QueryRowContext(ctx, `SELECT count(*) FROM write_queue`).Scan(&n); err != nil {
@@ -1988,5 +2015,359 @@ func TestFTS5TokenizerBehaviour(t *testing.T) {
 	}
 	if !strings.Contains(ddl, "remove_diacritics 2") {
 		t.Errorf("search_fts no longer declares remove_diacritics 2:\n  %s", ddl)
+	}
+}
+
+// ─── Migration 0006 · the three subtype tables Kavita writes ─────────────────
+//
+// ⚠️ THERE IS NO POPULATED-FIXTURE TEST FOR 0006, AND THAT IS STATED HERE
+// RATHER THAN LEFT FOR A READER TO WONDER ABOUT. The lesson 0005 paid for is
+// that a migration test which runs 1→N against an EMPTY database proves the
+// shape and nothing about data — which is why 0005 has wqFixture,
+// TestMigrate0005WriteQueueCopyIsLossless and
+// TestMigrate0005AbortsRatherThanDroppingWorkID beside its round trip. That
+// lesson does not apply here, and the reason is structural rather than a
+// judgement call: 0006 creates three BRAND-NEW tables and touches no existing
+// one. There is no copy step, no ALTER, no rebuild and no backfill, so there is
+// no row anywhere that this migration could drop, truncate or silently rewrite
+// — including on the way back down, where the Down block's three DROPs remove
+// only tables the Up block created. A fixture would populate tables that do not
+// exist until the migration under test has already run, which measures the
+// tables and not the migration.
+//
+// What CAN go wrong here is shape, and shape is what these tests execute
+// against: the declared types (ADR-0030 says any INTEGER issue-number column is
+// wrong), the foreign keys and their ON DELETE actions, the NOT NULL defaults,
+// and the down/up round trip.
+
+// TestMigrate0006SubtypeTablesExist pins the exact column set and declared type
+// of each of the three tables.
+//
+// The DECLARED TYPE is asserted and not just the name, because under STRICT it
+// is the only thing standing between '1.MU' and a rejected insert:
+// work_comic_issue.number_sort must be REAL and number_text must be TEXT.
+// ADR-0030 puts it in terms — "Any integer column is wrong" — after Komga and
+// Kavita were both checked, and a well-meaning INTEGER here is the single most
+// likely future edit to this table.
+func TestMigrate0006SubtypeTablesExist(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	want := map[string][][2]string{
+		"work_book": {
+			{"work_id", "INTEGER"},
+			{"page_count", "INTEGER"},
+			{"series_name", "TEXT"},
+			{"series_position", "REAL"},
+		},
+		"work_comic": {
+			{"work_id", "INTEGER"},
+			{"volume_label", "TEXT"},
+			{"volume_year", "INTEGER"},
+			{"reading_direction", "TEXT"},
+			{"publisher", "TEXT"},
+			{"total_issues_declared", "INTEGER"},
+			{"total_issues_source", "TEXT"},
+		},
+		"work_comic_issue": {
+			{"work_id", "INTEGER"},
+			{"number_text", "TEXT"},
+			{"number_sort", "REAL"},
+			{"volume_label", "TEXT"},
+			{"volume_sort", "REAL"},
+			{"is_special", "INTEGER"},
+			{"is_oneshot", "INTEGER"},
+			{"special_version", "TEXT"},
+			{"page_count", "INTEGER"},
+		},
+	}
+
+	for table, cols := range want {
+		t.Run(table, func(t *testing.T) {
+			rows, err := d.Read().QueryContext(ctx,
+				`SELECT name, type FROM pragma_table_info(?) ORDER BY cid`, table)
+			if err != nil {
+				t.Fatalf("%s does not exist: %v", table, err)
+			}
+			defer func() { _ = rows.Close() }()
+
+			var got [][2]string
+			for rows.Next() {
+				var name, typ string
+				if err := rows.Scan(&name, &typ); err != nil {
+					t.Fatal(err)
+				}
+				got = append(got, [2]string{name, typ})
+			}
+			if err := rows.Err(); err != nil {
+				t.Fatal(err)
+			}
+			if fmt.Sprint(got) != fmt.Sprint(cols) {
+				t.Errorf("%s columns = %v\nwant %v\n"+
+					"docs/reference/schema.md §1.1 is authoritative for the shape of these "+
+					"three tables. If a column is genuinely wanted, add it in 0006's "+
+					"successor — 0006 is merged — and update this list in the same change.",
+					table, got, cols)
+			}
+		})
+	}
+}
+
+// TestMigrate0006IssueNumbersRoundTrip is the by-execution half of the type
+// assertion above: the five issue numbers ADR-0030 names as real — '1.MU',
+// '-1', '0', 'Annual 1', '1A' — are inserted, read back and ordered.
+//
+// STRICT is what makes this test able to fail. In a non-STRICT table a TEXT
+// value lands in an INTEGER column by affinity and this whole test stays green
+// over a schema that has silently lost the distinction.
+func TestMigrate0006IssueNumbersRoundTrip(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	type issue struct {
+		id   int
+		text string
+		sort float64
+	}
+	issues := []issue{
+		{1, "-1", -1},
+		{2, "0", 0},
+		{3, "1", 1},
+		{4, "1.MU", 1.5},
+		{5, "1A", 1.75},
+		{6, "Annual 1", 900},
+	}
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO work (id, kind, title, sort_title, normalized_title)
+			VALUES (1, 'comic', 'Saga', 'saga', 'saga')`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO work_comic (work_id, volume_label, volume_year, reading_direction,
+			                        publisher, total_issues_declared, total_issues_source)
+			VALUES (1, 'Vol. 1', 2012, 'ltr', 'Image', 60, 'comicinfo')`); err != nil {
+			return err
+		}
+		for _, is := range issues {
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO work (id, kind, parent_work_id, title, sort_title, normalized_title)
+				VALUES (?, 'comic_issue', 1, ?, ?, ?)`,
+				100+is.id, is.text, is.text, is.text); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO work_comic_issue (work_id, number_text, number_sort)
+				VALUES (?, ?, ?)`, 100+is.id, is.text, is.sort); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+
+	rows, err := d.Read().QueryContext(ctx, `
+		SELECT number_text, number_sort FROM work_comic_issue ORDER BY number_sort`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	var order []string
+	for rows.Next() {
+		var text string
+		var sort float64
+		if err := rows.Scan(&text, &sort); err != nil {
+			t.Fatal(err)
+		}
+		order = append(order, text)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := strings.Join(order, ","), "-1,0,1,1.MU,1A,Annual 1"; got != want {
+		t.Errorf("issues ordered by number_sort = %s, want %s", got, want)
+	}
+
+	// A fractional sort key survives as a fraction. On an INTEGER column a
+	// STRICT table rejects it outright, and a non-STRICT one truncates it to 1 —
+	// which is the failure that puts '1.MU' and '1' at the same position.
+	var frac float64
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT number_sort FROM work_comic_issue WHERE number_text = '1.MU'`).Scan(&frac); err != nil {
+		t.Fatal(err)
+	}
+	if frac != 1.5 {
+		t.Errorf("number_sort for '1.MU' read back as %v, want 1.5", frac)
+	}
+
+	// And the type really is enforced: a text issue number in the SORT column is
+	// rejected. Without this the REAL declaration above is a claim nobody tested.
+	//
+	// Against a work of its own, so the row that fails fails on its TYPE. Reusing
+	// an existing work_id would trip the primary key first and leave this
+	// assertion green over a table that had lost STRICT entirely.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO work (id, kind, parent_work_id, title, sort_title, normalized_title)
+			VALUES (200, 'comic_issue', 1, 'x', 'x', 'x')`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO work_comic_issue (work_id, number_text, number_sort)
+			VALUES (200, 'x', 'Annual 1')`)
+		return err
+	}); err == nil {
+		t.Error("number_sort accepted the string 'Annual 1'; the table is not STRICT, " +
+			"so a parse failure now reaches disk as data instead of as an error")
+	}
+
+	// The two boolean flags default to 0 rather than to NULL, so "not a special"
+	// is a value and not an unknown.
+	var special, oneshot int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT is_special, is_oneshot FROM work_comic_issue WHERE work_id = 101`).
+		Scan(&special, &oneshot); err != nil {
+		t.Fatal(err)
+	}
+	if special != 0 || oneshot != 0 {
+		t.Errorf("is_special/is_oneshot defaulted to %d/%d, want 0/0", special, oneshot)
+	}
+}
+
+// TestMigrate0006ForeignKeysCascadeFromWork proves the one integrity property
+// these tables have: each row's lifetime is its parent work's.
+//
+// It matters because of the 7-day tombstone. A work is soft-deleted first and
+// hard-deleted later, and a subtype row that outlived its work would be a row no
+// query can reach and no sweep can find.
+func TestMigrate0006ForeignKeysCascadeFromWork(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	for _, table := range []string{"work_book", "work_comic", "work_comic_issue"} {
+		t.Run(table, func(t *testing.T) {
+			// A dangling parent is rejected. Foreign keys really are on — 0002
+			// pins that — and this is the insert that would silently succeed if
+			// they were not.
+			if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+				_, err := tx.ExecContext(ctx,
+					fmt.Sprintf(`INSERT INTO %s (work_id) VALUES (99999)`, table))
+				return err
+			}); err == nil {
+				t.Errorf("%s accepted a row for a work that does not exist", table)
+			}
+
+			// And a real parent's delete takes the subtype row with it.
+			if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+				if _, err := tx.ExecContext(ctx, `
+					INSERT INTO work (id, kind, title, sort_title, normalized_title)
+					VALUES (7, 'book', 'Piranesi', 'piranesi', 'piranesi')`); err != nil {
+					return err
+				}
+				_, err := tx.ExecContext(ctx,
+					fmt.Sprintf(`INSERT INTO %s (work_id) VALUES (7)`, table))
+				return err
+			}); err != nil {
+				t.Fatalf("fixture: %v", err)
+			}
+			if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+				_, err := tx.ExecContext(ctx, `DELETE FROM work WHERE id = 7`)
+				return err
+			}); err != nil {
+				t.Fatalf("deleting the parent work: %v", err)
+			}
+			var n int
+			if err := d.Read().QueryRowContext(ctx,
+				fmt.Sprintf(`SELECT count(*) FROM %s WHERE work_id = 7`, table)).Scan(&n); err != nil {
+				t.Fatal(err)
+			}
+			if n != 0 {
+				t.Errorf("%s kept %d row(s) after its parent work was deleted", table, n)
+			}
+		})
+	}
+}
+
+// TestMigrate0006DownAndUp round-trips the migration.
+//
+// The Down block is three DROPs and this is what checks the header's claim that
+// nothing else is owed: after Down the three tables are gone and NOTHING ELSE
+// changed — the assertion is over the whole schema dump, not over the three
+// names, because a Down that also took an index or a trigger with it would pass
+// a three-name check. PRAGMA foreign_key_check runs afterwards, which is where
+// a DROP that stranded a reference would show up.
+func TestMigrate0006DownAndUp(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	created := []string{"work_book", "work_comic", "work_comic_issue"}
+
+	at6, err := dumpSchema(ctx, d.Read())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.MigrateDown(ctx); err != nil {
+		t.Fatalf("MigrateDown 6→5: %v", err)
+	}
+	if v, err := d.Version(ctx); err != nil || v != 5 {
+		t.Fatalf("version after Down = %d (err %v), want 5", v, err)
+	}
+	for _, table := range created {
+		var n int
+		if err := d.Read().QueryRowContext(ctx,
+			`SELECT count(*) FROM pragma_table_list WHERE name = ?`, table).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Errorf("%s survived the Down block", table)
+		}
+	}
+
+	at5, err := dumpSchema(ctx, d.Read())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Everything 0006 did NOT create must be byte-identical across the Down.
+	for _, line := range strings.Split(at6, "\n\n") {
+		if line == "" {
+			continue
+		}
+		var mine bool
+		for _, table := range created {
+			if strings.Contains(line, table) {
+				mine = true
+			}
+		}
+		if !mine && !strings.Contains(at5, line) {
+			t.Errorf("0006's Down block removed or changed an object it did not create:\n%s", line)
+		}
+	}
+
+	rows, err := d.Read().QueryContext(ctx, `PRAGMA foreign_key_check`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	if rows.Next() {
+		t.Error("PRAGMA foreign_key_check reports a violation after 0006's Down")
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := d.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate 5→6: %v", err)
+	}
+	again, err := dumpSchema(ctx, d.Read())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != at6 {
+		t.Error("a Down followed by an Up did not reproduce the schema 0006 creates")
 	}
 }

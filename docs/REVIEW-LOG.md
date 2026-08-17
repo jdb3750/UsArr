@@ -8061,3 +8061,366 @@ two files, both under `docs/`, no Go and no `web/`, so `gofumpt`, `golangci-lint
 `eslint`, `svelte-check` and `govulncheck` all read files this commit does not touch. **What it
 attests is that no credential-shaped string appears in the tree, and that nothing was broken
 elsewhere while these edits were made.** It says nothing whatever about whether the prose is true.
+
+---
+
+# M5-37 — migration 0006: the three subtype tables Kavita writes, and the test helper whose "step down once" was a coincidence
+
+**Date:** 2026-08-17. **Worktree:** `libsync6-20260817193634`, branched from `origin/main` at
+`f722054`. **This is the schema commit of [ADR-0041](./DECISIONS.md#adr-0041)** — `work_book`,
+`work_comic`, `work_comic_issue` and `ix_comic_issue_sort`, in a new migration. No adapter code, no
+sync loop, no writer: `internal/kavita` is a client and nothing in `internal/` inserts into these
+three tables yet.
+
+**The id was renumbered once, and that is recorded rather than tidied away** — the same collision
+`M5-35` logged one entry earlier, from the other side. The standing method was run across **every
+remote head** rather than over the working file — `for r in $(git for-each-ref
+--format='%(refname)'; do git grep -h -oE "M5-[0-9]+" $r -- docs/REVIEW-LOG.md; done | sort -u` —
+and returned `35`, `M5-35` then living on a branch that had not reached `main`; the working file
+alone would have answered `34`. So this was drafted as `M5-36`. **The re-check immediately before
+the merge returned `36` on `origin/main`**: a concurrent thread landed `M5-35` *and* `M5-36` while
+this one was running its gate. Renumbered to `M5-37`, and the section headings with it —
+`origin/main` now owns `## M5.48`-`## M5.54`, so this entry starts at `## M5.55`. **The lesson is
+that checking every head is necessary and not sufficient**: the window between the last check and
+the push is the one that bites, which is why `DEVELOPMENT.md` §11 puts the re-read *after* the last
+fetch or merge.
+
+## M5.55 The scope was verified against both ADRs before anything was written, and one half of the instruction did not survive it unqualified
+
+The task said the three books-and-comics subtype tables are *"now due"* and cited
+[ADR-0040](./DECISIONS.md#adr-0040) and [ADR-0041](./DECISIONS.md#adr-0041). Both were read.
+**The claim holds, and the reason it holds is narrower than "ADR-0041 says so":**
+
+- **ADR-0040** does not schedule these tables by milestone at all. Its decision is that each of the
+  six lands *with the catalogue source that writes it*, and its Consequences say so twice
+  (*"Six tables now have a named landing point instead of a milestone"*).
+- **ADR-0041** moves **the source**, not the tables: it makes Kavita v0.1's first adapter and then
+  states the consequence in terms — *"`work_book`, `work_comic` and `work_comic_issue` are now due
+  with THIS work, not later … They arrive in a **new migration**"* — while listing ADR-0040 under
+  *"What this does NOT change"*: *"the landing point is the source, not the date."*
+- **The music three are untouched by both**, and ADR-0041 says it explicitly (*"The music three are
+  unaffected: `work_album`, `work_track` and `work_credit` still wait for Navidrome"*). That was
+  cross-checked against the tree rather than taken on the ADR's word: `internal/` contains `kavita`
+  and `servarr` and no Navidrome adapter, so the rule and the tree agree.
+
+⚠️ **What the verification surfaced that the task did not mention, and it is a real cost of the
+split rather than a technicality: `work_credit` is the table an author, writer, penciller, inker,
+colorist, letterer or cover artist would live in, and it is on the Navidrome side of the line.** So
+v0.1 ships a books-and-comics catalogue with **nowhere at all to put a creator** — not a lossy
+landing, none. That is ADR-0041's decision and this commit does not reopen it (its
+`creator_work_id` points at a `work` of kind `person`, which no v0.1 source produces either, so the
+table would arrive with a foreign key whose referents cannot exist — ADR-0040's own rejected
+alternative). It is written into 00006's header so the next reader meets it as a decision rather
+than as a gap.
+
+## M5.56 What was taken from 00005 rather than from `schema.md`, and why
+
+`docs/reference/schema.md` §1.1 is authoritative for **shape** and was reproduced faithfully:
+column names, order, types, nullability, the `work_id INTEGER PRIMARY KEY REFERENCES work(id) ON
+DELETE CASCADE` head on all three, and `ix_comic_issue_sort` on `(number_sort)` alone. Everything
+below is a convention the reference file does not carry, taken from
+`00005_library_sync.sql` because that file is the tested one:
+
+| Taken from 00005 | `schema.md` has | Why the shipped file wins |
+|---|---|---|
+| `-- +goose Up` / `StatementBegin` / `StatementEnd` framing | plain ` ```sql ` fences | goose parses the annotations; a fenced block is not a migration |
+| A header stating what it creates, what it deliberately leaves out, which source owns that, and why | nothing | 00001's and 00005's shape, and `CLAUDE.md`'s *"no invented status"* applied to a migration's own scope |
+| An explicit `-- +goose Down`, `DROP TABLE IF EXISTS` in reverse creation order | nothing | 00005's Down block, verbatim in form; downgrades are a local testing tool (`CONFIGURATION.md` §6.3) and nothing else |
+| Section banners keyed to `schema.md` §, and comments that explain *why* | terse inline comments | `CLAUDE.md`'s comment rule; the ADR citations belong next to the DDL they justify |
+| 🔍 marking on anything inferred | — | 00005 marks `sync_report` the same way. `work_book.series_name` / `series_position` get it: `schema.md` gives those two columns no prose at all, and the reading offered — a *declared* series string, distinct from the resolved `work.parent_work_id` link — is inference |
+| `STRICT` on every table | also `STRICT` here | no divergence, but it is the project rule and `TestAllTablesAreStrict` is the witness — see §M5.57 |
+
+**No `CHECK` constraint is written on any column, and that is a decision rather than an omission.**
+`schema.md` §1.1 declares none either; the vocabularies it lists in comments —
+`reading_direction ltr|rtl|vertical|webtoon`, `total_issues_source
+comicinfo|comicvine|kavitaplus|null`, `special_version tpb|hard-cover|omnibus|one-shot|
+volume-as-issue|cover` — are each a projection over several upstreams whose own enums disagree
+(Komga has a reading direction Kavita does not model), SQLite cannot `ALTER` a `CHECK`, and 00005
+made exactly this argument for `write_queue.state` and `sync_report.kind` with 0003's
+`provenance.acquisition_state` as the shipped precedent. `work_series.series_type` and
+`work_alt_title.kind` are the two closest existing columns and neither carries one.
+
+⚠️ **The stated cost:** SQLite will accept a misspelt `reading_direction`, and the enforcement is
+owed by whoever writes the Kavita import. **And the trap is written into the header for them**,
+because it is this project's twice-shipped defect: every one of those columns is nullable, so the
+only correct form is `CHECK (x IS NULL OR x IN (…))` — `CHECK (x IN (NULL, …))` is DB-01, which
+accepts everything. `schema.md` writes `null` as a *member* of `total_issues_source`'s vocabulary,
+which is precisely the sentence someone transcribes into an `IN` list by hand.
+
+## M5.57 Three guards fired deliberately, with their output
+
+A guard nobody has watched fail is not a guard (`DEVELOPMENT.md` §11 rule 3). Each break below was
+made in the tree, run, and reverted.
+
+**1. `STRICT` removed from `work_book`:**
+
+```
+--- FAIL: TestAllTablesAreStrict (0.03s)
+    migrate_test.go:574: table work_book is not STRICT
+FAIL	github.com/jdb3750/UsArr/internal/db	0.037s
+```
+
+**2. `work_book` removed from `TestDeferredTablesAreAbsent`'s `want` list** — the case that matters,
+because the test's own failure mode is a table in *neither* list passing silently:
+
+```
+--- FAIL: TestDeferredTablesAreAbsent (0.03s)
+    migrate_test.go:528: table work_book is in neither list in this test, so nothing here asserts
+    whether it should exist. Add it to `want` (and say which migration) or to `deferred` (and say
+    which milestone).
+FAIL	github.com/jdb3750/UsArr/internal/db	0.035s
+```
+
+**3. `CREATE INDEX ix_comic_issue_sort` deleted from the migration** — the query-plan assertion, which
+without a firing is a string match nobody has seen miss:
+
+```
+--- FAIL: TestQueryPlans/issues_in_a_number_range (0.00s)
+    queryplan_test.go:390: plan does not use ix_comic_issue_sort:
+      SCAN work_comic_issue | USE TEMP B-TREE FOR ORDER BY
+FAIL	github.com/jdb3750/UsArr/internal/db	0.035s
+```
+
+That third output is also the measurement behind the index: without it the contiguity read is a
+full scan **plus** a sort, not merely an unindexed seek.
+
+## M5.58 The 12-step rebuild was checked for rather than assumed away, and there is deliberately no populated-fixture test
+
+**No rebuild is needed, and the three reasons are checked ones:** all three tables are new, so there
+is no data to copy; **no table in the schema references any of them** (each is a child of `work` and
+a parent of nothing), so the Down block's `DROP TABLE` fires no cascade into a child; and
+`PRAGMA foreign_keys=OFF` is not written because goose runs each migration in a transaction, where
+SQLite documents the pragma as a no-op — 00005's finding, reused rather than re-derived.
+
+🚩 **0005's lesson is that a migration test running 1→N against an EMPTY database proves the shape
+and nothing about data, which is why 0005 has `wqFixture` and two data tests beside its round trip.
+That lesson does not transfer here, and the test file says so out loud instead of leaving a reader
+to notice the absence**: with no copy step, no `ALTER` and no backfill there is no row this
+migration could drop or rewrite, and a fixture would have to populate tables that do not exist until
+the migration under test has already run — measuring the tables, not the migration. What **can** go
+wrong is shape, and that is executed: the exact column set and declared type of each table
+(`number_sort` REAL, `number_text` TEXT — ADR-0030's *"any integer column is wrong"*), the five real
+issue numbers `-1 · 0 · 1 · 1.MU · 1A · Annual 1` inserted and read back in `number_sort` order, a
+string rejected by the REAL column *against a work of its own* so the row fails on its type rather
+than on the primary key, the `is_special`/`is_oneshot` defaults, the foreign key rejecting a
+dangling parent and cascading on a real one, and a Down/Up round trip diffed over the **whole**
+schema dump plus `PRAGMA foreign_key_check`.
+
+**One latent defect was found by adding the migration rather than by inspection.** `migrateTo0004`
+and `TestMigration0005DownPreservesEveryRow` both called `MigrateDown` **once** and asserted they
+had landed at 4 — true only while 0005 was the head. Adding 0006 turned both into
+`schema version = 5, want 4`. Fixed at the cause with a `migrateDownTo(t, ctx, d, target)` helper
+that steps and re-checks, so migration 0007 does not break them again.
+
+## M5.59 What could not be verified, stated rather than smoothed
+
+- ⚠️ **No row in these tables has ever come from a real Kavita.** Every value in the tests is
+  hand-written. The columns' *shapes* are `schema.md`'s and ADR-0030's, which were themselves argued
+  from Komga's and Kavita's models — but whether Kavita's `Volume`/`Chapter` payloads populate
+  `volume_label`, `volume_sort`, `is_special` and `special_version` without loss is **unmeasured**,
+  and stays unmeasured until the import channel is written. This commit's green attests DDL, not
+  fidelity.
+- ⚠️ **`ix_comic_issue_sort` is pinned on the plan its declaration supports, not on the report's real
+  query.** It is `(number_sort)` alone, exactly as `schema.md` declares it, so the *series-scoped*
+  form — "this series' issues, in order" — reaches `work` through `ix_work_parent` and does not use
+  this index at all. Widening it to `(work_id, number_sort)` is not available: `work_id` is the
+  primary key and the series is one join away on `work.parent_work_id`. Left as declared, with the
+  limitation written beside the index in the migration and a measurement owed by whoever writes the
+  contiguity report.
+- ℹ️ **`docs/reference/schema.md` is updated where 0006 falsifies it** — §1.1's heading said *"v0.1 for
+  movie/series/episode"* and the comment above `work_album` scheduled all six subtype tables as
+  *"later tables"*. Both now name what moved and what did not, and both point at the ADRs rather than
+  restating a status. `ARCHITECTURE.md` §16's enumerated-schema clause is **not** touched: it is
+  owned elsewhere, ADR-0040 and ADR-0041 both routed their §16 amendments to that thread, and
+  `DEVELOPMENT.md` §11 requires the same.
+
+### On the gate for M5-37
+
+`make check` is green on this tree; the command, the absolute tool paths, the versions, the SHA and
+the verbatim tail are in the commit message. **Its size, stated honestly:** unlike a docs-only
+commit, this diff *is* read by the gate — `test` runs `go test ./...`, which is where the migration
+actually executes, every guard above lives, and the schema snapshot in
+`internal/db/testdata/schema.sql` is compared. What the green still does **not** attest is anything
+in §M5.59: no step of it has seen a Kavita payload, and `gitleaks`, `gofumpt`, `golangci-lint`,
+`govulncheck` and `pnpm audit` read no Markdown in `docs/` at all.
+
+---
+
+<a id="adrc-01"></a>
+
+# ADRC-01 — the ADR amendment convention, settled from the file's own history rather than asserted, and the README lag M5-34 measured and routed
+
+Two tasks, one thread. [M5-34](#m5-34) §M5.47 raised ADR-0035 §1's stale rider and refused to fix it
+*"pending a convention"*; §M5.46 measured the README's lag and routed it here under §11's area map
+(*"implementation-status wording in `CLAUDE.md`, `README.md` and `ARCHITECTURE.md` §16"*). Both are
+discharged here.
+
+ℹ️ **On the prefix, because it is new.** This entry was drafted as `M5-36` and renumbered before
+commit: the generic `M5-` prefix is retired after **three numbering collisions on this file in one
+evening** (`952a472`, `d64b8fc` and `e7c3b0a`, all recorded in `DEVELOPMENT.md` §11), while
+per-thread prefixes have never collided. `ADRC-` was checked as unused **in `docs/REVIEW-LOG.md`, in
+every file under `docs/`, and on all eighteen remote heads** before it was taken. **No existing `M5-`
+id is renumbered by this entry** — they are dated records, and §6.1's invariant holds. Cross-references
+to `M5-32`, `M5-34`, `M5.44`, `M5.46` and `M5.47` below point at other threads' entries and are left
+exactly as they are.
+
+🚩 **The renumber was not precautionary — the collision it avoids is real and is in this file.** The
+design thread pushed [`M5-36`](#m5-36) at `10e7b00` while this entry sat uncommitted on `f716210`
+under that same drafted id. Both threads read the highest id (`M5-35`) correctly, and both were
+right when they looked — §11's *"a sequential id read out of a file is a race, not a lookup"*, for
+the **fourth** time in one evening. The merge that brought `M5-36` in was the usual append-vs-append
+conflict at EOF, **resolved by keeping both entries whole, in landing order, with nothing renumbered
+on either side.** Under the retired scheme this would have been a fourth collision to unpick; under
+per-thread prefixes there was nothing to unpick, which is the argument for the change.
+
+## ADRC.1 The convention was already in the file, and the file's history contradicts the obvious reading of it
+
+The proposal put to this thread was *"ADR bodies are immutable; supersession is announced in the
+Status line and the index row"*, on the precedent of ADR-0036's flag. **That reading is right about
+the rule and wrong about the evidence for it**, and the difference matters, so the history was read
+rather than the current text alone.
+
+**What was checked, and with what.** `git log -p -- docs/DECISIONS.md`, `git log -S` for the offending
+sentence, and a `grep` for every amendment marker in the file (`Amendment`, `AMENDED`, `STRUCK`,
+`Correction`).
+
+| Question | Measured answer |
+|---|---|
+| Does ADR-0036 carry a Status-line + index-row flag from ADR-0041? | **Yes.** `d64b8fc` — and its `docs/DECISIONS.md` diff **removes exactly two lines**, the index row and the Status line's tail. ADR-0036's body is untouched, with a `> ⚠️ **AMENDED …**` blockquote *added* under the Status line naming the two superseded consequences |
+| Is that the only shape in the file? | **No.** ADR-0002, ADR-0025, ADR-0029 and ADR-0039 all carry a dated `### ⚠️ Amendment, <date>` **section** under the Status line; ADR-0029 additionally flags the two falsified paragraphs **at their own sites**; ADR-0039 `~~`-strikes a ground and writes *"struck rather than deleted because the error is instructive"* |
+| Has any ADR body been rewritten in place? | **Yes — once, and it is the origin of this very finding.** `162dca5` rewrote ADR-0035's **title**, its §1 **heading** and its §1 **prose**, and *introduced* the rider *"Not in v0.1, which draws no comics or books library at all"* |
+| Does the file already state the convention anywhere? | **In an ADR body, as a justification, not as process**: ADR-0036's rejected alternatives read *"The file's convention is a new entry plus a flag on the amended ADR's Status line, which is what ADR-0035 itself did to ADR-0032."* Nothing in the preamble, `CLAUDE.md` or `DEVELOPMENT.md` §11 said it about ADRs |
+
+**The `162dca5` finding is what settles it, and it argues for the annotating rule rather than against
+it.** The one time an ADR body was rewritten in place, the rewrite manufactured a claim that (a) no
+ADR had ever decided, (b) was falsified within a day by ADR-0041, and (c) was untraceable to any
+decision when the next sweep found it — which is exactly why M5-34 could flag it but not fix it.
+🔍 **Inference, marked as such:** had `162dca5` annotated instead, ADR-0041's amendment would have
+landed on the annotation and §1 would never have needed a second pass.
+
+**Settled, and recorded in [`DECISIONS.md`](./DECISIONS.md)'s preamble** under *How an ADR is amended
+when the world moves under it* — chosen over `CLAUDE.md` and `DEVELOPMENT.md` §11 because it is the
+file an ADR author already has open, and **stated in one place only**: §11's existing
+`REVIEW-LOG.md` rule is *cited* from it, not restated. The rule: bodies are **annotated, never
+rewritten**; three marks always owed (index row, `Status:` line, dated block under it) plus a fourth
+inline flag where a reader could take the sentence as live; **the decision lives in the superseding
+ADR, the note only points**. The preamble also draws the distinction that was doing the real work
+unstated — **dated records are annotated, design documents are corrected in place** — which is the
+same line `M5.44` drew when it edited `ARCHITECTURE.md` §7.1a's prose but left the dated status cells
+beneath it alone.
+
+## ADRC.2 ADR-0035, and why the sentence itself was not edited
+
+Applying the convention to itself: **§1's rider was not rewritten and not deleted.** Three marks
+added, one site struck.
+
+* **Index row** — gains `⚠️ amended 2026-08-17 by ADR-0041`, naming both falsified sites.
+* **`Status:` line** — gains the same flag.
+* **A `> ⚠️ **AMENDED 2026-08-17**` blockquote under it**, in ADR-0036's shape, naming *which* claims
+  fall: the **2026-08-16 amendment's** framing (*"v0.1 has no catalogue sources at all"*, and its
+  clause 1 instruction to read every "v0.1" below as *"the milestone Kavita lands in"* — Kavita's
+  milestone now **is** v0.1) and **§1's rider**. It states what survives: §1's identity finding,
+  §2/§2a's probe, §3's confirmation of ADR-0030.
+* **§1's rider itself** — `~~`-struck with a dated `🚩 STRUCK 2026-08-17 by ADR-0041` note, per
+  ADR-0039's precedent, because a reader arriving at the `#adr-0035` anchor lands mid-document.
+
+⚠️ **The 2026-08-16 amendment block is deliberately left standing and unedited**, and now says so.
+It is a dated record of the call taken that day; rewriting it would destroy the evidence that the
+milestone moved twice, which is the fact ADR-0041's reasoning turns on.
+
+**One thing the task's framing got wrong and is corrected here:** the defect was *not* only that
+ADR-0041's list of amended sites was incomplete. ADR-0041 amends **ADR-0036**, and ADR-0035's staleness
+is inherited through ADR-0035's own 2026-08-16 amendment — so the mark was owed on ADR-0035
+regardless of ADR-0041's list, and the convention is what makes that obligation legible.
+
+## ADRC.3 The README: seven lines measured, four more found, and one false claim about the file itself
+
+**`README.md`'s tables are NOT generated.** Checked: no `scripts/`, no `tools/`, no `Makefile` target,
+and `grep -rl README` across `*.go`, `*.mjs`, `*.js`, `*.ts`, `Makefile` and `*.y*ml` (excluding
+`node_modules`) returns **nothing**. The line *"This table is generated from `ARCHITECTURE.md` §16"*
+was itself a false status claim — and a load-bearing one, because `M5-32` and `M5.46` both cited it
+as the **reason** the README could be left to move on its own (*"generated from §16, so they move
+after §16 does"*). It is now *"maintained by hand against §16 — nothing in the repo generates it, so
+it lags §16 and has."*
+
+**All seven of M5-34's measured lines were stale; none was a false positive.** Line numbers held —
+`git diff f722054 f716210 -- README.md` is empty — but each was relocated by content, per §11.
+
+| Was | Now |
+|---|---|
+| *"**v0.1 aggregates Sonarr, Radarr and Prowlarr** — the \*Arr library sync plus…"* | *"**v0.1 aggregates Kavita and Prowlarr** — one catalogue source in front of the sync core, plus…"* |
+| *"Navidrome and Kavita (whichever the delta probe favours), then Audiobookshelf, then Komga"* | *"Navidrome, then Audiobookshelf, then Komga"*, plus *"**Sonarr and Radarr are re-sequenced out of v0.1 rather than cut**"* |
+| *"**\*Arr library sync — Sonarr and Radarr** … \| 📋 Planned — v0.1"* | Split in two: a **sync core / Kavita** row at v0.1, and an **\*Arr** row at *"📋 Planned — §16 has not yet named the milestone"* |
+| *"Navidrome, Audiobookshelf, Kavita, then Komga … Order set by a delta-watermark probe"* | *"Navidrome, then Audiobookshelf, then Komga … ✅ the probe **ran 2026-08-17 and passed**, which is what moved Kavita into v0.1 ahead of them"* |
+| *"full import + `/history/since` delta (Sonarr/Radarr) … page-walk delta … specified now and built with the first of them"* | *"Sync channels **1, 3b and 4** … channel 3b … v0.1 work and **built** for Kavita … `/history/since` (channel 3) does not apply to Kavita"* |
+| *"**\"1080p ✓ / 4K ✗\"** — one poster across two Radarr instances \| 📋 Planned — v0.1"* | same claim + *"⚠️ **unexercised in v0.1**, because it needs two Radarrs and Radarr re-sequenced out"*; status split into the link (v0.1) and the demonstration |
+| *"Navidrome and Kavita first (order set by the delta-watermark probe), then Audiobookshelf, then Komga"* | *"**Navidrome (#1), then Audiobookshelf (#2), then Komga (#3)**. Kavita left this sequence for v0.1 and is not a fourth entry"* |
+
+⚠️ **M5-34's list of seven was short by four**, which is worth recording because the next sweep should
+not treat it as complete:
+
+1. *"**the v0.1 catalogue itself is film and TV**, because the library servers arrive after v0.1"* —
+   flatly contradicted by §16.1's own blockquote (*"the catalogue is books and comics/manga"*). Now says so.
+2. *"migration 0001 **or never**"* — §16's enumeration reads *"migration 0001 **or a backfill over the
+   largest tables**"*, and the three subtype tables Kavita writes are owed in a **new** migration
+   (ADR-0040 + ADR-0041). Corrected to *"or a backfill"*, with the ADR-0040 rule named.
+3. The **minimal write path** row asserted `v0.1` flatly; §16 says its \*Arr targets left with ADR-0041
+   and *"whether it re-sequences with them or stays for Prowlarr's grab path alone"* is open. Now
+   *"📋 Planned — v0.1, scope open"*, pointing at §16 rather than resolving it — that call is §16's.
+4. The *"generated from §16"* claim above.
+
+**The standing rule was applied where a fresher claim would just go stale again.** The \*Arr row
+says *"§16 has not yet named the milestone"* rather than inventing one — checked: §16 nowhere assigns
+Sonarr or Radarr a milestone, and §16.1's table has three numbered slots, none of them theirs. The
+write-path row points at §16's open question instead of answering it.
+
+## ADRC.4 Raised, not fixed
+
+- ✅ **`ARCHITECTURE.md` §17's install-switcher table — raised here, and FIXED independently by the
+  design thread while this entry was being written.** It was found stale during ADRC.3's sweep and
+  deliberately not touched (§17 and `docs/design/` are the design thread's): its **v0.1** row read
+  *"Sonarr, Radarr, Prowlarr | Movies and TV catalogued…"*, falsified by ADR-0041 on both halves.
+  [`M5-36`](#m5-36) landed at `10e7b00` and merged into this branch before its gate. **Its fix is
+  better than the one this thread would have written**, and worth recording as the convention rather
+  than the instance: it replaced the membership list with ***"§16 owns this list; read it there"***
+  instead of restating a fresher copy — the same standing rule ADRC.3 applied to the README's \*Arr
+  and write-path rows, arrived at independently on the same day. **The lesson generalises: a second
+  copy of §16's membership goes stale wherever it is kept, so the fix is a pointer, not a refresh.**
+- **`CLAUDE.md` carries the same lag and was left alone** — its roadmap line reads *"v0.1 — the \*Arr
+  library sync (Sonarr, Radarr) + search … **No catalogue source ships in v0.1**"*. It is in §11's
+  area map beside `README.md`, so it is arguably this thread's, but `CLAUDE.md` is agent-facing
+  project instruction rather than status prose and a coordinator may want it batched with
+  `docs/PROJECT-INSTRUCTIONS.md`. **Named here rather than edited; it should not survive another sweep.**
+- **ADR-0035's 2026-08-16 amendment clause 2** (*"It is no longer a day-one spike"*) is now doubly
+  overtaken — the spike ran, and its result is load-bearing inside v0.1. Covered by the blanket flag
+  rather than site-flagged, because §2a already records the run.
+
+### On the gate for ADRC-01
+
+`make check` from a **cleaned lint cache** — `/root/go/bin/golangci-lint cache clean` by absolute
+path first, per `DEVELOPMENT.md` §11's rule that a cached green is a rumour. Binaries, versions and
+tail are in the commit message.
+
+🚩 **State the green at its real size, because on this diff it is nearly worthless as evidence.**
+The diff is **three Markdown files** — `docs/DECISIONS.md`, `README.md`, `docs/REVIEW-LOG.md` — and
+**not one line of Go, TypeScript, Svelte, SQL or `go.mod`**. Of the gate's steps, exactly one reads
+any of them: `secrets` runs `gitleaks dir .` from the repo root over the whole working tree, so the
+green attests **that these three files leak no credential**. `fmt-check` lists `.go` files and runs
+`pnpm format:check` scoped to `web/`; `lint`, `build-tagged`, `modverify`, `test` and `vuln` do not
+read `docs/` or `README.md` at all. **Markdown prose is not checked by any tool in this repo** — there
+is no markdown linter and no link checker in `make check`, so nothing mechanical verified a single
+claim, cross-reference or anchor in this entry. What the green really attests is the **negative**:
+that the tree these edits sit on was not broken by them, which for a docs-only diff was never in
+doubt. The load-bearing verification here is the `git log -p` / `git show` / `grep` work recorded in
+§ADRC.1 and §ADRC.3, and it is manual.
+
+⚠️ **Two greens, and the second is the one that counts — but only the first is about this work.**
+The gate ran on `f716210` + these three files, then again after **two** merges with `origin/main`
+(`10e7b00`, then `191be31`, which carries `M5-37`'s migration 0006 and its tests). The second run is
+green on a tree that **does** contain Go and SQL, so `lint`, `test`, `build-tagged` and `vuln` had
+real work to do — **but that work is somebody else's commit, not this one.** Stated plainly so the
+green is not over-read in either direction: **this entry's own contribution is still three Markdown
+files, and the gate's verdict on it is still only `gitleaks`.** What the second run adds is that this
+branch's merge resolution did not break the code that arrived with it — the `docs/REVIEW-LOG.md`
+conflict was resolved by hand both times, and a mis-resolution there could have corrupted the file
+without any tool noticing.
