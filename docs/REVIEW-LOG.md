@@ -7772,3 +7772,288 @@ brought in [M5-34](#m5-34) and forced the id renumber recorded at the top. `orig
 so every line reference cited above (`api.ts:954`, `+page.svelte:177` and `:405`, `services.ts:219`)
 was re-confirmed on the merged tree rather than carried over. The merged tree was re-gated from a
 cleaned cache before the push.
+
+---
+
+# M5-36 — §17's half of ADR-0041: three sites were relayed, nine more were there, and the ownership convention is why they were the last to go
+
+**Date:** 2026-08-17. **Branch:** `claude/hearth-thread-vn9w7u`, off `origin/main` at `190814c`, then
+merged with `origin/main` **twice** before the gate — at `f722054` and again at `f716210` — each an
+append-vs-append conflict in this file, each resolved by keeping **both** entries with no existing
+text reworded.
+
+⚠️ **This entry's id was renumbered twice, `M5-33`→`M5-35`→`M5-36`, and its subsections once, to
+`M5.48`–`M5.54`.** `M5-33` and `M5-34` landed on `main` while it was being written, then `M5-35` did
+during the second merge. The standing method — `grep -on "M5-[0-9]\+" docs/REVIEW-LOG.md | sed
+'s/.*M5-//' | sort -n | tail -1` — is only correct **against a freshly fetched `main`**, and it
+returned `31`, `34` and `35` on three successive runs of this one pass. ℹ️ **Three concurrent agents
+have now collided on this file's numbering in a single evening** (`M5-34` logs the first pair,
+`M5-35` its own rename, this the third). The method is not the problem and neither is any thread;
+**an append-only log with a monotonic id is a shared counter with no lock**, and re-running the grep
+after the last fetch before the push is the only thing that makes it hold.
+**This is the §17 half of [M5-32](#m5-32--16-applied-adr-0041-and-the-renumber-was-the-smallest-part-of-it-eleven-surrounding-sentences-had-gone-false)**,
+which applied [ADR-0041](./DECISIONS.md#adr-0041) to §16 at `b2dc092` and — correctly — did not touch
+§17. **`docs/ARCHITECTURE.md` §17 and this file are the pass**; **one sentence in §13** was added to it
+by the coordinator and is dispositioned separately in [M5.53](#m553-one-sentence-in-13-judged-rather-than-swept--and-it-is-not-the-class-it-was-sorted-into),
+which is the only edit here outside §17. §16, `DECISIONS.md`, `web/` and `docs/design/` are other
+threads' and were left alone.
+
+## M5.48 The relayed scope claim was treated as a hypothesis. This time it held
+
+The claim arrived as a message: *ADR-0041 ships Kavita in v0.1 and moves Sonarr/Radarr out, so §17's
+v0.1 rows are wrong.* Four checks before any edit, each with its result rather than a verdict:
+
+1. **Does ADR-0041 exist, and is it Accepted?** ✅ `DECISIONS.md` carries *"## ADR-0041 — The sync core
+   ships with Kavita as its first adapter; Sonarr and Radarr re-sequence behind it"*, Status
+   *"Accepted · owner-decided 2026-08-17"*, resting on a quoted owner sentence.
+2. **Does it say what was relayed?** ✅ Decision clause 1 — *"v0.1's catalogue source is **Kavita**,
+   not Sonarr and Radarr"* — and clause 3, *"The Sonarr and Radarr adapters are RE-SEQUENCED, NOT
+   CUT."* The second half matters as much as the first: §17 must not read as though they were refused.
+3. **Does §16 on current `main` actually reflect it?** ✅ Three independent sites, not one: §16.0's
+   heading reads *"membership amended by ADR-0041"*; §16.1's v0.1 entry reads *"The sync core, with
+   one Tier 0 Go adapter in front of it: Kavita"* and *"**Sonarr and Radarr re-sequence out of
+   v0.1** (ADR-0041)"*; and §16.1's table no longer lists Kavita, with a ⚠️ line saying it *moved
+   INTO v0.1, not because it was cut*.
+4. **Is `b2dc092` an ancestor of `main`, and did it do what was described?** ✅
+   `git merge-base --is-ancestor b2dc092 origin/main` exits 0; the subject is *"docs: §16 applies
+   ADR-0041 — Kavita ships in v0.1, and eleven surrounding sentences that said otherwise — M5-32"*.
+
+**§16 and the ADR agree, so §17 was edited.** Had they disagreed, the instruction was to stop and cite
+both rather than take the side heard most recently — and the check is cheap precisely because the
+failure it guards is not.
+
+## M5.49 Removal beat updating at all three sites, and what survived is the part that cannot go stale
+
+§16 is authoritative for milestone scope; §17 describes screens. Each of the three sites was a
+**second copy of a fact §17 does not own** — [`SD-01`](#sd-01--design-directionmd-restated-a-fact-it-is-not-authoritative-for-applied) — which is
+why all three went stale in one commit while §16 was being corrected in the same file. So each was
+replaced by a pointer, not by a freshly-correct service list.
+
+**What survived, and only because a screen genuinely needs it: the count.** *One* catalogue source
+and not six is what decides how many Block A rows render sourceless, what the mockup's install
+switcher has to draw, and whether the Libraries screen has a binding at all. It is also the one part
+that does **not** move when membership does: ADR-0041 keeps ADR-0036's rule verbatim — *"The count is
+unchanged at one."* A pointer plus the count is stable under exactly the change that just broke the
+three lists.
+
+| Site | What it said | What it says now | Replaced or removed |
+|---|---|---|---|
+| §17 preamble, the install-switcher table's **v0.1** row | *"\| **v0.1** \| Sonarr, Radarr, Prowlarr \| Movies and TV catalogued; music, audiobooks, ebooks and comics present as media types with **no catalogue source** …"* | *"**§16 owns this list; read it there.** At the time of writing it is one catalogue source plus Prowlarr"*, and *"The media types that one source covers are catalogued; the rest …"* | **Service list removed**, pointer + count kept. The per-type behaviour is unchanged and was not a scope claim |
+| §17 preamble, the same table's **Full stack** row | *"**It is a later milestone than v0.1** — §16 is authoritative, and it sequences the catalogue sources one at a time *after* v0.1"* | *"**It is later than v0.1, which connects one catalogue source and not six** — §16 is authoritative for which, and for when the rest arrive"* | **Restatement removed.** Not in the relayed three; it is the adjacent cell of the same table and said *all four* sources sequence after v0.1, which ADR-0041 makes false |
+| §17.2, Block A's ⚠️ paragraph | *"four of Block A's six rows … v0.1 connects **Sonarr, Radarr and Prowlarr and nothing else** … so **Movies and TV have a source and music, audiobooks, ebooks and comics do not**"* | *"most of Block A's six rows … v0.1 connects **one** catalogue source … **§16 is authoritative for which source that is and which types it covers, and this section does not restate it**"* | **Membership removed**, the rendering rule kept unchanged. Three dependent phrases in the same paragraph moved with it — *"dropping the four rows leaves a Home screen showing only films and TV"*, *"which in v0.1 is two"*, *"the four sourceless types"* — because leaving them would have left the paragraph contradicting its own opening |
+| §17.8, the ⚠️ *"What this screen holds in v0.1"* paragraph | *"v0.1 connects **Sonarr, Radarr and Prowlarr and nothing else** … **In v0.1 a library therefore binds to a Radarr or Sonarr container** — a whole instance, a root folder or an \*Arr tag"* | *"v0.1 connects **one** catalogue source plus Prowlarr, which has no library at all … **A v0.1 library therefore binds to a container that v0.1's one source already named**"* | **Both the service list and the container enumeration removed.** The container kinds are already enumerated generically two paragraphs below, in the shipping definition sentence, so the copy here bought nothing and was the half that went wrong |
+
+ℹ️ **Nothing was made *more* specific anywhere.** No edit here names a service that §17 did not
+already name, and no edit adds a milestone claim. Every one of the four subtracts.
+
+## M5.50 The relayed count was three. §17 holds twelve, and nine are still there
+
+**Stating the root, because a count without one is an impression:**
+`grep -nE 'Sonarr|Radarr|\*Arr|Kavita|Navidrome|Audiobookshelf|Komga' docs/ARCHITECTURE.md`
+restricted to lines at or after the `## 17. Screens` heading (line 2580 on `190814c`), cross-checked
+against a `v0.1` sweep over the same range — 45 hits — and each hit read against §16.
+
+**Three were relayed. Twelve exist.** The four dispositioned above, plus **nine left standing**,
+listed with their text so the next thread does not have to re-find them:
+
+1. **§17.3** — *"v0.1's only sources are Radarr and Sonarr, which carry TMDB and TVDB ids, so every
+   v0.1 work resolves at the identifier tier."* ⚠️ **This one is inverted, not merely stale**: §16
+   now records that free Kavita's null identifier fields make *"not identified"* the **ordinary case
+   in v0.1** (ADR-0035 §1). The paragraph half-refutes itself two sentences later, which is why it is
+   worth fixing rather than deleting.
+2. **§17.3** — *"the **\"1080p ✓ / 4K ✗\"** badge §16 names as v0.1's power-user signal"*. §16 now
+   says the opposite in as many words: ⚠️ *"It is unexercised in v0.1"*, because it needs two Radarrs.
+3. **§17.4** — *"(⚠️ the equivalent over an Ebooks library and Audiobookshelf is the post-v0.1 form of
+   the same rule)"*, against a worked example of *"all from Radarr 4K"*. The two labels are now
+   **swapped**: ebooks is a v0.1 catalogue type and the \*Arr example is the post-v0.1 one.
+4. **§17.5** — *"⚠️ **And the catalogue half is deferred for every non-\*Arr type alike** — music,
+   audiobooks, ebooks and comics have **no catalogue source in v0.1**"*. False for ebooks and comics.
+5. **§17.7** — *"⚠️ **No v0.1 source is in this position** — Sonarr and Radarr both have a delta
+   channel"*. False twice over, and the second is the interesting one: the rule's worked example is
+   *"Kavita is unreachable — showing cached data from the last full compare at 09:12"*, and ADR-0035
+   §2a verified that Kavita **does** have a usable channel-3b watermark. So Kavita is now the wrong
+   exemplar for *"no delta channel at all"*, and choosing the right one is a §7.1a question.
+6. **§17.8** — *"**in v0.1, one `movie` library per Radarr and one `series` per Sonarr**"*.
+7. **§17.8** — *"(⚠️ the same warning over an Audiobookshelf feeding Ebooks and Audiobooks is the
+   post-v0.1 form of the identical rule)"*, against a *"Radarr feeds 2 libraries"* example. Labels
+   swapped, same shape as #3.
+8. **§17.8** — *"⚠️ **not reachable in v0.1**, whose only sources are \*Arrs on channel 3"*, on the
+   `no change feed` per-library state. Same Kavita-as-exemplar problem as #5.
+9. **§17.8, and it is not a wording fix** — *"Four of six rows read `none`"* and the shipping copy
+   *"v0.1 connects no request destination for music, audiobooks, ebooks or comics."* With no \*Arr in
+   v0.1 there is **no request destination for any of the six**, so the column is identical for every
+   row — which fires §17.4 rule 5, *a column whose value is identical for every row is not data*, on
+   the column that paragraph was written to defend. **The honest v0.1 answer may be that the column
+   does not render at all**, and that is a screen decision, not a substitution.
+
+✅ **Re-checked after the merge, because `M5-34` landed mid-pass and might have closed some of these.**
+It did not. [`M5-34`](#m5-34--six-documentation-sites-that-adr-0041-falsified-or-that-two-concurrent-agents-corrupted-and-one-scope-question-deliberately-left-open)
+amended ADR-0041's remaining sites in **§6.4, §7's channel table and §7.1a's per-source status** —
+`git show 69a9844 -- docs/ARCHITECTURE.md` touches six hunks, all at lines below 1900, and `## 17.
+Screens` begins at 2643. **None of the nine is in its diff**, and the list above stands as written.
+ℹ️ Two of them are §17's local echoes of what `M5-34` fixed upstream — #5 and #8 both use Kavita as
+the exemplar for *no delta channel at all*, which §7.1a now records as verified to have one — so the
+answer they need already exists; only §17 has not been told.
+
+**Why nine were left rather than swept.** ⚠️ Two reasons, and only the first is scope discipline.
+This pass was briefed on three sites; taking twelve unasked is the *"and also"* this repo's
+`CLAUDE.md` warns about. But #1, #5, #8 and #9 are also **not substitutions** — each needs a decision
+(§6.4's tier-1 claim restated against a source with no ids; which source now exemplifies *no delta
+channel at all*; whether the `Request destination` column renders in v0.1), and §16 itself flags the
+first as *"a live question this section flags rather than answers"*. Guessing at four of those under
+cover of a wording pass is how a scope gets resolved twice. **They are raised here so nothing is
+silently dropped, and they want one follow-up pass, not nine.**
+
+ℹ️ **Another relayed undercount, and `NOCI-02` had already counted four.** Its diagnosis was *"every
+one of them from a search narrower than the claim it supported"*, and that fits this one: the relay
+quoted a table row, a Block A paragraph and a Libraries paragraph — what a reader notices — while the
+other nine are single clauses inside paragraphs about something else.
+
+⚠️ **But the code thread's re-measurement of the CI-actor count has since found a sharper cause, and
+it is theirs rather than this entry's.** Cited, not restated: **the CI-actor count is now sixteen,
+written as a floor with its greps attached** — not the nine `NOCI-01` reported nor the eleven that
+followed — and **the original nine sat above a prose list of thirteen phrases**, so the heading
+disagreed with its own enumeration *on the day both were written*. That is a different failure from a
+narrow search: **a count that was never derived from the list it summarised.** Worth recording here
+because the two want different remedies — a narrow search is fixed by widening the root, a
+never-derived count only by deriving it, and no amount of re-grepping finds the second.
+
+## M5.51 Deliberately not asserted: the four write-path verbs
+
+§16's v0.1 entry carries an **open** question, in its own words: ⚠️ *"**The minimal write path**
+(`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue **had only \*Arr targets and
+now has none** — whether it re-sequences with them or stays for Prowlarr's grab path alone is this
+section's call to make; no optimistic apply either way."* It is with Joe and unanswered.
+
+**So this pass asserts nothing about them in either direction, and — checked rather than assumed —
+none of the four edited sites needed to.** Each was read for a *"the user can act on it"* claim before
+editing; none carried one. The only write claim any of them makes is *"Requests still covers all six
+types … over the Prowlarr free-text path"*, which is the **grab** path, not the queued verbs, and
+which ADR-0041 leaves untouched. **No second formulation of §16's open question was written**,
+because two documents wording one unresolved decision differently is how it gets resolved twice — the
+question stays in §16, where it is already flagged, and §17 stays silent rather than paraphrasing it.
+
+🚩 **Where it will bite, and it is on this thread's own section:** §17.6's item-detail *"Secondary
+actions (monitor toggle, delete, pick …)"*, §17.7's *"A command failed"* state, and the
+`Request destination` column in M5.50 #9 all depend on the answer. None was touched. **When Joe
+answers, those three are the sites to revisit**, and this note is the pointer.
+
+## M5.52 Why these were the last to go: the ownership convention worked, and it has a cost nobody had priced
+
+The tempting summary is *three lines were stale*. The useful one is **why they were the last** —
+because that answer is not an oversight, it is a convention behaving exactly as designed.
+
+`DEVELOPMENT.md` §11 routes an amendment to the thread that owns the section rather than letting the
+deciding thread reach across. It is right, and this repo has the scar tissue to show why: M5-31 wrote
+ADR-0041 and deliberately did **not** edit §16; M5-32 applied it to §16 and deliberately did **not**
+edit §17. Both were correct. Both are also why §17 kept saying *"v0.1 connects Sonarr, Radarr and
+Prowlarr and nothing else"* for a day after that sentence became false — **in the same file, eleven
+hundred lines below a §16 that had already been corrected.** A reader of `ARCHITECTURE.md` had no way
+to tell which of the two contradicting halves was current except by knowing the thread map.
+
+**The convention's cost is a window of self-contradiction, and the only thing that closes it is the
+handoff.** So: was the handoff made here?
+
+⚠️ **Partly, and the gap is worth naming precisely rather than generously.** M5-32's entry opens by
+stating that *"§17, `docs/design/`, `PROJECT-INSTRUCTIONS.md`, `CLAUDE.md` and `DEVELOPMENT.md` are
+all other threads' and were left alone"* — so §17 was consciously **excluded**. But its
+`M5.31 Raised, not fixed` list routes four downstream items onward — §7.1a and §7's channel table,
+`SETUP-CHECKLIST.md`, the README's generated status tables, and a pre-existing §16.1 inaccuracy — and
+**§17 is not among them.** *Left alone because it is owned* and *routed to its owner because it is now
+wrong* are different acts, and only the first happened. The relay that eventually reached this thread
+carried three sites and a wrong count; a routing note written by the thread that had just read the
+diff would have carried twelve.
+
+**The lesson is one line, and it is a cheap one: excluding a section from your diff is not the same as
+telling its owner you falsified it.** A `Raised, not fixed` list is where that is said, it costs a
+bullet, and the section owner is the only reader who can act on it. This entry states it plainly
+because the convention is right and should not be weakened — what needs strengthening is the handoff
+that pays for it.
+
+## M5.53 One sentence in §13, judged rather than swept — and it is not the class it was sorted into
+
+**Added to this pass by the coordinator, announced, and deliberately kept to one sentence.** §13 is
+not this thread's section; nothing else in it was touched.
+
+ℹ️ **The reported address was correct and still could not be checked when it arrived — which is the
+case the locate-by-text rule is actually for.** It was relayed as *"line 1923 as of `80db988`"*. At
+that moment `git cat-file -t 80db988` returned *"Not a valid object name"*: the commit was real, but
+it had not yet been fetched into this clone, and it landed on `origin/main` later in this same pass.
+Re-checked after the fetch, `git show 80db988:docs/ARCHITECTURE.md | sed -n '1923p'` is the sentence
+exactly. **So the address was never wrong — it was unresolvable, which looks identical to wrong and
+is not.** The edit proceeded only because the *text* verified against this pass's merge base, and
+that is the whole value of the convention: **a citation by symbol survives a clone that is behind, a
+citation by SHA and line does not.** Recorded rather than quietly dropped, because the tempting
+conclusion — *"that SHA is bogus, ignore it"* — would have been false about a commit that was
+minutes away.
+
+**Before:** *"**What stays in CI:** `EXPLAIN QUERY PLAN` assertions and **row-count assertions** on
+hot queries — deterministic, hardware-independent, fast, and a better proxy for what is being
+protected than wall-clock time."*
+
+**After:** *"**What stays in the gate:** … **There is no CI** — the gate is `make check`, which a
+person or an agent has to type, and a CI added later inherits this split unchanged
+(`docs/DEVELOPMENT.md` §8)."*
+
+**Specification stays, assertion goes — and applying that test is what shows the sort was wrong.**
+`NOCI-01` left `ARCHITECTURE.md`'s hits as **category (c)**, *"specification present tense about
+subsystems that do not exist"*, which stays; §5–§13's other hits genuinely are that, because they
+describe what a gate would assert about **queries that are themselves unbuilt**. **This sentence is
+not.** The `EXPLAIN QUERY PLAN` and row-count assertions **exist and run today** — `e6d335c`
+established exactly that when it fixed §16.1's twin, *"The assertions themselves are real and are in
+`make test`; only their home was wrong."* A present-tense claim about a **real** check in a
+**non-existent** CI is category (a), not (c). So the split is design intent and is kept verbatim;
+only its actor changed, and the wording is `e6d335c`'s rather than a fifth formulation of the same
+correction.
+
+ℹ️ **Why it survived the earlier sweep, which is the part worth generalising.** `ARCHITECTURE.md`'s
+CI hits were **judged as a class rather than line by line**, and this one differed from the class it
+was sorted into. **A batch judgement is a search with a coarse grain: it does not miss the sites, it
+misses the member that is not like the others** — and it misses it *by construction*, because the
+whole economy of judging a class is not reading its members. That is the same shape as the
+never-derived count in M5.50: a summary standing in for the thing it summarises. **Two of this
+week's findings now have that cause, and neither was found by widening a grep.**
+
+## M5.54 On the gate
+
+**`make design` was run on this tree** — `/opt/node22/bin/node` **v22.22.2**, target
+`docs/design/check.mjs`, `PLAYWRIGHT_BROWSERS_PATH` from the Makefile default — **four times: a
+baseline on `190814c` before any edit (exit 0, 132 s), after the §17 edits (exit 0, 134 s), after the
+§13 edit (exit 0, 132 s), and on the merged tree that this commit records (exit 0, 132 s).** All four
+green, all four closing on `all design checks pass`. **The baseline is the one that makes the others
+mean anything**: a single green after an edit cannot distinguish *"this change is fine"* from *"this
+check never looked"*, and the merged run is separate because `origin/main` moved six commits — one of
+them 115 lines of `ARCHITECTURE.md` — between the first run and the commit.
+
+⚠️ **What it covers here is narrow, and one part of it is more than incidental.** `make design`
+renders the mockups in Chromium and enforces `DESIGN-DIRECTION.md` §13; it reads **no** Go, **no**
+`web/` source and **none** of §17's prose as prose. It does not and cannot tell anyone whether the
+sentences edited above are *true* — that was established by reading each against §16 and ADR-0041,
+and M5.48 records the checks.
+
+✅ **But it is not inert over this diff, and the reason is `check.mjs`'s §17 copy-drift exemption.**
+The §13 em-dash sweep exempts a mockup string whose em-dash window *"§17 fixes verbatim"*, and it
+derives that exemption by reading §17 out of `ARCHITECTURE.md` at run time — `arch.slice(...'\n## 17.
+')` to the next `## `, normalised — precisely so that *"a label that DRIFTS from §17's wording loses
+its exemption and fails."* **So this diff is inside what the checker actually inspects**, in one
+specific way: deleting or rewording an em-dash phrase in §17 that a mockup label depends on would
+have withdrawn that label's exemption and failed the run.
+
+✅ **And it was measured rather than assumed, because "it still passed" would not have shown it.** The
+exemption count is printed on the §13 copy line, and it is **24 short em-dash strings exempt on the
+baseline and 24 on the finished diff**, against an unchanged corpus of 6,978 user-visible strings.
+**Equal counts are the actual result**: had any of the four edits touched phrasing a mockup label
+leans on, that number would have fallen and the run would have failed on the newly-unexempted string.
+It did not, so none of the removed wording was load-bearing for a mockup. Everything else in this
+entry is outside the checker's reach — including the §13 sentence in M5.53, which lives outside the
+`## 17.` slice the exemption reads and is therefore neither inspected nor exempted by it.
+
+✅ **`make check` was also run and passed** — the `CLAUDE.md` pre-commit gate, on the merged tree,
+**exit 0, 86 s**, closing on `check: OK`, with `407` frontend tests passed, `govulncheck` **v1.7.0
+asserted against the pin** reporting *"No vulnerabilities found"* and `pnpm audit` *"No known
+vulnerabilities found"*. ⚠️ **The green is not
+load-bearing and its scope is the same one M5-32 recorded for an identically-shaped diff:** this is
+two files, both under `docs/`, no Go and no `web/`, so `gofumpt`, `golangci-lint`, `go test`,
+`eslint`, `svelte-check` and `govulncheck` all read files this commit does not touch. **What it
+attests is that no credential-shaped string appears in the tree, and that nothing was broken
+elsewhere while these edits were made.** It says nothing whatever about whether the prose is true.
