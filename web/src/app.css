@@ -1882,6 +1882,44 @@ select[multiple] {
 	contain-intrinsic-size: auto var(--row-ci, var(--leading-base));
 }
 
+/*
+ * ONE FRAME OF FORCED RE-MEASUREMENT, WHICH IS §7.4's INVALIDATION RULE.
+ *
+ * `contain-intrinsic-size: auto` above means "use the length until you have
+ * rendered this row, then remember what it really was and use that instead".
+ * The memory belongs to the ELEMENT and survives the row going off screen, so a
+ * keyed `{#each}` — which reuses row nodes by design, and which §9.1a clause 4
+ * requires — carries the OLD density's remembered heights across a density
+ * change. §7.4 makes invalidating them REQUIRED rather than advisory, and
+ * permits exactly two ways: rebuild the row nodes, or force re-measurement of
+ * every mounted row before the next paint. This class is the second.
+ *
+ * `content-visibility: visible` is what forces it: the row stops skipping its
+ * contents, lays out for real at the new density, and the browser records a
+ * fresh last-remembered size. List.svelte adds the class for one frame and
+ * takes it off again, so nothing about the steady state changes.
+ *
+ * ⚠️ THE THREE CHEAPER THINGS THAT LOOK LIKE THEY SHOULD WORK, AND DO NOT.
+ * Measured on this primitive (x86-64 container, 4 vCPU, shared host; Chromium
+ * via playwright-core 1.56.1), 5,000 rich rows, compact -> relaxed, against the
+ * 14.57% error that doing nothing leaves:
+ *
+ *   drop the `auto` keyword for a frame   14.57%   no better than nothing
+ *   `content-visibility: hidden`          14.09%   no better than nothing
+ *   `display: none` on the tbody          14.59%   no better than nothing
+ *
+ * So the remembered size is not discarded by hiding the row, by taking the box
+ * away, or by removing the keyword that reads it. Only actually laying the row
+ * out again replaces it. Anyone optimising this should re-measure rather than
+ * reason: two of those three were this author's own hypotheses.
+ *
+ * Specificity is deliberate — (0,1,2), identical to `.tbl tbody tr` above — so
+ * this wins on source order alone and must stay BELOW it.
+ */
+.tbl--remeasure tbody tr {
+	content-visibility: visible;
+}
+
 .tbl tbody tr:hover {
 	background: var(--bg-hover);
 }
