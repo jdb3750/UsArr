@@ -11429,3 +11429,97 @@ arms fail **differently** rather than the asymmetric rule being decorative:
   points at ADR-0045. **Verified against `DECISIONS.md` rather than taken on the routing** — and one
   detail differed from how it was relayed: ADR-0045 is **owner-DELEGATED** (*"whatever you think is
   best"*), not owner-chosen, and the amended sentence says so.
+
+---
+
+# VN9-05 — §13's colour ban named four families and CSS names them seven, so `orchid`, `plum` and `magenta` walked through
+
+## VN9.21 The claim was verified before anything moved, and it held exactly as reported
+
+Three facts were checked first, because the change is only correct if all three hold:
+
+- **§13's **Colour** block named exactly four.** Its rule text read, verbatim:
+
+  > - `[grep]` No `indigo|violet|purple|fuchsia` class or equivalent hex/oklch anywhere in the app.
+
+- **`check.mjs` matched the same four**, in one rule: `rule('§13 colour: no
+  indigo/violet/purple/fuchsia', /\b(indigo|violet|purple|fuchsia)\b/i);`. Same list, same order, no
+  synonyms.
+- **None of `orchid`, `plum` or `magenta` appeared anywhere in `docs/`** — a word-bounded
+  case-insensitive grep over the whole tree returned **zero** hits outside `web/` and
+  `node_modules/`.
+
+CSS names the family seven ways, not four. `orchid` is `#da70d6`, `plum` is `#dda0dd`, and `magenta`
+is the exact synonym of `fuchsia` — the same `#f0f`. All three are the banned family under another
+keyword, and all three were legal to type.
+
+## VN9.22 Banned outright rather than scoped to colour contexts, because `\b` already does the scoping
+
+The instruction to check for collateral damage was taken seriously, since these are English words as
+well as CSS keywords and **a rule that fires on prose gets turned off**. `plum` is the live risk. It
+is not a live risk here:
+
+- **Zero word-bounded hits across all of `docs/`**, the mockups and `tokens.css` included. The
+  corpus `check.mjs` actually scans is nine CSS/JS/HTML sources with comments stripped — not prose —
+  which narrows it further.
+- **`\b` declines the compounds that matter.** `plumbing` (which does appear, four times, in
+  `ARCHITECTURE.md`, `DECISIONS.md` and `docs/reference/providers.md`, and in none of the nine
+  scanned files), `plummet`, `plumber`, `implement`, `complement` and `magentaBright` are all
+  non-matches; verified by running the pattern against each.
+
+So no colour-context narrowing was added. **Adding one would have been the worse change**: it would
+have made this rule structurally unlike the four words beside it, for a hazard that does not exist
+in the corpus. The reasoning is recorded in a comment above the rule so the next reader does not
+re-derive it.
+
+## VN9.23 Fired three times, deliberately and separately
+
+A pattern that catches `magenta` and silently misses `orchid` reads exactly like one that catches
+all three, so each word was planted on its own and the check run three times — not once with three
+plants. Each plant was `.deliberate-firing { color: <word>; }` appended to
+`docs/design/mockups/usarr.css`, a file already in the scanned set.
+
+All three exited **1**, naming the file, the line and the word:
+
+```
+FAIL  §13 colour: no indigo/violet/purple/fuchsia/orchid/plum/magenta — 1 hit(s)
+      docs/design/mockups/usarr.css:1906  orchid
+FAIL  §13 colour: no indigo/violet/purple/fuchsia/orchid/plum/magenta — 1 hit(s)
+      docs/design/mockups/usarr.css:1906  plum
+FAIL  §13 colour: no indigo/violet/purple/fuchsia/orchid/plum/magenta — 1 hit(s)
+      docs/design/mockups/usarr.css:1906  magenta
+```
+
+⚠️ **The failure line names file, line and word — not the selector.** `rule()`'s printed snippet is
+`m[0]`, the match itself, and this rule's pattern captures only the bare word. The line number is
+real (`strip()` preserves line count), so the selector is one jump away, but it is not in the
+message. Reported rather than fixed: widening what `rule()` prints changes every rule's output and
+is a different change.
+
+## VN9.24 The corpus did not move
+
+Reported before and after so a change in **what** the rule inspects could not pass unnoticed behind
+a change in what it forbids:
+
+| | files | chars scanned | violations |
+| --- | --- | --- | --- |
+| before | 9 | 843,447 | 0 |
+| after | 9 | 843,447 | 0 |
+
+Same nine files, same character count, same zero. **The rule now forbids more and inspects exactly
+the same thing** — which is the whole claim this change makes.
+
+## VN9.25 What this pass did NOT do
+
+- **The frontend chroma rule was not touched and not reasoned about.** It is a separate mechanism
+  with its own open question about how its floor was derived, and the two rules are deliberately
+  independent. This change is the word list only.
+- **`web/` was not touched**, including `web/src/lib/designrules.test.ts`, which already documents
+  this exact escape in a comment (*"`orchid`, `plum` and `magenta` are word-banned by neither … and
+  value-banned by neither"*). That file is another thread's; the finding it records is now closed on
+  this side of the fence only.
+- **§1's table row and §3's prose were left alone.** Both name the four families
+  (*"Indigo/violet/purple as the default accent"*; *"§1.1, which bans indigo, violet, purple and
+  fuchsia outright"*), and both are narrative about the AI-design tell rather than statements of the
+  rule. The ban is stated in two places on our side — §13's `[grep]` bullet and `check.mjs` — and
+  both now carry all seven.
