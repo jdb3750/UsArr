@@ -63,7 +63,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0010](#adr-0010) | OpenSubsonic and OPDS as northbound server surfaces | Accepted, scope narrowed |
 | [0011](#adr-0011) | Named permission strings, not a bitfield | Accepted |
 | [0012](#adr-0012) | Sync channels and the write path | **Superseded in part by ADR-0012a** |
-| [0012a](#adr-0012a) | A durable command queue replaces the optimistic intent log | **Accepted** (rev 2) |
+| [0012a](#adr-0012a) | A durable command queue replaces the optimistic intent log | **Accepted** (rev 2); ⚠️ **amended 2026-08-17 by [ADR-0042](#adr-0042)** — the design is untouched, but the queue's **first writer re-sequences out of v0.1** with the \*Arr adapters, so this ADR's *"every v0.1 write"* names writes no longer in v0.1 |
 | [0013](#adr-0013) | **Two-tier** search; an external engine deferred | **Amended** (rev 2) |
 | [0014](#adr-0014) | `service_item_link` is many-to-many | Accepted, framing demoted — **extended by [ADR-0026](#adr-0026)** |
 | [0015](#adr-0015) | Namespaced tags with virtual parents | Accepted |
@@ -77,7 +77,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0023](#adr-0023) | UsArr coexists with the ecosystem rather than replacing it | **Accepted** (rev 2) |
 | [0024](#adr-0024) | AGPL-3.0 is the licence | **Accepted** — owner-confirmed 2026-08-16 |
 | [0025](#adr-0025) | Styling and typography: Tailwind v4 with the default theme deleted, Bits UI, Tabler, self-hosted IBM Plex | **Accepted** — ⚠️ **amended 2026-08-16**: **Tailwind is not used**; the styling layer is hand-written CSS in `web/src/app.css`. Bits UI, Tabler and IBM Plex are unaffected |
-| [0026](#adr-0026) | A library is a user-owned binding to upstream containers, with a correction layer | **Accepted** — refines ADR-0004, extends ADR-0014 |
+| [0026](#adr-0026) | A library is a user-owned binding to upstream containers, with a correction layer | **Accepted** — refines ADR-0004, extends ADR-0014; ⚠️ **amended 2026-08-17 by [ADR-0043](#adr-0043)** — the binding, the four verbs and the storage are untouched, but this ADR's consequence capping the correction **UI** at v0.3 rested on *"§6.4 already establishes that tier 1 resolves essentially 100% of the v0.1 identity problem"*, which [ADR-0041](#adr-0041) falsified for v0.1's actual source: **the minimal *"fix this match"* case moves earlier**, and the full four-verb surface stays at v0.3 |
 | [0027](#adr-0027) | Two axes: media type is navigation, a library is scope | **Accepted** — settles §17.2's open question |
 | [0028](#adr-0028) | Home is three fixed blocks, not one strip per media type | **Accepted** — **amends** ARCHITECTURE §17.2 |
 | [0029](#adr-0029) | "Load more" + `content-visibility`; virtualization is a benchmarked escalation | **Accepted** — **amends** §4.5, corrects an argument in ADR-0003; ⚠️ **amended 2026-08-16** — the required benchmark ran against the shipped primitive: the decision is unchanged, correction (c)'s arithmetic, the mitigation ranking and the row-ceiling extrapolation are corrected, the page size is **200 rows**, and two benchmark gaps are recorded; ⚠️ **amended 2026-08-17** — the 100 ms every row ceiling divided by was Tier 0's and was never this ADR's to borrow: the toggles are governed by `DESIGN-DIRECTION.md` §7.2's new **Controls** budget at **400 ms**, so every ceiling scales 4×, the worst-case residual-risk note is weakened rather than withdrawn, the shipped 200-row page gains a measured cost, and the page size is still **200 rows** |
@@ -87,12 +87,14 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0033](#adr-0033) | `work.kind` gains `person`; a credit is not a music artist | **Accepted** — owner-decided 2026-08-16; refines ADR-0009, ADR-0031 |
 | [0034](#adr-0034) | The project keeps the name UsArr | **Accepted** — owner-decided 2026-08-16; naming only, nothing in the codebase moves |
 | [0035](#adr-0035) | Kavita, not Komga, is the comics-and-books catalogue source | **Accepted** — owner-decided 2026-08-16; **reverses one member of [ADR-0032](#adr-0032)**, confirms [ADR-0030](#adr-0030); ⚠️ **amended 2026-08-16** — the catalogue sources sequence **after** v0.1 ([ADR-0036](#adr-0036)), so this ADR picks *which* source, and its spike orders the post-v0.1 sequence; ✅ **§2's spike RAN 2026-08-17 and PASSED** — dated result in §2a, with one qualification (no server-side since-filter exists); ⚠️ **amended 2026-08-17 by [ADR-0041](#adr-0041)** — that spike result moved **Kavita into v0.1**, so the 2026-08-16 amendment below and §1's *"not in v0.1, which draws no comics or books library at all"* rider are both falsified. The choice of Kavita over Komga is untouched |
-| [0036](#adr-0036) | No catalogue source ships in v0.1; they arrive one at a time after it | **Accepted** — owner-decided 2026-08-16; **amends** §16; **re-sequences [ADR-0032](#adr-0032) and [ADR-0035](#adr-0035)** without rejecting any source; ⚠️ **amended 2026-08-17 by [ADR-0041](#adr-0041)** — the owner runs neither Sonarr nor Radarr, so this ADR's *"prove the replica thesis on real data"* criterion was unmeetable as scoped: **Kavita ships in v0.1 as the sync core's first adapter** and the \*Arr adapters re-sequence behind it. The rule — one source, proven on real data, before a second adapter — is kept unchanged |
+| [0036](#adr-0036) | No catalogue source ships in v0.1; they arrive one at a time after it | **Accepted** — owner-decided 2026-08-16; **amends** §16; **re-sequences [ADR-0032](#adr-0032) and [ADR-0035](#adr-0035)** without rejecting any source; ⚠️ **amended 2026-08-17 by [ADR-0042](#adr-0042)** — its libraries bullet justified the subsystem partly on *"the request destination v0.1's write path routes on"*, and **that write path re-sequences out of v0.1**; the subsystem stays on its other grounds; ⚠️ **amended 2026-08-17 by [ADR-0041](#adr-0041)** — the owner runs neither Sonarr nor Radarr, so this ADR's *"prove the replica thesis on real data"* criterion was unmeetable as scoped: **Kavita ships in v0.1 as the sync core's first adapter** and the \*Arr adapters re-sequence behind it. The rule — one source, proven on real data, before a second adapter — is kept unchanged |
 | [0037](#adr-0037) | TOFU SPKI pin enrolment is removed, not completed; enforcement stays | **Accepted** — 2026-08-16; amends no ADR; reopening conditions stated (a pin field on the update path + the change-acceptance UI) |
 | [0038](#adr-0038) | A list freezes its order while a user is aiming at it | **Accepted** — 2026-08-16; amends no ADR; the argument lives in `design/DESIGN-DIRECTION.md` §9.1a and ARCHITECTURE §17.5, this record holds the rejected alternatives |
 | [0039](#adr-0039) | `write_queue.state` loses its `CHECK`; `work_id` gets its foreign key back | **Accepted** — 2026-08-17; **supersedes** `reference/schema.md` §10 step 1 and the seam in `FUTURE.md` §11 / §11.1; closes `REVIEW-LOG.md` WQ-05; ⚠️ **amended 2026-08-17** — decision 3's ground 1 is **struck**, on a misquotation of `reference/sync.md` §4 that dropped the words *toward the \*Arr*: the decision stands on grounds 2 and 3, which are independent of it; ⚠️ **corrected 2026-08-17** — decision 1 and the first rejected alternative wrote the Go `state` validation as **done**; it is **owed by the first `write_queue` writer** and nothing validates the vocabulary today (`REVIEW-LOG.md` M5-25) |
 | [0040](#adr-0040) | The six subtype tables land with the catalogue source that writes each | **Accepted** — 2026-08-17; records as a decision what `00005_library_sync.sql` did; **in tension with** ARCHITECTURE §16's enumerated v0.1 schema line, which is left to the thread that owns §16 |
-| [0041](#adr-0041) | The sync core ships with **Kavita** as its first adapter; Sonarr and Radarr re-sequence behind it | **Accepted** — owner-decided 2026-08-17; **amends [ADR-0036](#adr-0036)** (*"No catalogue source ships in v0.1"*) and **amends** ARCHITECTURE §16, whose replacement text is proposed here and routed to the thread that owns §16; **re-sequences, rejects nothing** — Sonarr and Radarr still arrive; confirms [ADR-0035](#adr-0035) and [ADR-0040](#adr-0040) |
+| [0041](#adr-0041) | The sync core ships with **Kavita** as its first adapter; Sonarr and Radarr re-sequence behind it | **Accepted** — owner-decided 2026-08-17; **amends [ADR-0036](#adr-0036)** (*"No catalogue source ships in v0.1"*) and **amends** ARCHITECTURE §16, whose replacement text is proposed here and routed to the thread that owns §16; **re-sequences, rejects nothing** — Sonarr and Radarr still arrive; confirms [ADR-0035](#adr-0035) and [ADR-0040](#adr-0040); ⚠️ **amended 2026-08-17 by [ADR-0042](#adr-0042)** — the write-path question this ADR flagged as *"NOT decided here"* is now answered: the minimal write path **re-sequences with the \*Arr adapters**, so its consequence bullet and the ⚠️ clause in its proposed §16 text are both settled |
+| [0042](#adr-0042) | v0.1's minimal write path re-sequences with the \*Arr adapters; Sonarr and Radarr stay on the roadmap | **Accepted** — owner-decided 2026-08-17; **answers the question [ADR-0041](#adr-0041) flagged and refused**; **amends** ARCHITECTURE §16, [ADR-0041](#adr-0041), [ADR-0036](#adr-0036) and [ADR-0012a](#adr-0012a); **re-sequences, rejects nothing** — [ADR-0012a](#adr-0012a)'s queue design is untouched, the seam costs **no migration**, and Sonarr and Radarr stay on the roadmap at the owner's explicit condition; raises one open question it does not close (neither \*Arr has a milestone) |
+| [0043](#adr-0043) | A **minimal** match-correction UI moves earlier than v0.3; the full correction surface stays there | **Accepted** — owner-decided 2026-08-17; **answers the scope call ARCHITECTURE §6.4 flagged and routed**; **amends [ADR-0026](#adr-0026)**'s correction-UI consequence and **amends** ARCHITECTURE §16.0, §16.1's v0.1 and v0.3 entries; **re-sequences, rejects nothing** — ADR-0026's model, verbs, tables and scoping are untouched and `library_override` is already in the tree; **source-independent** — it turns on v0.1 having a weak-identity catalogue source, not on that source being Kavita; **assigns no milestone**, which is carried as an open question |
 
 ---
 
@@ -889,7 +891,20 @@ id space backwards; on a fingerprint change or a backwards jump in `max(id)`, re
 <a id="adr-0012a"></a>
 ## ADR-0012a — A durable command queue replaces the optimistic intent log
 
-**Status:** Accepted (revision 2) · **Supersedes the write-path half of ADR-0012.**
+**Status:** Accepted (revision 2) · **Supersedes the write-path half of ADR-0012.** ·
+⚠️ **Amended 2026-08-17 by [ADR-0042](#adr-0042)** — see the flag below.
+
+> ⚠️ **AMENDED 2026-08-17 by [ADR-0042](#adr-0042): nothing in this ADR's design is altered, and one
+> sentence of its supporting prose is off by a milestone.** ADR-0042 re-sequenced the minimal write
+> path (`monitor`, `unmonitor`, `delete`, `add`) out of v0.1 to land with the first \*Arr adapter,
+> because [ADR-0041](#adr-0041) removed Sonarr and Radarr from v0.1 and all four verbs are Servarr
+> operations. **What survives untouched is everything this ADR actually decided** — the state
+> machine, `verifying` and its 15-minute TTL, `UNIQUE (user_id, idempotency_key)`, the server-derived
+> northbound keys, `grab` at max one attempt, and the reconciliation guard over all three
+> non-terminal states. **What is flagged below is the phrase *"every v0.1 write"***, which named the
+> \*Arr writes that were v0.1's when this was written and are not now. `write_queue` ships in v0.1 as
+> a table with no writer, deliberately: ADR-0042 records that adding one later costs **no migration**,
+> because [ADR-0039](#adr-0039) left `state` unconstrained and `kind` never had a `CHECK`.
 
 ### Context
 ADR-0012 specified optimistic local apply, a stored `inverse_patch`, three-phase settlement where
@@ -932,6 +947,11 @@ Four things are kept or added deliberately:
 
 **The reconciliation guard covers every non-terminal state** — `pending`, `inflight` *and*
 `verifying`. Guarding only the first two means every v0.1 write is reverted by the next sweep.
+⚠️ **2026-08-17 ([ADR-0042](#adr-0042)): *"every v0.1 write"* no longer has a referent.** The writes
+meant here are the \*Arr ones, and they re-sequence out of v0.1 with the adapters that receive them;
+v0.1's only write path is Prowlarr Search-and-Grab, which dispatches synchronously and never enqueues.
+**The guard's reasoning is unaffected and the rule stands as written** — it simply first bites at the
+milestone the first queue writer lands in.
 
 ### Consequences
 - The project's self-declared top schedule risk is removed rather than restated.
@@ -1882,7 +1902,25 @@ enforcement is the reason Tailwind is chosen — so this is a fallback, not a pr
 
 **Status:** Accepted · **Refines [ADR-0004](#adr-0004)** (replica, not proxy) and **extends
 [ADR-0014](#adr-0014)** (the M:N link). Neither is superseded; ADR-0004's conflict rule is *narrowed*
-below, in writing, rather than quietly reinterpreted.
+below, in writing, rather than quietly reinterpreted. · ⚠️ **Amended 2026-08-17 by
+[ADR-0043](#adr-0043)** — see the block below.
+
+> ⚠️ **AMENDED 2026-08-17 by [ADR-0043](#adr-0043): one consequence bullet's cap on the correction
+> *UI* no longer holds whole.** The bullet *"It absorbs scope rather than adding it"* closes with
+> *"The correction **UI** is capped to v0.3, where the weak catalogues actually arrive — §6.4 already
+> establishes that tier 1 resolves essentially 100% of the v0.1 identity problem, so there is nothing
+> to correct before then."* **Both halves of that ground were falsified by [ADR-0041](#adr-0041)**,
+> which put a weak catalogue **in v0.1** and replaced the providers §6.4's percentage was measured on;
+> `ARCHITECTURE.md` §6.4 has since been restated against the new source and withdraws the support
+> explicitly. ADR-0043 therefore **moves the minimal *"fix this match"* case earlier than v0.3** and
+> **leaves the full four-verb surface and the Corrections list at v0.3**. The bullet carries an inline
+> flag at its own site.
+>
+> **Nothing else in this ADR moves.** The binding model, the single-kind rule, the four verbs
+> `exclude` / `include` / `relink` / `field`, their `library_id` scoping and `CHECK`, the four tables,
+> `target_identity_hash` and the no-foreign-key rule, the three-axis split and every rejected
+> alternative all stand exactly as decided. **This is a scheduling amendment to one consequence, not a
+> reopening of the design** — and the storage it re-sequences against is already in the tree.
 
 ### Context
 
@@ -1996,9 +2034,16 @@ catalogue comics with no sink at all beyond Prowlarr free-text.
   wrong trade.
 - **It absorbs scope rather than adding it.** §8.3's undefined routing rule gets a definition,
   `user_library_access` gets a referent, and Home's per-type sections are *replaced* rather than
-  extended. The correction *UI* is capped to v0.3, where the weak catalogues actually arrive — §6.4
+  extended. ~~The correction *UI* is capped to v0.3, where the weak catalogues actually arrive — §6.4
   already establishes that tier 1 resolves essentially 100% of the v0.1 identity problem, so there is
-  nothing to correct before then.
+  nothing to correct before then.~~ 🚩 **STRUCK 2026-08-17 by [ADR-0043](#adr-0043), and struck rather
+  than deleted because it is the clause the amendment at the top of this ADR exists for.** Both of its
+  grounds went at once: [ADR-0041](#adr-0041) put a **weak catalogue in v0.1** — so the weak catalogues
+  do not "actually arrive" at v0.3 — and it replaced the two providers §6.4's *"essentially 100%"* was
+  measured on, which `ARCHITECTURE.md` §6.4 has since restated as *"a property of the instance, not of
+  the design"*. There **is** something to correct before v0.3. **What replaces it:** the minimal
+  *"fix this match"* case moves earlier, its milestone unassigned; the **full** four-verb surface and
+  the Corrections list stay at v0.3. ARCHITECTURE §16.0 is authoritative for the scope.
 - **UsArr now owns a bug it cannot blame upstream for.** If the derivation is wrong, the grid shows
   the wrong items and there is no \*Arr to point at. Materialised membership is a cache with an
   invalidation problem. This is the honest cost.
@@ -3606,8 +3651,23 @@ whenever the adapter lands" — which does not move the verdict.
 **Status:** Accepted · **owner-decided 2026-08-16** · **Amends
 [`ARCHITECTURE.md`](./ARCHITECTURE.md) §16**, which remains authoritative for scope ·
 **Re-sequences [ADR-0032](#adr-0032) and [ADR-0035](#adr-0035)** · **Rejects nothing** — every source
-either of them names still arrives. · ⚠️ **Amended 2026-08-17 by [ADR-0041](#adr-0041)** — see the
-flag below.
+either of them names still arrives. · ⚠️ **Amended 2026-08-17 by [ADR-0041](#adr-0041)** and
+⚠️ **by [ADR-0042](#adr-0042)** — see the two flags below.
+
+> ⚠️ **AMENDED 2026-08-17 by [ADR-0042](#adr-0042): one ground under the libraries bullet below is
+> gone.** That bullet keeps the libraries subsystem in v0.1 partly because *"a library binding carries
+> the request destination v0.1's write path routes on"*. **That write path — the four \*Arr verbs on
+> the durable command queue — re-sequences out of v0.1** with the adapters that receive them, so the
+> clause names something v0.1 no longer contains. **The bullet's conclusion is unchanged and the
+> subsystem stays**, on the two grounds that never depended on it: its four tables are owed by v0.1
+> either way, and its screen is one of the five `CLAUDE.md` calls essential. **The request destination
+> has no v0.1 use left at all**, which is further than this decision alone would have taken it: §17.8
+> establishes that **no service v0.1 connects can be a library's request sink**, so the destination
+> cannot even be set and its column does not render for the milestone. Sequencing, not a cut — it
+> returns with the first service that can be a destination.
+> **The bullet's closing examples were already dead** by [ADR-0041](#adr-0041): an Anime
+> library on a Sonarr tag and a Films library spanning two Radarrs both need services v0.1 no longer
+> has, and §16.0 records the Kavita binding that replaces them.
 
 > ⚠️ **AMENDED 2026-08-17 by [ADR-0041](#adr-0041): the decision line *"No catalogue source ships in
 > v0.1"* no longer holds, and the reason is a fact this ADR never checked.** It scoped v0.1 to the
@@ -3724,7 +3784,9 @@ was the point of writing it down, and deferring the run must not turn it back in
   its pass condition on paper. **Nothing about it is implemented in v0.1.**
 - **The libraries subsystem stays in v0.1, and loses its best demonstration.** Its four tables belong
   in migration 0001 regardless, its screen is one of the five `CLAUDE.md` calls essential, and a
-  library binding carries the request destination v0.1's write path routes on. But the
+  library binding carries the request destination v0.1's write path routes on. ⚠️ **2026-08-17
+  ([ADR-0042](#adr-0042)): that third ground is gone — the write path it names re-sequences out of
+  v0.1. The first two stand, and so does the conclusion.** But the
   Ebooks/Audiobooks split over one Audiobookshelf library — the concrete improvement over upstream's
   own organisation — moves with Audiobookshelf. v0.1 demonstrates it on something narrower and
   honest: an Anime library bound to a Sonarr tag, or one Films library spanning a 1080p and a 4K
@@ -4285,7 +4347,20 @@ decision line *"No catalogue source ships in v0.1"* is the sentence this changes
 replacement text for §16.1's v0.1 entry is drafted below and **routed to the thread that owns §16
 rather than applied here** · **Re-sequences, rejects nothing** — Sonarr and Radarr both still arrive ·
 **Confirms [ADR-0035](#adr-0035)** (which source) and **[ADR-0040](#adr-0040)** (when each subtype
-table lands), neither of which is reopened.
+table lands), neither of which is reopened. · ⚠️ **Amended 2026-08-17 by [ADR-0042](#adr-0042)** —
+see the flag below.
+
+> ⚠️ **AMENDED 2026-08-17 by [ADR-0042](#adr-0042): the one question this ADR deliberately left open
+> is now closed, and this ADR is completed rather than corrected.** Its final consequence bullet
+> reads *"v0.1's minimal write path loses its target, and that question is NOT decided here"*, and the
+> ⚠️ clause in its proposed §16.1 text says the choice *"is this section's call to make"*. **§16's
+> owner made it, on the owner's own answer:** the minimal write path (`monitor`, `unmonitor`,
+> `delete`, `add`) on the durable command queue **re-sequences with the \*Arr adapters — specified,
+> not built** — because all four verbs are Servarr operations, and because the shipped Prowlarr grab
+> path was measured and **never used the queue** (`handleGrab` dispatches synchronously; `grab` is
+> max one attempt). **Nothing else in this ADR moves**, and its own *"re-sequenced, not cut"* framing
+> is what ADR-0042 extends to the write path, at the owner's explicit condition that Sonarr and
+> Radarr stay on the roadmap. Read ADR-0042 for the decision; the two places below carry inline flags.
 
 ### Context
 
@@ -4466,7 +4541,12 @@ state and §17.3's per-channel freshness rule already specify how.
   \*Arr adapters, or stays and is exercised only by Prowlarr's grab path, is a scope call that belongs
   to whoever owns §16. It is flagged here rather than answered, because this ADR does not own §16 and
   `DEVELOPMENT.md` §11 requires an edit to a shared document outside your area to be announced before
-  it is pushed.
+  it is pushed. ✅ **ANSWERED 2026-08-17 by [ADR-0042](#adr-0042), owner-decided: it re-sequences with
+  the \*Arr adapters — specified, not built.** The second option was refused on a measurement this
+  bullet did not have: **the grab path never used the queue**, so "stays for Prowlarr's grab path
+  alone" would have meant *building* v0.1's first queue writer for a path that completes inside one
+  HTTP handler and is barred from retrying. Sonarr and Radarr stay on the roadmap, which is the
+  owner's stated condition.
 
 **What this does NOT change — stated explicitly, because a re-sequencing ADR is easy to over-read:**
 
@@ -4539,6 +4619,13 @@ targets and now has none** — whether it re-sequences with them or stays for Pr
 alone is this section's call to make; no optimistic apply either way.
 ```
 
+⚠️ **2026-08-17 — the proposed block above has been applied to §16, and its own last clause has since
+been superseded there.** The block's closing ⚠️ sentence left the write path undecided —
+*"whether it re-sequences with them or stays for Prowlarr's grab path alone is this section's call to
+make"*. **§16 no longer reads that way:** [ADR-0042](#adr-0042) settled it, and §16's v0.1 entry now
+states the answer rather than the question. The block is left standing unedited because it is a dated
+record of what was proposed, not a description of what §16 says today — read §16 for that.
+
 **Two riders for whoever applies it**, both consequences of this ADR that fall outside the v0.1 entry
 itself: **(i)** §16.1's numbered table drops Kavita from row #1 and renumbers Navidrome, Audiobookshelf
 and Komga to #1–#3 **without reordering them**, with a line recording that Kavita moved *into* v0.1
@@ -4548,3 +4635,361 @@ payment is that v0.1 ships no catalogue source at all"* paragraph is the prose t
 *"Schema, enumerated"* clause needs `work_book` / `work_comic` / `work_comic_issue` moved into v0.1 —
 which is the same clause [ADR-0040](#adr-0040) already flagged to this section, so the two edits should
 be made together.
+
+---
+
+<a id="adr-0042"></a>
+## ADR-0042 — v0.1's minimal write path re-sequences with the \*Arr adapters; Sonarr and Radarr stay on the roadmap
+
+**Status:** Accepted · **owner-decided 2026-08-17** · **Answers the question
+[ADR-0041](#adr-0041) flagged and deliberately did not decide** ·
+**Amends [`ARCHITECTURE.md`](./ARCHITECTURE.md) §16**, whose v0.1 entry carried the open question and
+now carries this answer · **Amends [ADR-0041](#adr-0041), [ADR-0036](#adr-0036) and
+[ADR-0012a](#adr-0012a)** where their bodies assume a v0.1 queue writer ·
+**Re-sequences, rejects nothing** — [ADR-0012a](#adr-0012a)'s queue design is untouched and Sonarr and
+Radarr both still arrive.
+
+### Context
+
+**[ADR-0041](#adr-0041) moved Kavita into v0.1 as its catalogue source and took Sonarr and Radarr out,
+and that left one clause of the milestone with nothing behind it.** §16.1's v0.1 entry named a
+*"minimal write path (`monitor`, `unmonitor`, `delete`, `add`) on the durable command queue"*. **All
+four of those verbs are Servarr operations.** Kavita is a read-only catalogue source with no command
+sink ([ADR-0032](#adr-0032)), so after ADR-0041 the milestone specified a write path whose every verb
+addressed a service the milestone no longer contains. ADR-0041 flagged exactly this and refused to
+settle it, because §16 is authoritative for scope and that ADR did not own §16:
+
+> *"⚠️ **v0.1's minimal write path loses its target, and that question is NOT decided here.** …
+> Whether that write path re-sequences with the \*Arr adapters, or stays and is exercised only by
+> Prowlarr's grab path, is a scope call that belongs to whoever owns §16."*
+
+**The tempting answer — "it stays, Prowlarr's grab path exercises it" — is false on the tree, and
+this was measured rather than assumed.** The shipped grab path does not touch the queue and never did:
+
+- **`internal/httpapi/grab.go`'s `handleGrab` dispatches synchronously.** It reads the candidate
+  in scope, resolves a searcher, and calls `searcher.Grab(ctx, rscope, candidateID)` inline under a
+  `grabTimeout`, then writes `audit_log` and `provenance`. There is no enqueue, no `202
+  {command_id}`, and no worker.
+- **`grab` is max one attempt by design**, so the queue's retry machinery is switched off for it in
+  any case. §7.6: *"`grab` is max one attempt plus a manual button, because a blind retry is a double
+  download"*, restated as decision 4 of [ADR-0012a](#adr-0012a).
+- **Nothing anywhere writes `write_queue`.** The only non-test references under `internal/` and
+  `cmd/` are the standalone bench binary in `internal/db/spike/` (behind `//go:build bench`, and it
+  *reads*) and a comment at `internal/httpapi/grabs.go:58` saying so. Migration 0005's own rebuild
+  guard says the same in its abort message.
+
+So the two options ADR-0041 offered were not symmetric. "It stays for Prowlarr's grab path alone"
+would not have kept an existing user of the queue alive; it would have committed v0.1 to *building*
+its first queue writer, its worker and its verification loop for a path that today completes inside
+one HTTP handler and is explicitly barred from retrying.
+
+**The owner was asked and answered.** His words, verbatim, 2026-08-17:
+
+> *"sure that's fine. we should add them though or at least the capability to add them as they're
+> very popular services."*
+
+He approves the re-sequencing and attaches one condition, which is the second half of that sentence
+and is written into the Decision below rather than left to be inferred.
+
+### Decision
+
+> **1. The minimal write path re-sequences out of v0.1 — specified, not built.** The four verbs
+> `monitor`, `unmonitor`, `delete` and `add`, the durable command queue's worker, and its
+> `pending → inflight → verifying → done | failed` settlement loop **land with the first \*Arr
+> adapter**, which is the milestone that first supplies a service they can address. §16 is amended
+> to say so in place of the open question.
+>
+> **2. This removes nothing that works today.** The Prowlarr Search-and-Grab path is untouched and
+> stays in v0.1: it dispatches synchronously in `handleGrab`, is max-one-attempt, and has never
+> enqueued anything. **v0.1 therefore still has a write path** — grab is it, and it is the only one.
+>
+> **3. [ADR-0012a](#adr-0012a)'s design is not reopened.** The queue's state machine, its
+> `UNIQUE (user_id, idempotency_key)` rule, the `verifying` TTL and the reconciliation guard all
+> stand exactly as decided. What moves is *when the first writer is built*, not what it will do.
+>
+> **4. The seam is already paid for, and it costs no migration to use.** `write_queue` ships today as
+> a table with all three of its indexes and no writer. [ADR-0039](#adr-0039) left its `state`
+> vocabulary **unconstrained** — 00005 creates the column with an explicit *"NO CHECK"* and the
+> reason beside it — and `kind`, the verb half of the same row, **has never carried a `CHECK`
+> either**. A writer can therefore be added later **with no migration at all**: the table, the
+> partial index `ix_wq_runnable` and the unique idempotency index are already there, and neither the
+> verbs nor the states need widening. This is the seam `CLAUDE.md` asks for — the seam ships, the
+> feature does not.
+>
+> **5. Sonarr and Radarr stay on the roadmap, and the capability to add them is preserved.** This is
+> the owner's condition, in his terms: *"we should add them though or at least the capability to add
+> them as they're very popular services."* **They are re-sequenced, not cut, and neither is this
+> write path.** Nothing already built on `internal/servarr` is discarded — Prowlarr Search-and-Grab
+> runs on it today — and no schema, index or state vocabulary that the \*Arr write path will need is
+> given up here. **This ADR does not assign them a milestone**, because the owner named none and
+> §16.1's table does not hold a slot for them; §16 is authoritative for when, and the gap between
+> *"they arrive"* and *"they arrive at milestone N"* is recorded below as an open question rather
+> than closed by invention.
+
+### Alternatives considered
+
+- **(a) Keep the write path in v0.1 and let Prowlarr's grab path be its one user.** ⚠️ **The
+  strongest alternative, because it is the one ADR-0041 named first and it preserves the milestone
+  label unchanged.** It fails on measurement, not on taste. The grab path does not use the queue
+  today, so this is not "keep an existing user" — it is "rewrite the one shipped write path to go
+  through a queue it was deliberately built to bypass". And it would buy the least useful possible
+  exercise of that queue: `grab` is barred from retrying (§7.6, ADR-0012a decision 4), so the retry
+  sweep, the backoff, `next_attempt_at` and `ix_wq_runnable`'s whole reason for existing would remain
+  unexercised. A queue demonstrated only on the one verb that may not retry has not been demonstrated.
+- **(b) Keep the four verbs in v0.1 and point them at Kavita.** Rejected on the source. Kavita has no
+  command sink at all ([ADR-0032](#adr-0032)); there is no `monitor`, no `unmonitor` and no `add` to
+  address, and a `delete` against a read-only catalogue source is a deletion of the owner's files by
+  a hub that principle 2 says does not own bytes. There is no honest mapping to build.
+- **(c) Cut the write path rather than re-sequence it.** Rejected, and it is the reading the owner's
+  answer specifically forecloses. It would also throw away a paid-for seam for no saving: the table
+  and its indexes exist and are exercised by the query-plan assertions in `make test` today.
+- **(d) Re-sequence the four verbs but build the worker and the retry sweep in v0.1 anyway, so the
+  machinery is ready.** Rejected by *"cut before you add"* and by 00001's own rule, quoted in §16 —
+  *"a migration that creates a table nothing queries is a schema claim nobody has tested"*, whose
+  code equivalent is a worker that claims rows nothing enqueues. A settlement loop with no producer
+  cannot be tested against anything real, which is the same defect [ADR-0041](#adr-0041) rejected
+  alternative (d) for.
+- **(e) Answer the scope question and also assign Sonarr and Radarr a milestone number, to make
+  *"still on the roadmap"* concrete.** ⚠️ **Tempting, and refused deliberately.** The owner said they
+  should be added; **he did not say when**, and §16.1's post-v0.1 table has three slots — Navidrome,
+  Audiobookshelf, Komga — none of them theirs. Picking a number here would be inventing a commitment
+  nobody made, in an ADR whose whole subject is a clause that outlived the fact it rested on. The gap
+  is real and is recorded as an open question below, where §16's owner can close it with the owner's
+  input rather than with this ADR's guess.
+
+### Consequences
+
+**What this changes:**
+
+- **`ARCHITECTURE.md` §16 loses its open question and gains this answer.** The v0.1 entry's ⚠️ clause
+  — *"whether it re-sequences with them or stays for Prowlarr's grab path alone is this section's
+  call to make"* — is replaced by the call. Four further sentences in §16 that assumed a v0.1 queue
+  writer are amended in place, each quoting what it used to claim.
+- **v0.1 has no command sink of any kind, and §16's list of absent sinks is no longer exhaustive as
+  written.** *"No command sinks — no Lidarr, no LazyLibrarian, no Mylar3, no Kapowarr"* enumerated the
+  four ADR-0032 deferred, at a time when Sonarr and Radarr were v0.1's *kept* sinks. After ADR-0041
+  and this ADR the honest statement is **none at all**, and §16 now says that.
+- **§16.0's libraries justification loses one of its three grounds and keeps the other two.** It read
+  that a library binding *"carries the request destination that v0.1's one write path routes on"*.
+  The write path it named is no longer in v0.1. The subsystem stays, on the two grounds that do not
+  depend on it — its four tables are owed by v0.1 either way, and its screen is one of the five
+  `CLAUDE.md` names essential. **The third ground is withdrawn outright, not narrowed**, and §17.8 has
+  since taken it further than this decision alone would have: **no service v0.1 connects can be a
+  library's request sink at all** — a sink must advertise `Add` under §8.3's capability filter, and
+  the Prowlarr path does not, because it posts a release to Prowlarr's own download client (§8.5). So
+  the destination is not merely un-routed-on in v0.1; it **cannot be set**, and §17.8 drops its column
+  from the Libraries row view for the milestone. **Both are sequencing, not cuts.**
+- **The `Recent grabs` cost estimate's `write_queue` half is now absent by decision, not by
+  sequencing accident.** §16 already recorded that the shipped `GET /api/v1/grabs/recent` has no join
+  and no queue state *"because nothing writes `write_queue` yet"*. **The *yet* is what changes**: no
+  v0.1 work will write it, so the block's queue-state column is a post-v0.1 addition rather than a
+  gap v0.1 still owes. The estimate itself is left standing, unretrofitted, for the reason §16
+  already gives.
+- **`write_queue` stays in the schema with no writer for the whole of v0.1.** That is deliberate and
+  it is the seam, not an oversight. Migration 0005's rebuild guard and
+  `internal/httpapi/grabs.go:58`'s comment both already document the state of affairs; nothing needs
+  to change in the tree.
+- **[ADR-0039](#adr-0039)'s outstanding obligation acquires an owner and a milestone.** Its corrected
+  decision 1 says the Go `state` vocabulary declaration and validation are *"owed by whoever writes
+  the first `write_queue` writer"* and that nothing validates it today. **That writer is now known to
+  be the first \*Arr adapter's**, not v0.1's — which is a narrowing of the obligation, not a release
+  from it.
+
+**What this does NOT change — stated explicitly, because a re-sequencing ADR is easy to over-read:**
+
+- **[ADR-0012a](#adr-0012a) stands whole.** No state, no guard, no idempotency rule and no TTL is
+  altered. Only one sentence of its body is flagged, and only because it says *"every v0.1 write"* of
+  writes that are no longer v0.1's.
+- **The Prowlarr Search-and-Grab path is untouched**, including its synchronous dispatch, its
+  max-one-attempt rule, its audit rows and the `Recent grabs` block that reads them.
+- **No schema change and no migration.** `write_queue`, its three indexes, the unconstrained `state`
+  and `kind` columns and the restored `work_id` foreign key all stay exactly as 00005 left them.
+- **No ADR is reversed.** [ADR-0041](#adr-0041) is completed, not corrected: it asked this question
+  and routed it here.
+- **Sonarr and Radarr are not cut**, and neither is the write path. See decision 5 — this is the
+  owner's stated condition and it is the sentence most at risk of being quietly dropped later.
+
+### 🚩 Open question this ADR raises and does not answer
+
+**Sonarr and Radarr have no milestone.** §16.1's post-v0.1 table numbers three catalogue sources and
+holds no slot for either; §16's prose says only that they *"arrive too, onto a core already proven"*.
+This ADR now hangs a second thing off that unnumbered arrival — the minimal write path. **Two
+commitments pointing at a milestone that does not exist is a thinner position than one**, and the
+owner's *"we should add them"* is a reason to close the gap rather than to leave it. It is raised here
+for §16's owner and the project owner to settle together; it is not closed here, because no owner
+statement supports a number and this ADR will not invent one.
+
+---
+
+<a id="adr-0043"></a>
+## ADR-0043 — A **minimal** match-correction UI moves earlier than v0.3; the full correction surface stays there
+
+**Status:** Accepted · **owner-decided 2026-08-17** · **Answers the scope call
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) §6.4 flagged and deliberately routed** ·
+**Amends [ADR-0026](#adr-0026)**, whose consequence bullet capped the correction UI at v0.3 on a
+ground [ADR-0041](#adr-0041) falsified · **Amends [`ARCHITECTURE.md`](./ARCHITECTURE.md) §16.0 and
+§16.1**'s v0.1 and v0.3 entries · **Re-sequences, rejects nothing** — ADR-0026's binding model, its
+four verbs and its four tables are untouched · **Assigns no milestone**, which is recorded as an open
+question rather than closed by a guess.
+
+### Context
+
+**[ADR-0026](#adr-0026) capped the correction UI at v0.3, and it gave a reason.** Its consequence
+bullet reads *"The correction **UI** is capped to v0.3, where the weak catalogues actually arrive —
+§6.4 already establishes that tier 1 resolves essentially 100% of the v0.1 identity problem, so there
+is nothing to correct before then."* §16.0 restated the same cap and called it *"a scheduling
+detail, not the payment"*.
+
+**[ADR-0041](#adr-0041) falsified both halves of that ground on the same day, in one move.** It put
+**Kavita in v0.1** as the sync core's first adapter, which does two things at once:
+
+- **A weak catalogue now arrives in v0.1, not at v0.3.** *"where the weak catalogues actually arrive"*
+  was a statement about the roadmap ADR-0026 was written against, and the roadmap moved.
+- **The providers §6.4's percentage was measured on are no longer v0.1's.** *"Essentially 100%"* was
+  established for **Sonarr and Radarr**, every row of which carries `tmdbId` / `imdbId` / `tvdbId`.
+
+**The identity finding, verified in this repo rather than taken from the brief.** Both sources agree
+and neither is inference:
+
+- **[ADR-0035](#adr-0035) §1**, verbatim: *"**Kavita's `aniListId`, `malId`, `comicVineId` and the rest
+  are null without Kavita+.**"* It goes on that under that ADR this becomes *"what an ordinary user
+  sees once Kavita lands, not a documented edge case"*, and it requires the screens to render null
+  identifiers as *"the normal case"*. The *"not in v0.1"* rider on that requirement is itself **struck
+  at its own site** by ADR-0041.
+- **`ARCHITECTURE.md` §6.4**, restated against Kavita after ADR-0041, checks the same fact against the
+  vendored spec: `SeriesDto` in `api/specs/kavita.json` carries `aniListId`, `malId`, `hardcoverId`,
+  `metronId` and `cbrId` as integers and `comicVineId` and `mangaBakaEditionId` as nullable strings,
+  **all written only by the Kavita+ match path**, so a free instance returns `0`, `null` or `""` for
+  every one. Its conclusion: *"How much of v0.1's identity problem tier 1 resolves is now **a property
+  of the instance, not of the design** — essentially all of it on a Kavita+ install, close to none on
+  a free one."*
+
+**§6.4 then withdrew the cap's support and refused to take the call, on ownership grounds.** Its own
+words: *"the restatement **withdraws the support the cap was resting on**: a v0.1 whose only source may
+carry no external ids at all is a v0.1 where a user has something to correct on day one, which is not
+what 'a cap on a declared no-op' describes. Whether the cap survives is a **scope** question, scope is
+owned by the ADRs with §16 authoritative … **it needs an ADR and an owner decision.**"* This ADR is
+that ADR, and the owner decision it needed is below.
+
+**The owner was asked and answered. His words, verbatim, 2026-08-17:**
+
+> *"but yeah, i guess we can do a minimal fix this match thing earlier. in case anyone is running
+> kavita. but bookorbit seems to be the new meta tbh."*
+
+**Three things are read out of that sentence and nothing more.** *(1)* **"minimal"** and *(2)*
+**"earlier"** are decided, and both are load-bearing. *(3)* **"in case anyone is running kavita"** is
+his **rationale**, and it is attributed to him rather than presented as a fact about the roadmap: he
+does not run the case he is protecting — he is scoping for **other people's installs**, which is
+principle 3 applied by the owner to a user who is not him. The third clause, *"bookorbit seems to be
+the new meta"*, is **not** read as a decision; see the Decision's clause 4.
+
+### Decision
+
+> **1. The v0.3 cap on the correction UI is lifted for the minimal *"fix this match"* case, and holds
+> for everything else.** [ADR-0026](#adr-0026)'s cap is amended, not reversed: **the full four-verb
+> surface — `exclude`, `include`, `relink`, `field` — plus the Corrections list still land at v0.3.**
+> What comes earlier is the narrow case a user meets on the first screen of a catalogue whose source
+> supplied no external ids: an item shown as *"not identified"*, or bound to the wrong `work`, and a
+> way to say so.
+>
+> **2. "Minimal" is the owner's word and it is a constraint on scope, not a synonym for "small".** It
+> is what makes this a re-sequencing rather than an addition, and *"cut before you add"* is satisfied
+> by the split itself: the part that moves is bounded by what the *"fix this match"* case needs, and
+> **everything outside that boundary stays at v0.3.** 🔍 **Marked as inference, because the owner did
+> not enumerate verbs:** the case he named is an identity correction, which is ADR-0026's **`relink`**
+> — repointing a `service_item_link` at the right `work` — and **not** `exclude` / `include`, which
+> are library **membership** and answer a different complaint. `field` sits between the two and is not
+> claimed here either way. **The exact surface is settled by the milestone that takes it**, against
+> this boundary; this ADR fixes the boundary, not the widget.
+>
+> **3. No milestone is assigned, and that refusal is deliberate.** The owner said *"earlier"*; **he
+> named no version**, and `ARCHITECTURE.md` §16 is authoritative for milestone membership. Naming
+> v0.2 — or v0.1 — here would be inventing a commitment nobody made, which is the exact failure
+> [ADR-0042](#adr-0042) refused for Sonarr and Radarr the same day. §16.0 records that **the slot is
+> not yet assigned**; the gap is carried as this ADR's open question.
+>
+> **4. This decision is source-independent and survives a change of catalogue source.** What it turns
+> on is that **v0.1's catalogue source has weak identity**, which is a property of the source and not
+> of its name. 🔍 **`BookOrbit` is under live evaluation on this project as of 2026-08-17 and nothing
+> about it is decided** — it is named only because the owner named it, no ADR has taken it, and §16
+> assigns it nothing. **Whichever server ends up in that slot, clauses 1–3 stand.** The only thing
+> that would reopen them is a v0.1 source that supplies **strong external ids for the ordinary,
+> unpaid user** — a factual claim about a specific source, needing the same primary-source check
+> against a vendored spec that Kavita's got (§6.4), and no source now under evaluation has had it.
+>
+> **5. Nothing about [ADR-0026](#adr-0026)'s design is reopened.** The binding model, the single-kind
+> rule, the four verbs, `library_id IS NULL` for `relink` and `field` with its `CHECK`, the four
+> tables, `target_identity_hash` and the deliberate absence of a foreign key on the override's
+> `work_id` / `link_id` all stand exactly as decided.
+
+### Alternatives considered
+
+- **(a) Keep the v0.3 cap and rely on the *"not identified"* badge alone until then.** ⚠️ **The
+  strongest alternative, and the one the status quo already implements.** The badge and its column are
+  v0.1 work regardless — §6.4 and §16 both say they cannot be retrofitted — and *"failing to identify
+  is honest"* is this project's own rule. **It fails on what it leaves the user with:** the badge
+  tells a user their library is wrong and offers nothing to do about it, on a catalogue where
+  ADR-0035 §1 says that state is **the majority path, not the exception**. A screen that is honest
+  about a defect it forbids you to fix is a worse product than one that is silent about it, and the
+  owner's answer is a direct rejection of this option.
+- **(b) Move the whole ADR-0026 correction surface earlier.** Rejected by *"cut before you add"* and
+  by the owner's own word. Four verbs plus a Corrections list is a subsystem; moving it into an
+  earlier milestone would need a statement of what leaves to pay for it, and there is none. **The
+  owner said "minimal", and this alternative is the reading that ignores the adjective.**
+- **(c) Assign the minimal case to v0.2 — or to v0.1 — to make *"earlier"* concrete.** ⚠️ **Tempting
+  and refused, for the reason [ADR-0042](#adr-0042) gave in the same position a day earlier.** *"He
+  did not say when"* applies verbatim: he said "earlier", the milestones are §16's to allocate, and a
+  number invented in an ADR whose whole subject is a clause that outlived its evidence would be the
+  same mistake one turn later. Recorded as an open question instead.
+- **(d) Reverse [ADR-0026](#adr-0026)'s consequence outright rather than amend it.** Rejected on this
+  file's own convention. The bullet is a **dated record of a decision as taken**, and it was right
+  against the roadmap it was written against — v0.1 genuinely had strong-id sources at the time. It is
+  **struck in place with the correction beside it**, per the preamble's *"How an ADR is amended when
+  the world moves under it"*, which is exactly the rule the `162dca5` incident recorded there exists
+  to protect.
+- **(e) Wait for the BookOrbit evaluation to conclude, then decide.** Rejected because **the decision
+  does not depend on its outcome** (clause 4). Blocking an owner-taken scope call on an unrelated
+  live evaluation would leave the falsified cap standing in two documents for no gain, and if the
+  evaluation *did* change the answer it would do so by supplying a strong-id source — which reopens
+  this ADR cleanly rather than needing it withheld.
+
+### Consequences
+
+**What this changes:**
+
+- **[ADR-0026](#adr-0026) gains all four marks the preamble requires** — index row, `Status:` line, a
+  dated `> ⚠️ **AMENDED …**` block, and an inline `~~`-struck flag at the falsified bullet itself.
+  Nothing in its body is rewritten.
+- **`ARCHITECTURE.md` §16.0's kept-with-its-cost paragraph loses its open flag and gains this
+  answer.** It had ended *"whether the correction UI's v0.3 cap still holds against a source with no
+  ids is a live question this section flags rather than answers"*. It now records the decision, the
+  three things the decision does **not** say, and the unassigned slot.
+- **§16.1's v0.1 entry no longer reads *"the correction UI deferred to v0.3"* flat**, and **does not
+  claim the minimal case for v0.1 either.** §16.1's v0.3 entry keeps the full surface and says what
+  left it.
+- **A user has something to correct on day one and, when the minimal case lands, somewhere to do it.**
+  That is the whole user-visible effect.
+
+**What this does NOT change — stated explicitly, because a re-sequencing ADR is easy to over-read:**
+
+- **No schema change and no migration.** `library_override` and its `CHECK` are in the tree already
+  (`internal/db/migrations/00005_library_sync.sql`); the correction *storage* was never the deferred
+  part. **The seam ships and has shipped; this moves part of the feature.**
+- **[ADR-0035](#adr-0035)'s choice of source, [ADR-0041](#adr-0041)'s milestone move and
+  [ADR-0042](#adr-0042)'s write-path re-sequencing are all untouched.** This ADR consumes their
+  results; it revisits none of them.
+- **No ADR is reversed.** ADR-0026 is amended in one consequence.
+- **`ARCHITECTURE.md` §6.4 is not edited here.** It owns the identity cascade and its restated tier-1
+  claim is this ADR's evidence, not its subject; its 🚩 flag that the call *"needs an ADR and an owner
+  decision"* is answered by this record and its wording is §6's thread to update.
+
+### 🚩 Open question this ADR raises and does not answer
+
+**The minimal match-correction case has no milestone.** §16 is authoritative for membership and this
+ADR deliberately assigns none, because the owner said *"earlier"* and named no version. The candidate
+answers are not equivalent — **v0.1** makes it concurrent with the source that motivates it and needs
+a *"cut before you add"* payment named, while **v0.2** ships the badge without its remedy for one
+whole milestone on a catalogue where the badge is the majority state. **This is the second commitment
+in two days hung on an unnumbered slot** — [ADR-0042](#adr-0042) left Sonarr, Radarr and the minimal
+write path in the same position — and that pattern is itself worth the owner's attention. It needs his
+input, not an agent's guess.

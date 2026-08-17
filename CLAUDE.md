@@ -201,9 +201,13 @@ AGPL-compatibility check: MIT, BSD and Apache-2.0 are fine, GPL-2.0-only is not.
 
 Detail lives in `docs/ARCHITECTURE.md` §16, which wins over this summary.
 
-- **v0.1** — the \*Arr library sync (Sonarr, Radarr) + search, on a six-type schema, plus the
-  Prowlarr search-and-grab request path. Prove the replica thesis on real data. **No catalogue
-  source ships in v0.1**; Navidrome, Audiobookshelf, Kavita and Komga follow one at a time (§16.1).
+- **v0.1** — the sync core behind **one** catalogue adapter + search, on a six-type schema, plus the
+  Prowlarr search-and-grab request path. Prove the replica thesis on real data. **Which adapter, and
+  what else v0.1 owes, is §16's answer and it has moved twice — read §16.1, not this line.**
+  The rule that has held through every move: **one source, proven on real data, before a second
+  adapter**, and everything displaced is **re-sequenced, not cut**. ⚠️ This bullet used to read
+  *"the \*Arr library sync (Sonarr, Radarr)"* and **"No catalogue source ships in v0.1"**; ADR-0041
+  falsified both, and ADR-0042 re-sequenced the minimal \*Arr write path out with them.
 - **v0.2** — requests.
 - **v0.3** — cross-media linking.
 - **v0.4** — the gateway, narrowed: an OpenSubsonic read-only subset over one Navidrome.

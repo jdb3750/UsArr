@@ -369,6 +369,25 @@ endef
 # `go build ./cmd/usarr` on its own produces a binary that 404s on / because
 # web/build was never generated. `build` depends on `web-build` to prevent that.
 
+# ─── Deploy ──────────────────────────────────────────────────────────────────
+# THIN WRAPPERS ONLY. The logic lives in deploy/*.sh and must stay there: a
+# deployment host runs these over ssh, sometimes from a shell with no make
+# target in mind, and the sequence is only auditable while it reads as one file
+# instead of as backslash-continued recipe lines.
+#
+# CURDIR, not the scripts' /opt/UsArr default: invoked through make, the
+# checkout being updated is by definition the one this Makefile is in, and
+# silently updating a DIFFERENT checkout is the worst thing either script could
+# do. An explicit USARR_CHECKOUT still wins. See docs/DEVELOPMENT.md §12.1.
+
+.PHONY: deploy
+deploy: ## Update this host: ff-only pull, make build, install, restart, verify the running commit
+	@USARR_CHECKOUT="$${USARR_CHECKOUT:-$(CURDIR)}" ./deploy/update.sh
+
+.PHONY: deploy-status
+deploy-status: ## Report whether checkout, installed binary and running process are the same commit
+	@USARR_CHECKOUT="$${USARR_CHECKOUT:-$(CURDIR)}" ./deploy/status.sh
+
 # ─── Test ────────────────────────────────────────────────────────────────────
 
 .PHONY: test
