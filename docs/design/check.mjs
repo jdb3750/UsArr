@@ -1809,13 +1809,13 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
   const seenBySource = {};
   const countSource = (src, n) => { seenBySource[src] = (seenBySource[src] || 0) + n; };
 
-  let strings = 0, exempted = 0; const bad = [];
+  let strings = 0, exempted = 0, glyphs = 0; const bad = [];
   /* §17's copy is counted apart from `strings` on purpose. STRING_FLOOR's
      margin below is DERIVED from the rendered corpus — 6978 − 6750 = 228,
      argued against a 293-string regression — and folding documentation strings
      into that total would move the number the derivation is about while
      claiming the derivation still held. */
-  let s17Strings = 0, s17Exempted = 0, s17Bad = 0;
+  let s17Strings = 0, s17Exempted = 0, s17Bad = 0, s17Glyphs = 0;
   /* 2000 against 4203 while no panel was ever opened; 5800 against 6685 once
      the traversal landed; 6750 against 6978 now the unit is a run of inline
      content rather than a childless block element.
@@ -1939,6 +1939,29 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
       }
     }
     if (t.includes('!')) bad.push(`${where}: "!" in "${t.slice(0, 70)}"`);
+    /* STRUCTURAL EXEMPTION: A BARE EM DASH IS A GLYPH, NOT A SENTENCE.
+       `—` alone, as the WHOLE trimmed string, is the typographic convention for
+       "no value here" — the shipped app's NOTHING.empty, and the mockups' own
+       cell filler. §13's em-dash rule is a rule about PROSE: it bans a beat
+       inside a sentence, and there is no sentence here to carry a beat.
+
+       It is exempted BY SHAPE, never by name, file or token, which is what
+       makes it unable to launder anything: the test is that the string is one
+       character long, and no sentence fits in one character. Contrast the
+       exemption above it, which needs §17 to have written the wording — that
+       one is a claim about a document and can go stale; this one is a claim
+       about the string itself and cannot. It applies to both corpora for the
+       same reason: a glyph in §17 is a glyph too, and withholding it there
+       would be withholding it from a rule that was never about §17.
+
+       Deliberately NOT floored. Every count in this file has a floor because a
+       check that matches nothing reads like a check that passed — but that
+       argument is about RULES, not about exemptions of shape. The mockups keep
+       their bare dashes inside `<td>`, which the corpus already excludes as
+       data, so this fires zero times today and firing zero times is the honest
+       answer rather than a stale one. The number is printed regardless, so the
+       day it stops being zero is visible. */
+    if (t.trim() === '—') { if (isS17) s17Glyphs++; else glyphs++; return; }
     /* ⚠️ The fifteen-word floor is a PROXY for "is this a UI string", and it
        earns its keep only where the corpus MIXES microcopy with prose — the
        rendered walk reads paragraphs as well as buttons, and firing on those
@@ -2125,7 +2148,8 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
   if (uniq.length) { fail(`§13 copy: ${uniq.length} violation(s) in user-visible text`); uniq.slice(0, 10).forEach((b) => note(b)); }
   else if (floorOk('§13 copy', strings, STRING_FLOOR, 'user-visible string(s)')) {
     ok(`§13 copy: ${strings} user-visible strings clean of banned words, "!" and short-string em dashes ` +
-      `(floor ${STRING_FLOOR} over both installs; ${exempted} short em-dash string(s) exempt because ARCHITECTURE §17 fixes their wording verbatim)`);
+      `(floor ${STRING_FLOOR} over both installs; ${exempted} short em-dash string(s) exempt because ARCHITECTURE §17 fixes their wording verbatim; ` +
+      `${glyphs} bare "—" string(s) read as a glyph rather than prose, a structural exemption no sentence can hide in)`);
   }
   /* Reported separately from the line above because it is a separate corpus
      with a separate exemption, and one combined number would hide which of the
@@ -2142,7 +2166,7 @@ head('1b. §13 copy bans, over rendered chrome text (a <td> is data, not copy)')
   } else {
     ok(`§13 copy §17: ${s17Strings} shipping-copy string(s) in ARCHITECTURE §17 clean of banned words, "!" and ` +
       `em dashes at ANY length (the fifteen-word floor is not applied to specified UI copy; ${s17Exempted} ` +
-      `recorded exception(s), all of them §17's existing wording of the head-and-detail construction ` +
+      `recorded exception(s) and ${s17Glyphs} bare "—" glyph(s), the exception(s) all §17's existing wording of the head-and-detail construction ` +
       `§1.4 prescribes — whose beat is a colon since 2026-08-17, so these are carried, not blessed; ` +
       `§17 cannot exempt itself here, which is the point)`);
   }

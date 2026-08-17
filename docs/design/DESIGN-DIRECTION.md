@@ -3079,6 +3079,12 @@ widened, and nothing else. The `[review]` rules below are still human judgement 
   statement and an instruction (*"Grab failed. Check the indexer on Services."*). Stated here as
   well as at §1.4 because a section that endorses a construction and bans its punctuation produces
   correct-looking violations forever, and this one did.
+  **And a string whose entire content is one `—` is a glyph, not a sentence.** It is the empty-cell
+  convention — *"no value here"* — used by the app (`NOTHING.empty`) and by every `<td>` in the
+  mockups that has nothing to print, and it is exempt **by shape**: no sentence fits in one
+  character, so nothing can launder through it, and no name, file or token appears in the exemption.
+  Recorded here because the convention was tacit, and a tacit convention is what a later author
+  "fixes" into a word.
 - `[grep]` No `!` in UI strings.
 - `[grep]` **The UI locale is en-GB** — `catalogue`, `behaviour`, `colour`, `organisation` —
   **with one exception: a string quoted verbatim from an \*Arr keeps the \*Arr's spelling**
