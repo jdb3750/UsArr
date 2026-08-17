@@ -460,14 +460,45 @@
 
 	NOT A HERO, and §1.5's table is the checklist it is written against: no
 	oversized centred input, no illustration, no "Get started", no stat banner.
-	It is an <h2> at --text-lg, a native <input type="search"> at the same
-	content edge as the table it sits beside, and a submit button.
+	It is an <h2> at --text-lg, a native <input type="search"> and a submit
+	button — and, since the owner asked for it, a wordmark centred over the pair.
 -->
 {#if indexers}
 	<section class="section" id="home-search">
 		<div class="section__head">
 			<h2>Search your indexers</h2>
 		</div>
+		<!--
+			THE WORDMARK. The owner asked for a Google-shaped Home — the product name
+			above the search box, in a serif — and confirmed the serif explicitly.
+
+			⚠️ IT STAYS AT --text-xl (20px) AND IS NOT HERO-SIZED, which the owner
+			also accepted. 20px is the largest type anywhere in this application with
+			no exemption, and the type scale's seventh step was DELETED to enforce
+			that; a wordmark is not the case that reopens ADR-0025. What makes it
+			read as a wordmark instead of as another heading is therefore the
+			FAMILY and the CENTRING, which cost no pixels — not size, which does.
+			`--weight-xl` and `--leading-xl` come along unchanged, so this is the
+			page-title pairing with one property swapped.
+
+			NO BRAND HUE. It is `--fg`, the same ink as body text, because this
+			product has no accent colour and inventing one for its own name is the
+			first step of the thing §1.5 sends back to the landing page.
+
+			NO HERO BAND. There is no oversized vertical padding and no tall empty
+			region for it to float in: it is one line of text with normal section
+			spacing, sitting directly on the row below it.
+
+			IT IS aria-hidden, ON THE PRECEDENT THE TOOLBAR ALREADY SET. `UsArr` is
+			already in the accessibility tree three times on this screen — the
+			document title, the `topbar__brand` link, and the shell's h1 — and
+			+layout.svelte hides `topbar__title` for exactly this reason: the same
+			string as furniture and as a heading is a duplicate, not context. A
+			screen reader gains nothing from hearing the product name a fourth time
+			immediately before the search field, and this is the one element on the
+			screen that is pure furniture.
+		-->
+		<p class="wordmark" aria-hidden="true">UsArr</p>
 		<!--
 			A REAL FORM WITH A REAL DESTINATION. The button's `formaction` is the
 			same href `submit()` navigates to, so the control works without
@@ -625,7 +656,10 @@
 				call applied honestly: a Kavita can be ADDED today and nothing
 				imports from it yet, so pointing the very first thing a new user
 				sees at a catalogue that stays empty would promise what the
-				milestone does not yet ship. Name it here when the sync lands.
+				milestone does not yet ship. So the condition for naming it is in
+				the sentence rather than on a calendar: Kavita belongs here the
+				moment adding one gets the user a catalogue, which is the same
+				test that keeps it out today.
 			-->
 			<p class="empty__text">
 				UsArr talks to the services you already run, and none of them is connected yet.
@@ -767,10 +801,84 @@
 	 * the row for the same reason: see `.searchfield`'s own note, which carries
 	 * the measurement.
 	 */
+	/*
+	 * THE WORDMARK — one line, one family swap, no new geometry.
+	 *
+	 * Every value here except `font-family` and the centring is the --text-xl
+	 * pairing the type scale already defines and `.topbar__title` already uses:
+	 * 20px, 28px leading, weight 600. It is written out rather than inherited
+	 * because nothing else on this screen is at xl, so there is no rule to
+	 * inherit from — not because the numbers are this element's own.
+	 *
+	 * --font-serif IS THE ONLY PLACE THIS TOKEN IS READ, and app.css's own note
+	 * says so. If a second `font-family: var(--font-serif)` ever appears, the
+	 * decision it belongs to is the one the owner has not made.
+	 *
+	 * `--fg`, EXPLICITLY, rather than by inheritance. `.section` does not set a
+	 * colour, so this would land on --fg anyway; naming it is what stops the
+	 * next hand from reading the absence as a slot for an accent.
+	 *
+	 * `letter-spacing: -0.006em` is `.topbar__title`'s value at the same size,
+	 * carried across so the two renderings of 20px type in this app are tracked
+	 * identically. It is optical compensation for the size, not styling.
+	 *
+	 * ⚠️ `text-align: center` IS A DELIBERATE EXCEPTION TO A STATED RULE, AND IT
+	 * IS RECORDED HERE RATHER THAN LEFT TO BE REDISCOVERED. docs/design/check.mjs
+	 * carries `§13 type: no text-align:center outside dialog`, whose only
+	 * exemption is a selector matching dialog/modal/toast. That rule is about
+	 * PROSE — centred sentences and centred empty states, which §9.6 rules out
+	 * because they cost scan speed — and this is a two-syllable wordmark the
+	 * owner asked to be centred. It is also the whole mechanism by which the
+	 * element reads as a wordmark at a size it may not exceed.
+	 *
+	 * The rule does not FAIL on this today, and not because it was dodged:
+	 * check.mjs's SOURCES are docs/design/tokens.css, the mockup CSS/JS and the
+	 * mockup HTML — nine files, none of them under web/ — so it cannot see this
+	 * file at all. Verified by reading its own printed inventory, not assumed.
+	 * If web/ is ever added to that inventory this line is the first thing that
+	 * rule will report, and the answer is the paragraph above, not a rename.
+	 *
+	 * MARGIN IS ASYMMETRIC AND THAT IS THE ANTI-HERO CONSTRAINT, not a taste
+	 * call. Nothing above it (the section head supplies its own gap) and one
+	 * --space-3 below, so the wordmark sits ON the search row rather than
+	 * floating above it in a band. A hero here would be vertical padding; there
+	 * is none, and the block's total cost is one 28px line.
+	 */
+	.wordmark {
+		font-family: var(--font-serif);
+		font-size: var(--text-xl);
+		line-height: var(--leading-xl);
+		font-weight: var(--weight-xl);
+		letter-spacing: -0.006em;
+		color: var(--fg);
+		text-align: center;
+		margin: 0 0 var(--space-3);
+	}
+
+	/*
+	 * `justify-content: center` IS THE OTHER HALF OF THE WORDMARK, and it is the
+	 * only line of the search row this change touches. The owner asked for the
+	 * name centred ABOVE THE BOX; a centred line over a row still pinned to the
+	 * left content edge is centred over nothing, so the row and the wordmark
+	 * share one axis — the section's centre — and the composition is those two
+	 * things and nothing else.
+	 *
+	 * ⚠️ THE HEADING AND THE SCOPE NOTE DELIBERATELY DO NOT MOVE. They are
+	 * prose: `Search your indexers` is this section's label in a page whose
+	 * other sections all label themselves at the content edge, and the note is a
+	 * full sentence, which is worse to read centred. Centring the composition is
+	 * not a licence to centre the page.
+	 *
+	 * ⚠️ AND `max-width: 42rem` BELOW IS UNCHANGED — see its own note. Centring
+	 * an input is exactly the move that tempts someone to widen it too, and
+	 * widening it is the §1.5 hero-search bar the cap exists to prevent. The
+	 * input is the same size it was; it is only in a different place on the row.
+	 */
 	.homesearch {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
+		justify-content: center;
 		gap: var(--space-3);
 	}
 
