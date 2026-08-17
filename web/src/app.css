@@ -85,9 +85,29 @@
 	 * There are no --protocol-* tokens: the torrent hue was the same green as
 	 * --status-ok (dE76 4.59 light, 3.09 dark) so protocol read as status. The
 	 * chip is neutral and the words `torrent` / `usenet` carry the distinction.
-	 * DESIGN-DIRECTION §3.3. */
+	 * DESIGN-DIRECTION §3.3.
+	 *
+	 * THIS FILE IS A HAND-PORT OF tokens.css, NOT AN IMPORT — nothing in the
+	 * build compares the two, so a value changed there does not arrive here and
+	 * no gate notices. docs/design/check.mjs §2 does assert token drift, but its
+	 * file list is tokens.css plus the mockups; web/src/app.css is not in it and
+	 * cannot be seen by it. --status-warn is where that gap actually bit: the
+	 * owner closed the value on 2026-08-16 ("going more orange would be better
+	 * for warnings"), and REVIEW-LOG SW-05 landed it in tokens.css,
+	 * mockups/usarr.css and DESIGN-DIRECTION §3.2 in one commit — a list this
+	 * file was missing from, so it kept the superseded pair for the whole
+	 * interval. Light was #8a5300, forced dark by the 4.5:1 TEXT floor until the
+	 * amber was gone and only a brown was left (Lab hue 70.4°); dark was
+	 * #e0a33a, Lab hue 77.8° — a gold, so the two themes were not the same
+	 * colour at two lightnesses. The canonical pair below is #a44c00 (Lab 58.0°)
+	 * / #fb9349 (58.6°), against CSS `orange` #ff7f00's 59.6°. Re-measured here
+	 * on all five grounds this app can put status text on, WCAG 2.x: light
+	 * 5.53 --n-0 · 5.11 --n-1 · 4.55 --n-2 · 5.67 --inset · 4.84 --hover; dark
+	 * 8.07 · 7.52 · 6.57 · 8.55 · 6.92. Worst ground clears 4.5:1 in both, so
+	 * the separate glyph token §3.2 keeps available is still not needed.
+	 * When you change a colour here, change it in tokens.css first. */
 	--status-ok: #1c6b3a; /* healthy, synced, present.   6.21 · 5.74 · 5.11 */
-	--status-warn: #8a5300; /* degraded, stale, partial.   6.02 · 5.56 · 4.95 */
+	--status-warn: #a44c00; /* degraded, stale, partial.   5.53 · 5.11 · 4.55 */
 	--status-error: #b3251c; /* down, failed, rejected.     6.24 · 5.77 · 5.14 */
 	--status-unset: #5a534a; /* not configured. Grey IS a status.
 	                          *                             7.20 · 6.66 · 5.93 */
@@ -118,7 +138,8 @@
 	--hover: #26241f; /* adopted, see §1                                         */
 
 	--status-ok: #5cba7d; /*                             7.56 · 7.04 · 6.15 */
-	--status-warn: #e0a33a; /*                             8.15 · 7.60 · 6.63 */
+	--status-warn: #fb9349; /* see §1 — ported from tokens.css, was #e0a33a
+	                         *                             8.07 · 7.52 · 6.57 */
 	--status-error: #f0837a; /*                             7.09 · 6.61 · 5.77 */
 	--status-unset: #b0a89b; /*                             7.68 · 7.16 · 6.25 */
 
@@ -150,7 +171,7 @@
 		--hover: #26241f;
 
 		--status-ok: #5cba7d;
-		--status-warn: #e0a33a;
+		--status-warn: #fb9349; /* see §1 */
 		--status-error: #f0837a;
 		--status-unset: #b0a89b;
 	}
