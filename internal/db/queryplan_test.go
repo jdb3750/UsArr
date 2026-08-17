@@ -355,6 +355,21 @@ func TestQueryPlans(t *testing.T) {
 			args:  []any{"ready", "2026-08-16 00:00:00"},
 		},
 		{
+			// Migration 0006's one index, and schema.md §1.1 declares it
+			// normative: it is what makes the contiguity report cheap —
+			// "43 issues · #7, #12 and #30-32 missing", computed locally with no
+			// upstream help, and per ARCHITECTURE §6.1 the only always-honest
+			// completeness number in the domain. A range over number_sort is the
+			// shape that report reads in; without the index it is a scan of
+			// every issue in the library, which for a manga library is the
+			// biggest table in the schema after `work` itself.
+			name:  "issues in a number range",
+			index: "ix_comic_issue_sort",
+			query: `SELECT work_id, number_text FROM work_comic_issue
+			         WHERE number_sort >= ? AND number_sort < ? ORDER BY number_sort`,
+			args: []any{1.0, 60.0},
+		},
+		{
 			name:  "recent sync reports for one instance",
 			index: "ix_sync_report_instance",
 			query: `SELECT id, kind, remote_id, created_at FROM sync_report
@@ -703,11 +718,18 @@ func TestScopedSearchIsASeekNotAScan(t *testing.T) {
 // The §1.1 CI assertion — "no work_track row's edition belongs to a different
 // work" — is NOT here, and its absence is deliberate rather than an oversight.
 //
-// work_track does not exist: migration 0005 leaves the music, books and comics
-// subtype tables to the catalogue source that writes them (ADR-0035, ADR-0036),
-// so the assertion has no table to run against. Writing it now against a
-// missing table is either a query that errors or one that trivially returns no
-// rows, and the second is worse — a green assertion nobody ever exercised.
+// work_track does not exist: each subtype table lands with the catalogue source
+// that writes it (ADR-0040), and work_track's is Navidrome, which has no
+// adapter — so the assertion has no table to run against. Writing it now
+// against a missing table is either a query that errors or one that trivially
+// returns no rows, and the second is worse — a green assertion nobody ever
+// exercised.
+//
+// The books-and-comics half of that six is no longer deferred: migration 0006
+// created work_book, work_comic and work_comic_issue, because ADR-0041 made
+// Kavita — the source that writes them — v0.1's first adapter. None of the
+// three carries an edition-scoped invariant of work_track's kind, so nothing
+// moved out of this note with them.
 //
 // It lands with work_track, in the migration that creates it, together with
 // §13.3's sibling assertion on library_member.edition_id. That one CAN be

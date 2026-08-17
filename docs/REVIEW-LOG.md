@@ -7651,3 +7651,185 @@ in its own words and the measured version is under *"What a `make check` green o
 does and does not attest"*. What the prose rests on instead is named per claim above: `git` output for
 §M5.42, `grep`/`uniq` over this file for §M5.43, `api/specs/kavita.json` for §M5.45, and §11's own
 area map for §M5.46.
+
+---
+
+# M5-37 — migration 0006: the three subtype tables Kavita writes, and the test helper whose "step down once" was a coincidence
+
+**Date:** 2026-08-17. **Worktree:** `libsync6-20260817193634`, branched from `origin/main` at
+`f722054`. **This is the schema commit of [ADR-0041](./DECISIONS.md#adr-0041)** — `work_book`,
+`work_comic`, `work_comic_issue` and `ix_comic_issue_sort`, in a new migration. No adapter code, no
+sync loop, no writer: `internal/kavita` is a client and nothing in `internal/` inserts into these
+three tables yet.
+
+**The id was renumbered once, and that is recorded rather than tidied away** — the same collision
+`M5-35` logged one entry earlier, from the other side. The standing method was run across **every
+remote head** rather than over the working file — `for r in $(git for-each-ref
+--format='%(refname)'; do git grep -h -oE "M5-[0-9]+" $r -- docs/REVIEW-LOG.md; done | sort -u` —
+and returned `35`, `M5-35` then living on a branch that had not reached `main`; the working file
+alone would have answered `34`. So this was drafted as `M5-36`. **The re-check immediately before
+the merge returned `36` on `origin/main`**: a concurrent thread landed `M5-35` *and* `M5-36` while
+this one was running its gate. Renumbered to `M5-37`, and the section headings with it —
+`origin/main` now owns `## M5.48`-`## M5.54`, so this entry starts at `## M5.55`. **The lesson is
+that checking every head is necessary and not sufficient**: the window between the last check and
+the push is the one that bites, which is why `DEVELOPMENT.md` §11 puts the re-read *after* the last
+fetch or merge.
+
+## M5.55 The scope was verified against both ADRs before anything was written, and one half of the instruction did not survive it unqualified
+
+The task said the three books-and-comics subtype tables are *"now due"* and cited
+[ADR-0040](./DECISIONS.md#adr-0040) and [ADR-0041](./DECISIONS.md#adr-0041). Both were read.
+**The claim holds, and the reason it holds is narrower than "ADR-0041 says so":**
+
+- **ADR-0040** does not schedule these tables by milestone at all. Its decision is that each of the
+  six lands *with the catalogue source that writes it*, and its Consequences say so twice
+  (*"Six tables now have a named landing point instead of a milestone"*).
+- **ADR-0041** moves **the source**, not the tables: it makes Kavita v0.1's first adapter and then
+  states the consequence in terms — *"`work_book`, `work_comic` and `work_comic_issue` are now due
+  with THIS work, not later … They arrive in a **new migration**"* — while listing ADR-0040 under
+  *"What this does NOT change"*: *"the landing point is the source, not the date."*
+- **The music three are untouched by both**, and ADR-0041 says it explicitly (*"The music three are
+  unaffected: `work_album`, `work_track` and `work_credit` still wait for Navidrome"*). That was
+  cross-checked against the tree rather than taken on the ADR's word: `internal/` contains `kavita`
+  and `servarr` and no Navidrome adapter, so the rule and the tree agree.
+
+⚠️ **What the verification surfaced that the task did not mention, and it is a real cost of the
+split rather than a technicality: `work_credit` is the table an author, writer, penciller, inker,
+colorist, letterer or cover artist would live in, and it is on the Navidrome side of the line.** So
+v0.1 ships a books-and-comics catalogue with **nowhere at all to put a creator** — not a lossy
+landing, none. That is ADR-0041's decision and this commit does not reopen it (its
+`creator_work_id` points at a `work` of kind `person`, which no v0.1 source produces either, so the
+table would arrive with a foreign key whose referents cannot exist — ADR-0040's own rejected
+alternative). It is written into 00006's header so the next reader meets it as a decision rather
+than as a gap.
+
+## M5.56 What was taken from 00005 rather than from `schema.md`, and why
+
+`docs/reference/schema.md` §1.1 is authoritative for **shape** and was reproduced faithfully:
+column names, order, types, nullability, the `work_id INTEGER PRIMARY KEY REFERENCES work(id) ON
+DELETE CASCADE` head on all three, and `ix_comic_issue_sort` on `(number_sort)` alone. Everything
+below is a convention the reference file does not carry, taken from
+`00005_library_sync.sql` because that file is the tested one:
+
+| Taken from 00005 | `schema.md` has | Why the shipped file wins |
+|---|---|---|
+| `-- +goose Up` / `StatementBegin` / `StatementEnd` framing | plain ` ```sql ` fences | goose parses the annotations; a fenced block is not a migration |
+| A header stating what it creates, what it deliberately leaves out, which source owns that, and why | nothing | 00001's and 00005's shape, and `CLAUDE.md`'s *"no invented status"* applied to a migration's own scope |
+| An explicit `-- +goose Down`, `DROP TABLE IF EXISTS` in reverse creation order | nothing | 00005's Down block, verbatim in form; downgrades are a local testing tool (`CONFIGURATION.md` §6.3) and nothing else |
+| Section banners keyed to `schema.md` §, and comments that explain *why* | terse inline comments | `CLAUDE.md`'s comment rule; the ADR citations belong next to the DDL they justify |
+| 🔍 marking on anything inferred | — | 00005 marks `sync_report` the same way. `work_book.series_name` / `series_position` get it: `schema.md` gives those two columns no prose at all, and the reading offered — a *declared* series string, distinct from the resolved `work.parent_work_id` link — is inference |
+| `STRICT` on every table | also `STRICT` here | no divergence, but it is the project rule and `TestAllTablesAreStrict` is the witness — see §M5.57 |
+
+**No `CHECK` constraint is written on any column, and that is a decision rather than an omission.**
+`schema.md` §1.1 declares none either; the vocabularies it lists in comments —
+`reading_direction ltr|rtl|vertical|webtoon`, `total_issues_source
+comicinfo|comicvine|kavitaplus|null`, `special_version tpb|hard-cover|omnibus|one-shot|
+volume-as-issue|cover` — are each a projection over several upstreams whose own enums disagree
+(Komga has a reading direction Kavita does not model), SQLite cannot `ALTER` a `CHECK`, and 00005
+made exactly this argument for `write_queue.state` and `sync_report.kind` with 0003's
+`provenance.acquisition_state` as the shipped precedent. `work_series.series_type` and
+`work_alt_title.kind` are the two closest existing columns and neither carries one.
+
+⚠️ **The stated cost:** SQLite will accept a misspelt `reading_direction`, and the enforcement is
+owed by whoever writes the Kavita import. **And the trap is written into the header for them**,
+because it is this project's twice-shipped defect: every one of those columns is nullable, so the
+only correct form is `CHECK (x IS NULL OR x IN (…))` — `CHECK (x IN (NULL, …))` is DB-01, which
+accepts everything. `schema.md` writes `null` as a *member* of `total_issues_source`'s vocabulary,
+which is precisely the sentence someone transcribes into an `IN` list by hand.
+
+## M5.57 Three guards fired deliberately, with their output
+
+A guard nobody has watched fail is not a guard (`DEVELOPMENT.md` §11 rule 3). Each break below was
+made in the tree, run, and reverted.
+
+**1. `STRICT` removed from `work_book`:**
+
+```
+--- FAIL: TestAllTablesAreStrict (0.03s)
+    migrate_test.go:574: table work_book is not STRICT
+FAIL	github.com/jdb3750/UsArr/internal/db	0.037s
+```
+
+**2. `work_book` removed from `TestDeferredTablesAreAbsent`'s `want` list** — the case that matters,
+because the test's own failure mode is a table in *neither* list passing silently:
+
+```
+--- FAIL: TestDeferredTablesAreAbsent (0.03s)
+    migrate_test.go:528: table work_book is in neither list in this test, so nothing here asserts
+    whether it should exist. Add it to `want` (and say which migration) or to `deferred` (and say
+    which milestone).
+FAIL	github.com/jdb3750/UsArr/internal/db	0.035s
+```
+
+**3. `CREATE INDEX ix_comic_issue_sort` deleted from the migration** — the query-plan assertion, which
+without a firing is a string match nobody has seen miss:
+
+```
+--- FAIL: TestQueryPlans/issues_in_a_number_range (0.00s)
+    queryplan_test.go:390: plan does not use ix_comic_issue_sort:
+      SCAN work_comic_issue | USE TEMP B-TREE FOR ORDER BY
+FAIL	github.com/jdb3750/UsArr/internal/db	0.035s
+```
+
+That third output is also the measurement behind the index: without it the contiguity read is a
+full scan **plus** a sort, not merely an unindexed seek.
+
+## M5.58 The 12-step rebuild was checked for rather than assumed away, and there is deliberately no populated-fixture test
+
+**No rebuild is needed, and the three reasons are checked ones:** all three tables are new, so there
+is no data to copy; **no table in the schema references any of them** (each is a child of `work` and
+a parent of nothing), so the Down block's `DROP TABLE` fires no cascade into a child; and
+`PRAGMA foreign_keys=OFF` is not written because goose runs each migration in a transaction, where
+SQLite documents the pragma as a no-op — 00005's finding, reused rather than re-derived.
+
+🚩 **0005's lesson is that a migration test running 1→N against an EMPTY database proves the shape
+and nothing about data, which is why 0005 has `wqFixture` and two data tests beside its round trip.
+That lesson does not transfer here, and the test file says so out loud instead of leaving a reader
+to notice the absence**: with no copy step, no `ALTER` and no backfill there is no row this
+migration could drop or rewrite, and a fixture would have to populate tables that do not exist until
+the migration under test has already run — measuring the tables, not the migration. What **can** go
+wrong is shape, and that is executed: the exact column set and declared type of each table
+(`number_sort` REAL, `number_text` TEXT — ADR-0030's *"any integer column is wrong"*), the five real
+issue numbers `-1 · 0 · 1 · 1.MU · 1A · Annual 1` inserted and read back in `number_sort` order, a
+string rejected by the REAL column *against a work of its own* so the row fails on its type rather
+than on the primary key, the `is_special`/`is_oneshot` defaults, the foreign key rejecting a
+dangling parent and cascading on a real one, and a Down/Up round trip diffed over the **whole**
+schema dump plus `PRAGMA foreign_key_check`.
+
+**One latent defect was found by adding the migration rather than by inspection.** `migrateTo0004`
+and `TestMigration0005DownPreservesEveryRow` both called `MigrateDown` **once** and asserted they
+had landed at 4 — true only while 0005 was the head. Adding 0006 turned both into
+`schema version = 5, want 4`. Fixed at the cause with a `migrateDownTo(t, ctx, d, target)` helper
+that steps and re-checks, so migration 0007 does not break them again.
+
+## M5.59 What could not be verified, stated rather than smoothed
+
+- ⚠️ **No row in these tables has ever come from a real Kavita.** Every value in the tests is
+  hand-written. The columns' *shapes* are `schema.md`'s and ADR-0030's, which were themselves argued
+  from Komga's and Kavita's models — but whether Kavita's `Volume`/`Chapter` payloads populate
+  `volume_label`, `volume_sort`, `is_special` and `special_version` without loss is **unmeasured**,
+  and stays unmeasured until the import channel is written. This commit's green attests DDL, not
+  fidelity.
+- ⚠️ **`ix_comic_issue_sort` is pinned on the plan its declaration supports, not on the report's real
+  query.** It is `(number_sort)` alone, exactly as `schema.md` declares it, so the *series-scoped*
+  form — "this series' issues, in order" — reaches `work` through `ix_work_parent` and does not use
+  this index at all. Widening it to `(work_id, number_sort)` is not available: `work_id` is the
+  primary key and the series is one join away on `work.parent_work_id`. Left as declared, with the
+  limitation written beside the index in the migration and a measurement owed by whoever writes the
+  contiguity report.
+- ℹ️ **`docs/reference/schema.md` is updated where 0006 falsifies it** — §1.1's heading said *"v0.1 for
+  movie/series/episode"* and the comment above `work_album` scheduled all six subtype tables as
+  *"later tables"*. Both now name what moved and what did not, and both point at the ADRs rather than
+  restating a status. `ARCHITECTURE.md` §16's enumerated-schema clause is **not** touched: it is
+  owned elsewhere, ADR-0040 and ADR-0041 both routed their §16 amendments to that thread, and
+  `DEVELOPMENT.md` §11 requires the same.
+
+### On the gate for M5-37
+
+`make check` is green on this tree; the command, the absolute tool paths, the versions, the SHA and
+the verbatim tail are in the commit message. **Its size, stated honestly:** unlike a docs-only
+commit, this diff *is* read by the gate — `test` runs `go test ./...`, which is where the migration
+actually executes, every guard above lives, and the schema snapshot in
+`internal/db/testdata/schema.sql` is compared. What the green still does **not** attest is anything
+in §M5.59: no step of it has seen a Kavita payload, and `gitleaks`, `gofumpt`, `golangci-lint`,
+`govulncheck` and `pnpm audit` read no Markdown in `docs/` at all.
