@@ -700,7 +700,8 @@ bytes).
 **`work.kind` is:** `movie, series, season, episode, artist, album, track, book, comic, comic_issue,
 person, game`.
 
-> **`person` is new in this revision, and it is migration 0001 or never (ADR-0033).** `work_credit`
+> **`person` is new in this revision, and it is the migration that creates `work` or never
+> (ADR-0033)** — read `internal/db/migrations` for which one that is. `work_credit`
 > (ADR-0031) is M:N and required for books and comics explicitly — *"it is needed for books too,
 > where role matters: author, translator, editor, illustrator"* — and its creator column pointed at a
 > `work` whose only available kind was `artist`. So a book's author and a comic's penciller were
@@ -727,8 +728,9 @@ person, game`.
 > index, and a `kind_byte` allocation that §5.3 states is unchangeable once clients cache ids. That
 > asymmetry is the whole timing argument, and it is ADR-0030's argument in a second place.
 
-> **`comic_issue` is new in this revision, and migration 0001 is the only cheap moment to add it
-> (ADR-0030).** Every other multi-level medium got its levels — TV has `series`/`season`/`episode`,
+> **`comic_issue` is new in this revision, and the migration that creates `work` is the only cheap
+> moment to add it (ADR-0030)** — read `internal/db/migrations` for which one that is, and for
+> whether that moment has passed. Every other multi-level medium got its levels — TV has `series`/`season`/`episode`,
 > music has `artist`/`album`/`track` — and comics had exactly one member, `comic`, with a
 > `work_comic` subtype whose columns (`issue_number`, `volume`) describe an *issue* while the search
 > corpus, the Tier 1 prefix index, the `kind_byte` map and the grid all treat `comic` as
@@ -813,11 +815,14 @@ and `pdf` as comic/ebook file shapes, which the DDL currently lacks.
   hung `disc_number` and `track_number` off a `work`. But the same recording is track 4 on the
   original CD and track 6 on the 2017 deluxe reissue, with a different track MBID each time:
   **position is a property of the (track-work, edition) pair.** So `work_track` carries
-  `edition_id`, keyed `(work_id, edition_id)`. Adding that column later is a backfill over the
-  largest table in the schema; adding it in migration 0001 costs eight bytes a row. **The seam ships
-  in 0001; the multi-edition UI does not.** The `NOT NULL` has a consequence that must be stated
-  rather than discovered: **every album work carries exactly one synthetic primary `edition` from
-  migration 0001**, because Lidarr and Navidrome report no release concept and the adapter has to
+  `edition_id`, keyed `(work_id, edition_id)`. Adding that column to an existing `work_track` is a
+  backfill over the largest table in the schema; creating `work_track` with it costs eight bytes a
+  row. **The seam ships with the table; the multi-edition UI does not** — and per
+  [ADR-0040](./DECISIONS.md#adr-0040) the table itself lands with the catalogue source that writes it,
+  which is why the column is free rather than urgent. The `NOT NULL` has a consequence that must be
+  stated rather than discovered: **every album work carries exactly one synthetic primary
+  `edition`**, from the moment album works exist, because Lidarr and Navidrome report no release
+  concept and the adapter has to
   synthesise one before a track row can exist. **It is resolved, never re-allocated** — the adapter
   looks up `edition WHERE work_id = ? AND is_primary = 1` and inserts only on a miss — and
   `work_track.edition_id` is `ON DELETE RESTRICT` rather than `CASCADE`, so an adapter that
@@ -919,7 +924,9 @@ closure over external ids — 0.95; (3) `normalized_title` + year ±1 + same kin
 `tmdbId`/`imdbId`/`tvdbId`, so tier 1 resolves essentially 100% of the v0.1 identity problem —
 including the dual-Radarr case, which joins on `tmdbId`. Tiers 2–5 and the `work_merge`/un-merge
 machinery land with the first provider that lacks strong ids. `normalized_title` and `norm_version`
-**columns** exist from migration 0001 (adding them later is a backfill), populated by a deliberately
+are **columns on `work` from the migration that creates it** (adding them later is a backfill over
+the largest table in the schema — `internal/db/migrations` says which migration that was), populated
+by a deliberately
 simple v1 algorithm: casefold, NFKD, strip combining marks, strip punctuation, collapse whitespace.
 The full normaliser is in the schema reference as "the v2 normaliser" and is a known source of
 locale-dependent bugs (Turkish dotless ı among them).
@@ -988,8 +995,8 @@ the state first *renders* with the first catalogue source (§16) — and per
 [ADR-0035](./DECISIONS.md#adr-0035) §1 it renders as the **ordinary** case when that source is
 Kavita, whose identifier fields are null without Kavita+. Komga supplies **no external identifiers at
 all**, so comics has no strong-identity path under either choice. The rule is v0.1's because the
-nullable column belongs in migration 0001 and the badge belongs in the first grid, not because the
-badge is common on day one. It costs one nullable column and one badge, and it is precisely what
+nullable column belongs on `work` from the migration that creates it and the badge belongs in the
+first grid, not because the badge is common on day one. It costs one nullable column and one badge, and it is precisely what
 LazyLibrarian's absence of disqualifies it as a catalogue (§6.5): a file its matcher cannot bind gets
 no row at all. The badge is never a synonym for "broken" — an unidentified book is a book you own,
 and the honest statement is that UsArr could not find an identifier for it, not that it is missing.
@@ -1028,8 +1035,10 @@ source is still a replica — it is one with an owned overlay, which §2.2 grant
 playback position **and, since that amendment, library organisation and display-identity
 corrections**.
 
-**Four tables, all in migration 0001.** Full DDL, CHECK lists, keys, `ON DELETE` behaviour and
-indexes: [`reference/schema.md`](./reference/schema.md) **§13**.
+**Four tables, and they land together or not at all** — the derivation, the materialised membership
+and the override layer are one subsystem, so a migration that creates three of them has shipped
+nothing. **Read `internal/db/migrations` for whether they exist.** Full DDL, CHECK lists, keys,
+`ON DELETE` behaviour and indexes: [`reference/schema.md`](./reference/schema.md) **§13**.
 
 | Table | What it holds |
 |---|---|
@@ -1192,6 +1201,21 @@ degraded honestly rather than left implicit.
 > **Channel 3b: walk the source's item list ordered by its own last-modified field, newest first,
 > and stop at the first page entirely older than the watermark minus an overlap.**
 
+🚩 **"Stop at" is the whole mechanism, and it is a CLIENT-SIDE stop.** Channel 3b never asks the
+source for "everything since X" — that is channel 3, which these sources do not have. It asks for an
+ordered page and stops reading. Measured on Kavita 2026-08-17 (ADR-0035 §2a): `SeriesFilterField`
+carries **no timestamp member at all**, so a since-filter is not merely unused, it is *not
+expressible*, and any text describing 3b as "re-requesting with a filter at the last seen value" —
+including the earlier wording of ADR-0035 §2's own pass condition — describes something the API
+cannot do. What the watermark is *for* is deciding when to stop reading and what to compare, never
+what to send.
+
+ℹ️ **And why the overlap window is not optional, from that same live run:** Kavita's
+`lastChapterAddedUtc` values cluster on the **scan job's** clock rather than on the moment each
+chapter appeared — three series within microseconds at `07:00:30`. A walk that resumes exactly at
+the watermark drops the siblings that share the boundary timestamp; the overlap window is what
+absorbs them.
+
 Five properties, each of which is a correctness requirement rather than a detail:
 
 | Property | Rule |
@@ -1209,15 +1233,16 @@ delta time, and the library row (§17.8) carries the same, with the last full-co
 freshness number that is not backed by a delta must never be rendered with the same weight as one
 that is.
 
-⚠️ **Per-source status, dated 2026-08-16. No source in this table ships in v0.1** (§16) — they arrive
-one at a time afterwards — **and the two that carry the strategy are both unverified.** The rows are
-in the order the sources are expected to land.
+⚠️ **Per-source status. No source in this table ships in v0.1** (§16) — they arrive one at a time
+afterwards. Dated 2026-08-16, **amended 2026-08-17: Kavita's row is now verified against a live
+instance** and is no longer one of "the two that carry the strategy are both unverified" — Komga's
+is. The rows are in the order the sources are expected to land.
 
 | Source | Ordering key | Status |
 |---|---|---|
 | Navidrome | `getScanStatus.lastScan` as a cheap change *signal*, then an `updated_at`-ordered walk of the native API | 🔍 inference from the model; probe at connect |
 | Audiobookshelf | `LibraryItem.updatedAt` | 🔍 probe at connect |
-| Kavita | `LastChapterAdded` ordering on `POST /api/Series/all-v2` | ⚠️ **Unverified; the probe is specified in [ADR-0035](./DECISIONS.md#adr-0035) §2.** It passes only if all three hold: the response is ordered by the `lastChapterAdded` value the rows themselves carry; re-requesting from the last seen value returns the expected suffix rather than a shuffled page; and adding a chapter to an existing series moves it to the front. `SortField.LastModifiedDate` exists but `SeriesDto` returns **no** last-modified property, so that key yields no carryable watermark. **Its result orders the post-v0.1 catalogue sequence** (§16). |
+| Kavita | `LastChapterAdded` ordering on `POST /api/Series/all-v2` | ✅ **VERIFIED 2026-08-17 against a live instance** (Kavita 0.9.0.2, 151 series, page size 10 — the run and its numbers are in [ADR-0035](./DECISIONS.md#adr-0035) §2a). Clause (a) ordering **PASS**; clause (b) resumability **PASS** (no id overlap between pages, page 1 byte-identical across two fetches); clause (c) settled from Kavita's source rather than live — `UpdateLastChapterAdded()` has one production call site, in the new-chapter branch, so the key moves on a **chapter add** and not on edits, deletions, retitles or cover changes. 🚩 **With one qualification that changes the mechanism:** `SeriesFilterField` has **no timestamp member**, so there is no server-side since-filter — resumption is a **sorted page walk with a client-side stop**, not a re-request at the watermark. `SortField.LastModifiedDate` exists but `SeriesDto` returns **no** last-modified property, so that key remains unusable. |
 | Komga (later) | `sort=lastModified,desc` on the series list | ⚠️ **Could not be verified from the spec** — Spring `Pageable` sort properties are not enumerated and the DTO field name may not be the entity property name. **The whole Komga delta strategy rests on it**, so it is a probe at the milestone Komga lands in. If it fails, Komga drops to reconciliation-only and says so on its row. |
 
 Budget rows for the walk are in §13. **This channel is specified here but built with the first
@@ -2205,7 +2230,7 @@ and that behaviour is the same one an install without Navidrome would get in any
 
 **The order within the catalogue sequence is not fixed here. It is decided by the Kavita
 `LastChapterAdded` watermark probe** ([ADR-0035](./DECISIONS.md#adr-0035) §2, §7.1a): **Kavita first
-if it passes, Navidrome first if it fails.** Kavita first because it is the owner's install and the
+if it passes, Navidrome first if it fails.** ⚠️ **The probe RAN on 2026-08-17 and PASSED** ([ADR-0035](./DECISIONS.md#adr-0035) §2a, §7.1a) — a status fact recorded here rather than a sequence this section has re-decided; applying its consequence to the ordering below is §16's owner's call. Kavita first because it is the owner's install and the
 source with the most media types riding on it; Navidrome first if Kavita turns out to be
 reconciliation-only, because Kavita is then the *hardest* adapter rather than the easiest and
 Navidrome de-risks v0.4 at the same time. **Komga is last regardless**, because nobody on this
@@ -2214,15 +2239,15 @@ written rather than on day one — it decides the order of a sequence that no lo
 immediately.
 
 **What is kept, with its remaining cost stated rather than argued away.** The libraries subsystem
-(§6.5) and the auto-proposal flow stay in v0.1. Its four tables have to be in migration 0001 either
-way, its screen is one of the five `CLAUDE.md` names as essential, and **a library binding carries
+(§6.5) and the auto-proposal flow stay in v0.1. Its four tables are owed by v0.1 either way, its
+screen is one of the five `CLAUDE.md` names as essential, and **a library binding carries
 the request destination** that v0.1's one write path routes on — so it is load-bearing in v0.1 even
 with only \*Arr sources. ⚠️ **Its best demonstration is not:** the Ebooks/Audiobooks split over one
 Audiobookshelf library was the concrete improvement over upstream's own organisation, and that
 demonstration moves with Audiobookshelf. What v0.1 can show instead is narrower and honest — an
 Anime library bound to one Sonarr tag, or one Films library spanning a 1080p and a 4K Radarr — and
 the subsystem should be judged on that in v0.1, not on the split it cannot yet perform. The cost that
-remains, plainly: **four tables in migration 0001, materialised
+remains, plainly: **four tables, materialised
 membership with a 250 ms dirty-flush and a denormalised sort key, a derivation with five container
 predicates, an auto-proposal engine with join-vs-create defaults, and a second first-class settings
 screen (§17.8).** It is true that the Libraries screen *replaces* hard-coded per-type sections rather
@@ -2247,7 +2272,7 @@ the sequence is deliberately allowed to interleave with them.
 
 | # | Source | Media types it lights up | Gate |
 |---|---|---|---|
-| 1 | **Kavita** *or* **Navidrome** | books + comics/manga, *or* music | The [ADR-0035](./DECISIONS.md#adr-0035) §2 watermark probe. **Kavita first if it passes, Navidrome first if it fails.** |
+| 1 | **Kavita** *or* **Navidrome** | books + comics/manga, *or* music | The [ADR-0035](./DECISIONS.md#adr-0035) §2 watermark probe. **Kavita first if it passes, Navidrome first if it fails.** ⚠️ **The probe RAN on 2026-08-17 and PASSED** ([ADR-0035](./DECISIONS.md#adr-0035) §2a, §7.1a) — a status fact recorded here rather than a sequence this section has re-decided; applying its consequence to the ordering below is §16's owner's call. |
 | 2 | the other of those two | — | — |
 | 3 | **Audiobookshelf** | audiobooks (and ebooks where the install holds them) | `LibraryItem.updatedAt` probe at connect (§7.1a) |
 | 4 | **Komga** | a second comics source | Its own `sort=lastModified,desc` probe (§7.1a); reconciliation-only if that fails |
@@ -2297,6 +2322,28 @@ whose add flow asks for four fields — kind, name, base URL, API key — plus a
 for reverse-proxy sub-paths, and draws all four states of the mandatory connection test, failure
 included.**
 
+> ⚠️ **How the library-sync migration read the *Schema, enumerated* clause above, and where it
+> deviated.** That clause is qualified by its own reason — *"migration 0001 **or a backfill over the
+> largest tables in the schema**"* — and `internal/db/migrations/00005_library_sync.sql` applied the
+> reason rather than the enumeration. **What it shipped:** `work.kind`'s full twelve-member `CHECK`
+> including `comic_issue` and `person`, and `edition.narrators` / `duration_seconds` / `abridged`.
+> Both are genuinely one-way: SQLite cannot `ALTER` a `CHECK`, and §5.3's `kind_byte` codec is
+> unchangeable once clients cache northbound ids. **What it deferred:** the six subtype *tables* —
+> `work_album`, `work_track`, `work_credit`, `work_book`, `work_comic`, `work_comic_issue` — to the
+> catalogue source that writes each. **That deferral is [ADR-0040](./DECISIONS.md#adr-0040)**, which
+> is the decision authorising it; §16.1 and [ADR-0035](./DECISIONS.md#adr-0035) /
+> [ADR-0036](./DECISIONS.md#adr-0036) supply the *sequence* each table waits in, and neither of those
+> two changes any schema — both say so in their own consequences, which is why this paragraph no
+> longer cites them as the authority. A brand-new table with no dependants costs a plain
+> `CREATE TABLE` later, with no rebuild, no backfill and no codec change, so nothing about it is a
+> one-way door; `work_track.edition_id` in particular is free because the table it is a column of
+> does not exist yet. That is 00001's own rule — *"a migration that creates a table nothing queries is
+> a schema claim nobody has tested"* — applied to the six tables no v0.1 source writes. **ADR-0040
+> records that this leaves the enumeration above and the tree disagreeing, and routes the amendment of
+> the enumeration to the thread that owns §16 rather than making it there.** **Read
+> `internal/db/migrations` for what exists**; the clause above says what v0.1 owes, not what has
+> landed.
+
 **A `Recent grabs` block on the Requests screen (§17.5), and what it costs, stated plainly.** Ten
 rows, newest first: time, release name, indexer, protocol, size, resolved type, and last known state.
 **It adds no table, no state machine and no background work.** The states are the durable command
@@ -2326,7 +2373,7 @@ watermark probe is no longer day-one.** ADR-0032 funded a day-one probe of Komga
 `sort=lastModified,desc` and [ADR-0035](./DECISIONS.md#adr-0035) §2 retargeted it to Kavita's
 `LastChapterAdded`; with no catalogue source in v0.1 it has nothing to gate here. **It runs before
 the first catalogue adapter is written**, and its result orders §16.1's sequence — **Kavita first if
-it passes, Navidrome first if it fails.** Its pass condition stays written down in advance
+it passes, Navidrome first if it fails.** ⚠️ **The probe RAN on 2026-08-17 and PASSED** ([ADR-0035](./DECISIONS.md#adr-0035) §2a, §7.1a) — a status fact recorded here rather than a sequence this section has re-decided; applying its consequence to the ordering below is §16's owner's call. Its pass condition stays written down in advance
 (ADR-0035 §2, §7.1a) precisely so that deferring it does not turn it back into a guess.
 
 *Which of the above is built is not listed here, and the omission is the correction.* This entry
@@ -2508,8 +2555,10 @@ of a `book` work rather than a kind of its own. The enum, in full:
 
 Two consequences an implementer hits on the first screen. **Rows 4 and 5 need an existence query
 over `edition.format`, not the `work.kind` count every other type uses**, and `ix_edition_work` is
-`(work_id, is_primary DESC)`, which does not serve it — so migration 0001 carries
-`CREATE INDEX ix_edition_format ON edition(format, work_id)`. And **the Tier 1 client prefix index
+`(work_id, is_primary DESC)`, which does not serve it — so
+`CREATE INDEX ix_edition_format ON edition(format, work_id)` is owed alongside it. **Read
+`internal/db/migrations` for whether that index exists**; an unserved existence query is a scan on the
+first screen, which is why it is named here rather than discovered. And **the Tier 1 client prefix index
 ships `{id, title, year, kind, availability_state}` with no format**, so a *client-side* type filter
 cannot separate ebooks from audiobooks: **the Ebooks/Audiobooks split is server-side only in v0.1**,
 and the type chips in the client index resolve to five values, not six. Stated here rather than

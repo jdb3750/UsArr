@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -58,7 +59,7 @@ func TestMigrationRoundTrip(t *testing.T) {
 // asserted rather than derived so that adding a migration is a deliberate edit
 // here too — a version the tests do not know about is a migration nobody
 // round-tripped.
-const latestSchemaVersion int64 = 4
+const latestSchemaVersion int64 = 5
 
 // Down is not a supported user path, but it must work, because it is the
 // cheapest way to test a migration locally. A Down that leaves objects behind
@@ -418,9 +419,17 @@ func TestSystemSentinelUserExists(t *testing.T) {
 	}
 }
 
-// The tables deferred to the library-sync migration must NOT be here. A
-// migration that creates a table nothing queries is a schema claim nobody has
-// tested.
+// The tables deferred past the library-sync migration must NOT be here, and the
+// ones it ships must. A migration that creates a table nothing queries is a
+// schema claim nobody has tested — 00001's own rule, and the one 00005 quotes
+// when it leaves the six unbuilt subtype tables out.
+//
+// BOTH LISTS ARE EXHAUSTIVE ON PURPOSE, and they were not before 0005: the
+// deferred list named neither the music/books/comics subtype tables nor the
+// v0.2/v1.0 appendix tables, and the present list omitted indexer_catalog,
+// search_trgm, search_doc_library and all four library tables — so it asserted
+// nothing about the objects most likely to be forgotten. A table that belongs
+// to neither list is caught by the final loop rather than passing silently.
 func TestDeferredTablesAreAbsent(t *testing.T) {
 	ctx := t.Context()
 	d := openTestDB(t)
@@ -434,51 +443,498 @@ func TestDeferredTablesAreAbsent(t *testing.T) {
 		present[n] = true
 	}
 
-	for _, deferred := range []string{
-		"work", "work_movie", "work_series", "work_episode", "edition", "media_file",
-		"external_id", "service_item_link", "service_item_alias",
-		"search_doc", "search_fts", "image_asset", "sync_report",
-		"tag_rule", "tag_alias", "tag_implies", "saved_filter", "work_relation",
-	} {
-		if present[deferred] {
-			t.Errorf("%s is in migration 0001; it belongs in the library-sync migration", deferred)
+	// Deferred, with the milestone that owns each. The six work_* subtypes wait
+	// for the catalogue source that writes them (ADR-0035, ADR-0036); the rest
+	// is schema.md's "later tables" appendix.
+	deferred := []string{
+		// music — lands with Navidrome (§16.1 position 1 or 2)
+		"work_album", "work_track", "work_credit",
+		// books and comics — lands with Kavita (§16.1 position 1 or 2)
+		"work_book", "work_comic", "work_comic_issue",
+		// v0.2
+		"request", "request_quota",
+		// v0.3
+		"work_relation",
+		// v1.0
+		"work_merge", "tag_rule", "tag_alias", "tag_implies", "saved_filter",
+		"playback_state", "play_history", "playlist", "playlist_item",
+		"role", "role_permission", "user_role", "user_permission", "user_library_access",
+	}
+	for _, name := range deferred {
+		if present[name] {
+			t.Errorf("%s exists, but no shipped migration should create it; "+
+				"see 00005's header for which milestone owns it", name)
 		}
 	}
 
-	for _, want := range []string{
+	// Present, by the migration that creates it.
+	want := []string{
+		// 0001
 		"user", "session", "client_credential", "audit_log", "service_instance",
 		"release_candidate", "provenance", "write_queue", "tag", "tag_assignment",
-	} {
-		if !present[want] {
-			t.Errorf("%s is missing from migration 0001", want)
+		// 0004
+		"indexer_catalog",
+		// 0005
+		"image_asset", "work", "work_movie", "work_series", "work_episode",
+		"work_alt_title", "edition", "media_file", "external_id",
+		"service_item_link", "service_item_alias",
+		"library", "library_source", "library_member", "library_override",
+		"search_doc", "search_fts", "search_trgm", "search_doc_library",
+		"sync_report",
+	}
+	for _, name := range want {
+		if !present[name] {
+			t.Errorf("%s is missing; it should be created by migrations 0001-0005", name)
 		}
 	}
-}
 
-// Every table in migration 0001 is STRICT. A non-STRICT table accepts a string
-// into an INTEGER column, which is how a type bug reaches disk.
-func TestAllTablesAreStrict(t *testing.T) {
-	ctx := t.Context()
-	d := openTestDB(t)
-
+	// Neither list, and therefore unasserted. Indexes, triggers and FTS5's own
+	// shadow tables are not tables anyone declared, so they are excluded by
+	// asking pragma_table_list for the type rather than by matching on a name.
+	//
+	// `type IN ('table','virtual')` and not `type = 'table'`: search_fts and
+	// search_trgm are VIRTUAL, and with the narrower filter this loop skipped
+	// them — which was checked by firing it, not assumed. Deleting search_trgm
+	// from `want` left the whole test green, so the two objects most easily
+	// forgotten were the two it could not see. That is the proxy-instead-of-
+	// condition failure DEVELOPMENT.md §11 rule 1 describes, caught by rule 3.
+	known := map[string]bool{}
+	for _, n := range append(append([]string{}, deferred...), want...) {
+		known[n] = true
+	}
 	rows, err := d.Read().QueryContext(ctx, `
-		SELECT name, sql FROM sqlite_schema
-		 WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'goose_%'`)
+		SELECT name FROM pragma_table_list
+		 WHERE type IN ('table', 'virtual')
+		   AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'goose_%'`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
-		var name, ddl string
-		if err := rows.Scan(&name, &ddl); err != nil {
+		var name string
+		if err := rows.Scan(&name); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.Contains(strings.ToUpper(ddl), "STRICT") {
+		if !known[name] {
+			t.Errorf("table %s is in neither list in this test, so nothing here asserts "+
+				"whether it should exist. Add it to `want` (and say which migration) or to "+
+				"`deferred` (and say which milestone).", name)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Every ordinary table is STRICT. A non-STRICT table accepts a string into an
+// INTEGER column, which is how a type bug reaches disk.
+//
+// This asks pragma_table_list for each object's TYPE rather than string-matching
+// sqlite_schema, because migration 0005 introduces two kinds of object for which
+// "does the DDL contain STRICT" is the wrong question and would have been
+// answered wrong: `search_fts` and `search_trgm` are VIRTUAL tables, and SQLite
+// has no STRICT for one; and FTS5 creates four `shadow` tables of its own per
+// virtual table, whose DDL this project does not write. Both appear in
+// sqlite_schema as type='table'. Excluding them by name pattern would have been
+// the proxy-instead-of-condition mistake DEVELOPMENT.md §11 rule 1 describes —
+// pragma_table_list reports the distinction directly.
+func TestAllTablesAreStrict(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	rows, err := d.Read().QueryContext(ctx, `
+		SELECT name, type, strict FROM pragma_table_list
+		 WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE 'goose_%'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var ordinary int
+	for rows.Next() {
+		var name, objType string
+		var strict int
+		if err := rows.Scan(&name, &objType, &strict); err != nil {
+			t.Fatal(err)
+		}
+		if objType != "table" {
+			continue // virtual, shadow or view
+		}
+		ordinary++
+		if strict != 1 {
 			t.Errorf("table %s is not STRICT", name)
 		}
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
+	}
+	// Guard the guard: if pragma_table_list ever stops reporting `type`, or the
+	// filter above turns into a no-op, this loop would silently assert nothing.
+	if ordinary < 20 {
+		t.Errorf("only %d ordinary tables were examined; the schema has more than that, "+
+			"so this test is filtering out rows it should be checking", ordinary)
+	}
+}
+
+// FTS5 is a REGISTERED EXTENSION in this driver build, not a built-in, and
+// registration is per-connection exactly as the pragmas are. Measured, not
+// assumed: on ncruces/go-sqlite3 v0.35.3 a connection opened without
+// ext/fts5.Register answers `CREATE VIRTUAL TABLE … USING fts5(…)` with "no
+// such module: fts5".
+//
+// Migration 0005 creates search_fts and search_trgm, so a pool that lost the
+// registration could not migrate at all — but a pool that lost it on only SOME
+// connections would fail intermittently, at query time, arbitrarily far from
+// the cause. That is the same failure shape TestPragmasOnEveryConnection exists
+// for, so this is checked the same way: across every connection of the read
+// pool, held open simultaneously so the pool really hands out distinct ones.
+func TestFTS5IsAvailableOnEveryConnection(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	readers := d.Read().Stats().MaxOpenConnections
+	if readers < 2 {
+		t.Fatalf("read pool max connections = %d, want NumCPU*2", readers)
+	}
+
+	var wg sync.WaitGroup
+	release := make(chan struct{})
+	errs := make(chan error, readers+1)
+
+	for i := range readers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			conn, err := d.Read().Conn(ctx)
+			if err != nil {
+				errs <- err
+				return
+			}
+			defer func() { _ = conn.Close() }()
+
+			// A MATCH against the contentless table is the cheapest statement
+			// that cannot be planned at all without the fts5 module loaded.
+			var n int
+			if err := conn.QueryRowContext(ctx,
+				`SELECT count(*) FROM search_fts WHERE search_fts MATCH 'usarr'`).Scan(&n); err != nil {
+				errs <- fmt.Errorf("read connection %d has no fts5: %w", i, err)
+				return
+			}
+			<-release
+		}()
+	}
+	close(release)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("%v\nfts5 must be registered on every connection of BOTH pools — see "+
+			"internal/db.Open. Without it search_fts and search_trgm are unreadable.", err)
+	}
+
+	// contentless_delete=1 needs SQLite >= 3.43.0. The DELETE is the whole
+	// point of it: a plain contentless FTS5 table answers "cannot DELETE from
+	// contentless fts5 table", and without a working DELETE §7 invariant 2
+	// (count(search_fts) == count(search_trgm) == count(search_doc)) cannot be
+	// maintained across a work delete or a title change.
+	var version string
+	if err := d.Read().QueryRowContext(ctx, `SELECT sqlite_version()`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO search_fts (rowid, title) VALUES (1, 'Train Dreams')`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO search_trgm (rowid, title) VALUES (1, 'Train Dreams')`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM search_fts WHERE rowid = 1`); err != nil {
+			return fmt.Errorf("search_fts: %w", err)
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM search_trgm WHERE rowid = 1`); err != nil {
+			return fmt.Errorf("search_trgm: %w", err)
+		}
+		return nil
+	}); err != nil {
+		t.Errorf("contentless_delete=1 is not in effect on SQLite %s: %v", version, err)
+	}
+}
+
+// TestMigrate0005WriteQueueRebuild proves the 12-step rebuild did what its
+// header claims, by reading the result back rather than trusting that the
+// CREATE statements ran.
+//
+// Everything here is a claim that rots silently: an index that a rebuilt table
+// does not inherit, a partial predicate quietly recreated as a full one (which
+// changes which rows the reconciliation sweep sees), or a foreign-key violation
+// left behind by the copy.
+func TestMigrate0005WriteQueueRebuild(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	// 1. Still STRICT after the rebuild.
+	var strict int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT strict FROM pragma_table_list WHERE name = 'write_queue'`).Scan(&strict); err != nil {
+		t.Fatalf("reading pragma_table_list for write_queue: %v", err)
+	}
+	if strict != 1 {
+		t.Error("write_queue is not STRICT after the rebuild")
+	}
+
+	// 2. ALL THREE indexes exist, and ix_wq_runnable is still PARTIAL on
+	//    exactly ('pending','inflight','verifying'). A rebuilt table inherits
+	//    no indexes; a partial index silently recreated as a full one changes
+	//    which rows the sweep and the reconciliation guard see.
+	ddl := func() map[string]string {
+		out := map[string]string{}
+		rows, err := d.Read().QueryContext(ctx, `
+			SELECT name, sql FROM sqlite_schema WHERE type = 'index' AND tbl_name = 'write_queue'`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var name string
+			var s sql.NullString
+			if err := rows.Scan(&name, &s); err != nil {
+				t.Fatal(err)
+			}
+			out[name] = s.String
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}()
+
+	for _, name := range []string{"ux_wq_idem", "ix_wq_work", "ix_wq_runnable"} {
+		if _, ok := ddl[name]; !ok {
+			t.Errorf("%s did not survive the rebuild; a rebuilt table inherits no indexes", name)
+		}
+	}
+	if got := ddl["ix_wq_runnable"]; !strings.Contains(got, "WHERE state IN ('pending','inflight','verifying')") {
+		t.Errorf("ix_wq_runnable's partial predicate did not survive the rebuild:\n  %s\n"+
+			"It must stay byte-identical to 00001's. 'awaiting_choice' is deliberately NOT in "+
+			"it — a row waiting on a person is not runnable, and listing it here would expose "+
+			"it to the retry sweep and the verify_until TTL. See 00005's header, decision (b).", got)
+	}
+	var partial int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT partial FROM pragma_index_list('write_queue') WHERE name = 'ix_wq_runnable'`).
+		Scan(&partial); err != nil {
+		t.Fatal(err)
+	}
+	if partial != 1 {
+		t.Error("ix_wq_runnable is no longer partial")
+	}
+
+	// 3. The `state` CHECK is GONE (00005 decision (a)) and `fail_reason`'s is
+	//    KEPT. Both halves matter: dropping fail_reason's too would delete the
+	//    DB-01 regression witness.
+	var table string
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = 'write_queue'`).
+		Scan(&table); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(table, "CHECK (state IN") {
+		t.Error("write_queue.state still carries a CHECK. 00005 drops it deliberately: the " +
+			"lifecycle vocabulary is still growing, SQLite cannot ALTER a CHECK, and " +
+			"audit_log.result and provenance.acquisition_state are the shipped precedent " +
+			"for enforcing that class of vocabulary in Go.")
+	}
+	if !strings.Contains(table, "fail_reason IS NULL OR fail_reason IN") {
+		t.Error("write_queue.fail_reason lost its CHECK, or lost the `IS NULL OR` form. " +
+			"That vocabulary is closed, and this column is DB-01's regression witness.")
+	}
+
+	// And the behaviour, not just the DDL: a state 00001 would have rejected is
+	// now accepted, because the enforcement moved to Go.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO write_queue (idempotency_key, kind, payload, state)
+			VALUES ('k-awaiting', 'grab', '{}', 'awaiting_choice')`)
+		return err
+	}); err != nil {
+		t.Errorf("write_queue rejected state='awaiting_choice': %v\n"+
+			"That is the state a two-phase sink parks in while a person decides "+
+			"(FUTURE.md §11). 00005 drops the CHECK so it needs no further migration.", err)
+	}
+
+	// 4. Step 10 of the 12-step procedure, run where its result can fail a
+	//    build. The migration deliberately does not write it: goose discards a
+	//    PRAGMA's rows, so it would have been decoration.
+	fk, err := d.Read().QueryContext(ctx, `PRAGMA foreign_key_check`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = fk.Close() }()
+	var violations int
+	for fk.Next() {
+		violations++
+	}
+	if err := fk.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if violations != 0 {
+		t.Errorf("PRAGMA foreign_key_check reports %d violations after the rebuild", violations)
+	}
+}
+
+// TestMigrate0005WorkIDForeignKey proves decision (d) by execution rather than
+// by argument: write_queue.work_id gets `REFERENCES work(id) ON DELETE CASCADE`
+// back, the reference 00001 dropped with a comment naming this migration.
+//
+// The reason it is proven rather than reasoned about is that the argument
+// against it — the audit_log precedent, where an ON DELETE action is an
+// implicit write that a trigger aborts, making a user undeletable — is exactly
+// the kind of thing that looks fine in a comment and fails at runtime. So the
+// last assertion re-runs that failure mode directly.
+func TestMigrate0005WorkIDForeignKey(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	// 1. A dangling work_id is now rejected. Before the rebuild it was a bare
+	//    INTEGER and this insert succeeded, leaving ix_wq_work returning rows
+	//    for a work that does not exist.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO write_queue (idempotency_key, kind, work_id, payload)
+			VALUES ('k-dangling', 'monitor', 9999, '{}')`)
+		return err
+	}); err == nil {
+		t.Error("write_queue accepted a work_id with no work row; the restored REFERENCES " +
+			"clause is not enforced")
+	}
+
+	// 2. A real work_id is accepted, and deleting the work takes the queued
+	//    command with it. This is the behaviour the header argues for and the
+	//    one a reader is most likely to be surprised by, so it is asserted
+	//    rather than described.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO work (id, kind, title, sort_title, normalized_title)
+			VALUES (42, 'movie', 'Train Dreams', 'train dreams', 'train dreams')`); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO write_queue (idempotency_key, kind, work_id, payload)
+			VALUES ('k-real', 'monitor', 42, '{}')`)
+		return err
+	}); err != nil {
+		t.Fatalf("enqueueing against a real work failed: %v", err)
+	}
+
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `DELETE FROM work WHERE id = 42`)
+		return err
+	}); err != nil {
+		t.Fatalf("deleting a work with a queued command failed: %v\n"+
+			"ON DELETE CASCADE was chosen over RESTRICT precisely so this stays possible: "+
+			"a tombstone expiry that cannot delete is a sweep that stalls forever.", err)
+	}
+
+	var queued int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT count(*) FROM write_queue WHERE idempotency_key = 'k-real'`).Scan(&queued); err != nil {
+		t.Fatal(err)
+	}
+	if queued != 0 {
+		t.Error("the queued command outlived its work; ON DELETE CASCADE is not doing its job")
+	}
+
+	// 3. The audit_log failure mode, re-run against the rebuilt table. A user
+	//    who has queued something must still be deletable — the new foreign key
+	//    is on work_id, but the rebuild also re-declares user_id's, and a
+	//    rebuild is exactly where a clause gets copied wrong.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO user (id, username, auth_source) VALUES (7, 'joe', 'local')`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO write_queue (idempotency_key, user_id, kind, payload)
+			VALUES ('k-user', 7, 'grab', '{}')`); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO audit_log (actor_user_id, action, result) VALUES (7, 'grab', 'ok')`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `DELETE FROM user WHERE id = 7`)
+		return err
+	}); err != nil {
+		t.Fatalf("deleting a user with a queued command failed after the rebuild: %v", err)
+	}
+}
+
+// The reserved `library.id = 0` row, "Unfiled", must exist from the migration
+// that creates the table.
+//
+// It is what upholds schema.md §7 invariant 5: every search_doc row is visible
+// through at least one library, because a work the membership derivation would
+// otherwise place in NO library is a member of Unfiled. Without the row that
+// invariant has no mechanism, and a work visible through no library matches no
+// scope — it disappears from search for everyone, including its owner.
+func TestUnfiledLibraryExists(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	var name, slug, managedBy string
+	var userID int64
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT name, slug, managed_by, user_id FROM library WHERE id = 0`).
+		Scan(&name, &slug, &managedBy, &userID); err != nil {
+		t.Fatalf("the reserved library.id = 0 row is missing: %v", err)
+	}
+	if name != "Unfiled" || slug != "unfiled" {
+		t.Errorf("library 0 is %q/%q, want Unfiled/unfiled", name, slug)
+	}
+	if userID != 0 {
+		t.Errorf("library 0 belongs to user %d, want the sentinel 0", userID)
+	}
+	if managedBy != "auto" {
+		t.Errorf("library 0 is managed_by %q, want auto", managedBy)
+	}
+
+	// It has to be usable as a membership target and as a search scope, which
+	// is the only thing it is for.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO work (id, kind, title, sort_title, normalized_title)
+			VALUES (1, 'movie', 'Orphan', 'orphan', 'orphan')`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO library_member (library_id, sort_title, work_id) VALUES (0, 'orphan', 1)`); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO search_doc (rowid, work_id, kind, norm_title) VALUES (1, 1, 'movie', 'orphan')`); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx,
+			`INSERT INTO search_doc_library (library_id, doc_rowid) VALUES (0, 1)`)
+		return err
+	}); err != nil {
+		t.Fatalf("filing a work into Unfiled failed: %v", err)
+	}
+
+	// §7 invariant 5, asserted on the fixture just written.
+	var invisible int
+	if err := d.Read().QueryRowContext(ctx, `
+		SELECT count(*) FROM search_doc sd
+		 WHERE NOT EXISTS (SELECT 1 FROM search_doc_library sdl WHERE sdl.doc_rowid = sd.rowid)`).
+		Scan(&invisible); err != nil {
+		t.Fatal(err)
+	}
+	if invisible != 0 {
+		t.Errorf("%d search_doc rows are visible through no library", invisible)
 	}
 }
 
@@ -490,13 +946,23 @@ func TestAllTablesAreStrict(t *testing.T) {
 // NULL in the list makes every value legal. The constraint read as enforcement
 // and enforced nothing, in a migration that is never edited once merged.
 //
-// `state` is the control: the identical pattern without NULL in the list. If
-// only the state assertions pass, the nullable form has regressed.
+// `library_override.field_name` is the SECOND instance of the same defect,
+// found while writing migration 0005: schema.md §13.4 specified it as
+// `CHECK (field_name IN (NULL,'title','sort_title','year','cover'))`, which is
+// DB-01 character for character. 0005 creates it in the `IS NULL OR …` form and
+// this test is what says so.
+//
+// The control used to be `write_queue.state` — the identical pattern WITHOUT
+// NULL in the list. Migration 0005 drops that CHECK deliberately (see its
+// header, decision (a)), so the control moved to `provenance.protocol`, which
+// is the same shape on a NOT NULL column. If only the control passes, the
+// nullable form has regressed; if the control fails, CHECK enforcement is
+// broken generally and nothing else in this test means anything.
 func TestNullableCheckConstraintsActuallyConstrain(t *testing.T) {
 	ctx := t.Context()
 	d := openTestDB(t)
 
-	insert := func(t *testing.T, id int, col, val string) error {
+	queue := func(t *testing.T, id int, col, val string) error {
 		t.Helper()
 		q := fmt.Sprintf(
 			`INSERT INTO write_queue (id, idempotency_key, kind, payload, %s) VALUES (?, ?, 'grab', '{}', %s)`,
@@ -509,22 +975,65 @@ func TestNullableCheckConstraintsActuallyConstrain(t *testing.T) {
 
 	// The legal values, including NULL, must still be accepted.
 	for i, v := range []string{"'rejected'", "'unknown'", "'exhausted'", "NULL"} {
-		if err := insert(t, 10+i, "fail_reason", v); err != nil {
+		if err := queue(t, 10+i, "fail_reason", v); err != nil {
 			t.Errorf("fail_reason=%s was rejected but is legal: %v", v, err)
 		}
 	}
 
 	// Garbage must not be.
-	if err := insert(t, 20, "fail_reason", "'TOTAL-GARBAGE'"); err == nil {
+	if err := queue(t, 20, "fail_reason", "'TOTAL-GARBAGE'"); err == nil {
 		t.Error("fail_reason='TOTAL-GARBAGE' was ACCEPTED — the CHECK is a no-op.\n" +
 			"A nullable column must use `CHECK (col IS NULL OR col IN (...))`; " +
 			"putting NULL inside the IN list poisons the comparison and accepts everything.")
 	}
 
-	// Control: the same pattern without NULL in the list rejects correctly. If
-	// this fails, something broader is wrong with CHECK enforcement.
-	if err := insert(t, 21, "state", "'TOTAL-GARBAGE'"); err == nil {
-		t.Error("state='TOTAL-GARBAGE' was accepted; CHECK constraints are not being enforced at all")
+	// The same defect class on migration 0005's own nullable CHECK. verb='field'
+	// is required by the adjacent CHECK, so the rows below differ only in
+	// field_name.
+	override := func(t *testing.T, id int, fieldName string) error {
+		t.Helper()
+		q := fmt.Sprintf(`
+			INSERT INTO library_override (id, verb, work_id, target_identity_hash, field_name)
+			VALUES (?, 'field', 1, 'h', %s)`, fieldName)
+		return d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, q, id)
+			return err
+		})
+	}
+	for i, v := range []string{"'title'", "'sort_title'", "'year'", "'cover'"} {
+		if err := override(t, 30+i, v); err != nil {
+			t.Errorf("library_override.field_name=%s was rejected but is legal: %v", v, err)
+		}
+	}
+	if err := override(t, 40, "'TOTAL-GARBAGE'"); err == nil {
+		t.Error("library_override.field_name='TOTAL-GARBAGE' was ACCEPTED — the CHECK is a no-op.\n" +
+			"docs/reference/schema.md §13.4 specified this column as " +
+			"`CHECK (field_name IN (NULL,'title',...))`, which is DB-01 verbatim. " +
+			"Migration 0005 writes the `IS NULL OR ... IN (...)` form; if this fires, " +
+			"someone copied the spec back in.")
+	}
+	// NULL must still be legal for the two global verbs, which is the whole
+	// reason the column is nullable.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO library_override (id, verb, library_id, work_id, target_identity_hash)
+			VALUES (41, 'exclude', 0, 1, 'h')`)
+		return err
+	}); err != nil {
+		t.Errorf("an exclude override with field_name NULL was rejected: %v", err)
+	}
+
+	// Control: the same pattern on a NOT NULL column, with no NULL in the list.
+	// If this fails, CHECK constraints are not being enforced at all and every
+	// assertion above is vacuous.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO provenance (protocol, release_title, source_system)
+			VALUES ('TOTAL-GARBAGE', 'Some.Release', 'prowlarr')`)
+		return err
+	}); err == nil {
+		t.Error("provenance.protocol='TOTAL-GARBAGE' was accepted; CHECK constraints are not " +
+			"being enforced at all")
 	}
 }
 
@@ -685,4 +1194,799 @@ func userObjects(ctx context.Context, q *sql.DB) ([]string, error) {
 		return nil, fmt.Errorf("read sqlite_schema: %w", err)
 	}
 	return out, nil
+}
+
+// ─── The write_queue COPY, which no test above exercises ─────────────────────
+//
+// TestMigrate0005WriteQueueRebuild proves the rebuilt SHAPE. It cannot prove
+// anything about the COPY, and that is the deeper defect it hid: it runs
+// against openTestDB, which migrates 1→5 over a fresh EMPTY database, so the
+// one step of the 12 that can lose data — `INSERT … SELECT … FROM write_queue`
+// — moves zero rows in every test in this file.
+//
+// The two tests below migrate to 0004 first, put rows in, and then migrate.
+//
+// They are TWO tests rather than one because the resolution of the finding
+// makes a single "copy everything and diff every column" test unwritable: a
+// non-NULL work_id is dangling by construction (0005 creates `work` empty), and
+// 0005 now ABORTS on it rather than passing it through an EXISTS guard that
+// silently substitutes NULL. So the lossless-copy assertion covers every column
+// for rows the migration is willing to move, and the abort assertion covers the
+// rows it is not.
+
+// wqFixture is the row set both tests load at 0004. It covers every `state`
+// 0001's CHECK permits, every `fail_reason` including NULL, unicode and control
+// characters in three free-text columns, NULL and non-NULL for every nullable
+// column, and an id at the top of the rowid range.
+//
+// work_id is a parameter because it is the column the two tests disagree about.
+func wqFixture(t *testing.T, ctx context.Context, d *DB, workIDs map[int64]any) {
+	t.Helper()
+
+	// Parents first: a non-NULL user_id and service_instance_id have to point
+	// somewhere, and a rebuild is exactly where those two clauses get copied
+	// wrong.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO user (id, username, auth_source) VALUES (7, 'joe', 'local')`); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO service_instance (id, kind, name, base_url, api_key_enc)
+			VALUES (3, 'sonarr', 'Sonarr', 'http://sonarr:8989', x'00')`)
+		return err
+	}); err != nil {
+		t.Fatalf("fixture parents: %v", err)
+	}
+
+	// Unicode outside the BMP, combining marks, and C0 control characters —
+	// the three things a hand-written copy of a TEXT column is most likely to
+	// mangle, and none of which any other test in this package writes.
+	weird := "Ünïcødé \u200b 🎬 \x01\x02\x1f\t\n\r déjà-vu"
+
+	rows := []struct {
+		id       int64
+		key      string
+		userID   int64
+		kind     string
+		instance any
+		payload  string
+		state    string
+		fail     any
+		attempts int64
+		maxAtt   int64
+		next     any
+		verify   any
+		lastErr  any
+		created  string
+		settled  any
+	}{
+		{1, "k-pending", 0, "add", nil, `{"a":1}`, "pending", nil, 0, 6, "2026-08-17 07:00:00", nil, nil, "2026-08-17 06:00:00", nil},
+		{2, "k-inflight", 7, "monitor", int64(3), `{"b":"` + weird + `"}`, "inflight", nil, 1, 6, "2026-08-17 07:00:01", "2026-08-17 07:15:00", weird, "2026-08-17 06:00:01", nil},
+		{3, "k-verifying", 7, "grab", int64(3), `{}`, "verifying", nil, 2, 3, nil, "2026-08-17 07:15:00", nil, "2026-08-17 06:00:02", nil},
+		{4, "k-done", 0, "unmonitor", nil, `{}`, "done", nil, 1, 6, nil, nil, nil, "2026-08-17 06:00:03", "2026-08-17 06:30:00"},
+		{5, "k-failed-rejected", 0, "tag_add", int64(3), `{}`, "failed", "rejected", 6, 6, nil, nil, "rejected upstream", "2026-08-17 06:00:04", "2026-08-17 06:30:01"},
+		{6, "k-failed-unknown", 7, "refresh", nil, `{}`, "failed", "unknown", 6, 6, nil, nil, weird, "2026-08-17 06:00:05", "2026-08-17 06:30:02"},
+		{7, "k-failed-exhausted", 7, "delete", nil, `{}`, "failed", "exhausted", 6, 6, nil, nil, nil, "2026-08-17 06:00:06", "2026-08-17 06:30:03"},
+		// The unicode key, and the top of the rowid range. Both go in last:
+		// after max int64 no implicit rowid can be allocated.
+		{8, "k-" + weird, 0, "grab", nil, `{}`, "pending", nil, 0, 6, nil, nil, nil, "2026-08-17 06:00:07", nil},
+		{9223372036854775807, "k-max-rowid", 0, "grab", nil, `{}`, "pending", nil, 0, 6, nil, nil, nil, "2026-08-17 06:00:08", nil},
+	}
+
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		for _, r := range rows {
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO write_queue (
+					id, idempotency_key, user_id, kind, work_id, service_instance_id,
+					payload, state, fail_reason, attempts, max_attempts,
+					next_attempt_at, verify_until, last_error, created_at, settled_at)
+				VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+				r.id, r.key, r.userID, r.kind, workIDs[r.id], r.instance,
+				r.payload, r.state, r.fail, r.attempts, r.maxAtt,
+				r.next, r.verify, r.lastErr, r.created, r.settled); err != nil {
+				return fmt.Errorf("row %d: %w", r.id, err)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("fixture rows: %v", err)
+	}
+}
+
+// dumpWriteQueue renders every column of every row, typed, so that a value that
+// changed type (1 vs '1') or became NULL is a diff rather than a match. The
+// column list comes from the result set, so a column added by a later migration
+// is compared too instead of being silently skipped.
+func dumpWriteQueue(ctx context.Context, q *sql.DB) (string, error) {
+	rows, err := q.QueryContext(ctx, `SELECT * FROM write_queue ORDER BY id`)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = rows.Close() }()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return "", err
+	}
+
+	var b strings.Builder
+	for rows.Next() {
+		cells := make([]any, len(cols))
+		ptrs := make([]any, len(cols))
+		for i := range cells {
+			ptrs[i] = &cells[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return "", err
+		}
+		for i, c := range cols {
+			fmt.Fprintf(&b, "%s=%T:%#v\n", c, cells[i], cells[i])
+		}
+		b.WriteString("---\n")
+	}
+	return b.String(), rows.Err()
+}
+
+// migrateTo0004 walks a fresh database up and then one step back down, which is
+// the only route this package has to "the schema as 0004 left it".
+func migrateTo0004(t *testing.T, ctx context.Context) *DB {
+	t.Helper()
+	d := openTestDB(t)
+	if err := d.MigrateDown(ctx); err != nil {
+		t.Fatalf("MigrateDown 5→4: %v", err)
+	}
+	v, err := d.Version(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v != 4 {
+		t.Fatalf("schema version = %d, want 4", v)
+	}
+	return d
+}
+
+// TestMigrate0005WriteQueueCopyIsLossless is the test the rebuild never had.
+// Every column of every row must survive the 12-step rebuild byte for byte.
+func TestMigrate0005WriteQueueCopyIsLossless(t *testing.T) {
+	ctx := t.Context()
+	d := migrateTo0004(t, ctx)
+
+	wqFixture(t, ctx, d, nil) // every work_id NULL: see the abort test for the rest
+
+	before, err := dumpWriteQueue(ctx, d.Read())
+	if err != nil {
+		t.Fatalf("dump before: %v", err)
+	}
+
+	if err := d.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate 4→5: %v", err)
+	}
+
+	after, err := dumpWriteQueue(ctx, d.Read())
+	if err != nil {
+		t.Fatalf("dump after: %v", err)
+	}
+	if before != after {
+		t.Errorf("the 0005 write_queue copy is not lossless.\n\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+// TestMigrate0005AbortsRatherThanDroppingWorkID pins the resolution of the
+// silent-NULL finding.
+//
+// `work` is created EMPTY by this migration, so every pre-existing non-NULL
+// work_id is dangling by construction and the restored foreign key cannot
+// accept it. There are only two honest outcomes — abort, or keep the value —
+// and keeping it is not available. What is NOT acceptable is the third one the
+// migration used to take: pass the column through
+// `CASE WHEN EXISTS (SELECT 1 FROM work …) THEN work_id END`, which converts
+// every such value to NULL with no error, no log and no sync_report row.
+//
+// So: the migration must fail, the message must say how many rows and what to
+// do about them, and the database must be left at 4 with the rows untouched so
+// the operator can act on them.
+func TestMigrate0005AbortsRatherThanDroppingWorkID(t *testing.T) {
+	ctx := t.Context()
+	d := migrateTo0004(t, ctx)
+
+	wqFixture(t, ctx, d, map[int64]any{2: int64(4412), 5: int64(9999)})
+
+	before, err := dumpWriteQueue(ctx, d.Read())
+	if err != nil {
+		t.Fatalf("dump before: %v", err)
+	}
+
+	err = d.Migrate(ctx)
+	if err == nil {
+		t.Fatal("migration 0005 SUCCEEDED against write_queue rows carrying a work_id.\n" +
+			"Every one of them is dangling — 0005 creates `work` empty — so the copy has " +
+			"either silently NULLed the value or silently dropped the row. Neither is " +
+			"acceptable: the value is the only record of which work the queued command was " +
+			"for, and losing it is unrecoverable and invisible.")
+	}
+	// The message has to be actionable: the count, and the column.
+	if !strings.Contains(err.Error(), "work_id") || !strings.Contains(err.Error(), "2") {
+		t.Errorf("the abort message names neither the column nor the row count: %v", err)
+	}
+
+	// goose runs each migration in one transaction, so a failed 0005 must leave
+	// the database exactly as 0004 left it — including the rows themselves.
+	v, err := d.Version(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v != 4 {
+		t.Errorf("schema version = %d after the abort, want 4", v)
+	}
+	after, err := dumpWriteQueue(ctx, d.Read())
+	if err != nil {
+		t.Fatalf("dump after: %v", err)
+	}
+	if before != after {
+		t.Errorf("the aborted migration changed write_queue.\n\nbefore:\n%s\nafter:\n%s", before, after)
+	}
+}
+
+// TestImageAssetExpirySweepEvicts proves the change from the DEFAULTED
+// `ON DELETE NO ACTION` on work.poster_asset_id / work.backdrop_asset_id to
+// `ON DELETE SET NULL`.
+//
+// `ix_img_state(state, expires_at)` has no plausible reader but an expiry
+// sweep. Under NO ACTION that sweep's DELETE fails with "FOREIGN KEY constraint
+// failed" for every asset any work points at — which is every poster on the
+// Home screen, i.e. exactly the set the index exists to find. The index was
+// therefore serving a query that could never succeed.
+func TestImageAssetExpirySweepEvicts(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		for i, role := range []string{"poster", "backdrop"} {
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO image_asset (id, source_url, origin_class, role, cache_key, state, expires_at)
+				VALUES (?, ?, 'provider', ?, 'k', 'ready', '2020-01-01 00:00:00')`,
+				i+1, fmt.Sprintf("https://example.invalid/%s.jpg", role), role); err != nil {
+				return err
+			}
+		}
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO work (id, kind, title, sort_title, normalized_title,
+			                  poster_asset_id, backdrop_asset_id)
+			VALUES (1, 'movie', 'Train Dreams', 'train dreams', 'train dreams', 1, 2)`)
+		return err
+	}); err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+
+	// The sweep, spelled the way ix_img_state is shaped for.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx,
+			`DELETE FROM image_asset WHERE state = 'ready' AND expires_at <= '2026-08-17 00:00:00'`)
+		return err
+	}); err != nil {
+		t.Fatalf("the image expiry sweep cannot evict an asset a work references: %v\n"+
+			"That is what a defaulted ON DELETE NO ACTION on work.poster_asset_id / "+
+			"work.backdrop_asset_id costs: ix_img_state's only plausible reader can never "+
+			"succeed on a referenced row.", err)
+	}
+
+	var poster, backdrop sql.NullInt64
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT poster_asset_id, backdrop_asset_id FROM work WHERE id = 1`).
+		Scan(&poster, &backdrop); err != nil {
+		t.Fatal(err)
+	}
+	if poster.Valid || backdrop.Valid {
+		t.Errorf("the work still points at evicted assets (poster=%v backdrop=%v); "+
+			"ON DELETE SET NULL is not in effect", poster, backdrop)
+	}
+	// The work itself must survive: SET NULL, never CASCADE. A cover expiring
+	// must not delete the movie.
+	var works int
+	if err := d.Read().QueryRowContext(ctx, `SELECT count(*) FROM work`).Scan(&works); err != nil {
+		t.Fatal(err)
+	}
+	if works != 1 {
+		t.Errorf("evicting a cover deleted %d work rows; the clause is CASCADE, not SET NULL", 1-works)
+	}
+}
+
+// TestUnfiledLibraryIsProtected covers the second half of the reserved row:
+// before this, "reserved" was a comment and `DELETE FROM library WHERE id = 0`
+// simply succeeded, leaving the membership derivation with nowhere to file an
+// unfiled work for the life of the database.
+//
+// The trigger that fixes it is the shape that has already bitten this project
+// once — audit_log's append-only triggers turned an ON DELETE action into an
+// undeletable user (schema.md §9) — so the interaction is tested, not argued.
+func TestUnfiledLibraryIsProtected(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	// 1. The direct delete is refused.
+	err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `DELETE FROM library WHERE id = 0`)
+		return err
+	})
+	if err == nil {
+		t.Error("DELETE FROM library WHERE id = 0 succeeded; the reserved row is unprotected")
+	} else if !strings.Contains(err.Error(), "reserved") {
+		t.Errorf("library 0 is protected by something other than its own message: %v", err)
+	}
+	var unfiled int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT count(*) FROM library WHERE id = 0`).Scan(&unfiled); err != nil {
+		t.Fatal(err)
+	}
+	if unfiled != 1 {
+		t.Fatal("library 0 is gone")
+	}
+
+	// 2. Any OTHER library still deletes. A guard that blocks the whole table
+	//    would be a different bug with the same green test.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO library (id, user_id, name, slug, kind)
+			VALUES (5, 0, 'Films', 'films', 'movie')`); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, `DELETE FROM library WHERE id = 5`)
+		return err
+	}); err != nil {
+		t.Errorf("an ordinary library is no longer deletable: %v", err)
+	}
+
+	// 3. THE audit_log FAILURE MODE. A user with a row in every table that
+	//    references user(id) — library included — must still be deletable, or
+	//    the trigger has repeated audit_log's defect one table over.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		stmts := []string{
+			`INSERT INTO user (id, username, auth_source) VALUES (9, 'ada', 'local')`,
+			`INSERT INTO library (id, user_id, name, slug, kind) VALUES (6, 9, 'Ada', 'ada', 'movie')`,
+			`INSERT INTO library_override (id, user_id, verb, library_id, work_id, target_identity_hash)
+			   VALUES (1, 9, 'exclude', 6, 1, 'h')`,
+			`INSERT INTO session (id, user_id, kind, created_at, last_seen_at,
+			                      idle_expires_at, absolute_expires_at)
+			   VALUES ('s', 9, 'web', '2026-08-17 00:00:00', '2026-08-17 00:00:00',
+			           '2026-08-18 00:00:00', '2026-08-24 00:00:00')`,
+			`INSERT INTO client_credential (id, user_id, label, protocol, key_prefix, key_hash)
+			   VALUES (1, 9, 'l', 'native', 'pfx', x'00')`,
+			`INSERT INTO tag (id, value) VALUES (1, 't')`,
+			`INSERT INTO tag_assignment (tag_id, work_id, user_id, source) VALUES (1, 1, 9, 'user')`,
+			`INSERT INTO write_queue (idempotency_key, user_id, kind, payload)
+			   VALUES ('k9', 9, 'grab', '{}')`,
+			`INSERT INTO service_instance (id, kind, name, base_url, api_key_enc)
+			   VALUES (2, 'prowlarr', 'Prowlarr', 'http://p:9696', x'00')`,
+			`INSERT INTO release_candidate (id, user_id, service_instance_id, guid, title,
+			                                raw_release_json, fetched_at, expires_at)
+			   VALUES (1, 9, 2, 'g', 't', '{}', '2026-08-17 00:00:00', '2026-08-17 00:25:00')`,
+			`INSERT INTO audit_log (actor_user_id, action, result) VALUES (9, 'login', 'ok')`,
+		}
+		for _, s := range stmts {
+			if _, err := tx.ExecContext(ctx, s); err != nil {
+				return fmt.Errorf("%s: %w", s, err)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `DELETE FROM user WHERE id = 9`)
+		return err
+	}); err != nil {
+		t.Fatalf("a user with rows in every table is no longer deletable: %v\n"+
+			"That is audit_log's defect reproduced: a trigger that aborts the implicit write "+
+			"an ON DELETE action performs makes some row undeletable forever.", err)
+	}
+
+	// 4. …and the one row that IS now undeletable, pinned deliberately rather
+	//    than discovered. user 0 is the shared/system sentinel and its cascade
+	//    reaches library 0. Deleting it used to succeed and took library 0,
+	//    every shared tag_assignment, every shared write_queue row and every
+	//    shared release_candidate with it. It now fails.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `DELETE FROM user WHERE id = 0`)
+		return err
+	}); err == nil {
+		t.Error("DELETE FROM user WHERE id = 0 succeeded. The sentinel user's cascade reaches " +
+			"library 0, so it must not: a sentinel that can be deleted is not a sentinel.")
+	}
+}
+
+// TestSearchDocVisibilityIsACodeInvariant executes schema.md §7's invariants 5
+// and 2 against the paths that break them, so that "asserted, not enforced" is
+// a measurement rather than a claim.
+//
+// Neither is declarable in SQLite. Invariant 5 ("every search_doc row has at
+// least one search_doc_library row") has no "at least one child" constraint and
+// no trigger position that can express it: the doc must exist before its
+// junction row, and the two ways it breaks are cascades. Invariant 2
+// (count(search_fts) == count(search_trgm) == count(search_doc)) cannot be
+// expressed at all — the FTS5 tables are virtual, so they can carry neither a
+// constraint nor a trigger.
+//
+// This test therefore pins THREE things: each invariant's own query, the fact
+// that the schema does not uphold either, and — by firing them — that the
+// queries detect what they exist to detect.
+func TestSearchDocVisibilityIsACodeInvariant(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	orphans := func() int {
+		t.Helper()
+		var n int
+		if err := d.Read().QueryRowContext(ctx, `
+			SELECT count(*) FROM search_doc sd
+			 WHERE NOT EXISTS (SELECT 1 FROM search_doc_library sdl WHERE sdl.doc_rowid = sd.rowid)`).
+			Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	counts := func() (int, int, int) {
+		t.Helper()
+		var doc, fts, trgm int
+		row := func(q string, into *int) {
+			if err := d.Read().QueryRowContext(ctx, q).Scan(into); err != nil {
+				t.Fatal(err)
+			}
+		}
+		row(`SELECT count(*) FROM search_doc`, &doc)
+		row(`SELECT count(*) FROM search_fts`, &fts)
+		row(`SELECT count(*) FROM search_trgm`, &trgm)
+		return doc, fts, trgm
+	}
+
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		stmts := []string{
+			`INSERT INTO user (id, username, auth_source) VALUES (9, 'ada', 'local')`,
+			`INSERT INTO library (id, user_id, name, slug, kind) VALUES (5, 9, 'Ada', 'ada', 'movie')`,
+			`INSERT INTO work (id, kind, title, sort_title, normalized_title)
+			   VALUES (1, 'movie', 'Train Dreams', 'train dreams', 'train dreams')`,
+			`INSERT INTO search_doc (rowid, work_id, kind, norm_title) VALUES (1, 1, 'movie', 'train dreams')`,
+			`INSERT INTO search_fts (rowid, title) VALUES (1, 'Train Dreams')`,
+			`INSERT INTO search_trgm (rowid, title) VALUES (1, 'Train Dreams')`,
+			`INSERT INTO search_doc_library (library_id, doc_rowid) VALUES (5, 1)`,
+		}
+		for _, s := range stmts {
+			if _, err := tx.ExecContext(ctx, s); err != nil {
+				return fmt.Errorf("%s: %w", s, err)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+	if got := orphans(); got != 0 {
+		t.Fatalf("the fixture already violates invariant 5: %d orphans", got)
+	}
+
+	// INVARIANT 5, BREAKING PATH 1: delete the library. The junction row
+	// cascades; the doc does not, and is now visible to no scope at all —
+	// including Unfiled.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `DELETE FROM library WHERE id = 5`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := orphans(); got != 1 {
+		t.Errorf("deleting a library left %d orphaned search_doc rows, want 1 — "+
+			"either the schema now enforces invariant 5 (say so beside search_doc_library "+
+			"in 00005 and delete this arm) or the invariant query no longer detects it", got)
+	}
+
+	// INVARIANT 5, BREAKING PATH 2: delete the OWNER. It reaches the junction
+	// two cascades deep, through library.user_id, which is the path a reader
+	// looking only at search_doc_library's own foreign keys will not see.
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		stmts := []string{
+			`INSERT INTO library (id, user_id, name, slug, kind) VALUES (6, 9, 'Ada 2', 'ada-2', 'movie')`,
+			`INSERT INTO search_doc_library (library_id, doc_rowid) VALUES (6, 1)`,
+		}
+		for _, s := range stmts {
+			if _, err := tx.ExecContext(ctx, s); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := orphans(); got != 0 {
+		t.Fatalf("re-filing the doc did not clear the orphan: %d", got)
+	}
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `DELETE FROM user WHERE id = 9`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := orphans(); got != 1 {
+		t.Errorf("deleting the owning user left %d orphaned search_doc rows, want 1", got)
+	}
+
+	// INVARIANT 2. Deleting the work cascades search_doc away and leaves both
+	// FTS tables holding a document that no longer exists — they are virtual,
+	// so no foreign key and no trigger can reach them.
+	if doc, fts, trgm := counts(); doc != 1 || fts != 1 || trgm != 1 {
+		t.Fatalf("fixture counts are %d/%d/%d, want 1/1/1", doc, fts, trgm)
+	}
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `DELETE FROM work WHERE id = 1`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	doc, fts, trgm := counts()
+	if doc != 0 {
+		t.Errorf("search_doc did not cascade with its work: %d rows", doc)
+	}
+	if fts != 1 || trgm != 1 {
+		t.Errorf("the FTS tables followed the work delete (%d/%d) — if SQLite can now reach a "+
+			"virtual table from a foreign key, invariant 2 is enforceable and the note beside "+
+			"search_doc_library in 00005 is wrong", fts, trgm)
+	}
+}
+
+// TestMigration0005DownPreservesEveryRow covers the Down block, which used to
+// filter its copy with `WHERE state IN (…)` and therefore DELETED — silently,
+// with no count — every row in the one state 0005 exists to permit.
+//
+// Down is not a supported user path; it is how a migration is tested locally,
+// and a Down that eats rows makes the round trip untestable, which is the whole
+// job of the block.
+func TestMigration0005DownPreservesEveryRow(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		rows := []struct{ key, state, lastErr string }{
+			{"k-pending", "pending", ""},
+			{"k-awaiting", "awaiting_choice", ""},
+			{"k-awaiting-2", "awaiting_choice", "an earlier error"},
+			{"k-done", "done", ""},
+		}
+		for _, r := range rows {
+			if _, err := tx.ExecContext(ctx, `
+				INSERT INTO write_queue (idempotency_key, kind, payload, state, last_error)
+				VALUES (?, 'grab', '{}', ?, NULLIF(?, ''))`, r.key, r.state, r.lastErr); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+
+	if err := d.MigrateDown(ctx); err != nil {
+		t.Fatalf("MigrateDown 5→4: %v", err)
+	}
+
+	var n int
+	if err := d.Read().QueryRowContext(ctx, `SELECT count(*) FROM write_queue`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 4 {
+		t.Errorf("the Down block kept %d of 4 rows. It must not delete a row whose state "+
+			"0001's CHECK cannot hold — the state is remapped to 'failed' and recorded in "+
+			"last_error instead, because a row that vanishes is unrecoverable and a row whose "+
+			"state changed is still there to look at.", n)
+	}
+
+	// The remap is visible in the data, not just implied by the row count.
+	rows, err := d.Read().QueryContext(ctx,
+		`SELECT idempotency_key, state, last_error FROM write_queue ORDER BY id`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	remapped := 0
+	for rows.Next() {
+		var key, state string
+		var lastErr sql.NullString
+		if err := rows.Scan(&key, &state, &lastErr); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.HasPrefix(key, "k-awaiting") {
+			continue
+		}
+		remapped++
+		if state != "failed" {
+			t.Errorf("%s survived Down as state=%q; 0001's CHECK cannot hold it", key, state)
+		}
+		if !strings.Contains(lastErr.String, "awaiting_choice") {
+			t.Errorf("%s lost the record of its original state: last_error = %q", key, lastErr.String)
+		}
+		if key == "k-awaiting-2" && !strings.Contains(lastErr.String, "an earlier error") {
+			t.Errorf("%s's pre-existing last_error was overwritten: %q", key, lastErr.String)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if remapped != 2 {
+		t.Errorf("found %d remapped rows, want 2", remapped)
+	}
+}
+
+// TestFTS5TokenizerBehaviour tests what the two virtual tables were CONFIGURED
+// for, which no test did: TestFTS5IsAvailableOnEveryConnection only MATCHes an
+// empty table (and never asserts the count), so every tokenizer option in the
+// DDL — `remove_diacritics 2`, `prefix='2 3 4'`, `trigram` — was a string
+// nothing exercised.
+//
+// WHICH MUTATION EACH ASSERTION CATCHES WAS MEASURED, NOT ASSUMED, because
+// three of the four options turn out to be much harder to detect than they
+// look. Each option was gutted in the migration in turn and the suite re-run:
+//
+//	tokenize=trigram → unicode61       the two substring cases go red
+//	remove_diacritics 2 → 0            the two folding cases go red
+//	remove_diacritics 2 → 1            ONLY the pinyin case goes red — see below
+//	prefix='2 3 4' removed             NOTHING goes red — see below
+//
+// The 2-versus-1 discriminator is not what one would guess. Twenty accented
+// characters were tried under both settings and eighteen behaved identically;
+// what separates them is characters carrying TWO diacritics, which "1" leaves
+// alone and "2" folds (ǚ, ǻ, ǭ, ȱ, ṩ). ǚ is the one that matters here rather
+// than being a curiosity: it is pinyin, so "nǚ" is a romanised Chinese title,
+// and under `remove_diacritics 1` a search for "nu" would not find it.
+func TestFTS5TokenizerBehaviour(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		docs := []struct {
+			rowid int
+			title string
+		}{
+			{1, "Amélie"},        // precomposed é
+			{2, "Trainspotting"}, //
+			{3, "Amélie Two"},   // decomposed: e + combining acute
+			{4, "Nǚ Shu"},        // pinyin ǚ — u with diaeresis AND caron
+		}
+		for _, doc := range docs {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO search_fts (rowid, title) VALUES (?, ?)`, doc.rowid, doc.title); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO search_trgm (rowid, title) VALUES (?, ?)`, doc.rowid, doc.title); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+
+	match := func(t *testing.T, table, expr string) []int {
+		t.Helper()
+		rows, err := d.Read().QueryContext(ctx,
+			fmt.Sprintf(`SELECT rowid FROM %s WHERE %s MATCH ? ORDER BY rowid`, table, table), expr)
+		if err != nil {
+			t.Fatalf("MATCH %q against %s: %v", expr, table, err)
+		}
+		defer func() { _ = rows.Close() }()
+		var out []int
+		for rows.Next() {
+			var id int
+			if err := rows.Scan(&id); err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, id)
+		}
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	same := func(got []int, want []int) bool {
+		if len(got) != len(want) {
+			return false
+		}
+		for i := range got {
+			if got[i] != want[i] {
+				return false
+			}
+		}
+		return true
+	}
+
+	cases := []struct {
+		name  string
+		table string
+		expr  string
+		want  []int
+		why   string
+	}{
+		{
+			name: "exact term", table: "search_fts", expr: `trainspotting`, want: []int{2},
+			why: "the baseline: unicode61 indexing whole words, case-folded",
+		},
+		{
+			name: "prefix query", table: "search_fts", expr: `trai*`, want: []int{2},
+			why: "a prefix query must return the document. NOTE (measured): removing " +
+				"prefix='2 3 4' from the migration leaves this GREEN — FTS5 answers a " +
+				"prefix query from the main term list either way, and the declared prefix " +
+				"index is what makes it a seek rather than a term-list scan. The DDL " +
+				"assertion below is what pins the option; this pins the behaviour",
+		},
+		{
+			name: "diacritics folded, precomposed", table: "search_fts", expr: `amelie`, want: []int{1, 3},
+			why: "remove_diacritics folds é so a keyboard without it still matches",
+		},
+		{
+			name: "diacritics folded, decomposed", table: "search_fts", expr: `amelie two`, want: []int{3},
+			why: "and it folds a combining acute the same way as a precomposed é",
+		},
+		{
+			name: "diacritics folded, query accented", table: "search_fts", expr: "Am\u00e9lie", want: []int{1, 3},
+			why: "the fold is applied to the QUERY as well as to the document",
+		},
+		{
+			name: "the double diacritic only option 2 folds", table: "search_fts", expr: `nu`, want: []int{4},
+			why: "ǚ carries two diacritics. `remove_diacritics 1` leaves it alone and this " +
+				"case goes red under it; 2 folds it. Measured, and it is the ONLY case in " +
+				"this test that separates the two settings",
+		},
+		{
+			name: "substring, mid-word", table: "search_trgm", expr: `spotti`, want: []int{2},
+			why: "the trigram table exists for exactly this: unicode61 cannot match inside a word",
+		},
+		{
+			// ⚠️ MEASURED ASYMMETRY, pinned rather than fixed. The trigram
+			// tokenizer's own remove_diacritics defaults to 0 and the
+			// migration does not set it, so `melie` — which the unicode61
+			// table above WOULD fold to a match — returns nothing here, and
+			// the accented spelling is the only one that hits. That is a
+			// substantive difference between the two arms of the same search
+			// and it belongs to whoever writes the retriever; this case
+			// records which behaviour ships today.
+			name: "substring, mid-word, accent must be typed", table: "search_trgm",
+			expr: "\u00e9lie", want: []int{1},
+			why: "the trigram arm is diacritic-SENSITIVE: tokenize='trigram' with no " +
+				"remove_diacritics option, which defaults to 0",
+		},
+		{
+			name: "substring, mid-word, unaccented misses", table: "search_trgm",
+			expr: `melie`, want: nil,
+			why: "the other half of the same measurement. If this ever returns a row, " +
+				"the trigram table has gained diacritic folding and the case above " +
+				"plus the note beside it are wrong",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := match(t, tc.table, tc.expr)
+			if !same(got, tc.want) {
+				t.Errorf("%s MATCH %q = %v, want %v\n  %s", tc.table, tc.expr, got, tc.want, tc.why)
+			}
+		})
+	}
+
+	// The negative control. Without it every assertion above is satisfied by a
+	// configuration that matches everything.
+	if got := match(t, "search_fts", `nosuchterm`); len(got) != 0 {
+		t.Errorf("search_fts MATCH 'nosuchterm' = %v, want nothing", got)
+	}
+
+	// The one option with no behavioural signature, pinned on the DDL instead —
+	// and said out loud rather than left as a green test that proves nothing.
+	// prefix='2 3 4' is what makes a 2-, 3- or 4-character as-you-type query an
+	// index read; ARCHITECTURE §8.2's search-as-you-type budget is written
+	// against it.
+	var ddl string
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT sql FROM sqlite_schema WHERE name = 'search_fts'`).Scan(&ddl); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(ddl, "prefix='2 3 4'") {
+		t.Errorf("search_fts no longer declares prefix='2 3 4':\n  %s", ddl)
+	}
+	if !strings.Contains(ddl, "remove_diacritics 2") {
+		t.Errorf("search_fts no longer declares remove_diacritics 2:\n  %s", ddl)
+	}
 }

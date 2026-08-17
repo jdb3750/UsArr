@@ -589,10 +589,12 @@ func renderReport(header string, build childResult, results []childResult) strin
 	b.WriteString(pragmaFindings(results, readers))
 
 	b.WriteString("\n**Caveats, so nobody over-reads this.**\n\n")
-	b.WriteString("- Migration 0001 has no `work`, `edition`, `media_file`, `search_doc` or " +
-		"`search_fts` — they land with library sync. The fixture uses the tables that exist, " +
-		"chosen for comparable page and index pressure. **FTS5 memory is unmeasured**; re-run " +
-		"this after the migration that adds the search tables.\n")
+	b.WriteString("- ⚠️ **The fixture predates migration 0005 and has not been rebuilt for it.** " +
+		"`work`, `edition`, `media_file`, `search_doc`, `search_fts` and `search_trgm` all exist " +
+		"now; the composition here still fills only the tables 0001 created, chosen for " +
+		"comparable page and index pressure, plus the narrow `work` rows " +
+		"`write_queue.work_id`'s restored foreign key requires. **FTS5 memory is therefore still " +
+		"unmeasured**, and so is the library-table share. See `internal/db/spike/fixture.go`.\n")
 	fmt.Fprintf(&b, "- The read pool is `NumCPU*2` = %d here. A per-connection page cache scales "+
 		"with that number, so a result from a machine with a different core count is not "+
 		"transferable.\n", readers)

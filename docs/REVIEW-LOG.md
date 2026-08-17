@@ -5627,6 +5627,333 @@ in this entry is instead carried by its own quoted transcript**: the three `gitl
 
 ---
 
+# M5-01…M5-11 — an adversarial review of `b8bb500`, the migration-0005 commit, and what its documentation edits broke
+
+**Date:** 2026-08-17. **Branch:** `claude/hearth-thread-93bfq1`, on top of `b8bb500`, *"feat:
+migration 0005 — the library-sync schema and the write_queue rebuild"*. **Prefix `M5-` has not been
+used before in this file** (`grep -c "M5-" docs/REVIEW-LOG.md` → `0` before this entry), so nothing
+collides. Eleven findings were relayed; **ten are applied, one is applied with its premise corrected**
+— the correction is M5-04, where the finding's own scope claim was wrong about two of its nine sites.
+
+**What the round is about.** `b8bb500` shipped a real migration and, alongside it, edited five
+documents to describe what it had done. **Every one of the eleven findings is against those
+documentation edits, not against the SQL** — the migration itself was not re-reviewed here and no
+`.sql` file is touched by this entry's diff. The pattern across them is one thing said three ways: a
+commit that lands a schema event has to sweep the *pins* that event falsifies, and the pins are
+mostly not in the file being edited.
+
+## M5.1 Disposition of all eleven
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| **M5-01** | High | **ADR-0039 misquotes the citation its argument rests on.** It presented, inside quote marks, *"the sweep may correct an item only when there is no `write_queue` row for that work in `pending`, `inflight` or `verifying`"*. [`reference/sync.md`](./reference/sync.md) §4 reads *"The sweep may correct an item **toward the \*Arr** only when there is **no `write_queue` row for that work in `pending`, `inflight` or `verifying`**."* The three deleted words are exactly what makes the guard inapplicable to the case ADR-0039's decision-3 ground 1 invoked it for | **APPLIED, and the finding is confirmed on primary source.** Verified by reading `reference/sync.md:160-164` — the words are there, and `ARCHITECTURE.md:1333-1334` states the guard the same correct way, so the ADR was the only place carrying the short form. **The quotation is restored verbatim, as an indented block quote rather than an inline paraphrase**, so it cannot be shortened again by editing prose around it. **Ground 1 is struck, not deleted** — `~~…~~` with a 🚩 note beneath giving the reason. Grounds 2 and 3 were re-checked and **both survive**, and the ADR now says so plainly under a *"Does the decision survive on 2 and 3 alone?"* heading rather than leaving a reader to infer it. See M5-02 for the two other copies of the same lossy paraphrase |
+| **M5-02** | High | **The same lossy paraphrase in two more places:** the disposition text `b8bb500` wrote into WQ-05, and `reference/schema.md`'s *"the sweep skips any `work_id` with a row in `pending`, `inflight` **or** `verifying`"* — which **predates this commit** | **APPLIED, both, and the second one's provenance is recorded because it changes what the defect is.** `git blame -L1126,1126 docs/reference/schema.md` returns **`fb20a14`**, not `b8bb500`: the schema.md copy is a **pre-existing defect this commit reproduced**, not one it introduced. It now carries the guard verbatim plus the sentence the shortened form loses — *"It bounds **outbound** corrections … and says nothing about the sweep's local soft-delete and tombstone-expiry path"* — and points at ADR-0039 for what the omission cost. The WQ-05 copy is gone by a different route: that row is restored to its original text under M5-06, and the amended disposition written in its place quotes the guard in full |
+| **M5-03** | High | **The six-table deferral had no ADR authority.** ARCHITECTURE §16's new blockquote attributed it to *"(§16.1, ADR-0035, ADR-0036)"*, and **both of those ADRs state *"No schema change"* in their own Consequences** | **APPLIED, and the premise is confirmed by reading both.** `DECISIONS.md` under ADR-0035: *"**No schema change.** `work.kind` is untouched (§3), `service_instance` is untouched…"*; under ADR-0036: *"**No schema change, and no ADR is reversed.** `work.kind` is untouched, migration 0001 is untouched…"*. Neither authorises a schema scope change, so the deferral was resting on two citations that disclaim it. **[ADR-0040](./DECISIONS.md#adr-0040) is written**, in the file's five-part format, on the argument the finding specified: 00001's own *"a migration that creates a table nothing queries is a schema claim nobody has tested"*; the irreversibility that forced twelve `work.kind` members into the `CHECK` does **not** transfer to six brand-new tables with no dependants; each lands with the catalogue source that writes it. It records the tension with §16's enumerated line **as a consequence rather than resolving it**, and routes the amendment of §16 to the thread that owns §16 (`DEVELOPMENT.md` §11, *announce before pushing*). §16's blockquote now cites ADR-0040 as the authority and 0035/0036 only for the **sequence**, saying explicitly why they are no longer cited for the deferral. **`0040` is the next free number across all remote heads**, not just locally — see M5.3 |
+| **M5-04** | High | **Nine stale *"migration 0001"* pins in `ARCHITECTURE.md`, plus one in `FUTURE.md`,** falsified now that `work`, `edition` and the four library tables are created by `00005`. Includes `:1031`'s *"**Four tables, all in migration 0001.**"* — the identical sentence the commit had already corrected in `schema.md` §13, left standing in the parent document | **APPLIED at all ten sites — and ⚠️ the finding's own scope claim is corrected, because two of the nine are in sections it said they were not in.** The relay stated *"these sections are not §16 or §17"*. Measured with `awk` over the section headers: **`:2217` and `:2225` are inside §16.0**, and **`:2527` is inside §17.2**. Three of the nine are in exactly the two sections the finding excluded. They were still fixed, because all three are **status pins**, not scope claims — `DEVELOPMENT.md` §11 draws the line at *"Scope … is owned by the ADRs and §16 is authoritative for it. Status … is a separate question"* — and none of the three edits moves a milestone. **The distinction is on the record here so the announcement to the §16 owner names them.** The ten sites and their rewrites are in M5.2 |
+| **M5-05** | High | **`reference/schema.md` still carried two claims this log had flagged *in advance*.** `SD-02e` predicted the write_queue FK note would flip the day library sync landed (*"the FK is dropped there … because `work` does not exist yet"*); `SD-02f` predicted the *later tables* appendix header would go wrong the moment a later migration created any of its tables (*"Present in the design, **not in migration 0001**"* — and the `sync_report` row beneath it is created by `00005`) | **APPLIED, both, as pointers rather than as fresh status,** and both rows **closed through §6.1's amended-disposition mechanism** rather than by editing the original rows — see M5.4. The FK note now says *"at the time `00001` was written there was no `work` table to reference"* (a fact about 00001 that cannot go stale) plus *"**Whether there is one now, and which migration restored the key, is answered by `internal/db/migrations` and by nothing in this file**"*. The appendix header now claims **milestone ownership only** and points at `internal/db/migrations` and at `internal/db/migrate_test.go`'s `TestDeferredTablesAreAbsent` (verified present, `migrate_test.go:433`) for existence. ℹ️ **Worth stating: this is the second half of `SD-01`'s thesis arriving on schedule.** Two rows were written down as *"true today, and it flips at a named event"*; the event happened; both were still there |
+| **M5-06** | Medium | **WQ-05 and DL-11 were rewritten in place.** This file's own mechanism (§6.1 *Amended dispositions*) is a separate appended table, whose closing line is *"No existing entry's id, text or severity changed"* | **APPLIED.** Both rows are **restored byte-identical to `5bd7a44`**, the commit before `b8bb500` — verified by `git diff 5bd7a44 -- docs/REVIEW-LOG.md` returning **empty output** before this entry was appended, which is a stronger check than eyeballing the two cells. The new dispositions move into M5.4's amendment table. ⚠️ **The in-place rewrites were not lossy** — both had preserved the prior text inside the cell under *"Original disposition, kept:"* — so this is a mechanism failure rather than a data loss, and it is worth its severity anyway: the id, the severity and the *shape* of a row are part of what a later reader diffs against |
+| **M5-07** | Medium | **`FUTURE.md` §11.1 item 3 asserts the write_queue `CHECK` in the present tense, DDL block included, ~30 lines above its own correction.** Plus `:501`'s *"This paragraph said…"*, which after an in-place rewrite has no referent, and `:496`'s pointer to a WQ-03 argument that is now superseded | **APPLIED, all three.** Item 3 gains an inline ⚠️ at the finding, before the DDL, sending the reader to the correction first and saying which half of the item is stale (*"the finding's reasoning about the five states is what the fix acted on; only its assumption about the fix's shape is stale"*). *"This paragraph said"* becomes *"Item 3 above — and the paragraph that stood in this slot before this one"*, which gives it a live referent and is honest that the slot was rewritten. The WQ-03 pointer is split into the half that survives and the half that does not: **premise stands** (the rebuild was already mandatory — that is what ADR-0039 was decided on), **conclusion superseded** (add the value during the rebuild) |
+| **M5-08** | Medium | **`reference/schema.md`'s *"✅ DONE"* block restates the migration's content as fresh status** — four numbered items reciting what `00005` did — in a document whose own header disclaims that authority | **APPLIED.** The four-item recitation is replaced by a pointer to ADR-0039, to `00005_library_sync.sql`'s header and to `internal/db/testdata/schema.sql`, ending *"Read those, not a summary here — this file does not own what a migration did."* The *"still owed"* note about 0001's four other dropped foreign keys is **kept and re-pointed** — it describes work not done, which is this file's business as an instruction, and it now ends *"Whether it has been written is `internal/db/migrations`' answer"* rather than asserting that 0005 did not do it. ADR-0039's closing consequence bullet, which said the four-step block *"now records what was done"*, is updated to match |
+| **M5-09** | Low | **The §16 blockquote splits the *"Schema, enumerated"* paragraph mid-run,** leaving `**Identity tier 1 only**; the` dangling as its own line directly under a block quote | **APPLIED.** The paragraph is one continuous run from *"Schema, enumerated"* to *"…failure included."*; the blockquote had been inserted after its fifth sentence. It now sits **after** the whole run, and its opening is re-worded from *"The clause above"* to *"the *Schema, enumerated* clause above"* so it still names its subject from the greater distance |
+| **M5-10** | Low | **`FUTURE.md` §11's absence claim carries no search roots** — `DEVELOPMENT.md` §11 rule 5: report an absence as *"not under `docs/`, `web/src/`…"*, never as a claim about the whole tree | **APPLIED, and the search was run rather than restated.** `grep -rn "write_queue" --include=*.go internal/ cmd/ \| grep -v _test.go`, on `b8bb500`: the only hits under those roots are the standalone RSS-spike binary in `internal/db/spike/` and one comment at `internal/httpapi/grabs.go:58`. The paragraph now carries the command, the date, the tree and the two roots, and says *"nothing is claimed about any other"* |
+| **M5-11** | Low | **ADR-0039 is missing from the `DECISIONS.md` index table and has no `<a id="adr-0039"></a>` anchor,** so the four links `b8bb500` added to it all land at the top of the file | **APPLIED, and the pattern was verified rather than assumed.** `grep -n 'a id="adr-003' docs/DECISIONS.md` showed 0030…0038 each carrying an anchor on the line immediately above its `## ADR-…` heading, with the index row linking `[00NN](#adr-00NN)`; **0039 had neither**. Both are added for 0039 and for the new 0040, in that exact shape. The four inbound links — `REVIEW-LOG.md` WQ-05's replacement text, `FUTURE.md` §11 and §11.1, `reference/schema.md` §10 — now resolve. The 0039 index row also carries its own ⚠️ amendment note for M5-01's struck ground, matching how ADR-0025 and ADR-0029 record theirs |
+
+## M5.2 The ten pins, and what each became
+
+The rule applied throughout: **rewrite to a pointer, or pin to a schema *event* rather than a file
+number** — never to a fresher file number, which is the move that produced these. Nothing here writes
+new status prose.
+
+| Site | Was | Is |
+|---|---|---|
+| `ARCHITECTURE.md` §6.1 | *"`person` is new in this revision, and it is **migration 0001 or never**"* | *"the migration that creates `work` or never … read `internal/db/migrations` for which one that is"* |
+| §6.1 | *"**migration 0001** is the only cheap moment to add [`comic_issue`]"* | *"the migration that creates `work` is the only cheap moment … and for whether that moment has passed"* |
+| §6.1 | *"adding it **in migration 0001** costs eight bytes a row. **The seam ships in 0001**"* | *"creating `work_track` with it costs eight bytes a row. **The seam ships with the table**"*, plus a pointer to ADR-0040 for when the table lands |
+| §6.1 | *"every album work carries exactly one synthetic primary `edition` **from migration 0001**"* | *"…exactly one synthetic primary `edition`**, from the moment album works exist"* |
+| §6.4 | *"`normalized_title` and `norm_version` **columns** exist **from migration 0001**"* | *"columns on `work` from the migration that creates it … `internal/db/migrations` says which migration that was"* |
+| §6.4 | *"the nullable column belongs **in migration 0001**"* | *"belongs on `work` from the migration that creates it"* |
+| §6.5 | *"**Four tables, all in migration 0001.**"* — the sentence already corrected in `schema.md` §13 | *"**Four tables, and they land together or not at all** … **Read `internal/db/migrations` for whether they exist**"*, with the reason the four are indivisible |
+| §16.0 ⚠️ | *"Its four tables have to be **in migration 0001** either way"* | *"Its four tables are owed by v0.1 either way"* — a scope statement, which is what §16 is authoritative for |
+| §16.0 ⚠️ | *"**four tables in migration 0001**, materialised membership…"* | *"**four tables**, materialised membership…"* |
+| §17.2 ⚠️ | *"so **migration 0001 carries** `CREATE INDEX ix_edition_format …`"* | *"so `CREATE INDEX ix_edition_format …` **is owed alongside it**. **Read `internal/db/migrations` for whether that index exists**"* |
+| `FUTURE.md` §17 | *"`library` **exists from migration 0001** (ADR-0026)"* | *"`library` **is owed by v0.1** (ADR-0026) … read `internal/db/migrations` for whether the table exists yet"* |
+
+⚠️ **marks the three sites inside §16 and §17** — see M5-04. All three are status pins and none moves
+a milestone, but the §16/§17 owner should hear about them rather than find them.
+
+**The other seven `migration 0001` mentions in the two files were checked and deliberately left.**
+`grep -n "migration 0001" docs/ARCHITECTURE.md docs/FUTURE.md` after these edits returns
+`ARCHITECTURE.md:1875, :2209, :2282, :2310, :2815, :3338` and `FUTURE.md:323`. Six of the seven are
+**true** — `user_id` columns and the access-scope parameter, `service_instance.url_base`, and the
+`audit_log` foreign key are all genuinely in `00001_initial.sql`, and `:2310` is the verbatim
+quotation of the enumerated clause the blockquote is *about*. The seventh, `:2209`/`:2282`'s
+*"because migration 0001 can never be edited"*, is a **weakened argument rather than a false pin** —
+`work.kind`'s `CHECK` did not land in 0001 — and it sits inside §16, where the blockquote directly
+beneath it now carries the correction. Left for the §16 owner with the rest of the ⚠️ set.
+
+ℹ️ **One of the eleven rewrites is load-bearing beyond its own line and is called out:**
+`ix_edition_format` **does not exist** — `grep -n "ix_edition_format" internal/db/migrations/00005_library_sync.sql`
+returns nothing. The old text asserted a migration carried it; the new text says it is *owed* and
+sends the reader to the migrations directory. That is the honest form of the same sentence, and it is
+also the form that will still be honest on the day someone writes the index.
+
+## M5.3 Checking that `0040` was free — across every head, not just this one
+
+`DEVELOPMENT.md` §11: *"several threads push to `main` within the same hour here."* An ADR number
+claimed locally is worth nothing if a sibling branch has already claimed it. Run 2026-08-17, after
+`git fetch --all`, over **all eighteen remote heads** returned by `git ls-remote --heads origin`:
+
+```
+for b in $(git ls-remote --heads origin | awk '{print $2}' | sed 's|refs/heads/||'); do
+  echo "$b -> $(git show origin/$b:docs/DECISIONS.md | grep -o '^## ADR-[0-9]*' | sort | tail -1)"
+done
+```
+
+**`main` and thirteen branches stop at ADR-0038; three are further behind (0024, 0035, 0036); exactly
+one head carries ADR-0039, and it is this one.** So `0040` is the next free number everywhere, not
+merely here. ⚠️ **This is a claim with a shelf life** — it describes the remote at the moment it was
+read, and a branch pushed since could collide. It is recorded with its date and its method so the
+next author re-runs the loop rather than trusting the number.
+
+## M5.4 Amended dispositions
+
+Four rows amended, none edited. **No existing entry's id, text or severity changed** — WQ-05 and
+DL-11 were restored to their `5bd7a44` text first (M5-06), and SD-02e / SD-02f are untouched.
+
+| # | Original disposition | Amended disposition, and what was run |
+|---|---|---|
+| **WQ-05** | Recorded as undecided — the owner's call, deliberately made at rebuild time and not now. ⚠️ *"This is a lean, not a decision"* | **CLOSED 2026-08-17 by [ADR-0039](./DECISIONS.md#adr-0039), at the rebuild, exactly as this entry required.** The lean was followed: `'awaiting_choice'` is **excluded** from `ix_wq_runnable`'s predicate, with the reason written beside it in `internal/db/migrations/00005_library_sync.sql`, and the predicate is byte-identical to 0001's. The objection this entry raised — that the predicate also serves the reconciliation guard — settled it in the *same* direction, and the guard is quoted here in full because a shortened form of it caused M5-01: *"The sweep may correct an item **toward the \*Arr** only when there is **no `write_queue` row for that work in `pending`, `inflight` or `verifying`**"* ([`reference/sync.md`](./reference/sync.md) §4). It names the three states literally, so a fourth would change the outbound guard's meaning as well as the sweep's. **The same rebuild also dropped `state`'s `CHECK` entirely** rather than widening it — which WQ-03 and WQ-04 did not anticipate and which supersedes WQ-04's step 1; ADR-0039 carries that argument and its rejected alternatives |
+| **DL-11** | Open — recorded here rather than applied. **Fix shape:** decide it at the same rebuild WQ-04 already schedules … *"so a fourth index is the cheapest it will ever be"* | **Still open after the rebuild, and one premise of this entry is withdrawn.** The 0005 rebuild deliberately did **not** add a fourth index. *"A fourth index is the cheapest it will ever be"* is **false**, and the reasoning behind the error is worth keeping: it borrowed the *rebuild* argument (true of a `CHECK` or a foreign key, which SQLite cannot `ALTER` onto an existing column) and applied it to an index, which `CREATE INDEX` adds at any time with no rebuild at all. So a terminal-row index costs exactly the same on the day the sweep is written — when it can be justified by a measurement instead of a guess. Recorded in `00005_library_sync.sql` beside `ix_wq_runnable`. **The finding itself stands: the scan is still there and still latent.** ℹ️ Same class of error as M5-04's, in the other direction: an argument correct about one schema object quoted for another |
+| **SD-02e** | ⏭️ Open — *"**True**, and 🚩 **it flips the day library sync lands**"* | **CLOSED 2026-08-17 — the flip happened, on `b8bb500`, and the prediction was exact.** `work` is created by `00005_library_sync.sql`, so *"because `work` does not exist yet"* became false in the same commit that made it false, and survived that commit's own documentation sweep. Fixed by M5-05 as a **pointer**, not as a fresher status claim: the sentence now states a fact about `00001` that cannot decay, and hands existence to `internal/db/migrations`. ℹ️ **The row's value was in the 🚩, not the verdict.** A *"true today"* verdict aged out in under a day; the flag naming the event is what made the defect findable afterwards. That is the argument for writing the trigger into a status row whenever one is knowable |
+| **SD-02f** | ⏭️ Open — *"**True**, and 🚩 **the same pin again**: absence is asserted against migration **0001** specifically, so the header goes wrong the moment a later migration creates any row of its own table"* | **CLOSED 2026-08-17 — likewise flipped by `b8bb500`, by the mechanism this row named.** `sync_report` sits in the *later tables* appendix and is created by `00005`, so an appendix headed *"not in migration 0001"* now contains a row that is in a migration. Fixed by M5-05: the header claims **milestone ownership** only — a scope question, which the appendix does own — and points at `internal/db/migrations` for existence and at `internal/db/migrate_test.go`'s `TestDeferredTablesAreAbsent` (`:433`, verified present) for the lists in executable form. ⚠️ **This one had a second victim the row did not predict**: the same commit *edited the `sync_report` line beneath the header* while leaving the header above it standing. A sweep that touches a row and not the sentence that scopes it is the failure mode both SD-02e and SD-02f describe, performed once more in the act of not fixing them |
+
+## M5.5 What this round found that the relay did not
+
+* **The relay's scope statement was wrong about three of its own sites** — M5-04. Two are in §16.0 and
+  one in §17.2, which it explicitly said none of them were. They were fixed anyway on the
+  status-versus-scope distinction, but a finding that mis-states which section it is in is a finding
+  that could have been applied straight into somebody else's document unannounced.
+* **The `schema.md` paraphrase in M5-02 is older than the commit under review.** `git blame` puts it
+  at `fb20a14`. Reviewing a commit's diff would never have found it; it was found by grepping every
+  file for the *shape* of the quotation after M5-01 established that the shape was dangerous. **When a
+  misquotation is found once, grep for it — a wrong paraphrase is copied, not invented twice.**
+* **ADR-0039's ground 3 needed tightening even though its conclusion held.** It said *"Nothing in
+  `internal/` reads `write_queue` yet"*. Measured, that is not quite true: `internal/db/spike/` reads
+  it (`workload.go:149`). The spike is a standalone benchmark binary and the conclusion is unaffected,
+  but the sentence as written is the absence claim `DEVELOPMENT.md` §11 rule 5 forbids. It now carries
+  the command, the date, the two roots and the two hits. **This was not one of the eleven.**
+* **One thing the round deliberately did not do.** `sync.md` §4 specifies the write-queue guard for
+  *outbound* corrections and specifies **no** precondition on the sweep's local tombstone-expiry hard
+  delete. ADR-0039 is now decided in the open knowledge that the collision can occur. Whether §4
+  should *gain* such a precondition is a **design question for `reference/sync.md`'s owner**, not a
+  correction to this commit, and it is left unraised rather than smuggled in as a documentation fix.
+
+## On the gate for M5-01…M5-11
+
+⚠️ **Where it was run, and why not in the obvious place.** `make check` **cannot be run in the
+primary checkout of this tree right now**, and the reason is worth recording rather than working
+around silently: a concurrent read-only review agent has a git worktree at
+`.claude/worktrees/review-sql-a1/` **inside the repository**, `.claude/` is untracked and **not**
+git-ignored, and `fmt-check` globs `*.go` over the whole working tree. So the gate fails on somebody
+else's scratch files:
+
+```
+fmt-check: checking 273 .go files with gofumpt
+not gofumpt-formatted:
+.claude/worktrees/review-sql-a1/internal/db/zzadv2_test.go
+.claude/worktrees/review-sql-a1/internal/db/zzadv3_test.go
+make: *** [Makefile:473: fmt-check] Error 1
+```
+
+**273 `.go` files** against the **135** a clean tree has — the glob is picking up a second full
+checkout. Nothing was deleted, pruned or reformatted in response; the gate was run instead in a
+**detached worktree outside the repository**, at `b8bb500` with this entry's five-file documentation
+diff copied in, where the same glob reports 135. ℹ️ **This is a real gap in the gate, not a local
+annoyance** — any nested checkout under the repo root silently changes what `fmt-check`, `secrets`
+and `lint` are pointed at, which is `DEVELOPMENT.md` §11 rule 5 (*name the surface*) failing at the
+Makefile rather than in a report. **Raised, not fixed here:** it is a `Makefile` change and this
+entry is documentation-only.
+
+✅ **`check: OK`**, and the binaries it asserted, because a green that names neither its tool nor its
+tree is a rumour: gofumpt **v0.11.0** over **135 `.go` files**; golangci-lint **2.12.2** over **11 Go
+packages**, **`0 issues.`**, with `/root/go/bin/golangci-lint cache clean` run by absolute path first
+because the `PATH` copy is the stale 2.5.0 and this tree has had worktrees come and go; prettier
+**`All matched files use Prettier code style!`**; svelte-check **`COMPLETED 236 FILES 0 ERRORS 0
+WARNINGS 0 FILES_WITH_PROBLEMS`**; `go mod verify` → **`all modules verified`**; gitleaks **v8.30.1**
+(build-info; `--version` is unstamped) — **`no leaks found`** over **~8.68 MB** in ~2.2 s (ℹ️ the
+byte figure is given rounded and *only* rounded, because gitleaks scans the whole tree including this
+file: an exact count quoted here is falsified by the sentence quoting it, which is the one number in
+the banner that cannot be made self-consistent); **11 Go packages `ok`**; **386 web tests in 9 files
+passed**; `check-offline: OK`;
+govulncheck **v1.7.0** → **`No vulnerabilities found`**; `pnpm audit` → **`No known vulnerabilities
+found`**.
+
+⚠️ **State plainly what that green is worth here — the same size `MEAS-02` stated it at, for the same
+reason.** This entry's diff is **five Markdown files and nothing else**. **Exactly one step of the
+gate read them**: `secrets`, which runs `gitleaks dir .` from the repo root. `fmt-check`'s Go half
+globs `*.go` and its prettier half runs with cwd in `web/`, so **no Markdown under `docs/` is
+formatter-gated at all**; `lint`, `test`, `modverify` and `vuln` never leave the Go module and `web/`.
+**So the green attests one thing — no credential-shaped string anywhere in the tree — and nothing
+whatever about whether the eleven dispositions above are true.** ✅ **Every claim in this entry is
+carried by its own quoted evidence instead**: the `reference/sync.md:160-164` read behind M5-01, the
+`git blame -L1126,1126` behind M5-02, the two *"No schema change"* reads behind M5-03, the `awk`
+section-header mapping behind M5-04, the empty `git diff 5bd7a44 -- docs/REVIEW-LOG.md` behind M5-06,
+the `grep` for `ix_edition_format` behind M5.2, and the eighteen-head `git ls-remote` loop behind
+M5.3.
+
+ℹ️ **Measured on `b8bb500` plus this diff**, following the form `MEAS-02` set — the whole five-file
+diff, this section included, was copied into the detached worktree and the gate re-run there, so the
+figures above describe the tree that is about to be committed and not an earlier draft of it. **The
+one thing the gate cannot attest is the commit sha**, which does not exist until this file is
+committed; the base commit plus the five files reproduce it exactly.
+
+### Amendment — the gate re-run at the sha, and the nested-worktree obstruction lifting
+
+📌 **`make check` was re-run twice more after the entry above was committed, and both are `check:
+OK`.** The first is the one that closes the gap the last paragraph named: `git checkout -f --detach
+33f698f` in the same outside-the-repo worktree, `git status --short` **empty**, `git rev-parse HEAD`
+→ `33f698f9b81997dce2c835f9d0eaeea310048279` — so the green is attached to a **commit sha** and a
+clean tree, not to a base plus a copied diff. The second is in the **primary checkout**, `135 .go
+files`, `0 issues.`, `no leaks found`, `check: OK`.
+
+⚠️ **That second run means the paragraph above, which says the gate *"cannot be run in the primary
+checkout of this tree **right now**"*, describes a condition that had already lifted about fifteen
+minutes later: the concurrent agent removed `.claude/worktrees/review-sql-a1/` itself, and `ls -d`
+now reports `No such file or directory`. **The original paragraph is left standing rather than
+edited** — it is a dated measurement and this file's own rule (*"a citation inside a dated record is
+history, not staleness"*) says to amend underneath. ℹ️ It is also `SD-02r`'s defect committed once
+more, in the entry that closes two of `SD-02`'s rows: **a present-tense phrase about a live
+condition**. *"Right now"* should have been *"at 16:20 on 2026-08-17"* when it was written, and the
+amendment is here instead of the edit. **The `Makefile` gap it reports is unaffected and still real**
+— nothing about `fmt-check`'s glob changed, only the directory it was tripping over.
+
+---
+
+# M5-12…M5-24 — the SQL review of `00005_library_sync.sql` itself, and the gate holes the round fell into
+
+**Date:** 2026-08-17. **Branch:** `claude/hearth-thread-93bfq1`, on top of `1b3acd7`. **Target:**
+`internal/db/migrations/00005_library_sync.sql` — **the SQL this time**, which M5-01…M5-11
+explicitly did not review (*"every one of the eleven findings is against those documentation edits,
+not against the SQL"*). Seven findings against the migration, three against the gate, plus a live
+probe result recorded here because it landed in the same window.
+
+🚩 **`00005` IS NOT MERGED TO `main` — it exists only on this branch — so it was fixed IN PLACE
+rather than superseded by a `00006`.** The project rule *"a merged migration is never edited"* is
+about migrations other databases have already run; this one has run nowhere. Verified before any
+edit: `git log origin/main --oneline -- internal/db/migrations/00005_library_sync.sql` returns
+nothing. **`00001`–`00004` are merged and are untouched by this entry** — the diff proves it.
+
+## M5.6 Disposition of all ten
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| **M5-12** | **High** | **The `write_queue` copy silently destroys data.** `work_id` was passed through `CASE WHEN EXISTS (SELECT 1 FROM work …) THEN work_id END`, and `work` is created EMPTY by the same migration — so every non-NULL `work_id` became NULL with no error, no log and no `sync_report` row | **APPLIED, in the preferred shape, and the premise was reproduced first.** Measured: 2 of 2 rows lost the value; all 9 rows survived; it recurs on every down/up cycle. The `CASE` is gone — the copy is now a straight column list — behind a `BEFORE INSERT` trigger on `write_queue_new` that fires `RAISE(ABORT, …)` when any row carries a non-NULL `work_id`. **The message names the count and the remedy**, verbatim: `migration 0005 aborted rather than silently discard data: 2 write_queue row(s) carry a non-NULL work_id, and this migration creates the ``work`` table empty, so every one of them references a work that does not exist. … list them with "SELECT id, kind, state, work_id FROM write_queue WHERE work_id IS NOT NULL", then either DELETE them or set their work_id to NULL, and re-run the migration.` Three mechanics were executed rather than assumed: a bare `SELECT RAISE(ABORT, …)` is rejected (`RAISE() may only be used within a trigger-program`), so it must be a trigger; `RAISE`'s message accepts an **expression**, which is what lets it carry the count; and the `BEFORE` trigger fires **ahead of** the foreign key, so the operator sees this message and not `FOREIGN KEY constraint failed`. `PRAGMA defer_foreign_keys` was considered and rejected — it moves the same failure to `COMMIT` with a worse message |
+| **M5-13** | **High** | **…and the test never exercised the copy at all**, which is the deeper finding: `TestMigrate0005WriteQueueRebuild` runs against `openTestDB`, i.e. 1→5 over an EMPTY database, so the only step of the twelve that can lose data moves zero rows | **APPLIED. Two tests, and the split is itself a finding — see M5.7.** `migrateTo0004` walks a fresh database up and one step back down, which is this package's only route to "the schema as 0004 left it". `wqFixture` then loads nine rows covering every `state` 0001's `CHECK` permits, every `fail_reason` including `NULL`, `NULL` and non-`NULL` for every nullable column, a non-`NULL` `user_id` and `service_instance_id` (a rebuild is where those clauses get copied wrong), unicode outside the BMP plus a zero-width space plus C0 control characters in three free-text columns, and `id = 9223372036854775807`. **`TestMigrate0005WriteQueueCopyIsLossless`** dumps every column of every row **by name from the result set** — so a column a later migration adds is compared too — and diffs typed values, then migrates and diffs again. **`TestMigrate0005AbortsRatherThanDroppingWorkID`** asserts the abort, the count in the message, that the version is still 4, and that the rows are **byte-identical afterwards**. 🔥 **Fired before the fix**: the abort test went red against the silent-NULL migration with the message *"migration 0005 SUCCEEDED against write_queue rows carrying a work_id"*. 🔥 **The lossless test was fired too**, by making the copy write `NULL` for `settled_at`: red, naming the column |
+| **M5-14** | Medium | **`image_asset` foreign keys block the sweep their index exists for.** `work.poster_asset_id` / `.backdrop_asset_id` were `REFERENCES image_asset(id)` with a defaulted `ON DELETE NO ACTION`, and `ix_img_state(state, expires_at)` has no other plausible reader | **APPLIED, both columns, in the migration and in `schema.md` §1.** Reproduced first: `DELETE FROM image_asset WHERE state = 'ready' AND expires_at <= ?` against an asset a work points at fails with `FOREIGN KEY constraint failed` — so the index served a query that could never succeed on the rows it was built to find. Now `ON DELETE SET NULL`, matching `origin_service_instance_id` and `library.sink_service_instance_id` in the same migration. `TestImageAssetExpirySweepEvicts` proves the eviction, that the work's two columns are `NULL` afterwards, **and that the work itself survives** — SET NULL, never CASCADE; a cover expiring must not delete the movie. 🔥 Fired by reverting the two clauses: red, with the constraint error |
+| **M5-15** | Medium | **`media_file.provenance_id` is the third defaulted foreign key — judge it separately** | **JUDGED, AND DELIBERATELY LEFT AS `NO ACTION`.** The poster pair was changed because a sweep exists to delete their parent and the default blocked it; that argument does not transfer. **Nothing deletes a `provenance` row**: `schema.md` §6 makes the table immutable (*"never overwrite provenance on upgrade — insert a new row"*), it carries no expiry column and no index that would serve a sweep, and it is the child of nothing, so no cascade reaches it — `provenance.user_id` carries no foreign key for exactly that reason. So `NO ACTION` blocks no sweep here; what it blocks is an accidental `DELETE FROM provenance` while a file still cites it, which for an acquisition-history table is the outcome to want. `SET NULL` would quietly break the file→grab join that `acquisition_state` exists to keep honest. Recorded in the migration beside the column and in `schema.md` §1 |
+| **M5-16** | Medium | **The reserved `library.id = 0` "Unfiled" row is unprotected.** `DELETE FROM library WHERE id = 0` succeeded, nothing recreated it, and it is also reachable by cascade from deleting user 0 | **APPLIED — `trg_library_unfiled_no_delete`, a `BEFORE DELETE` trigger raising on `OLD.id = 0` — and the `audit_log` interaction was TESTED, which is the half that matters.** `TestUnfiledLibraryIsProtected` covers four things: the direct delete is refused; an **ordinary** library still deletes (a guard that blocked the whole table would be a different bug with the same green test); **a user with a row in every table that references `user(id)`** — library, library_override, session, client_credential, tag_assignment, write_queue, release_candidate, audit_log — **is still deletable**, which is the `audit_log` failure mode re-run at the table 0005 added; and `DELETE FROM user WHERE id = 0` now **fails**. 🚩 **That last one is a behaviour change, recorded rather than discovered**: it used to succeed and took library 0, every shared `tag_assignment`, every shared `write_queue` row and every shared `release_candidate` with it in one statement. A sentinel that can be deleted is not a sentinel. `AFTER DELETE`-and-re-insert was rejected: re-inserting during user 0's cascade violates `library.user_id`'s own foreign key at statement end. 🔥 Fired by deleting the trigger from the migration: red on both the delete and the row count |
+| **M5-17** | Medium | **The per-user *Unfiled* gap — record it, do not solve it.** *Unfiled* is `user_id = 0` while `ux_library_slug`/`ux_library_name` are `(user_id, …)`, so no other user has one and invariant 5's safety net does not exist for them | **RECORDED, not solved, as instructed** — [`FUTURE.md`](./FUTURE.md) §19, plus a ⚠️ pointer at `schema.md` §13.1. The section states the seam as *the defect it will become on the day the second user is created*, and names three specific things the later migration must do rather than "consider it": create one row per user at user-creation time and backfill the existing ones, with `(user_id, slug='unfiled')` — already unique under `ux_library_slug` — becoming the identity in place of the reserved id; keep library 0 and its trigger as user 0's own; **and widen the trigger to `WHEN OLD.slug = 'unfiled'` only after deciding the `audit_log` question again**, because under the widened form the blocked cascade's parent is an *ordinary* user and `DELETE FROM user` would fail for everyone. That last point is the non-obvious one and it is why the entry exists |
+| **M5-18** | Medium | **The `search_doc` visibility invariant is asserted, not enforced** — and `schema.md` §7 invariant 2 likewise | **APPLIED as a written decision: BOTH ARE CODE INVARIANTS, both are now stated as such with the code that owes them, and both are CI-asserted by execution rather than by hope.** Enforcement was considered and is **not available**: invariant 5 has no "at least one child row" constraint in SQLite, and no trigger position expresses it — at insert time the doc necessarily exists *before* its junction row (forced by that table's own foreign key), and the two ways it breaks are **cascades**, where an `AFTER DELETE` trigger cannot distinguish *"lost its last scope"* from *"is being deleted too"*. Invariant 2 is worse: the FTS5 tables are **virtual**, so they can carry no constraint and be the target of no trigger — nothing in SQLite can hold three row counts equal. `TestSearchDocVisibilityIsACodeInvariant` **executes both breaking paths** (`DELETE FROM library`, and `DELETE FROM user` two cascades deep through `library.user_id`) and the FTS divergence, so the queries are proven to detect what they exist to detect. **The Unfiled comment no longer implies the schema upholds anything** — in the migration and in `schema.md` §13.1 it is now *"the PLACE invariant 5 is upheld in"*, and §7's two rows carry the debt and its owner: the search-document builder, which writes all three tables and must re-file a stranded doc into library 0 in the same transaction |
+| **M5-19** | Medium | **`ix_wq_runnable` is only reachable by a query spelling its `IN` list verbatim**, and 0005 re-affirmed the predicate across ~15 lines without noting it | **APPLIED — the constraint is beside the index, in `schema.md` §10, and pinned in CI in both directions.** Measured: `WHERE state IN ('pending','inflight','verifying') AND next_attempt_at <= ?` → `SEARCH write_queue USING COVERING INDEX ix_wq_runnable (state=? AND next_attempt_at<?)`; `WHERE state = 'pending' AND next_attempt_at <= ?` → `SCAN write_queue`. `TestWriteQueueRunnableNeedsTheVerbatimINList` asserts **both**, because pinning only the good plan leaves the trap undocumented and pinning only the bad one reads as a bug report. The rule for callers is stated: **filter the extra states in the SELECT list, never in the `WHERE` clause.** 🔥 Fired by dropping the partial predicate: the single-state query then *does* reach the index and the test goes red saying so |
+| **M5-20** | Low | **`schema.md`'s `search_doc_library` is missing `STRICT`** — one of four corrections `b8bb500` claimed to have made, which did not land | **APPLIED, and the meta-point is recorded because it is the finding's real content.** The table now reads `) STRICT, WITHOUT ROWID;`, matching the migration and `schema.md`'s own *"STRICT tables throughout"*. ⚠️ **A claimed correction was not verified.** `00005`'s header lists four corrections *"that file now carries"*, item 1 being this one; the migration made the change and the sentence describing it was written, but nobody re-read the target. **The correction and the claim that it had been made were written in the same commit, which is exactly the pattern that makes a claim worthless** — the same class as `MEAS-02`'s three staged claims and `SD-01`'s. Items 2, 3 and 4 of that list were re-read while fixing this one and **all three did land** (`field_name` carries `IS NULL OR …`; §12.1 carries `sync_report`'s DDL flagged as inference; §13's *"all four tables are in migration 0001"* is gone) |
+| **M5-21** | Low | **The goose `Down` block silently deletes rows** — `WHERE state IN (…)` drops `awaiting_choice`, the state 0005 exists to permit, with no error | **APPLIED as the remap, and the choice is argued rather than picked.** Every row is now copied; a state 0001's `CHECK` cannot hold is remapped to `'failed'` — terminal, so nothing re-runs it — and the original is appended to `last_error`, which is free text and is where a human looks. **The reason the remap beats the comment-only option:** this is the same defect as M5-12 one block down, and the same answer applies — a row that vanishes is unrecoverable, a row whose state changed is still there to look at. **The reason it beats aborting** (the M5-12 answer) is that there the value's *only* copy was at stake; here it is preserved in a column built for it, and a `Down` that refuses to run is a local testing tool that does not work, which is the one thing the block is for. `TestMigration0005DownPreservesEveryRow` asserts 4 rows in and 4 out, the remapped state, the recorded original, **and that a pre-existing `last_error` is not overwritten**. 🔥 Fired by restoring the `WHERE`: red at *"the Down block kept 2 of 4 rows"* |
+
+## M5.7 The one place the review's own prescription could not be followed, and why
+
+M5-13 asked for **one** test that populates `write_queue` including *"NULL and non-NULL `work_id`"*
+and then *"migrates to 0005 and diffs every column"*. **That test is unwritable once M5-12 is fixed,
+and the reason is worth stating rather than quietly routing around**: a non-NULL `work_id` is
+dangling by construction, the resolution is to abort, and a migration that aborts moves no rows to
+diff. The three outcomes are exhaustive — abort, keep the value, or destroy it silently — and
+keeping it is not available at any price (`PRAGMA foreign_keys=OFF` is a documented no-op inside
+goose's transaction; `defer_foreign_keys` relocates the failure to `COMMIT`).
+
+So it is two tests: the column-by-column diff over the rows the migration is willing to move, and
+the abort over the rows it is not — which between them cover every column and both values of the one
+column they disagree about. **The prescription was followed where it holds and its unwritable half
+is recorded here, rather than a green test being produced that answers a different question.**
+
+## M5.8 The gate follow-ups — all three real, all three fixed, all three fired
+
+| # | Finding | Disposition |
+|---|---|---|
+| **M5-22** | **`internal/db/spike` is compiled by NO step of `make check`.** It is behind `//go:build bench`, so `go list ./...` returns 11 packages and never mentions it — and both spike files were changed by this work | **APPLIED — `make build-tagged` (`go build -tags=bench ./...`), added to `check-offline` between `lint` and `modverify`.** It prints the package count it compiled (**12**, against `go list ./...`'s **11**) so the step cannot silently scan nothing. 🔥 **Fired**: a deliberate `var deliberateTypeError string = 42` in `internal/db/spike/workload.go` passed `go build ./...` ("OK — did not see the error"), passed `go test ./internal/db`, and passed `golangci-lint run` over all 11 packages — and `make build-tagged` failed with `internal/db/spike/workload.go:46:34: cannot use 42 (untyped int constant) as string value in variable declaration`. ℹ️ **Why the hole was invisible**: gofumpt *does* read those files — it parses without resolving build tags — so the formatter reported the package as checked while no compiler had ever looked at it. `go build` rather than `go vet` or `go test` because the spike has no tests and a build is the smallest thing that makes a type error fail; it emits no binary, because `go build` only writes an executable when given a single main package |
+| **M5-23** | **FTS5's tokenizer and prefix behaviour has no behavioural test** — the existing one MATCHes an empty table and never asserts the count | **APPLIED — `TestFTS5TokenizerBehaviour`, eight cases plus a negative control — and 🚩 two of the four options turned out to be far harder to detect than the finding assumed, which is recorded in the test rather than papered over.** Each option was gutted in the migration and the suite re-run: `tokenize=trigram`→`unicode61` turns the two substring cases red; `remove_diacritics 2`→`0` turns four folding cases red; **`2`→`1` turns exactly ONE case red**; **removing `prefix='2 3 4'` turns NOTHING red.** The 2-versus-1 discriminator is not what one would guess — twenty accented characters were tried under both and eighteen behaved identically; what separates them is characters carrying **two** diacritics (ǚ, ǻ, ǭ, ȱ, ṩ), and **ǚ is pinyin**, so `Nǚ Shu` is a romanised Chinese title that `remove_diacritics 1` would not find under the query `nu`. That case is the test's only 2-vs-1 witness and it says so. `prefix='2 3 4'` has **no behavioural signature at all** — FTS5 answers `trai*` from the main term list either way, and the declared prefix index is what makes it a seek rather than a term-list scan — so it is pinned on the DDL, with the reason written down instead of a green case that proves nothing. ⚠️ **One thing measured and NOT fixed here**: the trigram table is diacritic-**sensitive** (`tokenize='trigram'` with no `remove_diacritics`, which defaults to 0), so `melie` finds nothing where the `unicode61` arm folds it. Both halves are pinned as cases; the asymmetry belongs to whoever writes the retriever |
+| **M5-24** | **The `.claude/` gate obstruction is real and unfixed** — a nested git worktree made `fmt-check` sweep 273 `.go` files instead of 135, because `.claude/` is untracked and not in `.gitignore` | **APPLIED, both halves, because a `.gitignore` entry only helps the tools that read one.** `.claude/` is now ignored, with the incident written next to it; and the Makefile grew `GO_SRC_LIST`, which is `git ls-files --cached --others --exclude-standard -- '*.go'` when inside a work tree and a `find` with prunes otherwise. **`--others --exclude-standard` is load-bearing**: it keeps a brand-new `.go` file format-checked *before* it is staged, which a bare `git ls-files` would lose, while excluding anything `.gitignore` covers. `fmt` and `fmt-check` both use it, so `make fmt` can no longer reformat somebody else's checkout either. 🔥 **Fired by recreating the condition**: `git worktree add --detach .claude/worktrees/gate-probe HEAD`, then — with the worktree in place — the **old** glob counts **270** `.go` files and the new list counts **135**, and `make fmt-check` reports `checking 135 .go files with gofumpt` and passes. Worktree removed afterwards; `git worktree prune` run |
+
+## M5.9 The Kavita watermark probe — a live result, recorded where it was owed
+
+**Ran by the owner, 2026-08-17, against his own instance: Kavita 0.9.0.2, 151 series, page size 10.**
+[ADR-0035](./DECISIONS.md#adr-0035) §2 wrote the pass condition down before the probe ran, which is
+what makes this recordable as a result rather than as an impression. Clause **(a)** ordering **PASS**
+— 10 of 10 rows non-increasing on `lastChapterAddedUtc`. Clause **(b)** resumability **PASS** —
+page-1 boundary ≥ page-2 first row, **no id overlap**, page 1 **byte-identical** across two fetches.
+Clause **(c)** **INCONCLUSIVE live** (it needs a library change) and **settled from source instead**:
+`UpdateLastChapterAdded()` has exactly one production call site,
+`Kavita.Services/Scanner/ProcessSeries.cs:769`, inside the `if (chapter == null)` new-chapter branch
+— so the key moves on a chapter **add** and not on an edit, a deletion, a retitle or a cover change.
+
+**Recorded in three places, each in the form that file's rules require.** ADR-0035 gains **§2a**, a
+dated result note that leaves §2's pass condition standing as the standard it was judged against.
+`ARCHITECTURE.md` §7.1a's Kavita row moves from ⚠️ **unverified** to ✅ **verified**, carrying the
+qualification. And the §7.1a header sentence *"the two that carry the strategy are both unverified"*
+is amended rather than rewritten, because it is dated.
+
+🚩 **The qualification changes the MECHANISM, not the verdict, and it falsified wording in two
+files.** `SeriesFilterField` has **no timestamp member**, so §2's *"re-requesting with a filter at
+the last seen value"* is **not expressible** — resumption is a **sorted page walk with a client-side
+stop**. §7.1a's channel-3b description is corrected to say so explicitly, because "stop at the first
+page entirely older than the watermark" was being read as a since-filter.
+
+ℹ️ **And the owner's real data supplies the concrete justification for §7.1a's overlap window**,
+which until now rested on reasoning: the timestamps cluster on the **scan job's** clock — three
+series within microseconds at `07:00:30` — so a walk resuming exactly at the watermark drops the
+siblings sharing the boundary value.
+
+📌 **Citation maintenance, appended rather than rewritten.** ADR-0035 §2's source table cites the
+**old** Kavita tree layout (`API/DTOs/SeriesDto.cs` and friends). The tree has been restructured —
+it is `Kavita.Models/DTOs/SeriesDto.cs` now — and the 2026-08-16 citations are **left exactly as they
+were**, with the new paths noted underneath. A citation inside a dated record is history: it is what
+was read on the day, against the tree as it then stood. This file's own rule, applied to somebody
+else's file.
+
+## M5.10 What this round found that the review did not
+
+* **`DELETE FROM user WHERE id = 0` succeeded**, and took library 0 with it. The finding named the
+  cascade as a *route to* the unprotected row; the larger fact is that the shared/system sentinel
+  user was itself deletable, and deleting it cascaded away every shared `tag_assignment`,
+  `write_queue` and `release_candidate` row in one statement. Closed as a side effect of M5-16 and
+  pinned deliberately, because a fix that changes what `DELETE FROM user` does must not arrive
+  unannounced.
+* **The `golangci-lint` cache pointed at a worktree that no longer exists.** The first lint run of
+  this round reported **4 gosec issues** in files under
+  `/tmp/…/scratchpad/gate-93bfq1-20260817/…` — a previous agent's detached worktree — alongside
+  `level=warning … no such file or directory` for each. `golangci-lint cache clean` by absolute path
+  cleared them and the same tree then reported `0 issues.` ⚠️ **A cached result from a deleted tree
+  is indistinguishable from a finding about this one**, and it is the second time this project has
+  had to clean that cache by absolute path (see the M5-01…M5-11 gate note). It is worth a standing
+  rule rather than two incidents.
+* **`prefix='2 3 4'` is undetectable behaviourally**, which means the config option most obviously
+  connected to a user-visible feature (search-as-you-type) is the one a behavioural test cannot
+  guard. Recorded in M5-23 and in the test.
+
+## M5.11 Raised, not fixed — deliberately out of this entry's scope
+
+* **The trigram arm of search is diacritic-sensitive while the unicode61 arm is not.** Measured,
+  pinned in both directions as test cases, not changed: adding `remove_diacritics` to
+  `search_trgm` is a schema decision with a retrieval-quality argument behind it, and it belongs
+  with whoever writes the retriever and can measure the result.
+* **§16.1's catalogue sequence branch is now decided by a probe that has run.** §16 says *"Kavita
+  first if it passes, Navidrome first if it fails"* and it passed. A ⚠️ pointer to ADR-0035 §2a is
+  added at all three sites so the two documents do not contradict each other, **but the sequence
+  itself is not re-written here** — §16 is authoritative for scope and `DEVELOPMENT.md` §11 says
+  announce before pushing. The §16 owner should apply it.
+* **`CLAUDE.md`'s one-line description of `make check` now under-counts the gate** — it lists five
+  offline steps and there are six. Left for the owner: it is the project instruction file, and this
+  entry does not edit it on its own initiative.
+
+---
+
 # PROMO-01 — the shared-class split was argued out three times in one night and written down none of them. **Applied, as a promotion rather than a new rule.**
 
 **Date:** 2026-08-17. **Branch:** `claude/hearth-thread-vn9w7u`. **`PROMO-` has not been used

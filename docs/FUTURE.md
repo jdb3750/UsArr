@@ -404,18 +404,24 @@ is deciding; and `verifying` carries a 15-minute `verify_until` TTL that ends in
 `fail_reason = 'unknown'`. This document previously listed the queue as the seam without qualifying
 it. It was overclaiming: the queue protects the verb, not the wait.
 
-**The fix is one `CHECK` value, `'awaiting_choice'`, and it is scheduled rather than done.** It lands
-in the migration that ships library sync, which has to rebuild `write_queue` anyway to restore the
-`work_id → work(id)` foreign key that `00001_initial.sql` drops — SQLite can neither add a foreign
-key nor alter a `CHECK` in place, so both changes ride the same already-mandatory 12-step rebuild and
-the second one is free. `00001_initial.sql` is **not** edited for it. The full instruction, including
-recreating `ix_wq_runnable`'s partial predicate and regenerating the schema snapshot, sits next to
-the DDL in [`reference/schema.md`](./reference/schema.md) §10, where whoever writes that rebuild will
-be reading. ⚠️ Whether `'awaiting_choice'` joins `ix_wq_runnable`'s predicate is **undecided** — the
-owner's lean is to exclude it, since a row waiting on a person is not runnable and must not be swept
-or TTL'd, but that predicate also serves the reconciliation guard and the call is being made with the
-reconciliation code in view. Until then this seam is **identified and scheduled, not protected**, and
-nothing about it should be read as shipped.
+**✅ The seam exists, and it is not the `CHECK` value this section used to promise.** The
+library-sync migration **dropped `write_queue.state`'s `CHECK` entirely** rather than widening it to
+add `'awaiting_choice'` ([ADR-0039](./DECISIONS.md#adr-0039)): the rebuild happened either way so both
+cost the same, the vocabulary is demonstrably still growing, SQLite cannot `ALTER` a `CHECK`, and
+`audit_log.result` and `provenance.acquisition_state` are the shipped precedent for enforcing that
+class of vocabulary in Go instead. So the state is expressible today with no further migration, and
+the seam is wider than a single literal would have made it. ✅ `'awaiting_choice'` is **excluded from
+`ix_wq_runnable`'s partial predicate**, with the reason written beside it in the SQL — a row waiting
+on a person is not runnable, and listing it would re-expose it to the retry sweep and the
+`verify_until` TTL. That was an open question when this paragraph was written; it is decided.
+
+Nothing implements any of it. No verb produces the state and no screen renders it: searched
+2026-08-17 on `b8bb500` with `grep -rn "write_queue" --include=*.go internal/ cmd/ | grep -v
+_test.go`, whose only hits under those two roots are the standalone RSS-spike binary in
+`internal/db/spike/` and one comment at `internal/httpapi/grabs.go:58`. Roots searched are
+`internal/` and `cmd/`; nothing is claimed about any other. The vocabulary now lives in Go, so it is
+enforced wherever `internal/store` grows a write-queue writer — which it has not. **The seam ships,
+the feature does not.**
 
 ---
 
@@ -466,7 +472,12 @@ exactly the job it was designed for.
    it is the hot queue table that `ix_wq_runnable` scans. This costs a table later and **no seam
    now** — a queue row can carry a reference as easily as a blob, so nothing needs deciding today.
 3. **🚩 The `state` CHECK has no state for "waiting for a human", and it is in migration 0001.**
-   This is the finding.
+   This is the finding. ⚠️ **Read the correction under *"The seam that was added"* below before this
+   item's present tense.** The `CHECK` quoted here is `00001_initial.sql`'s, and it is **no longer
+   the shape on disk** — [ADR-0039](./DECISIONS.md#adr-0039) dropped it entirely instead of widening
+   it. Everything below is preserved as the finding was written, because the finding's *reasoning*
+   about the five states is what the fix acted on; only its assumption about the fix's shape is
+   stale.
 
    ```sql
    state TEXT NOT NULL DEFAULT 'pending' CHECK (state IN (
@@ -493,20 +504,25 @@ exactly the job it was designed for.
    `work_id → work(id)` foreign key is deliberately dropped until `work` lands with library sync, and
    SQLite cannot add a foreign key to an existing column either. The migration that ships library
    sync must rebuild this table regardless, so a `CHECK` value added during that rebuild costs
-   nothing and no window is closing. See `REVIEW-LOG.md` WQ-03.
+   nothing and no window is closing. See `REVIEW-LOG.md` WQ-03 — ⚠️ **whose premise survives and
+   whose conclusion does not.** The premise (*the rebuild is already mandatory, so nothing is bought
+   by editing 0001*) is what ADR-0039 was decided on and still stands. The conclusion it was used for
+   — *add the `CHECK` value during that rebuild* — is superseded: the rebuild dropped the `CHECK`
+   rather than widening it.
 
-**The seam to add, and when.** `write_queue.state`'s `CHECK` gains **`awaiting_choice`** — not in
-migration 0001, which is not edited, but in the **library-sync migration**, riding the 12-step
-rebuild that table already requires. ⚠️ Whether `awaiting_choice` also joins `ix_wq_runnable`'s
-partial predicate is an **open question with a lean, not a decision**: the lean is to exclude it,
-since a row waiting on a person is not runnable and must not be swept or TTL'd, but the same
-predicate serves the reconciliation guard and that call is deliberately being made with the
-reconciliation code in view. Nothing implements any of this in v0.1, no verb produces the state, and
-the Requests screen has no rendering for it — so the seam here is **identified and scheduled, not
-protected**, and nothing about it should be read as shipped. The full instruction — the `CHECK`
-value, recreating all three indexes including `ix_wq_runnable`'s partial predicate, and regenerating
-the schema snapshot — sits next to the DDL in [`reference/schema.md`](./reference/schema.md) §10,
-where whoever writes that rebuild will be reading. See `REVIEW-LOG.md` WQ-04 and WQ-05.
+**The seam that was added, and how it differs from the one specified here.** Item 3 above — and the
+paragraph that stood in this slot before this one, which said the same thing more directly —
+specified that `write_queue.state`'s `CHECK` would *gain* `awaiting_choice` in the library-sync
+migration. That migration instead **dropped the `CHECK`**, and both open questions above are now
+closed —
+[ADR-0039](./DECISIONS.md#adr-0039) carries the argument and the alternatives, `reference/schema.md`
+§10 carries the corrected four-step list, and `internal/db/migrations/00005_library_sync.sql`'s
+header carries it next to the SQL. `'awaiting_choice'` is excluded from `ix_wq_runnable`'s partial
+predicate, as the lean here said it should be. The consequence for this section: the state is
+expressible with no further migration at all, but it is enforced nowhere but Go — so the seam is
+**wider and less self-policing** than the `CHECK` would have been, which is the trade ADR-0039 makes
+explicitly. Nothing in v0.1 implements it, no verb produces the state, and the Requests screen has
+no rendering for it. See `REVIEW-LOG.md` WQ-04 and WQ-05, both now dispositioned.
 
 **The seam.** The provider registry, `Grabber`'s two-phase pair, and
 `library.sink_service_instance_id`'s indifference to service shape — three parts that genuinely hold
@@ -708,8 +724,9 @@ library-shaped (`/api/Opds/{apiKey}/libraries`, `…/libraries/{libraryId}`), so
 ⚠️ Note what **not** to copy from it: Kavita carries the API key **in the URL path segment**, which
 leaks into proxy logs, browser history and referrers.
 
-**The seam.** `library` exists from migration 0001 (ADR-0026) with `include_in_search` and
-`display_order` already on it, and `user_library_access` is the multi-user half. An OPDS root of "one
+**The seam.** `library` is owed by v0.1 (ADR-0026) with `include_in_search` and `display_order`
+already on it — read `internal/db/migrations` for whether the table exists yet — and
+`user_library_access` is the multi-user half. An OPDS root of "one
 entry per library" is then a query, not a redesign — which is the same seam that makes v0.4's
 `getMusicFolders` return the user's `artist`-kind libraries.
 
@@ -784,3 +801,48 @@ wanted rather than an archaeology problem.
   to the grab that produced it goes through `provenance.download_id`; if that join ever has to
   disambiguate by *service* rather than by download id, the column stops being cosmetic and this
   entry closes.
+
+---
+
+## 19. A per-user *Unfiled* library — the multi-user half of §7 invariant 5
+
+**What.** Today there is exactly one *Unfiled* library, `library.id = 0`, `user_id = 0`. It is the
+place the membership derivation files a work that belongs to no other library, which is what keeps
+`search_doc`'s §7 invariant 5 satisfiable at all — a work visible through no library matches no
+search scope and disappears for **every** user including its owner.
+
+**The seam, stated as the defect it will become.** `ux_library_slug` and `ux_library_name` are both
+`(user_id, …)`, so *Unfiled* is a per-user name that only user 0 has. A second user with a work the
+derivation cannot place has **no** row to file it into: the derivation would have to file it into
+library 0, which belongs to user 0, and library scoping is `user_id`-based — so the work is either
+invisible to its own owner or visible to somebody else. Both outcomes are exactly the failure
+invariant 5 exists to prevent, and neither is reachable in v0.1 because there is one user. **This is
+not a bug today. It is a bug on the day the second user is created**, which makes it the multi-user
+migration's business rather than a v0.1 fix hunting for a caller.
+
+**What the later migration must do, specifically.** Not "consider per-user Unfiled" — the shape is
+already determined by three things the current schema fixes:
+
+1. **Create one `Unfiled` row per user, at user-creation time, in the same transaction as the
+   `user` row** — and backfill one for every user that already exists. `id = 0` cannot be the
+   mechanism twice, so the reserved *id* stops being the identity and `(user_id, slug='unfiled')`
+   becomes it. `ux_library_slug` already makes that pair unique, so no new index is needed.
+2. **Keep library 0 exactly as it is, and keep its `BEFORE DELETE` trigger.** It is user 0's own
+   Unfiled — user 0 being the shared/system sentinel — and rows filed into it before the migration
+   must not move. The trigger (`trg_library_unfiled_no_delete`) must GROW to cover the new rows:
+   `WHEN OLD.slug = 'unfiled'` rather than `WHEN OLD.id = 0`. ⚠️ That widening re-opens the
+   `audit_log` question the id-0 form was checked against — a trigger that aborts an implicit
+   `ON DELETE CASCADE` write makes the parent row undeletable — and under `WHEN OLD.slug =
+   'unfiled'` the parent is an **ordinary user**, so `DELETE FROM user` would fail for everyone.
+   The migration must therefore either delete the Unfiled row explicitly ahead of the user, or drop
+   the trigger in favour of a `library.is_reserved` column the delete path checks. **Decide it
+   deliberately; the current trigger is safe only because library 0's owner is the one user nobody
+   deletes.**
+3. **Whoever writes the document builder owes the re-filing either way** (`reference/schema.md` §7,
+   invariants 2 and 5). Per-user Unfiled changes *which* row it files into; it does not change that
+   the schema cannot do the filing itself.
+
+**Cost of doing it now: real, and the reason it is here instead.** A per-user Unfiled needs a
+user-creation hook that does not exist (v0.1 creates one user, in a migration), and a second
+reserved row nothing reads. Cost of doing it later: one `INSERT … SELECT` over the `user` table, one
+trigger rewrite, and the decision in (2). Nothing about it is a one-way door.

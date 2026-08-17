@@ -23,6 +23,7 @@ import (
 	// The driver pulls in the wasm2go-translated SQLite build itself; importing
 	// go-sqlite3/embed alongside it is redundant and the package says so.
 	"github.com/ncruces/go-sqlite3/driver"
+	"github.com/ncruces/go-sqlite3/ext/fts5"
 )
 
 // pragmas are set on EVERY connection in both pools.
@@ -83,8 +84,18 @@ type DB struct {
 //
 // The write pool is capped at one connection and opened with
 // _txlock=immediate, so every transaction it starts is BEGIN IMMEDIATE.
+//
+// fts5.Register is passed to BOTH pools, and it is not optional. This driver
+// does NOT ship FTS5 in its default build — measured, not assumed: on
+// ncruces/go-sqlite3 v0.35.3 (SQLite 3.53.4) a bare connection answers
+// `CREATE VIRTUAL TABLE … USING fts5(…)` with "no such module: fts5". FTS5 is a
+// separately-registered wasm extension here, registration is PER-CONNECTION
+// exactly as the pragmas are, and migration 0005 creates search_fts and
+// search_trgm — so a pool opened without it cannot even migrate, let alone
+// read. TestFTS5IsAvailableOnEveryConnection proves it across the whole read
+// pool rather than trusting this comment.
 func Open(ctx context.Context, path string) (*DB, error) {
-	read, err := driver.Open(dsn(path, false))
+	read, err := driver.Open(dsn(path, false), fts5.Register)
 	if err != nil {
 		return nil, fmt.Errorf("open read pool %s: %w", path, err)
 	}
@@ -92,7 +103,7 @@ func Open(ctx context.Context, path string) (*DB, error) {
 	read.SetMaxOpenConns(readers)
 	read.SetMaxIdleConns(readers)
 
-	write, err := driver.Open(dsn(path, true))
+	write, err := driver.Open(dsn(path, true), fts5.Register)
 	if err != nil {
 		_ = read.Close()
 		return nil, fmt.Errorf("open write pool %s: %w", path, err)

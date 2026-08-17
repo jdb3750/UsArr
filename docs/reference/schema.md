@@ -4,6 +4,13 @@
 for how much of that shape has been created — **`internal/db/migrations` answers that**, and
 reading the files there is the only form of the answer that does not go stale. A table given in
 full below may still be design-only.
+
+⚠️ **Where this file states which migration creates a thing, it has been wrong before.** §13 said
+"All four tables are in migration 0001" when none of them existed anywhere. Those claims are
+removed rather than refreshed: the per-section **v0.x** markers below say which *milestone* owns a
+table, which is a different question, and `internal/db/migrations` is the only answer to the other
+one. `internal/db/migrate_test.go`'s `TestDeferredTablesAreAbsent` carries the exhaustive
+present/absent lists in executable form.
 **Scope:** tables marked **v0.1** ship in the first milestone; everything else is in the "later
 tables" appendix at the bottom.
 **Parent document:** [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §6 carries the design and the
@@ -72,8 +79,8 @@ CREATE TABLE work (
   popularity        REAL NOT NULL DEFAULT 0,
   rating            REAL,
   status            TEXT,
-  poster_asset_id   INTEGER REFERENCES image_asset(id),
-  backdrop_asset_id INTEGER REFERENCES image_asset(id),
+  poster_asset_id   INTEGER REFERENCES image_asset(id) ON DELETE SET NULL,
+  backdrop_asset_id INTEGER REFERENCES image_asset(id) ON DELETE SET NULL,
   -- Denormalised rollups. Recomputed per dirty-mark flush batch, NOT per child write.
   have_count        INTEGER NOT NULL DEFAULT 0,
   want_count        INTEGER NOT NULL DEFAULT 0,
@@ -95,6 +102,22 @@ CREATE INDEX ix_work_added     ON work(added_at DESC, id DESC) WHERE deleted_at 
 CREATE INDEX ix_work_pop       ON work(popularity DESC, id DESC) WHERE deleted_at IS NULL;
 CREATE INDEX ix_work_dirty     ON work(rollup_dirty) WHERE rollup_dirty = 1;
 ```
+
+**`poster_asset_id` and `backdrop_asset_id` carry `ON DELETE SET NULL`, and the clause is what
+gives `ix_img_state(state, expires_at)` a reader at all.** That index has no plausible use but the
+image expiry sweep, and under the DEFAULTED `ON DELETE NO ACTION` — which is what this file
+specified until 2026-08-17 — the sweep's `DELETE FROM image_asset WHERE state = ? AND expires_at <=
+?` fails with `FOREIGN KEY constraint failed` for every asset any `work` row points at, i.e. for
+every poster on the Home screen. So the index served a query that could never succeed. Executed
+both ways; `TestImageAssetExpirySweepEvicts` pins it, including that the *work* survives the
+eviction (SET NULL, never CASCADE — a cover expiring must not delete the movie).
+
+⚠️ **`media_file.provenance_id` (§3) is the third defaulted foreign key and it is deliberately
+LEFT that way**, judged separately rather than swept up with these two. Nothing deletes a
+`provenance` row — the table is immutable by §6's own rule, has no expiry column, no index that
+would serve a sweep, and no parent whose cascade could reach it — so `NO ACTION` blocks no sweep
+there. What it does block is an accidental `DELETE FROM provenance` while a file still cites it,
+which for an acquisition-history table is the outcome to want.
 
 **Why the partial predicates on `ix_work_added` / `ix_work_pop`:** without `WHERE deleted_at IS
 NULL` the "recently added" and "popular" grids read soft-deleted rows from the index and filter them
@@ -191,8 +214,8 @@ CREATE TABLE work_album (
 
 -- ADR-0031: position is a property of the (track-work, edition) pair, NOT of the track work.
 -- The same recording is track 4 on the original CD and track 6 on the 2017 reissue, with a
--- different track MBID each. edition_id in migration 0001 costs 8 bytes a row; adding it later
--- is a backfill over the largest table in the schema.
+-- different track MBID each. edition_id costs 8 bytes a row on the day work_track is created;
+-- adding it later is a backfill over the largest table in the schema.
 CREATE TABLE work_track (
   work_id        INTEGER NOT NULL REFERENCES work(id) ON DELETE CASCADE,
   edition_id     INTEGER NOT NULL REFERENCES edition(id) ON DELETE RESTRICT,
@@ -222,7 +245,7 @@ CREATE UNIQUE INDEX ux_track_pos ON work_track(edition_id, disc_number, track_po
 > requirement is stated here rather than left to be discovered.** Three rules, all normative, all
 > consequences of the NOT NULL:
 >
-> 1. **Every album work has exactly one synthetic primary `edition` from migration 0001**, created
+> 1. **Every album work has exactly one synthetic primary `edition`**, created
 >    in the same transaction as the album, `is_primary = 1`, `label = NULL`. Lidarr and Navidrome
 >    report no release concept, so the adapter synthesises it; v0.x models only the active edition,
 >    which is what Lidarr does (ADR-0031).
@@ -283,8 +306,8 @@ album's credits in billing order"*, which is then a single covered range scan. `
 trails it to make the row unique when two creators share a role and a position (a co-credit).
 `ix_credit_creator` serves the reverse — a creator page listing everything they are credited on.
 
-**`creator_work_id` points at a `work` of kind `artist` or of kind `person`, and `person` is new in
-migration 0001 (ADR-0033).** The previous shape had no `person` member at all, so a book's author and
+**`creator_work_id` points at a `work` of kind `artist` or of kind `person`, and `person` is a
+member of `work.kind`'s CHECK from the migration that creates `work` (ADR-0033).** The previous shape had no `person` member at all, so a book's author and
 a comic's penciller were stored as `artist`-kind works — which put every author into the **Music**
 navigation type (ARCHITECTURE §17.2 maps `artist` → Music) and counted every credit against the Tier 1
 prefix index's 25,000-item cap (§4.5), which §13 already shows is tripped by the reference library.
@@ -305,7 +328,7 @@ and the cheap candidate — folding credited names into the FTS `alt_titles` of 
 credited on, so the query returns the books — belongs to whoever writes the document builder and is
 not specified here.
 
-**Doing this in migration 0001 costs one CHECK member and one byte allocation. Doing it later costs a
+**Doing this in the migration that creates `work` costs one CHECK member and one byte allocation. Doing it later costs a
 CHECK-constraint change (a SQLite table rebuild), an FTS re-index, a rebuild of every client prefix
 index, and a change to the `kind_byte` codec that ARCHITECTURE §5.3 states is unchangeable once
 clients cache ids** — which is ADR-0030's argument, in a second place, for the same reason.
@@ -617,7 +640,7 @@ corresponding `container_kind` is not offered for it.
 | Navidrome | `libraryId` on the album/artist row (ND's native API) | — | — | — |
 | Audiobookshelf | `LibraryItem.libraryId` | — | `Library.mediaType` (`book\|podcast`) | `LibraryItem.folderId` ⚠️ a folder **id**, not a path — never prefix-compared |
 | Komga | `SeriesDto.libraryId` | — | — | — |
-| Kavita (v0.2) | `Series.libraryId` | — | `Library.type` (`LibraryType` enum) | — |
+| Kavita | `Series.libraryId` | — | `Library.type` (`LibraryType` enum) | — |
 
 ⚠️ **Audiobookshelf's `folderId` is an opaque id, not a filesystem path.** It is stored in
 `remote_library_id`-adjacent form only as an id and is **never** used with the `root_folder`
@@ -847,7 +870,7 @@ CREATE TABLE search_doc_library (
   library_id INTEGER NOT NULL REFERENCES library(id)      ON DELETE CASCADE,
   doc_rowid  INTEGER NOT NULL REFERENCES search_doc(rowid) ON DELETE CASCADE,
   PRIMARY KEY (library_id, doc_rowid)
-) WITHOUT ROWID;
+) STRICT, WITHOUT ROWID;
 CREATE INDEX ix_sdl_doc ON search_doc_library(doc_rowid);
 ```
 
@@ -870,7 +893,13 @@ CREATE INDEX ix_sdl_doc ON search_doc_library(doc_rowid);
 > the outer filter and the doc set is the inner range. `ix_sdl_doc` serves the reverse — deleting a
 > `search_doc` row, and answering "which libraries can see this" for the item detail page.
 
-**Six invariants, all CI-asserted, all silent-corruption sources if broken:**
+**Six invariants, all CI-asserted, all silent-corruption sources if broken.**
+
+⚠️ **CI-asserted is not schema-enforced, and two of the six are neither declarable nor enforced —
+which this list previously left a reader to assume the other way.** Both are stated plainly below,
+each with the reason SQLite cannot hold it and the code that owes it. Neither is a defect to be
+fixed by a migration; both are debts to be paid by the document builder, and they are written down
+here so that whoever writes it inherits them rather than discovers them.
 
 1. `search_fts.rowid == search_trgm.rowid == search_doc.rowid`. The id is allocated by inserting
    into `search_doc` first, then inserted **explicitly** into both FTS tables in the same
@@ -879,6 +908,15 @@ CREATE INDEX ix_sdl_doc ON search_doc_library(doc_rowid);
    title change issues the matching FTS `DELETE` in the same transaction. Without
    `contentless_delete=1` this is impossible — a plain contentless table answers
    `cannot DELETE from contentless fts5 table`.
+
+   🚩 **A CODE INVARIANT, and undeclarable in principle.** The two FTS5 tables are *virtual*: they
+   can carry no foreign key and no `CHECK`, and no trigger can be created on them. Nothing in
+   SQLite can hold three row counts equal. Measured: `DELETE FROM work` cascades `search_doc` away
+   and leaves **both** FTS tables holding a document for a work that no longer exists.
+   **OWED BY:** the search-document builder — the code that writes `search_doc`, `search_fts` and
+   `search_trgm` — which must issue all three deletes in one transaction. Nothing writes those
+   three tables yet. `TestSearchDocVisibilityIsACodeInvariant` executes the divergence and pins the
+   count query.
 3. `SELECT COUNT(*) FROM search_doc WHERE kind IN ('season','episode','track','comic_issue',
    'person')` is **0**. `comic_issue` is in the list for the same reason as the first three: a large
    manga library's chapter titles would swamp every query (ADR-0030). `person` is there for a
@@ -895,12 +933,40 @@ CREATE INDEX ix_sdl_doc ON search_doc_library(doc_rowid);
 5. **Every `search_doc` row has at least one `search_doc_library` row.** A row visible through no
    library matches no scope and is invisible in search to every user *including the owner* — a
    disappearance the old `instance_scope` could not produce, because every replicated row came from
-   some instance. The invariant is upheld by reserved `library.id = 0`, *Unfiled* (§13).
+   some instance.
    `SELECT COUNT(*) FROM search_doc sd WHERE NOT EXISTS (SELECT 1 FROM search_doc_library sdl
    WHERE sdl.doc_rowid = sd.rowid)` must be **0**.
-6. **The scoped search plan is a seek, not a scan.** `EXPLAIN QUERY PLAN` on the scoped fusion
-   query must contain `SEARCH sdl USING PRIMARY KEY (library_id=? AND doc_rowid=?)` and must not
-   contain `SCAN search_doc_library`.
+
+   🚩 **ALSO A CODE INVARIANT. Reserved `library.id = 0` (*Unfiled*, §13) is the PLACE the builder
+   files an otherwise-unfiled work; it is not a mechanism that upholds anything on its own,** and
+   the sentence that used to read *"the invariant is upheld by reserved `library.id = 0`"* said
+   otherwise. SQLite has no "at least one child row" constraint, and no trigger position expresses
+   it: at insert time the doc necessarily exists *before* its junction row, and the two ways the
+   invariant breaks are both **cascades** — `DELETE FROM library`, and `DELETE FROM user`, which
+   reaches `library` through `library.user_id` — where an `AFTER DELETE` trigger on the junction
+   cannot tell *"this doc lost its last scope"* from *"this doc is being deleted too"*. Both paths
+   are executed in `TestSearchDocVisibilityIsACodeInvariant` and both leave an orphan.
+   **What the schema does now do** is refuse to delete library 0 itself (`BEFORE DELETE` trigger
+   `trg_library_unfiled_no_delete`), which closes the worst single path and, deliberately, also
+   blocks `DELETE FROM user WHERE id = 0`.
+   **OWED BY:** the same document builder, which must re-file a stranded doc into library 0 in the
+   same transaction as any library or user delete.
+6. **The scoped search plan is a seek, not a scan.** `EXPLAIN QUERY PLAN` on the scoped query must
+   contain `SEARCH sdl …` and must not contain `SCAN sdl` / `SCAN search_doc_library`.
+
+   ⚠️ **This invariant used to name one exact plan —
+   `SEARCH sdl USING PRIMARY KEY (library_id=? AND doc_rowid=?)` — and no query produces that
+   string.** Measured against the real schema (SQLite 3.53.4): which of the junction's two indexes
+   the planner reaches for depends on which side drives the join, and there are two real shapes.
+
+   | Query shape | Measured plan |
+   |---|---|
+   | doc set known — the RRF fusion, candidates from `search_fts`, scope applied per candidate | `SEARCH sdl USING COVERING INDEX ix_sdl_doc (doc_rowid=? AND library_id=?)` |
+   | scope leading — browse a scope with no query text | `SEARCH sdl USING PRIMARY KEY (library_id=?)` |
+
+   Both are seeks and neither is a scan, which is the invariant's substance: permission filtering
+   happens **in** the index join. `TestScopedSearchIsASeekNotAScan` asserts it in both directions,
+   plus the full FTS arm.
 
 ---
 
@@ -1103,8 +1169,25 @@ CREATE INDEX ix_wq_work ON write_queue(work_id, state);
 client-supplied key means a weak ULID source, a key reused across accounts, or a replay returns
 another user's `payload` and state. A key that exists under a different `user_id` gets `409`.
 
-`ix_wq_runnable` is also the reconciliation guard's index: the sweep skips any `work_id` with a row
-in `pending`, `inflight` **or** `verifying`.
+🚩 **`ix_wq_runnable` is PARTIAL, and a query only reaches it by spelling the predicate
+verbatim.** SQLite matches a partial index's `WHERE` clause syntactically and does not derive
+implication, so the obvious way to write *"claim the next runnable row"* —
+`WHERE state = 'pending' AND next_attempt_at <= ?` — is a logically strict **subset** of the
+index's predicate and plans as `SCAN write_queue`, a full scan of a table that grows with every
+command UsArr ever issues. The three-state form
+`WHERE state IN ('pending','inflight','verifying') AND next_attempt_at <= ?` plans as
+`SEARCH write_queue USING COVERING INDEX ix_wq_runnable (state=? AND next_attempt_at<?)`. Both
+plans are measured and both are pinned by `TestWriteQueueRunnableNeedsTheVerbatimINList`, so the
+constraint is met in CI rather than in production. **Any narrower sweep must filter the extra
+states in the SELECT list, not in the `WHERE` clause.**
+
+`ix_wq_runnable` is also the reconciliation guard's index. [`sync.md`](./sync.md) §4 states the guard,
+and the scope words are load-bearing: *"The sweep may correct an item **toward the \*Arr** only when
+there is **no `write_queue` row for that work in `pending`, `inflight` or `verifying`**."* It bounds
+**outbound** corrections — writes UsArr would push at the \*Arr — and says nothing about the sweep's
+local soft-delete and tombstone-expiry path. An earlier revision of this line dropped *toward the
+\*Arr*, and [ADR-0039](../DECISIONS.md#adr-0039) records what that omission cost when the shortened
+form was quoted back as an argument.
 
 ### ⚠️ Do this during the library-sync migration's `write_queue` rebuild
 
@@ -1122,29 +1205,30 @@ already expressible; the `state` half is not.
 **The fix is deliberately deferred to the migration that ships library sync, because that migration
 must rebuild this table anyway.** `write_queue.work_id` is `INTEGER` with **no** foreign key in
 `00001_initial.sql` — the `REFERENCES work(id) ON DELETE CASCADE` shown above is dropped there, with
-a comment naming library sync as the migration that restores it, because `work` does not exist yet.
+a comment naming library sync as the migration that restores it, because at the time `00001` was
+written there was no `work` table to reference. (**Whether there is one now, and which migration
+restored the key, is answered by `internal/db/migrations` and by nothing in this file.**)
 SQLite cannot add a foreign key to an existing column, so restoring it costs a full 12-step table
 rebuild that is **already mandatory**. Adding a `CHECK` value during a rebuild that is happening
 regardless costs nothing, and SQLite equally cannot `ALTER` a `CHECK` constraint, so doing it any
 earlier would mean either editing a merged migration or paying for a second rebuild. Neither is
 worth it while nothing is released. **`00001_initial.sql` is not to be edited for this.**
 
-When that rebuild is written, do all four:
+⚠️ **The rebuild that instruction was written for has since been decided, and not as step 1
+specified.** [ADR-0039](../DECISIONS.md#adr-0039) supersedes step 1 and carries the argument, the
+rejected alternatives and the two things the list did not name;
+`internal/db/migrations/00005_library_sync.sql`'s header carries the same reasoning beside the SQL,
+and `internal/db/testdata/schema.sql` is the current shape. Read those, not a summary here — this
+file does not own what a migration did.
 
-1. Add `'awaiting_choice'` to the `state` `CHECK` list.
-2. Recreate **all three** indexes on the rebuilt table — `ux_wq_idem`, `ix_wq_work`, and
-   `ix_wq_runnable` **including its partial `WHERE` predicate**. A rebuilt table does not inherit
-   indexes, and a partial index silently rebuilt as a full one changes which rows the sweep sees.
-3. Decide whether `'awaiting_choice'` joins `ix_wq_runnable`'s predicate — see below.
-4. Regenerate the schema snapshot: `go test ./internal/db -run TestMigrationRoundTrip -update-schema`.
+⚠️ **Still owed, and not by 0005.** 0001 also drops `tag_assignment.work_id` / `.edition_id` /
+`.media_file_id` and `release_candidate.work_id`, with comments naming "the migration that ships
+library sync". Each is a further 12-step rebuild, neither table has a blocked reader, and nothing is
+closing — so the comments in 0001 are pointers to a rebuild that is still owed. Whether it has been
+written is `internal/db/migrations`' answer.
 
-**Whether `'awaiting_choice'` belongs in `ix_wq_runnable`'s predicate is open, and is the owner's
-call at rebuild time.** ⚠️ Recorded as a **lean, not a decision**: it should probably be **excluded**,
-because a row waiting on a person is not runnable — leaving it in exposes it to the retry sweep and
-to the `verify_until` TTL, which is the whole defect above, reintroduced through the index. It is not
-settled here because that predicate also serves the reconciliation guard, and that call wants the
-reconciliation code in front of it rather than an argument from the schema alone. Whichever way it
-goes, write the reason next to the predicate: an exclusion looks like an oversight otherwise.
+The DDL block above shows the shape as `00001_initial.sql` created it, because the reasoning under it
+(`ux_wq_idem`, `fail_reason`'s `NULL` trap) is still the reasoning.
 
 **`fail_reason`'s `CHECK` must test `NULL` separately.** It previously read
 `CHECK (fail_reason IN (NULL,'rejected','unknown','exhausted'))`, which enforced **nothing at all**:
@@ -1215,14 +1299,54 @@ the **row** rather than from the URL string, which is the fix for the derived-UR
 body_hash, fetched_at, expires_at)`, the job queue, unowned-search result caching, and image-cache
 metadata. Deleting it costs a re-sync, not data.
 
+### 12.1 `sync_report` — what the sweep found · **v0.1**
+
+🔍 **Inference, and marked as such.** This table was named in the appendix as v0.1 with *no DDL
+anywhere in this document*, so the shape below was derived when it was created, from its only two
+specified call sites: [`sync.md`](./sync.md) §4 step 5 (*"emit a `sync_report` row"* per sweep) and
+§4 guard 1's `sync_report{kind: "id_reused", instance, remote_kind, remote_id}`. It is not prior
+art and nothing has exercised it — nothing writes this table yet.
+
+```sql
+CREATE TABLE sync_report (
+  id                  INTEGER PRIMARY KEY,
+  service_instance_id INTEGER REFERENCES service_instance(id) ON DELETE CASCADE,
+  kind                TEXT NOT NULL,   -- no CHECK; see below
+  remote_kind         TEXT,
+  remote_id           TEXT,
+  work_id             INTEGER,         -- no foreign key; see below
+  detail              TEXT,            -- JSON, REDACTED on the way in
+  created_at          TEXT NOT NULL DEFAULT (datetime('now'))
+) STRICT;
+CREATE INDEX ix_sync_report_instance ON sync_report(service_instance_id, created_at DESC);
+```
+
+**No `CHECK` on `kind`**, for ADR-0039's reason: this is the newest and least settled vocabulary in
+the schema — `sync.md` names one value and the sweep will add its own as channels 3b and 4 are
+built — and SQLite cannot `ALTER` a `CHECK`.
+
+**No foreign key on `work_id`**, for `provenance.user_id`'s reason (§6): it is a *historical* id.
+*"Work 4412's link was rebound because Sonarr reused id 842"* must survive work 4412 being deleted,
+and `CASCADE` would erase the report of exactly the event most worth reporting.
+
+**Append-only by convention, not by trigger.** `audit_log`'s triggers exist because it is a
+tamper-evidence chain; this is an operational log, and a trigger here would recreate `audit_log`'s
+foreign-key problem (§9) for no security benefit.
+
+⚠️ **`detail` holds upstream response text, so it is redacted on the way in** — `security.md` §5 and
+REVIEW-LOG R-08: Mylar3 returns configured indexer API keys in a response *body*, and Kavita carries
+its key in a URL *path* segment, so a query-parameter deny-list is not sufficient.
+
 ---
 
-## 13. Libraries — the user's organisation · **v0.1, migration 0001**
+## 13. Libraries — the user's organisation · **v0.1**
 
-Design and reasoning: [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §6.5 and ADR-0026. **All four
-tables are in migration 0001**, which `CLAUDE.md` says can never be edited, so everything an
+Design and reasoning: [`../ARCHITECTURE.md`](../ARCHITECTURE.md) §6.5 and ADR-0026. Everything an
 implementer needs is here rather than in prose: types, CHECK lists with their real allowed values,
 keys, `ON DELETE` behaviour, indexes, and the `user_id` principle 4 requires.
+
+⚠️ **This section used to open "All four tables are in migration 0001".** That was false — none of
+them existed in any migration when it was written. Read `internal/db/migrations` for what exists.
 
 ### 13.1 `library`
 
@@ -1294,13 +1418,28 @@ scope is driven by the `?lib=` chip. ADR-0028 separately pre-wires a per-type `s
 boolean, which is the flag that has a consumer. Two overlapping flags where one has no reader is
 how a schema accumulates dead columns in the one migration that can never be edited.
 
-**Reserved row: `library.id = 0`, *Unfiled*.** Inserted by migration 0001, `user_id 0`,
+**Reserved row: `library.id = 0`, *Unfiled*.** Inserted alongside the table, `user_id 0`,
 `managed_by 'auto'`, `kind` irrelevant (the CHECK is satisfied with `'movie'` and the row is never
-rendered). It exists to uphold §7 invariant 5: a work that the derivation would otherwise place in
-**no** library is a member of Unfiled, which keeps it visible in search to its owner and nobody
-else. It is never listed on the Libraries screen, never offered in the scope chip, and never
+rendered). It is the PLACE §7 invariant 5 is upheld *in*: a work that the derivation would otherwise
+place in **no** library is filed here instead, which keeps it visible in search to its owner and
+nobody else. The invariant itself is upheld by the code that does the filing — see §7, where both
+undeclarable invariants are stated with the code that owes them — not by the existence of this row.
+It is never listed on the Libraries screen, never offered in the scope chip, and never
 proposed. Reachable states that need it: a `root_folder`-scoped library covering only part of an
 instance, and an `exclude` correction against a work's last remaining library.
+
+**The row is protected by a `BEFORE DELETE` trigger,** because "reserved" was previously a comment
+and nothing else — `DELETE FROM library WHERE id = 0` simply succeeded, nothing recreated the row,
+and the derivation had nowhere to file an unfiled work for the life of that database. Two
+consequences, both measured in `TestUnfiledLibraryIsProtected`: an **ordinary** user with rows in
+every table that references `user(id)` is still deletable (the `audit_log` failure mode, re-run —
+see §9), and `DELETE FROM user WHERE id = 0` now **fails**, deliberately, because the sentinel
+user's cascade reaches this row.
+
+⚠️ **Unfiled is `user_id = 0`, and `ux_library_slug` / `ux_library_name` are `(user_id, …)`, so no
+other user has one.** Invariant 5's safety net does not exist for a second user. v0.1 is
+single-user, so this is not a bug today; it is a seam, and [`../FUTURE.md`](../FUTURE.md) §19 says
+what the multi-user migration must do about it.
 
 ### 13.2 `library_source`
 
@@ -1421,11 +1560,20 @@ EXPLAIN QUERY PLAN
 SELECT m.work_id FROM library_member m
  WHERE m.library_id = ? AND (m.sort_title, m.work_id) > (?, ?)
  ORDER BY m.sort_title, m.work_id LIMIT 100;
---  → SEARCH m USING PRIMARY KEY (library_id=? AND sort_title>?)
+--  MEASURED, SQLite 3.53.4:
+--  → SEARCH m USING PRIMARY KEY (library_id=? AND (sort_title,work_id)>(?,?))
+--  (this section previously wrote it as `(library_id=? AND sort_title>?)`; the row-value
+--   comparison is reported in full. Same seek. TestLibraryScopedKeysetIsASeek asserts the
+--   two halves separately so a leading-column-only scan still fails.)
 ```
 
 **CI asserts that plan for both topologies — one library per kind *and* two libraries over one
-kind — because only the second is the interesting one.** The write cost is one extra column on a
+kind — because only the second is the interesting one.** ⚠️ Both are built with real rows in
+`TestLibraryScopedKeysetIsASeek` and **both produce the same plan**, which is recorded rather than
+dressed up: `EXPLAIN QUERY PLAN` chooses from the schema, not the data, so with no `ANALYZE`
+statistics the topology changes selectivity and not the plan. What CI pins is that the seek is on
+the primary key in both shapes; the row-count difference this paragraph is really worried about
+belongs to `make bench`, which is never a merge gate. The write cost is one extra column on a
 table that is already materialised and already flushed on the 250 ms batch, plus one rule: **a title
 or sort-title change rewrites the member rows for that work**, since the sort key is now duplicated.
 A `field` override on `sort_title` dirties them the same way. That is the price of the seek and it
@@ -1445,7 +1593,13 @@ CREATE TABLE library_override (
   link_id     INTEGER,
   target_identity_hash TEXT NOT NULL,
   -- field verb only
-  field_name  TEXT CHECK (field_name IN (NULL,'title','sort_title','year','cover')),
+  field_name  TEXT CHECK (field_name IS NULL
+                          OR field_name IN ('title','sort_title','year','cover')),
+              -- `IS NULL OR … IN (…)`, NOT `IN (NULL, …)`. This column carried the second
+              -- instance of DB-01 until migration 0005: one NULL inside an IN list makes the
+              -- comparison NULL for every non-matching value, and a CHECK passes on NULL, so
+              -- the constraint accepted 'TOTAL-GARBAGE'. Pinned by
+              -- TestNullableCheckConstraintsActuallyConstrain.
   field_value TEXT,
   -- relink verb only
   relink_to_work_id INTEGER,
@@ -1510,11 +1664,23 @@ Allowing both would give two mechanisms for one fact.
 --    (declarative: the CHECK) — asserted anyway, because it is the C-16 regression guard.
 ```
 
+**Which of the six are live** is answered by `internal/db/queryplan_test.go` and
+`internal/db/migrate_test.go`, not here. Assertions 2, 3, 4 and 5 have tests as of migration 0005
+(`TestUnfiledLibraryExists`, `TestLibraryScopedKeysetIsASeek`,
+`TestLibraryMemberEditionsBelongToTheirWork`, and `ux_libsrc_authority` declaratively). 1 and 6 wait
+for the code they constrain — there is no identity cascade and no correction applier yet, and an
+assertion over code that does not exist is a green nobody has exercised.
+
 ---
 
 ## Appendix — later tables
 
-Present in the design, **not in migration 0001**, added with the milestone named:
+Present in the design, and **owned by the milestone named** — which is a claim about scope, not about
+what has been created. ⚠️ This header used to pin the whole appendix to the absence of a single
+migration (*"not in migration 0001"*), which goes wrong the moment any later migration creates one of
+these tables; `sync_report` is the row that made it go wrong. **`internal/db/migrations` is the only
+answer to whether a table exists**, and `internal/db/migrate_test.go`'s `TestDeferredTablesAreAbsent`
+carries the present/absent lists in executable form.
 
 | Table | Milestone | Note |
 |---|---|---|
@@ -1524,7 +1690,7 @@ Present in the design, **not in migration 0001**, added with the milestone named
 | `role`, `role_permission`, `user_role`, `user_permission`, `user_library_access` | v1.0 | RBAC tables. The `user_id` columns and the access-scope parameter land in 0001; these do not |
 | `playback_state`, `play_history` | v1.0 | Northbound write-back. **Both keys are edition-scoped — see below** |
 | `playlist`, `playlist_item` | v1.0 | See the note below |
-| `sync_report` | v0.1 | Emitted by the sweep; a plain append-only log |
+| `sync_report` | v0.1 | Emitted by the sweep; a plain append-only log. **DDL is now in §12.1** |
 
 **`playback_state` is keyed `(user_id, work_id, edition_id)` and `play_history` is
 `UNIQUE (user_id, work_id, edition_id, started_at)` — a correction ADR-0031 forced and nobody

@@ -49,6 +49,29 @@ EMBED_DIR   ?= internal/web/spa
 MIGRATIONS  ?= internal/db/migrations
 DIST_DIR    ?= dist
 
+# THIS REPO'S OWN .go FILES — not every .go file under the working directory,
+# which is what `gofumpt -l .` means and what it used to be handed.
+#
+# A NESTED CHECKOUT INSIDE THE REPO SILENTLY CHANGES WHAT THE FORMATTER IS
+# POINTED AT. Reproduced: a concurrent agent's `git worktree` at
+# .claude/worktrees/… made fmt-check sweep 273 .go files instead of 135 and fail
+# on somebody else's scratch files, so `make check` could not be run in the
+# primary checkout at all (docs/REVIEW-LOG.md, "On the gate for M5-01…M5-11").
+# `.claude/` is untracked, so nothing in the repo excluded it.
+#
+# `git ls-files --cached --others --exclude-standard` is the list that means
+# "this repo's files": tracked files PLUS untracked ones .gitignore does not
+# exclude — so a brand-new .go file is still format-checked before it is
+# staged, which a bare `git ls-files` would lose, while .claude/ and any other
+# ignored path is not. Outside a git work tree (a release tarball) it falls back
+# to find, with the old prunes plus ./.claude.
+GO_SRC_LIST := if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
+	  git ls-files --cached --others --exclude-standard -- '*.go' | sort -u; \
+	else \
+	  find . -path ./.git -prune -o -path ./.claude -prune -o \
+	    -path ./$(WEB_DIR)/node_modules -prune -o -name '*.go' -print; \
+	fi
+
 # Build metadata stamped into the binary via -ldflags.
 VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "0.0.0-dev")
 COMMIT      ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
@@ -464,20 +487,38 @@ lint-web: web-deps ## eslint + svelte-check
 .PHONY: fmt
 fmt: web-deps ## Format everything IN PLACE (gofumpt + prettier)
 	$(call require_tool,$(GOFUMPT),$(GOFUMPT_WANT))
-	$(GOFUMPT) -l -w .
+	@$(GO_SRC_LIST) | xargs -r $(GOFUMPT) -l -w
 	$(call pnpm_if_web,format)
 
 .PHONY: fmt-check
 fmt-check: web-deps ## Verify formatting without modifying files (used by `make check`)
 	$(call require_tool,$(GOFUMPT),$(GOFUMPT_WANT))
-	@n=$$(find . -path ./.git -prune -o -path ./$(WEB_DIR)/node_modules -prune -o \
-		-name '*.go' -print | wc -l); \
+	@n=$$($(GO_SRC_LIST) | wc -l); \
 	test "$$n" -gt 0 || { \
 		echo "fmt-check: 0 .go files — gofumpt would scan nothing and exit 0."; exit 1; }; \
 	echo "fmt-check: checking $$n .go files with gofumpt"; \
-	out=$$($(GOFUMPT) -l .); \
+	out=$$($(GO_SRC_LIST) | xargs -r $(GOFUMPT) -l); \
 	if [ -n "$$out" ]; then echo "not gofumpt-formatted:"; echo "$$out"; exit 1; fi
 	$(call pnpm_if_web,format:check)
+
+# ─── Build-tagged packages, which `go build ./...` does not see ──────────────
+#
+# internal/db/spike is behind `//go:build bench`, so `go list ./...` returns 11
+# packages and never mentions it: a deliberate type error in that package passed
+# the ENTIRE gate — fmt-check, lint, test, vuln, all green. Measured, then
+# fixed here. gofumpt does see the files (it parses without resolving build
+# tags), which is exactly why the hole was invisible: the formatter reported the
+# package as checked while no compiler had ever looked at it.
+#
+# `go build` rather than `go vet` or `go test`: the spike has no tests, and a
+# build with the tag on is the smallest thing that makes a type error fail. It
+# writes no binary — `go build` only emits an executable when it is given a
+# SINGLE main package, and `./...` is many.
+.PHONY: build-tagged
+build-tagged: ## Compile packages hidden behind build tags (internal/db/spike, `bench`)
+	@n=$$($(GO) list -tags=bench ./... | wc -l); \
+	echo "build-tagged: compiling $$n Go packages with -tags=bench"
+	$(GO) build -tags=bench ./...
 
 # ─── Design ──────────────────────────────────────────────────────────────────
 # docs/design/check.mjs is the runnable form of DESIGN-DIRECTION.md §13: the ban
@@ -691,5 +732,5 @@ check: check-offline vuln ## THE PRE-COMMIT GATE. No Docker. Two network calls (
 	@echo "check: OK"
 
 .PHONY: check-offline
-check-offline: fmt-check lint modverify secrets test ## Everything in `check` except the vuln scan.
+check-offline: fmt-check lint build-tagged modverify secrets test ## Everything in `check` except the vuln scan.
 	@echo "check-offline: OK"
