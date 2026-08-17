@@ -3,6 +3,8 @@ package httpapi
 import (
 	"testing"
 	"time"
+
+	"github.com/jdb3750/UsArr/internal/store"
 )
 
 // TestEventNamesAreTheWireContract pins the event names as literal strings.
@@ -27,17 +29,81 @@ func TestEventNamesAreTheWireContract(t *testing.T) {
 		}
 	}
 
-	// The full set, so an ADDED name is caught too: a new event nothing listens
-	// for is a feature that silently does nothing. `service.health` was exactly
-	// that and has been removed; the count is the guard against it coming back
-	// without a producer.
+	// import.progress is the SEVENTH name, and it is listed here deliberately
+	// rather than quietly: it HAS a producer (cmd/usarr's importProgress, proved
+	// end to end over a real SSE connection by
+	// TestAddingAKavitaProducesACatalogue), while web/src/lib/api.ts's
+	// STREAM_EVENT_NAMES does NOT yet carry it, so today's SPA drops the frame.
+	// That gap is recorded as LS-05 rather than closed here.
+	if EventImportProgress != "import.progress" {
+		t.Errorf("event name = %q, want %q", EventImportProgress, "import.progress")
+	}
+
+	// ⚠️ THIS BLOCK IS A REMINDER, NOT A DETECTOR, AND SAYING SO IS THE POINT.
+	// The map is a hand-written literal, so len(names) can only ever be the
+	// number of keys someone typed — it CANNOT notice a constant added to
+	// events.go, and it did not notice `import.progress`. The real contract is
+	// cross-language (this list against web/src/lib/api.ts's
+	// STREAM_EVENT_NAMES) and is currently pinned by two independent hardcoded
+	// lists that drift in silence. See LS-05.
 	names := map[string]bool{
 		EventSearchStarted: true, EventSearchIndexer: true, EventSearchResults: true,
 		EventSearchDone: true, EventSearchFailed: true,
-		EventStreamMissedEvents: true,
+		EventStreamMissedEvents: true, EventImportProgress: true,
 	}
-	if len(names) != 6 {
-		t.Fatalf("the event-name set has %d distinct names, want 6", len(names))
+	if len(names) != 7 {
+		t.Fatalf("the event-name set has %d distinct names, want 7 — two names collided", len(names))
+	}
+}
+
+// TestHubDeliversTheSystemSentinelToEveryStream is the property that makes
+// §7.2's "progress over SSE" reach anybody at all.
+//
+// The catalogue import has NO ACTING USER, so it publishes under
+// store.SystemUserID — the same id the libraries it writes are owned by, which
+// store.Scope resolves as `user_id IN (SystemUserID, UserID)`. Before this, the
+// hub matched the owner exactly, so the sentinel meant "everybody" in the
+// database and "nobody" on the stream, and every import.progress frame was
+// published into a void.
+func TestHubDeliversTheSystemSentinelToEveryStream(t *testing.T) {
+	h := NewHub(16, time.Now)
+	defer h.Close()
+
+	alice, _, _ := h.subscribe(1, 0)
+	bob, _, _ := h.subscribe(2, 0)
+
+	// One frame first, so the replay cursor below is non-zero: subscribe treats
+	// lastID 0 as "no cursor" and replays nothing at all.
+	cursor := h.Publish(1, EventSearchStarted, map[string]string{"search_id": "s1"})
+	h.Publish(store.SystemUserID, EventImportProgress, map[string]string{"phase": "done"})
+	<-alice.ch // the search frame alice owns, so the assertion below reads the shared one
+
+	for name, sub := range map[string]*subscriber{"alice": alice, "bob": bob} {
+		select {
+		case ev := <-sub.ch:
+			if ev.Name != EventImportProgress {
+				t.Errorf("%s got %q, want the shared frame", name, ev.Name)
+			}
+		case <-time.After(time.Second):
+			t.Errorf("%s received no shared frame: a system-owned event reached nobody, "+
+				"which is what an import progress bar that never moves looks like", name)
+		}
+	}
+
+	// A REPLAY MUST USE THE SAME PREDICATE. A reconnect that filtered differently
+	// would lose exactly the shared frames the live stream had been delivering.
+	_, replay, _ := h.subscribe(3, cursor)
+	if len(replay) != 1 || replay[0].Name != EventImportProgress {
+		t.Errorf("replay = %+v, want the shared frame", replay)
+	}
+
+	// And it stays ONE-WAY: a frame owned by a real user still reaches that user
+	// alone. Getting this backwards turns one screen's fix into a scope leak.
+	h.Publish(1, EventSearchResults, map[string]string{"for": "alice"})
+	select {
+	case ev := <-bob.ch:
+		t.Fatalf("bob received an event addressed to alice: %+v", ev)
+	case <-time.After(50 * time.Millisecond):
 	}
 }
 

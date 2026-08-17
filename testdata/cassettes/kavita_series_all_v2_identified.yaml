@@ -1,0 +1,325 @@
+---
+# SYNTHETIC — hand-authored from api/specs/kavita.json (develop @ 9c3e540,
+# SeriesDto) and Kavita.Server/Controllers/SeriesController.cs at the same
+# commit. NOT a wire capture. Claimed Kavita version: 0.9.0.20.
+#
+# WHY THIS FIXTURE EXISTS ALONGSIDE kavita_series_all_v2.yaml: that one is the
+# ORDINARY case — every Kavita+ identifier 0, null or "" — which is what a free
+# instance returns and what ARCHITECTURE.md §6.4 calls the ordinary case. This
+# one is the OPPOSITE and constructed to fire four paths that a free instance
+# never reaches:
+#
+#   1. TWO SERIES CLAIMING THE SAME aniListId (30013). That is a
+#      ux_extid_work_strong violation, which migration 0005 calls "the merge
+#      signal, not an error". v0.1 has no work_merge table.
+#   2. mangaBakaEditionId SET on series 103. It is an EDITION identifier and
+#      must not be written as a work identity (§6.4 amendment 4).
+#   3. A series in a DECLINED library (id 4, LibraryType 3 Image). No work row
+#      may exist for it.
+#   4. A LIGHT NOVEL library (id 5, LibraryType 4) and a COMIC VINE library
+#      (id 6, LibraryType 5), which the two-library fixture does not carry.
+#
+# ⚠️ NO REAL INSTANCE IS KNOWN TO LOOK LIKE THIS. It pairs with
+# kavita_libraries_all_types.yaml and is a constructed shape, not evidence about
+# any install. Only a live capture could be that.
+#
+# It carries NO Pagination header, deliberately: the header is middleware, it is
+# not in the OpenAPI document, and a reverse proxy that strips unknown headers
+# must degrade to "total unknown" rather than fail the read.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            Content-Type:
+                - application/json
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/all-v2?context=1
+        method: POST
+        body: '{"id":0,"name":null,"statements":[],"combination":1,"sortOptions":{"sortField":4,"isAscending":false},"entityType":0,"limitTo":0}'
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 2ms
+        body: |-
+            [
+              {
+                "id": 101,
+                "name": "Berserk",
+                "originalName": "",
+                "localizedName": "",
+                "sortName": "Berserk",
+                "pages": 4000,
+                "coverImageLocked": false,
+                "lastChapterAdded": "2026-08-17T03:00:30.118",
+                "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
+                "userRating": 0,
+                "hasUserRated": false,
+                "totalReads": 0,
+                "pagesRead": 0,
+                "latestReadDate": "0001-01-01T00:00:00",
+                "format": 1,
+                "created": "2026-02-11T18:22:04.771Z",
+                "sortNameLocked": false,
+                "localizedNameLocked": false,
+                "nameLocked": false,
+                "wordCount": 0,
+                "libraryId": 1,
+                "libraryName": "L1",
+                "minHoursToRead": 1,
+                "maxHoursToRead": 2,
+                "avgHoursToRead": 1.5,
+                "folderPath": "/mnt/user/media/101",
+                "lowestFolderPath": "/mnt/user/media/101",
+                "lastFolderScanned": "2026-08-17T07:00:30.118Z",
+                "dontMatch": false,
+                "isBlacklisted": false,
+                "isStandAlone": false,
+                "coverImage": "series101",
+                "primaryColor": "#000000",
+                "secondaryColor": "#111111",
+                "aniListId": 30013,
+                "malId": 2,
+                "hardcoverId": 0,
+                "metronId": 0,
+                "comicVineId": null,
+                "mangaBakaId": 0,
+                "mangaBakaEditionId": null,
+                "cbrId": 0
+              },
+              {
+                "id": 102,
+                "name": "Berserk (Deluxe)",
+                "originalName": "",
+                "localizedName": "",
+                "sortName": "Berserk (Deluxe)",
+                "pages": 4000,
+                "coverImageLocked": false,
+                "lastChapterAdded": "2026-08-17T03:00:30.118",
+                "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
+                "userRating": 0,
+                "hasUserRated": false,
+                "totalReads": 0,
+                "pagesRead": 0,
+                "latestReadDate": "0001-01-01T00:00:00",
+                "format": 1,
+                "created": "2026-02-11T18:22:04.771Z",
+                "sortNameLocked": false,
+                "localizedNameLocked": false,
+                "nameLocked": false,
+                "wordCount": 0,
+                "libraryId": 1,
+                "libraryName": "L1",
+                "minHoursToRead": 1,
+                "maxHoursToRead": 2,
+                "avgHoursToRead": 1.5,
+                "folderPath": "/mnt/user/media/102",
+                "lowestFolderPath": "/mnt/user/media/102",
+                "lastFolderScanned": "2026-08-17T07:00:30.118Z",
+                "dontMatch": false,
+                "isBlacklisted": false,
+                "isStandAlone": false,
+                "coverImage": "series102",
+                "primaryColor": "#000000",
+                "secondaryColor": "#111111",
+                "aniListId": 30013,
+                "malId": 0,
+                "hardcoverId": 0,
+                "metronId": 0,
+                "comicVineId": null,
+                "mangaBakaId": 0,
+                "mangaBakaEditionId": null,
+                "cbrId": 0
+              },
+              {
+                "id": 103,
+                "name": "Piranesi",
+                "originalName": "",
+                "localizedName": "",
+                "sortName": "Piranesi",
+                "pages": 272,
+                "coverImageLocked": false,
+                "lastChapterAdded": "2026-08-17T03:00:30.118",
+                "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
+                "userRating": 0,
+                "hasUserRated": false,
+                "totalReads": 0,
+                "pagesRead": 0,
+                "latestReadDate": "0001-01-01T00:00:00",
+                "format": 3,
+                "created": "2026-02-11T18:22:04.771Z",
+                "sortNameLocked": false,
+                "localizedNameLocked": false,
+                "nameLocked": false,
+                "wordCount": 0,
+                "libraryId": 3,
+                "libraryName": "L3",
+                "minHoursToRead": 1,
+                "maxHoursToRead": 2,
+                "avgHoursToRead": 1.5,
+                "folderPath": "/mnt/user/media/103",
+                "lowestFolderPath": "/mnt/user/media/103",
+                "lastFolderScanned": "2026-08-17T07:00:30.118Z",
+                "dontMatch": false,
+                "isBlacklisted": false,
+                "isStandAlone": false,
+                "coverImage": "series103",
+                "primaryColor": "#000000",
+                "secondaryColor": "#111111",
+                "aniListId": 0,
+                "malId": 0,
+                "hardcoverId": 445,
+                "metronId": 0,
+                "comicVineId": null,
+                "mangaBakaId": 0,
+                "mangaBakaEditionId": "edition-99",
+                "cbrId": 0
+              },
+              {
+                "id": 104,
+                "name": "Saga",
+                "originalName": "",
+                "localizedName": "",
+                "sortName": "Saga",
+                "pages": 900,
+                "coverImageLocked": false,
+                "lastChapterAdded": "2026-08-17T03:00:30.118",
+                "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
+                "userRating": 0,
+                "hasUserRated": false,
+                "totalReads": 0,
+                "pagesRead": 0,
+                "latestReadDate": "0001-01-01T00:00:00",
+                "format": 1,
+                "created": "2026-02-11T18:22:04.771Z",
+                "sortNameLocked": false,
+                "localizedNameLocked": false,
+                "nameLocked": false,
+                "wordCount": 0,
+                "libraryId": 6,
+                "libraryName": "L6",
+                "minHoursToRead": 1,
+                "maxHoursToRead": 2,
+                "avgHoursToRead": 1.5,
+                "folderPath": "/mnt/user/media/104",
+                "lowestFolderPath": "/mnt/user/media/104",
+                "lastFolderScanned": "2026-08-17T07:00:30.118Z",
+                "dontMatch": false,
+                "isBlacklisted": false,
+                "isStandAlone": false,
+                "coverImage": "series104",
+                "primaryColor": "#000000",
+                "secondaryColor": "#111111",
+                "aniListId": 0,
+                "malId": 0,
+                "hardcoverId": 0,
+                "metronId": 0,
+                "comicVineId": "4050-42563",
+                "mangaBakaId": 0,
+                "mangaBakaEditionId": null,
+                "cbrId": 7
+              },
+              {
+                "id": 105,
+                "name": "Desktop dump",
+                "originalName": "",
+                "localizedName": "",
+                "sortName": "Desktop dump",
+                "pages": 12,
+                "coverImageLocked": false,
+                "lastChapterAdded": "2026-08-17T03:00:30.118",
+                "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
+                "userRating": 0,
+                "hasUserRated": false,
+                "totalReads": 0,
+                "pagesRead": 0,
+                "latestReadDate": "0001-01-01T00:00:00",
+                "format": 0,
+                "created": "2026-02-11T18:22:04.771Z",
+                "sortNameLocked": false,
+                "localizedNameLocked": false,
+                "nameLocked": false,
+                "wordCount": 0,
+                "libraryId": 4,
+                "libraryName": "L4",
+                "minHoursToRead": 1,
+                "maxHoursToRead": 2,
+                "avgHoursToRead": 1.5,
+                "folderPath": "/mnt/user/media/105",
+                "lowestFolderPath": "/mnt/user/media/105",
+                "lastFolderScanned": "2026-08-17T07:00:30.118Z",
+                "dontMatch": false,
+                "isBlacklisted": false,
+                "isStandAlone": false,
+                "coverImage": "series105",
+                "primaryColor": "#000000",
+                "secondaryColor": "#111111",
+                "aniListId": 0,
+                "malId": 0,
+                "hardcoverId": 0,
+                "metronId": 0,
+                "comicVineId": null,
+                "mangaBakaId": 0,
+                "mangaBakaEditionId": null,
+                "cbrId": 0
+              },
+              {
+                "id": 106,
+                "name": "Spice and Wolf",
+                "originalName": "",
+                "localizedName": "",
+                "sortName": "Spice and Wolf",
+                "pages": 300,
+                "coverImageLocked": false,
+                "lastChapterAdded": "2026-08-17T03:00:30.118",
+                "lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
+                "userRating": 0,
+                "hasUserRated": false,
+                "totalReads": 0,
+                "pagesRead": 0,
+                "latestReadDate": "0001-01-01T00:00:00",
+                "format": 3,
+                "created": "2026-02-11T18:22:04.771Z",
+                "sortNameLocked": false,
+                "localizedNameLocked": false,
+                "nameLocked": false,
+                "wordCount": 0,
+                "libraryId": 5,
+                "libraryName": "L5",
+                "minHoursToRead": 1,
+                "maxHoursToRead": 2,
+                "avgHoursToRead": 1.5,
+                "folderPath": "/mnt/user/media/106",
+                "lowestFolderPath": "/mnt/user/media/106",
+                "lastFolderScanned": "2026-08-17T07:00:30.118Z",
+                "dontMatch": false,
+                "isBlacklisted": false,
+                "isStandAlone": false,
+                "coverImage": "series106",
+                "primaryColor": "#000000",
+                "secondaryColor": "#111111",
+                "aniListId": 0,
+                "malId": 9115,
+                "hardcoverId": 0,
+                "metronId": 0,
+                "comicVineId": null,
+                "mangaBakaId": 0,
+                "mangaBakaEditionId": null,
+                "cbrId": 0
+              }
+            ]

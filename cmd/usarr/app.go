@@ -247,6 +247,11 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 		return nil, err
 	}
 
+	// The registry is built before the server because httpapi.New takes it, so
+	// the stream is attached afterwards rather than injected. One assignment,
+	// during startup, before anything can publish.
+	reg.attachEvents(server.Events())
+
 	return &app{cfg: cfg, log: log, db: database, store: st, registry: reg, server: server}, nil
 }
 

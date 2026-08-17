@@ -6,6 +6,7 @@ require (
 	github.com/ncruces/go-sqlite3 v0.35.3
 	github.com/pressly/goose/v3 v3.27.3
 	golang.org/x/crypto v0.55.0
+	golang.org/x/text v0.41.0
 	gopkg.in/dnaeon/go-vcr.v4 v4.0.7
 )
 
