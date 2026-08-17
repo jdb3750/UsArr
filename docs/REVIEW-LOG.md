@@ -10563,13 +10563,132 @@ nothing about the write path at all.
 
 What it does not attest is everything in `LS.12`.
 
-# Round 5 continued — `LS-27`: the other three weblink-parsed ids, and `LS-12` closed
+---
 
-**Date:** 2026-08-17. **Prefix:** `LS-` (library sync), continuing from `LS-26` above — re-read
-after this thread's merge with `origin/main`, which is where the counter's true value lives
-(`DEVELOPMENT.md` §11, and `LS-17`'s own renumber note for why re-reading *after* the last merge is
-the thing that catches a collision). The credits pass landed `LS-17`–`LS-26` while this one was in
-flight; these ids were written against the merged tree, not against the branch point.
+# Round 5 continued — `LS-27`–`LS-29`: §17's three echoes of claims already corrected upstream
+
+**⚠️ Announced, per `DEVELOPMENT.md` §11's ownership map: this is a BACKEND-thread pass into
+`ARCHITECTURE.md` §17, which the design thread leads.** §11's map is explicit that these are *leads,
+not exclusive ownership*, and design's own nine-site §17 pass named these three as resolving from
+sections this thread owns rather than from §17's wording — an effective invitation, taken up here and
+stated rather than assumed. **The fix comes from upstream in every case:** none of the three is a
+defect in how §17 phrases itself, and none was found by re-reading §17. Each is a faithful echo of a
+sentence that §6.4, §7.1a and ADR-0035/0041 have since replaced, which is why the correction is a
+POINTER to the section that now owns the claim rather than a fresh status claim written in §17.
+
+**Scope held deliberately narrow.** Three sites, plus the one mechanical consequence in
+`docs/design/check.mjs` that a changed copy string forces (below). §8.5 and §17.8's `LibraryType`
+passage were both fixed by other threads within the hour and are untouched. Other things noticed in
+§17 while reading are recorded in `LS.16` and left for design.
+
+| # | Finding | Severity | Disposition |
+| --- | --- | --- | --- |
+| **LS-27** | §17.7's `matched by title` rule said the state is **not reachable in v0.1** because *"v0.1's only sources are Radarr and Sonarr, which carry TMDB and TVDB ids, so every v0.1 work resolves at the identifier tier"*. ADR-0041 made **Kavita** v0.1's catalogue source, and §16.0 flagged the consequence without answering it — `§6.4 owns the tier-1 claim and has not been restated against Kavita` | **High** | **Applied.** §6.4 was restated at `f722054` and again at `aea2654`; §17 now **matches** that wording instead of paraphrasing it, so the two cannot drift apart again. The state is reachable in v0.1 and may be the **ordinary** rendering; coverage is **a property of the instance, not of the design** |
+| **LS-28** | §17.7's degraded-instance banner used **Kavita** as the exemplar for *"no delta channel at all"* | **High** | **Applied.** ADR-0035 §2a disproved it against the owner's live instance: **Kavita HAS a usable delta** — channel 3b's ordered page walk — and lacks only a changed-since endpoint. **The honest distinction is "no channel 3", not "no delta"**, which §7.1a already carries. Exemplar moved to **Komga**, whose ordering guarantee is still an open probe |
+| **LS-29** | §17.8's `no change feed` named state used the same wrong exemplar — *"Kavita has no changed-since endpoint"* as the illustration of the reconciliation-only fallback — and justified its v0.1 unreachability with *"whose only sources are \*Arrs on channel 3"* | **High** | **Applied, with the SAME wording as `LS-28`.** One question, not two: an exemplar that is merely less wrong is not fixed, so both sites were rewritten together against one ruling rather than patched independently |
+
+## LS.14 Live prose or dated record — the judgement, site by site
+
+`DEVELOPMENT.md` §11: *a citation inside a dated record is history, not staleness*, and such a record
+is corrected by amending underneath rather than by rewriting. **All three sites were judged LIVE
+PROSE, and none was amended underneath.** The test applied is the one §11's rule implies: a dated
+record carries a date and the tree it was read at, and its value is that it keeps describing that
+tree. None of these three does.
+
+* **`LS-27`** — a normative rule about what the UI must render (*"the rule is written now because it
+  cannot be retrofitted"*), carrying no date and no tree. Its premise about v0.1's sources is a live
+  claim that ADR-0041 falsified, so leaving it standing with an amendment underneath would leave a
+  false sentence on the screen a reader hits first.
+* **`LS-28`** and **`LS-29`** — both are **specifications of shipping UI states**, one a banner and
+  one a named per-library state. A spec is read to be built from; there is no tree it describes. The
+  contrast is instructive and sits two sections away: §7.1a's per-source status **table** IS a dated
+  record — it says what was probed, when and against what — and §7.1a says so in its own words and
+  leaves it alone while amending the framing sentence above it. That is the distinction, not the
+  §-number.
+
+**History is preserved without the dated-record apparatus**, using the house style §6.4 and §7.1a
+already use: each site quotes what it previously read. ⚠️ **Those quotations are in BACKTICKS, never
+in the `*"…"*` italic-quoted form**, because `VN9.17` records that the §17 copy sweep matches that
+form anywhere in §17 and a retired string quoted in it becomes a phantom shipping-copy string. That
+trap fired twice during the pass that discovered it; it did not fire here, and the span count is the
+evidence (`LS.15`).
+
+## LS.15 The one non-§17 file this forced, and why it is not scope creep
+
+`docs/design/check.mjs` carries `S17_EMDASH_ALLOWED`, four recorded em-dash exemptions keyed on the
+**normalised text of the §17 string itself**, and the verdict block fails when the recorded count and
+the matched count differ — *"a recorded string no longer appears in §17, so the record is describing
+copy that is not there"*. `LS-28` changes one of those four strings, so the entry was re-keyed from
+`kavita is unreachable — …` to `komga is unreachable — …`. **The construction it exempts and its
+`RETIRED BY` clause are unchanged; only the subject moved.**
+
+This is the direction that file asks for rather than an edit against it: its own comment rules that
+*"a checker that edits the specification it checks is not a checker"*, and `VN9.17` retired two
+entries **in §17 rather than in the map** for exactly that reason. §17 ruled; the map tracks.
+
+**Verified offline rather than asserted**, because `make design` needs Chromium and is not part of
+`make check`. The §17 span extraction and `norm()` were replicated exactly as `check.mjs` performs
+them and run against the edited file: **57 shipping-copy spans (unchanged, floor 45), 4 carrying an
+em dash, and those 4 normalise to exactly the 4 recorded keys** — `tv — catalogue source, request
+destination`, `music — catalogue source; no request destination`, `grab failed — http 502`, and the
+re-keyed `komga is unreachable — showing cached data from the last full compare at 09:12`. Zero spans
+contain `!`. No banned word entered either new string. `LS-29`'s replacement copy carries **no em
+dash at all**, so it needs no exemption and none was added.
+
+No mockup carries either string: `docs/design/mockups/` uses the Radarr variant, exempted through the
+`DESIGN-DIRECTION` §13 window and untouched by this change. `web/src/lib/services.ts` renders
+`no change feed — full compare at 09:12`, which matches §17.3's label — and §17.3's label was
+**already correct**, distinguishing `page-walk delta` from the no-ordering-guarantee case. It is not
+edited, and that it was already right is what identified §17.7 and §17.8 as the two that had drifted.
+
+## LS.16 Noticed in §17 and deliberately left for design
+
+Recorded rather than fixed, because a wide unannounced diff into another thread's section is the
+thing §11's announce rule exists to prevent. **None of these was touched.**
+
+* **§17.7's degraded-banner example is `Radarr 4K is unreachable`, and §17.7's wizard bullet still
+  reads `1,240 of 10,000 movies`.** Both are \*Arr-shaped illustrations in a v0.1 whose catalogue
+  source is Kavita. Neither is FALSE — §16 keeps Sonarr and Radarr, only re-sequenced — so neither is
+  in this pass's remit, which was echoes of *corrected* claims. Whether §17's running examples should
+  lead with the source v0.1 actually ships is a design question about the document's exemplars.
+* **§17.2's install-position table describes the *"Full stack"* as the mockups' default** and already
+  carries its own caveat that this is later than v0.1. Flagged only because `LS-27`–`LS-29` are three
+  instances of the same underlying hazard — §17 was drafted against a \*Arr-first v0.1 — and the
+  caveat is the pattern that handles it correctly where it is present.
+
+## LS.17 On the gate
+
+`make check` from a cleaned lint cache — `/root/go/bin/golangci-lint cache clean` by absolute path
+first. Binaries, versions, the commit and the verbatim tail are in the commit message.
+
+🚩 **What a green attests about this change is very close to nothing, and saying so is the point.**
+This pass edits two files, `docs/ARCHITECTURE.md` and `docs/design/check.mjs`, and **exactly one step
+of the gate reads `docs/` at all**: `make secrets`, the gitleaks scan, which looks only for
+credential-shaped strings. `fmt-check`, `lint`, `build-tagged`, `modverify`, `test` and `vuln` do not
+read Markdown, and `make design` — the one target that would evaluate §17's copy — is deliberately
+**not part of `check`** because it needs a browser (`Makefile`, the comment above the `design`
+target). So the green proves the tree still builds and tests clean around an unrelated docs edit, and
+proves **nothing whatever** about whether these three sites are now correct.
+
+**What does attest to them** is `LS.15`'s offline replication of the §17 sweep, the primary sources
+each site now points at (§6.4 as restated at `f722054`/`aea2654`, §7.1a, ADR-0035 §2a's live-instance
+run, ADR-0041), and the fact that §17.3's already-correct label was used as the control.
+
+# Round 5 continued — `LS-30`: the other three weblink-parsed ids, and `LS-12` closed
+
+**Date:** 2026-08-17. **Prefix:** `LS-` (library sync), continuing from `LS-29` above.
+
+🚩 **AND THESE WERE RENUMBERED TWICE, WHICH IS `LS-17`'s LESSON ARRIVING ON SCHEDULE.** `LS-16` was
+the highest id observable when this pass started. The credits pass landed `LS-17`–`LS-26` while it
+was in flight, so the block was written as `LS-17`… and rewritten as `LS-27`… against the merged
+tree. **Then the §17 pass landed `LS-27`–`LS-29` between that merge and this push**, and the
+collision surfaced as the same `docs/REVIEW-LOG.md` EOF conflict `LS-17` describes — so the block was
+renumbered a second time, to `LS-30`–`LS-37`, against `26a7376`. **Re-reading after the last merge is
+necessary and not sufficient**: the counter can move again between the read and the push, and the
+only reliable check is the one that runs at the moment the conflict appears. The renumber is
+mechanical and the six code sites that cite one of these ids moved with it —
+`internal/libsync/weblinkid.go`, `kavita.go`, `kavita_test.go`, `importer_test.go`,
+`cmd/usarr/import_e2e_test.go` and `testdata/cassettes/kavita_series_all_v2_identified.yaml`.
 
 **Target:** `internal/libsync/weblinkid.go` (new), `internal/libsync/kavita.go`,
 `internal/kavita/resources.go`, two new cassettes, and the three tests that encoded the old premise.
@@ -10620,16 +10739,16 @@ segment, which was spot-checked on one id rather than enumerated.
 
 | # | Finding | Severity | Disposition |
 | --- | --- | --- | --- |
-| **LS-27** | `SeriesDto.aniListId`, `malId` and `mangaBakaId` went through `kavitaExternalIDs`'s `add` closure, which hard-codes `Confidence: 1.0` — satisfying `ux_extid_work_strong` and so **merging works** on a value Kavita may have parsed out of a free-text `<Web>` element. `LS-12`'s hazard, confirmed | **High** | **Applied.** New `weblinkid.go`; all three route through `webLinkIdentity` at `WebLinkConfidence` (0.90) and **cannot reach `add`** |
-| **LS-28** | `'mal'` was written **bare**, and the collision `LS-10` feared is real rather than theoretical: MAL id `1` is *Cowboy Bebop* in the anime space and *Monster* in the manga space | **High** | **Applied.** `MalMangaSource = "mal_manga"`. ⚠️ `AniListSource` and `MangaBakaSource` stay **bare**, on measurement rather than symmetry — AniList's `Media` space is global and MangaBaka keeps its edition ids in a separate DTO field |
-| **LS-29** | 🚩 **A GUARD ASSERTED THE BUG.** `importer_test.go`'s `TestFullImportDeclinesTheImageLibraryAndSaysWhy` required `WorksCreated == 4 && WorksReused == 1`, commented *"the two Berserk rows are one work"* — i.e. it would have failed if the merge stopped happening | **High** | **Applied.** Now `5` and `0`, with the reversal and its reason written at the assertion rather than in a commit message |
-| **LS-30** | The fixture header said the same thing: `kavita_series_all_v2_identified.yaml` described its shared-`aniListId` pair as *"a `ux_extid_work_strong` violation, which migration 0005 calls 'the merge signal, not an error'"* — encoding the false premise, exactly as `LS-15` found for `comicVineId` | Medium | **Applied.** Corrected in place with the measurement and the date, the `LS-15` shape |
-| **LS-31** | ⚠️ `internal/kavita/resources.go`'s `SeriesDto` comment still asserted *"written only by the Kavita+ match path"* — the premise `LS-11` disproved for ComicVine and this pass disproved for three more fields — **immediately above the struct field group labelled "Kavita+ identifiers"** | Medium | **Applied.** Rewritten to say what the six writers actually are, and to state the consequence for a reader of the struct: none of these fields carries its own provenance |
-| **LS-32** | `hardcover_book` and `metron` **still go out at 1.0**, and their provenance is *weaker* than the three just capped: `Series.HardcoverId` has exactly one writer (`ExternalMetadataIdHelper.cs:28`) and `Series.MetronId` exactly one (`:33`) — the Edit Series dialog, free text, with **no scanner and no provider writer at all** | **High** | **Raised, not fixed**, for the reason `LS-12` was not fixed inside `LS-11`: different fields, different fixtures, and a third behaviour in this commit would make none of them reviewable. Recorded in `kavitaExternalIDs`'s comment, decision 5 |
-| **LS-33** | `LS-17` recorded that the credits pass now makes `GET /api/Series/metadata` per series, so `SeriesMetadataDto.WebLinks` is decoded and unread — offering `LS-11`'s `ParseComicVineWebLinks` a free feed. **Claimed and measured here rather than left unclaimed** | Medium | **Declined on measurement, not on scope.** See below — the string is empty in the case that needed it |
-| **LS-34** | 🚩 **AND A SECOND GUARD ASSERTED IT, THROUGH THE REAL HTTP PATH.** `cmd/usarr/import_e2e_test.go`'s `TestAddingAKavitaProducesACatalogue` required `catalogue work rows == 4` — *"the two Berserk series are one work"* — plus `search_doc == 4`, one `work_comic` row for the pair, and `work_credit == 4`. **Four separate numbers, all downstream of the same merge.** More seriously, TWO DOCUMENTED FINDINGS WERE DEMONSTRATED ON THAT MERGE and lose their only fixture when it goes: `LS-07` (a shared work's `reading_direction` is last-writer-wins) and `LS-19` (a shared work's credits are last-writer-wins) | **High** | **Applied, and the coverage loss is written at both sites rather than left as a passing number.** Now `5`, `5`, `2` and `6`, each with the reversal and its reason. `LS-07` and `LS-19`'s **findings stand unchanged** — two remote items resolving onto one work still overwrite each other — but reaching that state now needs a genuinely work-strong shared id (`hardcover_book`, `openlibrary_work`, `goodreads_work`), which this fixture does not carry. ✅ One assertion got **stronger**: `person works == 4` used to be carried by the two Berserk rows having merged, and now tests what it says it tests — `store.personWorkID` resolving one human credited on two different works to one row |
+| **LS-30** | `SeriesDto.aniListId`, `malId` and `mangaBakaId` went through `kavitaExternalIDs`'s `add` closure, which hard-codes `Confidence: 1.0` — satisfying `ux_extid_work_strong` and so **merging works** on a value Kavita may have parsed out of a free-text `<Web>` element. `LS-12`'s hazard, confirmed | **High** | **Applied.** New `weblinkid.go`; all three route through `webLinkIdentity` at `WebLinkConfidence` (0.90) and **cannot reach `add`** |
+| **LS-31** | `'mal'` was written **bare**, and the collision `LS-10` feared is real rather than theoretical: MAL id `1` is *Cowboy Bebop* in the anime space and *Monster* in the manga space | **High** | **Applied.** `MalMangaSource = "mal_manga"`. ⚠️ `AniListSource` and `MangaBakaSource` stay **bare**, on measurement rather than symmetry — AniList's `Media` space is global and MangaBaka keeps its edition ids in a separate DTO field |
+| **LS-32** | 🚩 **A GUARD ASSERTED THE BUG.** `importer_test.go`'s `TestFullImportDeclinesTheImageLibraryAndSaysWhy` required `WorksCreated == 4 && WorksReused == 1`, commented *"the two Berserk rows are one work"* — i.e. it would have failed if the merge stopped happening | **High** | **Applied.** Now `5` and `0`, with the reversal and its reason written at the assertion rather than in a commit message |
+| **LS-33** | The fixture header said the same thing: `kavita_series_all_v2_identified.yaml` described its shared-`aniListId` pair as *"a `ux_extid_work_strong` violation, which migration 0005 calls 'the merge signal, not an error'"* — encoding the false premise, exactly as `LS-15` found for `comicVineId` | Medium | **Applied.** Corrected in place with the measurement and the date, the `LS-15` shape |
+| **LS-34** | ⚠️ `internal/kavita/resources.go`'s `SeriesDto` comment still asserted *"written only by the Kavita+ match path"* — the premise `LS-11` disproved for ComicVine and this pass disproved for three more fields — **immediately above the struct field group labelled "Kavita+ identifiers"** | Medium | **Applied.** Rewritten to say what the six writers actually are, and to state the consequence for a reader of the struct: none of these fields carries its own provenance |
+| **LS-35** | `hardcover_book` and `metron` **still go out at 1.0**, and their provenance is *weaker* than the three just capped: `Series.HardcoverId` has exactly one writer (`ExternalMetadataIdHelper.cs:28`) and `Series.MetronId` exactly one (`:33`) — the Edit Series dialog, free text, with **no scanner and no provider writer at all** | **High** | **Raised, not fixed**, for the reason `LS-12` was not fixed inside `LS-11`: different fields, different fixtures, and a third behaviour in this commit would make none of them reviewable. Recorded in `kavitaExternalIDs`'s comment, decision 5 |
+| **LS-36** | `LS-17` recorded that the credits pass now makes `GET /api/Series/metadata` per series, so `SeriesMetadataDto.WebLinks` is decoded and unread — offering `LS-11`'s `ParseComicVineWebLinks` a free feed. **Claimed and measured here rather than left unclaimed** | Medium | **Declined on measurement, not on scope.** See below — the string is empty in the case that needed it |
+| **LS-37** | 🚩 **AND A SECOND GUARD ASSERTED IT, THROUGH THE REAL HTTP PATH.** `cmd/usarr/import_e2e_test.go`'s `TestAddingAKavitaProducesACatalogue` required `catalogue work rows == 4` — *"the two Berserk series are one work"* — plus `search_doc == 4`, one `work_comic` row for the pair, and `work_credit == 4`. **Four separate numbers, all downstream of the same merge.** More seriously, TWO DOCUMENTED FINDINGS WERE DEMONSTRATED ON THAT MERGE and lose their only fixture when it goes: `LS-07` (a shared work's `reading_direction` is last-writer-wins) and `LS-19` (a shared work's credits are last-writer-wins) | **High** | **Applied, and the coverage loss is written at both sites rather than left as a passing number.** Now `5`, `5`, `2` and `6`, each with the reversal and its reason. `LS-07` and `LS-19`'s **findings stand unchanged** — two remote items resolving onto one work still overwrite each other — but reaching that state now needs a genuinely work-strong shared id (`hardcover_book`, `openlibrary_work`, `goodreads_work`), which this fixture does not carry. ✅ One assertion got **stronger**: `person works == 4` used to be carried by the two Berserk rows having merged, and now tests what it says it tests — `store.personWorkID` resolving one human credited on two different works to one row |
 
-## `LS-33` — the phase-B `webLinks` opportunity, priced before it was passed over
+## `LS-36` — the phase-B `webLinks` opportunity, priced before it was passed over
 
 The offer is real: `SeriesMetadataDto.webLinks` is declared in the vendored spec, is on the response
 of the exact endpoint `StreamCredits` already calls, and is decoded by nobody. **It was not folded
@@ -10685,8 +10804,8 @@ severity changed.
 
 | # | Original disposition | Amended disposition, and what settles it |
 | --- | --- | --- |
-| **LS-12** | *"**Raised, not fixed.** A behaviour change against different fixtures; shipping it inside a ComicVine correction would make neither reviewable. Recorded in `kavitaExternalIDs`'s comment, decision 1"* | ✅ **CLOSED by `LS-27`/`LS-28`.** The premise is confirmed and the fix shipped: all three land at `0.90`, `mal` is namespaced. Two things the original could not know, both from re-measuring rather than re-reading: **`mangaBakaId` has no provider writer anywhere in Kavita**, and **`aniListId`/`malId` do have one** — which makes their cap an argument about *provenance being unrecoverable and overwritable*, not about the absence of a matcher. The `arguably` is discharged in the strongest available form: the free-text path does not merely coexist with the provider path, `ProcessSeries.cs:358-367` **overwrites it on every scan** |
-| **LS-10** | *"**Raised, not fixed.** Recorded in `kavita.go` rather than pre-solved with a source string the schema does not list — see `LS.8`"* | ✅ **CLOSED by `LS-28`, and the caution turned out to be half right.** `external_id.source` has **no `CHECK`** (`00005:448-454`), so "a source string the schema does not list" was never a schema question — `LS-11` had already shipped `comicvine_volume` on the same column. The worry itself was **correct for MAL and wrong for AniList**, and only a live check could separate them: MAL id `1` names two different works in two spaces; AniList `Media` ids are one space across anime and manga. So `mal` is namespaced and `anilist` is deliberately left bare |
+| **LS-12** | *"**Raised, not fixed.** A behaviour change against different fixtures; shipping it inside a ComicVine correction would make neither reviewable. Recorded in `kavitaExternalIDs`'s comment, decision 1"* | ✅ **CLOSED by `LS-30`/`LS-31`.** The premise is confirmed and the fix shipped: all three land at `0.90`, `mal` is namespaced. Two things the original could not know, both from re-measuring rather than re-reading: **`mangaBakaId` has no provider writer anywhere in Kavita**, and **`aniListId`/`malId` do have one** — which makes their cap an argument about *provenance being unrecoverable and overwritable*, not about the absence of a matcher. The `arguably` is discharged in the strongest available form: the free-text path does not merely coexist with the provider path, `ProcessSeries.cs:358-367` **overwrites it on every scan** |
+| **LS-10** | *"**Raised, not fixed.** Recorded in `kavita.go` rather than pre-solved with a source string the schema does not list — see `LS.8`"* | ✅ **CLOSED by `LS-31`, and the caution turned out to be half right.** `external_id.source` has **no `CHECK`** (`00005:448-454`), so "a source string the schema does not list" was never a schema question — `LS-11` had already shipped `comicvine_volume` on the same column. The worry itself was **correct for MAL and wrong for AniList**, and only a live check could separate them: MAL id `1` names two different works in two spaces; AniList `Media` ids are one space across anime and manga. So `mal` is namespaced and `anilist` is deliberately left bare |
 | **LS-04** | *(in `LS-17`'s "not done" list)* *"`LS-04` is still open — §17.8's `LibraryType` withdrawal versus the vendored spec — and this pass did not revisit it"* | ✅ **Already closed twice over, and the stale line is noted rather than edited.** `LS-11`'s own table resolved it (`✅ RESOLVED`, `mapLibraryType`'s comment), and §17.8 on `main` at `2c7709a` now carries the amendment that withdraws the withdrawal. `mapLibraryType`'s comment is rewritten here to drop the two-documents-disagree hedging, since nothing disagrees any more; the durable half — **a Kavita citation with an `API/Entities/…` path is reading the frozen `main`** — is kept |
 
 ## The guards, fired
@@ -10756,7 +10875,7 @@ Both new files declare **SYNTHETIC** in their own header with the version they c
 fail differently if the cap came off. `kavita_libraries_weblink_ids.yaml` separates the three
 provenance regimes — Kavita+-eligible with the flag off, flag on, and a **Book** library that
 `NonEligibleLibraryTypes` excludes from Kavita+ entirely. `kavita_series_all_v2_identified.yaml` was
-**corrected in place**, not extended — `LS-30`.
+**corrected in place**, not extended — `LS-33`.
 
 ### On the gate
 
@@ -10765,9 +10884,9 @@ first. Binaries, versions, the commit and the verbatim tail are in the commit me
 
 ### What this pass did NOT do
 
-* **`LS-32`** — `hardcover_book` and `metron` at 1.0 on a weaker provenance than the three just
+* **`LS-35`** — `hardcover_book` and `metron` at 1.0 on a weaker provenance than the three just
   capped. Measured, recorded, not changed.
-* **`LS-33`** — the phase-B `webLinks` feed. Measured, priced, declined; see above.
+* **`LS-36`** — the phase-B `webLinks` feed. Measured, priced, declined; see above.
 * **Stale ids are never deleted.** UsArr's `external_id` write is an upsert with no delete path, so
   when Kavita's inherit block **erases** a field to `0` on a later scan, the row UsArr already wrote
   survives. That is protective at 0.90 — identity does not flap — but it means a wrong id outlives

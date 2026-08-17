@@ -264,7 +264,7 @@ func TestIdentifiedCassetteMapsEveryIDSourceAndDropsTheEditionID(t *testing.T) {
 	// ⚠️ THE CONFIDENCE RULE IS NOT UNIFORM, and it used to be asserted here as
 	// though it were — on the premise that every one of these is "a typed
 	// Kavita+ field, not free text". That premise was false for ComicVine and,
-	// LS-27 measured, false for AniList, MyAnimeList and MangaBaka too: all four
+	// LS-30 measured, false for AniList, MyAnimeList and MangaBaka too: all four
 	// have plain-scanner writers at v0.9.0.2 reading ComicInfo.xml's <Web>
 	// element, and every one of the six has an Edit-Series-dialog writer. §6.4
 	// amendment 3 caps all four below 1.0.

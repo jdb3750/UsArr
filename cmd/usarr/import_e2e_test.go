@@ -46,8 +46,12 @@ func kavitaSeries(id, libraryID int, name string, extra map[string]any) map[stri
 		// The UTC watermark, not the server's local clock.
 		"lastChapterAddedUtc": "2026-08-17T07:00:30.118Z",
 		"lastChapterAdded":    "2026-08-17T09:00:30.118Z",
-		// DEGRADED IDENTITY IS THE DEFAULT HERE because it is the ordinary case:
-		// a free Kavita writes none of the Kavita+ identifier fields.
+		// DEGRADED IDENTITY IS THE DEFAULT HERE because it is the ordinary case
+		// for an UNTAGGED library. ⚠️ Not because "a free Kavita writes none of
+		// the Kavita+ identifier fields", which is what this said and is false:
+		// LS-30 found that four of these six have plain-scanner writers reading
+		// ComicInfo.xml's <Web> element, so a ComicTagger-tagged free instance
+		// fills them in.
 		"aniListId": 0, "malId": 0, "hardcoverId": 0, "metronId": 0,
 		"comicVineId": "", "mangaBakaId": 0, "cbrId": 0,
 	}
@@ -130,7 +134,11 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 		kavitaSeries(42, 2, "Saga", nil),
 		kavitaSeries(43, 3, "The Hobbit", map[string]any{"pages": 310}),
 		// Two series in DIFFERENT libraries of the SAME kind carrying the SAME
-		// strong id: §6.4 tier 1 must resolve them onto one work.
+		// AniList id. ⚠️ They must NOT resolve onto one work: this said "§6.4
+		// tier 1 must resolve them onto one work", on the premise that aniListId
+		// is matcher-written. LS-30 measured otherwise, so §6.4 amendment 3 caps
+		// it at 0.90 and tier 1 skips it. The pair is kept precisely to prove
+		// that — a deluxe re-release must not swallow the original.
 		kavitaSeries(44, 1, "Berserk", map[string]any{"aniListId": 30013}),
 		kavitaSeries(45, 2, "Berserk (Deluxe)", map[string]any{"aniListId": 30013}),
 	}
@@ -197,7 +205,7 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 	// ⚠️ THIS ASSERTED FOUR, AND THE FOURTH WAS A MERGE THAT SHOULD NEVER HAVE
 	// HAPPENED. It read: "Five series, FOUR CATALOGUE works: the two Berserk rows
 	// share an AniList id and tier 1 resolves them onto one work across two
-	// libraries." They do share `aniListId: 30013` — but LS-27 measured
+	// libraries." They do share `aniListId: 30013` — but LS-30 measured
 	// Series.AniListId at Kavita v0.9.0.2 and found a plain-scanner writer
 	// (ProcessSeries.cs:363) and an Edit-Series-dialog writer
 	// (ExternalMetadataIdHelper.cs:13) beside the Kavita+ one, so §6.4 amendment
@@ -239,12 +247,12 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 	// reading_direction IS LAST-WRITER-WINS … one work now sits in a Manga library
 	// (rtl) and a Comic library (ltr), and work_comic holds exactly one value".
 	// That was true only while the two rows merged on a 0.90-capped AniList id,
-	// which LS-27 stopped. The FINDING stands — two remote items that resolve onto
+	// which LS-30 stopped. The FINDING stands — two remote items that resolve onto
 	// one work still overwrite each other's reading_direction, and it still lands
 	// in a column §6.5 rule 4 makes editable — but reaching it now needs a
 	// genuinely work-strong shared id (`hardcover_book`, `openlibrary_work`,
 	// `goodreads_work`), which this fixture does not carry. A fixture that
-	// exercises it deliberately belongs to whoever revisits LS-07 or LS-32.
+	// exercises it deliberately belongs to whoever revisits LS-07 or LS-35.
 	if n := countIn(t, env, `
 		SELECT COUNT(*) FROM work_comic wc JOIN work w ON w.id = wc.work_id
 		 WHERE w.title LIKE 'Berserk%'`); n != 2 {
@@ -263,7 +271,7 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 	// DEGRADED IDENTITY IS THE ORDINARY CASE. Three of the five works carry no
 	// external id at all, and all five are still filed and still indexed. The
 	// other two are the Berserk pair, which now hold ONE 0.90 `anilist` row each
-	// instead of one shared 1.0 row — see LS-27.
+	// instead of one shared 1.0 row — see LS-30.
 	//
 	// A PERSON CARRIES NO external_id EITHER, by design — see
 	// store.personWorkID: Kavita's person id is instance-local, so writing it
@@ -280,7 +288,7 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 	// ── credits, through the real HTTP path (ADR-0044) ──────────────────────
 	//
 	// FOUR people, and this number is now a STRONGER assertion than it was.
-	// Kentaro Miura is credited on BOTH Berserk rows, and since LS-27 those are
+	// Kentaro Miura is credited on BOTH Berserk rows, and since LS-30 those are
 	// two separate works — so the person dedupe can no longer be carried by the
 	// works having merged. He is one person work because store.personWorkID
 	// resolves him to one, which is the thing worth testing.
@@ -297,7 +305,7 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 	// metadata entry — then clears both and writes writer alone. FOUR credits,
 	// not five: Frieren 2, The Hobbit 1, Berserk 1, Saga 0."
 	//
-	// Since LS-27 remotes 44 and 45 are two works, so nothing overwrites anything:
+	// Since LS-30 remotes 44 and 45 are two works, so nothing overwrites anything:
 	// SIX credits — Frieren 2, The Hobbit 1, Berserk 2 (writer + penciller),
 	// Berserk (Deluxe) 1 (writer), Saga 0.
 	//
@@ -384,7 +392,7 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 	docs := countIn(t, env, `SELECT COUNT(*) FROM search_doc`)
 	fts := countIn(t, env, `SELECT COUNT(*) FROM search_fts`)
 	trgm := countIn(t, env, `SELECT COUNT(*) FROM search_trgm`)
-	// Five, not four: the Berserk pair are two works since LS-27, and a work that
+	// Five, not four: the Berserk pair are two works since LS-30, and a work that
 	// exists is a work that is indexed.
 	if docs != 5 {
 		t.Errorf("search_doc rows = %d, want 5", docs)

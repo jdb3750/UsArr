@@ -363,7 +363,7 @@ func mapSeries(dto kavita.SeriesDto, d kindDecision) store.CatalogueItem {
 //     re-verification found that `Series.AniListId`, `MalId` and `MangaBakaId`
 //     are ALSO weblink-parsed at v0.9.0.2 (ProcessSeries.cs:363-366) rather than
 //     matcher-written, which means §6.4 amendment 3 arguably reaches them too."
-//     Re-measured writer by writer (LS-27): it does reach all three, they now go
+//     Re-measured writer by writer (LS-30): it does reach all three, they now go
 //     through webLinkIdentity at WebLinkConfidence (0.90), and weblinkid.go's
 //     comment owns the measurement — including the two places the answer is NOT
 //     ComicVine's. MangaBaka has no provider writer at all; AniList and MAL each
@@ -395,7 +395,7 @@ func mapSeries(dto kavita.SeriesDto, d kindDecision) store.CatalogueItem {
 //     going out at 1.0 from here on the strength of an unexamined premise. It is
 //     not changed in this commit for exactly the reason LS-12 was not changed
 //     inside LS-11 — different fields, different fixtures, and a third behaviour
-//     bundled in would make none of them reviewable. docs/REVIEW-LOG.md LS-32
+//     bundled in would make none of them reviewable. docs/REVIEW-LOG.md LS-35
 //     carries it with the measurement.
 func kavitaExternalIDs(dto kavita.SeriesDto, d kindDecision) []store.ExternalIdentifier {
 	var out []store.ExternalIdentifier

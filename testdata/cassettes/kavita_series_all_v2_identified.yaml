@@ -13,7 +13,7 @@
 #      WAS THE BUG. It read: "That is a ux_extid_work_strong violation, which
 #      migration 0005 calls 'the merge signal, not an error'. v0.1 has no
 #      work_merge table." The premise underneath was that aniListId is a
-#      Kavita+ field. It is not: LS-27 measured Series.AniListId at v0.9.0.2 and
+#      Kavita+ field. It is not: LS-30 measured Series.AniListId at v0.9.0.2 and
 #      found a plain-scanner writer (ProcessSeries.cs:363, in the
 #      inheritWebLinksFromFirstChapter block) and an Edit-Series-dialog writer
 #      (ExternalMetadataIdHelper.cs:13) beside the Kavita+ one. §6.4 amendment 3

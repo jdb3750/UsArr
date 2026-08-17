@@ -18,7 +18,7 @@ import (
 // confidence-1.00 write hits ux_extid_work_strong and MERGES WORKS — a mistyped
 // link must not be able to do that."
 //
-// # Why the amendment reaches these three (REVIEW-LOG.md LS-12, closed by LS-27)
+// # Why the amendment reaches these three (REVIEW-LOG.md LS-12, closed by LS-30)
 //
 // Measured against Kavita's source at tag v0.9.0.2 — the owner's version,
 // ADR-0035 §2a — by grepping the whole tree for assignments to each field. The

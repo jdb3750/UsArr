@@ -220,7 +220,7 @@ func TestFullImportDeclinesTheImageLibraryAndSaysWhy(t *testing.T) {
 	// which migration 0005 calls 'the merge signal, not an error'".
 	//
 	// It is NOT a merge signal when the id was parsed out of a free-text <Web>
-	// element, which LS-27 measured Series.AniListId to be at Kavita v0.9.0.2.
+	// element, which LS-30 measured Series.AniListId to be at Kavita v0.9.0.2.
 	// §6.4 amendment 3 caps such an id at 0.90, store.ApplyCatalogueBatch's
 	// tier-1 lookup skips anything below 1.0, and A DELUXE RE-RELEASE NO LONGER
 	// SWALLOWS THE ORIGINAL — which is the whole point, because v0.1 has no
