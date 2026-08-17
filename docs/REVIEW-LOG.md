@@ -11578,3 +11578,57 @@ staleness one layer down. Reported, not edited.
   §1's six types (movies, TV, music, ebooks, audiobooks, comics) **two are covered and four are
   not**. Two of §17's rows are therefore now wrong and four are right, which is §17's owner's call
   to make rather than this thread's.
+
+---
+
+## LS-53 ADR-0046 is sound and is not a template: the assumption it rests on is that upstream regenerates its spec per release
+
+**Applied** — 2026-08-17, as an **amendment to [ADR-0046](./DECISIONS.md#adr-0046)**, not a new ADR
+and not a reversal. The finding came from another thread trying to apply ADR-0046's floor/ceiling
+pattern to Prowlarr and finding it could not — a limitation of the ADR rather than a Prowlarr quirk.
+
+**What ADR-0046 assumed without saying so: that upstream regenerates its OpenAPI spec per release.**
+Two pins are two points only if the tag and the branch tip are two *documents*. Kavita satisfies it
+(462 paths at `v0.9.0.2` against 488 on `develop`). Prowlarr does not.
+
+**Verified here, independently of the reporting thread, on 2026-08-17:**
+
+| Claim | How it was checked | Result |
+| --- | --- | --- |
+| `src/Prowlarr.Api.V1/openapi.json` is one blob at tag and at `develop` | `git ls-remote` → `develop` `1f7db1e`, `refs/tags/v2.5.2.5491` `c0f8c2c`; blobless fetch of both; `git ls-tree <commit> <path>` | **Both `134d31d7df5e80714c454a6224e7449df512c55e`** |
+| The vendored file is that same blob | `git hash-object api/specs/prowlarr.json` | **`134d31d7…`**, 145360 bytes |
+| The spec self-reports a placeholder version | read `info` from `api/specs/prowlarr.json` | **`"version": "1.0.0"`** — the Swashbuckle default |
+| Last regeneration, and how far back | `git log up/develop -- <path>` | **`60740fa25`, 2025-06-07**, *"Automated API Docs update"*; `git tag --contains 60740fa25` → **33** tags |
+| `SearchResource.Limit`/`Offset` are `int?` upstream | `git show up/develop:src/Prowlarr.Api.V1/Search/SearchResource.cs`; `git log`/`git tag --contains` on that file | **`public int? Limit`/`Offset`**, commit `c687bdb1f` (*"Fixed: Don't send limit=0 to Newznab indexers (#2654)"*), first tag **`v2.3.6.5351`**, ancestor of `v2.5.2.5491` |
+| The vendored document still says otherwise | `/api/v1/search` GET parameters in `api/specs/prowlarr.json` | `limit` and `offset` are plain `{"type":"integer","format":"int32"}` — **no `nullable`** |
+| UsArr is nonetheless correct | `internal/servarr/search.go:189-190,224-234` | `Limit *int32` / `Offset *int32`, both omitted from the query when nil — **no live bug** |
+
+**Taken on trust: nothing load-bearing.** The reporting thread's third check (a bogus ref returning
+404) was not repeated, because git content addressing is strictly stronger evidence than a raw-URL
+fetch and it agreed. Kavita's 462/488 path counts are quoted from ADR-0046 and `api/specs/SOURCES.md`
+rather than re-measured; they are not what the finding turns on.
+
+**Why this is an amendment and not an ADR.** The decision is unchanged for Kavita — no file moves,
+no test changes, no runtime behaviour is touched. What is recorded is a **boundary**: the remedy is
+chosen per upstream, and the Prowlarr counter-example belongs to the thread that measured it, which
+is landing its own remedy and its own ADR. This amendment points at that work rather than retelling
+it, per `DECISIONS.md`'s own rule that *"the decision lives in the superseding ADR; the amendment
+note points at it and does not re-argue it"*.
+
+**The second, sharper half: identity is by blob SHA where the document declares no version.**
+ADR-0046's method for telling its two files apart is `info.version`, machine-checked by
+`TestBothSpecsAreTheDocumentsSOURCESSays`. Prowlarr's `"1.0.0"` carries **no** version information
+rather than stale information, so a version assertion there would assert nothing while looking like
+it asserted something — a harder case than Kavita's floor, which declares a stale-but-real `0.9.0.0`.
+
+**The three marks `DECISIONS.md` owes an amendment were all written**, plus the fourth: the index row
+for 0046, the `Status:` line, a dated `> ⚠️ **AMENDED …**` blockquote directly under it, and a dated
+inline flag on the falsified sentence itself — open question 1's *"has the same shape of gap"*. The
+gap is real; the shape is not the same, and the implied remedy does not apply. That question's last
+sentence — *"nothing here should be read as evidence that the Prowlarr contract tests attest anything
+about 2.5.2"* — survives, and survives more strongly than it was written: **no contract test over
+that document could ever have caught the `int?` change, because the document never moved.**
+
+**Deliberately not touched.** `api/specs/prowlarr.json`, `api/specs/SOURCES.md`, the
+`internal/servarr` suite and anything under `web/` — the Prowlarr remedy is another thread's
+in-flight change, and duplicating it here would produce two answers to one question.
