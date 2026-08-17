@@ -2713,17 +2713,27 @@ design document goes wrong: it was still asserting that the Services health scre
 after the screen had shipped, on a page whose own §17.3 describes that screen's rendered bugs. The
 tree answers the question and cannot go stale — `web/src/routes` is the set of screens, `internal/`
 the set of backend surfaces, `internal/db/migrations` the schema that actually exists, and
-`git log` the order they arrived in. ⚠️ **The correction was applied and then immediately undercut**:
-this paragraph went on to keep *one* sentence of inventory — *"no sync channel runs yet, so there is
-no catalogue — nothing replicates from any source, v0.1's own Kavita adapter included, and every
-screen that would render a library says so rather than drawing an empty one"* — on the grounds that
-it stated the gap rather than the contents, and it went stale the same way and for the same reason,
-in a commit that never touched this file. The gap is a moving quantity, so it is a pointer here too:
-**`internal/libsync` is the sync core, and its package comment states which of `reference/sync.md`
-§1's channels it implements and which it does not** — that is the sentence that used to live here,
-and it now lives beside the code it describes, where a change to one is a change to the other.
-(The query-plan assertions are in place for the tables that exist, in `make test` — the gate named
-above, not a CI.)
+`git log` the order they arrived in. What is worth stating at this altitude is the gap the whole
+milestone is about, and the durable form of it is a pointer rather than a sentence: **read
+`internal/libsync`'s package doc, which names channel by channel what the sync core has and what it
+deliberately has not, and `cmd/usarr/import.go`'s, which names what triggers an import and what does
+not.** ⚠️ **This passage carried that gap as a claim and the claim went stale — which is the
+failure the paragraph immediately above describes, committed by the paragraph itself.** It read
+*"no sync channel runs yet, so there is no catalogue — nothing replicates from any source, v0.1's
+own Kavita adapter included, and every screen that would render a library says so rather than
+drawing an empty one"*. That was re-measured and recorded as still holding at `5b22d58`
+(2026-08-17 20:16 UTC, REVIEW-LOG MWP); `01969ed` falsified it **eight minutes later**, and
+`f77ea2a` finished the channel it started. Corrected at `c56c8e4`.
+
+**One clause of that sentence was a requirement wearing a status claim's clothes, and it survives as
+a requirement**: *every screen that would render a library says which source is missing rather than
+drawing an empty one* (principle 3, §17.7's `unconfigured` state). While nothing replicated it was
+vacuously satisfied. It is no longer vacuous — Kavita's adapter emits exactly two `work.kind` values,
+`comic` and `book` (`mapLibraryType`, `internal/libsync/kavita.go`), so **two of §1's six media types
+now have a source and four do not**, and the rule now has to hold on a mixed screen rather than an
+empty one. **That is §17's to re-measure, and it is flagged rather than assumed here** (REVIEW-LOG
+CH1-04). (The query-plan assertions are in
+place for the tables that exist, in `make test` — the gate named above, not a CI.)
 
 **v0.2 — "Requests."** Request model, routing rules, approval workflow, quotas, single-user
 auto-approve. **One search box over owned and unowned** (§8.6). One Add that routes; availability

@@ -1,14 +1,15 @@
 # UsArr
 
-> **Status: pre-alpha. Some of it works; the rest is still design and its evidence base.**
-> It is a Go binary with an embedded SPA shell. There is no release and no container image yet, so
-> running it means building it (`make build`). **Which paths actually run is not listed here.** This
-> paragraph used to name one — *"nothing syncs a library in yet, so there is no catalogue"* — and a
-> single commit made that false without editing this file, which is the second time a sentence in
-> this box has gone stale that way. The tree answers it and cannot: `web/src/routes` for screens,
-> `internal/` for backend surfaces (`internal/libsync/doc.go` in particular states which sync
-> channels exist and which do not), and `internal/db/migrations` for the schema. If you are here to
-> install something finished, come back later.
+> **Status: pre-alpha. Parts of it run; the rest is still design and its evidence base.**
+> What runs today is Prowlarr Search-and-Grab: free-text indexer search, results streaming in per
+> indexer, and grab — served by a Go binary with an embedded SPA shell. There is no release and no
+> container image yet, so running it means building it (`make build`). A catalogue import exists as
+> of `c56c8e4` — for Kavita and for nothing else, and only the first-import channel: it fires once
+> when you connect a Kavita, or on demand, and there is no periodic re-sync behind it. Which
+> channels the sync core has is a question for `internal/libsync` and `cmd/usarr/import.go`, whose
+> package docs answer it channel by channel. The rest moves week to week, so what exists is
+> whatever is in the tree (`web/src/routes`, `internal/`) rather than whatever this paragraph last
+> claimed. If you are here to install something finished, come back later.
 
 **One unified, searchable catalogue over everything you own and everything you might want —
 that plugs into the players you already use.**
