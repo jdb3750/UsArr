@@ -12,6 +12,21 @@
 // on Client plus a second resources file; nothing else in this package assumes v1.
 // No speculative abstraction has been built for services with no code behind them.
 //
+// There are TWO read paths, and picking the wrong one is a memory bug:
+//
+//   - do buffers the whole body, bounded at 32 MB. It is for the small,
+//     fixed-shape endpoints — /ping, system/status, indexer, search.
+//   - StreamList hands each array element to a callback as it decodes, bounded at
+//     MaxStreamBytes (200 MB, the same ceiling internal/ssrf's transport
+//     enforces). It is for the unpaged list endpoints, which run 30-80 MB on a
+//     10k-movie library: ARCHITECTURE.md §7.2 is "Stream the JSON; never
+//     io.ReadAll", because buffering AND unmarshalling that peaks at 200-400 MB
+//     on a 1 GB Pi.
+//
+// Both bounds FAIL rather than truncate. A truncated *Arr list is
+// indistinguishable from content deleted upstream and would drive a destructive
+// reconciliation sweep.
+//
 // Two rules this package enforces rather than documents:
 //
 //   - The API key never appears in an error string, a log line or a returned URL.

@@ -42,6 +42,17 @@ type HTTPDoer interface {
 type Timeouts struct {
 	Default time.Duration
 	Search  time.Duration
+
+	// List is the budget for a streamed list endpoint (StreamList). It covers the
+	// whole body, not just the response headers, because the deadline is on the
+	// context and the context governs every Read.
+	//
+	// The default is deliberately large: docs/reference/sync.md §2 puts a
+	// 10k-movie Radarr's GET /api/v3/movie at 30-80 MB in one unpaged response,
+	// and the Default 10 s would fail that on any ordinary link. 10 minutes is an
+	// INFERENCE from those sizes, not a measurement — it is a ceiling that stops a
+	// worker leaking, not a target.
+	List time.Duration
 }
 
 func (t Timeouts) withDefaults() Timeouts {
@@ -50,6 +61,9 @@ func (t Timeouts) withDefaults() Timeouts {
 	}
 	if t.Search <= 0 {
 		t.Search = 60 * time.Second
+	}
+	if t.List <= 0 {
+		t.List = 10 * time.Minute
 	}
 	return t
 }
@@ -104,6 +118,11 @@ type Client struct {
 	breaker     *Breaker
 	isPolicyErr func(error) bool
 	log         *slog.Logger
+
+	// maxStream bounds one streamed body. It is a field rather than a constant so
+	// a test can fire the bound without pushing MaxStreamBytes (200 MB) through a
+	// race-instrumented decoder; nothing outside this package can change it.
+	maxStream int64
 
 	// appVersion is read from the X-Application-Version header, which is present
 	// on every /api/* response — so version detection costs nothing extra.
@@ -163,6 +182,7 @@ func NewProwlarr(opts Options) (*Client, error) {
 		breaker:     NewBreaker(opts.Breaker, opts.Now, opts.Rand),
 		isPolicyErr: opts.IsPolicyError,
 		log:         log,
+		maxStream:   MaxStreamBytes,
 	}, nil
 }
 
@@ -199,8 +219,59 @@ type request struct {
 	anonymous bool
 }
 
+// newRequest builds the outbound *http.Request for one request.
+//
+// BOTH read paths — do and stream — go through here, so the API-key header, the
+// Accept header and the URL assembly exist exactly once. A second copy is how one
+// of them ends up sending ?apikey= or a bare application/json Accept.
+func (c *Client) newRequest(ctx context.Context, r request) (*http.Request, error) {
+	u := *c.base
+	u.Path = c.base.Path + r.path
+	if len(r.query) > 0 {
+		u.RawQuery = r.query.Encode()
+	}
+
+	var bodyReader io.Reader
+	var hasBody bool
+	if r.body != nil {
+		b, err := json.Marshal(r.body)
+		if err != nil {
+			return nil, &APIError{Op: r.op, Method: r.method, Path: r.path, Message: "encoding request body", Err: ErrInvalidRequest}
+		}
+		hasBody = true
+		bodyReader = bytes.NewReader(b)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, r.method, u.String(), bodyReader)
+	if err != nil {
+		return nil, &APIError{Op: r.op, Method: r.method, Path: r.path, Message: "building request", Err: ErrInvalidRequest}
+	}
+
+	// Content negotiation: ReturnHttpNotAcceptable = true is confirmed in the
+	// shipped Servarr Startup.cs, and several of the largest endpoints are declared
+	// text/plain-only in the specs — so a bare `application/json` can 406 the most
+	// important endpoint in the import path. Accept both and parse as JSON
+	// regardless of the returned Content-Type (docs/DEVELOPMENT.md §5).
+	req.Header.Set("Accept", "application/json, text/plain;q=0.9, */*;q=0.1")
+	req.Header.Set("User-Agent", c.ua)
+	if hasBody {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	// The key goes in the header and NEVER in the query string, where it would
+	// land in access logs, Referer headers and any reverse proxy in front.
+	if !r.anonymous && c.apiKey != "" {
+		req.Header.Set("X-Api-Key", c.apiKey)
+	}
+	return req, nil
+}
+
 // do performs one request: breaker gate, deadline, headers, status handling,
 // JSON decode. out may be nil to discard the body.
+//
+// do BUFFERS the whole body, so it is for the small, fixed-shape endpoints only.
+// The *Arr list endpoints are unpaged and run 30-80 MB on a large library
+// (docs/reference/sync.md §2) — those go through StreamList, which never holds
+// more than one element.
 func (c *Client) do(ctx context.Context, r request, out any) error {
 	if err := c.breaker.Allow(); err != nil {
 		return &APIError{Op: r.op, Method: r.method, Path: r.path, Err: err}
@@ -215,40 +286,9 @@ func (c *Client) do(ctx context.Context, r request, out any) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	u := *c.base
-	u.Path = c.base.Path + r.path
-	if len(r.query) > 0 {
-		u.RawQuery = r.query.Encode()
-	}
-
-	var bodyReader io.Reader
-	var rawBody []byte
-	if r.body != nil {
-		b, err := json.Marshal(r.body)
-		if err != nil {
-			return &APIError{Op: r.op, Method: r.method, Path: r.path, Message: "encoding request body", Err: ErrInvalidRequest}
-		}
-		rawBody = b
-		bodyReader = bytes.NewReader(b)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, r.method, u.String(), bodyReader)
+	req, err := c.newRequest(ctx, r)
 	if err != nil {
-		return &APIError{Op: r.op, Method: r.method, Path: r.path, Message: "building request", Err: ErrInvalidRequest}
-	}
-
-	// Content negotiation: ReturnHttpNotAcceptable = true is confirmed in the
-	// shipped Servarr Startup.cs, and several of the largest endpoints are declared
-	// text/plain-only in the specs — so a bare `application/json` can 406 the most
-	// important endpoint in the import path. Accept both and parse as JSON
-	// regardless of the returned Content-Type (docs/DEVELOPMENT.md §5).
-	req.Header.Set("Accept", "application/json, text/plain;q=0.9, */*;q=0.1")
-	req.Header.Set("User-Agent", c.ua)
-	if rawBody != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	if !r.anonymous && c.apiKey != "" {
-		req.Header.Set("X-Api-Key", c.apiKey)
+		return err
 	}
 
 	resp, err := c.http.Do(req)
@@ -266,25 +306,33 @@ func (c *Client) do(ctx context.Context, r request, out any) error {
 
 	// Bound the body. A misconfigured base URL pointing at something that streams
 	// forever must not exhaust memory.
-	const maxBody = 32 << 20
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
+	//
+	// It FAILS rather than truncating, which io.LimitReader here used to do: a
+	// truncated JSON body decodes as a malformed document and gets diagnosed as an
+	// upstream bug, and a silently truncated *Arr list looks like content deleted
+	// upstream — which would drive a destructive sweep. Same reasoning, same
+	// wording, as internal/ssrf's cappedTransport one layer below.
+	lb := &limitedBody{r: resp.Body, max: maxBufferedBody}
+	body, err := io.ReadAll(lb)
 	if err != nil {
+		if lb.exceeded {
+			c.recordStatus(resp.StatusCode)
+			return &APIError{
+				Op: r.op, Method: r.method, Path: r.path, Status: resp.StatusCode,
+				Message: fmt.Sprintf("response exceeded the %d-byte buffered limit; this endpoint needs StreamList", maxBufferedBody),
+				Err:     ErrResponseTooLarge,
+			}
+		}
 		return c.transportError(r, err)
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		apiErr := parseErrorBody(r.op, r.method, r.path, resp.StatusCode, body)
-		// 4xx is UsArr sending a bad request; it says nothing about instance
-		// health, so it must not trip the breaker. 5xx does.
-		if resp.StatusCode >= 500 {
-			c.breaker.Failure()
-		} else {
-			c.breaker.Success()
-		}
+		c.recordStatus(resp.StatusCode)
 		return apiErr
 	}
 
-	c.breaker.Success()
+	c.recordStatus(resp.StatusCode)
 
 	if out == nil {
 		return nil
@@ -299,6 +347,60 @@ func (c *Client) do(ctx context.Context, r request, out any) error {
 		}
 	}
 	return nil
+}
+
+// recordStatus feeds one answered request to the breaker.
+//
+// 4xx is UsArr sending a bad request; it says nothing about instance health, so it
+// must not trip the breaker. 5xx does.
+func (c *Client) recordStatus(status int) {
+	if status >= 500 {
+		c.breaker.Failure()
+		return
+	}
+	c.breaker.Success()
+}
+
+// maxBufferedBody caps the body do reads into memory. It stays at 32 MB
+// deliberately: do's endpoints are small and fixed-shape, and raising it here
+// would only make the buffered path a bigger memory hazard. The unpaged list
+// endpoints are the reason StreamList exists.
+const maxBufferedBody int64 = 32 << 20
+
+// limitedBody bounds a response body and FAILS at the bound instead of
+// truncating. io.LimitReader reports a clean io.EOF at its limit, which is
+// indistinguishable from a body that genuinely ended — the exact confusion
+// internal/ssrf refuses one layer down.
+//
+// It also remembers the underlying reader's last error, which is what lets the
+// streaming path tell "the connection died mid-array" (a transport failure, the
+// breaker's business) from "the server sent malformed JSON" (a decode failure).
+type limitedBody struct {
+	r   io.Reader
+	n   int64
+	max int64
+
+	exceeded bool
+	lastErr  error // last non-EOF error from r
+}
+
+func (l *limitedBody) Read(p []byte) (int, error) {
+	if l.exceeded {
+		return 0, errBodyTooLarge
+	}
+	n, err := l.r.Read(p)
+	l.n += int64(n)
+	if err != nil && !errors.Is(err, io.EOF) {
+		l.lastErr = err
+	}
+	if l.max > 0 && l.n > l.max {
+		l.exceeded = true
+		// Drop the overshooting bytes: the read is fatal, so nothing above will
+		// look at them, and returning them alongside the error invites a caller to
+		// parse a body it has already been told is over the limit.
+		return 0, errBodyTooLarge
+	}
+	return n, err
 }
 
 // transportError classifies a failure that happened before a status code existed.

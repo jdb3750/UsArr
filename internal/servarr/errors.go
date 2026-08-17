@@ -53,6 +53,13 @@ var (
 	// ErrDecode means the body was not the JSON this endpoint promises.
 	ErrDecode = errors.New("servarr: cannot decode response")
 
+	// ErrResponseTooLarge means the body ran past the client's byte bound. It is
+	// deliberately distinct from ErrDecode: the bound FAILS rather than truncating,
+	// because a truncated *Arr list is indistinguishable from content deleted
+	// upstream and would drive a destructive reconciliation sweep. On the buffered
+	// path it also means "this endpoint belongs on StreamList".
+	ErrResponseTooLarge = errors.New("servarr: response body too large")
+
 	// ErrWrongService means system/status.appName was not the expected app. Sonarr
 	// and Radarr answer the identical SystemResource shape on their own paths, so
 	// appName is the only handshake that distinguishes them.

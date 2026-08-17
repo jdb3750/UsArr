@@ -6273,3 +6273,94 @@ diff is two files, both under `docs/`, and **only `gitleaks dir .` reads `docs/`
 green attests that no credential-shaped string appears anywhere in the tree, and says nothing
 whatever about whether the prose is true. The `golangci-lint` cache was cleaned by absolute path
 (`/root/go/bin/golangci-lint cache clean`) before the run, per the standing M5-01…M5-11 gate note.
+
+---
+
+# M5-30 — the \*Arr client capped every response at 32 MB under a transport that permits 200 MB, and buffered the endpoints `ARCHITECTURE.md` §7.2 forbids buffering
+
+**Date:** 2026-08-17. **Branch:** `claude/hearth-thread-93bfq1`, reset from `origin/main` at `a855e23`.
+**Continues the M5 series.** Unlike M5-25…M5-29 this is **executable behaviour, not a citation**: it
+adds a read path to `internal/servarr` and changes what the existing one does at its bound.
+**`M5-30` is the next free id**, checked rather than assumed with
+`grep -on "M5-[0-9]\+" docs/REVIEW-LOG.md | sed 's/.*M5-//' | sort -n | tail -1`, whose highest hit
+before this entry is **M5-29**.
+
+The finding is a **three-layer disagreement about one number**, which is why no single file looked
+wrong on its own: `internal/ssrf/body.go` sets `MaxListBytes = 200 << 20` with a comment naming the
+\*Arr list endpoints *"whose payloads run 30-80 MB on a large library"*; `ARCHITECTURE.md` §7.2 says
+**"Stream the JSON; never `io.ReadAll`"**; and `internal/servarr/client.go`'s `do` read every
+response with `io.ReadAll(io.LimitReader(resp.Body, 32<<20))`. The client's cap was **the binding
+one**, six times below the ceiling underneath it, and it was applied by `io.LimitReader`, which
+reports a clean `io.EOF` at its limit — so a 40 MB `GET /api/v3/movie` did not fail, it **truncated
+and then failed as malformed JSON**. That is the failure mode `internal/ssrf`'s own
+`cappedTransport` comment refuses one layer down, for the reason that matters here: *"a silently
+truncated \*Arr list looks like content that was deleted upstream and would drive a destructive
+sweep."*
+
+## M5.19 Disposition
+
+| # | Severity | Finding | Disposition |
+|---|---|---|---|
+| **M5-30a** | High | **The 32 MB cap is below the layer beneath it and below the payloads it is for.** Both halves verified in the tree rather than taken from the relay: `internal/ssrf/body.go:21` — `MaxListBytes int64 = 200 << 20`, commented *"caps the \*Arr list endpoints, whose payloads run 30-80 MB on a large library"* — and `docs/reference/sync.md` §2 — *"A 10k-movie library is ~30-80 MB of JSON in one response"* | **APPLIED.** New exported `MaxStreamBytes = 200 << 20`, equal to `ssrf.MaxListBytes` **by test** (`TestMaxStreamBytesTracksTheSSRFCeiling`), not by comment. It is duplicated rather than imported because `doc.go` forbids this package depending on `internal/ssrf` — the point of injecting the policy client is that this package cannot reach around it — so the test is what stops the duplicate drifting. `do`'s own cap **stays at 32 MB**: its endpoints are small and fixed-shape, and raising it would only make the buffered path a bigger hazard |
+| **M5-30b** | High | **The bound truncated instead of failing.** `io.LimitReader` returns `io.EOF` at its limit, so an over-cap body was diagnosed as bad JSON | **APPLIED.** `limitedBody` replaces `io.LimitReader` on both paths and returns a typed failure at the bound; new sentinel **`ErrResponseTooLarge`**, deliberately distinct from `ErrDecode`. Fired deliberately by reinstating the `io.LimitReader`: the test then printed `decoding response: unexpected end of JSON input` — the misdiagnosis, verbatim |
+| **M5-30c** | High | **Buffering the list endpoints is forbidden, not merely discouraged.** `sync.md` §2, under *Mandatory implementation rules*: *"**Stream the JSON.** `json.Decoder.Token()` consuming the array element by element. Buffering *and* unmarshalling a 60 MB payload peaks at ~200-400 MB on a 1 GB Pi; streaming holds it near constant."* `ARCHITECTURE.md` §7.2 carries the same rule as *"never `io.ReadAll`"* | **APPLIED, and measured rather than asserted.** New `StreamList[T]` + unexported `Client.stream`, `do`'s sibling: one `*json.Decoder` over the live body, elements handed to a callback one at a time. On a 24 MB payload — the largest the 32 MB buffered cap can carry at all, so both arms are the **real** code paths on the **same** body — peak heap above baseline was **63.75 MB buffered against 3.54 MB streaming, an 18× reduction**, with churn 162.4 MB/op against 22.3 MB/op (`BenchmarkListRead`, `-benchtime 5x`, Intel Xeon @ 2.10 GHz, linux/amd64). The buffered figure is **2.7× the payload**, which is what `sync.md`'s 200-400 MB-for-60 MB estimate looks like from underneath |
+
+## M5.20 The contract the review asked for, and where it is pinned
+
+A streamed read can fail **after** the callback has already been given part of the payload, and a
+half-applied import that reports success is worse than one that fails. So `StreamList` returns
+**`(n, err)` — the number of elements actually handed to the callback — on success and on failure
+alike**, and the docs say plainly that those `n` calls happened and their effects stand: `n` is *how
+far the import got*, never *how many rows are correct*. Recovery is the caller's, which is what
+`sync.md` §2's chunked transactions are for.
+
+The subtle half is that **`dec.More()` returns false at a read error exactly as it does at `]`**, so
+a body cut on an element boundary decodes as a complete array. `StreamList` therefore **reads the
+closing bracket rather than assuming it**. Fired deliberately by deleting that read: the truncation
+test then failed with *"a truncated array must not be reported as a complete list"* — i.e. it had
+returned `(137, nil)`, a half payload reported as a whole one.
+
+## M5.21 What the new path had to preserve, and how that was checked
+
+`stream` is `do`'s sibling, so every behaviour `do` carries had to survive on it. Each was pinned by
+a test **and then fired by breaking the code it protects** (nine mutations, each reverted; the
+outputs are in the thread's report): the `X-Api-Key` header and the absence of `?apikey=`; the
+`Accept: application/json, text/plain;q=0.9, */*;q=0.1` header with the body parsed as JSON whatever
+the `Content-Type` says; `X-Application-Version` capture; the full error taxonomy through
+`parseErrorBody`'s three envelopes, including the 401 that must not be parsed at all; the breaker
+policy that 4xx must **not** trip and 5xx must; and `transportError`'s reconstruction of `*url.Error`
+— which the redaction mutation showed is the only thing standing between a mid-stream connection
+reset and the **full admin API key** appearing in an error string.
+
+Two rules are new and belong to the streaming path alone. **A non-2xx response is never streamed**:
+it takes the bounded buffered read and `parseErrorBody`, and the callback is not called. Breaking
+that showed why it is not cosmetic — a 400 carrying the bare FluentValidation **array** decoded
+cleanly into the caller's element type and the call returned **`nil`**. And **an error the caller's
+own function returns comes back unwrapped**, so `errors.Is` against the caller's sentinels works;
+without its envelope it arrived as `decoding response: writing chunk to sqlite`, blaming the
+upstream for a SQLite failure.
+
+## M5.22 Raised, not fixed
+
+* **`Timeouts.List` defaults to 10 minutes, and that number is an inference, not a measurement.**
+  It is derived from `sync.md` §2's 30-80 MB against an ordinary home link; the `Default` 10 s would
+  fail such a body outright. It is a ceiling that stops a worker leaking, not a target, and it is
+  labelled as inference in the field's doc comment. Re-derive it when the sync engine has real
+  timings on real hardware.
+* **No endpoint uses `StreamList` yet.** Only Prowlarr is implemented and none of its endpoints are
+  in the 30-80 MB class; `Search` and `Indexers` stay on the buffered path deliberately. This is the
+  seam landing ahead of the feature, per CLAUDE.md's *"the seam ships, the feature does not"* — and
+  it is why the tests drive it through a `listItem` stand-in rather than a resource type that does
+  not exist.
+* **The benchmark is a benchmark, not a test.** `go test ./...` compiles it and does not run it, so
+  the gate pays nothing and no memory ratio is asserted on a shared runner — `DEVELOPMENT.md` §5's
+  rule. The 34 MB streaming test **is** in the gate, because "the cap is lifted" is a correctness
+  claim rather than a performance one; it costs ~3.6 s under `-race`.
+
+### On the gate for M5-30
+
+`make check` was run on this tree and is green — command, absolute tool paths, versions, SHA and the
+verbatim tail are in the commit message. **The green is load-bearing here**, unlike M5-29's: the diff
+is four Go files, so `test` (with `-race -shuffle=on`), `lint` and `vuln` all read it. The
+`golangci-lint` cache was cleaned by absolute path (`/root/go/bin/golangci-lint cache clean`) before
+the run, per the standing M5-01…M5-11 gate note.
