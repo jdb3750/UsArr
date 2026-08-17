@@ -715,46 +715,56 @@ const EMDASH_DEFERRED: Record<string, string> = {
  * lean".
  *
  * ─────────────────────────────────────────────────────────────────────────────
+ * ⚠️ THE FLOOR WAS RE-DERIVED ON 2026-08-17, OFF A DIFFERENT QUANTITY. The first
+ * version of this rule set the floor at 0.2064 = the palette's GLOBAL MAXIMUM
+ * CHROMA (0.179274, `--status-error` light) plus a margin. Design read the code
+ * and rejected the derivation, and the reason is the conjunction above:
+ *
+ *     `--status-error` is at hue 29.0°. It is not in [265°, 335°], so it never
+ *     reaches the chroma test at all. A value the chroma test never sees cannot
+ *     constrain the chroma test's floor.
+ *
+ * The floor was doing a job nothing asked of it. Under a conjunction the ONLY
+ * thing the floor has to do is refuse the one false positive the hue test can
+ * produce on its own: a NEAR-ACHROMATIC value has no meaningful hue, because at
+ * chroma near zero the a/b coordinates are numerical dust and `atan2` of dust
+ * returns an angle that can land anywhere, including inside the band. That is
+ * the whole of it. So the floor is derived from HUE STABILITY instead: it must
+ * sit above the chroma at which a computed hue stops being noise.
+ *
  * THE FLOOR IS MEASURED, NOT CHOSEN. Design required this explicitly, and the
  * measurement is reproduced live by the first two rule-2 tests below so it
  * cannot go stale the way a quoted number does.
  *
- * WHAT WAS MEASURED. Every colour value in `docs/design/tokens.css`, in every
- * block — §1 `:root` (light), §2 `:root[data-theme="dark"]`, §3's
- * `prefers-color-scheme: dark` block, and §7's `--shadow-overlay`. 46 values,
- * 0 skipped. Comments are stripped first, so the withdrawn and rejected
- * candidates tokens.css records in prose (`#8a5300`, `#a9700a`, `#e0a33a`, the
- * withdrawn `--protocol-*` pair, CSS `orange` quoted as a hue reference) are
- * correctly NOT counted as tokens.
+ * WHAT WAS MEASURED — THE NEUTRAL RAMPS, IN BOTH FILES. `docs/design/tokens.css`
+ * and `web/src/app.css`, every `--n-0`..`--n-8` step plus the `--inset` and
+ * `--hover` interstitials, in every block: §1 `:root` (light), §2
+ * `:root[data-theme="dark"]` and §3's `prefers-color-scheme: dark`. 33 values
+ * per file, 66 in all, 0 skipped. These are the values whose hue is meaningless
+ * by construction, so they are the population the floor has to clear. Comments
+ * are stripped first, so the withdrawn and rejected candidates tokens.css
+ * records in prose (`#8a5300`, `#a9700a`, `#e0a33a`, the withdrawn
+ * `--protocol-*` pair, CSS `orange` quoted as a hue reference) are correctly NOT
+ * counted as tokens.
  *
- * RESULT 1 — THE BAND IS EMPTY. **Zero of the 46 fall in [265°, 335°].** Not
- * one. The ramp is warm by construction (tokens.css: "The ramp is warm-neutral,
- * hue ~35-45") and measures hue 67.6° to 91.6° in OKLCH; the four status values
- * measure 25.8°, 29.0°, 50.6°/53.4° and 151.9°/153.4°. The nearest any token
- * comes to the band is `--n-1` dark `#1e1d1a` at hue 91.6°, which is 173°
- * away. So there is no in-band maximum to clear, and per design's instruction
- * the floor is built on the whole-set maximum instead.
+ *       MEASURED BASIS   0.024372
+ *       (--n-4 light, #807869, OKLCH L 0.575487 / C 0.024371 / H 83.228°;
+ *        the identical value is the maximum in BOTH files)
  *
- * RESULT 2 — THE WHOLE-SET MAXIMUM, REGARDLESS OF HUE:
+ * The constant below is 0.024372 rather than 0.024371 because the exact value is
+ * 0.024371490... and a bound the floor must CLEAR is rounded up, not to nearest.
  *
- *       MEASURED MAXIMUM CHROMA   0.179274
- *       (--status-error light, #b3251c, OKLCH L 0.500317 / C 0.179273 / H 28.998°)
+ * Runners-up, so the basis is visibly a maximum and not a lone spike: `--n-5`
+ * light `#6b6355` at 0.023764, `--n-5` dark `#9a9284` at 0.022314, `--n-4` dark
+ * `#7d7568` at 0.021834. The ramp's floor is `--inset` light `#fdfcfb` at
+ * 0.001703, whose hue of 67.8° is exactly the dust this floor is about: three
+ * hex digits' difference from `#ffffff`, and an "orange" hue nobody chose.
  *
- * The constant below is 0.179274 rather than 0.179273 because the exact value is
- * 0.17927323490967592 and a bound the floor must CLEAR is rounded up, not to
- * nearest. That one ulp is not pedantry: it is the difference between the
- * re-measurement test below passing and failing on its own recorded figure.
- *
- * Runners-up, so the maximum is visibly a maximum and not a lone spike:
- * `--status-warn` dark `#fb9349` at 0.152872, `--status-warn` light `#a44c00`
- * at 0.136311, `--status-error` dark `#f0837a` at 0.135056. The whole neutral
- * ramp sits under 0.025 — the most chromatic neutral in either theme is `--n-4`
- * light `#807869` at 0.024371.
- *
- * THE MARGIN, ALSO MEASURED. A floor sitting flush on today's maximum fails the
- * first time a legitimate token is retuned, so the margin is the largest chroma
- * move this palette has ACTUALLY made, taken from tokens.css's own recorded
- * history rather than from a comfortable round number:
+ * THE MARGIN, ALSO MEASURED, AND UNCHANGED BY THE RE-DERIVATION. A floor sitting
+ * flush on today's basis fails the first time a legitimate token is retuned, so
+ * the margin is the largest chroma move this palette has ACTUALLY made, taken
+ * from tokens.css's own recorded history rather than from a comfortable round
+ * number:
  *
  *       --status-warn light, closed by the owner 2026-08-16
  *       #8a5300 (C 0.109252)  ->  #a44c00 (C 0.136311)     delta 0.027058
@@ -766,67 +776,115 @@ const EMDASH_DEFERRED: Record<string, string> = {
  * ⚠️ n=2. Those are the only two retunes tokens.css records, so the margin is
  * an honest measurement of a small sample, not a distribution. If a third
  * retune moves a token's chroma by more than 0.0271, re-derive rather than
- * nudging the floor.
+ * nudging the floor. ⚠️ AND IT IS A STATUS-COLOUR MARGIN APPLIED TO A NEUTRAL:
+ * tokens.css records no retune of a ramp step at all, so this is the largest
+ * move any token has made, standing in for the largest move a ramp step could
+ * make. That is a deliberate over-estimate, which is the safe direction here.
  *
  * THE FLOOR:
  *
- *       0.179274 (measured maximum) + 0.0271 (margin) = 0.206374
- *       CHROMA FLOOR = 0.2064, rounded UP, which is the safe direction.
+ *       0.024372 (measured basis) + 0.0271 (margin) = 0.051472
+ *       CHROMA FLOOR = 0.0515, rounded UP, which is the safe direction.
  *
- * BOTH NUMBERS ARE STATED BECAUSE THE MARGIN HAS TO BE VISIBLE, not implied: a
- * reader can see that the floor clears every real token by 0.0271 and clears
- * the entire neutral ramp by more than 0.18.
+ * ALL THREE NUMBERS ARE STATED SEPARATELY BECAUSE THE DERIVATION HAS TO BE
+ * VISIBLE, not implied: a reader can see that the floor clears the most
+ * chromatic neutral either file ships by 0.0271, and that it sits 0.0498 below
+ * `#c4b5fd` violet-300, the palest Tailwind violet anyone actually reaches for.
+ * Both halves matter. A floor that fails the first is a false-positive machine;
+ * a floor that fails the second is the 0.2064 floor again.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * ⚠️ WHAT THIS FLOOR CATCHES, AND WHAT IT LETS THROUGH. A floor forced above the
- * palette's own maximum chroma is a HIGH floor, and honesty about the cost is
- * worth more than a rule that reads as though it catches everything.
+ * ⚠️ THE FLOOR RESTS ON THE BAND BEING EMPTY, SO THAT IS ASSERTED, WITH ROOM.
+ * The 0.0515 floor is BELOW four real tokens: `--status-error` in both themes,
+ * `--status-warn` in both, `--status-ok` in both. They pass rule 2 purely
+ * because their hue is nowhere near the band. Under the old 0.2064 floor a token
+ * drifting into the band would still have cleared on chroma; under this one it
+ * would fail the moment it crossed 265°, which is a real (if remote) way for
+ * this rule to start failing a legitimate colour.
  *
- * CAUGHT (chroma >= 0.2064, hue in band) — the saturated purples, which is the
- * generated-UI tell §13 was written about:
+ * So the proximity guard below asserts that no token in tokens.css comes within
+ * 40° of the band, and says "re-derive the floor" rather than "banned colour" if
+ * one ever does. It is measured live, like everything else here.
+ *
+ * ⚠️ AND THE ROOM IS 50.84°, NOT THE 173° THIS COMMENT CLAIMED BEFORE. That
+ * figure was wrong, and it was wrong in the direction that flatters the rule, so
+ * it is corrected here rather than quietly replaced. HUE IS CIRCULAR. The old
+ * text took `--n-1` dark at hue 91.6° and subtracted it from the band's lower
+ * edge (265 - 91.6 = 173.4), which measures the gap in one direction only. The
+ * band's upper edge is at 335°, and the short way round from 335° runs through
+ * 0° and reaches 25.8° in 50.8°. The genuinely nearest token is therefore
+ * `--status-error` dark `#f0837a` at hue 25.841°, 50.84° from the band, and the
+ * 40° guard clears by 10.84° rather than by 133°. It still passes. It is
+ * tighter than advertised, and a warm red palette is exactly the kind that
+ * approaches a magenta band from below zero, so the guard earns its place.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * ⚠️ WHAT THIS FLOOR CATCHES, AND WHAT IT LETS THROUGH. Honesty about the cost
+ * is worth more than a rule that reads as though it catches everything, and the
+ * costs moved when the floor did.
+ *
+ * CAUGHT (chroma >= 0.0515, hue in band). The whole saturated range the 0.2064
+ * floor caught, and now the two families it did not: the mid tints, and the
+ * named CSS purples that were relying on rule 1 to catch them by word.
  *
  *       #7c3aed  violet-600    C 0.2466  H 293.0°     #9333ea  purple-600   C 0.2525  H 302.3°
- *       #8b5cf6  violet-500    C 0.2189  H 292.7°     #a855f7  purple-500   C 0.2325  H 303.9°
  *       #4f46e5  indigo-600    C 0.2301  H 277.0°     #c026d3  fuchsia-600  C 0.2569  H 322.9°
- *       #8a2be2  blueviolet    C 0.2503  H 301.4°     #d946ef  fuchsia-500  C 0.2591  H 322.2°
  *       #9400d3  darkviolet    C 0.2607  H 309.8°     #ff00ff  CSS fuchsia  C 0.3225  H 328.4°
  *
- * NOT CAUGHT, and each is a real gap rather than a rounding artefact:
+ *   NEWLY CAUGHT, each of which the 0.2064 floor let through:
  *
- *       #6366f1  indigo-500    C 0.2041  H 277.1°   misses the floor by 0.0023
- *       #800080  CSS purple    C 0.1935  H 328.4°   } caught by rule 1, by name
- *       #4b0082  CSS indigo    C 0.1793  H 301.7°   }
- *       #ee82ee  CSS violet    C 0.1861  H 327.2°   }
- *       #da70d6  CSS orchid    C 0.1813  H 328.7°   caught by NEITHER rule
- *       #c4b5fd  violet-300    C 0.1013  H 293.6°   TINTS ARE NOT CAUGHT AT ALL
- *       #ddd6fe  violet-200    C 0.0549  H 293.3°
+ *       #6366f1  indigo-500    C 0.2041  H 277.1°   missed the old floor by 0.0023
+ *       #800080  CSS purple    C 0.1935  H 328.4°   } were rule-1-only, by name
+ *       #4b0082  CSS indigo    C 0.1793  H 301.7°   } now banned by value too, so
+ *       #ee82ee  CSS violet    C 0.1861  H 327.2°   } the hex form no longer walks
+ *       #da70d6  CSS orchid    C 0.1813  H 328.7°   was caught by NEITHER rule
+ *       #c4b5fd  violet-300    C 0.1013  H 293.6°   } the tints, which the old
+ *       #a5b4fc  indigo-300    C 0.1041  H 274.7°   } comment recorded as being
+ *       #ddd6fe  violet-200    C 0.0549  H 293.3°   } out of reach of ANY floor
+ *       #c7d2fe  indigo-200    C 0.0622  H 274.0°   }
+ *
+ * STILL NOT CAUGHT, and the line is now where the noise floor is rather than
+ * where the palette's maximum happened to be:
+ *
+ *       #ede9fe  violet-100    C 0.0284  H 294.6°   the palest washes only
+ *       #f5f3ff  violet-50     C 0.0161  H 293.8°
+ *       #d8bfd8  CSS thistle   C 0.0439  H 326.0°
+ *       #e6e6fa  CSS lavender  C 0.0269  H 285.9°
  *
  * Three things follow, and they are the reason this list is here rather than
  * summarised away:
  *
- *   1. TINTS ARE OUT OF REACH OF ANY MEASURED FLOOR. A pale violet wash sits at
- *      chroma 0.05-0.10, far below anything this palette uses at any hue, so no
- *      floor derived from the palette can reach it without banning the palette.
- *      That is a limit of the method, accepted deliberately: design ruled that
- *      raising the floor to fit a real token is the failure mode the measurement
- *      exists to prevent, and LOWERING it below the palette's own maximum is the
- *      same error facing the other way.
+ *   1. TINTS ARE NO LONGER OUT OF REACH, AND THE OLD NOTE SAYING THEY WERE HAS
+ *      BEEN DELETED RATHER THAN SOFTENED. It said "no floor derived from the
+ *      palette can reach them without banning the palette", which was true only
+ *      of a floor derived from the palette's MAXIMUM. A floor derived from the
+ *      palette's noise level reaches violet-200 with room to spare and bans
+ *      nothing, because the palette's neutrals are 0.0271 below it and the
+ *      palette's chromatic tokens are 236° of hue away from the test.
+ *      What survives is a much smaller version of the same limit: below about
+ *      0.05 a violet wash and a cool grey are genuinely hard to tell apart by
+ *      chroma, so violet-100 and violet-50 stay out of reach. That residue is
+ *      accepted, and it is where the false-positive risk actually lives.
  *   2. `#4b0082` IS AN ARRESTING COINCIDENCE AND NOTHING MORE. CSS `indigo`
  *      measures chroma 0.17927151; `--status-error` measures 0.17927323. They
  *      differ by 1.7e-6, at hues 272.7° apart — the most saturated colour this
  *      design system uses and the colour §13 is named after are, to five decimal
- *      places, the same distance from grey. Nothing follows from it, but a
- *      reader WILL notice it and should be told it was noticed: it is exactly
- *      why the floor cannot be lowered to catch CSS `indigo` without failing a
- *      real token, and it is the sharpest available illustration of why chroma
- *      alone is not a purple test and the hue band is not optional.
- *   3. RULE 1 AND RULE 2 COMPOSE, AND ONE NAMED COLOUR ESCAPES BOTH. `orchid`,
- *      `plum` and `magenta` are word-banned by neither (rule 1's list is the
- *      four families §13 names) and value-banned by neither (`orchid` is 0.0251
- *      under the floor). Rule 2 does not resolve CSS colour KEYWORDS at all —
- *      no keyword occurs anywhere in `web/src`, verified, and a keyword table is
- *      rule 1's shape of problem, not rule 2's. Recorded as a known gap for the
- *      design thread rather than half-closed here.
+ *      places, the same distance from grey. It USED to be load-bearing: under
+ *      the 0.2064 floor it was the proof that the floor could not be lowered to
+ *      catch CSS `indigo` without failing a real token. That argument was the
+ *      derivation error in miniature, and the re-derivation dissolves it, since
+ *      the two values were never compared by the rule in the first place. It is
+ *      kept because a reader WILL notice it, and it is still the sharpest
+ *      illustration going of why chroma alone is not a purple test.
+ *   3. RULE 1 AND RULE 2 COMPOSE, AND THE REMAINING HOLE IS NOW KEYWORD-SHAPED
+ *      ONLY. `orchid`, `plum` and `magenta` are not on rule 1's word list (which
+ *      is the four families §13 names), and rule 2 does not resolve CSS colour
+ *      KEYWORDS at all — no keyword occurs anywhere in `web/src`, verified, and a
+ *      keyword table is rule 1's shape of problem, not rule 2's. What changed is
+ *      that their VALUES are now banned: `#da70d6` and `#dda0dd` both clear
+ *      0.0515 inside the band, so only the literal word `orchid` still walks
+ *      through. Design owns that word-list gap and is fixing it separately;
+ *      recorded here, not half-closed.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * THE CONVERSION IS IN THIS FILE, FROM THE PUBLISHED MATRICES, AND TAKES NO
@@ -1146,13 +1204,56 @@ function readColours(src: string, file: string, out: ColourValue[], skipped: Col
 const BAND_LO = 265;
 const BAND_HI = 335;
 
-/** Measured off tokens.css, and re-measured live below. See the block comment. */
-const TOKEN_MAX_CHROMA = 0.179274;
+/**
+ * The floor and the two numbers it is made of, all three re-measured live below.
+ * See the block comment: the basis is the most chromatic NEUTRAL either file
+ * ships, because under the conjunction the floor's only job is to refuse a hue
+ * computed from numerical dust.
+ */
+const NEUTRAL_MAX_CHROMA = 0.024372;
 const CHROMA_MARGIN = 0.0271;
-const CHROMA_FLOOR = 0.2064;
+const CHROMA_FLOOR = 0.0515;
+
+/**
+ * `#c4b5fd` violet-300, the palest violet a generated UI actually reaches for,
+ * and the ceiling the floor has to stay well under to be worth having. Asserted
+ * against the floor below rather than left as a claim in prose.
+ */
+const TINT_REFERENCE_CHROMA = 0.1013;
+
+/**
+ * How close a real token may come to the band before the floor stops being the
+ * right floor. The derivation assumes the band is EMPTY; 40° is the width of the
+ * warning strip either side of it. Today's nearest token clears by 10.84°.
+ */
+const BAND_PROXIMITY_MIN = 40;
 
 const inBand = (c: Oklch): boolean => c.H >= BAND_LO && c.H <= BAND_HI;
 const banned = (v: ColourValue): boolean => inBand(v.oklch) && v.oklch.C >= CHROMA_FLOOR;
+
+/**
+ * Shortest angular separation between two hues.
+ *
+ * ⚠️ THE WRAP IS THE POINT. `Math.abs(a - b)` reads 309° for a pair 51° apart
+ * across 0°, which is how this file's own comment came to claim 173° of room
+ * where there is 50.84°. Hue is an angle; measure it like one.
+ */
+const arc = (a: number, b: number): number => {
+	const d = (((a - b) % 360) + 360) % 360;
+	return Math.min(d, 360 - d);
+};
+
+/** Degrees from the banned band, either side, and 0 for anything inside it. */
+const bandDistance = (c: Oklch): number =>
+	inBand(c) ? 0 : Math.min(arc(c.H, BAND_LO), arc(c.H, BAND_HI));
+
+/**
+ * The proximity guard design asked for, as a function so the measurement test
+ * can run it over the real tokens and the drill can fire it on a planted one.
+ * A guard that has only ever been run on input that passes is not a guard.
+ */
+const nearBand = (values: readonly ColourValue[]): ColourValue[] =>
+	values.filter((v) => bandDistance(v.oklch) < BAND_PROXIMITY_MIN);
 
 /**
  * The failure line. Names the file, the selector AND the line, and the two
@@ -1165,6 +1266,13 @@ const reportColour = (v: ColourValue): string =>
 	`${v.decl} ${v.text}  ` +
 	`OKLCH hue ${v.oklch.H.toFixed(2)}°, chroma ${v.oklch.C.toFixed(4)}, lightness ${v.oklch.L.toFixed(4)}  ` +
 	`(banned band ${BAND_LO}°-${BAND_HI}°, chroma floor ${CHROMA_FLOOR})`;
+
+/** The proximity guard's own line, which reports a distance rather than a verdict. */
+const reportProximity = (v: ColourValue): string =>
+	`${v.file}:${v.line}  ${v.where || '(no enclosing selector)'}  ` +
+	`${v.decl} ${v.text}  ` +
+	`OKLCH hue ${v.oklch.H.toFixed(2)}°, chroma ${v.oklch.C.toFixed(4)}  ` +
+	`${bandDistance(v.oklch).toFixed(2)}° from the band ${BAND_LO}°-${BAND_HI}°`;
 
 const CORPUS_COLOURS: ColourValue[] = [];
 const CORPUS_COLOUR_SKIPS: ColourSkip[] = [];
@@ -1283,67 +1391,117 @@ describe('DESIGN-DIRECTION §13 — the static rules, over web/src', () => {
 		}
 	});
 
-	it("§13 colour by value: the chroma floor still sits above tokens.css's measured maximum", () => {
+	it("§13 colour by value: the floor's basis, re-measured off both neutral ramps", () => {
 		/* THE FLOOR'S PREMISE, RE-MEASURED RATHER THAN QUOTED. A number written into
 		   a comment goes stale silently — tokens.css §0 carries a whole note about a
-		   restated fact that stayed wrong for months (REVIEW-LOG SD-01). So the
-		   measurement runs on every `make check` instead, and if the design thread
-		   lands a token more chromatic than TOKEN_MAX_CHROMA, or a token inside the
-		   banned band, this fails and says re-derive rather than nudge. */
-		const raw = readFileSync(TOKENS_CSS, 'utf8');
+		   restated fact that stayed wrong for months (REVIEW-LOG SD-01), and the 173°
+		   this file itself claimed until the re-derivation is a second instance. So
+		   the measurement runs on every `make check` instead. */
+		const files = [
+			{ path: TOKENS_CSS, name: 'docs/design/tokens.css' },
+			{ path: join(SRC, 'app.css'), name: 'web/src/app.css' }
+		];
 		const values: ColourValue[] = [];
 		const skips: ColourSkip[] = [];
-		readColours(strip(raw, 'css'), 'docs/design/tokens.css', values, skips);
+		for (const f of files)
+			readColours(strip(readFileSync(f.path, 'utf8'), 'css'), f.name, values, skips);
 
-		/* 46 values today over four blocks: §1 light, §2 dark and §3 auto contribute
-		   15 each (nine ramp steps, two interstitials, four status), and §7's
-		   --shadow-overlay contributes one. Floor 32: losing any one theme block
-		   drops the count to 31 and fails, which is the regression a count floor is
-		   for. Not rounded to 30, which one lost block would survive. */
+		/* 92 values today, 46 per file over three theme blocks of 15 (nine ramp steps,
+		   two interstitials, four status) plus one overlay each. Floor 64: losing any
+		   one theme block drops the count to 77 and fails, which is the regression a
+		   count floor is for. Not rounded to 60, which two lost blocks would survive. */
 		expect(
 			values.length,
-			`only ${values.length} colour value(s) read out of tokens.css, below the floor of ` +
-				`32. The floor below is derived from that file, so a parse that finds nothing ` +
-				`would "measure" a maximum chroma of zero and pass this trivially.`
-		).toBeGreaterThanOrEqual(32);
+			`only ${values.length} colour value(s) read out of tokens.css and app.css, below ` +
+				`the floor of 64. The basis below is measured from those files, so a parse that ` +
+				`finds nothing would "measure" a maximum chroma of zero and pass this trivially.`
+		).toBeGreaterThanOrEqual(64);
 		expect(
-			skips,
-			'a tokens.css colour could not be converted, so the measured maximum is not a ' +
-				'maximum over the whole file. Convert it or re-derive the floor by hand.'
-		).toEqual([]);
+			[...new Set(skips.map((s) => `${s.file}  ${s.text}`))].sort(),
+			'a colour in tokens.css or app.css could not be converted, so the measured basis ' +
+				'is not a maximum over the whole of either file. Convert it, or record it and ' +
+				're-derive the basis by hand.\n' +
+				skips.map((s) => `${s.file}:${s.line}  ${s.text}  ${s.why}`).join('\n')
+		).toEqual(Object.keys(COLOUR_SKIPS).sort());
 
-		/* RESULT 1: the band is empty. Stated as an assertion, not as prose, so the
-		   day a purple token lands the floor's whole derivation is reconsidered. */
+		/* PREMISE 1: the band is empty, in both files. Stated as an assertion, not as
+		   prose, so the day a purple token lands the whole derivation is reconsidered. */
 		const band = values.filter((v) => inBand(v.oklch));
 		expect(
 			band.map(reportColour),
-			`a tokens.css token now falls in the banned hue band ${BAND_LO}°-${BAND_HI}°. ` +
-				`The floor below was derived on the basis that NONE did, so it is no longer ` +
-				`the right floor: take the maximum chroma among the in-band tokens and ` +
-				`re-derive from that instead.`
+			`a token now falls in the banned hue band ${BAND_LO}°-${BAND_HI}°. The floor is ` +
+				`BELOW the four status colours, so an in-band token would now FAIL rule 2. ` +
+				`Re-derive before doing anything else.`
 		).toEqual([]);
 
-		/* RESULT 2: the whole-set maximum, which is what the floor was built on. */
-		const measured = Math.max(...values.map((v) => v.oklch.C));
-		const worst = values.find((v) => v.oklch.C === measured)!;
+		/* PREMISE 2: nothing is even NEAR the band. This is the guard design asked
+		   for, and it is the one that gives premise 1 somewhere to fail early. The
+		   distance is circular: today's nearest is --status-error dark at hue 25.8°,
+		   which is 50.84° from the band's upper edge THE SHORT WAY ROUND, not the
+		   173° a subtraction from the lower edge reports. */
+		expect(
+			nearBand(values).map(reportProximity),
+			`a token is now within ${BAND_PROXIMITY_MIN}° of the banned band ` +
+				`${BAND_LO}°-${BAND_HI}°. Nothing is banned yet, and nothing here is wrong ` +
+				`with the token: this fires early, on purpose. The chroma floor of ` +
+				`${CHROMA_FLOOR} was derived on the basis that the palette lives nowhere near ` +
+				`the band, and a token approaching it means the floor needs RE-DERIVING off ` +
+				`the in-band population rather than off the neutral ramp. Do not widen ` +
+				`${BAND_PROXIMITY_MIN}° to make this green.`
+		).toEqual([]);
+
+		/* THE BASIS: the most chromatic neutral either file ships. `--n-N` plus the
+		   two interstitials, which is the population whose hue is meaningless by
+		   construction and therefore the population the floor exists to clear. */
+		const ramp = values.filter((v) => /^--(n-\d|inset|hover)\b/.test(v.decl));
+		expect(
+			ramp.length,
+			`only ${ramp.length} neutral-ramp value(s) matched across both files, below the ` +
+				`floor of 44. Eleven per theme block, three blocks, two files. If the ramp ` +
+				`was renamed, this measures a smaller set and reports a lower basis, which ` +
+				`would loosen the floor silently.`
+		).toBeGreaterThanOrEqual(44);
+
+		const measured = Math.max(...ramp.map((v) => v.oklch.C));
+		const worst = ramp.find((v) => v.oklch.C === measured)!;
 		expect(
 			measured,
-			`tokens.css's maximum chroma is now ${measured.toFixed(6)} (${reportColour(worst)}), ` +
-				`above the ${TOKEN_MAX_CHROMA} the floor of ${CHROMA_FLOOR} was derived from. ` +
-				`Re-derive: floor = measured maximum + margin ${CHROMA_MARGIN}.`
-		).toBeLessThanOrEqual(TOKEN_MAX_CHROMA);
+			`the neutral ramps' maximum chroma is now ${measured.toFixed(6)} ` +
+				`(${reportColour(worst)}), above the ${NEUTRAL_MAX_CHROMA} the floor of ` +
+				`${CHROMA_FLOOR} was derived from. A more chromatic neutral means a higher ` +
+				`noise level, so re-derive: floor = measured basis + margin ${CHROMA_MARGIN}.`
+		).toBeLessThanOrEqual(NEUTRAL_MAX_CHROMA);
 		expect(
 			measured,
-			'tokens.css lost its most chromatic token, so the floor is now loose'
-		).toBeGreaterThan(TOKEN_MAX_CHROMA - 0.001);
+			'the neutral ramps lost their most chromatic step, so the floor is now looser ' +
+				'than the measurement it claims to rest on'
+		).toBeGreaterThan(NEUTRAL_MAX_CHROMA - 0.001);
 
 		/* And the arithmetic that turns the two into the floor, asserted rather than
 		   trusted to the comment that states it. */
 		expect(
 			CHROMA_FLOOR,
-			`the floor ${CHROMA_FLOOR} no longer clears the measured maximum ` +
-				`${TOKEN_MAX_CHROMA} by the stated margin ${CHROMA_MARGIN}`
-		).toBeGreaterThanOrEqual(TOKEN_MAX_CHROMA + CHROMA_MARGIN);
+			`the floor ${CHROMA_FLOOR} no longer clears the measured basis ` +
+				`${NEUTRAL_MAX_CHROMA} by the stated margin ${CHROMA_MARGIN}`
+		).toBeGreaterThanOrEqual(NEUTRAL_MAX_CHROMA + CHROMA_MARGIN);
+
+		/* THE OTHER HALF OF THE DERIVATION, WHICH IS THE HALF THE 0.2064 FLOOR FAILED.
+		   A floor above a real tint catches nothing anybody ships. `#c4b5fd` is the
+		   ceiling, re-measured here rather than quoted so the constant cannot drift
+		   from the colour it names. */
+		const tint = parseHex('#c4b5fd');
+		expect(tint.ok, 'the tint reference failed to parse').toBe(true);
+		if (!tint.ok) return;
+		expect(tint.oklch.C, 'violet-300 is not the chroma TINT_REFERENCE_CHROMA records').toBeCloseTo(
+			TINT_REFERENCE_CHROMA,
+			4
+		);
+		expect(
+			CHROMA_FLOOR,
+			`the floor ${CHROMA_FLOOR} has risen to within 0.02 of violet-300 ` +
+				`(${TINT_REFERENCE_CHROMA}), so the tints this rule was re-derived to catch are ` +
+				`slipping back out of reach. Re-derive rather than accepting the gap.`
+		).toBeLessThan(TINT_REFERENCE_CHROMA - 0.02);
 	});
 
 	it('§13 colour by value: fires on a planted #7c3aed, and says where and what', () => {
@@ -1398,6 +1556,150 @@ describe('DESIGN-DIRECTION §13 — the static rules, over web/src', () => {
 		).toEqual([]);
 	});
 
+	/** One planted declaration through the real extractor, not a re-implementation. */
+	const plant = (value: string): ColourValue => {
+		const values: ColourValue[] = [];
+		const skips: ColourSkip[] = [];
+		readColours(`.probe {\n\t--accent: ${value};\n}\n`, 'web/src/planted.css', values, skips);
+		expect(skips, `the planted value ${value} was skipped instead of converted`).toEqual([]);
+		expect(values.length, `the planted value ${value} was not read as a colour`).toBe(1);
+		return values[0];
+	};
+
+	it('§13 colour by value: the re-derived floor, drilled by mechanism and not by verdict', () => {
+		/* ⚠️ WHY THIS TABLE REPORTS TWO BOOLEANS AND NOT ONE VERDICT. A probe that
+		   passes because a DIFFERENT condition absorbed it looks identical to a probe
+		   that passes because the rule works — that is exactly how the 0.2064 floor
+		   survived review while resting on a token the chroma test never sees. So
+		   every row states WHICH half fired: `band` is the hue test, `floor` is the
+		   chroma test, and `banned` is their conjunction. Read the rows, not the
+		   verdict. */
+		const probes: readonly { readonly what: string; readonly value: string }[] = [
+			/* Unchanged by the re-derivation: the value the rule was written for. */
+			{ what: 'violet-600, the original gap', value: '#7c3aed' },
+			/* The three the 0.2064 floor let through, which is the point of the change. */
+			{ what: 'indigo-500, missed the old floor by 0.0023', value: '#6366f1' },
+			{ what: 'violet-300, a tint the old comment called unreachable', value: '#c4b5fd' },
+			{ what: 'violet-200, the palest tint now in reach', value: '#ddd6fe' },
+			/* Below the noise floor, and honestly out of reach. */
+			{ what: 'violet-100, still under the floor', value: '#ede9fe' },
+			/* The false positives the floor exists to prevent. */
+			{ what: 'a cool neutral at hue 314.7°', value: '#4a464c' },
+			{ what: "Tailwind zinc-500, somebody else's cool ramp", value: '#71717a' },
+			/* In-band-adjacent but out of band: the hue test alone must reject them. */
+			{ what: 'the palette itself, --status-error light', value: '#b3251c' }
+		];
+
+		const rows = probes.map((p) => {
+			const v = plant(p.value);
+			return {
+				what: p.what,
+				band: inBand(v.oklch),
+				floor: v.oklch.C >= CHROMA_FLOOR,
+				banned: banned(v)
+			};
+		});
+
+		expect(rows, 'a probe changed which half of the conjunction decided it').toEqual([
+			/* hue 293.0°, chroma 0.2466. Both halves fire; banned, as before. */
+			{ what: 'violet-600, the original gap', band: true, floor: true, banned: true },
+			/* hue 277.1°, chroma 0.2041. Band fired before AND now; the FLOOR is what
+			   changed, from 0.2064 (fails) to 0.0515 (clears). */
+			{ what: 'indigo-500, missed the old floor by 0.0023', band: true, floor: true, banned: true },
+			/* hue 293.6°, chroma 0.1013. Same story, and the larger one: 0.1013 clears
+			   0.0515 by 0.0498 and missed 0.2064 by 0.1051. */
+			{
+				what: 'violet-300, a tint the old comment called unreachable',
+				band: true,
+				floor: true,
+				banned: true
+			},
+			/* hue 293.3°, chroma 0.0549. Clears by 0.0034, the narrowest pass here, and
+			   said so rather than presented as comfortable. */
+			{ what: 'violet-200, the palest tint now in reach', band: true, floor: true, banned: true },
+			/* hue 294.6°, chroma 0.0284. In band, under the floor: NOT banned, and the
+			   row is here so the residual gap is drilled rather than only described. */
+			{ what: 'violet-100, still under the floor', band: true, floor: false, banned: false },
+			/* hue 314.7°, chroma 0.0112. In band. The FLOOR is the only thing between
+			   this legitimate grey and a false positive. */
+			{ what: 'a cool neutral at hue 314.7°', band: true, floor: false, banned: false },
+			/* hue 285.9°, chroma 0.0138. Same mechanism, somebody else's palette. */
+			{
+				what: "Tailwind zinc-500, somebody else's cool ramp",
+				band: true,
+				floor: false,
+				banned: false
+			},
+			/* hue 29.0°, chroma 0.1793. ⚠️ `floor: true`. This token is ABOVE the floor
+			   and passes ONLY because the hue test rejected it first. It is the whole
+			   re-derivation in one row: the value the old floor was built to clear never
+			   reaches the chroma test, so it never constrained it. */
+			{ what: 'the palette itself, --status-error light', band: false, floor: true, banned: false }
+		]);
+	});
+
+	it('§13 colour by value: a near-grey rotated INTO the band still does not fire', () => {
+		/* THE FALSE POSITIVE THE FLOOR EXISTS TO PREVENT, CONSTRUCTED RATHER THAN
+		   FOUND. `#4a464c` above is a near-grey that happens to land in the band, but
+		   it is somebody's arbitrary hex and clears the floor by 0.0403, which makes
+		   it an easy probe. So here is the hardest one this palette can produce:
+		   take --n-4 light, the MOST chromatic neutral either file ships and the exact
+		   value the basis was measured from, and rotate its hue to 300°, the middle of
+		   the band, keeping L and C. It is now a colour that is simultaneously the
+		   noisiest hue this design system can generate and sitting dead centre in the
+		   banned band. If the floor is derived correctly it must not fire, and it must
+		   miss by exactly the stated margin. */
+		const worstNeutral = plant(`oklch(0.575487 ${NEUTRAL_MAX_CHROMA} 300)`);
+
+		expect(inBand(worstNeutral.oklch), 'the constructed probe is not in the band').toBe(true);
+		expect(worstNeutral.oklch.H, 'the probe should sit mid-band').toBeCloseTo(300, 6);
+		expect(
+			banned(worstNeutral),
+			'the most chromatic neutral this palette ships, rotated into the band, reads as ' +
+				'purple. The floor is too low: it is now inside the noise it was derived to ' +
+				'sit above, and every cool grey is a false positive waiting to happen.'
+		).toBe(false);
+
+		/* And the margin, asserted as a quantity rather than left implied by the
+		   boolean above. This is the number the whole derivation is: how far the
+		   worst legitimate near-grey sits below the floor. */
+		expect(
+			CHROMA_FLOOR - worstNeutral.oklch.C,
+			`the constructed near-grey clears the floor by ${(CHROMA_FLOOR - worstNeutral.oklch.C).toFixed(6)}, ` +
+				`not the stated margin of ${CHROMA_MARGIN}`
+		).toBeGreaterThanOrEqual(CHROMA_MARGIN);
+	});
+
+	it('§13 colour by value: the band-proximity guard fires on a token near the edge', () => {
+		/* THE GUARD, DRILLED. It passes over the real tokens by 10.84°, and a guard
+		   that has only ever seen input that passes is indistinguishable from no
+		   guard — the same argument that put the planted `#7c3aed` above in the file.
+		   240° is 25° below the band's lower edge: NOT banned, because nothing about
+		   it is in the band, but close enough that the floor's premise is wobbling. */
+		const approaching = plant('oklch(0.55 0.15 240)');
+		expect(inBand(approaching.oklch), 'the probe must be OUTSIDE the band').toBe(false);
+		expect(banned(approaching), 'the probe must not be banned, only near').toBe(false);
+		expect(bandDistance(approaching.oklch), 'the probe should sit 25° out').toBeCloseTo(25, 4);
+		expect(nearBand([approaching]).length, 'the proximity guard did not fire').toBe(1);
+		expect(reportProximity(approaching)).toContain('25.00° from the band');
+
+		/* Both sides of the band, because a one-sided distance is the bug this guard
+		   was written after. 5° above the upper edge, reached the short way round
+		   through 0°, is where --status-error's family lives. */
+		const above = plant('oklch(0.55 0.15 340)');
+		expect(
+			bandDistance(above.oklch),
+			'the wrap-around side of the band is not measured'
+		).toBeCloseTo(5, 4);
+		expect(nearBand([above]).length, 'the proximity guard is one-sided').toBe(1);
+
+		/* And the negative half: a token comfortably clear must NOT fire, or the guard
+		   is just an assertion that always fails. --status-ok dark is 111.65° out. */
+		const clear = plant('#5cba7d');
+		expect(bandDistance(clear.oklch)).toBeGreaterThan(BAND_PROXIMITY_MIN);
+		expect(nearBand([clear]), 'the guard fires on a token nowhere near the band').toEqual([]);
+	});
+
 	it('§13 colour by value: no OKLCH purple in web/src', () => {
 		/* Anti-vacuity first: 46 values today, all in `app.css`'s three theme blocks
 		   (15 each) plus --shadow-overlay. Floor 32 for the same reason as the
@@ -1426,11 +1728,11 @@ describe('DESIGN-DIRECTION §13 — the static rules, over web/src', () => {
 			hits.map(reportColour),
 			`§13 colour: a value in the banned OKLCH band. §13 bans indigo / violet / ` +
 				`purple / fuchsia "or equivalent hex/oklch", and rule 1 only reads the words, ` +
-				`so this is the half that catches a literal. The floor is MEASURED off ` +
-				`tokens.css (maximum chroma ${TOKEN_MAX_CHROMA} + margin ${CHROMA_MARGIN} = ` +
-				`${CHROMA_FLOOR}), so anything failing here is more chromatic than every ` +
-				`colour the design system uses at any hue, and sits in the purple band. Do ` +
-				`not raise the floor to make this green.`
+				`so this is the half that catches a literal. The floor is MEASURED off the ` +
+				`neutral ramps (basis ${NEUTRAL_MAX_CHROMA} + margin ${CHROMA_MARGIN} = ` +
+				`${CHROMA_FLOOR}), so anything failing here is more chromatic than the most ` +
+				`chromatic grey this design system ships, and sits in the purple band. It is ` +
+				`a colour, not noise. Do not raise the floor to make this green.`
 		).toEqual([]);
 	});
 
