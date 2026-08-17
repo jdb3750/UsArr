@@ -217,7 +217,7 @@ These are not new. They are restated because every decision below is downstream 
 | **ARCHITECTURE §17.1** | **No animation on any list, grid or navigation transition** |
 | **ARCHITECTURE §17.1** | **Density is a feature**, and compact is what loads |
 | **ARCHITECTURE §17.1** | **Every screen usable on a phone browser** — responsive layout, not a separate mobile design |
-| **ARCHITECTURE §17.1 / §4.4.1** | **No skeleton shimmer.** The image placeholder is a `dominant_color` block — the cover's own average colour, reserved at the right aspect before the image arrives. Informative, not decorative, and it never pulses. **The title sits below it, not in it** (§9.7) |
+| **ARCHITECTURE §17.1 / §4.4.1** | **No skeleton shimmer.** The image placeholder is a `dominant_color` block — the cover's own average colour, reserved at the right aspect before the image arrives. Informative, not decorative, and it never pulses. **The title sits below it, not in it** (§9.2) |
 | **ARCHITECTURE §2.3 / §5.5 / §17.7** | Degraded ≠ blocked. A small **non-modal** banner. **The catalogue never greys out and never shows a spinner** |
 | **ARCHITECTURE §13** | Client-side prefix filter p50 < 5 ms, p99 < 16 ms — one frame. The UI's own budget, not the server's |
 | **ARCHITECTURE §16** (amended by ADR-0032, then re-sequenced) | **v0.1 connects three services: Sonarr, Radarr and Prowlarr.** The six media types stay in the model and the navigation, but **v0.1 has no catalogue source for music, audiobooks, ebooks or comics** — the read-only catalogue sources (**Navidrome, Audiobookshelf, Kavita**, then Komga) sequence **after** v0.1, one at a time, so the \*Arr library sync proves the replica thesis on real data first. Of the pair, **Kavita is the one that ships and Komga follows it** — ADR-0032 cut Kavita and **ADR-0035 reversed that**, because Kavita is the install the owner actually runs and it covers books, comics and manga in one source. ARCHITECTURE §16 is authoritative for which milestone each lands in. The **command sinks are all out of v0.1**, and they do not all land together: **LazyLibrarian is v0.3** (the first Tier 1 manifest, request sink only), while **Lidarr, Mylar3 and Kapowarr are v1.0**. Requests in v0.1 is the **Prowlarr Search-and-Grab path only — for all six types**, which is what keeps the four sourceless types navigable |
@@ -824,7 +824,7 @@ data. So the policy is not austerity; the case simply does not arise.
 placeholder*: a reserved box carrying the cover's own average colour, present because §4.4.1 makes
 `dominant_color` available before ThumbHash. It is the item's real data rather than a stand-in
 animation — it never pulses, and what it replaces is a grey box, not the title. The title is not in
-it; §9.7 puts the title and year below the tile, on the chrome's own ground.
+it; §9.2 puts the title and year below the tile, on the chrome's own ground.
 
 ### 7.2 The four tiers
 
@@ -2865,7 +2865,7 @@ widened, and nothing else. The `[review]` rules below are still human judgement 
 - `[review]` Contrast re-measured in both themes when any token changes.
 - `[grep]` **Every `dominant_color` / foreground pair in a fixture clears 4.5:1** (§11). This is the
   one colour that is data rather than a token, so it cannot be checked once. ⚠️ **No such pair ships
-  today** — §9.7 moved the poster title off the fill and the constraint machinery was deleted with
+  today** — §9.2 moved the poster title off the fill and the constraint machinery was deleted with
   it — so this line is armed and idle. Do not record it as passing; it has nothing to check until a
   surface sets text on a computed fill again.
 - `[review]` No live region missing on a determinate progress readout or on a control that changes a

@@ -886,7 +886,7 @@ head('1c. data-when and data-inst never write hidden on the same element');
  * from usarr.js. CSP governs the style ATTRIBUTE in markup and the <style>
  * element; CSSOM mutation from script is not an inline style and is not
  * blocked. The poster grid's --dc assignment is that, and it stays. (--dc-fg
- * went with §9.7's move of the poster title off the fill; --dc remains,
+ * went with §9.2's move of the poster title off the fill; --dc remains,
  * because it is still the image placeholder.)
  * This rule is therefore evaluated over the HTML sources only.
  * ========================================================================== */
