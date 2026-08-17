@@ -493,7 +493,7 @@
 				id="home-query"
 				name="q"
 				type="search"
-				class="homesearch__input"
+				class="searchfield homesearch__input"
 				autocomplete="off"
 				placeholder="Release name, or part of one"
 				aria-describedby="home-search-note"
@@ -735,14 +735,24 @@
 	}
 
 	/*
-	 * The search row. It is the Requests screen's `.searchbar` geometry, and it
-	 * is a local class rather than a shared one because `.searchbar` is scoped
-	 * to that screen's own <style> block and promoting it to app.css would edit
-	 * a file this change has no other reason to touch. Two flex declarations is
-	 * the cheaper duplication; the note in the report carries the follow-up.
+	 * The search ROW — placement only. The field's own appearance moved to
+	 * app.css's `.searchfield`, which the input below carries as its first
+	 * class; what is left here is where the row puts it, which is the half no
+	 * shared class may own.
+	 *
+	 * THESE FOUR LINES ARE NOT A DUPLICATE OF THE REQUESTS TOOLBAR'S FOUR even
+	 * though they read identically today, and that is why they did not go with
+	 * the appearance. Every one of them is flex participation: a caller that
+	 * stacked this field under a label, or dropped it into a grid cell, would
+	 * have to undo all four. The mockup's own `@media (max-width: 700px)` block
+	 * is the recorded case — it turns `form.toolbar` into a column and resets
+	 * `flex` on every child to do it.
 	 *
 	 * `1 1 24rem` rather than a width: the input takes the row on a phone and
-	 * shares it with the button on a desktop, with no breakpoint of its own.
+	 * shares it with the button on a desktop, with no breakpoint of its own. It
+	 * is 24rem here and 20rem on Requests, whose row carries a label, a select
+	 * and two more buttons — the two numbers disagreed from the day they were
+	 * written, which is on its own the argument against a shared basis.
 	 *
 	 * ⚠️ AND IT IS CAPPED, WHICH IS THE §1.5 FIX RATHER THAN A TASTE CALL.
 	 * Uncapped it grew to 1,180 px at 1440 — a full-bleed input above the fold
@@ -751,6 +761,10 @@
 	 * name a user would actually type and leaves the row reading as a control on
 	 * a screen rather than as the screen's subject. Below that width it still
 	 * takes the whole row, so the phone case is unchanged.
+	 *
+	 * `min-width: 0` is the flex automatic-minimum-size override and stays with
+	 * the row for the same reason: see `.searchfield`'s own note, which carries
+	 * the measurement.
 	 */
 	.homesearch {
 		display: flex;
@@ -763,13 +777,6 @@
 		flex: 1 1 24rem;
 		max-width: 42rem;
 		min-width: 0;
-		min-height: var(--control-h);
-		padding: 0 var(--space-4);
-		background: var(--bg-inset);
-		color: var(--fg);
-		border: 1px solid var(--border-strong);
-		border-radius: var(--radius-sm);
-		font-size: var(--text-md);
 	}
 
 	/* The note sits between the section head and the table, so it needs the gap
