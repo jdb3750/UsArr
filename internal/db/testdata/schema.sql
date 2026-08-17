@@ -13,6 +13,9 @@ CREATE INDEX ix_audit_ts ON audit_log(ts DESC);
 -- index ix_cc_user
 CREATE INDEX ix_cc_user ON client_credential(user_id, revoked_at);
 
+-- index ix_comic_issue_sort
+CREATE INDEX ix_comic_issue_sort ON work_comic_issue(number_sort);
+
 -- index ix_edition_work
 CREATE INDEX ix_edition_work ON edition(work_id, is_primary DESC);
 
@@ -858,6 +861,58 @@ CREATE TABLE work_alt_title (
   normalized TEXT NOT NULL,
   kind       TEXT NOT NULL,   -- original|translated|alias|acronym|sort
   language   TEXT
+) STRICT;
+
+-- table work_book
+CREATE TABLE work_book (
+  work_id     INTEGER PRIMARY KEY REFERENCES work(id) ON DELETE CASCADE,
+  page_count  INTEGER,
+  -- 🔍 INFERENCE, marked because schema.md gives these two no prose: this is
+  -- the series a book DECLARES it belongs to, as a string and a position, which
+  -- is a different fact from work.parent_work_id. The parent is a resolved
+  -- link to a `work` that must already exist; these two are what the upstream
+  -- said before anything was resolved, and they survive a series work that
+  -- UsArr never manages to create. Keeping both is schema.md's shape and is not
+  -- reopened here. series_position is REAL for the same reason
+  -- work_comic_issue.number_sort is: 1.5 is an ordinary book-series position.
+  series_name TEXT, series_position REAL
+) STRICT;
+
+-- table work_comic
+CREATE TABLE work_comic (
+  work_id                INTEGER PRIMARY KEY REFERENCES work(id) ON DELETE CASCADE,
+  volume_label           TEXT,      -- 'Vol. 3' / '(2012)' — a label, never a node
+  volume_year            INTEGER,
+  reading_direction      TEXT,      -- ltr|rtl|vertical|webtoon; the manga axis, not a kind.
+                                    -- Komga models vertical/webtoon and Kavita does not, which
+                                    -- is one reason this is not a CHECK — see the header.
+  publisher              TEXT,
+  -- total_issues_declared IS A DECLARATION AND NOT A FACT, which is why it is
+  -- stored beside its source rather than alone. ComicInfo's own `Count` spec
+  -- concedes it "could be different on each book in a series", so a bare total
+  -- renders a completeness claim nobody can stand behind. schema.md §1's
+  -- availability blob (k="count") carries total_source for the same reason, and
+  -- the number that is always honest is contiguity — computed locally from
+  -- work_comic_issue.number_sort, which is what the index below is for.
+  total_issues_declared  INTEGER,
+  total_issues_source    TEXT       -- comicinfo|comicvine|kavitaplus|null
+) STRICT;
+
+-- table work_comic_issue
+CREATE TABLE work_comic_issue (
+  work_id         INTEGER PRIMARY KEY REFERENCES work(id) ON DELETE CASCADE,
+  number_text     TEXT,
+  number_sort     REAL,
+  volume_label    TEXT,     -- Kavita's Volume, carried as an attribute (ADR-0030)
+  volume_sort     REAL,
+  is_special      INTEGER NOT NULL DEFAULT 0,
+  is_oneshot      INTEGER NOT NULL DEFAULT 0,
+  special_version TEXT,     -- tpb|hard-cover|omnibus|one-shot|volume-as-issue|cover.
+                            -- A TPB is its own issue row; ADR-0030 decides UsArr does
+                            -- NOT model which issues it collects, because no backend
+                            -- reports it and inferring it from title ranges is the
+                            -- false-positive machine ADR-0007 refuses.
+  page_count      INTEGER
 ) STRICT;
 
 -- table work_episode

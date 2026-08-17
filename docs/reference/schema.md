@@ -167,7 +167,15 @@ search, because the SELECT list includes `title, year, poster_asset_id, have_cou
 availability`. 100 row lookups per page is fine; the CI assertion must assert `SEARCH … USING
 INDEX`, not `COVERING INDEX`.
 
-### 1.1 Subtype tables · **v0.1 for movie/series/episode**
+### 1.1 Subtype tables · **v0.1 for movie/series/episode and for book/comic/comic_issue**
+
+⚠️ **This heading read *"v0.1 for movie/series/episode"* and the comment above `work_album` below
+scheduled all six remaining subtype tables as *"later tables"*. Both were falsified by
+[ADR-0041](../DECISIONS.md#adr-0041)**, which made **Kavita** v0.1's first catalogue adapter:
+`work_book`, `work_comic` and `work_comic_issue` are the tables Kavita writes, so they ship in v0.1
+and exist in the tree. [ADR-0040](../DECISIONS.md#adr-0040) is confirmed rather than reopened — each
+subtype table still lands with the source that writes it, and only the *date* of three of them moved.
+**`work_album`, `work_track` and `work_credit` still wait for Navidrome**, which has no adapter.
 
 Rule: **every `kind` has a subtype table or an explicit justification for not having one.**
 `season`, `artist` and `game` have none and need none today. **`person` (ADR-0033) has none by
@@ -203,10 +211,12 @@ CREATE TABLE work_episode (
 ) STRICT;
 CREATE INDEX ix_ep_air ON work_episode(air_date_utc);
 
--- later tables, landing with the command sinks (Lidarr) and the comics/manga
--- catalogue source. Both sit AFTER v0.1: ADR-0036 keeps every catalogue source
--- out of v0.1 and sequences them one at a time afterwards, and ADR-0035 makes
--- Kavita the comics-and-books source, with Komga last of the four.
+-- THE MUSIC THREE, and they are the only subtype tables still waiting. They land
+-- with NAVIDROME (and their command sink, Lidarr, is in no milestone before
+-- that), first in the post-v0.1 sequence ADR-0036 established and ADR-0041
+-- re-numbered. The books-and-comics three further down are NOT here with them
+-- any more: ADR-0041 made Kavita v0.1's first adapter, and per ADR-0040 a
+-- subtype table lands with the source that writes it.
 CREATE TABLE work_album (
   work_id    INTEGER PRIMARY KEY REFERENCES work(id) ON DELETE CASCADE,
   album_type TEXT, disambiguation TEXT, track_count INTEGER
@@ -332,6 +342,9 @@ not specified here.
 CHECK-constraint change (a SQLite table rebuild), an FTS re-index, a rebuild of every client prefix
 index, and a change to the `kind_byte` codec that ARCHITECTURE §5.3 states is unchangeable once
 clients cache ids** — which is ADR-0030's argument, in a second place, for the same reason.
+
+**The three below ship in v0.1** — Kavita writes them ([ADR-0041](../DECISIONS.md#adr-0041)), and
+`internal/db/migrations` is the answer to whether they exist yet.
 
 ```sql
 
