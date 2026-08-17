@@ -97,7 +97,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0043](#adr-0043) | A **minimal** match-correction UI moves earlier than v0.3; the full correction surface stays there | **Accepted** — owner-decided 2026-08-17; **answers the scope call ARCHITECTURE §6.4 flagged and routed**; **amends [ADR-0026](#adr-0026)**'s correction-UI consequence and **amends** ARCHITECTURE §16.0, §16.1's v0.1 and v0.3 entries; **re-sequences, rejects nothing** — ADR-0026's model, verbs, tables and scoping are untouched and `library_override` is already in the tree; **source-independent** — it turns on v0.1 having a weak-identity catalogue source, not on that source being Kavita; **assigns no milestone**, which is carried as an open question; ⚠️ **amended 2026-08-17 by [ADR-0045](#adr-0045)** — that open question is **closed**: the owner delegated the call and the minimal case lands in **v0.2**, chosen **by elimination** (the only slot both earlier than v0.3 and not v0.1) with its cost recorded — v0.1 ships the *"not identified"* badge without its remedy for one milestone. The *"minimal"* boundary, the source-independence and the v0.3 cap on the full surface are all untouched |
 | [0044](#adr-0044) | Author and creator credits ship in v0.1; `work_credit` lands with **Kavita**, not Navidrome | **Accepted** — owner-decided 2026-08-17; **applies [ADR-0040](#adr-0040)'s rule rather than overriding it** — the landing point is the source that writes the table, and Kavita writes credits; **amends [ADR-0040](#adr-0040)** for `work_credit` **only** — `work_album` and `work_track` still wait for Navidrome; **confirms [ADR-0033](#adr-0033)**, whose `person` kind finally gets a writer; **costs a ROW, not a column** — an author is a `work` of kind `person`, which nothing in v0.1 created before; leaves [ADR-0035](#adr-0035), [ADR-0041](#adr-0041) and [ADR-0042](#adr-0042) untouched; raises one open question it does not close (nothing collects an uncredited person) |
 | [0045](#adr-0045) | The three unslotted commitments land in **v0.2**: Sonarr and Radarr, the minimal write path, and the minimal match-correction UI | **Accepted** — **owner-delegated 2026-08-17** (*"whatever you think is best"*); **closes the open questions [ADR-0042](#adr-0042) and [ADR-0043](#adr-0043) each raised and refused**; **amends** ARCHITECTURE §16 (§16.0, §16.1, and the v0.1, **v0.2** and v0.3 entries) and **amends [ADR-0042](#adr-0042)** and **[ADR-0043](#adr-0043)** at their no-milestone clauses; **assigns milestones and nothing else** — no scope moves, no design reopens, no ADR is reversed; for the two \*Arr items this **writes down a dependency v0.2 already had** (§8.3's `Add` capability filter), for the correction UI it is **by elimination** and the cost is recorded rather than argued away; raises one open question it does not close (whether v0.2 should be split) |
-| [0046](#adr-0046) | Kavita's contract tests pin **TWO** specs: the release the owner runs is the **floor**, `develop` is the **ceiling** | **Accepted** — 2026-08-17; **implements a policy `api/specs/SOURCES.md` already stated and the tree had not acted on** (*"a green contract test here is evidence about `develop`"*); **changes what a green means, not what the code does** — no adapter field, request or migration changes; **renames** `api/specs/kavita.json` → `kavita-develop.json` and **adds** `kavita-v0.9.0.2.json`; every spec-reading test runs against **both**, named per file, with enum coverage **equal** to the ceiling and a **superset** of the floor; `ceilingOnlyProperties` machine-checks the five modelled properties that **decode to nothing on the owner's server**; the `cbr` external_id is **unreachable** on the stable line and now says so; raises three open questions it does not close (Prowlarr has the same gap, `'cbr'` is an unenumerated `external_id.source`, and the floor's re-pin cadence) |
+| [0046](#adr-0046) | Kavita's contract tests pin **TWO** specs: the release the owner runs is the **floor**, `develop` is the **ceiling** | **Accepted** — 2026-08-17; **implements a policy `api/specs/SOURCES.md` already stated and the tree had not acted on** (*"a green contract test here is evidence about `develop`"*); **changes what a green means, not what the code does** — no adapter field, request or migration changes; **renames** `api/specs/kavita.json` → `kavita-develop.json` and **adds** `kavita-v0.9.0.2.json`; every spec-reading test runs against **both**, named per file, with enum coverage **equal** to the ceiling and a **superset** of the floor; `ceilingOnlyProperties` machine-checks the five modelled properties that **decode to nothing on the owner's server**; the `cbr` external_id is **unreachable** on the stable line and now says so; raises three open questions it does not close (Prowlarr has the same gap, `'cbr'` is an unenumerated `external_id.source`, and the floor's re-pin cadence) — **question 2 settled 2026-08-17** by the rename to `comicbookroundup` (`LS-73`); ⚠️ **amended 2026-08-17** — the decision stands unchanged **for Kavita**, but it is **not a template**: it rests on the unstated assumption that **upstream regenerates its spec per release**, which Prowlarr does not — its `openapi.json` is the **same git blob** at tag `v2.5.2.5491` and at `develop`, so open question 1's *"the same shape of gap"* is wrong about the shape and the two-spec structure there would manufacture the false green this ADR abolishes. The remedy is chosen **per upstream**; and where a spec self-reports a placeholder `info.version`, identity is by **blob SHA** |
 
 ---
 
@@ -5482,7 +5482,42 @@ deliberately rather than discovered halfway through.
 the tree had not acted on** · **Changes what a green means; changes no runtime behaviour** — no
 adapter field is added or removed, no request changes, no migration · **Renames the vendored file**
 `api/specs/kavita.json` → `api/specs/kavita-develop.json` and adds `api/specs/kavita-v0.9.0.2.json` ·
-**Leaves [ADR-0035](#adr-0035) and [ADR-0041](#adr-0041) untouched.**
+**Leaves [ADR-0035](#adr-0035) and [ADR-0041](#adr-0041) untouched.** · ⚠️ **Amended 2026-08-17** —
+the decision stands unchanged for Kavita; what is corrected is its **reach**. See the block below.
+
+> ⚠️ **AMENDED 2026-08-17: this decision stands unchanged FOR KAVITA. What is corrected is its
+> reach — it is not a template, and open question 1 was wrong about why.** Nothing in the Decision,
+> the Alternatives or the Consequences is reopened; no file, test or runtime behaviour moves.
+>
+> **The assumption it turned out to rest on, named plainly: that upstream regenerates its OpenAPI
+> spec per release.** Every clause above needs a tag and a branch tip to be *two documents* — that
+> is what makes two pins two points. **Kavita satisfies it** (462 paths at the tag against 488 on
+> develop). **Prowlarr does not.** `src/Prowlarr.Api.V1/openapi.json` is the **same git blob** at
+> tag `v2.5.2.5491` and at `develop` — `134d31d7df5e80714c454a6224e7449df512c55e`, which is also
+> exactly what `api/specs/prowlarr.json` already holds; confirmed by `git ls-tree` at both refs on
+> 2026-08-17. Upstream last regenerated it on **2025-06-07** (`60740fa25`, *"Automated API Docs
+> update"*), 33 release tags back. Building the floor/ceiling structure there would vendor the same
+> 145 KB twice under two names and print two subtest names over one document — **exactly the false
+> green this ADR exists to abolish.**
+>
+> **So the remedy is chosen per upstream, not applied as a template.** *Floor and ceiling* is the
+> answer where the two pins are two documents; where they are one document it is theatre, and the
+> honest remedy is a different one. **Prowlarr is the counter-example**, and it has its own
+> measurement and its own ADR from the thread that took it — **pointed at here, not retold.** That
+> the staleness is real and not merely cosmetic is worth one line: `SearchResource.Limit`/`Offset`
+> became `int?` upstream in PR #2654 (`c687bdb1f`, first shipped `v2.3.6.5351`, present on both
+> lines) while the vendored document still declares them non-nullable `int32` — **no contract test
+> over that document could ever have caught it, because the document never moved.** UsArr is
+> independently correct (`internal/servarr/search.go` types both `*int32` and omits on nil), so
+> there is no live bug; there is a test that cannot see.
+>
+> **And identity is by BLOB SHA where a spec declares a placeholder version.** This ADR tells its
+> two files apart by `info.version` — 0.9.0.0 against 0.9.0.20 — and
+> `TestBothSpecsAreTheDocumentsSOURCESSays` pins exactly that. Prowlarr's spec self-reports
+> `info.version` **`"1.0.0"`**, the Swashbuckle placeholder: it carries **no** version information
+> rather than stale information, so a version assertion there would assert nothing while looking
+> like it asserted something. That is a **harder** case than Kavita's floor, which at least declares
+> a stale-but-real 0.9.0.0. Where the document names no version, its identity is its blob SHA.
 
 ### Context
 
@@ -5626,7 +5661,12 @@ them.
 
 ### 🚩 Open questions this ADR raises and does not answer
 
-1. **`prowlarr.json` has the same shape of gap and is not fixed here.** It tracks `develop` at v2.6.2
+1. **`prowlarr.json` has the same shape of gap and is not fixed here.**
+   ⚠️ **2026-08-17: the gap is real, the *shape* is not the same, and this paragraph's implied
+   remedy does not apply.** Prowlarr's `openapi.json` is one blob at both refs, so there is no
+   second document to pin — see the amendment block under `Status:`. The final sentence of this
+   paragraph is the part that survives, and it survives more strongly than written.
+   It tracks `develop` at v2.6.2
    while the only known deployment runs stable 2.5.2.5491, and SOURCES.md's Prowlarr warning is
    word-for-word the one that failed to work for Kavita. Applying this ADR's pattern there is a
    separate change against a different suite, and doing it inside a Kavita commit would make neither
@@ -5636,6 +5676,15 @@ them.
    free `TEXT` with a comment listing sources, and `cbr` is not in the comment — the `cbr` that does
    appear in `00005_library_sync.sql` is `edition.format`'s `CHECK`, a different thing entirely.
    Unreachable on the owner's install today, so it is recorded rather than fixed.
+   ✅ **SETTLED 2026-08-17 by the rename to `comicbookroundup`** (`internal/libsync/editableid.go`,
+   [`REVIEW-LOG.md`](./REVIEW-LOG.md) `LS-73`). The question is answered in the *"a different thing
+   entirely"* clause's own terms: two unrelated things sharing one token inside one schema is the
+   defect, and the site's own name cannot be read as a file extension. **The unreachability this ADR
+   measured is what made it free** — no `cbr` row has ever been written at the floor, so there was
+   nothing to migrate, and the same rename after the first `develop` user syncs would have needed
+   one. The migration comment's source list is left alone: it is already stale for
+   `comicvine_volume`, `mal_manga` and `hardcover_book`, a merged migration is never edited, and the
+   vocabulary now lives on named Go constants that the compiler checks.
 3. **Whether the floor should be re-pinned on every upstream patch release or only when the owner
    upgrades.** This change pins what he runs. Chasing every stable tag would make the floor a second
    moving target and lose the property that makes a tag diff meaningful.

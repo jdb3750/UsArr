@@ -100,8 +100,11 @@ UsArr/
 │   ├── requests/               # v0.2 — request → route to the right *Arr by media type
 │   ├── crossmedia/             # v0.3 — Wikidata edge resolution
 │   ├── metadata/               # v0.2+ — tmdb, tvmaze, musicbrainz, openlibrary, wikidata
-│   ├── navidrome/ audiobookshelf/ kavita/ komga/  # catalogue adapters, one milestone each after
-│   │                                              # v0.1, in that order subject to the §16.1 probe
+│   ├── navidrome/ audiobookshelf/ kavita/ komga/  # catalogue adapters. This read "one milestone
+│   │                               #   each after v0.1, in that order subject to the §16.1 probe";
+│   │                               #   ADR-0041 moved kavita/ INTO v0.1 and the probe is discharged,
+│   │                               #   so only the other three are after it. The adapter that drives
+│   │                               #   a client like kavita/ lives in libsync/, not beside it.
 │   ├── jellyfin/                # v1.0 southbound adapter
 │   ├── lazylibrarian/          # v0.3 as a Tier 1 YAML manifest (ARCHITECTURE §16); Go code only
 │   │                           #   if the manifest ceiling is hit — cmd= RPC, HTTP 200 + Success:false
@@ -1068,6 +1071,15 @@ mis-transcription hypotheses breed — the `ZZ-probe.md` investigation burned it
 theory about a filename gitleaks had never printed, because the actual output, `leaks found: 1`
 with no path in it at all, had been summarised rather than quoted. A summary silently adds detail
 the tool did not give you and drops the detail it did. Paste the line.
+
+**8. A count is a measurement — compute it from the artefact, never from recollection.** Three of
+these landed in one day, across three threads and three files: a total stated over a list that
+contradicted it, twice low and once high, one of them contradicted by its own commit message as
+well. Nobody was careless — each figure was true when it was formed, and then the list moved under
+it and the number did not. The list is the instrument, so **`wc`/`grep` the landed diff or the list
+itself at the moment you write the figure**, not when you first arrived at it. This has ridden along
+as per-brief boilerplate for a while; it is written down here so it stops depending on whoever wrote
+the brief remembering to include it.
 
 **The pattern worth carrying: two of the first three were introduced by the fixes for the other
 two.** That is not bad luck. A fix is written under the assumption that the failure mode is now

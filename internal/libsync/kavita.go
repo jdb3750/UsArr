@@ -396,34 +396,32 @@ func mapSeries(dto kavita.SeriesDto, d kindDecision) store.CatalogueItem {
 //     so both fields are modelled from a spec ahead of the owner's release, and
 //     both decode as the Go zero value on his instance.
 //
-//  5. ⚠️ 'hardcover_book', 'metron' AND 'cbr' STILL GO OUT AT 1.0, AND ALL THREE
-//     ARE WORSE THAN THEY LOOK. The same whole-tree grep found:
+//  5. ✅ LS-43 IS CLOSED FOR TWO OF ITS THREE FIELDS, AND ONE SURVIVES AT 1.0 ON
+//     PURPOSE. It read: "'hardcover_book', 'metron' AND 'cbr' still go out at
+//     1.0, and all three are worse than they look."
 //
-//     'hardcover_book' — Series.HardcoverId written by
-//     ExternalMetadataIdHelper.cs:28 ALONE: the Edit Series dialog, free text,
-//     with neither a scanner nor a provider writer. WEAKER provenance than the
-//     three capped above, and still strong enough to merge two works.
+//     'metron' and 'cbr' NOW GO THROUGH editableIdentity at
+//     EditableIDConfidence (0.90) and CANNOT REACH add. editableid.go owns both
+//     measurements in full, including the one that changed the answer: the brief
+//     that commissioned the fix expected §6.4 amendment 4 and an outright
+//     refusal for Metron, and the measurement gives amendment 3 and a cap
+//     instead, because the ISSUE id Kavita parses out of ComicInfo <Notes> lands
+//     on ChapterDto — a field UsArr never reads — and never reaches
+//     SeriesDto.metronId. `cbr` is renamed to ComicBookRoundupSource in the same
+//     pass, settling ADR-0046's second open question.
 //
-//     'metron' — Series.MetronId likewise written by
-//     ExternalMetadataIdHelper.cs:33 alone, and 🚩 METRON'S IDENTITY IS
-//     ISSUE-LEVEL IN PRACTICE. metron-tagger's id is parsed out of ComicInfo's
-//     <Notes> (Parser.cs:1350, DefaultParser.cs:178-179) into ParserInfo and
-//     lands on the CHAPTER (ProcessSeries.cs:749) — nothing on any scan path
-//     writes Series.MetronId, and metron.cloud is not in WeblinkParser's <Web>
-//     vocabulary at all. So the only Metron id Kavita actually populates is one
-//     level BELOW the work, which is §6.4 amendment 4's shape and exactly what
-//     LS-14 refused for a ComicVine issue. Series-level Metron identity would
-//     have to be derived the way ComicVine's is at ProcessSeries.cs:162-167 —
-//     Distinct(), accept only when exactly one — and Kavita does not do that.
-//
-//     'cbr' — 🚩 DEAD ON THE OWNER'S VERSION. SeriesDto.cs at v0.9.0.2 has no
-//     CbrId at all (decision 4), so dto.CbrID is always the Go zero value there
-//     and this line can never fire on the install it was written for.
-//
-//     None of the three is changed in this commit, for exactly the reason LS-12
-//     was not changed inside LS-11 — different fields, different fixtures, and a
-//     fourth behaviour bundled in would make none of them reviewable.
-//     docs/REVIEW-LOG.md LS-43 carries all three with the measurements.
+//     'hardcover_book' KEEPS 1.0, and that is a decision rather than an
+//     oversight. LS-43's measurement of its provenance stands — Series.HardcoverId
+//     is written by ExternalMetadataIdHelper.cs:28 ALONE, the Edit Series dialog,
+//     with neither a scanner nor a provider writer at v0.9.0.2 — so on
+//     provenance alone amendment 3 would reach it too. What holds it up is that
+//     §6.4 AMENDMENT 4 NAMES IT: "work-strong book sources are openlibrary_work,
+//     hardcover_book and goodreads_work, and nothing else." That is the
+//     architecture electing a source, not this mapping trusting a field, and
+//     overriding it belongs in an amendment to §6.4 rather than in a Kavita
+//     adapter. ⚠️ RECORDED AS THE OPEN TENSION IT IS in REVIEW-LOG.md LS-74:
+//     amendment 4 names hardcover_book work-strong for the BOOK cascade and says
+//     nothing about how much a hand-typed Kavita field is worth.
 func kavitaExternalIDs(dto kavita.SeriesDto, d kindDecision) []store.ExternalIdentifier {
 	var out []store.ExternalIdentifier
 	add := func(source, value string) {
@@ -434,20 +432,38 @@ func kavitaExternalIDs(dto kavita.SeriesDto, d kindDecision) []store.ExternalIde
 	}
 	// 'hardcover_book' rather than 'hardcover': §6.4's amendment 4 names
 	// "hardcover_book" as one of exactly three work-strong book sources.
+	//
+	// ⚠️ THIS IS THE ONLY REMAINING CALLER OF add(), i.e. THE ONLY Kavita FIELD
+	// UsArr STILL WRITES AT 1.0. Decision 5 says why it survived the pass that
+	// capped metronId and cbrId, and LS-74 records the tension. A future field
+	// wired to add() is asserting that §6.4 names it work-strong; if it does
+	// not, route it through editableIdentity or webLinkIdentity instead.
 	add("hardcover_book", intID(int64(dto.HardcoverID)))
-	add("metron", intID(dto.MetronID))
-	// ⚠️ UNREACHABLE ON THE RELEASE THE OWNER RUNS, and kept anyway. `cbrId` is
-	// not a property of SeriesDto at stable v0.9.0.2 — it is declared only by
-	// develop (ADR-0046; contract_test.go's ceilingOnlyProperties is the
-	// machine-checked list, and Kavita.Models/DTOs/SeriesDto.cs at tag v0.9.0.2
-	// confirms it in source). So on that server the field is absent from the
-	// body, CbrID stays 0, intID returns "" and add() skips: no row, ever.
-	// It stays because it is CORRECT for anyone on develop or a later release
-	// and it degrades to nothing rather than to something wrong — but nobody
-	// should read this line as evidence that a `cbr` external_id exists in the
+
+	// The two hand-editable ids do NOT go through add() either, and for add()'s
+	// own reason: it hard-codes 1.0, and both of these are reachable from
+	// Kavita's Edit Series dialog with no provenance on the DTO to say so.
+	// editableid.go owns the measurement and the refusal-versus-cap argument.
+	//
+	// ⚠️ cbrId IS UNREACHABLE ON THE RELEASE THE OWNER RUNS and the line is kept
+	// anyway. It is not a property of SeriesDto at stable v0.9.0.2 — only
+	// develop declares it (ADR-0046; contract_test.go's ceilingOnlyProperties is
+	// the machine-checked list, and Kavita.Models/DTOs/SeriesDto.cs at the tag
+	// confirms it in source), so there the field is absent from the body, CbrID
+	// stays 0, intID returns "" and editableIdentity declines: no row, ever. It
+	// stays because it is CORRECT for anyone on develop or a later release and
+	// degrades to nothing rather than to something wrong — but nobody should
+	// read it as evidence that a comicbookroundup external_id exists in the
 	// owner's database, and no test may be written expecting one from a
 	// v0.9.0.2 fixture.
-	add("cbr", intID(int64(dto.CbrID)))
+	for _, e := range []struct{ source, value string }{
+		{MetronSeriesSource, intID(dto.MetronID)},
+		{ComicBookRoundupSource, intID(int64(dto.CbrID))},
+	} {
+		if id, ok := editableIdentity(e.source, e.value); ok {
+			out = append(out, id)
+		}
+	}
 
 	// The weblink-parsed three do NOT go through add(): add() hard-codes
 	// confidence 1.0 and §6.4 amendment 3 forbids any of these reaching it.

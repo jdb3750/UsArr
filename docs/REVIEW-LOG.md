@@ -11815,6 +11815,428 @@ afterwards shows the two Go files and nothing else.
 * **No inventory in `http-api.md`.** It documents the semantics of one endpoint and points at the
   router for which endpoints exist. A hand-maintained endpoint list in a document is the status claim
   this repo's own rule tells you not to write.
+---
+
+# Premise sweep — sentences `internal/libsync` falsified without touching them
+
+**2026-08-17**, branch `premise-1787006529`, cut from `origin/main` at `0c3f6e2`. Ids `LS-80`–`LS-89`.
+
+**The technique, stated because it is the transferable part.** Grepping for the *feature* —
+`libsync`, `importer`, `Kavita` — finds the prose that already knows. What goes stale is prose
+resting on the **premise**: *"no sync channel runs yet"*, *"there is no catalogue"*, *"nothing writes
+this table"*, *"none of them is v0.1"*, *"designed, not implemented"*. None of those sentences names
+the thing that falsified it, and none of them is near the changed code. Every hit below was found by
+searching for the assumption.
+
+**Every fix is a pointer, not a fresher claim.** `CLAUDE.md` — *"do not write a fresher one; write
+the pointer"* — was the rule applied throughout, and in three places the replaced sentence is quoted
+inside its own replacement so the failure mode stays legible.
+
+## LS.80 The findings
+
+* **`LS-80` — `CLAUDE.md`, status paragraph. NOW FALSE.** *"No sync channel runs yet, so there is no
+  catalogue behind any of it."* Channel 1 runs: `internal/libsync` is the sync core and imports a
+  Kavita library end to end. Replaced with a pointer at `internal/libsync/doc.go` (which states
+  which channels it implements) and `reference/sync.md` §1 (which names them all), plus the note
+  that this paragraph has now gone stale twice in the same way.
+* **`LS-81` — `README.md`, status box. NOW FALSE, same premise.** *"Nothing syncs a library in yet,
+  so there is no catalogue."* The box's opening also claimed *"One path works"* and named only
+  Prowlarr Search-and-Grab. Both replaced with the tree pointer the box already half-carried.
+* **`LS-82` — `ARCHITECTURE.md` §16, v0.1 entry. NOW FALSE, and it had predicted its own failure.**
+  The paragraph argues at length that an inventory in a design document goes stale, cites the
+  Services-health-screen case where it did, then keeps **one** sentence of inventory on the grounds
+  that it states the gap rather than the contents: *"no sync channel runs yet, so there is no
+  catalogue — nothing replicates from any source, v0.1's own Kavita adapter included, and every
+  screen that would render a library says so rather than drawing an empty one."* It went stale the
+  same way, in a commit that never opened this file. The gap is now a pointer too. **This is §16
+  *status* wording, not §16 *scope* wording** (`DEVELOPMENT.md` §11's distinction) — no milestone
+  boundary moved.
+* **`LS-83` — `docs/reference/sync.md` header. NOW FALSE, narrowly.** *"**Status:** designed, not
+  implemented."* Only **channel 1, behind one adapter** is implemented. The header now says so and
+  names what is still design — channels 3 / 3b, channel 4, the write queue — because "implemented"
+  without that split would be the opposite overclaim.
+* **`LS-84` — `docs/reference/search.md` header. NOW FALSE, and the split is corpus-yes /
+  retrieval-no.** §2's corpus is maintained (`internal/store`'s catalogue writer owns `search_doc`,
+  `search_fts`, `search_trgm` and their count invariant; `internal/libsync` fills them on import).
+  §3, §4 and §5 are untouched: **every `MATCH` against either FTS table in the tree is inside a
+  `_test.go`** (`internal/store/catalogue_test.go`, `internal/db/migrate_test.go`), verified by
+  `grep -rn MATCH --include=*.go internal/ cmd/` on this branch.
+* **`LS-85` — `docs/reference/schema.md` §12.1, `sync_report`. NOW FALSE.** *"It is not prior art and
+  nothing has exercised it — nothing writes this table yet."* `internal/store`'s `RecordSyncReport`
+  writes it, from `internal/libsync`'s full import. **The correction is deliberately partial**: the
+  table was shaped by inference from `sync.md` §4's two call sites, and *neither of those* is what
+  exercised it — the two live `kind` values are `container_declined` and `identity_conflict`, and
+  the `id_reused` guard row the vocabulary was invented for is still written by nothing. Saying only
+  "it is written now" would have discharged an inference that is only half discharged.
+* **`LS-86` — `docs/reference/schema.md`, `service_item_link`'s container columns. NOW FALSE, and
+  unfixable at the source.** The DDL comment says the three columns *"are written by the \*Arr sync
+  first and carry no catalogue reader until then"*. ADR-0041 inverted that: `remote_library_id` and
+  `remote_subtype` got their first writer from a **catalogue** source and the \*Arr sync has written
+  neither. The same superseded sentence stands in
+  `internal/db/migrations/00005_library_sync.sql:493`, and **a merged migration is never edited**
+  (`CLAUDE.md`), so the doc's transcription is left verbatim and a ⚠️ note underneath records the
+  supersession and says why the SQL still reads the old way. Editing the transcription alone would
+  have made the doc disagree with the shipped schema it exists to describe.
+* **`LS-87` — `docs/reference/providers.md` §3.2. NOW FALSE.** *"⚠️ **None of them is v0.1** — per
+  ADR-0036 no catalogue source ships in v0.1."* ADR-0041 amended ADR-0036; Kavita is v0.1's one
+  catalogue source and its hand-written Tier 0 adapter is now this paragraph's **worked example**
+  rather than a counter-example. Audiobookshelf and Komga are unchanged.
+* **`LS-88` — `docs/FUTURE.md` §16, the "not identified" state. NOW FALSE, inverted.** *"It is
+  reached rarely in v0.1, whose Sonarr and Radarr carry TVDB and TMDB ids, and becomes the ordinary
+  case with the first catalogue source."* Both halves swapped milestones: ADR-0041 made Kavita the
+  first catalogue source **and** v0.1's, ADR-0045 moved Sonarr and Radarr to v0.2 — so free Kavita's
+  null identifiers make "not identified" the **ordinary** case from v0.1. The requirement itself does
+  not move; how hard v0.1 exercises it does. The same entry's **Trigger** parenthetical (*"under
+  ADR-0036 no book catalogue source ships in v0.1 at all, so the old trigger would now fire later"*)
+  is amended in place: the old trigger is back to firing at v0.1, and the round trip is itself the
+  argument for the rewrite that replaced it.
+* **`LS-89` — two Go/layout comments on the same premise. NOW FALSE.**
+  `internal/kavita/doc.go`'s scope section closed *"channels 1, 3b and 4 (ADR-0041) are the commits
+  after this one"* — channel 1 arrived, in the package that consumes this one. The client/no-writes
+  boundary that section exists to state is **unchanged and kept**. `docs/DEVELOPMENT.md` §2's layout
+  comment on `navidrome/ audiobookshelf/ kavita/ komga/` read *"one milestone each after v0.1, in
+  that order subject to the §16.1 probe"*; `kavita/` is in v0.1 and the probe is discharged, and the
+  comment now also records that the adapter for a client lives in `libsync/`, not beside it.
+
+## LS.81 Controls — premises checked and found STILL TRUE
+
+A sweep that finds everything wrong has not been calibrated. These were checked the same way and
+left alone.
+
+* **`ARCHITECTURE.md` §16 and §8.4, `FUTURE.md` §11 — *"nothing writes `write_queue` yet"*, *"no
+  writer for the whole milestone"*.** Still true. `internal/libsync/doc.go` names the write queue as
+  deliberately out of scope, and `grep -rn write_queue --include=*.go internal/ cmd/` outside
+  `_test.go` hits only `internal/db/spike/` and one comment in `internal/httpapi/grabs.go`.
+  `FUTURE.md` §11's version of the claim is a **dated record** (*"searched 2026-08-17 on `b8bb500`"*)
+  and would have been amended underneath rather than rewritten had it been false; it was not.
+* **`ADR-0044` — *"`work_comic.publisher`, which migration 0006 created and nothing writes"*.** Still
+  true: `internal/store` writes `work_book` and no other subtype table.
+* **`ARCHITECTURE.md` §8.5 — *"Prowlarr has no library, so with only Prowlarr there is nothing to
+  sync, the grid is empty"*.** Still true; it is conditional on a Prowlarr-only install, which is
+  what makes it survive a Kavita adapter landing. The unconditional cousins of this sentence are
+  exactly the ones that failed.
+* **`docs/reference/providers.md` header — *"no code has been written for Sonarr or Radarr"*.** Still
+  true, and ADR-0045 makes it true *by scope* rather than by accident.
+* **`docs/reference/search.md` §2 — *"find everything by this author is unanswered in v0.1"*.** Still
+  true, and non-obviously so; see LS.82 below for why.
+* **`internal/httpapi/services.go` — *"Kavita is read-only and has no command sink … filing it under
+  acquisition would promise a write path that does not exist"*.** Still true. A catalogue source
+  shipping does not give it a command sink.
+* **`internal/kavita/doc.go` — *"This is the CLIENT only. No sync loop, no import, no schema
+  writes"*.** Still true and kept verbatim; only the sentence after it had gone stale.
+* **`README.md` — *"Most of this table is not built yet"*.** Still true of the feature table, which
+  already carries its own tree pointer.
+
+## LS.82 Two divergences REPORTED and deliberately NOT fixed — the code may be the wrong half
+
+Where prose and code disagree, the stale comment is sometimes the only surviving witness that they
+diverged. Neither of these is edited here.
+
+* **`schema.md`'s per-adapter container table says Kavita's `remote_subtype` is `Library.type`
+  (`LibraryType` enum); the shipped adapter writes `SeriesDto.format`.**
+  `internal/libsync/kavita.go`'s `mapSeries` carries an explicit argument for its choice —
+  *"remote_subtype is 'the upstream's own sub-classification', stored verbatim and unparsed (§6.5
+  rule 3). For Kavita that is MangaFormat, which is a fact about THIS series rather than about its
+  container"* — and it is a good one: a per-series link column holding a container-level value would
+  duplicate `remote_library_id`. But **no ADR records the change**, the doc row still names the
+  other field, and which one is meant to be right is a design call, not a transcription error.
+  Reported for the design thread rather than resolved by rewriting the table row.
+* **`search_fts.people` is created by migration 0005, is written as the empty string by the only
+  document builder there is, and `work_credit` now has data that could fill it.** That is what keeps
+  `search.md` §2's *"find everything by this author is unanswered in v0.1"* true — so the control
+  above holds — but it holds by omission rather than by decision. `search.md` §2 says the fold-into-
+  `alt_titles` option *"is a decision for whoever writes the document builder"*; the builder was
+  written and the decision is not recorded anywhere. **Possible bug, not a prose defect.**
+
+## LS.83 The guard fired, deliberately, and it went red
+
+The drill rule: a guard that has never been triggered is indistinguishable from no guard, and a
+firing that another exemption absorbs proves nothing.
+
+Exactly **one** step of `make check` reads `docs/` at all — `secrets` (`gitleaks dir .`), and only
+for credential-shaped strings. So that is the step that was fired. A GitHub-PAT-shaped token was
+planted in `docs/reference/sync.md`, one of the files this pass edits:
+
+```
+$ make secrets
+tool: /root/go/bin/gitleaks — build-info module github.com/zricethezav/gitleaks/v8@v8.30.1, asserted against the pin (--version is unstamped)
+/root/go/bin/gitleaks dir . --redact=100 --no-banner --exit-code 1
+INF scanned ~10611567 bytes (10.61 MB) in 2.71s
+WRN leaks found: 1
+make: *** [Makefile:624: secrets] Error 1
+```
+
+**It went red, so there is no absorbed-vs-missed question to answer** — the rule saw a planted
+violation in a `docs/` Markdown file and failed the build on it. The plant was then removed and the
+file restored byte-for-byte.
+
+## LS.84 What the green attests, and what it does not
+
+This is a **documentation** commit plus two comment-only Go edits. `make check` passing therefore
+attests:
+
+* `gitleaks` scanned every edited file and found no credential-shaped string (**the only step that
+  reads `docs/` at all**, and shown above to be capable of failing on one);
+* the two comment edits (`internal/kavita/doc.go`) are `gofumpt`-clean, lint-clean and did not break
+  the build or any test;
+* `go mod verify`, `-mod=mod -diff` tidiness and `govulncheck` are unchanged, as they must be.
+
+It attests **nothing whatsoever about whether the prose is true.** No gate in this repo reads a
+sentence for accuracy. The accuracy claims above rest on the greps and file reads named beside each
+one, taken on this branch at `0c3f6e2`, and they are the part a reviewer has to check by hand.
+
+## LS.85 Amended disposition — three of these ten collided with `CH1` and CH1's text wins
+
+**Amended 2026-08-17**, on the merge of `premise-1787006529` into `origin/main` at `09b1a9a`. The
+findings above stand as written; this records what happened to three of them and changes none of
+their ids, text or severity.
+
+**`LS-80`, `LS-81` and `LS-82` were found independently and simultaneously by the `CH1` thread**
+(entry immediately above, landed at `c56c8e4`), from the same premise and by the same technique —
+which is itself the strongest evidence the technique generalises, since neither thread saw the
+other's greps. All three conflicted textually on merge, and **CH1's wording was taken in every
+case**, for three reasons: it landed first; it measures the tree at a named commit rather than
+describing it (CH1-01's table); and it carries two things this pass did not have —
+the *"re-measured as still holding at `5b22d58`, falsified by `01969ed` eight minutes later"*
+timeline, and CH1-04's separation of the one clause that was a **requirement** wearing a status
+claim's clothes. Nothing from `LS-80`–`LS-82` is lost that CH1 does not say better.
+
+**`LS-83` through `LS-89` are untouched by the collision and are this pass's own.** CH1-05 records
+exactly what it left: `README.md`'s feature table, §16's other clauses, §17 and `web/`. It did not
+reach `docs/reference/` at all — which is where four of the seven live, including the two
+(`LS-85`, `LS-86`) that are about writers rather than about status prose — nor `FUTURE.md`, nor the
+two comments in `LS-89`. **Two threads sweeping the same premise found overlapping but unequal
+sets, and the difference was which roots each one searched**, not which phrases: CH1 searched the
+top-level status documents, this pass searched `docs/reference/`, `docs/FUTURE.md` and the package
+comments under `internal/`. Neither root is redundant.
+
+The `LS.82` divergences and the `LS.83` guard firing are unaffected and remain open as reported.
+
+---
+
+# LS-90 — a count written from recollection, three times in one day
+
+**Date:** 2026-08-17. **Prefix:** `LS-` (library sync), id `LS-90` from this thread's reserved
+`LS-90`–`LS-99` block. **Requested by the code thread and assigned by the project coordinator** —
+`docs/DEVELOPMENT.md` maps to whoever lands `internal/`, `cmd/` and the build, which is this thread,
+so this is announced rather than taken.
+
+| # | Finding | Severity | Disposition |
+| --- | --- | --- | --- |
+| **LS-90** | **Three counts in one day, in three different threads, each contradicted by the list printed beside it** — twice low, once high, and one of the three contradicted by its own commit message as well. The common mechanism, not the individual slips: the number was formed at one moment and the list moved afterwards, and nothing recomputed it before the commit. §11's guard rules covered the instrument (rule 2), the surface (rule 5) and the transcription (rule 7), but **no rule said the figure itself has to be re-derived at write time**; the `wc`/`grep`-it-now instruction lived only in per-brief boilerplate, so it held exactly as often as the brief's author remembered it | Medium | **Applied as `docs/DEVELOPMENT.md` §11 rule 8, *"A count is a measurement — compute it from the artefact, never from recollection"*.** Placed after rule 7 and before the closing *"the pattern worth carrying"* paragraph, so the numbered list stays contiguous and rules 2, 5 and 7 keep their cross-references — the topically nearer slot beside rule 5 was rejected because inserting there renumbers 6 and 7 and breaks the *"rule 5 names what it was pointed at"* references. The three instances are cited **by count, not re-told**, per the subsection's own register. No renumbering of existing entries or rules |
+
+---
+
+
+---
+
+# Round 5 continued — `LS-70`–`LS-79`: the last two Kavita ids at 1.0, and the one that keeps it
+
+**Date:** 2026-08-17. **Prefix:** `LS-` (library sync). **Ids `LS-70`–`LS-79` were RESERVED for this
+pass before it started, and the file was deliberately NOT read to find the next free one** — that
+read is the race, and it has now collided five times in this round alone (`EXPL-01`, `LS-01`,
+`LS-17`, `LS-30`, `LS-47`). `LS-53`–`LS-69` are unallocated here and that is correct, not a gap to
+close.
+
+**What this pass was handed.** `LS-43` measured three sources still going out at confidence 1.0 —
+`hardcover_book`, `metron` and `cbr` — and raised them without fixing them, for the reason `LS-12`
+was not fixed inside `LS-11`. This is that fix for two of the three, and the third is decided rather
+than deferred again.
+
+**The brief was right about the measurement and wrong about the rule, and that is the finding.** It
+handed over Metron as `ARCHITECTURE.md` §6.4 **amendment 4**'s shape — an identifier one level below
+the work, the rule that made `LS-14` refuse a ComicVine `4000` issue outright — and instructed that
+the premise be verified at the tag first. Verifying it is what broke it: the premise is true and its
+consequence does not follow, because the chapter-level id and the field UsArr reads never meet.
+
+| # | Finding | Severity | Disposition |
+| --- | --- | --- | --- |
+| **LS-70** | **The handed-over Metron premise is TRUE and it does not reach the field UsArr reads.** Re-verified at tag `v0.9.0.2` (`6bcd568`): a whole-tree `MetronId` grep, migrations excluded, finds exactly two assignment sites — `ProcessSeries.cs:749` (`chapter.MetronId = info.MetronId ?? 0`) and `ExternalMetadataIdHelper.cs:31-33`. 🚩 **Nothing on any scan path writes `Series.MetronId`**, exactly as relayed. But the scanner's id is parsed out of ComicInfo `<Notes>` and lands on `Chapter.MetronId` → `ChapterDto.metronId`, **a field UsArr never reads**, and Kavita has no `ProcessSeries.cs:162` analogue promoting it to the series. So the only writer of `SeriesDto.metronId` is the Edit Series dialog, and **the field is series-level by construction** | **High** | **Applied as a CAP, not a refusal — §6.4 amendment 3 rather than amendment 4.** Amendment 4 bars an id from a level *below* the work; nothing below the work reaches this field, so it has nothing to bite on. What is left is a hand-typed number: `metron_series` at `EditableIDConfidence` **0.90**, via the new `editableIdentity` in `internal/libsync/editableid.go`. The ASCII diagram of the two non-meeting write paths is in that file, because the next reader will be handed the same premise |
+| **LS-71** | **`cbr` is Comic Book Roundup, it is SERIES-level, and it is provider-supplied *and* free-text at once.** Established at both refs as instructed. Level, from three independent readings: `KavitaPlusConfiguration.MetadataProvidersForLibraryTypes` offers `MetadataProvider.ComicBookRoundup` to the **Comic**, **Image** and **ComicVine** library types and matches per SERIES (`ExternalMetadataService.cs:205-223`, `match.Series.CbrId`); `HasRequiredId` gates the provider on `series.CbrId > 0` (`:264`); Kavita's link builder is `comicbookroundup.com/comic-books/reviews/${id}` (`provider-url.util.ts:8`) and that path is a **series** page on the site, with issues one segment deeper (fetched 2026-08-17). Writers at develop `9c3e540`: `ExternalMetadataService.cs:223` and `:1773-75` (**provider**, licence-gated) and `ExternalMetadataIdHelper.cs:15` (**Edit dialog**). No scanner writer at either ref | **High** | **Applied. 0.90, on `weblinkid.go`'s reason 1 standing alone.** Amendment 4 does not reach it either — it is not an edition or issue id. It is capped because **`SeriesDto` carries no provenance**: UsArr cannot tell a Kavita+ match from a typed number, so the weakest writer must govern or the amendment is unenforceable by construction. 🚩 **And the free-text writer is strictly worse on develop than at the tag** — `ExternalMetadataIdHelper` guards every assignment with `is > 0` at `v0.9.0.2` and rewrites all six as `dto.X ?? 0` on develop, so on the very releases where `cbrId` is reachable, **saving the Edit Series dialog overwrites a Kavita+ match and can clear it to zero** |
+| **LS-72** | 🚩 **A SHIPPED TEST REQUIRED THE BUG — the third instance in one round.** `kavita_test.go`'s `weakSources` table listed the four already-capped sources, and its `!weakSources[…] && x.Confidence < 1.0` arm therefore **errored if `cbr` came out below 1.0**. It would have failed the moment the cap it exists to protect was applied | **High** | **Applied, with the reversal and its reason written at the assertion site** — the `LS-40`/`LS-45` shape. The root cause is recorded because it will recur: the table was written as *"the four fields we have just capped"* rather than as *"every field §6.4 does not name work-strong"*, so an unmeasured field defaulted to the strong side. Fired deliberately as **Break D** below |
+| **LS-73** | ✅ **ADR-0046's second open question, settled.** It read: *"`external_id.source = 'cbr'` is not enumerated anywhere as a legal source … the `cbr` that does appear in `00005_library_sync.sql` is `edition.format`'s `CHECK`, a different thing entirely."* 🚩 **That clause names the defect without noticing it: `cbr` ALREADY MEANS the Comic Book RAR archive format inside this schema** — an `edition.format` `CHECK` value, listed beside `cbz` and `pdf` at `internal/store/recent.go:390`. One token, two unrelated meanings, one database | Medium | **Applied. `ComicBookRoundupSource = "comicbookroundup"`.** The site's own name cannot be read as a file extension. ⚠️ **The rename was free EXACTLY NOW and never again**: `cbrId` is absent from `SeriesDto` at the floor (`LS-46`, `LS-48`, machine-checked by `ceilingOnlyProperties`), so no `cbr` row has ever been written and there is nothing to migrate — the same rename after one develop user syncs needs a migration. ADR-0046 and both Kavita comment sites now say so |
+| **LS-74** | ⚠️ **`hardcover_book` KEEPS 1.0, and the tension is recorded rather than resolved quietly.** On provenance it is the **weakest** of the six — `ExternalMetadataIdHelper.cs:28` at `v0.9.0.2` is its only writer, with neither a scanner nor a provider one — so amendment 3 would reach it on the same argument that capped the other five | **High** | **Not changed, deliberately.** §6.4 **amendment 4 NAMES it**: *"work-strong book sources are `openlibrary_work`, `hardcover_book` and `goodreads_work`, and nothing else."* That is the architecture electing a source, and an adapter overruling it is the wrong place for the decision. 🚩 **The unresolved half, stated plainly rather than left implicit: amendment 4 names it work-strong for the BOOK cascade and says nothing about what a HAND-TYPED Kavita field carrying it is worth.** Closing that is an amendment to §6.4 with its own owner, not a line in a Kavita adapter. Pinned by `TestHardcoverIsTheONLYRemainingStrongKavitaSource`, which is **two-sided** — a new field at 1.0 fails it, and so does `hardcover_book` quietly losing its 1.0 |
+| **LS-75** | **Refusing was considered for Metron and rejected on measurement.** The brief warned against copying `LS-11`'s refusal or `LS-12`'s cap reflexively, so both were tested against the facts. `LS-11` refused two shapes and **both rest on something absent here**: a value whose text *proves* it names an issue (`LS-14`), or one Kavita **itself** filled from a chapter after erasing the discriminator (`LS-13`). Neither applies. And `SeriesDto.metronId` has exactly one writer, so **refusing would refuse 100% of what the source can produce** | **High** | **Cap, and the argument is written where the refusal would have gone.** `comicvine.go`'s own test for a refusal — *"there is no source string under which a value of unknown kind is a true statement"* — fails here in the other direction: `metron_series` **is** a true statement about every value that writer can produce |
+| **LS-76** | ⚠️ **The residual Metron risk is real and 0.90 is exactly its defence.** A user pasting an **issue** id into the series box, because the form gives them nothing to go on: the Edit modal renders one bare numeric input per id from a **shared component used at series, volume and chapter level**, labelled only *"Metron Id"* (`edit-external-metadata-form.component.html`; `en.json`). And Metron's `Issue` and `Series` are **separate Django models with separate auto primary keys** (`Metron-Project/metron` `comicsdb/models/{issue,series}.py`, checked 2026-08-17), so issue 42 and series 42 are different objects — **ComicVine's `4050`/`4000` hazard with no prefix to distinguish them** | Medium | **Named as an ACCURACY risk, which the cap covers**, in `weblinkid.go`'s own words for the identical `MalMangaSource` case: *"at 0.90 a user who pastes an anime id gets a wrong row that cannot merge anything"* |
+| **LS-77** | **`metron_series` is namespaced on measurement, not on symmetry** — the distinction `LS-39` drew when it kept `anilist` and `mangabaka` bare. Metron has two numeric spaces and **UsArr is one phase from holding both**: `Chapter.MetronId` is an ISSUE id, named as such by the token itself in metron-tagger (`create_notes()` writes `[issue_id:{issue_id}]`, fetched 2026-08-17) and by Kavita's regex (`Parser.cs:725`, `MetronTagger-.*\[issue_id:(?<Id>\d+)\]`), and it reaches `ChapterDto.metronId`, which `doc.go`'s phase-B chapter walk will decode | Medium | **Applied.** Under a bare `metron`, Metron series 42 and Metron issue 42 would collide on `(source, value)` — the exact key `ux_extid` and `ux_extid_work_strong` are built on. ⚠️ **The constant carries the forward instruction**: a commit that writes the chapter id **must not reuse the string**, because it is an issue id and amendment 4 bars it from a work row at **any** confidence |
+| **LS-78** | **One shared cap constant where ComicVine and the weblink three got two, and the departure is argued rather than assumed.** `weblinkid.go` says the existing two are separate *"on purpose: the two caps rest on different measurements of different Kavita code paths"* | Nit | **`EditableIDConfidence` covers both, because they rest on ONE measurement** — the Edit Series dialog reaches both and `SeriesDto` carries no provenance for either, so the weakest writer governs both for the same reason. ⚠️ The constant's comment carries the condition: **their writer sets already differ** (Metron has no provider writer at any ref; ComicBookRoundup has one on develop), so **if a future measurement separates them the constant SPLITS rather than moves** |
+| **LS-79** | **`ARCHITECTURE.md` §6.4 still carries the falsified premise, in the bullet this pass's rule is quoted from.** It reads that `SeriesDto`'s identifier fields are *"all of them written only by the Kavita+ match path"* — disproved for `comicVineId` by `LS-11`, for three more fields by `LS-38`, and now for `metronId` and `cbrId` | Medium | **Recorded, not back-edited**, on `LS-38`'s and `LS-47`'s precedent: this file is a historical record, a docs sweep was in flight in another worktree, and `LS-11`/`LS-38` both fixed the equivalent claim at the **code** site (`resources.go`, `kavitaExternalIDs`) rather than in §6.4. The amendments this pass applies — 3 and 4 — are unaffected by that bullet. **The pointer is the entry; a fresher status sentence is not written** |
+
+## LS.20 The four guards fired, with verbatim output
+
+Every guard was broken on purpose, run red, and reverted. The breaks are chosen so that **no two
+fail for the same reason** — a set of breaks that all trip the same assertion proves one guard, not
+four.
+
+**Break A — the original wrong behaviour restored** (`add("metron", …)` and `add("cbr", …)`, i.e.
+1.0 *and* the bare source strings):
+
+```
+--- FAIL: TestEditableIDsAreNeverWorkStrong (0.00s)
+    editableid_test.go:58: inherit=false: no metron_series identifier at all; [{Source:metron Value:156409 Confidence:1} {Source:cbr Value:7 Confidence:1}]
+    editableid_test.go:78: inherit=false: an id was written under the BARE source "metron"
+    editableid_test.go:78: inherit=false: an id was written under the BARE source "cbr"
+--- FAIL: TestHardcoverIsTheONLYRemainingStrongKavitaSource (0.00s)
+    editableid_test.go:127: the sources written at confidence >= 1.0 are map[cbr:7 hardcover_book:445 metron:156409]; want exactly {hardcover_book:445}. ...
+--- FAIL: TestEditableIDEndToEndAgainstTheDatabase (0.05s)
+    editableid_test.go:257: series 401 and 402 resolved to 1 distinct works, want 2 — they share metronId 156409, and a strong write MERGED THEM: a Metron id is hand-typed into an untyped "Metron Id" box, and Metron numbers issues and series separately
+    editableid_test.go:257: series 403 and 404 resolved to 1 distinct works, want 2 — they share cbrId 7, and a strong write MERGED THEM: a ComicBookRoundup id is indistinguishable on the DTO from one the Edit Series dialog typed over the Kavita+ match
+    editableid_test.go:276: 3 work rows, want 5 — weakening an identity claim must not drop the work
+--- FAIL: TestIdentifiedCassetteMapsEveryIDSourceAndDropsTheEditionID (0.00s)
+    kavita_test.go:348: Saga external ids = map[cbr:7 comicvine_volume:42563]
+```
+
+⚠️ **`3 work rows, want 5` is the whole point of the fixture** and the reason the pair assertions
+count `DISTINCT work_id` rather than rows: five series collapsed into three works, unrecoverably,
+and a `count(*)` over `service_item_link` would still have read five.
+
+**Break B — the 0.90 cap KEPT, only the two namespaces reverted.** This is the one that matters: it
+proves the namespace guards test the **string** and not the confidence, so a future change that
+keeps the cap and reverts a source name cannot pass unnoticed.
+
+```
+--- FAIL: TestEditableIDsAreNeverWorkStrong (0.00s)
+    editableid_test.go:58: inherit=false: no metron_series identifier at all; [{Source:metron Value:156409 Confidence:0.9} {Source:cbr Value:7 Confidence:0.9}]
+    editableid_test.go:78: inherit=false: an id was written under the BARE source "metron"
+--- FAIL: TestEditableIDEndToEndAgainstTheDatabase (0.06s)
+    editableid_test.go:222: series 401 claim 0 = {source:metron value:156409 confidence:0.9}, want {source:metron_series value:156409 confidence:0.9}
+    editableid_test.go:267: 2 rows carry the bare source "metron"; "metron" would collide with Metron's separate ISSUE number space, and "cbr" already names the Comic Book RAR archive format in edition.format's CHECK
+    editableid_test.go:267: 2 rows carry the bare source "cbr"; ...
+```
+
+🚩 **`TestHardcoverIsTheONLYRemainingStrongKavitaSource` did NOT fire on Break B, and the drill rule
+adopted from design's `c56c8e4` says that must be answered rather than passed over.** It is a
+correct non-firing and not an absorbed one: that test asks *which sources come out at ≥ 1.0*, Break B
+left both ids at 0.90, so the strong set really is still exactly `{hardcover_book}` and there was
+nothing for it to catch. The property Break B attacks — the source **string** — is not one it
+asserts, and it is covered by the two tests above that did fire, on the strings themselves. The
+distinction is checked rather than asserted: **Break A moved the confidence and the same test fired
+immediately**, which is what an absorbed firing could not do.
+
+**Break C — `hardcover_book` quietly routed through `editableIdentity` too**, i.e. the pass
+over-applying its own rule. It proves `LS-74`'s guard is **two-sided** rather than a floor:
+
+```
+--- FAIL: TestHardcoverIsTheONLYRemainingStrongKavitaSource (0.00s)
+    editableid_test.go:127: the sources written at confidence >= 1.0 are map[]; want exactly {hardcover_book:445}. A source at 1.0 satisfies ux_extid_work_strong and can MERGE TWO WORKS, and §6.4 amendment 4 names only openlibrary_work, hardcover_book and goodreads_work as work-strong — so a new name here is an adapter overruling §6.4, and a missing hardcover_book is the same thing in the other direction
+--- FAIL: TestIdentifiedCassetteMapsEveryIDSourceAndDropsTheEditionID (0.00s)
+    kavita_test.go:327: 103: hardcover_book=445 came out at confidence 0.9; want 1.0
+```
+
+ⓘ The first attempt at this break **did not compile** — `declared and not used: add` — which is a
+finding worth keeping: with `metron` and `cbr` rerouted, `hardcover_book` is the **only** remaining
+caller of the 1.0 closure, so removing it makes the closure dead code and Go says so. The break was
+re-applied with `_ = add` to get past the compiler and reach the assertions.
+
+**Break D — `LS-72`'s reversal undone, the production fix KEPT.** The proof that the shipped test
+required the bug, rather than merely being silent about it:
+
+```
+--- FAIL: TestIdentifiedCassetteMapsEveryIDSourceAndDropsTheEditionID (0.00s)
+    kavita_test.go:325: 104: comicbookroundup=7 came out at confidence 0.9; want 1.0
+```
+
+## LS.21 Fixtures
+
+Two new cassettes, **both synthetic and both saying so in their own headers**, along with the Kavita
+version each claims — and here that version is **`0.9.0.20` (develop), where the other two identity
+fixture pairs claim the owner's tag.** ⚠️ **That is forced, not a preference: `cbrId` does not exist
+on `SeriesDto` at `v0.9.0.2`**, so a fixture claiming the floor and carrying one would assert a shape
+the floor cannot emit — the class of error `LS-15` found in the `comicVineId` fixture.
+
+* `kavita_libraries_editable_ids.yaml` — libraries 30 (Comic) and 31 (ComicVine), the two regimes
+  `KavitaPlusConfiguration` offers the ComicBookRoundup provider to. `inheritWebLinksFromFirstChapter`
+  is **false on both, and the header says why that is the point rather than an omission**: the flag
+  drives `ProcessSeries.cs:358-367`, and **neither field is in that block at either ref**, so it
+  cannot change either outcome. Setting it true on one library would imply it was a variable under
+  test.
+* `kavita_series_all_v2_editable_ids.yaml` — 401/402 share `metronId` **156409**, the value from
+  Kavita's **own doc comment** for the regex that reads it (`Parser.cs:722-726`, verbatim: *"Tagged
+  with MetronTagger-4.4.0 using info from Metron on 2025-12-24 12:32:18. [issue_id:156409]"*);
+  403/404 share `cbrId 7`; 405 is the untagged control. **Each capped field gets its own merge pair**,
+  because one constant caps both and a single pair would let one regress unobserved. `hardcoverId` is
+  0 on all five deliberately — the one field still at 1.0 does not belong in the fixture for the two
+  being capped.
+
+**The database side is not synthetic.** `TestEditableIDEndToEndAgainstTheDatabase` runs the whole
+channel-1 path against a real migrated SQLite, populates it, then asks SQLite in
+`ux_extid_work_strong`'s **own predicate** what it holds — and counts `DISTINCT work_id` for each
+pair, because a row count still adds up after a merge.
+
+## LS.22 What this pass did NOT do
+
+* **No ADR.** Both changes apply rules `ARCHITECTURE.md` §6.4 already states, which is what `LS-11`
+  and `LS-38` did without one; the only decision that closed an alternative is ADR-0046's own open
+  question 2, and it is answered **in ADR-0046**. **This also avoids taking a number from the shared
+  counter that moved mid-pass twice tonight** (`LS-52`).
+* **No migration.** `external_id.source` is free `TEXT` with no `CHECK`, and no row under either old
+  string has ever been written — `cbr` is unreachable at the floor and no catalogue source has
+  shipped. **The migration comment's source list is left stale rather than edited**: a merged
+  migration is never edited, it is already stale for `comicvine_volume`, `mal_manga` and
+  `hardcover_book`, and the vocabulary now lives on named Go constants the compiler checks.
+* **`ChapterDto.metronId` is not read**, and the seam for it is left explicit rather than filled.
+  Reading it needs `doc.go`'s phase-B chapter walk, an N+1 upstream call `LS-11` already priced and
+  declined; what ships is the namespace that will keep the issue space from colliding with this one.
+* **`hardcover_book` is not capped** — `LS-74`, and the §6.4 amendment it would take is not written
+  here.
+* **No live Kavita was contacted.** Everything above is Kavita's **source at both refs** in a full
+  working tree, the two vendored specs, and four first-party fetches recorded at their assertions
+  (metron-tagger's `talker.py`, Metron's `comicsdb` models, Metron's URL routes, and a
+  comicbookroundup.com series page).
+
+---
+
+## LS-53 ADR-0046 is sound and is not a template: the assumption it rests on is that upstream regenerates its spec per release
+
+**Applied** — 2026-08-17, as an **amendment to [ADR-0046](./DECISIONS.md#adr-0046)**, not a new ADR
+and not a reversal. The finding came from another thread trying to apply ADR-0046's floor/ceiling
+pattern to Prowlarr and finding it could not — a limitation of the ADR rather than a Prowlarr quirk.
+
+**What ADR-0046 assumed without saying so: that upstream regenerates its OpenAPI spec per release.**
+Two pins are two points only if the tag and the branch tip are two *documents*. Kavita satisfies it
+(462 paths at `v0.9.0.2` against 488 on `develop`). Prowlarr does not.
+
+**Verified here, independently of the reporting thread, on 2026-08-17:**
+
+| Claim | How it was checked | Result |
+| --- | --- | --- |
+| `src/Prowlarr.Api.V1/openapi.json` is one blob at tag and at `develop` | `git ls-remote` → `develop` `1f7db1e`, `refs/tags/v2.5.2.5491` `c0f8c2c`; blobless fetch of both; `git ls-tree <commit> <path>` | **Both `134d31d7df5e80714c454a6224e7449df512c55e`** |
+| The vendored file is that same blob | `git hash-object api/specs/prowlarr.json` | **`134d31d7…`**, 145360 bytes |
+| The spec self-reports a placeholder version | read `info` from `api/specs/prowlarr.json` | **`"version": "1.0.0"`** — the Swashbuckle default |
+| Last regeneration, and how far back | `git log up/develop -- <path>` | **`60740fa25`, 2025-06-07**, *"Automated API Docs update"*; `git tag --contains 60740fa25` → **33** tags |
+| `SearchResource.Limit`/`Offset` are `int?` upstream | `git show up/develop:src/Prowlarr.Api.V1/Search/SearchResource.cs`; `git log`/`git tag --contains` on that file | **`public int? Limit`/`Offset`**, commit `c687bdb1f` (*"Fixed: Don't send limit=0 to Newznab indexers (#2654)"*), first tag **`v2.3.6.5351`**, ancestor of `v2.5.2.5491` |
+| The vendored document still says otherwise | `/api/v1/search` GET parameters in `api/specs/prowlarr.json` | `limit` and `offset` are plain `{"type":"integer","format":"int32"}` — **no `nullable`** |
+| UsArr is nonetheless correct | `internal/servarr/search.go:189-190,224-234` | `Limit *int32` / `Offset *int32`, both omitted from the query when nil — **no live bug** |
+
+**Taken on trust: nothing load-bearing.** The reporting thread's third check (a bogus ref returning
+404) was not repeated, because git content addressing is strictly stronger evidence than a raw-URL
+fetch and it agreed. Kavita's 462/488 path counts are quoted from ADR-0046 and `api/specs/SOURCES.md`
+rather than re-measured; they are not what the finding turns on.
+
+**Why this is an amendment and not an ADR.** The decision is unchanged for Kavita — no file moves,
+no test changes, no runtime behaviour is touched. What is recorded is a **boundary**: the remedy is
+chosen per upstream, and the Prowlarr counter-example belongs to the thread that measured it, which
+is landing its own remedy and its own ADR. This amendment points at that work rather than retelling
+it, per `DECISIONS.md`'s own rule that *"the decision lives in the superseding ADR; the amendment
+note points at it and does not re-argue it"*.
+
+**The second, sharper half: identity is by blob SHA where the document declares no version.**
+ADR-0046's method for telling its two files apart is `info.version`, machine-checked by
+`TestBothSpecsAreTheDocumentsSOURCESSays`. Prowlarr's `"1.0.0"` carries **no** version information
+rather than stale information, so a version assertion there would assert nothing while looking like
+it asserted something — a harder case than Kavita's floor, which declares a stale-but-real `0.9.0.0`.
+
+**The three marks `DECISIONS.md` owes an amendment were all written**, plus the fourth: the index row
+for 0046, the `Status:` line, a dated `> ⚠️ **AMENDED …**` blockquote directly under it, and a dated
+inline flag on the falsified sentence itself — open question 1's *"has the same shape of gap"*. The
+gap is real; the shape is not the same, and the implied remedy does not apply. That question's last
+sentence — *"nothing here should be read as evidence that the Prowlarr contract tests attest anything
+about 2.5.2"* — survives, and survives more strongly than it was written: **no contract test over
+that document could ever have caught the `int?` change, because the document never moved.**
+
+**Deliberately not touched.** `api/specs/prowlarr.json`, `api/specs/SOURCES.md`, the
+`internal/servarr` suite and anything under `web/` — the Prowlarr remedy is another thread's
+in-flight change, and duplicating it here would produce two answers to one question.
 
 # VN9-06 — Search promised six media types on an install that can hold two
 

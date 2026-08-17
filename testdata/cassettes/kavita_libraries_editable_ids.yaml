@@ -1,0 +1,73 @@
+---
+# SYNTHETIC — hand-authored from api/specs/kavita-develop.json (develop @
+# 9c3e540, LibraryDto) and from Kavita's source at BOTH refs. NOT a wire
+# capture. Claimed Kavita version: 0.9.0.20 (develop, ADR-0046's CEILING).
+#
+# ⚠️ WHY THIS ONE CLAIMS DEVELOP WHERE kavita_libraries_weblink_ids.yaml AND
+# kavita_libraries_comicvine.yaml CLAIM THE OWNER'S TAG: cbrId DOES NOT EXIST ON
+# SeriesDto AT v0.9.0.2. It is one of the four ceilingOnlyProperties
+# internal/kavita/contract_test.go machine-checks, so a fixture claiming the
+# floor and carrying a cbrId would be asserting a shape the floor cannot emit —
+# which is exactly the class of error LS-15 found in the comicVineId fixture.
+# metronId exists at BOTH refs and is exercised here alongside it, because the
+# two share one cap (editableid.go, EditableIDConfidence) and a fixture per
+# constant is what keeps a break attributable.
+#
+# WHY THIS FIXTURE EXISTS ALONGSIDE THE OTHER TWO LIBRARY CASSETTES: those
+# separate the variables that matter for comicVineId (a KIND the DTO erases) and
+# for the weblink three (PROVENANCE — which writer put the number there). The
+# variable here is LEVEL, and the libraries below are the two regimes in which
+# Kavita+'s ComicBookRoundup provider can write cbrId at all:
+#
+#   30  Comic (type 1), inheritWebLinksFromFirstChapter FALSE
+#       Kavita+ ELIGIBLE for ComicBookRoundup and Hardcover
+#       (KavitaPlusConfiguration.MetadataProvidersForLibraryTypes at 9c3e540).
+#       So a cbrId here is EITHER a provider match (ExternalMetadataService.cs:223,
+#       `series.CbrId = match.Series.CbrId ?? 0`) OR the Edit Series dialog
+#       (ExternalMetadataIdHelper.cs:15, `entity.CbrId = dto.CbrId ?? 0` —
+#       UNGATED on develop, so saving the modal overwrites the match and can
+#       clear it to zero). SeriesDto does not say which.
+#
+#   31  ComicVine (type 5), inheritWebLinksFromFirstChapter FALSE
+#       The same two ComicBookRoundup/Hardcover providers, per the same map.
+#
+# THE FLAG IS FALSE ON BOTH, AND THAT IS THE POINT RATHER THAN AN OMISSION.
+# inheritWebLinksFromFirstChapter drives ProcessSeries.cs:358-367, which writes
+# aniListId/malId/mangaBakaId/comicVineId from a chapter's <Web> element. NEITHER
+# metronId NOR cbrId IS IN THAT BLOCK at either ref — Metron's scanner id is
+# parsed out of <Notes> and lands on the CHAPTER (ProcessSeries.cs:749), and
+# ComicBookRoundup has no scanner writer at all — so the flag cannot change
+# either outcome. Setting it TRUE on one library would suggest it was a variable
+# under test; it is not, and comicvine_test.go owns the one field it is.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Library/libraries
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            [
+              {"id": 30, "name": "Comics",    "type": 1, "folders": ["/m/comics"], "coverImage": "", "lastScanned": "2026-08-17T07:00:30.118Z", "inheritWebLinksFromFirstChapter": false},
+              {"id": 31, "name": "ComicVine", "type": 5, "folders": ["/m/cv"],     "coverImage": "", "lastScanned": "2026-08-17T07:00:30.118Z", "inheritWebLinksFromFirstChapter": false}
+            ]
