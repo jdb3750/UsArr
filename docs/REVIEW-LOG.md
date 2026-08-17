@@ -12014,6 +12014,19 @@ The `LS.82` divergences and the `LS.83` guard firing are unaffected and remain o
 
 ---
 
+# LS-90 — a count written from recollection, three times in one day
+
+**Date:** 2026-08-17. **Prefix:** `LS-` (library sync), id `LS-90` from this thread's reserved
+`LS-90`–`LS-99` block. **Requested by the code thread and assigned by the project coordinator** —
+`docs/DEVELOPMENT.md` maps to whoever lands `internal/`, `cmd/` and the build, which is this thread,
+so this is announced rather than taken.
+
+| # | Finding | Severity | Disposition |
+| --- | --- | --- | --- |
+| **LS-90** | **Three counts in one day, in three different threads, each contradicted by the list printed beside it** — twice low, once high, and one of the three contradicted by its own commit message as well. The common mechanism, not the individual slips: the number was formed at one moment and the list moved afterwards, and nothing recomputed it before the commit. §11's guard rules covered the instrument (rule 2), the surface (rule 5) and the transcription (rule 7), but **no rule said the figure itself has to be re-derived at write time**; the `wc`/`grep`-it-now instruction lived only in per-brief boilerplate, so it held exactly as often as the brief's author remembered it | Medium | **Applied as `docs/DEVELOPMENT.md` §11 rule 8, *"A count is a measurement — compute it from the artefact, never from recollection"*.** Placed after rule 7 and before the closing *"the pattern worth carrying"* paragraph, so the numbered list stays contiguous and rules 2, 5 and 7 keep their cross-references — the topically nearer slot beside rule 5 was rejected because inserting there renumbers 6 and 7 and breaks the *"rule 5 names what it was pointed at"* references. The three instances are cited **by count, not re-told**, per the subsection's own register. No renumbering of existing entries or rules |
+
+---
+
 
 ---
 
