@@ -676,8 +676,18 @@ rule('§13 type: no uppercase transform on a label, no italic heading',
  *   · `…selector… { …decls… text-align: center`  — a CSS rule
  *   · `<div class="dialog__foot" style="…text-align:center`  — inline */
 const CENTER = /(?<where>[^{}]{0,200}\{[^{}]{0,400}?|<[a-z][^<>]{0,300}?)text-align\s*:\s*center/i;
+/* ⚠️ NARROWED 2026-08-17, from /dialog|modal|toast/ to /dialog|modal/. §13
+ * names ONE component — "no text-align: center outside dialog components" —
+ * and `modal` is that component under another word, so it stays. `toast` is a
+ * DIFFERENT component: it arrived by regex convenience, nobody has argued for
+ * centring one, and §9.4 specifies toasts without asking for it. The exemption
+ * is inert today, which is precisely the reason to narrow it now rather than
+ * later — an unused exemption grants everything on the day someone builds the
+ * component, and it grants it silently, because the rule it disables never
+ * fired while the component did not exist. An exemption is a claim about a
+ * component that has been argued; this one had not been. */
 rule('§13 type: no text-align:center outside dialog', CENTER, {
-  exempt: { group: 'where', match: /dialog|modal|toast/i, why: '§9.6 allows centring inside a dialog' },
+  exempt: { group: 'where', match: /dialog|modal/i, why: '§9.6 allows centring inside a dialog' },
 });
 rule('§13 type: no bordered / filled empty state',
   /\.empty[a-z-]*[^{}]*\{[^}]*(border\s*:|border-style\s*:\s*dashed|background\s*:|box-shadow\s*:)/i);
