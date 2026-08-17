@@ -36,6 +36,7 @@ UNKNOWN="(unknown)"
 printf 'checkout\n'
 CHECKOUT_HEAD="$UNKNOWN"
 BEHIND="$UNKNOWN"
+TRACKED_DIRTY_COUNT=0
 if [ -d "$CHECKOUT" ] && git -C "$CHECKOUT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 	field "path" "$CHECKOUT"
 	field "branch" "$(git -C "$CHECKOUT" rev-parse --abbrev-ref HEAD)"
@@ -58,8 +59,14 @@ if [ -d "$CHECKOUT" ] && git -C "$CHECKOUT" rev-parse --is-inside-work-tree >/de
 		field "origin/$BRANCH" "$UNKNOWN (no such remote ref)"
 	fi
 
-	DIRTY_COUNT="$(git -C "$CHECKOUT" status --porcelain | wc -l | tr -d ' ')"
-	field "dirty files" "$DIRTY_COUNT"
+	# Two counts, never one. An untracked scratch file on a server says nothing
+	# about whether the install is current, and folding it into a single "dirty"
+	# number would make a normal checkout look broken. Only the tracked count
+	# reaches the verdict below.
+	TRACKED_DIRTY_COUNT="$(git -C "$CHECKOUT" status --porcelain --untracked-files=no | wc -l | tr -d ' ')"
+	UNTRACKED_COUNT="$(git -C "$CHECKOUT" ls-files --others --exclude-standard | wc -l | tr -d ' ')"
+	field "modified (tracked)" "$TRACKED_DIRTY_COUNT"
+	field "untracked files" "$UNTRACKED_COUNT (normal on a server; not a staleness signal)"
 else
 	field "path" "$CHECKOUT — NOT a git checkout"
 fi
@@ -141,6 +148,12 @@ if [ "$LIVE_COMMIT" != "$UNKNOWN" ] && [ "$BINARY_COMMIT" != "$UNKNOWN" ] &&
 fi
 if [ "$EXE_DELETED" = "1" ]; then
 	STALE+=("running process holds a deleted inode — it was never restarted")
+fi
+# Tracked modifications only. They mean the built binary cannot be reproduced
+# from origin, which is a real deviation worth naming. Untracked files are
+# deliberately absent from this list.
+if [ "$TRACKED_DIRTY_COUNT" != "0" ]; then
+	STALE+=("$TRACKED_DIRTY_COUNT tracked file(s) modified — this build does not match origin/$BRANCH")
 fi
 
 if [ "${#STALE[@]}" -gt 0 ]; then

@@ -1272,6 +1272,16 @@ That is the whole procedure. The script fetches, fast-forwards, builds, installs
 **refuses to half-update**: every step is checked, and each failure names what state the host was
 left in. Pass `--check` to find out whether an update is available without applying one.
 
+**Untracked files do not stop it, modified tracked files do**, and the split is deliberate rather
+than lenient. A server accumulates scratch files — the owner's checkout carries a
+`kavita-watermark-probe.sh` in its root — and an untracked file cannot affect a fast-forward or be
+lost by one, so aborting on it would only teach the operator to pass `USARR_ALLOW_DIRTY=1` on every
+run, disabling the half of the check that matters. A modified **tracked** file can make the merge
+fail or lose work, so that is the case that stops the script and the case `USARR_ALLOW_DIRTY=1`
+overrides. The build output is gitignored (`.gitignore`: `/usarr`), so it is not untracked cruft at
+all; if that entry ever goes missing, `update.sh` says so by name rather than letting every run
+report a tree that looks dirty.
+
 **Why a script rather than three commands.** All three commands below can succeed while the live
 process keeps running the old build, and none of them says so. The checkout can merge instead of
 fast-forwarding and end up on a commit that is on no branch anywhere; `make build` can be skipped in
@@ -1327,9 +1337,12 @@ document it against: the very first deployment was this same sequence preceded b
 Read-only. It writes nothing and restarts nothing; its one side effect is the `git fetch` that makes
 "how far behind?" answerable at all, and `USARR_NO_FETCH=1` drops even that.
 
-It prints the checkout's branch, `HEAD`, `origin/main` and commit distance, the dirty-file count, the
-installed binary's path, mtime and `--version` output, and then the service's active state, `MainPID`,
-`/proc/<pid>/exe` and the commit from its startup journal line. It ends on one verdict line.
+It prints the checkout's branch, `HEAD`, `origin/main` and commit distance, then **two** file counts —
+modified tracked files and untracked files, never one combined "dirty" number — then the installed
+binary's path, mtime and `--version` output, and then the service's active state, `MainPID`,
+`/proc/<pid>/exe` and the commit from its startup journal line. It ends on one verdict line. Only the
+tracked count reaches that verdict: a scratch file sitting in the checkout says nothing about whether
+the install is current, and letting it colour the verdict would make a healthy host read as broken.
 
 **Three links, reported separately, because they go stale independently**: the checkout can be behind
 `origin`, the installed binary can be older than the checkout, and the running process can be older
@@ -1372,7 +1385,7 @@ target above, so on the owner's host neither needs an argument.
 | `USARR_INSTALL_PATH` | `/usr/local/bin/usarr` | Where the built binary is installed to. |
 | `USARR_SERVICE` | `usarr` | The systemd unit name. |
 | `USARR_BRANCH` | `main` | The branch `HEAD` must be on; also what `origin` is compared against. |
-| `USARR_ALLOW_DIRTY` | unset | `update.sh` only: `1` builds a dirty tree instead of aborting. The abort lists the offending files. |
+| `USARR_ALLOW_DIRTY` | unset | `update.sh` only: `1` builds despite locally modified **tracked** files instead of aborting. The abort lists them. **Untracked files never block an update** and this variable has nothing to say about them. |
 | `USARR_NO_FETCH` | unset | `status.sh` only: `1` skips `git fetch` and compares against whatever `origin/$USARR_BRANCH` is already on disk. |
 
 ### 12.2 What the server needs before its first `make build`

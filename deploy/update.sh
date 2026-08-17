@@ -17,7 +17,8 @@
 #   USARR_INSTALL_PATH  where the binary is installed    (default /usr/local/bin/usarr)
 #   USARR_SERVICE       systemd unit name                (default usarr)
 #   USARR_BRANCH        branch that must be checked out  (default main)
-#   USARR_ALLOW_DIRTY   set to 1 to build a dirty tree   (default unset)
+#   USARR_ALLOW_DIRTY   set to 1 to build with modified TRACKED files (default unset).
+#                       Untracked files never block an update.
 #
 # Usage: deploy/update.sh [--check]
 #   --check  report whether an update is available and exit; change nothing.
@@ -74,16 +75,35 @@ fi
 step "checkout: $CHECKOUT"
 
 # ── 2. clean tree, right branch ──────────────────────────────────────────────
-DIRTY="$(git status --porcelain)"
-if [ -n "$DIRTY" ]; then
+# TRACKED and UNTRACKED are two different questions and only one of them is a
+# reason to stop. A modified tracked file can make the fast-forward below fail
+# or lose work; an untracked scratch file cannot do either. Servers accumulate
+# untracked cruft — a probe script left in the checkout root is the normal case,
+# not a fault — and aborting on it would train the operator to pass
+# USARR_ALLOW_DIRTY=1 every time, which would disable the check that matters.
+TRACKED_DIRTY="$(git status --porcelain --untracked-files=no)"
+UNTRACKED="$(git ls-files --others --exclude-standard)"
+
+if [ -n "$TRACKED_DIRTY" ]; then
 	if [ "$ALLOW_DIRTY" = "1" ]; then
-		info "working tree is dirty; USARR_ALLOW_DIRTY=1, continuing:"
-		printf '%s\n' "$DIRTY" | sed 's/^/      /'
+		info "tracked files are modified; USARR_ALLOW_DIRTY=1, continuing:"
+		printf '%s\n' "$TRACKED_DIRTY" | sed 's/^/      /'
 	else
-		printf '\nupdate: FAILED: working tree is dirty\n' >&2
-		printf '%s\n' "$DIRTY" | sed 's/^/  /' >&2
+		printf '\nupdate: FAILED: tracked files are modified in %s\n' "$CHECKOUT" >&2
+		printf '%s\n' "$TRACKED_DIRTY" | sed 's/^/  /' >&2
 		printf '  Commit, stash or discard these, or set USARR_ALLOW_DIRTY=1.\n' >&2
+		printf '  (Untracked files are ignored and never block an update.)\n' >&2
 		exit 1
+	fi
+fi
+
+if [ -n "$UNTRACKED" ]; then
+	info "$(printf '%s\n' "$UNTRACKED" | wc -l | tr -d ' ') untracked file(s) present; ignored"
+	# If the build output itself is showing up as untracked, .gitignore is
+	# wrong and every future run would report cruft that is only the last
+	# build. Worth one line, because the fix is one line.
+	if printf '%s\n' "$UNTRACKED" | grep -qx 'usarr'; then
+		info "NOTE: ./usarr is NOT gitignored — add '/usarr' to .gitignore"
 	fi
 fi
 
