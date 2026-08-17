@@ -3795,7 +3795,33 @@ not restate it** (ADR-0035). Two proposals are decisions rather than defaults:
   🔍 *Kavita's `LibraryType 3 (Image)` was the second example here and is withdrawn: re-checked
   against Kavita `main` on 2026-08-16, `API/Entities/Enums/LibraryType.cs` declares exactly `Manga = 0`,
   `Comic = 1`, `Book = 2` and no `Image` member at all, so the claim cannot be sourced. The rule does
-  not depend on it.* **The column holding both outcomes is headed `Decision`, not `Accept`** — accepted rows
+  not depend on it.*
+  ⚠️ **Amendment, 2026-08-17 — the withdrawal is itself withdrawn.** `Image = 3` is real, and
+  `LibraryType 3` returns as the second worked example. At tag **`v0.9.0.2`** (commit **`6bcd5689`**),
+  the version the owner runs, `Kavita.Models/Entities/Enums/LibraryType.cs` declares **six** members —
+  `Manga = 0`, `Comic = 1`, `Book = 2`, `Image = 3`, `LightNovel = 4`, `ComicVine = 5` — and the file
+  is byte-identical at `develop` (`9c3e5400`). Nor is `Image` new: it is already present at tag
+  **`v0.7.11`** (`caf2ba08`, 2023-12-03), so it has shipped in every release for about 2.7 years.
+  UsArr's own client was correct throughout — `internal/kavita` declares all six and
+  `internal/kavita/contract_test.go` asserts them against the vendored spec — so **the document was
+  the only defect**. `internal/libsync/kavita.go` records the contradiction and deliberately declines
+  to pick a side, since resolving it needed a network fact that pass could not verify (REVIEW-LOG
+  LS-04); it is picked here.
+  🚩 **The root cause is the part worth keeping, and the rule goes in the correction: any Kavita
+  re-check must read a TAG or `develop`, never `main`.** Kavita's `main` is frozen at the v0.7.8
+  release commit — `97950804`, dated **2023-09-03**, subject `v0.7.8 - New Filtering System (#2260)`
+  — while its release line is `develop` plus tags. The withdrawal note above was not careless: it is
+  exactly **reproducible**, because `main` at the very path it cites does declare those three members
+  and no more. It read a real file correctly, and the file had been stale for three years. Its own
+  tells confirm which tree it read — `API/Entities/` exists in no v0.9.x layout, and a three-member
+  enum has not been current since 2023.
+  **The general form, because this repo vendors several upstreams: an upstream project's `main` is
+  not necessarily its release line, and a version claim read from the wrong branch is wrong in a way
+  that looks thorough.** That is `DEVELOPMENT.md` §11 rule 5, `name the surface, not just the
+  value`, pointed at someone else's repository: two correct reads of two different trees are not
+  comparable, and the one that is not the release line is not evidence about a release. **Cite a tag
+  and a commit, never a branch name**, for the reason this entry demonstrates.
+  **The column holding both outcomes is headed `Decision`, not `Accept`** — accepted rows
   keep their checkbox, the declined row keeps its word, and an `Accept` header over a cell reading
   `declined` is a header contradicting its own cell.
 
