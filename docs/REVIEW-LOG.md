@@ -13430,6 +13430,507 @@ below was taken with both caches isolated under the scratchpad and neither one c
 
 ---
 
+# VN9-07 — the classifier hold cleared on a retry, and three ADR-0041 stalenesses landed behind it
+
+**Date:** 2026-08-18. **Prefix:** `VN9-`, continuing from
+[`VN9-06`](#vn9-06--search-promised-six-media-types-on-an-install-that-can-hold-two), which was the
+highest `VN9-` **entry** on `main` when this was written. ⚠️ `VN9-03`'s VN9.19 named a *commit*
+"VN9-07"; `VN9-06` already ruled that those were commit labels rather than entry ids, and this entry
+takes `VN9-07` on the same ruling — the next free entry id, never renumbered and never reused.
+Flagged rather than silently resolved, exactly as `VN9-06` flagged it.
+
+## VN9.29 The probe was the task, and it came back clear
+
+Roughly fifty minutes before this pass, `git merge origin/main` on this branch was refused by the
+auto-mode classifier — *"Blocked by classifier"*, no rule named — on a merge that was a **pure
+fast-forward**: the branch was a strict ancestor of `origin/main`, so the operation moved a ref and
+changed no content. Three edits were finished, verified green, and stranded behind it.
+
+The retry was run as its own step, under the standing instruction that a second denial would end the
+task with the tree untouched and that **no alternative route** — `pull`, `rebase`, `reset`,
+`checkout -B`, cherry-pick, a worktree — would be attempted for the same result. **It was allowed:**
+`Updating ba0f47e..d81a66f`, fast-forward, 28 files. A second fast-forward mid-pass
+(`d81a66f..90f1697`) was allowed as well.
+
+⚠️ **This is evidence about one retry, not a diagnosis.** Nothing here identifies what the classifier
+objected to the first time, and no rule was named on either attempt. What can be said is narrow, and
+is recorded because the narrow version is the true one: the same command, on the same branch, against
+a `origin/main` that had only moved further ahead, was refused once and allowed twice, with no change
+to the repository or to the command in between.
+
+## VN9.30 `lavender` and `thistle` are a different case from `orchid`, `plum` and `magenta`
+
+`VN9-05` closed the three CSS keywords that ARE §13's four banned families under another name. **Two
+more exist, and the argument for them is not the same argument.**
+
+`web/src/lib/designrules.test.ts` — another thread's file, not touched here — carries the measurement
+in its own comment, under its `STILL NOT CAUGHT` heading:
+
+```
+      #d8bfd8  CSS thistle   C 0.0439  H 326.0°
+      #e6e6fa  CSS lavender  C 0.0269  H 285.9°
+```
+
+These are the family's pale tints. `orchid` at C 0.1813 is reachable by a chroma floor in principle;
+`thistle` at C 0.0439 and `lavender` at C 0.0269 sit **below any floor that does not also ban
+neutrals** — the same limit that file records for `violet-100` and `violet-50`. So for these two the
+word rule is not a convenience over the value rule: **it is the only mechanism that reaches them at
+all.** That reason is now written above the rule in `check.mjs` and into §13's bullet, because it is
+precisely the thing a later reader would otherwise try to replace with a floor.
+
+Those two comment lines are the **only** occurrences of either word anywhere in the repository
+outside `node_modules/`, and they are a colour argument rather than a non-colour use. **They are not
+a reason to decline either word** — they are corroboration for both, and `web/` is not in the scanned
+corpus.
+
+## VN9.31 Collateral damage checked before either word was added
+
+Both are English words as well as CSS keywords, so `VN9-05`'s standard applies: a rule that fires on
+prose gets turned off.
+
+- **Zero word-bounded, case-insensitive hits across all of `docs/`** for either word — and zero hits
+  for any compound containing either, so there is not even a near-miss in the tree to argue about.
+- **`\b` declines the compounds that matter**, verified by running the exact pattern against each
+  rather than reasoned about: `lavenderblush`, `thistledown`, `whistle`, `bristle`, `bristles` and
+  `epistle` are all non-matches, while `lavender`, `thistle`, `Thistle` and `thistle.` all match.
+
+`lavenderblush` is the one worth naming, because it is itself a CSS colour keyword rather than an
+innocent English compound. `\b` declines it, and declining it is **right on the merits and not merely
+a lucky property of the pattern**: `lavenderblush` is a pale near-white, not a member of the banned
+family.
+
+## VN9.32 Fired twice, deliberately and separately
+
+A pattern that catches `thistle` and silently misses `lavender` reads exactly like one that catches
+both, so each word was planted on its own and the check run twice — not once with two plants. Each
+plant was `.deliberate-firing { color: <word>; }` appended to `docs/design/mockups/usarr.css`, a file
+already in the scanned set, and removed before the next was planted.
+
+Both exited **1** from `check.mjs` (`make` surfaces that as `Error 1`), naming the file, the line and
+the word:
+
+```
+FAIL  §13 colour: no indigo/violet/purple/fuchsia/orchid/plum/magenta/lavender/thistle — 1 hit(s)
+      docs/design/mockups/usarr.css:1905  lavender
+FAIL  §13 colour: no indigo/violet/purple/fuchsia/orchid/plum/magenta/lavender/thistle — 1 hit(s)
+      docs/design/mockups/usarr.css:1905  thistle
+```
+
+Each run reported `1 FAILURES` — exactly one rule, the intended one, with nothing else moving.
+`VN9-05`'s observation that the failure line names the word rather than the selector still holds and
+is still unfixed: it is `rule()`'s `m[0]`, and widening what every rule prints remains a different
+change.
+
+## VN9.33 The corpus did not move
+
+Reported before and after, so that a change in **what** the rule inspects could not pass unnoticed
+behind a change in what it forbids:
+
+| | files | chars scanned | violations | exit |
+| --- | --- | --- | --- | --- |
+| before | 9 | 843,447 | 0 | 0 |
+| after | 9 | 843,447 | 0 | 0 |
+
+Same nine files, same character count, same zero, `all design checks pass` on both. **The rule now
+forbids nine words and inspects exactly the same bytes** — which is the whole claim this change
+makes. Seven words to nine.
+
+## VN9.34 Rule 13's worked example was true when written, and ADR-0041 falsified it
+
+§13's rule 13 — *"Show a type, section, group or control with no content"* — carries a worked example
+of the boundary it draws, and that example was a **Comics/Kavita** row:
+
+> a row reading *"Comics — no catalogue source · Kavita · after v0.1 · Add"* (the mockup's verbatim
+> string) carries a state, a cause and an action, which is content.
+
+[ADR-0041](./DECISIONS.md#adr-0041) moved **Kavita into v0.1** as the sync core's first adapter, so
+comics is one of the two types v0.1 *does* have a source for. The example asserted the opposite of
+the roadmap it was illustrating.
+
+**Replaced with the Music/Navidrome row**, which appears in `docs/design/mockups/index.html` Block A
+in the identical construction and is genuinely sourceless in v0.1:
+
+> a row reading *"Music — no catalogue source · Navidrome · after v0.1 · Add"* (the mockup's verbatim
+> string) carries a state, a cause and an action, which is content.
+
+**The illustration is not weakened, and that was checked rather than assumed.** Rule 13's property is
+that a row with no *items* is not a region with no *content*, because it carries state (*no catalogue
+source*), cause (*Navidrome · after v0.1*) and action (*Add*). The Music row has all three, in the
+same three slots, in the same markup — it is one of the four rows the Comics row sat beside, not a
+different kind of row. It is also **more durable than the row it replaces**: Navidrome is slot #1 of
+ARCHITECTURE §16.1's post-v0.1 sequence, so music is sourceless in v0.1 both before and after the
+pending mockup redraw, whereas the Comics row is exactly what that redraw exists to move.
+
+⚠️ **A second clause in the same table cell was false for the same reason, and was corrected with
+it.** Its closing sentence read *"…the only inference is that UsArr does not do books, music or
+comics"* — books and comics are Kavita's under ADR-0041, so naming them as the missing ones repeats
+the error one sentence later. It now reads *"movies, TV, music or audiobooks"*. This is marginally
+wider than "replace the example", and it is reported rather than folded in silently: leaving it would
+have shipped a cell that contradicted its own corrected example.
+
+## VN9.35 §8.4's v0.1 sentence — the membership flipped, the count did not
+
+§8.4 draws the full-stack Home wireframe and then says what the v0.1 install is instead. It read:
+
+> v0.1 connects Sonarr, Radarr and Prowlarr only; the catalogue sources sequence after it, one at a
+> time, so on a v0.1 install music, audiobooks, ebooks and comics have **no catalogue source**…
+
+Both halves are pre-ADR-0041. It now reads:
+
+> v0.1 connects Kavita and Prowlarr only (ADR-0041); the remaining catalogue sources sequence after
+> it, one at a time, so on a v0.1 install movies, TV, music and audiobooks have **no catalogue
+> source**…
+
+Verified against the primary documents rather than taken on the routing:
+
+- **ARCHITECTURE §16.1's v0.1 entry**: *"The sync core, with one Tier 0 Go adapter in front of it:
+  Kavita … plus Prowlarr in Search-and-Grab mode (§8.5), which is the request path for all six media
+  types … Sonarr and Radarr re-sequence out of v0.1."*
+- **ADR-0041's consequence bullets**: *"v0.1's catalogue is books and comics/manga, not film and
+  TV"*, and Kavita is what writes `work_book`, `work_comic` and `work_comic_issue`, while *"the music
+  three are unaffected … still wait for Navidrome, which still has no adapter."*
+
+So ebooks and comics gain a source, movies and TV lose one. **The count of sourceless types is still
+four**, which is load-bearing rather than incidental: the sentence hands off to rule 13 *"for why
+four stateful rows are not an empty section"*, and Block A's row budget is unchanged. Only the
+membership flipped.
+
+`catalogue sources` became `remaining catalogue sources` for the same reason — with Kavita inside
+v0.1, *"the catalogue sources sequence after it"* would now be false of the set as a whole rather
+than merely imprecise.
+
+`(ADR-0041)` is written bare rather than as a link because `DESIGN-DIRECTION.md` cites every other
+ADR that way — `ADR-0029` seventeen times, `ADR-0025` nine, `ADR-0032` three — and uses no
+`#adr-NNNN` anchor anywhere in the file. Matching the file beat matching this log.
+
+## VN9.36 What this pass did NOT do
+
+- **`docs/design/mockups/index.html` was not touched at all** — not its install selector, not Block
+  A's rows, not any sample data. The mockup's whole v0.1 install is inverted by ADR-0041, not just
+  the one label, and a partial fix would leave the selector contradicting the rows beneath it. That
+  is a separate pass, and the Music/Navidrome example in VN9.34 was chosen partly because it survives
+  that pass unchanged.
+- **A fourth stale sentence was found and deliberately left.** `DESIGN-DIRECTION.md` line 234's table
+  row still reads *"v0.1 connects three services: Sonarr, Radarr and Prowlarr"* and *"v0.1 has no
+  catalogue source for music, audiobooks, ebooks or comics"* — the same ADR-0041 error as §8.4's, in
+  a different section with its own owner. **Raised, not fixed**: this pass was scoped to three named
+  edits, and quietly widening to a fourth would make the diff harder to review, not easier. Recorded
+  here so it is not lost.
+- **§13's frontend chroma rule was not touched**, as in `VN9-05`. VN9.30 is a statement about *why
+  the word rule is necessary*, not a proposal to move the floor.
+- **`web/src/lib/designrules.test.ts` was not touched**, though it is where VN9.30's measurement comes
+  from. It is another thread's file; the escape it records is now closed on this side of the fence
+  only.
+- **§8.4's wireframe was not redrawn.** It draws the full stack deliberately — *"six populated types
+  is what this layout has to be judged on"* — and that is unaffected by which two types v0.1 sources.
+  Only the sentence saying what v0.1 has *instead* was wrong.
+
+## VN9.37 Gate
+
+`make design` was run **four** times: a baseline before any edit, once per deliberate firing, and
+once clean on the final tree with the review log in it. Baseline and final are identical in corpus
+(VN9.33) and both end `all design checks pass` at exit 0.
+
+`make check` passed at exit 0 — `check: OK`. Following `VN9-06`'s finding, it was run with **both**
+`GOCACHE` and `GOLANGCI_LINT_CACHE` isolated under the scratchpad, and **neither shared cache was
+cleaned**, since other agents may be mid-run. golangci-lint 2.12.2 reported `0 issues.` over 13 Go
+packages, govulncheck v1.7.0 found no called vulnerabilities, and 479 frontend tests passed across 12
+files.
+
+⚠️ **No phantom findings appeared, and that is a weak confirmation of `VN9-06`'s controlled pair
+rather than a replication of it.** This diff touches only `docs/`, so there was no Go change for a
+stale issue to be attributed to; a clean lint here is consistent with the poisoning being real and
+equally consistent with it being absent. The isolation was applied because it is cheap and the
+finding is credible, not because this run tested it.
+
+---
+
+# EXPL-04 — A guard that diagnosed an outage as news, and three more readings it could not give
+
+**Prefix note.** `EXPL-` is this thread's prefix, already carrying [`EXPL-01`](#expl-01),
+[`EXPL-02`](#expl-02) and [`EXPL-03`](#expl-03); this is `EXPL-04`. Checked free immediately before
+the write, against every remote head — `git for-each-ref refs/remotes/origin/` piped through
+`git grep -ohE '\bEXPL-0?[0-9]+\b' -- docs/REVIEW-LOG.md` returned `EXPL-01`, `EXPL-02`, `EXPL-03`
+and nothing else. No shared counter was read.
+
+**All five findings are against this thread's own `c8022f1`**, raised by a read-only adversarial
+reviewer who verified them by breaking things rather than by reading. **Every one was re-verified
+here, by breaking the same thing again, before anything was changed** — a finding taken on the
+reviewer's word has been believed, not confirmed. The verbatim before/after output is in each
+section.
+
+**They share a root, and it is the one this thread spent the day correcting in other people's
+work: a message that states a cause nobody established.** `make spec-drift` shipped in `c8022f1`
+with a floor assertion that correctly detects *"nothing was checked"* and a four-cause list that
+explains it — and the list was written from imagination rather than from firing. One cause was
+false, one was circular, one realistic failure had no cause at all, and the epilogue attached to
+the *interesting* failure fired on the *commonest* one. **A guard that guesses will have its guess
+read as a finding**, which is precisely [`DEVELOPMENT.md` §11 rule 4](./DEVELOPMENT.md#11-onboarding-an-ai-agent)'s
+concern one level up: not just that "found nothing" and "looked at nothing" must differ, but that
+neither may be reported as something else.
+
+## EXPL4.1 — Applied (Serious): the epilogue diagnosed "upstream moved" at a 502 from a proxy
+
+**The finding.** The `rc != 0` epilogue printed unconditionally, asserting *"a failure here is NEWS,
+not a broken build: it means upstream moved."* The reviewer pointed `upstreamRepo` at an unreachable
+host and the target still said upstream had moved. It had not.
+
+**Re-verified before fixing.** Same edit, 2026-08-18, `upstreamRepo` → an unreachable host:
+
+```
+    specdrift_upstream_test.go:96: git fetch --quiet --filter=blob:none --depth 1 origin refs/tags/v2.5.2.5491: exit status 128
+        fatal: unable to access 'https://unreachable.invalid.example/Prowlarr/Prowlarr/': CONNECT tunnel failed, response 502
+--- FAIL: TestSpecDriftRefsStillShareThePinnedBlob (0.40s)
+
+spec-drift: 1 drift check(s) ran; the run FAILED (go test exit 1).
+
+a failure here is NEWS, not a broken build: it means upstream moved. Read the message,
+re-vendor deliberately, and revisit the ADR whose premise just changed.
+```
+
+**Why it fired the wrong reading, mechanically.** The test's own honest reading — *"(a) LOCAL
+MISTAKE, NOT UPSTREAM NEWS"* — lives inside the `len(diverged) > 0` branch, which a `t.Fatalf` out of
+`run()` never reaches. So the commonest failure of a network target, an outage, had **no** correct
+signpost anywhere, and inherited standing advice written for blob divergence.
+
+**The fix: the test classifies itself, and the target says only what the classification supports.**
+Three `SPEC_DRIFT_VERDICT` sentinels, chosen because they carry *different actions*, not different
+wording. `run()` now takes the verdict to print if its command fails, because the failures are not
+alike: a fetch that never completes says nothing about upstream, a `rev-parse` that cannot resolve
+the path says upstream moved the file.
+
+| Verdict | Emitted at | What the target is then allowed to say |
+| --- | --- | --- |
+| `drift` | blob comparison failed | upstream answered and moved the spec — **news** |
+| `path-moved` | `git rev-parse` failed | upstream answered, spec not at that path — **different news**; the blob comparison never ran |
+| `unreached` | `git init` / `remote add` / `fetch` failed | **not news about upstream**; no fact established in either direction |
+| *(none)* | anything else | **unclassified — the target does not know why, and will not guess** |
+
+**Fired, all four branches, after the fix.** The unreachable host now reads:
+
+```
+    specdrift_upstream_test.go:133: SPEC_DRIFT_VERDICT: unreached
+    specdrift_upstream_test.go:133: git fetch --quiet --filter=blob:none --depth 1 origin refs/tags/v2.5.2.5491: exit status 128
+        fatal: unable to access 'https://unreachable.invalid.example/Prowlarr/Prowlarr/': CONNECT tunnel failed, response 502
+
+spec-drift: 1 drift check(s) ran; the run FAILED (go test exit 1).
+
+VERDICT: UPSTREAM NOT REACHED — THIS IS NOT NEWS ABOUT UPSTREAM. The fetch never
+got an answer: DNS, a proxy, an outage, a rate limit, or git failing locally.
+NO FACT ABOUT THE SPEC WAS ESTABLISHED, in either direction.
+```
+
+**A changed message is not evidence the diagnosis is now correct, so the other three were fired
+too.** Genuine drift, forced by setting `vendoredSpecBlob` to forty zeroes — upstream reachable, blob
+genuinely not the pinned one — still gets the news reading, which is the half that had to survive:
+
+```
+VERDICT: DRIFT — and this one IS news, not a broken build. Upstream answered, and
+the spec is no longer the pinned blob.
+```
+
+`specPathInUpstream` pointed at `openapi-RENAMED-UPSTREAM.json`, which upstream answers and does not
+have:
+
+```
+    specdrift_upstream_test.go:134: SPEC_DRIFT_VERDICT: path-moved
+        fatal: path 'src/Prowlarr.Api.V1/openapi-RENAMED-UPSTREAM.json' does not exist in 'FETCH_HEAD'
+
+VERDICT: PATH MOVED — upstream answered, but the spec is not at the path this
+guard reads, so the blob comparison NEVER HAPPENED.
+```
+
+And a synthetic `t.Error` that prints no sentinel, to prove the fallback refuses to invent one:
+
+```
+VERDICT: UNCLASSIFIED — this target does not know why, and will not guess. The run
+failed without printing a SPEC_DRIFT_VERDICT line, so it is NOT established that
+upstream moved, and NOT established that it did not.
+```
+
+## EXPL4.2 — Applied: cause (b) claimed a lost build tag would be caught; it was invisible
+
+**The finding.** Cause (b) read *"IT WAS DELETED, or its file lost its `//go:build upstream` line."*
+The second half is false.
+
+**Re-verified before fixing.** Deleting line 1 of `specdrift_upstream_test.go` — `_upstream_test.go`
+is not a `GOOS`/`GOARCH` suffix, so it carries no implicit constraint and the file simply joins the
+default build:
+
+```
+--- PASS: TestSpecDriftRefsStillShareThePinnedBlob (2.59s)
+ok  	github.com/jdb3750/UsArr/internal/servarr	3.611s
+
+spec-drift: OK — 1 drift check(s) actually ran and passed (floor 1).
+MAKE_EXIT=0
+```
+
+Green, exit 0, and **nothing else in the repo asserts the tag** — `make check` would simply have
+started skipping the test via `requireOptIn` instead of never compiling it.
+
+**Fixed by detecting it, not by softening the text**, as asked. An offline preflight lists the
+selected tests **without** `-tags=upstream`; a non-empty list means the tag is gone. `go test -list`
+compiles and enumerates without executing, so this adds **no network call**, and it runs inside
+`spec-drift` only — `check` is still `check-offline vuln`, still exactly two calls.
+
+**Fired after the fix**, same deletion, and note it now fails *before* the network is touched:
+
+```
+spec-drift: FAILED — 1 `TestSpecDrift…` test(s) are visible WITHOUT -tags=upstream.
+
+The `//go:build upstream` line is gone. That tag is the whole reason `make check`
+makes exactly two network calls, so losing it puts a github.com fetch on every
+commit's gate — an upstream outage would turn unrelated commits red.
+```
+
+## EXPL4.3 — Applied: cause (a) was circular — following it literally reproduced the failure
+
+**The finding.** The prefix lived in **three** places — the Go function name, `SPEC_DRIFT_RUN`, and a
+hardcoded `grep -cE '^--- (PASS|FAIL): TestSpecDrift'` — and the advice said *"Rename it back, or
+change both together."* Two of three. Fail-closed but useless.
+
+**Re-verified before fixing** by doing exactly what the advice said: rename the function to
+`TestDriftGuard…`, move `SPEC_DRIFT_RUN` with it. The test **ran and passed**, checking both refs,
+while the target reported that nothing ran:
+
+```
+--- PASS: TestDriftGuardRefsStillShareThePinnedBlob (1.75s)
+
+spec-drift: FAILED — 0 drift check(s) ran, floor is 1.
+...
+  (a) THE DRIFT TEST WAS RENAMED out of the reserved `TestSpecDrift` prefix that
+      SPEC_DRIFT_RUN ('^TestDriftGuard') selects on. Rename it back, or change both together.
+```
+
+**Collapsed to one source of truth, as asked.** `SPEC_DRIFT_PREFIX` is now the single definition;
+`SPEC_DRIFT_RUN` and the result counter both derive from it, and `override` keeps it derived so a
+command-line `SPEC_DRIFT_RUN=` can no longer desync selector from counter. Three places became
+**two** — the variable and the Go function name — and the second is **asserted** by the preflight
+rather than left to advice, so the remaining coupling is checked rather than described.
+
+**Fired, three ways.** Function renamed with `SPEC_DRIFT_PREFIX` left behind — caught, with advice
+that names what is actually true:
+
+```
+spec-drift: FAILED — 0 test(s) carry the `TestSpecDrift` prefix, floor is 1.
+
+The tagged tree compiles, so the guard has been renamed, deleted, or never existed.
+The prefix has ONE definition — SPEC_DRIFT_PREFIX in the Makefile — and the Go
+function name must match it.
+```
+
+The **same rename, done the way the advice now says** — the case that used to reproduce the failure:
+
+```
+spec-drift: preflight OK — 1 `TestDriftGuard…` test(s) compile, behind the tag. Running them.
+--- PASS: TestDriftGuardRefsStillShareThePinnedBlob (1.88s)
+spec-drift: OK — 1 drift check(s) actually ran and passed (floor 1).
+MAKE_EXIT=0
+```
+
+And an attempt to desync through the old third place, `make spec-drift SPEC_DRIFT_PREFIX=TestDriftGuard
+SPEC_DRIFT_RUN='^TestSomethingElse'`: the `override` held, the bogus selector was ignored, and the run
+stayed coherent at exit 0.
+
+## EXPL4.4 — Applied: a tagged file that does not compile had no reading at all
+
+**The finding.** A type error in the tagged file gives `[build failed]`, zero ran, and four causes
+none of which is *"the tagged file does not compile"* — realistic, because `//go:build upstream`
+hides the file from `go build`, `go test` and (until [`EXPL-03`](#expl-03)) the linter, leaving
+`make build-tagged` as the only other thing that compiles it.
+
+**Re-verified before fixing** with `ownerRelease` changed to an int:
+
+```
+internal/servarr/specdrift_upstream_test.go:93:10: invalid operation: "refs/tags/" + ownerRelease (mismatched types untyped string and untyped int)
+FAIL	github.com/jdb3750/UsArr/internal/servarr [build failed]
+
+spec-drift: FAILED — 0 drift check(s) ran, floor is 1.
+...
+  (a) THE DRIFT TEST WAS RENAMED ...  (b) IT WAS DELETED ...  (c) IT SKIPPED ...  (d) SPEC_DRIFT_FLOOR was raised ...
+```
+
+All four wrong.
+
+**Fixed by detecting it explicitly**, as asked: the preflight's `go test -list` exit code is checked
+before its output is counted, so a build failure is reported as a build failure instead of being
+counted as an absence.
+
+**Fired after the fix**, same type error:
+
+```
+# github.com/jdb3750/UsArr/internal/servarr [github.com/jdb3750/UsArr/internal/servarr.test]
+internal/servarr/specdrift_upstream_test.go:130:10: invalid operation: "refs/tags/" + ownerRelease (mismatched types untyped string and untyped int)
+FAIL	github.com/jdb3750/UsArr/internal/servarr [build failed]
+
+spec-drift: FAILED — THE UPSTREAM-TAGGED TESTS DO NOT COMPILE (go test -list exit 1).
+
+Nothing ran, and this establishes NOTHING about upstream. The compiler output above
+is the whole story: fix it and re-run.
+```
+
+**A knock-on the preflight buys for free.** By the time control reaches the runtime floor check, the
+guard is proven to exist, compile, carry the prefix and be hidden behind the tag. That message's
+cause list therefore shrank from four guesses to the two things still possible — it skipped, or the
+binary died before printing a result line.
+
+## EXPL4.5 — Applied (residual): the floor was satisfiable from `go test`'s result cache
+
+**The finding.** `make spec-drift GOTESTFLAGS=` replayed `--- PASS:` from cache and announced the
+floor satisfied over **zero network calls**. Only `-shuffle=on` in the default `GOTESTFLAGS` was
+incidentally defeating the cache — an accident, not a guarantee.
+
+**Re-verified before fixing.** Two consecutive runs, second one verbatim:
+
+```
+--- PASS: TestSpecDriftRefsStillShareThePinnedBlob (1.87s)
+ok  	github.com/jdb3750/UsArr/internal/servarr	(cached)
+
+spec-drift: OK — 1 drift check(s) actually ran and passed (floor 1).
+```
+
+Note the duration `1.87s` replayed **identically** from the first run beside the `(cached)` marker.
+A drift check served from cache is exactly the "looked at nothing" this target exists to refuse, and
+it reached the reassuring green.
+
+**Fixed** with `-count=1`, placed **after** `$(GOTESTFLAGS)` so an override cannot drop it.
+
+**Fired after the fix**, the same two runs on the same cache-defeating path:
+
+```
+########## RUN 1 (GOTESTFLAGS= , the path that replayed from cache) ##########
+--- PASS: TestSpecDriftRefsStillShareThePinnedBlob (2.82s)
+ok  	github.com/jdb3750/UsArr/internal/servarr	2.823s
+spec-drift: OK — 1 drift check(s) actually ran and passed (floor 1).
+########## RUN 2 (immediately again — must NOT be cached) ##########
+--- PASS: TestSpecDriftRefsStillShareThePinnedBlob (1.54s)
+ok  	github.com/jdb3750/UsArr/internal/servarr	1.542s
+spec-drift: OK — 1 drift check(s) actually ran and passed (floor 1).
+```
+
+No `(cached)` marker, and a genuinely different wall-clock duration — the second run really went to
+github.com.
+
+## EXPL4.6 — What this pass did NOT do
+
+* **No production-code change.** A test file, the `Makefile` and this document. No adapter field,
+  request, migration or `web/` change.
+* **No new network call in `make check`.** The preflight uses `go test -list`, which compiles and
+  enumerates without executing, and it lives in `spec-drift` only. `check` is still
+  `check-offline vuln`; `check-offline` is still `fmt-check lint build-tagged modverify secrets test`.
+  Neither mentions `spec-drift`.
+* **The `SPEC_DRIFT_FLOOR` banner residual is deliberately untouched** — it belongs to the thread
+  that owns the pin-note machinery, and two threads editing the same banner is how the collisions
+  recorded elsewhere in this log happened.
+* **`make spec-drift` is still unautomated**, exactly as [ADR-0047](./DECISIONS.md#adr-0047)'s open
+  question 2 says, and exactly as [`EXPL-03`](#expl-03) already noted. Four honest readings make the
+  target truthful when someone types it; they do not make anyone type it. There is no CI.
+* **The gate was taken with both caches isolated** — `GOLANGCI_LINT_CACHE` *and* `GOCACHE`, each a
+  fresh scratchpad directory, per the residual [`EXPL-03`](#expl-03) recorded. Neither shared cache
+  was cleaned and no worktree was removed.
+
+---
+
 # BTAG — the `bench` build-tag lint hole, and the stale-cache bullet that was not amended
 
 **Date:** 2026-08-18. **Target:** `d81a66f`. Two changes were commissioned; **one landed and one was

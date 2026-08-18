@@ -1574,12 +1574,12 @@ Its height is **O(1) in the number of media types**.
 
 ⚠️ **The wireframe below draws the *full stack* — Sonarr, Radarr, Prowlarr, Navidrome,
 Audiobookshelf and Kavita — because six populated types is what this layout has to be judged on.**
-**That is not the v0.1 install.** v0.1 connects Sonarr, Radarr and Prowlarr only; the catalogue
-sources sequence after it, one at a time, so on a v0.1 install music, audiobooks, ebooks and comics
-have **no catalogue source** and Block A renders those four rows in the per-type `unconfigured`
-state, naming the service that will populate each and the milestone it arrives in (ARCHITECTURE
-§17.2, and rule 13 in §13 below for why four stateful rows are not an empty section). Both installs
-are real screens the design owes; neither is the other's placeholder.
+**That is not the v0.1 install.** v0.1 connects Kavita and Prowlarr only (ADR-0041); the remaining
+catalogue sources sequence after it, one at a time, so on a v0.1 install movies, TV, music and
+audiobooks have **no catalogue source** and Block A renders those four rows in the per-type
+`unconfigured` state, naming the service that will populate each and the milestone it arrives in
+(ARCHITECTURE §17.2, and rule 13 in §13 below for why four stateful rows are not an empty section).
+Both installs are real screens the design owes; neither is the other's placeholder.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────────────┐
@@ -1682,7 +1682,7 @@ Carried across so none of it has to be rediscovered:
 | 10 | Let a linked work appear once per medium | §8.5 rule 4 |
 | 11 | Build per-type screens | Jellyfin serves eight content types from one card builder branching on **aspect ratio, not media type**; §9.1 already forbids varying row treatment by type |
 | 12 | Hide a media type behind "More" | Types are a closed enum capped at six and all fit the row budget. Overflow is for pinned libraries only |
-| 13 | Show a type, section, group or control with no content | §17.2; Komga's `v-if="collectionsCount > 0"`; Navidrome's `LibrarySelector` returning `null` at ≤1 library; Sonarr's status badge returning `null` at zero. ⚠️ **The bound is *no content*, not *no items*.** Home Block A's four sourceless rows in v0.1 (§17.2) are **not** an exception to this rule: a row reading *"Comics — no catalogue source · Kavita · after v0.1 · Add"* (the mockup's verbatim string) carries a state, a cause and an action, which is content. What the rule bans is a region that says nothing. Dropping those four rows instead would leave a Home screen from which the only inference is that UsArr does not do books, music or comics |
+| 13 | Show a type, section, group or control with no content | §17.2; Komga's `v-if="collectionsCount > 0"`; Navidrome's `LibrarySelector` returning `null` at ≤1 library; Sonarr's status badge returning `null` at zero. ⚠️ **The bound is *no content*, not *no items*.** Home Block A's four sourceless rows in v0.1 (§17.2) are **not** an exception to this rule: a row reading *"Music — no catalogue source · Navidrome · after v0.1 · Add"* (the mockup's verbatim string) carries a state, a cause and an action, which is content. What the rule bans is a region that says nothing. Dropping those four rows instead would leave a Home screen from which the only inference is that UsArr does not do movies, TV, music or audiobooks |
 
 ---
 
@@ -2929,8 +2929,10 @@ widened, and nothing else. The `[review]` rules below are still human judgement 
 
 **Colour**
 - `[grep]` No `indigo|violet|purple|fuchsia` class or equivalent hex/oklch anywhere in the app —
-  and none of `orchid`, `plum` or `magenta` either, which are the same four families wearing
-  another CSS keyword and escape the word list otherwise.
+  and none of `orchid`, `plum`, `magenta`, `lavender` or `thistle` either, which are the same four
+  families wearing another CSS keyword and escape the word list otherwise. The last two are the
+  family's pale tints, and they escape a chroma floor as well as the word list: `thistle` measures
+  C 0.0439 and `lavender` C 0.0269, below any floor that does not also ban neutrals.
 - `[grep]` No `bg-gradient`, `linear-gradient`, `radial-gradient` or `bg-clip-text` in app CSS.
 - `[grep]` No `box-shadow` with a non-neutral colour; no `text-shadow`; no hued `drop-shadow`.
 - `[grep]` No `#fff`, `#ffffff`, `#000`, `#000000`, `white` or `black` literals — use tokens.
