@@ -61,8 +61,15 @@
  * is a read of which media types are PRESENT IN `work` — split by
  * `edition.format` for the Ebooks/Audiobooks pair, since §17.2 makes those two
  * a `(kind, formats)` pair rather than a kind of their own — and that read does
- * not exist at any layer. No store method (`internal/store` ships
- * `ListRecentWorks` and nothing that aggregates), no route
+ * not exist at any layer. No store method: `internal/store` ships
+ * `ListRecentWorks` and nothing that rolls up BY TYPE. ⚠️ THAT USED TO READ
+ * **"and nothing that aggregates"**, WHICH IS TOO STRONG AND WAS FALSIFIED BY
+ * THE READ IT NAMES — `ListRecentWorks` aggregates plenty, just per WORK rather
+ * than per type: its `RecentWork` carries `HaveCount`, `WantCount` and the
+ * `MIN(edition.format = 'audiobook')` that `mediaTypeOf` reads
+ * (`internal/store/recent.go`). Block A needs a DIFFERENT SHAPE — one row per
+ * media type, counted across the catalogue — and that is the shape nothing
+ * computes. No route
  * (`internal/httpapi/server.go` registers `GET /api/v1/library/recent` and no
  * per-type read), no aggregate wire type (`recentWorksResponse` is
  * `{items, limit, next_cursor}`, `internal/httpapi/library.go`), and not even
@@ -154,7 +161,20 @@ export function homeMode(health: ServicesHealth): HomeMode {
  * never draws an input that has nothing behind it. A search box that accepts a
  * query and can only fail is the invented status CLAUDE.md forbids, expressed
  * as a control rather than as a number — the same reason `routes/search` draws
- * a sentence instead of an input over an index that does not exist.
+ * a sentence instead of an input.
+ *
+ * ⚠️ THE REASON GIVEN FOR THAT SENTENCE WAS **"over an index that does not
+ * exist"**, AND THAT PREMISE IS DEAD. The index exists: `internal/libsync`
+ * imports a catalogue and `internal/store`'s `ApplyCatalogueBatch` writes
+ * `search_doc`, `search_fts` and `search_trgm` beside the rows, all three
+ * created by `internal/db/migrations/00005_library_sync.sql`. The screen this
+ * sentence points AT has since retracted it in as many words
+ * (`web/src/routes/search/+page.svelte`, "THE INDEX IS NO LONGER THE MISSING
+ * HALF"), so this line was citing a reason its own referent had withdrawn.
+ * **The analogy survives on the half that is real**: what is missing is the
+ * QUERY. `internal/httpapi/server.go` registers `GET /api/v1/library/recent`
+ * and no other `/api/v1/library/*` route, so a library-search input still has
+ * nothing to call. Same hole, one layer up from where this used to put it.
  */
 export function hasIndexer(health: ServicesHealth): boolean {
 	return health.services.some(isIndexer);
@@ -174,8 +194,16 @@ export function hasIndexer(health: ServicesHealth): boolean {
  * fans out to an indexer; submitting navigates to Requests with `?q=`, which is
  * §17.4's own mechanism (`requestsSearchHref`). Home stays a local read.
  *
- * ⚠️ THIS STRING IS THE SEAM, AND IT IS THE ONLY THING THAT CHANGES WHEN THE
- * LIBRARY INDEX LANDS. §8.3 gives that index a persistent input, at which point
+ * ⚠️ THIS STRING IS THE SEAM, AND IT IS THE ONLY THING THAT CHANGES WHEN
+ * LIBRARY SEARCH LANDS. ⚠️ THE TRIGGER USED TO BE WRITTEN AS **"WHEN THE
+ * LIBRARY INDEX LANDS"**, AND THAT PREMISE IS DEAD WITH THE ONE IN
+ * `hasIndexer` above: the index landed with the catalogue import — migration
+ * `00005_library_sync.sql` creates `search_doc`, `search_fts` and
+ * `search_trgm`, and `ApplyCatalogueBatch` fills them — and this string did not
+ * change, because the index was never what it was waiting on. WHAT IT IS
+ * WAITING ON IS THE QUERY: `internal/httpapi/server.go` registers no
+ * library-search route, only `GET /api/v1/library/recent`. §8.3 gives library
+ * search a persistent input, at which point
  * Home's box becomes library search: same element, same submit, a different
  * destination and this sentence rewritten. Keeping the destination in
  * `requestsSearchHref` and the scope in a constant is what makes that a
