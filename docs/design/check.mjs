@@ -625,13 +625,18 @@ head('1. DESIGN-DIRECTION §13 ban list (static, comments stripped)');
 note(`${FILES.length} source files: ` + FILES.map((f) => rel(f.path).replace('docs/design/', '')).join(' '));
 
 /* --- colour ------------------------------------------------------------- */
-/* The four families §13 names, plus the three CSS keywords that ARE those
+/* The four families §13 names, plus the five CSS keywords that ARE those
  * families under another name: `orchid` (#da70d6), `plum` (#dda0dd) and
- * `magenta` (#f0f, the `fuchsia` synonym). Word-banning them costs nothing —
- * `\b` already declines `plumbing`, `plummet` and `magentaBright`, and no
- * non-colour use of any of the three exists anywhere in docs/. */
-rule('§13 colour: no indigo/violet/purple/fuchsia/orchid/plum/magenta',
-  /\b(indigo|violet|purple|fuchsia|orchid|plum|magenta)\b/i);
+ * `magenta` (#f0f, the `fuchsia` synonym), then the family's two pale tints,
+ * `thistle` (#d8bfd8) and `lavender` (#e6e6fa). The tints are the reason this
+ * list cannot be replaced by a chroma floor: at C 0.0439 and C 0.0269 they sit
+ * below any floor that does not also ban neutrals, so the word rule is the
+ * only thing that reaches them. Word-banning all five costs nothing — `\b`
+ * already declines `plumbing`, `plummet`, `magentaBright`, `lavenderblush`,
+ * `thistledown`, `whistle` and `bristle`, and no non-colour use of any of the
+ * five exists anywhere in docs/. */
+rule('§13 colour: no indigo/violet/purple/fuchsia/orchid/plum/magenta/lavender/thistle',
+  /\b(indigo|violet|purple|fuchsia|orchid|plum|magenta|lavender|thistle)\b/i);
 rule('§13 colour: no gradients or bg-clip-text', /\b(linear-gradient|radial-gradient|conic-gradient|bg-gradient|bg-clip-text)\b/i);
 rule('§13 colour: no pure black or white literals',
   /(#fff\b|#ffffff\b|#000\b|#000000\b|\bcolor:\s*(white|black)\b|\bbackground(-color)?:\s*(white|black)\b|\brgba?\(\s*0\s*,\s*0\s*,\s*0\b|\brgba?\(\s*255\s*,\s*255\s*,\s*255\b)/i);
