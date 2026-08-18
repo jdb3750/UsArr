@@ -5,7 +5,10 @@
  * `docs/design/DESIGN-DIRECTION.md` §13, plus one from `docs/ARCHITECTURE.md`
  * §17.4, and no others:
  *
- *   1. colour — no indigo / violet / purple / fuchsia, BY NAME
+ *   1. colour — no indigo / violet / purple / fuchsia, BY NAME, plus the five
+ *               CSS keywords that are those families under another name
+ *               (check.mjs's list, taken whole: orchid, plum, magenta,
+ *               lavender, thistle)
  *   2. colour — no indigo / violet / purple / fuchsia, BY VALUE (OKLCH)
  *   3. colour — no gradient, no bg-clip-text
  *   4. layout — no backdrop-filter / backdrop-blur
@@ -165,15 +168,17 @@
  * §17.4 rather than retyped here, so §17 stays the single definition and this
  * file stays a check that the app has not drifted from it.
  *
- * ⚠️ AND ONE PLACE THIS FILE IS KNOWINGLY BEHIND check.mjs AS OF 2026-08-17.
- * Design's `5879d50` widened the gate's colour word list past §13's four
- * families to the CSS keywords that are those families under another name, and
- * more are landing. Rule 1 below still bans four. THAT SYNC IS DELIBERATELY NOT
- * MADE HERE YET: the gate's list is mid-change, and syncing to a moving list
- * means being wrong in between and doing it twice. It is a known gap, recorded
- * rather than half-closed, and it closes in one edit against the gate's final
- * list. ⚠️ Do not partially sync it — read `docs/design/check.mjs` and take the
- * whole list, or take none of it.
+ * RULE 1'S WORD LIST IS check.mjs's, AND IS NOW IN SYNC. Design widened the
+ * gate's list past §13's four families to the CSS keywords that are those
+ * families under another name — `5879d50` added `orchid`, `plum` and `magenta`,
+ * `2895961` added the pale tints `lavender` and `thistle` — and rule 1 was held
+ * at four while that list was moving, on the ground that syncing to a moving
+ * list means being wrong in between and doing it twice. The list has settled at
+ * nine and rule 1 bans nine; the gap that note recorded is closed.
+ * ⚠️ The rule that closed it still stands for the next widening: this list is
+ * NOT maintained here. Read it off `docs/design/check.mjs` and take the whole
+ * list, or take none of it — a partial sync is the one outcome refused, and
+ * there is no exception machinery in this file for a word the gate bans.
  *
  * TWO PROPERTIES INHERITED FROM check.mjs, BECAUSE THEY ARE WHY IT IS TRUSTED:
  *
@@ -1116,19 +1121,20 @@ const SEARCH_COPY: readonly CopyString[] = COPY.filter((s) => s.file.startsWith(
  *       #800080  CSS purple    C 0.1935  H 328.4°   } were rule-1-only, by name
  *       #4b0082  CSS indigo    C 0.1793  H 301.7°   } now banned by value too, so
  *       #ee82ee  CSS violet    C 0.1861  H 327.2°   } the hex form no longer walks
- *       #da70d6  CSS orchid    C 0.1813  H 328.7°   was caught by NEITHER rule
+ *       #da70d6  CSS orchid    C 0.1813  H 328.7°   was caught by NEITHER rule;
+ *                                                  now caught by both
  *       #c4b5fd  violet-300    C 0.1013  H 293.6°   } the tints, which the old
  *       #a5b4fc  indigo-300    C 0.1041  H 274.7°   } comment recorded as being
  *       #ddd6fe  violet-200    C 0.0549  H 293.3°   } out of reach of ANY floor
  *       #c7d2fe  indigo-200    C 0.0622  H 274.0°   }
  *
- * STILL NOT CAUGHT, and the line is now where the noise floor is rather than
- * where the palette's maximum happened to be:
+ * STILL NOT CAUGHT BY RULE 2, and the line is now where the noise floor is
+ * rather than where the palette's maximum happened to be:
  *
  *       #ede9fe  violet-100    C 0.0284  H 294.6°   the palest washes only
  *       #f5f3ff  violet-50     C 0.0161  H 293.8°
- *       #d8bfd8  CSS thistle   C 0.0439  H 326.0°
- *       #e6e6fa  CSS lavender  C 0.0269  H 285.9°
+ *       #d8bfd8  CSS thistle   C 0.0439  H 326.0°   } rule 1 catches these two
+ *       #e6e6fa  CSS lavender  C 0.0269  H 285.9°   } by NAME, and only by name
  *
  * Three things follow, and they are the reason this list is here rather than
  * summarised away:
@@ -1155,15 +1161,20 @@ const SEARCH_COPY: readonly CopyString[] = COPY.filter((s) => s.file.startsWith(
  *      the two values were never compared by the rule in the first place. It is
  *      kept because a reader WILL notice it, and it is still the sharpest
  *      illustration going of why chroma alone is not a purple test.
- *   3. RULE 1 AND RULE 2 COMPOSE, AND THE REMAINING HOLE IS NOW KEYWORD-SHAPED
- *      ONLY. `orchid`, `plum` and `magenta` are not on rule 1's word list (which
- *      is the four families §13 names), and rule 2 does not resolve CSS colour
- *      KEYWORDS at all — no keyword occurs anywhere in `web/src`, verified, and a
- *      keyword table is rule 1's shape of problem, not rule 2's. What changed is
- *      that their VALUES are now banned: `#da70d6` and `#dda0dd` both clear
- *      0.0515 inside the band, so only the literal word `orchid` still walks
- *      through. Design owns that word-list gap and is fixing it separately;
- *      recorded here, not half-closed.
+ *   3. RULE 1 AND RULE 2 COMPOSE, AND THE KEYWORD-SHAPED HOLE IS NOW CLOSED.
+ *      Rule 2 does not resolve CSS colour keywords at all, and never will — a
+ *      keyword table is rule 1's shape of problem, not rule 2's. The gap used to
+ *      be that `orchid`, `plum` and `magenta` were on NEITHER list; their values
+ *      closed first (`#da70d6` and `#dda0dd` both clear 0.0515 inside the band),
+ *      and rule 1's widening to check.mjs's nine closed the words.
+ *      `thistle` #d8bfd8 and `lavender` #e6e6fa are the pair that shows why the
+ *      word half has to exist at all rather than being an overlap with rule 2.
+ *      At chroma 0.0439 and 0.0269 they are UNDER the floor, and they are under
+ *      it for the reason item 1 gives: below about 0.05 a pale wash and a cool
+ *      grey are not separable by chroma, so any floor low enough to catch these
+ *      two would read the neutral ramps as purple. They are violet-100's case
+ *      with a CSS name on it — structurally out of reach of any chroma test,
+ *      caught by the word list or not at all.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * THE CONVERSION IS IN THIS FILE, FROM THE PUBLISHED MATRICES, AND TAKES NO
@@ -1618,8 +1629,27 @@ describe('DESIGN-DIRECTION §13 — the static rules, over web/src', () => {
 		expect(page!.src.length, 'stripping changed the file length').toBe(raw.length);
 	});
 
-	it('§13 colour: no indigo / violet / purple / fuchsia', () => {
-		const { hits } = applyRule(/\b(indigo|violet|purple|fuchsia)\b/i);
+	/* The gate's nine, transcribed whole from `docs/design/check.mjs` — the four
+	   families §13 names, plus the five CSS keywords that ARE those families
+	   under another name: `orchid` #da70d6, `plum` #dda0dd, `magenta` #f0f (the
+	   `fuchsia` synonym), and the family's two pale tints, `thistle` #d8bfd8 and
+	   `lavender` #e6e6fa.
+
+	   THE TINTS ARE WHY THIS RULE CANNOT BE FOLDED INTO RULE 2, and they are the
+	   same residual rule 2's table already records, reached from the other side:
+	   at chroma 0.0439 and 0.0269 they sit below the 0.0515 floor, and below any
+	   floor that does not also ban the neutral ramps — which is exactly what
+	   keeps violet-100 out of rule 2's reach there. No chroma threshold can
+	   catch a colour this pale without catching legitimate greys, so for these
+	   two the word list is not a convenience, it is the only guard there is.
+
+	   `\b` is what makes the widening free: it already declines `plumbing`,
+	   `plummet`, `magentaBright`, `lavenderblush`, `thistledown`, `whistle` and
+	   `bristle`, and none of the nine occurs anywhere in the corpus today. */
+	it('§13 colour: no indigo / violet / purple / fuchsia / orchid / plum / magenta / lavender / thistle', () => {
+		const { hits } = applyRule(
+			/\b(indigo|violet|purple|fuchsia|orchid|plum|magenta|lavender|thistle)\b/i
+		);
 		expect(hits.map(fmt), '§13 colour: banned colour family in web/src').toEqual([]);
 	});
 
