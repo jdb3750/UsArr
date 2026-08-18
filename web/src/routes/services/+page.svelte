@@ -130,7 +130,28 @@
 	const COLUMNS: ListColumn[] = [
 		{ id: 'service', header: 'Service', width: 'minmax(0, 1.6fr)' },
 		{ id: 'state', header: 'State', width: 'minmax(0, 1.1fr)' },
-		{ id: 'sync', header: 'Last successful sync', width: '150px' },
+		/*
+		 * 176px, AND THE NUMBER IS MEASURED RATHER THAN CHOSEN. It was 150px while
+		 * this column was the hardcoded word `Never`; it now renders
+		 * `last_full_sync_at`, whose widest form is the one §9.1 requires past 24
+		 * hours — clock, day, short month, year.
+		 *
+		 * The worst case is `23:58 on 28 Sept 2026`, and `Sept` is what makes it the
+		 * worst: en-GB's `month: 'short'` abbreviates September to four characters
+		 * and every other month to three, so this is a real string `dateOf()` emits
+		 * and not a padded guess. Measured in the PRODUCT tree, in this cell, over
+		 * all twelve months: 138.00 px with IBM Plex Sans served, 149.42 px on the
+		 * fallback stack. The cell spends 24 px on horizontal padding (150 px track
+		 * measured against a 126 px content box), so the fallback face needs
+		 * 173.42 px and 176 px is the next 8 px step above it.
+		 *
+		 * SIZED FOR THE FALLBACK FACE ON PURPOSE. At 150px the served face already
+		 * wrapped this cell to a third line — row height went 49 px to 63 px on the
+		 * one row holding a day-old timestamp — and a track sized to the served face
+		 * alone would do the same on any client that has not loaded the webfont.
+		 * The 26 px comes out of the three `fr` tracks, which have it to give.
+		 */
+		{ id: 'sync', header: 'Last successful sync', width: '176px' },
 		{ id: 'items', header: 'Items', width: '110px', align: 'end' },
 		{ id: 'problem', header: 'Problem', width: 'minmax(0, 1.9fr)' },
 		{ id: 'action', header: 'Action', width: '248px' }
@@ -1020,7 +1041,7 @@
 		</span>
 		{#if label.detail}<div class="cell-sub">{label.detail}</div>{/if}
 	{:else if column.id === 'sync'}
-		{@const sync = syncCell(row)}
+		{@const sync = syncCell(row, now)}
 		<span class:muted={sync.muted}>{sync.text}</span>
 		{#if sync.sub}<div class="cell-sub">{sync.sub}</div>{/if}
 	{:else if column.id === 'items'}

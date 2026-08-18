@@ -843,6 +843,41 @@ export interface ServiceHealth {
 	observedAt?: string;
 	/** True when no probe has been taken yet. An honest "not measured" beats a green tick. */
 	stale: boolean;
+
+	/**
+	 * When this instance last COMPLETED a full catalogue import, or `null` for
+	 * never (internal/httpapi/services.go:655, `json:"last_full_sync_at"`).
+	 *
+	 * ⚠️ `string | null`, NOT `string | undefined`, and the difference is the
+	 * contract rather than a typing preference. The server sends the key with no
+	 * `omitempty`, so `null` is a POSITIVE statement — "no full import has ever
+	 * completed here" — while an absent key would mean a build that does not send
+	 * the field. Widening this to optional would erase the fact the endpoint
+	 * exists to carry (docs/reference/http-api.md §3.2).
+	 *
+	 * ⚠️ READ IT WITH `workCount`, NEVER ALONE. A null timestamp does NOT imply
+	 * an empty catalogue: a partial import leaves its committed batches behind,
+	 * so `null` + a positive count is a real and separate state. `syncCell()` and
+	 * `itemsCell()` in ./services own the four-state rendering.
+	 */
+	lastFullSyncAt: string | null;
+
+	/**
+	 * How many DISTINCT works this instance contributes to the local catalogue
+	 * (internal/httpapi/services.go:660; the query is
+	 * `COUNT(DISTINCT l.work_id)` at internal/store/catalogue.go:1392).
+	 *
+	 * Always present, and `0` is a real answer rather than a missing one. It is
+	 * not a link count, not a media-file count and not an edition count.
+	 *
+	 * ⚠️ NOT THE SAME NUMBER AS the Libraries endpoint's per-library
+	 * `item_count`. This one is per SERVICE INSTANCE; a user-defined library
+	 * binds containers across instances (§17.8), so the two answer different
+	 * questions and only coincide while the tree has one instance and one
+	 * library. Copy that implies they are one number is wrong even while they
+	 * agree.
+	 */
+	workCount: number;
 }
 
 export interface ServicesHealth {
@@ -941,7 +976,14 @@ function toServiceHealth(value: unknown): ServiceHealth | undefined {
 			.map(toBlockedIndexer)
 			.filter((b): b is BlockedIndexer => b !== undefined),
 		observedAt: str(value.observed_at),
-		stale: bool(value.stale)
+		stale: bool(value.stale),
+		// `?? null`, not `?? undefined`: an absent key from an older server and a
+		// wire `null` both mean "no completed import is known", and the screen
+		// renders one thing for that. What must NOT collapse is `null` against a
+		// positive workCount — that pair is a partial import, and it survives
+		// because the two fields are read together rather than merged here.
+		lastFullSyncAt: str(value.last_full_sync_at) ?? null,
+		workCount: num(value.work_count) ?? 0
 	};
 }
 

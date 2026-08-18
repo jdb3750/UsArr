@@ -26,13 +26,32 @@
  * WHAT THE SERVER DOES NOT SEND, stated here so no caller invents it:
  *   · GET /api/v1/services/health carries no `url_base`. Only GET
  *     /api/v1/services does, so the screen reads both and joins on id.
- *   · Nothing carries a per-instance item count, a sync-channel time or a
- *     clock skew. v0.1 has one service kind — prowlarr, an indexer with no
- *     catalogue — so `Items` and `Last successful sync` are `Not applicable`
- *     for every row that exists, which is the honest answer rather than a
- *     zero. `describeSync()` carries the channel vocabulary §17.3 specifies so
- *     the first catalogue source does not have to reinvent it; nothing in v0.1
- *     reaches it.
+ *   · It carries no SYNC-CHANNEL time and no clock skew. `describeSync()`
+ *     holds the channel vocabulary §17.3 specifies so the first catalogue
+ *     source does not have to reinvent it, and nothing on the wire reaches it
+ *     yet: the health row says WHEN a full import last completed, never by
+ *     which channel.
+ *
+ * ⚠️ THIS BLOCK USED TO SAY "Nothing carries a per-instance item count", and
+ * that `Items` and `Last successful sync` were `Not applicable` on every row
+ * that could exist. Both are false now. The endpoint gained
+ * `last_full_sync_at` and `work_count`
+ * (internal/httpapi/services.go:655 and :660), and the two cells below render
+ * them. The `Not applicable` answer survives for an INDEXER, which is a
+ * statement about `role` and not about the wire.
+ *
+ * THE TWO FRESHNESS FIELDS ARE ONE FACT IN TWO SLOTS, and every call site here
+ * reads them as a pair. docs/reference/http-api.md §3.2 is the contract; the
+ * short form is that `null` and `0` are independent, so all four combinations
+ * are reachable and three of them are NOT "nothing here":
+ *
+ *   null  + 0   → never synced
+ *   time  + 0   → synced, and the upstream really is empty
+ *   time  + >0  → the ordinary case
+ *   null  + >0  → a partial import's committed batches stand
+ *
+ * The fourth is why `work_count` is not nulled to match the timestamp, and why
+ * nothing here may "tidy" a null timestamp into "no data".
  */
 
 import { NOTHING } from './list';
@@ -131,12 +150,28 @@ export function relativeTo(iso: string | undefined, now: Date): string {
  * form, and past 24 hours it carries a date."
  */
 export function stampOf(iso: string | undefined, now: Date): string {
+	const absolute = absoluteOf(iso, now);
+	if (!absolute) return '';
+	const relative = relativeTo(iso, now);
+	return relative ? `${absolute}, ${relative}` : absolute;
+}
+
+/**
+ * The absolute half of §9.1's pair, on its own: `14:02`, or `11:47 on 15 Aug
+ * 2026` once it is more than a day old.
+ *
+ * It exists because a TABLE CELL has two slots where a sentence has one.
+ * `stampOf` joins the two halves with a comma for a `<li>` or a `title`; a cell
+ * puts the absolute half on the value line and the relative half on
+ * `.cell-sub`, which is what `describeSync()` already does with `delta 14:02` /
+ * `6 minutes ago`. Both callers get the SAME absolute rule from here rather
+ * than a second one, so the column cannot drift from the expander above it.
+ */
+export function absoluteOf(iso: string | undefined, now: Date): string {
 	const at = toDate(iso);
 	if (!at) return '';
-	const relative = relativeTo(iso, now);
 	const olderThanADay = Math.abs(now.getTime() - at.getTime()) >= 86400 * 1000;
-	const absolute = olderThanADay ? `${clockOf(iso)} on ${dateOf(iso)}` : clockOf(iso);
-	return relative ? `${absolute}, ${relative}` : absolute;
+	return olderThanADay ? `${clockOf(iso)} on ${dateOf(iso)}` : clockOf(iso);
 }
 
 /**
@@ -317,26 +352,81 @@ export function describeSync(channel: SyncChannel, now: Date): Cell {
 /**
  * The `Last successful sync` cell for a real row.
  *
+ * FIVE ANSWERS, and the last four are the wire's four-state pair:
+ *
+ *   indexer      →  `Not applicable` / `no catalogue`
+ *   null  +  0   →  `Never`
+ *   null  + >0   →  `Partial import` / `some rows landed`
+ *   time  +  0   →  `14:02` / `6 minutes ago`
+ *   time  + >0   →  `14:02` / `6 minutes ago`
+ *
  * An indexer has no catalogue, so the concept does not exist for it — which is
- * exactly §9.1's `Not applicable`, and NOT `—` and NOT `0`. `Never` is kept as
- * a real answer for a catalogue source that has never synced.
+ * exactly §9.1's `Not applicable`, and NOT `—` and NOT `0`. That branch is
+ * decided on `role`, never on the two fields, because a Prowlarr reports
+ * `null` / `0` exactly like an unsynced catalogue source and only `role`
+ * separates them (http-api.md §3.2).
+ *
+ * ⚠️ `Partial import` IS NOT A NOTHING-WORD, and it is deliberately not muted.
+ * It is the one state where the two columns disagree on purpose: this cell says
+ * no import has ever completed while `Items` shows a real count, because a
+ * partial import leaves its committed batches behind (internal/libsync's
+ * FullImport). Rendering it as `Never` would make the count next to it look
+ * like a contradiction; muting it would hide the one row on the screen whose
+ * freshness is unknown.
  */
-export function syncCell(row: ServiceRow): Cell {
+export function syncCell(row: ServiceRow, now: Date): Cell {
 	if (isIndexer(row.health)) return nothing(NOTHING.inapplicable, 'no catalogue');
-	return nothing('Never');
+
+	const { lastFullSyncAt, workCount } = row.health;
+	// `absoluteOf` is the parse as well as the format: an unparseable timestamp
+	// yields '' and falls through to the never/partial branch rather than
+	// rendering an empty cell that claims a sync happened.
+	const absolute = absoluteOf(lastFullSyncAt ?? undefined, now);
+	if (absolute === '') {
+		if (workCount > 0) {
+			return { text: 'Partial import', sub: 'some rows landed', muted: false };
+		}
+		return nothing('Never');
+	}
+	return {
+		text: absolute,
+		sub: relativeTo(lastFullSyncAt ?? undefined, now),
+		muted: false
+	};
 }
 
 /**
- * The `Items` cell: how many works this instance contributes.
+ * The `Items` cell: how many DISTINCT WORKS this instance contributes.
  *
- * Same reasoning, and the same answer for the same reason: an indexer
- * contributes no works, so the column is inapplicable rather than zero. A zero
- * would read as "it has a catalogue and it is empty", which is a different and
- * false claim.
+ * ⚠️ NOT the Libraries screen's per-library `item_count`, and the copy must
+ * never imply otherwise. This number is per SERVICE INSTANCE; a user-defined
+ * library binds containers across instances (§17.8), so a per-library figure is
+ * a different query against a different grouping. The two agree today only
+ * because the tree holds one instance and one library, which is a coincidence
+ * of the fixture rather than a relationship (docs/REVIEW-LOG.md).
+ *
+ * FOUR ANSWERS:
+ *
+ *   indexer      →  `Not applicable`   an indexer contributes no works at all
+ *   null  +  0   →  `—`                nothing has ever been counted
+ *   time  +  0   →  `0`                counted, and the upstream really is empty
+ *   any   + >0   →  the count
+ *
+ * ⚠️ `—` AND `0` ARE DIFFERENT ANSWERS HERE, which is the whole reason the
+ * server sends the timestamp alongside the count. `0` is a MEASUREMENT — an
+ * import completed and found nothing — and rendering the never-synced case as
+ * `0` too would state that measurement without having taken it. An indexer gets
+ * neither: `Not applicable`, because a zero there would read as "it has a
+ * catalogue and it is empty", a claim about a catalogue that does not exist.
  */
 export function itemsCell(row: ServiceRow): Cell {
 	if (isIndexer(row.health)) return nothing(NOTHING.inapplicable);
-	return nothing(NOTHING.empty);
+
+	const { lastFullSyncAt, workCount } = row.health;
+	// A partial import's committed rows are real and are shown, so the count
+	// wins over the missing timestamp whenever there is one to show.
+	if (workCount <= 0 && lastFullSyncAt === null) return nothing(NOTHING.empty);
+	return { text: workCount.toLocaleString('en-GB'), sub: '', muted: false };
 }
 
 export function isIndexer(health: ServiceHealth): boolean {
