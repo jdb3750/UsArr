@@ -27,15 +27,21 @@ positions, and every screen, count, caption and service row answers to it.
 
 | | **Full stack** — the default | **v0.1** |
 |---|---|---|
-| Services | Sonarr, Sonarr Anime, Radarr, Radarr 4K *(named, never connected)*, Prowlarr, Navidrome, Audiobookshelf, **Kavita** | Sonarr, Sonarr Anime, Radarr, Radarr 4K, Prowlarr |
-| Service rows | 8 | 5 |
-| Libraries | 8 | 2 |
-| Scope chip | `All libraries (8)` | `All libraries (2)` |
+| Services | Sonarr, Sonarr Anime, Radarr, Radarr 4K *(named, never connected)*, Prowlarr, Navidrome, Audiobookshelf, **Kavita** | **Kavita**, Prowlarr |
+| Service rows | 8 | 2 |
+| Libraries | 8 | 4 |
+| Scope chip | `All libraries (8)` | `All libraries (4)` |
 | Media types in the sidebar | 6 | 2 |
 | Home Block A | 6 rows, all counted | 6 rows: 2 counted, 4 with no catalogue source |
-| Home Block B | 4 items | 3 items |
-| Home Block C | 26 rows across 6 types | 8 rows across 2 types |
-| Search `dune` | 31 results in 6 groups | 5 results in 2 groups |
+| Home Block B | 4 items | 2 items |
+| Home Block C | 26 rows across 6 types | 7 rows across 2 types |
+| Search `dune` | 31 results in 6 groups | 6 results in 2 groups |
+
+**The two types v0.1 catalogues are ebooks and comics.** Kavita is its one catalogue source
+([ADR-0041](../../DECISIONS.md#adr-0041)) and Kavita's adapter emits exactly two `work.kind` values,
+so the four types with no source behind them are films, TV, music and audiobooks — the first two at
+v0.2 ([ADR-0045](../../DECISIONS.md#adr-0045)), the other two somewhere in ARCHITECTURE §16.1's
+sequence after v0.1. Its four libraries are Ebooks, Comics, Manga and the orphaned Ongoing comics.
 
 **The full stack is the default, and that is a deliberate choice about what is being judged.** Six
 populated media types is the case the layout has to survive — the unified recently-added table, the
@@ -50,7 +56,7 @@ the option labels are:
 
 ```
 Full stack: a later milestone
-v0.1: Sonarr, Radarr, Prowlarr
+v0.1: Kavita, Prowlarr
 ```
 
 The separator is a colon and not an em dash, and that is not a style preference. Both labels are
@@ -60,13 +66,22 @@ for as long as they existed. They were caught the moment that sweep's corpus was
 and rewriting them was the right fix rather than exempting them: nothing about the milestone
 labelling needs an em dash to survive.
 
-**"A later milestone" rather than "v0.2" is the point.** ARCHITECTURE §16 is authoritative for
-milestones and, per [ADR-0035](../../DECISIONS.md#adr-0035)'s amendment, **v0.1 ships no catalogue
-source at all**: Navidrome, Audiobookshelf and Kavita arrive **one at a time, after it**, in an order
-that ADR-0035 §2's watermark spike has not yet decided. So the full stack is not v0.2 — it is the
-state after *all three* have landed, and naming a release here would invent the very status the
-label exists to prevent. `Full stack — a later milestone` is the strongest statement that is true
-today and stays true whatever §16 fixes.
+**The two labels are asymmetric on purpose, and each half is the strongest true statement available
+to it.** ARCHITECTURE §16 is authoritative for milestones, and it now fixes v0.1's own services:
+[ADR-0041](../../DECISIONS.md#adr-0041) makes **Kavita** the one catalogue source v0.1 ships, and
+[ADR-0045](../../DECISIONS.md#adr-0045) fixes Sonarr and Radarr at **v0.2**. Two services, both
+pinned, so the v0.1 label names them outright — a vaguer label there would hide a fact the roadmap
+has already settled. What §16 does *not* pin is everything else: §16.1 sequences Navidrome,
+Audiobookshelf and Komga one at a time after v0.1 **without fixing which release each lands in**,
+and the full stack is every one of them at once. No version names that state. It is later than v0.2
+and there is no release the sequence guarantees it by, so `Full stack: a later milestone` is the
+strongest thing that is true today and stays true whatever §16 fixes next.
+
+⚠️ **This passage used to argue from the opposite premise** — *"per ADR-0035's amendment, v0.1 ships
+no catalogue source at all"*, with the full stack read as the state after all three sources land.
+ADR-0041 falsified that sentence and the drawing followed it. The **full stack's** label survives
+unchanged because its argument never depended on the half that failed; the **v0.1** label changed,
+because that half is exactly what ADR-0041 settled.
 
 Three more things follow from the same rule, and `check.mjs` §8b asserts all of them:
 
@@ -74,9 +89,9 @@ Three more things follow from the same rule, and `check.mjs` §8b asserts all of
   a UsArr control and there is no setting it corresponds to; drawing it in the top bar proper would
   fabricate a product affordance. Inside the label it reads as part of the label.
 - **The notice itself changes with the selection** — *"Drawn over an install with every catalogue
-  source connected, which is later than v0.1"* against *"Drawn over the three services v0.1
-  connects"* — so the labelled-mockup exception in `DESIGN-DIRECTION.md` §9.6 stays true of whichever
-  install is on screen, not of one of them.
+  source connected, which is later than v0.1"* against *"Drawn over the two services v0.1 connects"*
+  — so the labelled-mockup exception in `DESIGN-DIRECTION.md` §9.6 stays true of whichever install
+  is on screen, not of one of them.
 - **The page loads in `full` and the switcher is not persisted.** A control that remembered `v0.1`
   from a previous visit would show a reviewer a different screen from the one being discussed.
 
@@ -84,45 +99,90 @@ Three more things follow from the same rule, and `check.mjs` §8b asserts all of
 
 Every v0.1 figure is the full stack's own figure with the absent services' contribution removed.
 That is what makes the two installs reconcile against each other rather than merely each being
-internally plausible, and it is what a reviewer checks first:
+internally plausible, and it is what a reviewer checks first. Almost every row is therefore present
+on both installs or absent from v0.1 entirely; **Ebooks is the single row that differs by arithmetic
+rather than by presence**, and it is the one to check first because it is the only place the rule
+has to do any work:
 
-- **Comics 553** = Kavita `Comics` 512 + Kavita `Manga` 0 + orphaned `Ongoing comics` 41.
+- **Ebooks 2,266 → 424.** One UsArr library over two containers: Audiobookshelf's 1,842 and Kavita's
+  `Books` · 424. v0.1 keeps Kavita's half and nothing else, so the sidebar row, the Libraries row,
+  the edit screen's toolbar and Home Block A all read **424** there and **2,266** on the full stack.
+- **Comics 553** = Kavita `Comics` 512 + Kavita `Manga` 0 + the orphaned `Ongoing comics` 41, and it
+  is **the same number on both installs**, because all three of those containers are Kavita's or
+  were. Comics is the one media type v0.1 loses nothing from.
+- **Comics issues 7,891**, of which Kavita's own *Contributes* panel on Services reports **7,204**.
+  The other 687 belong to `Ongoing comics`, whose Kavita instance was removed. **That 687 is not
+  drawn as a figure on any screen** and is named here rather than in the drawing: an orphaned
+  library reports what UsArr still holds of it, 41 works, and an issue count for a source that is
+  gone would be a claim nothing can refresh.
 - **Audiobookshelf 2,260 items** = Audiobooks 418 + Ebooks 1,842, one upstream library split by
-  edition format into two UsArr libraries.
-- **TV 275** = Sonarr 214 + Sonarr Anime 61 — which is also what the v0.1 proposal flow's
-  rename-to-merge demonstration produces, so the Libraries screen's two states agree with each
-  other and with the sidebar.
-- **Comics issues 7,891** = Kavita 7,204 + Ongoing comics 687.
-- **Home Block B falls 4 → 3** because the Kavita identifier warning is the one attention item
-  belonging to a service v0.1 does not have — which then makes it equal Services' own System-status
-  count of 3, as it should, since the other three are service-health items and that one is not.
-- **Search falls 31 → 5**, and this is the one figure naive subtraction gets wrong. `Dune` is one
-  linked work across the 1965 novel, its M4B and the 2021 film, and §17.4 rule 4 renders it **once**,
-  in the group of its best-scoring medium. On the full stack that is Ebooks, and the Movies group
-  carries a one-line pointer at it (`1 more film is on a linked row in the Ebooks group`). Delete the
-  Ebooks group and the row does **not** vanish — the same work's best *available* medium becomes the
-  film, so it moves into Movies. Subtracting the four absent groups gives 4; the correct answer is
-  **5**: Movies 4, TV 1. The chips, the group header count, the scoped state's excluded total and the
-  posters grid all follow it.
-- **The per-group cap moves with the group count.** §17.4's budget is `clamp(floor(40/g), 3, 10)`, so
-  six groups get six rows each and two groups get ten. Nothing is truncated on the v0.1 install and
-  there is no `Show all N` row on it at all — the two `Show all` rows on the full stack are a
-  consequence of splitting one budget six ways, which is worth being able to see both halves of.
+  edition format into two UsArr libraries. Full stack only.
+- **TV 275** = Sonarr 214 + Sonarr Anime 61. Full stack only — and the two-instance library it
+  produces is a full-stack demonstration now, not a v0.1 one.
+- **Home Block B falls 4 → 2**, because the Radarr outage and the Sonarr Anime clock skew belong to
+  services v0.1 does not have. The Prowlarr 401 and the Kavita identifier warning survive, which
+  then makes Block B equal Services' own System-status count on either install — `1 error, 3
+  warnings` against `1 error, 1 warning` — as it should, since the two surfaces are one set of facts
+  drawn twice.
+- **Home Block C falls 26 → 7**, across two types rather than six. It is the only block whose v0.1
+  row count is not stated on the screen itself; it is counted from the table.
+- **Search falls 31 → 6, and this is the one figure naive subtraction gets wrong.** The full stack's
+  six groups are Ebooks 14, Audiobooks 9, Movies 3, Comics 2, Music 2, TV 1. Deleting the four
+  groups whose services are absent removes 15 — but the Ebooks group does not survive intact either,
+  because it is 14 over *both* of that library's sources and **4** over Kavita's half alone, which
+  takes ten more. 31 − 15 − 10 = **6**, drawn as Ebooks 4 + Comics 2, and the pagehead, the chips,
+  the scoped state's `4 results … 2 more in the three the scope excludes` and the posters grid all
+  follow it.
+- **The linked-work rendering has no v0.1 instance, and that is a real loss rather than an
+  omission.** `Dune` is one work across the 1965 novel, its M4B and the 2021 film, and §17.4 rule 4
+  renders it once in the group of its best-scoring medium — Ebooks on the full stack, with the
+  Movies group carrying `1 more film is on a linked row in the Ebooks group` at it. All three
+  editions live in Audiobookshelf and Radarr, so on v0.1 the work is not moved to another group; it
+  is simply not there. The four ebooks v0.1 does draw are Kavita's, and none of them is linked to
+  anything.
+- **The per-group cap moves with the group count**, and the truncation demonstration is the full
+  stack's. §17.4's budget is `clamp(floor(40/g), 3, 10)`, so six groups get six rows each — which
+  truncates Ebooks and Audiobooks and draws `Show all 14 ebooks matching dune` and `Show all 9
+  audiobooks matching dune` — and two groups get ten, which both of v0.1's groups are under at 4 and
+  2. There is no `Show all` row anywhere on the v0.1 install.
+- **What moves the other way is hoisting.** The full stack's Ebooks group carries Instance as a
+  column, because the group holds two of them; v0.1's carries `all from Kavita · all matched by
+  title` in the group header instead, because it holds one. Same §17.4 rule, opposite outcome, and
+  the two installs are what make it visible.
 
 ### What each install is *for*
 
-They are not the same drawing twice. Each reaches states the other cannot:
+They are not the same drawing twice, and the difference is not only how much is on screen. **The two
+installs demonstrate opposite identity tiers.** A free Kavita returns null `aniListId`, `malId` and
+`comicVineId`, so **weak identity is what a v0.1 owner sees every day**, and the strong-identity
+sources — Sonarr and Radarr, carrying TVDB and TMDB ids — went to v0.2 with ADR-0045. That is the
+consequence a swap of nouns cannot express, and it is why each install reaches states the other
+cannot:
 
-- **Only the full stack** can show six populated types on one screen, a group set large enough to
-  truncate, an Audiobookshelf library split by edition format into two UsArr libraries, a source
-  reporting zero items while healthy, an orphaned library whose service was removed, and
-  `matched by title` — which §17.3 marks as unreachable in v0.1, because Radarr and Sonarr carry TMDB
-  and TVDB ids.
-- **Only the v0.1 install** can show a media type that exists with no catalogue source behind it, a
-  scope chip at the two-library minimum Navidrome's `LibrarySelector` renders at all, a library over
-  two instances of one service with one of them degraded, a metadata-authority radio that is a real
-  choice rather than a cell reading *"the only source"*, and an identity panel where **nothing** is
-  matched by title.
+- **Only the full stack** can show six populated types on one screen; a group set large enough to
+  truncate; an Audiobookshelf library split by edition format into two UsArr libraries; a library
+  over two instances of one service with one of them degraded; a metadata-authority radio that is a
+  real choice rather than a cell reading *"the only source"*; and a **mixed** identity panel — 1,703
+  works matched on an external id against 563 matched by title, in one library.
+- **Only the v0.1 install** can show a media type that exists with no catalogue source behind it,
+  and it shows four at once with a service and a milestone against each; an identity panel where
+  **everything** is matched by title, 0 against 424, which §17.3 marks as v0.1's **ordinary**
+  rendering rather than an edge state; a health table that is nothing but a media server and an
+  indexer manager; a search whose groups both fit inside the cap; and a drilldown that stops at two
+  levels, `Comics › Dune: House Atreides`, because a series and its issues is all the depth the
+  medium has.
+- **Both installs, now**: a source reporting zero items while healthy (Kavita `Manga`, 0 series) and
+  an orphaned library whose service was removed (`Ongoing comics`, 41 works). Both used to be
+  full-stack exclusives and both moved when v0.1's source became the one that owns them. They are
+  still worth drawing twice, because the table around them is a different size on each.
+
+**Two of the old claims died rather than changed hands, and are recorded here so the next reader
+does not go looking for them.** *"`matched by title`, which §17.3 marks as unreachable in v0.1,
+because Radarr and Sonarr carry TMDB and TVDB ids"* was the full stack's exclusive; §17.3 now says
+the opposite in as many words, so the badge is not a state one install reaches and the other
+cannot: it is the ordinary rendering on v0.1 and an exception on the full stack. And *"a scope chip
+at the two-library minimum"* was v0.1's, and rested on v0.1 having exactly two libraries. It has
+four, so that minimum is drawn on neither install and nothing here claims it.
 
 ### The mechanism, for anyone editing these files
 
@@ -474,9 +534,12 @@ services neither install has, and its rows are essays by design.
 **Both new row shapes hit the ceiling and were cut back rather than exempted**, which is the band
 doing its job. Home Block A's four sourceless rows on the v0.1 install ran to 80px — three lines in a
 half-width column — until the cause line was compressed to `Navidrome · after v0.1 · Add`, which says
-no less than the sentence it replaced. The v0.1 Libraries edit screen's two catalogue-source rows ran
+no less than the sentence it replaced. The Libraries edit screen's two catalogue-source rows ran
 to 61px, because the metadata-authority radio had grown a per-row explanation of what the radio does;
 the explanation is a property of the control, not of the row, so it is stated once under the table.
+That two-source screen was the **v0.1** install's when this was measured and is the **full stack's**
+since ADR-0041 exchanged the two installs' identity tiers; the rows, the radio and the ceiling are
+unchanged, and only which install draws them moved.
 
 What actually changed, on both screens: every explanation moved into the row expander that already
 existed and was barely used; the `Problem` column carries one line plus **Show detail**, which
@@ -1152,7 +1215,7 @@ the dialog the button opens and were the empty state doing the dialog's job.
 | `g`-prefixed go-to-screen keybindings | proposed in research, not implemented here |
 | A `permission-denied` state on a search, library or item surface | specified from day one (`DESIGN-DIRECTION.md` §10) and **not drawn**: v0.1 has one account, and the §14 rule-6 behaviour is that a library the user cannot see renders as *absent*, which is indistinguishable from an empty scope in a static mockup. The Services `denied` state is a sudo re-auth state, which is a different thing and is not a substitute. |
 | An `importing` and a `needs re-identification` per-library state (§17.8) | v0.1, not drawn here — the four §17.8 states that are drawn are *all sources down*, *sources healthy zero items*, *one source degraded* and *orphaned* |
-| Lidarr, LazyLibrarian and Komga as configured services | v1.0, **v0.3** and after Kavita — drawn in the Services **annex** state, labelled with their milestone, and configured on neither install. LazyLibrarian is v0.3, not v1.0: ARCHITECTURE §16 ships it as the first Tier 1 manifest, request sink only. **Kavita is no longer in this row**: ADR-0035 made it the comics-and-books catalogue source, so it is a configured service on the full-stack install and its absence is drawn on the v0.1 one. Its milestone is stated as *after v0.1*, never as v0.2 — §16 has not fixed which release it lands in, and naming one here would invent exactly the status this table exists to avoid |
+| Lidarr, LazyLibrarian and Komga as configured services | v1.0, **v0.3** and after Kavita — drawn in the Services **annex** state, labelled with their milestone, and configured on neither install. LazyLibrarian is v0.3, not v1.0: ARCHITECTURE §16 ships it as the first Tier 1 manifest, request sink only. **Kavita is no longer in this row**: ADR-0035 made it the comics-and-books catalogue source and [ADR-0041](../../DECISIONS.md#adr-0041) put it **in v0.1**, so it is a configured service on **both** installs and the third annex row beside Lidarr and LazyLibrarian is **Komga**. Komga's milestone is stated as *after Kavita*, never as a version — §16.1 sequences it third without fixing which release it lands in, and naming one here would invent exactly the status this table exists to avoid |
 
 Also absent, and permanently: any in-app player, any transcoding path, any FFmpeg dependency.
 
