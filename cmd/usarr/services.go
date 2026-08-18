@@ -650,7 +650,10 @@ func (g *registry) probe(ctx context.Context, instanceID int64) {
 
 	entry, err := g.entry(ctx, instanceID)
 	if err != nil {
-		health.Error = err.Error()
+		// Redact BEFORE the value reaches the row. last_error is persisted, and a
+		// stored credential is retroactive: it survives in every backup taken before
+		// the fix. Redacting on read-out does not reach the bytes on disk.
+		health.Error = ssrf.RedactText(err.Error())
 		g.recordProbe(ctx, instanceID, health, nil)
 		return
 	}
@@ -663,7 +666,8 @@ func (g *registry) probe(ctx context.Context, instanceID int64) {
 
 	status, err := entry.prowlarr.SystemStatus(ctx)
 	if err != nil {
-		health.Error = err.Error()
+		// Redacted before the row, as above.
+		health.Error = ssrf.RedactText(err.Error())
 		health.BreakerState, health.BreakerRetryAt = entry.breakerState()
 		g.recordProbe(ctx, instanceID, health, nil)
 		return
@@ -748,7 +752,8 @@ func (g *registry) probeKavita(ctx context.Context, entry *registryEntry, health
 
 	libs, err := entry.kavita.Libraries(ctx)
 	if err != nil {
-		health.Error = err.Error()
+		// Redacted before the row, for the reason given in probe.
+		health.Error = ssrf.RedactText(err.Error())
 		health.BreakerState, health.BreakerRetryAt = entry.breakerState()
 		g.recordProbe(ctx, instanceID, health, nil)
 		return
