@@ -787,7 +787,7 @@ summary; the file itself is the source of truth:
 ```yaml
 version: "2"
 run:
-  build-tags: [upstream]    # a file behind a build tag is NEVER OPENED without this
+  build-tags: [upstream, bench]  # a file behind a build tag is NEVER OPENED without this
 linters:
   default: standard
   enable:
@@ -829,8 +829,14 @@ One defect, two verdicts, decided by a build tag. **`make build-tagged` is not t
 `go build -tags=bench` and `go vet -tags=upstream` type-check the hidden files, which closes the
 *compile* hole and nothing else. **Keep the list in step with the tree:**
 `grep -rn "go:build" --include="*.go" .` names every tag in the repo, and each one absent from
-`run.build-tags` is a file the gate does not lint. `bench` (`internal/db/spike`) is knowingly still
-absent.
+`run.build-tags` is a file the gate does not lint. `bench` was added the same day on the same kind
+of pair — a dropped `os.Setenv` in `internal/db/pragma_spike.go` against an untagged twin in
+`internal/db/sqlite.go` gave 1 errcheck finding before and 2 after, control still firing — plus a
+third probe in `internal/db/spike/workload.go`, because that package is not in `go list ./...` and
+the two-file pair alone would not have proved it was opened. The tagged code linted clean, 0 issues,
+with nothing suppressed. **One residual gap remains and is not closable from this list:**
+`internal/db/spike/rss_other.go` is `bench && !linux`, so GOOS keeps it out on a linux runner —
+neither linted nor compiled by `make build-tagged` here.
 
 **The `issues:` block is load-bearing.** golangci-lint defaults to `max-same-issues: 3` and
 `max-issues-per-linter: 50`, and it drops the remainder *silently* — no "N more" line, nothing in the
@@ -1081,6 +1087,12 @@ names, dressed as extra reassurance rather than as silence.** Both halves are cl
 selector is the reserved `^TestSpecDrift` prefix, and the target counts the top-level
 `--- PASS:`/`--- FAIL:` lines that prefix actually produced and fails below `SPEC_DRIFT_FLOOR`.
 A `--- SKIP:` deliberately does not count — a skipped check looked at nothing too.
+
+⚠️ **The epilogue quoted above is historical — do not expect to grep it out of the `Makefile`.**
+`d10ca98` replaced that one blanket line with four verdict readings, so an unreachable github.com now
+prints *"THIS IS NOT NEWS ABOUT UPSTREAM"* rather than being reported as drift. The old wording is
+kept here because it is what the guard actually printed while the floor was missing, and the point of
+the example is that the reassurance was the misleading part.
 
 **5. Name the surface, not just the value.** Rule 2 names the *instrument*; this names what the
 instrument was pointed at, and it is the half that has been broken three times here — each time by

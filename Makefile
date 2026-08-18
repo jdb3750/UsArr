@@ -694,6 +694,8 @@ fmt-check: web-deps ## Verify formatting without modifying files (used by `make 
 .PHONY: build-tagged
 build-tagged: ## Compile packages hidden behind build tags (`bench`: internal/db/spike; `upstream`: the spec-drift tests)
 	@n=$$($(GO) list -tags=bench ./... | wc -l); \
+	test "$$n" -gt 0 || { \
+		echo "build-tagged: 0 packages — go build would compile nothing and exit 0."; exit 1; }; \
 	echo "build-tagged: compiling $$n Go packages with -tags=bench"
 	$(GO) build -tags=bench ./...
 	@echo "build-tagged: type-checking the -tags=upstream test files (go vet; go build cannot see them)"

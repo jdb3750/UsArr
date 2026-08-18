@@ -30,12 +30,29 @@ version: "2"
 #
 # KEEP THIS LIST IN STEP WITH THE TREE. `grep -rn "go:build" --include="*.go" .`
 # names every tag in the repo; each one absent from this list is a file the gate
-# does not lint. `bench` (internal/db/spike) is knowingly still absent — it is a
-# measurement spike that ships nothing, and adding it is a separate change with
-# its own findings to triage.
+# does not lint.
+#
+# `bench` was added 2026-08-18 on the same matched pair, and it needed a third
+# probe the `upstream` case did not. The same dropped `os.Setenv` planted in
+# internal/db/pragma_spike.go (`//go:build bench`) and in the untagged
+# internal/db/sqlite.go beside it — one package, `db` — gave ONE errcheck
+# finding before the tag was added, the untagged one, and TWO after, with the
+# control still firing. But that pair only proves the tagged file of an
+# already-linted package is opened; internal/db/spike is its own package and
+# `go list ./...` never names it, so a third probe was planted in
+# internal/db/spike/workload.go and confirmed to fire. The tagged code was
+# already clean — the real run is 0 issues — so nothing was suppressed, no
+# exclusion was widened and no `nolint` was added to land this.
+#
+# ONE RESIDUAL GAP, named rather than left to be rediscovered:
+# internal/db/spike/rss_other.go is `bench && !linux`, and no build-tag list can
+# open it on a linux runner. GOOS excludes it, not tags — and `make build-tagged`
+# does not compile it here either, so on this CI it is neither linted nor
+# type-checked. Closing that needs a cross-GOOS pass, not an entry in this list.
 run:
   build-tags:
     - upstream
+    - bench
 
 linters:
   default: standard

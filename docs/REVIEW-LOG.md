@@ -13427,3 +13427,180 @@ replay is coming through the Go build cache, which means `/root/go/bin/golangci-
 would not have cleared it. **Raised, not fixed** — amending §11's cache bullet is outside this
 commit's two changes, and `cache clean` was off-limits to this thread in any case. Every gate result
 below was taken with both caches isolated under the scratchpad and neither one cleaned.
+
+---
+
+# BTAG — the `bench` build-tag lint hole, and the stale-cache bullet that was not amended
+
+**Date:** 2026-08-18. **Target:** `d81a66f`. Two changes were commissioned; **one landed and one was
+refused by its own evidence.** Both are below, because a commissioned change that does not land is
+exactly the kind of thing this log exists to record rather than leave to memory.
+
+## BTAG-01 `bench` joins `run.build-tags`, on the same matched pair `upstream` was closed with
+
+[`EXPL-03`](#expl-03) (`c8022f1`) closed the `upstream` half of this hole and named `bench` as the
+knowingly-open other half.
+Six files were behind it — `internal/db/pragma_spike.go` and the five in `internal/db/spike/` — and
+no linter opened any of them. `.golangci.yml` now lists `bench` alongside `upstream`.
+
+**The pair, all four results, quoted from the runs.** The same planted defect in both files, a
+dropped `os.Setenv` error, in one package (`db`): `internal/db/pragma_spike.go` is `//go:build bench`
+and `internal/db/sqlite.go` beside it is untagged.
+
+*Before* — `build-tags: [upstream]`:
+
+```
+internal/db/sqlite.go:298:11: Error return value of `os.Setenv` is not checked (errcheck)
+1 issues:
+* errcheck: 1
+```
+
+The tagged twin at `internal/db/pragma_spike.go:43` is **absent** — one defect, two verdicts.
+
+*After* — `build-tags: [upstream, bench]`:
+
+```
+internal/db/pragma_spike.go:43:11: Error return value of `os.Setenv` is not checked (errcheck)
+internal/db/sqlite.go:298:11: Error return value of `os.Setenv` is not checked (errcheck)
+2 issues:
+* errcheck: 2
+```
+
+Both fire, and **the control still fires** — the change added a finding rather than moving one.
+
+🚩 **That pair is necessary and not sufficient, which the `upstream` case did not have to worry
+about.** It proves a tagged *file* of an already-linted *package* is opened. `internal/db/spike` is a
+separate `main` package that `go list ./...` never names — `make lint-go` still prints `linting 13 Go
+packages` — so the two-file pair would have read identically whether or not the spike package itself
+was reached. A third probe settles it: the same dropped `os.Setenv` planted in
+`internal/db/spike/workload.go` fires.
+
+```
+internal/db/spike/workload.go:223:11: Error return value of `os.Setenv` is not checked (errcheck)
+internal/db/spike/workload.go:222:6: func lintProbeSpike is unused (unused)
+```
+
+`errcheck`, `unused` and `gofumpt` all reported against that file, so the package is genuinely
+analysed rather than merely listed.
+
+## BTAG-02 The triage inventory is empty, and that is the whole list
+
+**Findings surfaced by turning `bench` on: 0.** Counted from the run, not from memory — the real run
+with both probes reverted is `0 issues.`, exit 0, and `grep -cE '^\S+\.go:[0-9]+:[0-9]+: '` over the
+captured output is `0`. Re-confirmed with `GOCACHE` and `GOLANGCI_LINT_CACHE` both isolated at fresh
+directories: `0 issues.` again.
+
+Nothing was suppressed to reach that: **no `nolint` was added, no exclusion was widened, and no
+existing finding was reclassified.** The spike code was already clean under `errcheck`, `gosec`,
+`bodyclose`, `noctx`, `errorlint`, `sqlclosecheck`, `rowserrcheck`, `staticcheck`, `unused`,
+`ineffassign`, `govet`, `gofumpt` and `goimports`. The commission anticipated a list long enough to
+be its own task; there is no list.
+
+🚩 **One residual gap, named rather than left to be rediscovered.**
+`internal/db/spike/rss_other.go` is `//go:build bench && !linux`. **No entry in `run.build-tags` can
+open it on a linux runner** — GOOS excludes it, not tags — and `make build-tagged`'s `go build
+-tags=bench ./...` does not compile it here either, so on this CI it is neither linted nor
+type-checked. Closing it needs a cross-`GOOS` pass, which is a different change. Recorded in
+`.golangci.yml` next to the list so the next reader of that list meets the caveat with it.
+
+## BTAG-03 `build-tagged` gets the floor `fmt-check` and `lint-go` already had
+
+Pre-existing, adjacent, one line, and taken. The recipe computed `n=$(go list -tags=bench ./... | wc
+-l)` and only echoed it — §11 rule 4's exact shape: "found nothing" and "looked at nothing" produced
+the same exit code. It now asserts `test "$n" -gt 0`. **Fired deliberately** per rule 3, because a
+floor nobody has triggered is indistinguishable from no floor:
+
+```
+$ make build-tagged GO=true
+build-tagged: 0 packages — go build would compile nothing and exit 0.
+make: *** [Makefile:696: build-tagged] Error 1
+```
+
+Normal run: `build-tagged: compiling 14 Go packages with -tags=bench`, exit 0. Fourteen with the tag
+against the thirteen `lint-go` reports without it — the one package is `internal/db/spike`, which is
+the whole reason this change existed.
+
+## BTAG-04 §11's stale-cache bullet was NOT amended, because the pair behind the amendment does not survive being reproduced
+
+The commission was to rewrite §11's `cache clean` bullet to prescribe isolating **both** `GOCACHE`
+and `GOLANGCI_LINT_CACHE`, on the strength of the pair recorded at the end of `PINSRC-3`: 5 stale
+issues against the deleted sibling worktree `../wt-kavita/` with a shared `GOCACHE`, `0 issues.` with
+an isolated one, both on an empty golangci-lint cache. The commission also said, correctly, that a
+rule resting on an unreproduced pair is worse than the wrong rule it replaces. **It did not
+reproduce, and the mechanism it infers is contradicted by primary source. §11's cache bullet is
+unchanged** — the only §11 edit in this commit is [`BTAG-05`](#btag-05), which is unrelated to it.
+
+**What was measured.**
+
+1. **The failing half does not reproduce.** A fresh detached worktree at `d81a66f`, sibling to where
+   `wt-kavita` had been, first `make lint-go`, brand-new `GOLANGCI_LINT_CACHE`, shared
+   `/root/.cache/go-build`: `0 issues.`, exit 0. That is the exact condition the pair says yields 5
+   stale issues.
+2. **The isolation the pair relied on is real**, so the failure to reproduce is not an artefact of a
+   bad control. During a run with `GOLANGCI_LINT_CACHE` pointed at a fresh directory, **0** files
+   under `/root/.cache/golangci-lint` were touched while 2574 were written to the fresh one — the
+   override is total. The shared `GOCACHE` was still in use in that same run (13 files touched).
+3. **golangci-lint's own cache is the one that stores source paths**, and it can be searched for
+   them: a fresh cache from one clean run contains 12 files naming the worktree's path and one naming
+   `internal/db/sqlite.go`. The shared `/root/.cache/golangci-lint` contains **0** files naming
+   `wt-kavita`. `/root/.cache/go-build` contains **178**.
+4. 🚩 **But the Go build cache cannot replay another directory's paths into this one, by
+   construction.** Without `-trimpath` the *absolute package directory* is hashed into the build
+   action ID — `cmd/go/internal/work/exec.go`, `buildActionID`, go1.25.13:
+
+   ```go
+   } else if !strings.HasPrefix(p.Dir, b.WorkDir) {
+       // -trimpath is not set and no other rewrite rules apply,
+       // so the object file may refer to the absolute directory
+       // containing the package.
+       fmt.Fprintf(h, "dir %s\n", p.Dir)
+   }
+   ```
+
+   Two worktrees at different paths therefore never share a compile cache entry, however identical
+   their sources. Confirmed by measurement as well as by reading: a second worktree at the same
+   commit was built, and its export files carried its own path; it was then deleted, and the
+   surviving worktree's `go list -deps -export` returned export data naming the surviving worktree
+   for all 13 packages, not the deleted one. `GOFLAGS` is empty and nothing sets `-trimpath`.
+
+**So the 178 `wt-kavita` entries in `/root/.cache/go-build` are inert** — keyed to a directory that
+no longer exists, unreachable from any other tree. *Inference, marked as such:* the confound is most
+likely ordering rather than the variable — the two runs were separated in time as well as in
+`GOCACHE`, and a stale replay that heals itself after one run would produce exactly that pair. What
+is **not** inference is that the `dir` line above forbids the mechanism the amendment would have been
+written around.
+
+Writing the amendment anyway would have put a falsified mechanism into the one section of the docs
+whose entire subject is how a check earns the right to be believed. **Two things carry forward
+instead**, both measured above and neither yet in §11: `GOLANGCI_LINT_CACHE` fully isolates
+golangci-lint's cache, and that cache — not `GOCACHE` — is where foreign source paths actually live,
+which is consistent with §11's existing remedy rather than against it. The open question is why an
+empty one still reported them, and that needs a live reproduction nobody has yet.
+
+## BTAG-05 §11's one edit tonight is not that one: a quoted epilogue that no longer exists
+
+Landed here only because this thread already had §11 open, and a third commit to one section in one
+night is worse than one more paragraph. Raised by the coordinator, **verified before being acted on
+rather than taken on their characterisation** — they said as much themselves, not having read the
+passage.
+
+Rule 4's third example narrates `make spec-drift` shipping without its floor, and quotes the
+reassurance it printed while doing so: *"a failure here is NEWS"*. That string was real —
+`Makefile:555` at `d81a66f`, `echo "a failure here is NEWS, not a broken build: it means upstream
+moved. Read the message,"` — and `d10ca98` deleted it, replacing the blanket line with four verdict
+readings, so an unreached upstream now prints `THIS IS NOT NEWS ABOUT UPSTREAM` instead of being read
+as drift. `git log -S'a failure here is NEWS' --all -- Makefile` names exactly two commits: `2b43987`
+introduced the string, `d10ca98` removed it.
+
+It is a **quote**, not a reference, so the first of the two branches applies. The passage is already
+in the past conditional — the target *"would have reported success — with a reassuring … epilogue"* —
+which is why this reads as narrative and is not a false claim. But a reader who greps for the string
+finds nothing, and re-quoting from the current recipe would destroy the example, whose whole point is
+the wording that no longer exists. **Marked as the historical form it is**, in one appended
+paragraph. No rule renumbered, no `§11 rule N` citation moved, and the recipe untouched.
+
+ℹ️ **One thing found and deliberately not fixed.** `Makefile:495`, in the comment block above the
+target, carries the same quote — *"…here is NEWS" epilogue…"* — and is stale in exactly the same way.
+Out of scope twice over: the brief for this addition was §11, and the `SPEC_DRIFT_FLOOR` banner in
+that same comment block is a sequenced change belonging to another thread. Recorded so whoever edits
+there next does not have to rediscover it.
