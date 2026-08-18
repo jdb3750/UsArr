@@ -16533,3 +16533,296 @@ here, not a failure, and the counting helper now says so at the site.
 ⚠️ **What the fake server cannot prove.** It answers what UsArr *asks*, so it validates the script's
 parsing, arithmetic, redaction and failure handling — and nothing at all about what Kavita's real
 handler does. **That is the entire question**, and it is why the script exists.
+
+---
+
+## LS-210 — Home and Search assert a falsehood about the user's library, and the schema is what makes it sayable
+
+**Raised and recorded, not fixed. Nothing in this entry changes a line of Go, SQL or `web/`** — the
+defect is real today on `c93ea6f` and the fix is a separate commit, deliberately, because the sharp
+form below is what decides the shape of that commit and it is worth having written down before
+anybody starts typing.
+
+**The claim, stated plainly.** On every work whose `have_count` is `0`, Home's Block C and the Search
+results table render a muted crossed circle whose accessible name is the string **`none held`** — and
+**nothing in non-test Go has ever written `have_count`**. So on the owner's own Kavita import, 151
+series that are demonstrably on disk each render a glyph that says he holds none of it.
+
+**The chain, cited end to end, every link verified against the tree rather than recalled:**
+
+| # | Where | What it does |
+|---|---|---|
+| 1 | `internal/db/migrations/00005_library_sync.sql:293-294` | `have_count INTEGER NOT NULL DEFAULT 0`, `want_count INTEGER NOT NULL DEFAULT 0`. **`NOT NULL DEFAULT 0` is the whole defect** — see below. |
+| 2 | `internal/store/recent.go:258` and `internal/store/searchlibrary.go:457` | both `SELECT` lists carry `w.have_count, w.want_count, w.availability`. |
+| 3 | `internal/httpapi/library.go:102-103` and `internal/httpapi/librarysearch.go:94-95` | `HaveCount int64 \`json:"have_count"\`` — **no `omitempty`**, so a zero goes on the wire as `0` and is indistinguishable from a computed zero. `Availability json.RawMessage \`json:"availability,omitempty"\`` does carry it. |
+| 4 | `internal/httpapi/library.go:302-305` (`availabilityFor`) | `if !blob.Valid { return nil }` — a NULL `availability` column is omitted **silently**, correctly, and its own header says why: *"A work may honestly have no blob. This is not a fault and must not be logged"*. |
+| 5 | `web/src/lib/library.ts:300-301` | `haveCount: num(value.have_count) ?? 0`. |
+| 6 | `web/src/lib/library.ts:348-366` (`haveCell`) | with `availability === undefined` it calls `availabilityMark(item.haveCount, null)`. |
+| 7 | `web/src/lib/library.ts:223-230` (`availabilityMark`) | `if (have === 0) return { k: 'none' };` — reached second, after the tick's typed guard. |
+| 8 | `web/src/routes/+page.svelte:1098-1100` and `web/src/routes/search/+page.svelte:471-473` | `{:else if line.mark.k === 'none'}` → `<Icon name="x-circle" /><span class="sr">none held</span>`. Byte-identical markup in both files; Search imports the same helper (`web/src/lib/search.ts:41`, `web/src/routes/search/+page.svelte:77,463`), so **there is one bug, rendered twice**, not two. |
+
+**Nothing writes the numerator, and that was checked rather than assumed.** `grep` for `have_count`
+and `want_count` across non-test Go returns **reads only** — the two `SELECT` lists at step 2 and the
+two wire structs at step 3. There is no `INSERT` and no `UPDATE`. The same holds for the columns
+either side of it: **`availability`**, **`media_file`** and **`edition`** have no non-test writer
+anywhere in `internal/` (`internal/libsync/kavita.go` maps library types; it produces no `edition`
+row, and `internal/libsync/doc.go:43` says outright that the volume-and-chapter walk *"is where
+`work_comic_issue` and `media_file` get their rows"*, in the future tense it means).
+
+### 🔥 The sharp form: `have_count NOT NULL DEFAULT 0` conflates "never computed" with "zero files"
+
+**That is the finding.** Everything above is the trace; this is the sentence to keep. A column that
+cannot be null cannot say *"nobody has run the rollup"*, so the only value it can hold before the
+rollup exists is the same value it holds for a work the user genuinely has none of — and the renderer,
+correctly following its own rules, turns that into a positive claim on screen.
+
+⚠️ **What makes this worth an entry rather than a bug report is that the codebase already knows how
+to do this, on the other axis, and does it well.** The design has a deliberate, defended and *tested*
+vocabulary for an unknown **denominator** and refuses to invent one:
+
+* `schema.md` §1's rule, recorded here at **C-17** — ***`total: null` is not `total: 0`***, the first
+  meaning *nobody honestly knows*.
+* `web/src/lib/library.ts:223-227`: the tick is tested first and its `total > 0` clause is tested
+  against a number, *"so a null total cannot reach it however `have` compares"* — a typed guard
+  written specifically because `null` coerces to `0` in a loose comparison.
+* `web/src/lib/library.ts:340-346` and `internal/httpapi/library.go:112-114`: **a row with no
+  availability blob never gets a tick**, and `total = have + want` is named as the tempting bug.
+* `web/src/lib/library.test.ts:312-317` pins it: *"THE INVENTED-DENOMINATOR BUG, PINNED"*.
+
+There is **no such vocabulary for an unknown numerator**. `have_count` has exactly one unknown-shaped
+value available to it and it already means something else. The asymmetry is the bug, and it is in the
+schema, not in the renderer — `availabilityMark` given `have === 0` has nothing else it could
+honestly return.
+
+**No existing entry covers this.** Verified by grep over `docs/REVIEW-LOG.md` before asserting it:
+`have_count` appears at lines 10783 and 10794 only as a member of Block C's `SELECT` list and wire
+row; `rollup` appears at S-10 (scoping), C-15 and C-17 (the edition-keyed rollup and the polymorphic
+blob), line 1103 (`library_member`'s flush cadence) and RG-01.6 (the existence-oracle rebuttal);
+**`none held` appears nowhere**, and neither does the numerator/denominator asymmetry. The nearest
+neighbour is **I-01**, which made the accessible name mandatory — and it is worth noticing that I-01
+is *why* this defect is now legible: before it, the glyph was silent and the falsehood was only
+visual. Giving the status a word made it possible to read the word and see that it is wrong.
+
+**It is fixable with zero HTTP, and independently of the volume walk.** Every input is already in the
+local database. Nothing here needs a Kavita round trip, which means this defect does not have to wait
+on `LS-200`'s probe, on phase B, or on any milestone question. That is the one piece of good news in
+the entry and it is the reason it is filed as a finding rather than as a deferral.
+
+---
+
+## LS-211 — the walk and the rollup are different writers, only one of them is scheduled, and the order they land in is not free
+
+**Two findings recorded as one, because the second is the first's consequence and neither is safe to
+read alone.** `LS-210` says the numerator is never computed. This says *what would compute it*, that
+nothing schedules it, and that the obvious remedy — land the rollup — is **worse than the disease** if
+it lands first.
+
+### LS-211.1 — writing `media_file` rows does not move `have_count`
+
+**The rollup is fully specified and entirely unbuilt, and the two facts are easy to mistake for one
+another** because the specification is unusually complete. It is not a sketch:
+
+* **`docs/ARCHITECTURE.md:903-914`** (§6.3, *"The availability rollup, defined"*) gives the blob, the
+  render rule (`have == total && total > 0` → ✓; **`have == 0` → ✗**), and the mechanism:
+  *"a child write marks its ancestor dirty in the same transaction, and ancestors are re-aggregated
+  once per 250 ms flush batch."*
+* **`docs/reference/sync.md:347-349`** repeats it as an operational rule with the reason:
+  *"Never re-aggregate per child write — a series has up to ~300 children and an import generates
+  ~400k child events."*
+* **`internal/db/migrations/00005_library_sync.sql:297`** ships the column —
+  `rollup_dirty INTEGER NOT NULL DEFAULT 0, -- set by a child write; cleared by the flush`.
+* **`internal/db/migrations/00005_library_sync.sql:316`** ships the index —
+  `CREATE INDEX ix_work_dirty ON work(rollup_dirty) WHERE rollup_dirty = 1`.
+* **`internal/db/queryplan_test.go:230-234`** even **plan-guards** it: `SELECT id FROM work WHERE
+  rollup_dirty = 1` is asserted to use `ix_work_dirty`.
+
+🚩 **And nothing sets the flag.** `grep -rn 'rollup_dirty' --include=*.go` returns the migration, the
+schema dump, the plan guard and nothing else — **no writer, in test code or out of it**. So the
+partial index is permanently empty, the guard passes over an empty set, and the flush that would read
+it does not exist. This is a fourth instance of `LS-199`'s rule (*a guard that is green while the
+thing it protects is disconnected*), recorded here so the guard's green is not read as coverage.
+
+**No document assigns the rollup to a milestone.** Verified by grep, not by impression:
+`docs/ROADMAP.md` returns **zero** matches for `rollup`, `have_count` and `availability` across all
+232 lines. `docs/ARCHITECTURE.md` §16 (lines 2265–2981) returns **one** `availability`, at line 2814,
+and it is v0.2's *"availability states"* on the **request** surface — a different thing entirely —
+plus incidental `edition` mentions in the schema-freeze list. **§16 is authoritative for which
+milestone owns a thing, and it does not own this one.** Per `CLAUDE.md` — *"If §16 does not say a
+thing ships, it does not ship"* — the availability rollup is currently in no milestone at all.
+
+**The consequence, stated plainly so a plan cannot be written past it:** `media_file` rows and
+`have_count` are written by **two different writers**. `LS-200`'s volume walk produces the first.
+Producing the first does not produce the second. **A plan that lands the walk alone leaves the
+`none held` claim of `LS-210` exactly as it is** — 151 series with file rows underneath them, and 151
+crossed circles on top.
+
+### LS-211.2 — ⚠️ never the rollup alone, and the guard belongs in the writer
+
+**The symmetric mistake is worse, and it is worse in the specific way this project cares about.**
+Land the rollup **before** the walk and every work gets a `k:"count"` blob aggregated over **zero**
+`media_file` rows. `web/src/lib/library.ts:368-377` then takes the `availability.k === 'count'` arm
+instead of the blob-less one, and `availabilityMark(0, N)` returns `{k:'fraction'}` — so a healthy
+library renders **`0 / N · N missing`**: a denominator with no numerator, rendered through a column
+that now *looks* populated.
+
+**That is a regression from today's defect, not a partial fix.** Today's crossed circle is at least
+visibly the product of a blank column; `0 / 300 · 300 missing` looks **computed**. It is precisely
+`DESIGN-DIRECTION` §9.6's fabricated data, arrived at by arithmetic rather than by invention, and it
+is the same failure `web/src/routes/+page.svelte:39-46` already refuses for Block A — *"every count in
+it would have to be invented … a zeroed table and a skeleton shimmer are the same fabrication with
+different punctuation."*
+
+**Two rules follow, and the second is the load-bearing one:**
+
+1. **Never the rollup alone.** The walk and the rollup are one slice or they are sequenced walk-first.
+   A commit that lands the flush against an empty `media_file` makes the screen worse.
+2. **The rollup must refuse to write a `k:"count"` blob for a work with no file rows** — leaving the
+   column NULL, which `availabilityFor` already handles silently and correctly
+   (`internal/httpapi/library.go:302-305`) — **rather than relying on rule 1 holding.** Sequencing is
+   a property of a plan and plans slip; a writer that will not aggregate over zero children is a
+   property of the code. The distinction matters beyond the first import: a work whose children have
+   not been walked *yet* is the steady state during every subsequent sync, not a one-off first-run
+   condition.
+
+⚠️ Note what rule 2 does **not** fix: refusing the blob returns the row to the blob-less path, which
+is `LS-210`'s crossed circle. **Both entries have to be closed together.** Rule 2 stops the rollup
+making things worse; only `LS-210`'s schema-level distinction between *never computed* and *zero*
+makes the screen honest.
+
+---
+
+## LS-212 — two blocks on one Home screen disagree about the same work, which overturns an earlier "it changes nothing visible" call
+
+**The finding is the reversal as much as the fact.** An earlier judgement in this work — *leave
+editions out of the slice, it changes nothing visible* — was reached by checking **one** block's
+rendering rule and generalising it to a screen that has **two**. The rules are different, they
+disagree on the same rows, and the disagreement is on the same screen.
+
+**Block C classifies a book with no editions as Ebooks.** `internal/store/recent.go:259` selects
+`(SELECT MIN(e.format = ?) FROM edition e WHERE e.work_id = w.id)` and
+`internal/store/recent.go:379-398` (`mediaTypeOf`) turns it into a media type, ending with the
+sentence that decides the case: ***"A book with NO editions is Ebooks for the same reason — 'book' is
+the kind and an absent edition is not evidence of an audiobook."*** With no edition writer, `MIN(...)`
+over an empty set is `NULL`, `allAudiobook.Valid` is false, and every Kavita book lands under
+**Ebooks**. That is a deliberate, defended default and it is right.
+
+**Block A classifies the same work as nothing at all.** `docs/ARCHITECTURE.md:3045-3052` gives the
+six-row enum, and rows 4 and 5 are the two that are not `work.kind` counts:
+
+| # | Media type | `(kind, formats)` | "has content" is |
+|---|---|---|---|
+| 4 | Ebooks | `('book', ['print','ebook','cbz','cbr','pdf'])` | `EXISTS (SELECT 1 FROM edition e JOIN work w ON w.id=e.work_id WHERE w.kind='book' AND e.format IN (…))` |
+| 5 | Audiobooks | `('book', ['audiobook'])` | the same over `e.format='audiobook'` |
+
+With `edition` empty **both** EXISTS queries are false. And `web/src/routes/+page.svelte:47-49`
+states the rendering rule that makes that visible: ***"a media type the user does not have is not
+shown AT ALL, not in Block A, not in the sidebar, not as a search group"*** — §17.2's own hard rule,
+sourced at line 3037 (*"one sidebar entry per type that has content"*).
+
+🔥 **So on an install that demonstrably holds ebooks: Block A omits the Ebooks row and the sidebar
+omits the Ebooks entry, while Block C on the same screen files those same works under Ebooks.** One
+screen, two blocks, one work, two answers.
+
+**Three qualifications, each of which the entry would be wrong without:**
+
+1. **Block A is not drawn yet**, and for a good reason — `web/src/routes/+page.svelte:9` reads
+   `Block A media-type summary ≤6 rows NOT DRAWN — no source`, and lines 39-46 explain that its
+   per-type read does not exist and a zeroed table would be fabrication. **So the disagreement is
+   specified rather than currently rendered.** It becomes visible the day Block A lands, which is
+   exactly why it is worth recording now: the block will be built from §17.2's table, and §17.2's
+   table is the half that is wrong on a no-edition install.
+2. **§17.2's "hidden" is not unconditional.** `docs/ARCHITECTURE.md:3105-3112` specifies a per-type
+   **`unconfigured`** state for types v0.1's one source does not cover — *the type, `no catalogue
+   source connected`, the service that will populate it, the milestone it arrives in, and a link to
+   Add*. That is the honest state, and it is the state the design is proud of. But Ebooks on a
+   Kavita install **is** covered (§16.0: *"the catalogue is books and comics/manga, because Kavita is
+   the source that ships"*), so it does not qualify for `unconfigured` — it falls through to *not a
+   present type* and vanishes. **The row that would be hidden is the one whose source is working.**
+3. **`ix_edition_format` does not exist.** §17.2 line 3057 says
+   `CREATE INDEX ix_edition_format ON edition(format, work_id)` *"is owed alongside it"* and tells the
+   reader to check the migrations; `grep -rn 'ix_edition_format' internal/db/` returns **nothing**.
+   Recorded as an adjacent fact, not as this finding — but whoever builds Block A owes it.
+
+### The narrowing: real as a mechanism, zero on today's data
+
+**On a Kavita-only replica an edition writer would reclassify nothing.** `internal/libsync/kavita.go`
+`mapLibraryType` (lines 117-160) maps `Manga`/`Comic`/`ComicVine` → `comic`, `Book` and `LightNovel`
+→ `book`, and `Image` → declined with a reason. The `Book` arm says it in as many words at lines
+137-140: ***"an audiobook is not a kind (it is an edition with format='audiobook', ADR-0031), and
+Kavita serves no audio, so nothing here can produce one."*** So every edition a Kavita adapter could
+write is an ebook format, row 4's EXISTS goes true, row 5's stays false, and **no work moves between
+media types.** The movement is real as a **mechanism** and **zero on today's data**; it becomes live
+only when an audio-bearing adapter lands — Navidrome or Audiobookshelf.
+
+### 📌 The lesson, which is the part to carry forward
+
+**One block's rendering rule was checked and generalised to a screen that had two.** The check was
+correct; its scope was not. Home has three blocks, they read different queries, and *"nothing visible
+changes"* is a claim about **every** surface that reads the affected column, not about the one that
+was open in the editor. `web/src/routes/+page.svelte`'s own header is the standing evidence that the
+blocks diverge — it exists precisely to explain why one is drawn and another is not.
+
+---
+
+## LS-213 — the edition writer's known trap, recorded so it is not rediscovered: membership stays at the whole-work sentinel
+
+**Recorded as a decision taken in advance of the work, so that whoever writes the edition writer meets
+this as a constraint rather than as a `item_count` that doubled overnight.**
+
+**The trap, in the code's own words.** `library_member`'s WITHOUT ROWID primary key is
+`(library_id, sort_title, work_id, edition_id)` and `ux_libmem_identity` is
+`(library_id, work_id, edition_id)` — the key is **edition-grained by design**, and
+`internal/store/libraries.go:253-259` says why and what follows:
+
+> *"It counts MEMBER ROWS, which are EDITION-GRAINED (§17.8's flagship Ebooks/Audiobooks split is why
+> the key carries edition_id at all). Today that equals a count of distinct works, because the only
+> writer of the table — `catalogue.go`'s item pass — hardcodes `edition_id = 0`, the "whole work,
+> format-independent" sentinel. **When an edition-grained writer lands, a work with two editions in
+> one library will count twice and this comment is where the decision to change it goes.**"*
+
+**The decision, made here.** ✅ **Membership stays at the whole-work sentinel.** An edition writer
+must keep writing `edition_id = 0` into `library_member`, so **Libraries' `item_count` keeps its
+current meaning** — *"how many things are in this library"*, one row per work — and **an edition
+writer must not change that in the same slice.** Two reasons, and the second is the one that would
+otherwise be discovered late:
+
+1. **The Libraries screen's number would silently change meaning with no code change on that screen.**
+   A library of 151 series reading `151` today would read some larger number tomorrow, with nothing in
+   the diff touching `libraries.go` to explain it. That is a change to what the product claims,
+   arriving as a side effect of a sync-layer commit, which is the shape of change this log exists to
+   stop.
+2. **The cheap-looking fix is the one `libraries.go:259-262` explicitly rejects**, and the rejection
+   is measured rather than argued: *"COUNT(DISTINCT work_id) is NOT the safe default: the key's second
+   column is `sort_title`, so a distinct pass over `work_id` cannot be served by the key order and
+   buys a temp b-tree for a difference that does not exist yet."* The current plan is
+   `SEARCH m USING COVERING INDEX ux_libmem_identity (library_id=?)`, pinned by
+   `TestListLibrariesPlanIsSeeks`. Going edition-grained would force the distinct pass and cost the
+   covering seek, on a read that runs **once per row** of the Libraries screen.
+
+**The seam is kept, not spent.** This is `CLAUDE.md`'s *"the seam ships, the feature does not"*
+applied literally: `edition_id` stays in both keys, so an edition-grained membership remains a change
+to one writer's inputs and to nothing in the schema. What is decided is only that the writer does not
+take that seam **now**, and not in the same commit as the edition writer.
+
+⚠️ **Read with `LS-212`.** These two are the whole of the edition writer's blast radius as it stands
+today: `LS-212` is what an edition writer would *fix* on Home (row 4's EXISTS goes true) and
+`LS-213` is what it must be stopped from *breaking* on Libraries.
+
+---
+
+### On the ids, and on why there is no ADR here
+
+**`LS-210` through `LS-213` were allocated as a block; `LS-214`–`LS-219` are reserved and left as
+gaps.** They are not to be closed by renumbering — a gap in this file is cheaper than a collision,
+and `WEB-02`'s note above records why the `LS-` series is the one where concurrent threads collide.
+The `LS-2xx` decade was assigned to this batch rather than derived from the file's tail, deliberately.
+
+**No ADR, for any of the four.** These are findings, not decisions that close off an alternative.
+`LS-210` and `LS-211` describe defects and a sequencing constraint that follows from them by
+arithmetic — there is no rejected alternative, only a bug and the wrong way to fix it. `LS-212`
+reports a disagreement between two specified rendering rules and reverses a judgement made inside this
+work, which is a correction rather than a decision. **`LS-213` is the closest call**, since it does
+choose one option over another — and it is deliberately *not* given an ADR number, because it does not
+close the alternative off: it defers it, `libraries.go:257-259` already names itself as the place the
+decision to change it goes, and the seam that would carry it is untouched in both keys. An ADR here
+would overstate the finality of a "not in this slice".
