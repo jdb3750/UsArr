@@ -69,6 +69,7 @@
 		type ServiceHealth
 	} from '$lib/api';
 	import Icon from '$lib/Icon.svelte';
+	import { importStream } from '$lib/importstream.svelte';
 	import List from '$lib/List.svelte';
 	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { NOTHING, type ListColumn } from '$lib/list';
@@ -90,6 +91,7 @@
 		syncButtonBlocked,
 		syncButtonLabel,
 		syncCell,
+		syncNoteWithProgress,
 		syncRefusal,
 		syncStarted,
 		type SyncNote,
@@ -262,9 +264,27 @@
 	let syncing = $state<number | undefined>(undefined);
 	const syncNotes = new SvelteMap<number, SyncNote>();
 
+	/**
+	 * The note as it stands NOW, which is the press folded together with whatever
+	 * the import stream has since said about that instance.
+	 *
+	 * ⚠️ IT IS DERIVED ON READ, NEVER STORED BACK. `syncNotes` keeps what the
+	 * SERVER answered the press with, and it must stay that: writing a
+	 * stream-derived sentence into it would make a dropped socket permanent, and
+	 * the fallback would never come back when the socket did.
+	 *
+	 * `syncNoteWithProgress` is where every refusal lives, and it is the reason
+	 * this is a function call rather than a `{#if}` in the template.
+	 */
+	function syncNoteFor(id: number): SyncNote | undefined {
+		const note = syncNotes.get(id);
+		if (!note) return undefined;
+		return syncNoteWithProgress(note, importStream.progressFor(id), importStream.connected);
+	}
+
 	function syncPhase(id: number): SyncPhase {
 		if (syncing === id) return 'starting';
-		return syncNotes.get(id)?.phase ?? 'idle';
+		return syncNoteFor(id)?.phase ?? 'idle';
 	}
 
 	/** Rows whose identity changed. Loud on purpose: this one blocks (§17.7). */
@@ -417,7 +437,31 @@
 			now = new Date();
 			void load();
 		}, 60_000);
-		return () => clearInterval(timer);
+
+		// ONE SHARED CONNECTION, held for as long as this screen is mounted.
+		// `$lib/importstream` reference counts it, so this is a join rather than
+		// an open, and the counts the banner renders are read back off the store
+		// rather than kept in a second copy here.
+		//
+		// The listener exists for the ONE thing a rendered count cannot do: the
+		// terminal frame means `last_full_sync_at` has already been written, so
+		// the row's own column is stale by exactly one read. Re-reading it here is
+		// what makes the completion sentence and the column agree.
+		const release = importStream.subscribe((event) => {
+			if (event.kind !== 'import' || event.progress.phase !== 'done') return;
+			// Only for a row this tab pressed. A bootstrap import runs with no
+			// press behind it, and announcing one would be the screen speaking
+			// about something the user did not ask for.
+			const note = syncNotes.get(event.progress.instanceId);
+			if (!note || (note.phase !== 'started' && note.phase !== 'running')) return;
+			void load();
+			announcement = 'The import has finished.';
+		});
+
+		return () => {
+			clearInterval(timer);
+			release();
+		};
 	});
 
 	function isOpen(id: number): boolean {
@@ -696,6 +740,10 @@
 		const attempt = async () => {
 			syncing = id;
 			syncNotes.delete(id);
+			// ⚠️ THE PREVIOUS IMPORT'S TERMINAL FRAME MUST NOT SURVIVE THIS PRESS.
+			// A leftover `done` would be folded into the new note and render as
+			// "The import has finished" before the new import had read a row.
+			importStream.forget(id);
 			try {
 				const started = await syncService(id);
 				const note = syncStarted(started);
@@ -1273,14 +1321,22 @@
 			<button type="button" class="btn" onclick={() => (removing = row)}>Remove</button>
 		</div>
 		<!--
-			WHAT THE SERVER SAID ABOUT THE LAST PRESS.
+			WHAT THE SERVER SAID ABOUT THE LAST PRESS, PLUS WHAT THE IMPORT HAS SAID SINCE.
 
-			⚠️ `started` IS THE STRONGEST WORD ANY BRANCH HERE MAY USE. There is no
-			progress bar and no completion tick, because the 202 carries neither a
-			count nor an outcome: the import has read nothing when the response is
-			written (http-api.md §4.2). What completion looks like is the row's own
-			`Last successful sync` column moving, and it is named in the copy for
-			exactly that reason.
+			⚠️ `started` IS STILL THE STRONGEST WORD THE RESPONSE SUPPORTS. The 202
+			carries neither a count nor an outcome: nothing has been read when it is
+			written (http-api.md §4.2). Everything stronger than that comes off the
+			`import.progress` frames, and `syncNoteWithProgress` owns every rule
+			about when they may be believed.
+
+			⚠️ THERE IS NO PROGRESS BAR, AND THAT IS NOT AN OVERSIGHT. Two of the
+			four phases send no total at all, so a bar would need a denominator the
+			server never sent. The readout is a sentence with real counts in it,
+			which is what §7.2 asked for and is all the wire can honestly fill.
+
+			The one completion sentence comes from the terminal frame alone. When no
+			frame has arrived, or the socket is down, the copy falls back to the
+			`Last successful sync` column, which is written on success alone.
 
 			The title and the consequence are UsArr's words; `message` and `action`
 			are the server's, carried through untouched under §17.3's verbatim rule.
@@ -1292,8 +1348,8 @@
 			banner IS to assistive tech is the button's description, through the
 			`aria-describedby` above.
 		-->
-		{#if syncNotes.get(h.id)}
-			{@const note = syncNotes.get(h.id)!}
+		{#if syncNotes.has(h.id)}
+			{@const note = syncNoteFor(h.id)!}
 			<div
 				class={`banner sync-note ${note.tone === 'err' ? 'banner--err' : note.tone === 'warn' ? 'banner--warn' : ''}`}
 				id={`svc-sync-${String(h.id)}`}

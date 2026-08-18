@@ -55,7 +55,7 @@
  */
 
 import { NOTHING } from './list';
-import type { ServiceHealth, ServiceInstance } from './api';
+import type { ImportProgress, ServiceHealth, ServiceInstance } from './api';
 
 /** One row of the health table: the health row, plus what only GET /services has. */
 export interface ServiceRow {
@@ -735,14 +735,22 @@ export function rollupCount(entries: readonly { tone: Tone }[]): string {
 /**
  * Where one row's re-import press has got to.
  *
- * ⚠️ THERE IS NO `done`, AND THAT IS THE POINT. The endpoint answers 202 and
- * never learns how the import ended (http-api.md §4.3), so no phase reachable
- * from a response may claim completion. `started` is the strongest word the
- * wire supports. Completion is observed elsewhere entirely: `last_full_sync_at`
- * moving in the `Last successful sync` column, which is written on success
- * alone.
+ * ⚠️ NO PHASE REACHABLE FROM THE RESPONSE MAY CLAIM COMPLETION, and that has
+ * not changed. The endpoint answers 202 and never learns how the import ended
+ * (http-api.md §4.3), so `started` is still the strongest word any branch of
+ * `syncStarted` or `syncRefusal` may use.
+ *
+ * `finished` IS REACHABLE FROM ONE PLACE AND ONE ONLY: the terminal
+ * `import.progress` frame, `phase: "done"`, applied by `syncNoteWithProgress`
+ * below. That frame is published after `StampFullSync` has written
+ * `last_full_sync_at` (internal/libsync/importer.go), so it is the server
+ * saying it succeeded rather than a client concluding it. Silence is not that
+ * frame: an import that fails returns before the publish and simply stops
+ * sending, so a quiet stream, a dropped socket and a count that reached a total
+ * all mean UNKNOWN and none of them may reach this phase.
  */
-export type SyncPhase = 'idle' | 'starting' | 'started' | 'running' | 'refused' | 'failed';
+export type SyncPhase =
+	'idle' | 'starting' | 'started' | 'running' | 'refused' | 'failed' | 'finished';
 
 /**
  * What the screen says after a press, as data.
@@ -787,11 +795,13 @@ export function canRunFullSync(health: ServiceHealth): boolean {
 /**
  * The 202. `started`, and never a word stronger.
  *
- * ⚠️ NO PROGRESS, NO PERCENTAGE, NO COMPLETION. The response carries none of
- * the three because nothing has been read when the server writes it, so a
- * progress bar here would be an animation over an invented number. The
- * consequence line says the two true things instead: what to watch for, and
- * that a repeat press is how "is it still running" is asked.
+ * ⚠️ NO PROGRESS, NO PERCENTAGE, NO COMPLETION IN THIS NOTE. The response
+ * carries none of the three because nothing has been read when it is written,
+ * so anything numeric here would be invented. Real counts exist, and they reach
+ * the screen through `syncNoteWithProgress` folding the `import.progress`
+ * frames onto this note afterwards. Until one arrives, the consequence line
+ * says the two true things instead: what to watch for, and that a repeat press
+ * is how "is it still running" is asked.
  */
 export function syncStarted(started: { name: string }): SyncNote {
 	return {
@@ -800,10 +810,22 @@ export function syncStarted(started: { name: string }): SyncNote {
 		title: started.name === '' ? 'A full re-import has started' : `${started.name} is re-importing`,
 		message: '',
 		action: '',
-		consequence:
-			'Nothing has been read yet, so there is no progress to show. It is finished when Last successful sync moves, and that column moves on success alone.'
+		consequence: NOTHING_READ_YET
 	};
 }
+
+/**
+ * The completion anchor, named because three different sentences end with it.
+ *
+ * It is the answer that holds when the stream says nothing at all, and it stays
+ * true when the stream says plenty: `last_full_sync_at` is written on success
+ * alone, so the column moving is positive evidence in every case.
+ */
+export const WATCH_THE_SYNC_COLUMN =
+	'It is finished when Last successful sync moves, and that column moves on success alone.';
+
+/** What the screen said before it could see the stream, kept verbatim as the fallback. */
+export const NOTHING_READ_YET = `Nothing has been read yet, so there is no progress to show. ${WATCH_THE_SYNC_COLUMN}`;
 
 /**
  * The sentence §4.4 exists to make sayable, and it is said on every non-2xx
@@ -894,6 +916,107 @@ export function syncRefusal(
 						: NO_IMPORT_STARTED
 			};
 	}
+}
+
+/**
+ * The count sentence for one live frame, and nothing beyond what the frame said.
+ *
+ * ⚠️ `total` IS A DENOMINATOR ONLY WHERE IT EXISTS. It is `omitempty` on the
+ * wire and the credits pass is the only publisher that sets one, so the item
+ * phase renders a bare count. Rendering `of 0` there, or dividing by it for a
+ * percentage, would turn "the source named no total" into "the source said
+ * zero", which are opposite claims about how much is left.
+ *
+ * ⚠️ AND NO BRANCH HERE SAYS ANYTHING ABOUT THE END. A phase name this client
+ * has not heard of still has meaningful counts, so it renders them and declines
+ * to name the phase, rather than being dropped or guessed at.
+ */
+function progressCounts(progress: ImportProgress): string {
+	const read = progress.itemsRead.toLocaleString('en-GB');
+	const applied = progress.applied.toLocaleString('en-GB');
+	const total = progress.total === undefined ? '' : progress.total.toLocaleString('en-GB');
+	switch (progress.phase) {
+		case 'containers':
+			return 'Reading the list of libraries. Nothing has been applied yet.';
+		case 'items':
+			return total === ''
+				? `Read ${read} items so far, and applied ${applied} of them.`
+				: `Read ${read} of ${total} items so far, and applied ${applied} of them.`;
+		case 'credits':
+			return total === ''
+				? `Adding credits: ${read} items read, ${applied} credits written.`
+				: `Adding credits: ${read} of ${total} items read, ${applied} credits written.`;
+		default:
+			return `Read ${read} so far, and applied ${applied}.`;
+	}
+}
+
+/**
+ * Fold the live stream into the note the press produced. THE WHOLE FEATURE IS
+ * THIS FUNCTION, and its three refusals matter more than its one readout.
+ *
+ * ⚠️ REFUSAL ONE: NO FRAME, NO CHANGE. `progress` undefined covers a stream
+ * that never connected, a stream that connected and has sent nothing yet, and a
+ * browser that cannot open one at all. All three get the note exactly as it was
+ * written, which is the sentence this screen shipped with. It is still true in
+ * every one of them: nothing has been observed, so nothing is claimed.
+ *
+ * ⚠️ REFUSAL TWO: DISCONNECTED MEANS THE NUMBERS GO AWAY. A socket that dropped
+ * mid-import leaves a last frame behind, and that frame is a photograph of a
+ * moment that has passed. Rendering it on would be a progress readout that has
+ * silently stopped moving, which is worse than none: the user reads a stalled
+ * count as a stalled import. So the counts are withdrawn and the sentence says
+ * the stream is gone, rather than freezing a number nobody can date.
+ *
+ * ⚠️ REFUSAL THREE: ONLY `done` ENDS IT. Not the last batch, not silence, not
+ * `applied` reaching `total`. See SyncPhase.
+ *
+ * A `done` frame OUTLIVES a disconnection, and that is not an inconsistency
+ * with refusal two: it is an event that was observed rather than a count that
+ * has to be current, so it stays said whatever the socket does afterwards.
+ *
+ * Only a note that is WAITING on an import is folded into. A refusal, a fault
+ * and a press still in flight are all statements about the request, and frames
+ * for a bootstrap import running in the background must not rewrite them.
+ */
+export function syncNoteWithProgress(
+	note: SyncNote,
+	progress: ImportProgress | undefined,
+	connected: boolean
+): SyncNote {
+	if (note.phase !== 'started' && note.phase !== 'running') return note;
+	if (progress === undefined) return note;
+
+	if (progress.phase === 'done') {
+		const read = progress.itemsRead.toLocaleString('en-GB');
+		const applied = progress.applied.toLocaleString('en-GB');
+		return {
+			...note,
+			phase: 'finished',
+			tone: 'ok',
+			title: 'The import has finished',
+			// ⚠️ THE SERVER'S OWN TEXT IS DROPPED HERE, AND ONLY HERE, AND THIS IS
+			// NOT §17.3's verbatim rule being bent. That rule forbids PARAPHRASING
+			// what the server said; it does not require keeping a sentence about a
+			// state that has since ended. The refusal this note may have come from
+			// is `import_in_progress`, whose message and action read "an import is
+			// already running" and "Wait for the running import to finish" — beside
+			// a headline saying it has finished, they are a live instruction to wait
+			// for something that is over.
+			message: '',
+			action: '',
+			consequence: `It read ${read} items and applied ${applied}. Last successful sync has moved, because that column is written on success alone.`
+		};
+	}
+
+	if (!connected) {
+		return {
+			...note,
+			consequence: `The progress stream is not connected, so there is no progress to show. ${WATCH_THE_SYNC_COLUMN}`
+		};
+	}
+
+	return { ...note, consequence: `${progressCounts(progress)} ${WATCH_THE_SYNC_COLUMN}` };
 }
 
 /** The button's label for each phase. `Starting` is the only in-flight word. */

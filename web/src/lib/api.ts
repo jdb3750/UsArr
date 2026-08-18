@@ -94,7 +94,14 @@ export const STREAM_EVENT_NAMES = [
 	'search.results',
 	'search.done',
 	'search.failed',
-	'stream.missed'
+	'stream.missed',
+	// The SEVENTH name, and it had a producer long before it had a listener.
+	// cmd/usarr's importProgress publishes internal/libsync's Progress under
+	// store.SystemUserID as each batch commits, so the frame was on the wire and
+	// this list simply did not name it: EventSource delivers a named event to a
+	// registered listener and to nothing else, so every frame was dropped by the
+	// browser. That was recorded as LS-05 in docs/REVIEW-LOG.md.
+	'import.progress'
 ] as const;
 
 export type StreamEventName = (typeof STREAM_EVENT_NAMES)[number];
@@ -250,7 +257,51 @@ export type StreamEvent =
 	| { kind: 'done'; searchId?: string; report?: SearchReport }
 	| { kind: 'failed'; searchId?: string; message: string; action?: string }
 	| { kind: 'missed'; message: string; action?: string }
+	// ⚠️ `searchId?: undefined` IS A STATEMENT OF FACT, NOT A SHIM. An import is
+	// not a search and carries no search id, and saying so in the type is what
+	// keeps `event.searchId` reachable across the whole union: a consumer that
+	// filters late frames out of an older search reads `undefined` here and
+	// lets the frame through to a `switch` that has no case for it. Leaving the
+	// field off the member instead would make that consumer a type error
+	// without making it a bug.
+	| { kind: 'import'; searchId?: undefined; progress: ImportProgress }
 	| { kind: 'unknown' };
+
+/**
+ * One `import.progress` frame, field for field as internal/libsync's `Progress`
+ * marshals it (internal/libsync/importer.go:100).
+ *
+ * ⚠️ `phase` IS THE ONLY FIELD THAT MAY SAY AN IMPORT ENDED, and only when it
+ * reads `done`. That frame is published at the very bottom of `FullImport`,
+ * after `StampFullSync` has written `last_full_sync_at`, so it is reached on
+ * complete success and on nothing else: every early return takes an error path
+ * that publishes nothing. Silence is therefore NOT completion. A failed import
+ * simply stops sending frames, and a caller that inferred an ending from the
+ * last batch, from a count reaching a total, or from a quiet stream would call
+ * a half-imported catalogue finished.
+ *
+ * ⚠️ AND `total` IS ABSENT FAR MORE OFTEN THAN IT IS PRESENT. Go tags it
+ * `omitempty`, and the only publish site that sets it is the credits pass; the
+ * container and item phases send none, because Kavita reports its own total in
+ * a `Pagination` header that is middleware and is not in its OpenAPI document.
+ * `undefined` here means UNKNOWN and must render as unknown, never as zero and
+ * never as a denominator.
+ *
+ * The four phases are `containers`, `items`, `credits` and `done`, and they are
+ * carried through as the strings the server sent rather than mapped onto an
+ * enum: a phase this client has not heard of is a phase the server has, and
+ * dropping the frame would be worse than saying less about it.
+ */
+export interface ImportProgress {
+	instanceId: number;
+	phase: string;
+	/** How far the read got. Never a claim that this many rows are correct. */
+	itemsRead: number;
+	/** How many reached a COMMITTED batch. */
+	applied: number;
+	/** The upstream's own total, when it reported one. Undefined means unknown. */
+	total?: number;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -416,6 +467,26 @@ export function normalizeStreamEvent(eventName: string, rawData: string): Stream
 				message: str(payload.message) ?? 'some events were dropped',
 				action: str(payload.action)
 			};
+		case 'import.progress': {
+			// instance_id is the ONLY required field: progress that cannot be
+			// attributed to a service is progress no row can render, and filing it
+			// under a guessed instance would move the wrong row's numbers.
+			const instanceId = num(payload.instance_id);
+			if (instanceId === undefined) return { kind: 'unknown' };
+			// `?? 0` is right for these two and would be WRONG for `total`. Go
+			// leaves both untagged, so a zero is sent and means zero; `total` is
+			// `omitempty`, so an absent one means the source named no total.
+			return {
+				kind: 'import',
+				progress: {
+					instanceId,
+					phase: str(payload.phase) ?? '',
+					itemsRead: num(payload.items_read) ?? 0,
+					applied: num(payload.applied) ?? 0,
+					total: num(payload.total)
+				}
+			};
+		}
 		default:
 			return { kind: 'unknown' };
 	}
