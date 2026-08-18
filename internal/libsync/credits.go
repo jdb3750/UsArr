@@ -300,6 +300,55 @@ func releaseYearOf(md kavita.SeriesMetadataDto) sql.NullInt64 {
 	return sql.NullInt64{Int64: int64(md.ReleaseYear), Valid: true}
 }
 
+// kavitaPublicationStatus maps Kavita's PublicationStatus onto work.status.
+//
+// The members are OnGoing=0, Hiatus=1, Completed=2, Cancelled=3, Ended=4
+// (kavita.PublicationStatus). Three of them unlock the availability rollup's
+// denominator (ARCHITECTURE.md §6.1) and the store owns that gate, so the
+// strings come from store's constants rather than being spelled again here.
+//
+// ⚠️ 0 IS AMBIGUOUS AND IS MAPPED TO 'ongoing' DELIBERATELY. A free Kavita may
+// or may not populate publicationStatus — it has never been measured — and .NET
+// writes an unset enum as its zero member, so "the operator said OnGoing" and
+// "nobody said anything" arrive identically. Both map to 'ongoing', which fails
+// the denominator gate, so the ambiguity costs a fraction that would have been a
+// guess and costs nothing else. A member Kavita adds later maps to "" — no
+// statement — rather than to a neighbouring status.
+func kavitaPublicationStatus(ps kavita.PublicationStatus) string {
+	switch ps {
+	case 0:
+		return store.WorkStatusOngoing
+	case 1:
+		return store.WorkStatusHiatus
+	case 2:
+		return store.WorkStatusCompleted
+	case 3:
+		return store.WorkStatusCancelled
+	case 4:
+		return store.WorkStatusEnded
+	}
+	return ""
+}
+
+// declaredTotalOf projects SeriesMetadataDto.totalCount onto
+// work_comic.total_issues_declared.
+//
+// 0 IS "NOTHING DECLARED", NOT "ZERO ISSUES", on releaseYearOf's reasoning:
+// totalCount is a plain int32 whose unset value is 0, and a series with zero
+// issues is not a thing Kavita models. Storing 0 would put a denominator in the
+// blob that §6.3's render rule guards against with `total > 0` — i.e. it would
+// depend on a downstream check rather than on the value being honest here.
+//
+// A NEGATIVE VALUE IS ALSO REFUSED. The field is an unbounded int32 in the
+// spec, and a negative total is not a smaller total, it is a value nothing can
+// mean.
+func declaredTotalOf(md kavita.SeriesMetadataDto) sql.NullInt64 {
+	if md.TotalCount <= 0 {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: int64(md.TotalCount), Valid: true}
+}
+
 // StreamCredits fetches each requested series' metadata and hands its credits to
 // fn.
 //
@@ -353,6 +402,10 @@ func (s *KavitaSource) StreamCredits(
 			RemoteKind: r.RemoteKind, RemoteID: r.RemoteID, Credits: credits,
 			// The same response, on the same round trip. See releaseYearOf.
 			Year: releaseYearOf(md),
+			// And the rollup's denominator gate, on that same round trip —
+			// which is the whole reason it is affordable at all.
+			Status:        kavitaPublicationStatus(md.PublicationStatus),
+			TotalDeclared: declaredTotalOf(md),
 		}); err != nil {
 			return n, err
 		}

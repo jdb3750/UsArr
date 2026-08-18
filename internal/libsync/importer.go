@@ -118,6 +118,12 @@ type Report struct {
 	// Files is what the file walk wrote, on Credits's terms.
 	Files store.FileResult
 
+	// Rollups is what the flush computed. It is the pass that turns the file
+	// rows into have_count and the availability blob; without it the walk
+	// leaves 151 series with file rows underneath them and 151 crossed circles
+	// on top (REVIEW-LOG.md LS-211.1).
+	Rollups store.RollupResult
+
 	// Completed is true only when the whole stream was read AND every batch
 	// committed. It is what gates last_full_sync_at.
 	Completed bool
@@ -222,7 +228,14 @@ func (im *Importer) publish(p Progress) {
 //     order that leaves the least time with a numerator and no denominator is
 //     this one. It is also the pass that sets work.rollup_dirty, so it must be
 //     the last thing that touches a work before the flush.
-//  5. ANALYZE, then last_full_sync_at, ON SUCCESS ONLY. Both are skipped on a
+//  5. THEN THE ROLLUP FLUSH, which is where have_count and the availability
+//     blob come from. It is LAST among the writers because it reads what they
+//     all left: a child write marks its ancestor dirty in the same transaction
+//     and the flush re-aggregates the dirty set once (ARCHITECTURE.md §6.3).
+//     Running it before the walk would aggregate over zero file rows — which
+//     internal/store/rollup.go refuses to do anyway, in the writer rather than
+//     by sequencing, because plans slip.
+//  6. ANALYZE, then last_full_sync_at, ON SUCCESS ONLY. Both are skipped on a
 //     failed or partial import: a freshness claim written over half a library is
 //     worse than none, because the Services screen renders it as current.
 //
@@ -305,6 +318,19 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (Report, e
 		return rep, err
 	}
 
+	// THE SCOPE IS THE OWNER'S, NAMED AT THE CALL SITE RATHER THAN DEFAULTED
+	// INSIDE THE FLUSH. work.have_count and work.availability are denormalised
+	// columns, so they hold ONE scope's answer; v0.1 has exactly one user and
+	// OwnerScope's predicate is `1=1`, so the stored figure and the true figure
+	// coincide. Writing it here means the day a second user exists, the
+	// question "whose numbers are in that column" has an answer in the code
+	// rather than in a reconstruction.
+	rollups, err := im.Store.FlushRollups(ctx, store.OwnerScope(im.UserID), 0)
+	rep.Rollups = rollups
+	if err != nil {
+		return rep, fmt.Errorf("full import of service_instance %d: flush rollups: %w", instanceID, err)
+	}
+
 	rep.Completed = true
 
 	// ANALYZE after a bulk import (reference/sync.md §6 rule 5). It runs on the
@@ -350,6 +376,10 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (Report, e
 		"files_written", rep.Files.FilesWritten,
 		"files_removed", rep.Files.FilesRemoved,
 		"editions_created", rep.Files.EditionsCreated,
+		"rollups_flushed", rep.Rollups.WorksFlushed,
+		"blobs_written", rep.Rollups.BlobsWritten,
+		"blobs_withheld", rep.Rollups.BlobsWithheld,
+		"totals_offered", rep.Rollups.TotalsOffered,
 		"declined_containers", len(rep.DeclinedContainers),
 		"skipped_containers", len(rep.SkippedContainers),
 		"identity_conflicts", len(rep.IdentityConflicts),

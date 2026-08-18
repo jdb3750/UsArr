@@ -2,6 +2,7 @@ package libsync
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -212,12 +213,50 @@ func TestFullImportFromTheCassettesEndToEnd(t *testing.T) {
 	}
 
 	// The dirty mark, which is the whole point of the pass for the rollup: the
-	// three walked works are queued for the flush and nothing else is.
-	if n := countRows(t, s, `SELECT COUNT(*) FROM work WHERE rollup_dirty = 1`); n != 3 {
-		t.Errorf("%d works are marked rollup_dirty, want the 3 the walk touched", n)
-	}
+	// three walked works are queued for the flush.
 	if rep.Files.WorksMarkedDirty != 3 {
 		t.Errorf("WorksMarkedDirty = %d, want 3", rep.Files.WorksMarkedDirty)
+	}
+	// ...and the flush CLEARED them. A flag left set is a work every later
+	// flush picks up again forever.
+	if n := countRows(t, s, `SELECT COUNT(*) FROM work WHERE rollup_dirty = 1`); n != 0 {
+		t.Errorf("%d works are still marked rollup_dirty after the flush", n)
+	}
+	if rep.Rollups.WorksFlushed != 3 || rep.Rollups.BlobsWritten != 3 || rep.Rollups.BlobsWithheld != 0 {
+		t.Errorf("rollups: flushed %d written %d withheld %d, want 3/3/0",
+			rep.Rollups.WorksFlushed, rep.Rollups.BlobsWritten, rep.Rollups.BlobsWithheld)
+	}
+
+	// have_count IS the file count, and the blob says so. The denominator is
+	// offered for exactly one of the three: Blame! is Completed with a declared
+	// total of 10 (kavita_series_metadata.yaml), Frieren is OnGoing, and The
+	// Hobbit is a book — work_book has no total column, so a book never has a
+	// declared total whatever its status says.
+	for _, tc := range []struct {
+		title, availability string
+		have                int
+	}{
+		{"Frieren: Beyond Journey's End", `{"k":"count","have":3,"total":null,"total_source":null}`, 3},
+		{"Blame!", `{"k":"count","have":2,"total":10,"total_source":"comicinfo"}`, 2},
+		{"The Hobbit", `{"k":"count","have":1,"total":null,"total_source":null}`, 1},
+	} {
+		var have int
+		var blob sql.NullString
+		if err := s.DB().Read().QueryRowContext(t.Context(),
+			`SELECT have_count, availability FROM work WHERE title = ?`, tc.title).
+			Scan(&have, &blob); err != nil {
+			t.Fatalf("read the rollup of %q: %v", tc.title, err)
+		}
+		if have != tc.have {
+			t.Errorf("%q: have_count = %d, want %d", tc.title, have, tc.have)
+		}
+		if !blob.Valid || blob.String != tc.availability {
+			t.Errorf("%q: availability = %v, want %s", tc.title, blob, tc.availability)
+		}
+	}
+	if rep.Rollups.TotalsOffered != 1 {
+		t.Errorf("TotalsOffered = %d, want 1 (only the Completed series with a declared total)",
+			rep.Rollups.TotalsOffered)
 	}
 
 	// §7 invariants 2 and 5, over a POPULATED corpus.

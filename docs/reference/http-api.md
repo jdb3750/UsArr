@@ -133,6 +133,20 @@ The blob is `reference/schema.md` §1's polymorphic rollup, **forwarded verbatim
 | `edition` | music | edition-keyed fractions with a `label`, because a remaster changes the track list |
 | `count` | comics, and anything with no honest denominator | `have`, a `total` that may be `null`, a `total_source` naming the declaration, and `missing` |
 
+⚠️ **`k:"count"` is the only shape anything in the tree writes today, and it ships WITHOUT `missing`.**
+The writer is `internal/store/rollup.go`, fed by the Kavita volume walk, and it emits exactly
+`{"k":"count","have":N,"total":…,"total_source":…}` for works of kind `book`, `comic` and
+`comic_issue`. `missing` is **contiguity** — *"43 issues · #7, #12 and #30-32 missing"* — computed
+locally from `work_comic_issue.number_sort`, and nothing writes `work_comic_issue` yet, so the key is
+**absent rather than empty**: an empty `missing` array would claim a complete run, which is a
+different statement from "nobody has worked out what is missing". A renderer must treat an absent
+`missing` as unknown, never as none.
+
+**`total` is present only when the series has STOPPED and a total was declared** (`ARCHITECTURE.md`
+§6.1), so on an ordinary comics library it is `null` on most rows. `total_source` names the
+declaration's origin — `comicinfo` for everything Kavita reports, because Kavita's `totalCount`
+derives from ComicInfo's `Count`. Both keys are always **present**; it is their VALUE that is `null`.
+
 ⚠️ **`total: null` is not `total: 0`.** The first means nobody honestly knows; the second means the
 series is empty. §6.3's render rule (`have == total && total > 0` → ✓) must never fire on the first.
 
@@ -191,6 +205,27 @@ manufactured zero, which arrives at the same signal from the other direction.
 **So absence self-corrects, and a client written to this rule needs no second edit.** The first flush
 that has anything to count publishes the key — including when the honest answer is `have: 0` — and
 the row moves from *not counted* to counted with no wire change behind it.
+
+✅ **That flush now exists** (`internal/store/rollup.go`), and it holds the rule from the writer's
+side rather than by sequencing: a work with **no file rows in the viewer's scope** gets **no blob**,
+and the flush refuses to publish `have: 0` over an empty basis. `REVIEW-LOG.md` LS-211.2 rule 2 is
+the reasoning; `TestTheRollupRefusesToFabricateAZero` is the guard, fired.
+
+⚠️ **ABSENCE HAS A SECOND CAUSE NOW, AND IT CHANGES NOTHING FOR A CONSUMER.** A work that HAD a blob
+and whose basis then went away — every file deleted upstream, so the walk reconciled its rows to
+nothing — has its blob **withdrawn**, returning the row to *not counted*. So the precise reading of
+an absent key is **"no count is currently computable for this work"**, of which "never counted" is
+the common case. The consumer rule is unchanged and unchanged deliberately: with zero file rows,
+*never walked* and *walked, and empty* are indistinguishable from the server's side, and only one of
+them could honestly be rendered as emptiness — so neither is. The alternatives were leaving
+yesterday's `have: 43` standing, which is a claim about a library the user no longer has, and writing
+`have: 0`, which is the fabrication this whole section exists to prevent.
+
+**One invariant this writer preserves on purpose:** it never moves `have_count` without also writing
+the blob. A work whose `kind` has a shape this writer cannot produce — video is `k:"tier"`, music is
+`k:"edition"`, and neither has a source that writes files yet — is skipped with **both** columns left
+alone rather than counted into a bare number. `TestAKindWithNoBlobShapeLeavesBothColumnsAlone` is the
+guard.
 
 ### 1.5 Paging
 

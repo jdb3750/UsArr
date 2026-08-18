@@ -105,6 +105,25 @@ type CreditSet struct {
 	// items resolved onto, that is last-writer-wins, exactly as the credits are
 	// (docs/DECISIONS.md, ADR-0044).
 	Year sql.NullInt64
+
+	// Status is work.status — the upstream's own publication state, mapped onto
+	// this package's WorkStatus* vocabulary by the adapter. "" means the source
+	// makes no statement, and is stored as SQL NULL.
+	//
+	// IT IS HERE FOR THE SAME REASON Year IS: phase B is one metadata read per
+	// item, and Kavita reports publicationStatus on the response that carries
+	// the credits. A separate pass for it would be a second GET per series for a
+	// field already in hand.
+	Status string
+
+	// TotalDeclared is the upstream's DECLARED total number of issues, landing
+	// on work_comic.total_issues_declared. INVALID means nothing was declared.
+	//
+	// ⚠️ IT IS A DECLARATION AND NOT A FACT, which is why the column stores it
+	// beside total_issues_source and why the rollup gates it on status
+	// (rollup.go's declaredTotal). ComicInfo's own `Count` specification
+	// concedes it "could be different on each book in a series".
+	TotalDeclared sql.NullInt64
 }
 
 // CreditResult is what one ApplyCredits call did.
@@ -139,6 +158,13 @@ type CreditResult struct {
 	// replaced in place, so no count outside this struct can see the difference.
 	DocsRebuilt int
 
+	// StatusesWritten and TotalsWritten count works whose work.status and
+	// work_comic.total_issues_declared this call actually CHANGED, on
+	// YearsWritten's terms and guarded the same way: a re-import that reports
+	// the same values again touches no row.
+	StatusesWritten int
+	TotalsWritten   int
+
 	// YearsWritten counts works whose work.year this call actually CHANGED. It
 	// is not the number of sets carrying a year: the update is guarded by
 	// `year IS NOT ?`, so a re-import that reports the same year again touches
@@ -157,6 +183,8 @@ func (r *CreditResult) add(o CreditResult) {
 	r.CreditsRejected += o.CreditsRejected
 	r.DocsRebuilt += o.DocsRebuilt
 	r.YearsWritten += o.YearsWritten
+	r.StatusesWritten += o.StatusesWritten
+	r.TotalsWritten += o.TotalsWritten
 }
 
 // Add merges another result into r, so an importer can accumulate across
@@ -254,6 +282,57 @@ func applyOneCreditSet(
 		}
 		if n > 0 {
 			res.YearsWritten++
+		}
+	}
+
+	// ── 1c. The publication status and the declared total, from the same
+	// metadata read, because they are the availability rollup's DENOMINATOR
+	// GATE and fetching them separately would be a second GET per series for
+	// two fields already in hand (ARCHITECTURE.md §6.1).
+	//
+	// ⚠️ WHETHER A FREE KAVITA POPULATES EITHER OF THEM HAS NEVER BEEN
+	// MEASURED, and this code does not need to know: an instance that populates
+	// neither sends publicationStatus 0 (OnGoing) and totalCount 0, which the
+	// adapter maps to WorkStatusOngoing and an INVALID total — and both of
+	// those fail rollup.go's gate, so the blob carries `total: null` and no
+	// fraction is ever rendered. The populated case and the unpopulated case
+	// take the same safe branch, which is why it is not a question this slice
+	// has to answer.
+	{
+		status := nullString(set.Status)
+		r, err := tx.ExecContext(ctx, `
+			UPDATE work SET status = ?, updated_at = ?
+			 WHERE id = ? AND status IS NOT ?`,
+			status, FormatTime(now), workID, status)
+		if err != nil {
+			return res, fmt.Errorf("set status on work %d: %w", workID, err)
+		}
+		if n, err := r.RowsAffected(); err == nil && n > 0 {
+			res.StatusesWritten++
+		}
+
+		// work_comic only. A book is not a series of issues and work_book has
+		// no total column, so this UPDATE matches no row for a 'book' work —
+		// which is the kind-scoping, without a branch on kind that could
+		// disagree with the schema.
+		var source any
+		if set.TotalDeclared.Valid {
+			// ARCHITECTURE.md §6.1: "Komga's totalBookCount and Kavita's
+			// totalCount both derive from ComicInfo `Count`". So the
+			// declaration's origin is the ComicInfo the scanner read, which is
+			// a member of the column's stated vocabulary; "kavita" would name
+			// the messenger rather than the source.
+			source = "comicinfo"
+		}
+		r, err = tx.ExecContext(ctx, `
+			UPDATE work_comic SET total_issues_declared = ?, total_issues_source = ?
+			 WHERE work_id = ? AND (total_issues_declared IS NOT ? OR total_issues_source IS NOT ?)`,
+			set.TotalDeclared, source, workID, set.TotalDeclared, source)
+		if err != nil {
+			return res, fmt.Errorf("set the declared total on work %d: %w", workID, err)
+		}
+		if n, err := r.RowsAffected(); err == nil && n > 0 {
+			res.TotalsWritten++
 		}
 	}
 

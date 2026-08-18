@@ -17171,3 +17171,79 @@ mapping `credits_test.go` already owns against hand-built DTOs. Its `publication
 in production (*one 404 must not cost 1,999 series their credits*) is **invisible in a test suite**,
 and a cassette that is simply absent is indistinguishable from an upstream that answers. A pass whose
 failure mode is "drop and continue" needs at least one assertion that it did **not** drop everything.
+
+---
+
+## LS-233 — the rollup flush landed, and the rule that stops it making things worse is in the writer
+
+**`LS-211` said the walk and the rollup are two writers, that landing the walk alone leaves
+`LS-210`'s crossed circles in place, and that landing the rollup alone is *worse than the disease*.
+Both are now landed, walk first, in that order — and rule 2 is enforced anyway.**
+
+🚩 **The refusal is in `internal/store/rollup.go`, not in the plan.** A work with no `media_file`
+rows in scope gets **no blob** — not `have: 0`. `LS-211.2` argued this in advance and its own words
+are the reason it is code: *"Sequencing is a property of a plan and plans slip; a writer that will
+not aggregate over zero children is a property of the code."* Fired by making `basis == 0` unreachable,
+which produced, verbatim:
+
+```
+availability = "{\"k\":\"count\",\"have\":0,\"total\":null,\"total_source\":null}" for a work with
+no file rows; the rollup fabricated a denominator's numerator and the screen will render
+`0 / N · N missing` on a healthy library (LS-211.2 rule 2)
+```
+
+**A second cause of absence was introduced deliberately, and `http-api.md` §1.4.1 was amended to
+say so.** A work whose basis GOES AWAY — every file deleted upstream, so the walk reconciled its rows
+to nothing — has its blob **withdrawn** rather than left standing or rewritten as `have: 0`. The
+three options were weighed: a stale `have: 43` is a claim about a library the user no longer has;
+`have: 0` is the fabrication §1.4.1 exists to prevent; withdrawal returns the row to *not counted*,
+which is honest because with zero file rows *never walked* and *walked, and empty* are
+indistinguishable from the server's side. §1.4.1's consumer rule is unchanged — that was the test
+applied to the amendment, and it is why the amendment was acceptable at all.
+
+**The invariant §1.4.1 rests on is preserved from the other end too.** That paragraph's argument is
+*"there is no specified path that moves `have_count` without also writing the blob"*. So a dirty work
+whose `kind` has a shape this writer cannot produce — video is `k:"tier"`, music is `k:"edition"` —
+is skipped with **both** columns untouched and its flag cleared, rather than counted into a bare
+number. Unreachable today (no source writes a file for either kind), asserted anyway, and fired.
+
+**The denominator costs zero extra HTTP and is gated.** `SeriesMetadataDto` carries
+`publicationStatus` and `totalCount` on the response the credit pass already makes, so they land on
+`work.status` and `work_comic.total_issues_declared` from a round trip that was happening anyway. The
+gate is ARCHITECTURE §6.1's, unchanged: a `total` appears only when the series has
+ENDED/Completed/Cancelled **and** a positive total was declared. `total: null` is emitted explicitly
+rather than omitted, because §6.3's ✓ rule must never fire on "nobody knows".
+
+✅ **`LS-200`'s open question 4 — whether a free instance populates either field — is answered as
+"it does not matter", which is better than answering it.** An instance that populates neither sends
+`publicationStatus 0` and `totalCount 0`; the adapter maps those to `ongoing` and *no total*, and
+both halves of the gate fail independently. The populated and unpopulated cases take the same safe
+branch, so the code needs no measurement to be correct — it needs one only to know how often a
+fraction will appear.
+
+**Scope is in the signature from day one, and what it degenerates to is written down rather than
+implied.** `security.md`: availability computed across instances the viewer cannot see is an
+existence oracle. The numerator counts `media_file` rows through `Scope.instancePredicate` — `1=1`
+for `AllInstances`, **`1=0` for an empty visible set**, `IN (…)` otherwise — and all three arms are
+fired by `TestTheRollupScopeActuallyFilters`.
+
+⚠️ **A denormalised column is scope-free by construction, and the honest statement is that
+`work.have_count` and `work.availability` hold ONE scope's answer — whichever scope last flushed
+them.** v0.1's degenerate case is that exactly one such scope exists: the owner's, whose predicate is
+`1=1`, so the stored figure and the true figure coincide for the only user there is. The importer
+names `OwnerScope` at the call site rather than letting the flush default it, so "whose numbers are
+in that column" has an answer in the code. **The seam for multi-scope is that signature plus that
+fact**, and the two options it leaves open — keep these columns as the owner's answer and compute a
+narrower user's figure at read time off `ix_file_work`, or add a per-scope rollup table — both start
+from a flush that already knows what it computed.
+
+⚠️ **There is still NO 250 ms timer**, and the documents that name that cadence
+(ARCHITECTURE §6.3, `sync.md`) describe one this milestone does not have. `internal/libsync/doc.go`
+lists *"any timer"* among the things deliberately not built; the flush runs at the end of an import,
+batch-bounded, and `FlushRollups` is the seam a cadence would drive. What was NOT done is a
+background goroutine nobody asked for.
+
+**No ADR for either commit.** The surrogate was an owner decision taken outside this work (`LS-230`),
+the refusal rule was decided by `LS-211.2` before this code existed, the membership question was
+decided by `LS-213`, and the §1.4.1 amendment adds a cause of absence without changing what absence
+obliges a consumer to do. Nothing here closes off an alternative that was open.
