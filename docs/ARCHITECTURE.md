@@ -1593,10 +1593,22 @@ is table stakes. Ebook-vs-audiobook routing is the case the schema was shaped fo
 
 Catalogue search is local and instant. **Release search** is remote and must never be on a page-load
 path: Prowlarr users report waits **over 30 seconds** for down indexers to time out, and
-FlareSolverr's default timeout is 60 s. Rules: behind progressive disclosure; stream partial results
-over SSE as each indexer answers; per-indexer deadlines with independent breakers; skip known-down
-indexers; rank progressively; respect `capabilities.limitsMax` and check `supportsPagination` before
-sending an `offset`.
+FlareSolverr's default timeout is 60 s. Rules: **behind progressive disclosure — the fan-out leaves
+on a user action and never on a page load** ([`reference/search.md`](./reference/search.md) §6 carries
+the definition this compresses); stream partial results over SSE as each indexer answers; per-indexer
+deadlines with independent breakers; skip known-down indexers; rank progressively; respect
+`capabilities.limitsMax` and check `supportsPagination` before sending an `offset`.
+
+⚠️ **The first rule read *"behind progressive disclosure"* unscoped, and §8.5 says the opposite of it
+in three words — *"not progressive disclosure"* — so the pair described one screen in two
+incompatible states.** Neither clause was wrong and neither is deleted; each is scoped here to what
+it actually governs. **This one governs when the request leaves:** no fan-out on a render, ever, in
+any mode, Search-and-Grab included. It does **not** govern where the entry point sits, which is
+§8.5's clause and a different question. The shipped screen satisfies both at once —
+`web/src/routes/requests/+page.svelte:1044` fires the search from `onsubmit`, and `:772-776` fires it
+during load **only** when the URL carries a `?q=` another screen put there, which is a user action
+carried across a navigation rather than a page load originating one. **What this rule exists to say
+is untouched:** a browser paint never waits on an indexer.
 
 > 🚩 **Prowlarr's grab cache is 30 minutes.** `SearchController.MapReleases()` caches the original
 > `ReleaseInfo` keyed `"{indexerId}_{guid}"` for 30 minutes. **POST the release back within 30
@@ -1612,9 +1624,26 @@ configuration with its own primary surface**, activated when no configured insta
 running in Search-and-Grab mode: search your indexers and send grabs to your download client. Add a
 Sonarr, Radarr or media server to get a library."*
 
-- **A free-text search screen as the primary surface**, not progressive disclosure. The entry point
+- **A free-text search screen as the primary surface** — *primary* scoped to **where the entry point
+  sits**: a destination of its own, reached from this mode's front door, rather than a control folded
+  into a screen about something else. It is **not** an exemption from §8.4, which still governs the
+  fan-out behind it: the request leaves on a user action and never on a page load. The entry point
   is `Search(ctx, inst, SearchQuery{Text: "..."})` — a query taking a string that **does not require
   a `WorkRef`**. That is why the provider interface's search method takes a `SearchQuery` (§11).
+
+  > ⚠️ **This bullet ended *"not progressive disclosure"*, which read against §8.4's then-unscoped
+  > *"behind progressive disclosure"* as a straight contradiction about one screen.** Both are scoped
+  > now rather than either being dropped. **And the obvious scoping — disclosed on an install with a
+  > library, primary on one without — is not what ships:** §17.5 states the free-text path is *"the
+  > whole of this screen on every install, whether or not a Sonarr and a Radarr are configured — it
+  > is not a fallback for the Prowlarr-only case"*, and `web/src/routes/requests/+page.svelte` reads
+  > no mode at all. **What this mode changes is the route in, not the screen.** `0c89420` made
+  > `Search indexers → /requests` the primary action of Home's Search-and-Grab block
+  > (`web/src/routes/+page.svelte:1216`), because Home's own search box — the local one — is drawn
+  > only for `mode === 'library'`. **Neither clause is about `/search`**, which is search over your
+  > own library (§17.4) and is never a release search: DESIGN-DIRECTION §8.3 holds the two apart, and
+  > merging them *"is how a 0 ms local query ends up waiting on a 30 s indexer"*.
+
 - Backed by Prowlarr `GET /api/v1/search?query=&indexerIds=&categories=…`, returning
   `ReleaseResource[]` as `application/json`; **grab is `POST /api/v1/search` with the
   `ReleaseResource` body**, and `ReleaseResource.downloadClientId` selects one of *Prowlarr's own*
