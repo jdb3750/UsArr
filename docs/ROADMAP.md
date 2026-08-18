@@ -12,7 +12,7 @@
 > **No dates and no estimates appear here, ever**, at the owner's standing instruction. Where a line
 > is inference rather than something read off §16, an ADR or the tree, it is marked 🔍.
 
-**Last re-derived against:** `origin/main` `0c89420` (2026-08-18).
+**Last re-derived against:** `origin/main` `19f5451` (2026-08-18).
 
 ---
 
@@ -153,6 +153,39 @@ Ordered roughly by what the rest depends on, not by size.
 | A request destination on a library binding | A service that advertises `Add` under §8.3's capability filter. **No service v0.1 connects does** — Prowlarr's grab path posts to Prowlarr's own download client — so §17.8 drops the column for v0.1. It returns with Sonarr and Radarr at v0.2. |
 | The queue-state column on Requests' `Recent grabs` block | The first `write_queue` writer — a v0.2 addition, not a v0.1 gap. |
 | Knowing whether an *already connected* source covers a media type | One capability array on the health row, derived at ingest. **Build neither it nor §8.3's `Caps.MediaKinds` now** — the seam is [`FUTURE.md`](./FUTURE.md) §20. Naming *which source will populate a type* is unblocked and is a constant derived from §16. |
+
+### v0.2 is settled — not an open question
+
+**Decided 2026-08-17, and closed.** [ADR-0045](./DECISIONS.md#adr-0045) (Accepted, owner-delegated)
+slots the commitments [ADR-0042](./DECISIONS.md#adr-0042) and [ADR-0043](./DECISIONS.md#adr-0043) each
+left without a milestone — **the Sonarr and Radarr adapters, the minimal write path, and the minimal
+match-correction UI** — into **v0.2**. ADR-0045 counts them as three commitments; they are four work
+items, because Sonarr and Radarr are two adapters.
+
+*Authority:* ADR-0045 and §16's v0.2 entry, which carries it. Read §16 for what v0.2 now contains and
+in what order; it is not restated here. **No review should report any of these as awaiting a milestone
+decision — that question is not open.**
+
+### 🔍 Sequencing recommendation — a RECOMMENDATION, not a decision
+
+**No ADR backs this. §16 does not say it. Nothing is planned around it.** It is inference from facts
+already on record, offered to whoever picks v0.2 up.
+
+Across the v0.2 window, take the **minimal match-correction UI** and the **Navidrome adapter** first
+— both run against services the owner actually operates, so both can be **proven on real data**, which
+is the rule ADR-0036 set and [ADR-0041](./DECISIONS.md#adr-0041) clause 2 kept: *"prove the replica
+thesis on real data, on one source, before a second adapter is written"*. **Sonarr, Radarr and the
+write path cannot be proven on his stack at all** — §16 records that the owner runs neither Sonarr nor
+Radarr. Two lines already point the same way: §16 says of the correction UI that *"it is the part of
+this milestone that can land first, and it should"*, and §16.1 puts **Navidrome at #1** in the
+post-v0.1 catalogue sequence, *"numbered by order, not by version"*, with *"Navidrome must precede
+v0.4"* as its only version pin.
+
+Two caveats this does not paper over: **Navidrome is not a member of v0.2** — §16 pins no catalogue
+source to it and has #1 landing *"before or alongside"* — and Navidrome is still **sequenced behind
+v0.1's Kavita adapter running on a real library**, per the table above.
+
+**Wording this into §16 or an ADR belongs to the implementation thread, not to this file.**
 
 ### Open decision — BookOrbit as a books backend
 
