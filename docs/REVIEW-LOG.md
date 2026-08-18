@@ -13427,3 +13427,289 @@ replay is coming through the Go build cache, which means `/root/go/bin/golangci-
 would not have cleared it. **Raised, not fixed** — amending §11's cache bullet is outside this
 commit's two changes, and `cache clean` was off-limits to this thread in any case. Every gate result
 below was taken with both caches isolated under the scratchpad and neither one cleaned.
+
+---
+
+# EXPL-04 — A guard that diagnosed an outage as news, and three more readings it could not give
+
+**Prefix note.** `EXPL-` is this thread's prefix, already carrying [`EXPL-01`](#expl-01),
+[`EXPL-02`](#expl-02) and [`EXPL-03`](#expl-03); this is `EXPL-04`. Checked free immediately before
+the write, against every remote head — `git for-each-ref refs/remotes/origin/` piped through
+`git grep -ohE '\bEXPL-0?[0-9]+\b' -- docs/REVIEW-LOG.md` returned `EXPL-01`, `EXPL-02`, `EXPL-03`
+and nothing else. No shared counter was read.
+
+**All five findings are against this thread's own `c8022f1`**, raised by a read-only adversarial
+reviewer who verified them by breaking things rather than by reading. **Every one was re-verified
+here, by breaking the same thing again, before anything was changed** — a finding taken on the
+reviewer's word has been believed, not confirmed. The verbatim before/after output is in each
+section.
+
+**They share a root, and it is the one this thread spent the day correcting in other people's
+work: a message that states a cause nobody established.** `make spec-drift` shipped in `c8022f1`
+with a floor assertion that correctly detects *"nothing was checked"* and a four-cause list that
+explains it — and the list was written from imagination rather than from firing. One cause was
+false, one was circular, one realistic failure had no cause at all, and the epilogue attached to
+the *interesting* failure fired on the *commonest* one. **A guard that guesses will have its guess
+read as a finding**, which is precisely [`DEVELOPMENT.md` §11 rule 4](./DEVELOPMENT.md#11-onboarding-an-ai-agent)'s
+concern one level up: not just that "found nothing" and "looked at nothing" must differ, but that
+neither may be reported as something else.
+
+## EXPL4.1 — Applied (Serious): the epilogue diagnosed "upstream moved" at a 502 from a proxy
+
+**The finding.** The `rc != 0` epilogue printed unconditionally, asserting *"a failure here is NEWS,
+not a broken build: it means upstream moved."* The reviewer pointed `upstreamRepo` at an unreachable
+host and the target still said upstream had moved. It had not.
+
+**Re-verified before fixing.** Same edit, 2026-08-18, `upstreamRepo` → an unreachable host:
+
+```
+    specdrift_upstream_test.go:96: git fetch --quiet --filter=blob:none --depth 1 origin refs/tags/v2.5.2.5491: exit status 128
+        fatal: unable to access 'https://unreachable.invalid.example/Prowlarr/Prowlarr/': CONNECT tunnel failed, response 502
+--- FAIL: TestSpecDriftRefsStillShareThePinnedBlob (0.40s)
+
+spec-drift: 1 drift check(s) ran; the run FAILED (go test exit 1).
+
+a failure here is NEWS, not a broken build: it means upstream moved. Read the message,
+re-vendor deliberately, and revisit the ADR whose premise just changed.
+```
+
+**Why it fired the wrong reading, mechanically.** The test's own honest reading — *"(a) LOCAL
+MISTAKE, NOT UPSTREAM NEWS"* — lives inside the `len(diverged) > 0` branch, which a `t.Fatalf` out of
+`run()` never reaches. So the commonest failure of a network target, an outage, had **no** correct
+signpost anywhere, and inherited standing advice written for blob divergence.
+
+**The fix: the test classifies itself, and the target says only what the classification supports.**
+Three `SPEC_DRIFT_VERDICT` sentinels, chosen because they carry *different actions*, not different
+wording. `run()` now takes the verdict to print if its command fails, because the failures are not
+alike: a fetch that never completes says nothing about upstream, a `rev-parse` that cannot resolve
+the path says upstream moved the file.
+
+| Verdict | Emitted at | What the target is then allowed to say |
+| --- | --- | --- |
+| `drift` | blob comparison failed | upstream answered and moved the spec — **news** |
+| `path-moved` | `git rev-parse` failed | upstream answered, spec not at that path — **different news**; the blob comparison never ran |
+| `unreached` | `git init` / `remote add` / `fetch` failed | **not news about upstream**; no fact established in either direction |
+| *(none)* | anything else | **unclassified — the target does not know why, and will not guess** |
+
+**Fired, all four branches, after the fix.** The unreachable host now reads:
+
+```
+    specdrift_upstream_test.go:133: SPEC_DRIFT_VERDICT: unreached
+    specdrift_upstream_test.go:133: git fetch --quiet --filter=blob:none --depth 1 origin refs/tags/v2.5.2.5491: exit status 128
+        fatal: unable to access 'https://unreachable.invalid.example/Prowlarr/Prowlarr/': CONNECT tunnel failed, response 502
+
+spec-drift: 1 drift check(s) ran; the run FAILED (go test exit 1).
+
+VERDICT: UPSTREAM NOT REACHED — THIS IS NOT NEWS ABOUT UPSTREAM. The fetch never
+got an answer: DNS, a proxy, an outage, a rate limit, or git failing locally.
+NO FACT ABOUT THE SPEC WAS ESTABLISHED, in either direction.
+```
+
+**A changed message is not evidence the diagnosis is now correct, so the other three were fired
+too.** Genuine drift, forced by setting `vendoredSpecBlob` to forty zeroes — upstream reachable, blob
+genuinely not the pinned one — still gets the news reading, which is the half that had to survive:
+
+```
+VERDICT: DRIFT — and this one IS news, not a broken build. Upstream answered, and
+the spec is no longer the pinned blob.
+```
+
+`specPathInUpstream` pointed at `openapi-RENAMED-UPSTREAM.json`, which upstream answers and does not
+have:
+
+```
+    specdrift_upstream_test.go:134: SPEC_DRIFT_VERDICT: path-moved
+        fatal: path 'src/Prowlarr.Api.V1/openapi-RENAMED-UPSTREAM.json' does not exist in 'FETCH_HEAD'
+
+VERDICT: PATH MOVED — upstream answered, but the spec is not at the path this
+guard reads, so the blob comparison NEVER HAPPENED.
+```
+
+And a synthetic `t.Error` that prints no sentinel, to prove the fallback refuses to invent one:
+
+```
+VERDICT: UNCLASSIFIED — this target does not know why, and will not guess. The run
+failed without printing a SPEC_DRIFT_VERDICT line, so it is NOT established that
+upstream moved, and NOT established that it did not.
+```
+
+## EXPL4.2 — Applied: cause (b) claimed a lost build tag would be caught; it was invisible
+
+**The finding.** Cause (b) read *"IT WAS DELETED, or its file lost its `//go:build upstream` line."*
+The second half is false.
+
+**Re-verified before fixing.** Deleting line 1 of `specdrift_upstream_test.go` — `_upstream_test.go`
+is not a `GOOS`/`GOARCH` suffix, so it carries no implicit constraint and the file simply joins the
+default build:
+
+```
+--- PASS: TestSpecDriftRefsStillShareThePinnedBlob (2.59s)
+ok  	github.com/jdb3750/UsArr/internal/servarr	3.611s
+
+spec-drift: OK — 1 drift check(s) actually ran and passed (floor 1).
+MAKE_EXIT=0
+```
+
+Green, exit 0, and **nothing else in the repo asserts the tag** — `make check` would simply have
+started skipping the test via `requireOptIn` instead of never compiling it.
+
+**Fixed by detecting it, not by softening the text**, as asked. An offline preflight lists the
+selected tests **without** `-tags=upstream`; a non-empty list means the tag is gone. `go test -list`
+compiles and enumerates without executing, so this adds **no network call**, and it runs inside
+`spec-drift` only — `check` is still `check-offline vuln`, still exactly two calls.
+
+**Fired after the fix**, same deletion, and note it now fails *before* the network is touched:
+
+```
+spec-drift: FAILED — 1 `TestSpecDrift…` test(s) are visible WITHOUT -tags=upstream.
+
+The `//go:build upstream` line is gone. That tag is the whole reason `make check`
+makes exactly two network calls, so losing it puts a github.com fetch on every
+commit's gate — an upstream outage would turn unrelated commits red.
+```
+
+## EXPL4.3 — Applied: cause (a) was circular — following it literally reproduced the failure
+
+**The finding.** The prefix lived in **three** places — the Go function name, `SPEC_DRIFT_RUN`, and a
+hardcoded `grep -cE '^--- (PASS|FAIL): TestSpecDrift'` — and the advice said *"Rename it back, or
+change both together."* Two of three. Fail-closed but useless.
+
+**Re-verified before fixing** by doing exactly what the advice said: rename the function to
+`TestDriftGuard…`, move `SPEC_DRIFT_RUN` with it. The test **ran and passed**, checking both refs,
+while the target reported that nothing ran:
+
+```
+--- PASS: TestDriftGuardRefsStillShareThePinnedBlob (1.75s)
+
+spec-drift: FAILED — 0 drift check(s) ran, floor is 1.
+...
+  (a) THE DRIFT TEST WAS RENAMED out of the reserved `TestSpecDrift` prefix that
+      SPEC_DRIFT_RUN ('^TestDriftGuard') selects on. Rename it back, or change both together.
+```
+
+**Collapsed to one source of truth, as asked.** `SPEC_DRIFT_PREFIX` is now the single definition;
+`SPEC_DRIFT_RUN` and the result counter both derive from it, and `override` keeps it derived so a
+command-line `SPEC_DRIFT_RUN=` can no longer desync selector from counter. Three places became
+**two** — the variable and the Go function name — and the second is **asserted** by the preflight
+rather than left to advice, so the remaining coupling is checked rather than described.
+
+**Fired, three ways.** Function renamed with `SPEC_DRIFT_PREFIX` left behind — caught, with advice
+that names what is actually true:
+
+```
+spec-drift: FAILED — 0 test(s) carry the `TestSpecDrift` prefix, floor is 1.
+
+The tagged tree compiles, so the guard has been renamed, deleted, or never existed.
+The prefix has ONE definition — SPEC_DRIFT_PREFIX in the Makefile — and the Go
+function name must match it.
+```
+
+The **same rename, done the way the advice now says** — the case that used to reproduce the failure:
+
+```
+spec-drift: preflight OK — 1 `TestDriftGuard…` test(s) compile, behind the tag. Running them.
+--- PASS: TestDriftGuardRefsStillShareThePinnedBlob (1.88s)
+spec-drift: OK — 1 drift check(s) actually ran and passed (floor 1).
+MAKE_EXIT=0
+```
+
+And an attempt to desync through the old third place, `make spec-drift SPEC_DRIFT_PREFIX=TestDriftGuard
+SPEC_DRIFT_RUN='^TestSomethingElse'`: the `override` held, the bogus selector was ignored, and the run
+stayed coherent at exit 0.
+
+## EXPL4.4 — Applied: a tagged file that does not compile had no reading at all
+
+**The finding.** A type error in the tagged file gives `[build failed]`, zero ran, and four causes
+none of which is *"the tagged file does not compile"* — realistic, because `//go:build upstream`
+hides the file from `go build`, `go test` and (until [`EXPL-03`](#expl-03)) the linter, leaving
+`make build-tagged` as the only other thing that compiles it.
+
+**Re-verified before fixing** with `ownerRelease` changed to an int:
+
+```
+internal/servarr/specdrift_upstream_test.go:93:10: invalid operation: "refs/tags/" + ownerRelease (mismatched types untyped string and untyped int)
+FAIL	github.com/jdb3750/UsArr/internal/servarr [build failed]
+
+spec-drift: FAILED — 0 drift check(s) ran, floor is 1.
+...
+  (a) THE DRIFT TEST WAS RENAMED ...  (b) IT WAS DELETED ...  (c) IT SKIPPED ...  (d) SPEC_DRIFT_FLOOR was raised ...
+```
+
+All four wrong.
+
+**Fixed by detecting it explicitly**, as asked: the preflight's `go test -list` exit code is checked
+before its output is counted, so a build failure is reported as a build failure instead of being
+counted as an absence.
+
+**Fired after the fix**, same type error:
+
+```
+# github.com/jdb3750/UsArr/internal/servarr [github.com/jdb3750/UsArr/internal/servarr.test]
+internal/servarr/specdrift_upstream_test.go:130:10: invalid operation: "refs/tags/" + ownerRelease (mismatched types untyped string and untyped int)
+FAIL	github.com/jdb3750/UsArr/internal/servarr [build failed]
+
+spec-drift: FAILED — THE UPSTREAM-TAGGED TESTS DO NOT COMPILE (go test -list exit 1).
+
+Nothing ran, and this establishes NOTHING about upstream. The compiler output above
+is the whole story: fix it and re-run.
+```
+
+**A knock-on the preflight buys for free.** By the time control reaches the runtime floor check, the
+guard is proven to exist, compile, carry the prefix and be hidden behind the tag. That message's
+cause list therefore shrank from four guesses to the two things still possible — it skipped, or the
+binary died before printing a result line.
+
+## EXPL4.5 — Applied (residual): the floor was satisfiable from `go test`'s result cache
+
+**The finding.** `make spec-drift GOTESTFLAGS=` replayed `--- PASS:` from cache and announced the
+floor satisfied over **zero network calls**. Only `-shuffle=on` in the default `GOTESTFLAGS` was
+incidentally defeating the cache — an accident, not a guarantee.
+
+**Re-verified before fixing.** Two consecutive runs, second one verbatim:
+
+```
+--- PASS: TestSpecDriftRefsStillShareThePinnedBlob (1.87s)
+ok  	github.com/jdb3750/UsArr/internal/servarr	(cached)
+
+spec-drift: OK — 1 drift check(s) actually ran and passed (floor 1).
+```
+
+Note the duration `1.87s` replayed **identically** from the first run beside the `(cached)` marker.
+A drift check served from cache is exactly the "looked at nothing" this target exists to refuse, and
+it reached the reassuring green.
+
+**Fixed** with `-count=1`, placed **after** `$(GOTESTFLAGS)` so an override cannot drop it.
+
+**Fired after the fix**, the same two runs on the same cache-defeating path:
+
+```
+########## RUN 1 (GOTESTFLAGS= , the path that replayed from cache) ##########
+--- PASS: TestSpecDriftRefsStillShareThePinnedBlob (2.82s)
+ok  	github.com/jdb3750/UsArr/internal/servarr	2.823s
+spec-drift: OK — 1 drift check(s) actually ran and passed (floor 1).
+########## RUN 2 (immediately again — must NOT be cached) ##########
+--- PASS: TestSpecDriftRefsStillShareThePinnedBlob (1.54s)
+ok  	github.com/jdb3750/UsArr/internal/servarr	1.542s
+spec-drift: OK — 1 drift check(s) actually ran and passed (floor 1).
+```
+
+No `(cached)` marker, and a genuinely different wall-clock duration — the second run really went to
+github.com.
+
+## EXPL4.6 — What this pass did NOT do
+
+* **No production-code change.** A test file, the `Makefile` and this document. No adapter field,
+  request, migration or `web/` change.
+* **No new network call in `make check`.** The preflight uses `go test -list`, which compiles and
+  enumerates without executing, and it lives in `spec-drift` only. `check` is still
+  `check-offline vuln`; `check-offline` is still `fmt-check lint build-tagged modverify secrets test`.
+  Neither mentions `spec-drift`.
+* **The `SPEC_DRIFT_FLOOR` banner residual is deliberately untouched** — it belongs to the thread
+  that owns the pin-note machinery, and two threads editing the same banner is how the collisions
+  recorded elsewhere in this log happened.
+* **`make spec-drift` is still unautomated**, exactly as [ADR-0047](./DECISIONS.md#adr-0047)'s open
+  question 2 says, and exactly as [`EXPL-03`](#expl-03) already noted. Four honest readings make the
+  target truthful when someone types it; they do not make anyone type it. There is no CI.
+* **The gate was taken with both caches isolated** — `GOLANGCI_LINT_CACHE` *and* `GOCACHE`, each a
+  fresh scratchpad directory, per the residual [`EXPL-03`](#expl-03) recorded. Neither shared cache
+  was cleaned and no worktree was removed.
