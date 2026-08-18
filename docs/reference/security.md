@@ -402,11 +402,16 @@ silently change which resource a redirect resolves to. The tracker-specific name
 >    put in a support bundle**, keyed on the field names a provider declares as secret. This is the
 >    same class as `Field.privacy` and must not be left to the request path alone.
 >
->    ⚠️ **Stated as a requirement here, and NOT met by the one upstream client that parses
->    response bodies.** `internal/kavita`'s `parseErrorBody` puts Kavita body text into the error
->    message with no redaction on any branch, and it reaches three `cmd/usarr` log lines and
->    `service_instance.last_error` unredacted. Latent rather than breached today; the two routes
->    that would make it live, and the unapplied fix, are in `REVIEW-LOG.md` LS-170.
+>    ✅ **Met, as of LS-170.** It was not: `internal/kavita`'s `parseErrorBody` put Kavita body text
+>    into the error message with no redaction on any branch, and it reached three `cmd/usarr` log
+>    lines and `service_instance.last_error` unredacted. Every branch of `parseErrorBody` now runs
+>    `ssrf.RedactText` and then bounds the result; `service_instance.last_error` is redacted **before**
+>    the row rather than on read-out; and `cmd/usarr`'s slog handlers are wrapped in a redacting
+>    `slog.Handler`, which makes *"a middleware, not a convention"* true for that package for the
+>    first time. `REVIEW-LOG.md` LS-170 § *Applied* has the detail, including the guard that was fired
+>    against the unfixed code. **This closes the leak, not the requirement**: `ssrf.RedactText` finds
+>    secrets inside URLs, so the *field-name-keyed* half stated above — a provider declaring which
+>    response fields are secret, which is what the Mylar3 case needs — is still unbuilt.
 > 2. **Secrets in a URL *path segment*.** **Kavita carries its API key in the path**, not the query
 >    string: `/api/Opds/{apiKey}/…`, and the same for its KOReader routes. A query-parameter
 >    deny-list catches nothing, and the key then lands in proxy logs, browser history and

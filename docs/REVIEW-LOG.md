@@ -15644,11 +15644,17 @@ that reading, not the gate, is what stands behind it.
 
 ## LS-170 — Kavita response-body text reaches logs and SQLite unredacted: latent, not breached, and two named routes make it live
 
-**Recorded, deliberately NOT fixed.** No `.go` file moved. The fix lifts a redactor between
-packages (§ *The fix* below), which is a change to a shared security primitive and not one to take
-in a hurry; it is scheduled rather than taken here. Every line cited was re-read at the cited file
-and line against `origin/main` `081c5bc` before it was written down, and the two claims that did not
-survive that reading are marked as such.
+**APPLIED** — all four steps, in `dff0fa7`, `44b9354`, `a13bf6f`, `3fe94aa`. See § *Applied* at the
+end of this entry for what landed, what drifted underneath the citations below, and what is now stale
+elsewhere.
+
+**As originally recorded, deliberately NOT fixed.** No `.go` file moved. The fix lifts a redactor
+between packages (§ *The fix* below), which is a change to a shared security primitive and not one to
+take in a hurry; it is scheduled rather than taken here. Every line cited was re-read at the cited
+file and line against `origin/main` `081c5bc` before it was written down, and the two claims that did
+not survive that reading are marked as such. **The prose below is left as written**, citations
+included, so the diagnosis can still be read against the tree it was made on; the § *Applied* section
+corrects the line numbers that have since moved.
 
 ### The gap: `parseErrorBody` bounds length and nothing else
 
@@ -15794,7 +15800,7 @@ a transport error (`:276`), and the cassette **request** fields — URL, `X-Api-
 body (`vcr_test.go:210-213`). **Not one covers a response body or `parseErrorBody`'s output.** A
 change that widened what reaches `e.Message` would pass the suite green.
 
-### The fix, in priority order — NOT applied
+### The fix, in priority order — since applied, see § *Applied*
 
 1. **Stop writing `last_error` raw** (`cmd/usarr/services.go:653`, `:666`, `:751`). Highest priority
    because a stored value is **retroactive**: it survives in every `VACUUM INTO` backup taken before
@@ -15848,6 +15854,54 @@ the tree still builds and that no credential-shaped literal was added; it cannot
 claim above is correct. The re-reading is what stands behind them — including the 403 sub-claim and
 the Kavita 5xx body shape, both of which are marked inference above precisely because re-reading
 could not settle them from this repo.
+
+### Applied
+
+All four steps landed on `main` in four commits, in the order the § *The fix* list gives:
+
+| Step | Commit | What landed |
+| --- | --- | --- |
+| 2 (first, the others depend on it) | `dff0fa7` | `httpapi.redactText` and its two private helpers moved to `internal/ssrf/redact.go` as **`ssrf.RedactText`**. `internal/httpapi` keeps a one-line unexported shim, so all 38 call sites there are byte-identical and no `httpapi` behaviour changed. The three `RedactText` tests moved to `internal/ssrf` with their strings and assertions **unchanged**; `httpapi` keeps one case proving the shim still redacts. The three separate `RedactedPlaceholder` constants (`httpapi`, `kavita`, `servarr`) were **not** merged — that was out of scope and nothing depends on it. |
+| 1 | `44b9354` | All three `health.Error = err.Error()` assignments in `cmd/usarr/services.go` now assign `ssrf.RedactText(err.Error())`, so the value is redacted **before** it reaches `service_instance.last_error`. The `replicateIndexers` rule the file already stated is now applied to `health.Error` as well. |
+| 2b + 4 | `a13bf6f` | Every branch of `parseErrorBody` passes through one new helper, `clean()` — `ssrf.RedactText` first, then the existing `truncate`, so the bound applies to the redacted form. That covers the four `truncate` sites **and** the `problemDetails` branch, which had neither. `pd.Errors` field names and messages are cleaned individually, so `e.Validation` is bounded per entry where it previously had no bound at all. No second redactor in `kavita`; `internal/kavita` already imported `internal/ssrf`, so no new import edge. Guard: `internal/kavita/errors_test.go`. |
+| 3 | `3fe94aa` | `cmd/usarr/logredact.go` — a `redactHandler` wrapping **both** handlers built in `main.go`. It runs `ssrf.RedactText` over the message and over string- and error-valued attributes, recursing into groups and into `WithAttrs`-bound attributes, and calling `Resolve()` before inspecting a value so a `LogValuer`'s payload is not passed through unread. **The three log sites are NOT hand-redacted**, deliberately: hand-fixing the known three leaves the fourth to be written unguarded, which is the failure mode *"middleware, not a convention"* names. |
+
+**The guards were fired, not asserted.** Step 4's three tests were run against the unfixed
+`errors.go`: `TestParseErrorBodyRedactsTheAuthKey` failed with the fixture Auth Key rendered verbatim
+out of `APIError.Error()` on the `problemDetails` branch,
+`TestParseErrorBodyRedactsEveryBranch` failed on **all four** `truncate` branches, and
+`TestParseErrorBodyBoundsTheProblemDetailsBranch` reported a 4102-byte unbounded `Message`. All three
+pass with the fix restored. Step 3's assertions were fired the same way, by making `newRedactHandler`
+a passthrough: five of its six tests failed, quoting the key out of an `err` attribute, a message, a
+`With()`-bound attribute, a group and a `LogValuer` respectively.
+
+**Two of this entry's own citations had drifted before it was implemented**, and the prose above still
+carries the stale numbers because it was left as written:
+
+- `cmd/usarr/import.go:164` and `:264` — the two log sites named under *Where the text goes* — are
+  now **`:227`** and **`:329`**. Both are still `"err", err`, and both are now covered by step 3's
+  handler rather than individually. (A third, `:202`, is covered by the same handler.)
+- `cmd/usarr/services.go:653`, `:666`, `:751` moved to `:656`, `:670`, `:756` in the course of the fix
+  itself, because each gained a comment above it.
+
+**Left alone on purpose:** `PluginVersion` is still unwired. Landing these four steps removes the
+ordering constraint that blocked wiring it; it does not decide whether to.
+
+⚠️ **`docs/reference/http-api.md:774-801` is now STALE and was deliberately not edited here** — another
+thread owns that file. It documents this gap as **open**, naming `internal/kavita/errors.go:167`,
+`:174`, `:177`, `:179` as assigning the body *"through `truncate` alone — **no redactor**"*. As of
+`a13bf6f` all four of those sites, and the `problemDetails` branch it does not name, go through
+`ssrf.RedactText`. That passage is the stated reason the `stopped` SSE frame carries no cause field;
+**closing gap 1 does not by itself reopen that decision** — gap 2 (a credential in a Kavita *path
+segment*, which shape-based redaction cannot catch) is untouched and still stands on its own, and
+LS-160's contract is unchanged either way. The owning thread should correct the gap-1 half of the
+argument and leave the conclusion where it is unless it argues otherwise separately.
+
+**No ADR, as this entry predicted.** The lift is now an exported `ssrf.RedactText` where before it was
+an unexported `httpapi.redactText`, which does widen `internal/ssrf`'s public surface — but it closes
+off no alternative. The placement was dictated by the pre-existing one-implementation rule at
+`internal/httpapi/redact.go:22-24`, not chosen against a live competitor, and nothing about the
+function's contract or its stated limit changed in the move.
 
 ---
 

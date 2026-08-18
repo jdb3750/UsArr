@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/jdb3750/UsArr/internal/ssrf"
 )
 
 // Sentinel errors. Callers match with errors.Is; every failure this package
@@ -157,26 +159,30 @@ func parseErrorBody(op, method, path string, status int, body []byte) *APIError 
 					e.Message = pd.Title + ": " + pd.Detail
 				}
 			}
+			e.Message = clean(e.Message)
 			for field, msgs := range pd.Errors {
 				for _, m := range msgs {
-					e.Validation = append(e.Validation, ValidationFailure{PropertyName: field, ErrorMessage: m})
+					e.Validation = append(e.Validation, ValidationFailure{
+						PropertyName: clean(field),
+						ErrorMessage: clean(m),
+					})
 				}
 			}
 			break
 		}
-		e.Message = truncate(trimmed)
+		e.Message = clean(trimmed)
 	case trimmed[0] == '"':
 		// BadRequest(await localizationService.TranslateAsync(...)) — a localised
 		// message serialised as a bare JSON string. Unquote it so the user sees
 		// the sentence and not the quotes.
 		var s string
 		if err := json.Unmarshal(body, &s); err == nil {
-			e.Message = truncate(s)
+			e.Message = clean(s)
 			break
 		}
-		e.Message = truncate(trimmed)
+		e.Message = clean(trimmed)
 	default:
-		e.Message = truncate(trimmed)
+		e.Message = clean(trimmed)
 	}
 
 	switch {
@@ -193,6 +199,23 @@ func parseErrorBody(op, method, path string, status int, body []byte) *APIError 
 	}
 	return e
 }
+
+// clean is what every byte of upstream response-body text passes through before
+// it reaches APIError, and there is deliberately no branch of parseErrorBody that
+// skips it.
+//
+// Two separate jobs, in this order. Redaction first, because APIError.Error()
+// renders Message AND Validation into a string that reaches slog and
+// service_instance.last_error, and a Kavita error that quotes the URL it failed on
+// quotes ?apiKey= with it (GET /api/Plugin/version takes the Auth Key in the
+// query). Truncation second, so the bound applies to the redacted form.
+//
+// The redactor is ssrf.RedactText and NOT a copy of it: internal/httpapi's
+// redact.go states the rule — two deny-lists drift, and the one that drifts is the
+// one that leaks. Its limit carries over unchanged: a bare secret outside a URL is
+// not caught by shape, which is why the request-side guards in vcr_test.go exist
+// as well.
+func clean(s string) string { return truncate(ssrf.RedactText(s)) }
 
 // truncate bounds an unrecognised body so a 2 MB HTML error page from a reverse
 // proxy cannot end up inside an error string or a log line.

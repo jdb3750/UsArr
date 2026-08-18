@@ -95,65 +95,11 @@ func isRedactedHeader(name string) bool {
 
 // redactText strips credentials out of free-form text that may embed a URL.
 //
-// Upstream error strings are shown VERBATIM on the Services screen (§17.3) and
-// ride the SSE stream, and an *Arr error routinely quotes the URL it failed on —
-// which for Prowlarr carries ?apikey=. Verbatim means "the actual error, not a
-// placeholder"; it does not mean "including the key".
-//
-// The URL rewriting is ssrf.RedactRawURL's. This function only finds the
-// substrings to hand it.
-func redactText(s string) string {
-	if s == "" {
-		return s
-	}
-	lower := strings.ToLower(s)
-	if !strings.Contains(lower, "http://") && !strings.Contains(lower, "https://") {
-		return s
-	}
-
-	var b strings.Builder
-	b.Grow(len(s))
-	for i := 0; i < len(s); {
-		start := indexScheme(s[i:])
-		if start < 0 {
-			b.WriteString(s[i:])
-			break
-		}
-		start += i
-		b.WriteString(s[i:start])
-		end := start
-		for end < len(s) && !isURLTerminator(s[end]) {
-			end++
-		}
-		// Trailing punctuation belongs to the sentence, not to the URL.
-		for end > start && strings.ContainsRune(".,;:!?)]}'\"", rune(s[end-1])) {
-			end--
-		}
-		b.WriteString(ssrf.RedactRawURL(s[start:end]))
-		i = end
-	}
-	return b.String()
-}
-
-func indexScheme(s string) int {
-	lower := strings.ToLower(s)
-	h := strings.Index(lower, "http://")
-	s2 := strings.Index(lower, "https://")
-	switch {
-	case h < 0:
-		return s2
-	case s2 < 0:
-		return h
-	case h < s2:
-		return h
-	default:
-		return s2
-	}
-}
-
-func isURLTerminator(c byte) bool {
-	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '"' || c == '<' || c == '>'
-}
+// It is a one-line shim over ssrf.RedactText, which is where the implementation
+// lives: internal/kavita needs the same scanner on its response-body path, and a
+// second copy is exactly what the one-implementation rule at the top of this file
+// forbids. The shim stays so this package's 38 call sites read unchanged.
+func redactText(s string) string { return ssrf.RedactText(s) }
 
 // redactURLField renders a URL harvested from upstream (an indexer's infoUrl,
 // commentUrl or posterUrl) for a client.

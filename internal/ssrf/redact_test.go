@@ -148,3 +148,41 @@ func TestStripCredentials(t *testing.T) {
 		t.Error("stripCredentials dropped a non-credential parameter")
 	}
 }
+
+// RedactText's own cases. These moved here from internal/httpapi when the scanner
+// was lifted (LS-170 step 2); the strings and the assertions are unchanged, so a
+// weakening of what stays redacted still fails here.
+
+// An upstream error routinely quotes the URL it failed on, and for Prowlarr that
+// URL carries ?apikey=. Verbatim means "the actual error", not "including the
+// key" — this is the line between the two.
+func TestRedactTextKeepsTheErrorAndDropsTheKey(t *testing.T) {
+	in := `Get "http://prowlarr:9696/api/v1/indexer?apikey=abc123def456": dial tcp 10.0.0.5:9696: connect: connection refused`
+	got := RedactText(in)
+
+	if strings.Contains(got, "abc123def456") {
+		t.Fatalf("the key survived redaction: %s", got)
+	}
+	for _, want := range []string{"connection refused", "prowlarr:9696", "/api/v1/indexer"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("redaction destroyed the diagnostic: %q missing from %s", want, got)
+		}
+	}
+}
+
+func TestRedactTextLeavesPlainTextAlone(t *testing.T) {
+	in := "Prowlarr rejected UsArr's API key"
+	if got := RedactText(in); got != in {
+		t.Fatalf("RedactText(%q) = %q, want it unchanged", in, got)
+	}
+}
+
+func TestRedactTextHandlesTrailingPunctuation(t *testing.T) {
+	got := RedactText("failed on http://host:9696/x?token=SECRET.")
+	if strings.Contains(got, "SECRET") {
+		t.Fatalf("key survived: %s", got)
+	}
+	if !strings.HasSuffix(got, ".") {
+		t.Fatalf("the sentence lost its full stop: %s", got)
+	}
+}

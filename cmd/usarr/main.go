@@ -241,10 +241,12 @@ func newLogger(cfg *config.Config) *slog.Logger {
 			format = "text"
 		}
 	}
+	// Both handlers are wrapped: redaction in this binary is middleware, not a
+	// convention. See logredact.go.
 	if format == "text" {
-		return slog.New(slog.NewTextHandler(os.Stdout, opts))
+		return slog.New(newRedactHandler(slog.NewTextHandler(os.Stdout, opts)))
 	}
-	return slog.New(slog.NewJSONHandler(os.Stdout, opts))
+	return slog.New(newRedactHandler(slog.NewJSONHandler(os.Stdout, opts)))
 }
 
 func isTerminal(f *os.File) bool {

@@ -106,16 +106,18 @@ Ordered roughly by what the rest depends on, not by size.
       *Authority:* §14, `reference/security.md` §1.5, §16 v0.1 entry.
       *Done when:* `grep -rn 'rotate' cmd/usarr/*.go` finds a subcommand, not nothing.
 
-- [ ] **LS-170 — lift `httpapi.redactText` into `internal/ssrf`, and the three fixes around it.**
-      Four steps, in the REVIEW-LOG's order: stop writing `last_error` raw; redact inside
-      `parseErrorBody` including the `problemDetails` branch; redact the three `cmd/usarr` log sites
-      (better: a redacting `slog.Handler`); add a guard over `parseErrorBody`'s output **and fire it
-      deliberately**.
-      *Authority:* `REVIEW-LOG.md` LS-170, `reference/security.md` §5. **No ADR** — it applies rules
-      those documents already state.
-      *Done when:* `redactText` (or its exported successor) is defined in `internal/ssrf` and
-      `internal/kavita` calls it; today it is defined in `internal/httpapi/redact.go` and called from
-      `internal/httpapi` only.
+- [x] **LS-170 — lift `httpapi.redactText` into `internal/ssrf`, and the three fixes around it.**
+      **All four steps landed** (`dff0fa7`, `44b9354`, `a13bf6f`, `3fe94aa`): `ssrf.RedactText` is
+      defined in `internal/ssrf/redact.go` and called from `internal/kavita`, `internal/httpapi` (via
+      a one-line shim, so its 38 call sites are unchanged) and `cmd/usarr`; `last_error` is redacted
+      before the row; every branch of `parseErrorBody` is redacted **and** bounded, the
+      `problemDetails` branch included; and `cmd/usarr`'s slog handlers are wrapped rather than the
+      three log sites hand-fixed. The step-4 guard was **fired against the unfixed code** before it
+      was trusted.
+      *Authority:* `REVIEW-LOG.md` LS-170 § *Applied*, `reference/security.md` §5. **No ADR** — it
+      applies rules those documents already state, and closes off no alternative.
+      ⚠️ `docs/reference/http-api.md:774-801` still describes this gap as open and is now stale; the
+      thread that owns that file is to correct it.
 
 - [ ] **The Docker image, and `VACUUM INTO` backups as a shipped path.** `cmd/usarr/backup.go` exists;
       there is no `Dockerfile` anywhere in the tree.
@@ -145,7 +147,7 @@ Ordered roughly by what the rest depends on, not by size.
 
 | Item | Blocked on / sequenced behind |
 |---|---|
-| Wiring Kavita's `PluginVersion`, or any second Kavita endpoint taking a credential in a query or path | **All four LS-170 steps must land first.** That ordering is the whole difference between latent and breached (`REVIEW-LOG.md` LS-170, *Ordering constraint*). |
+| ~~Wiring Kavita's `PluginVersion`, or any second Kavita endpoint taking a credential in a query or path~~ | **UNBLOCKED.** All four LS-170 steps landed (`REVIEW-LOG.md` LS-170 § *Applied*), so the ordering constraint that gated this is discharged. `PluginVersion` remains unwired: nothing calls it, and whether to wire it is a separate decision that LS-170 no longer gates. |
 | A second catalogue adapter (Navidrome, then Audiobookshelf, then Komga) | v0.1's Kavita adapter landing and running against a real library. The rule is unchanged across every re-sequencing: **one source, proven on real data, before a second adapter** (§16.0, §16.1, [ADR-0036](./DECISIONS.md#adr-0036)). |
 | The minimal write path — `monitor`, `unmonitor`, `delete`, `add`, the queue worker and its settlement loop | **v0.2**, with the first \*Arr adapter ([ADR-0042](./DECISIONS.md#adr-0042), [ADR-0045](./DECISIONS.md#adr-0045)). `write_queue` stays in the schema with **no writer for the whole of v0.1** — that is the seam, and it costs no migration ([ADR-0039](./DECISIONS.md#adr-0039)). |
 | [ADR-0039](./DECISIONS.md#adr-0039)'s outstanding Go `state`-vocabulary declaration and validation | The first `write_queue` writer, which is v0.2's. |
