@@ -99,7 +99,14 @@ class ImportStream {
 	 * ⚠️ A PRESS MUST CALL THIS, and the reason is the terminal frame. A `done`
 	 * left over from the previous import would be rendered against the new one
 	 * as "finished" before the new one has read anything, which is the single
-	 * most misleading thing this module could say.
+	 * most misleading thing this module could say. A leftover `stopped`
+	 * (http-api.md §5.5) is the same hazard wearing the other face.
+	 *
+	 * ⚠️ IT IS NOT WHAT MAKES A SECOND RUN RENDER CORRECTLY, and must not be
+	 * relied on for that. The frame has no run id (§5.5.3), so a bootstrap
+	 * import that nobody pressed can follow a terminal frame with no `forget`
+	 * in between. That case is handled where the sentence is derived: the last
+	 * frame wins, and a non-terminal one for that `instance_id` is a new run.
 	 */
 	forget(instanceId: number): void {
 		this.#progress.delete(instanceId);

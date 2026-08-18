@@ -287,10 +287,22 @@ export type StreamEvent =
  * `undefined` here means UNKNOWN and must render as unknown, never as zero and
  * never as a denominator.
  *
- * The four phases are `containers`, `items`, `credits` and `done`, and they are
- * carried through as the strings the server sent rather than mapped onto an
- * enum: a phase this client has not heard of is a phase the server has, and
- * dropping the frame would be worse than saying less about it.
+ * The phases are `containers`, `items`, `credits`, `done` and http-api.md
+ * §5.5's `stopped`, and they are carried through as the strings the server sent
+ * rather than mapped onto an enum: a phase this client has not heard of is a
+ * phase the server has, and dropping the frame would be worse than saying less
+ * about it.
+ *
+ * ⚠️ `stopped` IS SPECIFIED AND NOT YET PRODUCED. Nothing in the repository
+ * emits it today (§5.5's own 🚩), so §5.1's shipped behaviour still holds
+ * alongside it: a failed import publishes nothing at all. The consumer is built
+ * against the contract's names, and it must therefore handle a `stopped` that
+ * never arrives — which it does, because silence changes nothing.
+ *
+ * ⚠️ AND `stopped` CARRIES NO CAUSE. §5.5.1 adds one phase value and ZERO new
+ * fields, and §5.5.5 forbids any upstream message, body, URL or status line on
+ * this frame for good. There is nothing here to render raw, and nothing to add
+ * one to.
  */
 export interface ImportProgress {
 	instanceId: number;
