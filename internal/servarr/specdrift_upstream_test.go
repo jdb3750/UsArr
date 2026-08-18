@@ -19,6 +19,7 @@ package servarr
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -43,8 +44,18 @@ const specPathInUpstream = "src/Prowlarr.Api.V1/openapi.json"
 // pin so re-confirming it later is a one-line change.
 const ownerRelease = "v2.5.2.5491"
 
-// TestUpstreamRefsStillShareThePinnedBlob is the guard that fires the day
+// TestSpecDriftRefsStillShareThePinnedBlob is the guard that fires the day
 // ADR-0047's premise changes.
+//
+// THE `TestSpecDrift` PREFIX IS A CONTRACT WITH THE MAKEFILE, not a style
+// choice. `make spec-drift` selects on it and then asserts a FLOOR on how many
+// tests carrying it actually ran, so that renaming this function away cannot
+// leave the target exiting 0 over nothing. The prefix used to be `TestUpstream`,
+// which is an ordinary English word: `-run Upstream` swept in five unrelated
+// tests in internal/kavita, internal/releases and internal/store, so three
+// packages printed a bare `ok` and looked drift-checked while holding no
+// upstream-tagged test at all. A new drift test takes this prefix and raises
+// SPEC_DRIFT_FLOOR in the Makefile; nothing else may take it.
 //
 // The premise: Prowlarr does NOT regenerate its checked-in OpenAPI document per
 // release, so the release the owner runs and `develop` carry the byte-identical
@@ -55,7 +66,7 @@ const ownerRelease = "v2.5.2.5491"
 // That identity is a coincidence of upstream neglect, not a property. When it
 // ends, somebody must revisit the split deliberately instead of rediscovering the
 // whole problem from scratch, and this is the thing that tells them.
-func TestUpstreamRefsStillShareThePinnedBlob(t *testing.T) {
+func TestSpecDriftRefsStillShareThePinnedBlob(t *testing.T) {
 	requireOptIn(t)
 
 	dir := t.TempDir()
@@ -68,6 +79,14 @@ func TestUpstreamRefsStillShareThePinnedBlob(t *testing.T) {
 	run(ctx, t, dir, "git", "init", "--quiet")
 	run(ctx, t, dir, "git", "remote", "add", "origin", upstreamRepo)
 
+	// Mismatches are COLLECTED and reported once, after the loop. Reporting
+	// inside it printed this whole 14-line explanation per diverging ref — and
+	// the ordinary way for the premise to die is upstream regenerating the file,
+	// which moves BOTH refs at once, so the common failure was two identical
+	// walls of text. Reading (c) below also needs both refs in hand to be
+	// answerable at all.
+	var diverged []string
+
 	for _, ref := range []struct {
 		spec, role string
 	}{
@@ -79,24 +98,30 @@ func TestUpstreamRefsStillShareThePinnedBlob(t *testing.T) {
 
 		t.Logf("%s (%s): %s is blob %s", ref.spec, ref.role, specPathInUpstream, got)
 		if got != vendoredSpecBlob {
-			t.Errorf("%s (%s) now carries %s as blob %s; api/specs/prowlarr.json is %s.\n\n"+
-				"THIS IS THE NEWS THIS TEST EXISTS FOR, not a broken test. Three readings, in the\n"+
-				"order worth checking them:\n"+
-				"  (a) LOCAL MISTAKE, NOT UPSTREAM NEWS — check this first. If the gate's\n"+
-				"      TestVendoredSpecIsThePinnedBlob is also failing, then vendoredSpecBlob and\n"+
-				"      api/specs/prowlarr.json disagree with EACH OTHER and upstream is innocent.\n"+
-				"      Fix that first; this test cannot tell you anything until it is fixed.\n"+
-				"  (b) UPSTREAM REGENERATED THE SPEC, for the first time since 2025-06-07. Then\n"+
-				"      ADR-0047's premise is dead: the floor and the ceiling may now be DIFFERENT\n"+
-				"      documents, and the floor/ceiling split ADR-0046 gave Kavita becomes worth\n"+
-				"      doing here. Re-vendor, re-read knownSpecDivergences (a regenerated spec is\n"+
-				"      exactly when those stop being true), and supersede ADR-0047.\n"+
-				"  (c) ONLY ONE REF MOVED — compare the two log lines above, one per ref. If the\n"+
-				"      tag and develop now disagree, that alone kills the one-file argument.\n"+
-				"Nothing here is a gate failure: this target is not in `make check` and must not be\n"+
-				"added to it. Fix it as a deliberate piece of work, not as a red build.",
-				ref.spec, ref.role, specPathInUpstream, got, vendoredSpecBlob)
+			diverged = append(diverged, fmt.Sprintf("  %s (%s) now carries it as blob %s", ref.spec, ref.role, got))
 		}
+	}
+
+	if len(diverged) > 0 {
+		t.Errorf("%s has moved away from the pinned blob on %d of 2 refs; "+
+			"api/specs/prowlarr.json is %s.\n%s\n\n"+
+			"THIS IS THE NEWS THIS TEST EXISTS FOR, not a broken test. Three readings, in the\n"+
+			"order worth checking them:\n"+
+			"  (a) LOCAL MISTAKE, NOT UPSTREAM NEWS — check this first. If the gate's\n"+
+			"      TestVendoredSpecIsThePinnedBlob is also failing, then vendoredSpecBlob and\n"+
+			"      api/specs/prowlarr.json disagree with EACH OTHER and upstream is innocent.\n"+
+			"      Fix that first; this test cannot tell you anything until it is fixed.\n"+
+			"  (b) UPSTREAM REGENERATED THE SPEC, for the first time since 2025-06-07. Then\n"+
+			"      ADR-0047's premise is dead: the floor and the ceiling may now be DIFFERENT\n"+
+			"      documents, and the floor/ceiling split ADR-0046 gave Kavita becomes worth\n"+
+			"      doing here. Re-vendor, re-read knownSpecDivergences (a regenerated spec is\n"+
+			"      exactly when those stop being true), and supersede ADR-0047.\n"+
+			"  (c) ONLY ONE REF MOVED — the list above says which, and both log lines above give\n"+
+			"      the observed blob. If the tag and develop now disagree, that alone kills the\n"+
+			"      one-file argument.\n"+
+			"Nothing here is a gate failure: this target is not in `make check` and must not be\n"+
+			"added to it. Fix it as a deliberate piece of work, not as a red build.",
+			specPathInUpstream, len(diverged), vendoredSpecBlob, strings.Join(diverged, "\n"))
 	}
 }
 
