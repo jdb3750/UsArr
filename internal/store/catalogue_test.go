@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ncruces/go-sqlite3"
 )
 
 // Every test in this file runs against a REAL MIGRATED DATABASE — newTestStore
@@ -130,7 +132,7 @@ func TestBindContainersCreatesOneLibraryPerContainer(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita-1")
 
-	binds, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
 		comicContainer("1", "Manga"),
 		{RemoteID: "2", Name: "Ebooks", Kind: "book"},
 		{RemoteID: "4", Name: "Wallpapers", DeclineReason: "no UsArr kind"},
@@ -169,12 +171,12 @@ func TestBindContainersIsIdempotentAndJoinsBySameNameAndKind(t *testing.T) {
 	a := fixtureInstance(t, s, "kavita-a")
 	b := fixtureInstance(t, s, "kavita-b")
 
-	first, err := s.BindContainers(t.Context(), a, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
+	first, _, err := s.BindContainers(t.Context(), a, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
 	if err != nil {
 		t.Fatalf("BindContainers a: %v", err)
 	}
 	// Re-running the same instance must not create a second library.
-	again, err := s.BindContainers(t.Context(), a, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
+	again, _, err := s.BindContainers(t.Context(), a, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
 	if err != nil {
 		t.Fatalf("BindContainers a again: %v", err)
 	}
@@ -185,7 +187,7 @@ func TestBindContainersIsIdempotentAndJoinsBySameNameAndKind(t *testing.T) {
 	// §17.8: a SECOND INSTANCE of the same kind JOINS the existing library
 	// rather than creating a new one. The merge key is case-insensitive and
 	// whitespace-trimmed, so "  manga  " must join "Manga".
-	joined, err := s.BindContainers(t.Context(), b, SystemUserID, []CatalogueContainer{comicContainer("7", "  manga  ")})
+	joined, _, err := s.BindContainers(t.Context(), b, SystemUserID, []CatalogueContainer{comicContainer("7", "  manga  ")})
 	if err != nil {
 		t.Fatalf("BindContainers b: %v", err)
 	}
@@ -209,7 +211,7 @@ func TestBindContainersWillNotJoinAcrossKinds(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
 
-	binds, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
 		comicContainer("1", "Library"),
 		{RemoteID: "2", Name: "Library", Kind: "book"},
 	})
@@ -229,10 +231,235 @@ func TestBindContainersWillNotJoinAcrossKinds(t *testing.T) {
 	}
 }
 
+// ── The two library-uniqueness indexes, and the reserved row ────────────────
+//
+// Migration 0005 declares TWO unique indexes over library — ux_library_name
+// (user_id, name) and ux_library_slug (user_id, slug) — and seeds one reserved
+// row, library 0 "Unfiled", which participates in both. The bind path derives
+// the name and the slug independently, so it has to satisfy all three, and it
+// used to satisfy only the first. The three tests below were written FAILING
+// against the old code and each names the constraint it is standing in for.
+
+func libraryNameSlug(t *testing.T, s *Store, id int64) (string, string) {
+	t.Helper()
+	var name, slug string
+	if err := s.db.Read().QueryRowContext(t.Context(),
+		`SELECT name, slug FROM library WHERE id = ?`, id).Scan(&name, &slug); err != nil {
+		t.Fatalf("read library %d: %v", id, err)
+	}
+	return name, slug
+}
+
+func TestBindContainersDisambiguatesASlugCollisionNotJustANameCollision(t *testing.T) {
+	// MEASURED FAILING BEFORE THE FIX:
+	//   bind container "Sci Fi" (2) on service_instance 1: create library
+	//   "Sci Fi": sqlite3: constraint failed: UNIQUE constraint failed:
+	//   library.user_id, library.slug
+	//
+	// slugify collapses every run of non-alphanumerics to one dash, so "Sci-Fi"
+	// and "Sci Fi" are two distinct NAMES — the join key does not match them and
+	// ux_library_name is content — that reduce to the one slug "sci-fi". The old
+	// disambiguation loop tested the name only, so it never fired, and the
+	// create died on ux_library_slug. It died inside BindContainers' single
+	// transaction, so "Manga" below never landed either: two libraries with
+	// awkward names cost the operator the ENTIRE import.
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s, "kavita")
+
+	binds, skipped, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+		comicContainer("1", "Sci-Fi"),
+		comicContainer("2", "Sci Fi"),
+		comicContainer("3", "Manga"),
+	})
+	if err != nil {
+		t.Fatalf("BindContainers: %v", err)
+	}
+	if len(skipped) != 0 {
+		t.Fatalf("a slug collision is disambiguable, so nothing should be skipped: %+v", skipped)
+	}
+	if len(binds) != 3 {
+		t.Fatalf("bound %d containers, want 3: %+v", len(binds), binds)
+	}
+	if binds["1"].LibraryID == binds["2"].LibraryID {
+		t.Fatal("two differently-named containers were fused into one library")
+	}
+	n1, s1 := libraryNameSlug(t, s, binds["1"].LibraryID)
+	n2, s2 := libraryNameSlug(t, s, binds["2"].LibraryID)
+	if s1 == s2 {
+		t.Errorf("both libraries got slug %q; ux_library_slug is per user and this cannot commit", s1)
+	}
+	if n1 != "Sci-Fi" {
+		t.Errorf("the FIRST container was renamed to %q; only the loser of a collision moves", n1)
+	}
+	if n2 != "Sci Fi (2)" || s2 != "sci-fi-2" {
+		t.Errorf("disambiguated library = (%q, %q), want (\"Sci Fi (2)\", \"sci-fi-2\") — "+
+			"the suffix is deterministic so a re-import lands on the same one", n2, s2)
+	}
+	// The rest of the import is the point: nothing else was lost to it.
+	if binds["3"].LibraryID == 0 || !binds["3"].Created {
+		t.Errorf("Manga did not bind: %+v — one awkward container must not take down the import", binds["3"])
+	}
+}
+
+func TestBindContainersDoesNotCollideWithTheReservedUnfiledLibrary(t *testing.T) {
+	// MEASURED FAILING BEFORE THE FIX:
+	//   bind container "Unfiled" (1) on service_instance 1: create library
+	//   "Unfiled": sqlite3: constraint failed: UNIQUE constraint failed:
+	//   library.user_id, library.name
+	//
+	// Library 0 is user 0's, and v0.1 imports as SystemUserID, so it is in
+	// ux_library_name and ux_library_slug alongside every library the bind path
+	// creates. The taken-set the disambiguation reads excludes it — correctly,
+	// because nothing may JOIN library 0 — and the old code used that same set
+	// for uniqueness, which made a reserved name look free.
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s, "kavita")
+
+	// KIND 'movie' ON PURPOSE, and it is the difference between this test
+	// asserting something and asserting nothing. Library 0's kind is 'movie',
+	// and the join rule requires the kinds to agree — so a COMIC container named
+	// "Unfiled" can never join library 0 whatever the taken-set says, and a test
+	// written with one measures the kind check rather than the exclusion. A
+	// movie library named "Unfiled" is the reachable case and the sharp one.
+	binds, skipped, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+		{RemoteID: "1", Name: "Unfiled", Kind: "movie"},
+		comicContainer("2", "Manga"),
+	})
+	if err != nil {
+		t.Fatalf("BindContainers: %v", err)
+	}
+	if len(skipped) != 0 {
+		t.Fatalf("the reserved name is disambiguable, so nothing should be skipped: %+v", skipped)
+	}
+	if binds["1"].LibraryID == UnfiledLibraryID {
+		t.Fatal("an upstream container was bound INTO the reserved Unfiled library — every " +
+			"work that belongs to no other library would then share a scope with it")
+	}
+	name, slug := libraryNameSlug(t, s, binds["1"].LibraryID)
+	if name != "Unfiled (2)" || slug != "unfiled-2" {
+		t.Errorf("the container landed as (%q, %q), want (\"Unfiled (2)\", \"unfiled-2\")", name, slug)
+	}
+	// The reserved row is untouched: it still holds its own name and slug, and
+	// it is still the row internal/db's TestUnfiledLibraryIsProtected defends.
+	rn, rs := libraryNameSlug(t, s, UnfiledLibraryID)
+	if rn != "Unfiled" || rs != "unfiled" {
+		t.Errorf("library 0 is now (%q, %q); the reserved row must not be renamed or re-slugged", rn, rs)
+	}
+	if _, err := s.db.Writer().ExecContext(t.Context(), `DELETE FROM library WHERE id = 0`); err == nil {
+		t.Error("library 0 became deletable; trg_library_unfiled_no_delete must still fire")
+	}
+	if binds["2"].LibraryID == 0 || !binds["2"].Created {
+		t.Errorf("Manga did not bind: %+v", binds["2"])
+	}
+}
+
+func TestBindContainersRebindsToTheSameDisambiguatedLibraryEveryTime(t *testing.T) {
+	// IDEMPOTENCY IS THE PROPERTY MOST LIKELY TO BREAK when a name grows a
+	// counter: a disambiguation that re-runs on every import walks "Sci Fi (2)",
+	// "Sci Fi (3)", "Sci Fi (4)" and leaves a library per sync. It must not,
+	// and one repetition does not prove it — the second run is the one where
+	// "(2)" is taken, the third is where "(3)" would be.
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s, "kavita")
+	cs := []CatalogueContainer{
+		comicContainer("1", "Sci-Fi"),
+		comicContainer("2", "Sci Fi"),
+		{RemoteID: "3", Name: "Unfiled", Kind: "movie"},
+	}
+
+	first, _, err := s.BindContainers(t.Context(), inst, SystemUserID, cs)
+	if err != nil {
+		t.Fatalf("BindContainers: %v", err)
+	}
+	want := count(t, s, `SELECT COUNT(*) FROM library`)
+	for run := 2; run <= 4; run++ {
+		again, skipped, err := s.BindContainers(t.Context(), inst, SystemUserID, cs)
+		if err != nil {
+			t.Fatalf("BindContainers run %d: %v", run, err)
+		}
+		if len(skipped) != 0 {
+			t.Fatalf("run %d skipped %+v; a re-import binds what it bound before", run, skipped)
+		}
+		for _, ref := range []string{"1", "2", "3"} {
+			if again[ref].LibraryID != first[ref].LibraryID {
+				t.Errorf("run %d bound container %s to library %d, want %d",
+					run, ref, again[ref].LibraryID, first[ref].LibraryID)
+			}
+			if again[ref].Created {
+				t.Errorf("run %d reported container %s as newly Created", run, ref)
+			}
+		}
+		if n := count(t, s, `SELECT COUNT(*) FROM library`); n != want {
+			t.Fatalf("run %d left %d libraries, want %d — the counter suffix is growing per import", run, n, want)
+		}
+	}
+	// The names did not drift either: a stable id under a renamed library would
+	// still break every permalink.
+	if n, sl := libraryNameSlug(t, s, first["2"].LibraryID); n != "Sci Fi (2)" || sl != "sci-fi-2" {
+		t.Errorf("after four imports the disambiguated library is (%q, %q), want (\"Sci Fi (2)\", \"sci-fi-2\")", n, sl)
+	}
+}
+
+func TestBindContainersSkipsAnUnbindableContainerAndRecordsWhy(t *testing.T) {
+	// The disambiguation above should make a uniqueness skip unreachable, so
+	// this exercises the fallback with the OTHER constraint on library: kind's
+	// CHECK. An adapter that reports a kind the schema does not know is exactly
+	// the drift the fallback exists for.
+	//
+	// The property under test is CLAUDE.md principle 3: the import degrades to
+	// "one library is missing, and here is why", not to nothing.
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s, "kavita")
+
+	binds, skipped, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+		comicContainer("1", "Manga"),
+		{RemoteID: "2", Name: "Sheet Music", Kind: "score"},
+		{RemoteID: "3", Name: "Ebooks", Kind: "book"},
+	})
+	if err != nil {
+		t.Fatalf("BindContainers returned an error rather than skipping one container: %v", err)
+	}
+	if len(binds) != 2 || binds["1"].LibraryID == 0 || binds["3"].LibraryID == 0 {
+		t.Fatalf("bound %+v, want the two valid containers", binds)
+	}
+	if _, ok := binds["2"]; ok {
+		t.Error("the unbindable container was returned as bound")
+	}
+	if len(skipped) != 1 || skipped[0].RemoteID != "2" || skipped[0].Name != "Sheet Music" {
+		t.Fatalf("skipped = %+v, want exactly the Sheet Music container", skipped)
+	}
+	if skipped[0].Reason == "" {
+		t.Error("a skip with no reason is a silent skip")
+	}
+	// The two good libraries COMMITTED. Read them back off the pool rather than
+	// trusting the returned map: the savepoint rollback is the thing that could
+	// have taken them with it.
+	if n := count(t, s, `SELECT COUNT(*) FROM library WHERE id <> ?`, UnfiledLibraryID); n != 2 {
+		t.Errorf("%d libraries committed, want 2", n)
+	}
+	if n := count(t, s, `SELECT COUNT(*) FROM library WHERE name = 'Sheet Music'`); n != 0 {
+		t.Error("the failed container left a partial library row behind")
+	}
+	// RECORDED, not just returned. A background import has no caller left to
+	// read a Report by the time the operator asks where the library went.
+	var remoteKind, remoteID, detail string
+	if err := s.db.Read().QueryRowContext(t.Context(),
+		`SELECT remote_kind, remote_id, detail FROM sync_report WHERE kind = 'container_bind_failed'`).
+		Scan(&remoteKind, &remoteID, &detail); err != nil {
+		t.Fatalf("read sync_report: %v", err)
+	}
+	if remoteKind != "library" || remoteID != "2" {
+		t.Errorf("sync_report row = (%q, %q), want (library, 2)", remoteKind, remoteID)
+	}
+	if !strings.Contains(detail, "Sheet Music") || !strings.Contains(detail, "reason") {
+		t.Errorf("sync_report detail = %q, want the container's name and a reason", detail)
+	}
+}
+
 func TestApplyCatalogueBatchWritesTheWholeShape(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
-	binds, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
 		comicContainer("1", "Manga"),
 		{RemoteID: "2", Name: "Ebooks", Kind: "book"},
 	})
@@ -391,7 +618,7 @@ func TestApplyCatalogueBatchIsIdempotent(t *testing.T) {
 	// removed this now reports search_fts = 3 against search_doc = 2.
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
-	binds, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
+	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
 	if err != nil {
 		t.Fatalf("BindContainers: %v", err)
 	}
@@ -452,7 +679,7 @@ func TestApplyCatalogueBatchIsIdempotent(t *testing.T) {
 func TestTheFTSRowidIsTheSearchDocRowidWhenTheTablesHaveDrifted(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
-	binds, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
+	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
 	if err != nil {
 		t.Fatalf("BindContainers: %v", err)
 	}
@@ -538,11 +765,11 @@ func TestTierOneReusesTheWorkThatAlreadyHoldsTheIdentifier(t *testing.T) {
 	b := fixtureInstance(t, s, "kavita-b")
 
 	id := ExternalIdentifier{Source: "anilist", Value: "30013", Confidence: 1.0}
-	bindsA, err := s.BindContainers(t.Context(), a, SystemUserID, []CatalogueContainer{comicContainer("1", "A")})
+	bindsA, _, err := s.BindContainers(t.Context(), a, SystemUserID, []CatalogueContainer{comicContainer("1", "A")})
 	if err != nil {
 		t.Fatalf("bind a: %v", err)
 	}
-	bindsB, err := s.BindContainers(t.Context(), b, SystemUserID, []CatalogueContainer{comicContainer("1", "B")})
+	bindsB, _, err := s.BindContainers(t.Context(), b, SystemUserID, []CatalogueContainer{comicContainer("1", "B")})
 	if err != nil {
 		t.Fatalf("bind b: %v", err)
 	}
@@ -577,7 +804,7 @@ func TestTierOneNeverMergesAcrossKind(t *testing.T) {
 	// linked, never merged. Same id, different kind, two works.
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
-	binds, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
+	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{
 		comicContainer("1", "Manga"), {RemoteID: "2", Name: "Ebooks", Kind: "book"},
 	})
 	if err != nil {
@@ -609,7 +836,7 @@ func TestTwoItemsClaimingOneIDInOneBatchAreResolvedByReuse(t *testing.T) {
 	// item resolves onto the first item's work and both links point at it.
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
-	binds, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
+	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
 	if err != nil {
 		t.Fatalf("BindContainers: %v", err)
 	}
@@ -650,7 +877,7 @@ func TestExternalIDConflictIsRecordedAndTheBatchSurvives(t *testing.T) {
 	// savepoint this aborts the whole 2,000-row transaction.
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
-	binds, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
+	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
 	if err != nil {
 		t.Fatalf("BindContainers: %v", err)
 	}
@@ -717,7 +944,7 @@ func TestExternalIDConflictIsRecordedAndTheBatchSurvives(t *testing.T) {
 func TestUnfiledIsWhereAWorkBoundToNoOtherLibraryLands(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
-	binds, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
+	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
 	if err != nil {
 		t.Fatalf("BindContainers: %v", err)
 	}
@@ -768,7 +995,7 @@ func TestUnfiledIsWhereAWorkBoundToNoOtherLibraryLands(t *testing.T) {
 func TestRebuildSearchDocFilesAStrandedDocAsUnfiled(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
-	binds, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
+	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
 	if err != nil {
 		t.Fatalf("BindContainers: %v", err)
 	}
@@ -829,7 +1056,7 @@ func TestRebuildSearchDocFilesAStrandedDocAsUnfiled(t *testing.T) {
 func TestSearchDocInvariantQueriesCatchABreak(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita")
-	binds, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
+	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID, []CatalogueContainer{comicContainer("1", "Manga")})
 	if err != nil {
 		t.Fatalf("BindContainers: %v", err)
 	}
@@ -1008,4 +1235,31 @@ func TestIdentityConflictStringNamesBothWorks(t *testing.T) {
 		}
 	}
 	_ = fmt.Sprint(c)
+}
+
+func TestOnlyAConstraintViolationSkipsAContainer(t *testing.T) {
+	// The narrowing in BindContainers, asserted directly because no reachable
+	// CatalogueContainer can make SQLite return an I/O error on demand. If this
+	// widens to "any error", a failing disk stops being an import failure and
+	// starts being a quiet list of libraries the operator is told cannot be
+	// bound — which is worse than the abort this whole change removed.
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"unique index", sqlite3.CONSTRAINT_UNIQUE, true},
+		{"check constraint", sqlite3.CONSTRAINT_CHECK, true},
+		{"foreign key", sqlite3.CONSTRAINT_FOREIGNKEY, true},
+		{"wrapped, as bindOneContainer returns it",
+			fmt.Errorf("create library %q: %w", "Manga", sqlite3.CONSTRAINT_UNIQUE), true},
+		{"disk I/O", sqlite3.IOERR, false},
+		{"corrupt database", sqlite3.CORRUPT, false},
+		{"database is full", sqlite3.FULL, false},
+		{"context cancelled", context.Canceled, false},
+	} {
+		if got := isSkippableBindError(tc.err); got != tc.want {
+			t.Errorf("isSkippableBindError(%s) = %v, want %v", tc.name, got, tc.want)
+		}
+	}
 }

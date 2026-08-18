@@ -5,11 +5,14 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/ncruces/go-sqlite3"
 )
 
 // The catalogue write path: what a full import (channel 1) puts into the
@@ -74,6 +77,26 @@ type CatalogueBinding struct {
 	// so a caller that wants to report "joined X as a second source" needs to be
 	// able to tell them apart.
 	Created bool
+}
+
+// SkippedContainer is one upstream container that could NOT be bound to a
+// library, and the reason.
+//
+// It is not a DeclinedContainer. A decline is the adapter's decision — UsArr
+// has no work.kind for this container — and it is known before any write. A
+// skip is a write that failed a uniqueness constraint the replica cannot
+// satisfy for this container, discovered inside the bind transaction. Both are
+// reported; they are separate fields because "we do not handle Kavita's Image
+// libraries" and "two of your libraries want the same slug" need different
+// answers from the operator.
+type SkippedContainer struct {
+	RemoteID string
+	Name     string
+
+	// Reason is the underlying error's text. It names a constraint, so it is
+	// database detail rather than upstream text — the upstream's own NAME is
+	// carried in Name, on the same terms as DeclinedContainer.
+	Reason string
 }
 
 // ExternalIdentifier is one identity claim about a work.
@@ -293,29 +316,99 @@ func slugify(name string) string {
 // returned to the caller in neither the map nor an error: the caller already
 // holds the reason and reports it.
 //
+// # ONE UNBINDABLE CONTAINER DOES NOT TAKE DOWN THE IMPORT
+//
+// A container whose create violates ux_library_name or ux_library_slug is
+// SKIPPED — rolled back to its own savepoint, recorded in sync_report as
+// `container_bind_failed`, and returned in the []SkippedContainer — and every
+// other container in the list still binds. Before this it returned an error,
+// which aborted BindContainers, which aborted FullImport before a single item
+// was read: two Kavita libraries whose names reduce to the same slug meant NO
+// library synced at all. CLAUDE.md principle 3 is that a feature degrades
+// honestly rather than failing wholesale, and "honestly" is the reason the skip
+// is recorded rather than logged: a background import has no caller left to
+// read a return value by the time anyone asks why a library is missing.
+//
+// The disambiguation in step 3 should make a skip unreachable in practice. It
+// is kept anyway, because a uniqueness rule the schema owns and this file
+// re-derives is exactly the pair that drifts.
+//
 // It is a replication write and takes no Scope. See the file header.
 func (s *Store) BindContainers(
 	ctx context.Context, instanceID, userID int64, cs []CatalogueContainer,
-) (map[string]CatalogueBinding, error) {
+) (map[string]CatalogueBinding, []SkippedContainer, error) {
 	out := make(map[string]CatalogueBinding, len(cs))
+	var skipped []SkippedContainer
 	err := s.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
-		for _, c := range cs {
+		for i, c := range cs {
 			if c.Kind == "" {
 				continue
 			}
-			b, err := bindOneContainer(ctx, tx, instanceID, userID, c)
-			if err != nil {
-				return fmt.Errorf("bind container %q (%s) on service_instance %d: %w",
-					c.Name, c.RemoteID, instanceID, err)
+			sp := fmt.Sprintf("bind_%d", i)
+			if _, err := tx.ExecContext(ctx, "SAVEPOINT "+sp); err != nil {
+				return fmt.Errorf("savepoint %s: %w", sp, err)
 			}
-			out[c.RemoteID] = b
+			b, bindErr := bindOneContainer(ctx, tx, instanceID, userID, c)
+			if bindErr == nil {
+				if _, err := tx.ExecContext(ctx, "RELEASE SAVEPOINT "+sp); err != nil {
+					return fmt.Errorf("release savepoint %s: %w", sp, err)
+				}
+				out[c.RemoteID] = b
+				continue
+			}
+			wrapped := fmt.Errorf("bind container %q (%s) on service_instance %d: %w",
+				c.Name, c.RemoteID, instanceID, bindErr)
+			// Only a CONSTRAINT violation is "this container cannot be bound".
+			// An I/O error, a corrupt page or a locked database is a fact about
+			// the DATABASE, not about this container, and skipping every
+			// container in turn would report a broken disk as a tidy list of
+			// unbindable libraries.
+			if !isSkippableBindError(bindErr) {
+				return wrapped
+			}
+			// Undo just this container. Everything already bound in this
+			// transaction stands — the savepoint is per container for the same
+			// reason ApplyCatalogueBatch's is per external id.
+			if _, err := tx.ExecContext(ctx, "ROLLBACK TO SAVEPOINT "+sp); err != nil {
+				return fmt.Errorf("rollback to savepoint %s after %w: %w", sp, bindErr, err)
+			}
+			if _, err := tx.ExecContext(ctx, "RELEASE SAVEPOINT "+sp); err != nil {
+				return fmt.Errorf("release savepoint %s: %w", sp, err)
+			}
+			sk := SkippedContainer{RemoteID: c.RemoteID, Name: c.Name, Reason: bindErr.Error()}
+			detail, err := json.Marshal(map[string]string{"name": sk.Name, "reason": sk.Reason})
+			if err != nil {
+				return fmt.Errorf("encode skipped container %q: %w", c.RemoteID, err)
+			}
+			// Recorded INSIDE the same transaction as the rollback that made it
+			// true, and by the store rather than the caller: the caller can
+			// ignore a returned slice, and a skip nobody can see is the failure
+			// mode this whole change exists to remove.
+			if err := recordSyncReport(ctx, tx, instanceID,
+				"container_bind_failed", "library", c.RemoteID, string(detail)); err != nil {
+				return err
+			}
+			skipped = append(skipped, sk)
 		}
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return out, nil
+	return out, skipped, nil
+}
+
+// isSkippableBindError decides whether a failed bind is a fact about THIS
+// CONTAINER or a fact about the database.
+//
+// Only a CONSTRAINT violation is the former: a name or slug that cannot be made
+// unique, a kind the schema does not know, a foreign key that no longer
+// resolves. An I/O error, a corrupt page, a full disk or a locked database is
+// the latter, and skipping container after container over one would report a
+// broken database as a tidy list of unbindable libraries — the opposite of
+// degrading honestly.
+func isSkippableBindError(err error) bool {
+	return errors.Is(err, sqlite3.CONSTRAINT)
 }
 
 func bindOneContainer(
@@ -352,7 +445,7 @@ func bindOneContainer(
 	// because ux_library_name is a plain UNIQUE on the raw name and there is no
 	// index over a lowered, trimmed form to seek — a homelab has single-digit
 	// libraries, so the scan is cheaper than the index would be.
-	existing, err := userLibrariesByNameKey(ctx, tx, userID)
+	existing, err := userLibraries(ctx, tx, userID)
 	if err != nil {
 		return CatalogueBinding{}, err
 	}
@@ -361,25 +454,36 @@ func bindOneContainer(
 	if name == "" {
 		name = "Library " + c.RemoteID
 	}
-	if got, ok := existing[libraryNameKey(name)]; ok && got.kind == c.Kind {
+	if got, ok := existing.joinable[libraryNameKey(name)]; ok && got.kind == c.Kind {
 		if err := insertLibrarySource(ctx, tx, got.id, instanceID, c); err != nil {
 			return CatalogueBinding{}, err
 		}
 		return CatalogueBinding{LibraryID: got.id, Kind: got.kind}, nil
 	}
 
-	// Step 3: create. A name taken by a library of a DIFFERENT kind cannot be
-	// joined and must not collide with ux_library_name, so it is disambiguated
-	// deterministically rather than by a random suffix.
+	// Step 3: create, under a name and slug that are BOTH free.
+	//
+	// TWO UNIQUE INDEXES, NOT ONE, and that is the whole of the bug this loop
+	// used to have. Migration 0005 declares ux_library_name(user_id, name) AND
+	// ux_library_slug(user_id, slug); the loop tested only the first. slugify
+	// is lossy — every run of non-alphanumerics collapses to one dash — so
+	// "Sci-Fi" and "Sci Fi" are two DIFFERENT names (the join key never
+	// matches, the name index never fires) that reduce to the one slug
+	// "sci-fi", and the create aborted on ux_library_slug. Measured, not
+	// reasoned: TestBindContainersDisambiguatesASlugCollision.
+	//
+	// AND THE TAKEN SET INCLUDES THE RESERVED "Unfiled" ROW. It is excluded
+	// from `joinable` on purpose — nothing may ever join library 0 — but it is
+	// still a row in ux_library_name and ux_library_slug, so an upstream
+	// library actually named "Unfiled" collided with it. Reserving a name
+	// against joining is not the same as pretending it is free.
 	base := name
-	for n := 2; ; n++ {
-		if _, taken := existing[libraryNameKey(name)]; !taken {
-			break
-		}
+	slug := slugify(name)
+	for n := 2; existing.names[libraryNameKey(name)] || existing.slugs[slug]; n++ {
 		name = fmt.Sprintf("%s (%d)", base, n)
+		slug = slugify(name)
 	}
 
-	slug := slugify(name)
 	res, err := tx.ExecContext(ctx, `
 		INSERT INTO library (user_id, name, slug, kind, managed_by, enabled, include_in_search)
 		VALUES (?,?,?,?, 'auto', 1, 1)`, userID, name, slug, c.Kind)
@@ -401,25 +505,50 @@ type libraryRow struct {
 	kind string
 }
 
-func userLibrariesByNameKey(ctx context.Context, q querier, userID int64) (map[string]libraryRow, error) {
+// userLibrarySet is what one user already holds, read ONCE and split into the
+// two questions the bind path asks — which are different questions and were
+// previously one map, which is how library 0 came to be invisible to a
+// uniqueness check it participates in.
+type userLibrarySet struct {
+	// joinable is "which library may this container JOIN", keyed by
+	// libraryNameKey. The reserved Unfiled row is absent: it is where the
+	// membership derivation files a work belonging to nowhere else, and a
+	// container binding into it would make that meaningless.
+	joinable map[string]libraryRow
+
+	// names and slugs are "which values would violate a UNIQUE index", and they
+	// include EVERY row this user owns, Unfiled included.
+	names map[string]bool
+	slugs map[string]bool
+}
+
+func userLibraries(ctx context.Context, q querier, userID int64) (userLibrarySet, error) {
+	out := userLibrarySet{
+		joinable: map[string]libraryRow{},
+		names:    map[string]bool{},
+		slugs:    map[string]bool{},
+	}
 	rows, err := q.QueryContext(ctx,
-		`SELECT id, name, kind FROM library WHERE user_id = ? AND id <> ?`, userID, UnfiledLibraryID)
+		`SELECT id, name, slug, kind FROM library WHERE user_id = ?`, userID)
 	if err != nil {
-		return nil, fmt.Errorf("list libraries for user %d: %w", userID, err)
+		return out, fmt.Errorf("list libraries for user %d: %w", userID, err)
 	}
 	defer func() { _ = rows.Close() }()
 
-	out := map[string]libraryRow{}
 	for rows.Next() {
 		var r libraryRow
-		var name string
-		if err := rows.Scan(&r.id, &name, &r.kind); err != nil {
-			return nil, fmt.Errorf("list libraries for user %d: scan: %w", userID, err)
+		var name, slug string
+		if err := rows.Scan(&r.id, &name, &slug, &r.kind); err != nil {
+			return out, fmt.Errorf("list libraries for user %d: scan: %w", userID, err)
 		}
-		out[libraryNameKey(name)] = r
+		out.names[libraryNameKey(name)] = true
+		out.slugs[slug] = true
+		if r.id != UnfiledLibraryID {
+			out.joinable[libraryNameKey(name)] = r
+		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list libraries for user %d: %w", userID, err)
+		return out, fmt.Errorf("list libraries for user %d: %w", userID, err)
 	}
 	return out, nil
 }
@@ -508,9 +637,11 @@ func (s *Store) ApplyCatalogueBatch(
 		for _, it := range items {
 			b, ok := bindings[it.ContainerID]
 			if !ok {
-				// A container with no binding is a declined one. Skipping here
-				// rather than erroring keeps a declined Kavita library from
-				// failing the whole import.
+				// A container with no binding was DECLINED (no work.kind) or
+				// SKIPPED (its library could not be created). Either way the
+				// reason is already recorded upstream of here. Skipping rather
+				// than erroring keeps one unusable Kavita library from failing
+				// the whole import.
 				continue
 			}
 			one, err := applyOneItem(ctx, tx, instanceID, b, it, now)
@@ -1237,13 +1368,23 @@ func (s *Store) RecordSyncReport(
 	ctx context.Context, instanceID int64, kind, remoteKind, remoteID, detail string,
 ) error {
 	return s.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `
-			INSERT INTO sync_report (service_instance_id, kind, remote_kind, remote_id, detail)
-			VALUES (?,?,?,?,?)`,
-			instanceID, kind, nullString(remoteKind), nullString(remoteID), nullString(detail))
-		if err != nil {
-			return fmt.Errorf("record sync_report %q for service_instance %d: %w", kind, instanceID, err)
-		}
-		return nil
+		return recordSyncReport(ctx, tx, instanceID, kind, remoteKind, remoteID, detail)
 	})
+}
+
+// recordSyncReport is the same append, inside a transaction the caller already
+// holds. It exists so a fact discovered mid-transaction — a container skipped
+// after a ROLLBACK TO SAVEPOINT — is committed atomically with the state that
+// made it true, rather than in a second write that a crash can lose.
+func recordSyncReport(
+	ctx context.Context, tx *sql.Tx, instanceID int64, kind, remoteKind, remoteID, detail string,
+) error {
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO sync_report (service_instance_id, kind, remote_kind, remote_id, detail)
+		VALUES (?,?,?,?,?)`,
+		instanceID, kind, nullString(remoteKind), nullString(remoteID), nullString(detail))
+	if err != nil {
+		return fmt.Errorf("record sync_report %q for service_instance %d: %w", kind, instanceID, err)
+	}
+	return nil
 }

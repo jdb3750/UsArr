@@ -41,7 +41,7 @@ func importOne(t *testing.T, s *Store, inst int64, binds map[string]CatalogueBin
 func creditFixture(t *testing.T, s *Store) (inst, bookA, bookB int64) {
 	t.Helper()
 	inst = fixtureInstance(t, s, "kavita-credits")
-	binds, err := s.BindContainers(t.Context(), inst, SystemUserID,
+	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID,
 		[]CatalogueContainer{{RemoteID: "2", Name: "Ebooks", Kind: "book"}})
 	if err != nil {
 		t.Fatalf("BindContainers: %v", err)

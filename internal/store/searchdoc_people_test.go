@@ -306,7 +306,7 @@ func TestAReimportKeepsTheCreditedNamesInTheDocument(t *testing.T) {
 	inst, _, _ := creditFixture(t, s)
 	clarkeOnPiranesi(t, s, inst)
 
-	binds, err := s.BindContainers(t.Context(), inst, SystemUserID,
+	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID,
 		[]CatalogueContainer{{RemoteID: "2", Name: "Ebooks", Kind: "book"}})
 	if err != nil {
 		t.Fatalf("BindContainers: %v", err)
@@ -342,7 +342,7 @@ func TestAReimportKeepsTheCreditedNamesInTheDocument(t *testing.T) {
 func TestTheCreditPassRebuildKeepsEveryOtherColumn(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s, "kavita-drift")
-	binds, err := s.BindContainers(t.Context(), inst, SystemUserID,
+	binds, _, err := s.BindContainers(t.Context(), inst, SystemUserID,
 		[]CatalogueContainer{{RemoteID: "2", Name: "Ebooks", Kind: "book"}})
 	if err != nil {
 		t.Fatalf("BindContainers: %v", err)

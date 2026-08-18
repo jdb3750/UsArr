@@ -53,6 +53,13 @@ type Report struct {
 	LibrariesJoined    int
 	DeclinedContainers []DeclinedContainer
 
+	// SkippedContainers is the containers that HAD a kind and still got no
+	// library, because the create violated a library uniqueness index. Distinct
+	// from DeclinedContainers, which never had a kind — see
+	// store.SkippedContainer. Each one is also in sync_report as
+	// `container_bind_failed`, written by the bind transaction itself.
+	SkippedContainers []store.SkippedContainer
+
 	// ItemsRead is what the adapter handed over. It is "how far the read got",
 	// never "how many rows are correct".
 	ItemsRead int
@@ -205,9 +212,19 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (Report, e
 	}
 	im.publish(Progress{InstanceID: instanceID, Phase: "containers"})
 
-	bindings, err := im.Store.BindContainers(ctx, instanceID, im.UserID, containers)
+	bindings, skipped, err := im.Store.BindContainers(ctx, instanceID, im.UserID, containers)
 	if err != nil {
 		return rep, fmt.Errorf("full import of service_instance %d: bind libraries: %w", instanceID, err)
+	}
+	// A container that could not be bound is NOT an import failure. It is one
+	// missing library, reported as one missing library — BindContainers has
+	// already written the sync_report row inside the bind transaction, so this
+	// is the operator-facing half and not the durable record.
+	rep.SkippedContainers = skipped
+	for _, sk := range skipped {
+		im.log().Warn("container skipped: it could not be bound to a library",
+			"instance_id", instanceID, "remote_id", sk.RemoteID,
+			"name", sk.Name, "reason", sk.Reason)
 	}
 	for _, b := range bindings {
 		if b.Created {
@@ -283,6 +300,7 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (Report, e
 		"people_created", rep.Credits.PeopleCreated,
 		"credits_written", rep.Credits.CreditsWritten,
 		"declined_containers", len(rep.DeclinedContainers),
+		"skipped_containers", len(rep.SkippedContainers),
 		"identity_conflicts", len(rep.IdentityConflicts),
 		"duration", rep.Duration())
 	return rep, nil

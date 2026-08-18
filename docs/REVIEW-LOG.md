@@ -12782,3 +12782,159 @@ tells them apart.
   moving a subtype row and is a separate question; the divergence is noted at the function.
 * **No `alt_titles` change**, no `search_trgm` change, and no migration. `search_fts.people` has
   existed since migration 0005 and was reserved for exactly this.
+
+---
+
+# LS-101…LS-109 — two reported bugs in the catalogue bind path
+
+**Date:** 2026-08-18. **Target:** `internal/store/catalogue.go` (`BindContainers`, `bindOneContainer`)
+and `internal/libsync/importer.go` (`FullImport`). **Input:** two bug reports from a thread reading the
+code, neither covered by a test. Both were REPRODUCED against the shipped code before anything was
+changed; the verbatim failures are quoted below and again at each test.
+
+Ids LS-101…LS-109 were allocated to this thread. LS-105…LS-109 are unused and are left as gaps —
+per `docs/DEVELOPMENT.md` §11, an id is never reused and a gap is never closed by renumbering.
+
+## LS-101 Both reports are real, and they are TWO bugs, not one
+
+The hypothesis offered with the reports — *"`bindOneContainer` disambiguates a colliding NAME to
+`Name (2)` but the slug is derived from the pre-disambiguation name, so `ux_library_name` is satisfied
+while `ux_library_slug` aborts"* — is **WRONG, and it is recorded here rather than quietly corrected.**
+`slug := slugify(name)` already ran AFTER the loop, on the final name. The loop is not the thing that
+misfires: **in both reports it never runs at all.**
+
+**Report 1 — two names, one slug.** `slugify` collapses every run of non-alphanumerics to a single
+dash, so `"Sci-Fi"` and `"Sci Fi"` are two different names under `libraryNameKey` (`"sci-fi"` vs
+`"sci fi"` — the join key does not match and the name index is content) that reduce to the one slug
+`"sci-fi"`. The loop tested `existing[libraryNameKey(name)]` and nothing else, so it saw a free name
+and stopped. Reproduced:
+
+```
+bind container "Sci Fi" (2) on service_instance 1: create library "Sci Fi":
+sqlite3: constraint failed: UNIQUE constraint failed: library.user_id, library.slug
+```
+
+**Report 2 — the reserved row.** `userLibrariesByNameKey` excluded `library.id = 0` from its result —
+correctly, because nothing may ever JOIN the Unfiled library — and the disambiguation loop read that
+same map as its uniqueness set. Reserving a name against joining is not the same as pretending it is
+free: library 0 is user 0's, v0.1 imports as `SystemUserID` (`cmd/usarr/import.go:65`), and it sits in
+`ux_library_name` and `ux_library_slug` alongside everything the bind path creates. Reproduced:
+
+```
+bind container "Unfiled" (1) on service_instance 1: create library "Unfiled":
+sqlite3: constraint failed: UNIQUE constraint failed: library.user_id, library.name
+```
+
+Note which index fires: report 1 dies on the **slug**, report 2 on the **name**. Fixing either one
+alone leaves the other live, which is the operational proof they are two bugs.
+
+The earlier prediction that a container named `Unfiled` would land safely as `Unfiled (2)` is the
+behaviour this change now DELIVERS; before it, the create aborted.
+
+## LS-102 The shared third failure: one bad container took down the whole import
+
+Both reports abort `BindContainers`' single transaction, `FullImport` returns at `importer.go:215`,
+and **not one item is read**. Two awkwardly-named Kavita libraries cost the operator the entire sync.
+That is the opposite of CLAUDE.md principle 3, and it is fixed independently of the disambiguation:
+
+* Each container is bound inside its **own SAVEPOINT**, on the shipped precedent of
+  `ApplyCatalogueBatch`'s per-external-id savepoint. A failure rolls back that container and nothing
+  else; every container bound earlier in the same call stands.
+* **Only a CONSTRAINT violation is skippable** (`isSkippableBindError`). An I/O error, a corrupt page,
+  a full disk or a cancelled context is a fact about the DATABASE, and skipping container after
+  container over one would report a broken disk as a tidy list of unbindable libraries.
+* The skip is **RECORDED, not logged**: a `sync_report` row with `kind = 'container_bind_failed'`,
+  written **inside the same transaction as the rollback that made it true**, by the store rather than
+  by the caller. Two reasons for that placement, both deliberate: a caller can ignore a returned
+  slice, and a background import has no caller left to read a `Report` by the time the operator asks
+  where a library went. `sync_report` was chosen over the importer's counters because migration 0005
+  calls it "an operational log the sweep writes and the Services screen reads" and the shipped
+  `container_declined` rows are the exact precedent. The counters get it too —
+  `Report.SkippedContainers` — but as the operator-facing half, not as the durable record.
+
+`SkippedContainer` is a **separate type from `DeclinedContainer` on purpose**: a decline is the
+adapter's decision, known before any write ("UsArr has no kind for Kavita's Image libraries"); a skip
+is a write that failed, discovered inside the transaction. They need different answers from the
+operator, so they are different fields.
+
+## LS-103 Idempotency, and the three breaks that fired on it
+
+The disambiguation is deterministic (`base`, then `base (2)`, `base (3)`, …, each candidate tested
+against BOTH indexes) and stability across re-imports rests on `bindOneContainer` step 1, which finds
+the existing `library_source` and returns before any naming happens.
+`TestBindContainersRebindsToTheSameDisambiguatedLibraryEveryTime` runs the same container list **four
+times** — one repetition proves nothing, since the second run is the first where `(2)` is taken —
+and asserts the same library ids, `Created == false`, a stable `COUNT(*) FROM library`, and unchanged
+names. Neutering step 1's lookup fires it with exactly the predicted failure:
+
+```
+run 2 bound container 2 to library 4, want 2
+run 2 reported container 3 as newly Created
+run 2 left 6 libraries, want 4 — the counter suffix is growing per import
+```
+
+## LS-104 Guard firing, including one no-op break and two absorbed guards found and fixed
+
+Every new assertion was fired by breaking the production code deliberately. Three results are worth
+recording because they are the ones that would otherwise have shipped as false confidence.
+
+**A no-op break that looked like an absorbed guard.** Rewriting the per-container savepoint name from
+`fmt.Sprintf("bind_%d", i)` to a single constant `"bind_all"` left every test GREEN — and it is not an
+absorbed guard, it is **not a break**: SQLite savepoints are a stack, so re-issuing the same name
+inside the loop still nests one per container. Re-broken properly — the `SAVEPOINT` hoisted OUT of the
+loop, taken once — it fired at once:
+
+```
+1 libraries committed, want 2
+```
+
+**An absorbed assertion, found and repaired.** `TestBindContainersDoesNotCollideWithTheReservedUnfiledLibrary`
+was first written with a COMIC container named `"Unfiled"`, and making library 0 joinable did not fire
+it. The reason is that library 0's `kind` is `'movie'` and the join rule requires the kinds to agree,
+so a comic container can never join it whatever the taken-set says: the test was measuring the kind
+check, not the exclusion. Rewritten with a **movie** container — the reachable and sharp case — the
+same break fires:
+
+```
+an upstream container was bound INTO the reserved Unfiled library — every work that belongs
+to no other library would then share a scope with it
+```
+
+**A branch no reachable input can exercise, asserted directly instead of left unasserted.** No
+`CatalogueContainer` can make SQLite return an I/O error on demand, so the "only a constraint is
+skippable" narrowing had no test. Rather than report it as uncovered, the decision was extracted into
+`isSkippableBindError` and pinned by `TestOnlyAConstraintViolationSkipsAContainer` over
+`CONSTRAINT_UNIQUE` / `_CHECK` / `_FOREIGNKEY`, a wrapped constraint error, `IOERR`, `CORRUPT`, `FULL`
+and `context.Canceled`. Widening it to `err != nil` fires four cases.
+
+Also recorded: one candidate test was **written, measured, and deleted**. It tried to prove the
+savepoint undoes a PARTIAL container (the `library` row committed, `library_source` failing after it)
+by binding against a non-existent `service_instance`. It cannot work, and the reason is itself worth
+knowing: `sync_report.service_instance_id` carries the same foreign key, so recording the skip fails
+too. With a valid instance, no `CatalogueContainer` can make `library_source` fail after `library`
+succeeds — the rollback of a partial container is **precautionary**, and the savepoint's asserted job
+is the per-container scoping above.
+
+**No existing test was reversed, because none asserted the bug.** The repo was searched (three tests
+here have previously been found pinning a bug as required behaviour). Every existing call site of
+`BindContainers` treats an error as a fatal test failure, and before this branch no test in
+`internal/` exercised a slug collision or the reserved name at all — which matches the reports, both
+of which came with "not covered by a test".
+
+**No schema change, and none is needed.** Migration 0005 is untouched. Both unique indexes and the
+`trg_library_unfiled_no_delete` trigger are correct as they stand; the bug was entirely in the code
+that has to satisfy them. The trigger is re-asserted from the new test, and that assertion was proved
+live rather than assumed by inverting it once and watching it report the trigger's own message.
+
+⚠️ **Deferred, reported rather than fixed.** A library that has been disambiguated is no longer
+reachable by the §17.8 join key: a second instance offering a container named `"Sci Fi"` will not join
+the library now named `"Sci Fi (2)"`, and creates `"Sci Fi (3)"` instead. This is **pre-existing** —
+the same is already true of the cross-kind disambiguation `TestBindContainersWillNotJoinAcrossKinds`
+pins — and fixing it means storing the join key separately from the display name, which is a schema
+question and a §17.8 question, not a bug fix. It does not affect re-import stability, which step 1
+owns.
+
+**No ADR was allocated.** ADR-0047 was taken by another thread on 2026-08-17. Nothing here closes off
+an alternative that `BindContainers`' own doc comment does not already carry — the `remote_library`
+container-kind decision that comment flags as owing an ADR is untouched by this change and still owes
+one.
