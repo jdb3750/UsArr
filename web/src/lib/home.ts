@@ -186,32 +186,45 @@ export function hasIndexer(health: ServicesHealth): boolean {
  * DESIGN-DIRECTION §8.3 keeps two things apart that the *Arrs also keep apart:
  * **library search** — the persistent input, jumping to something you already
  * have — and **release search**, a dedicated screen. *"Merging them is how a
- * 0 ms local query ends up waiting on a 30 s indexer."* Home's box is the
- * second kind and must say so, because an unlabelled input on a home screen
- * reads as the first kind by default.
+ * 0 ms local query ends up waiting on a 30 s indexer."* Home's box is the FIRST
+ * kind, and it says which it is because there is now more than one search in
+ * this product and nothing else on the screen distinguishes them.
  *
  * It is also why the box is a ROUTE and not a search field. Nothing on Home
- * fans out to an indexer; submitting navigates to Requests with `?q=`, which is
+ * queries anything; submitting navigates to `/search` with `?q=`, which is
  * §17.4's own mechanism (`requestsSearchHref`). Home stays a local read.
  *
- * ⚠️ THIS STRING IS THE SEAM, AND IT IS THE ONLY THING THAT CHANGES WHEN
- * LIBRARY SEARCH LANDS. ⚠️ THE TRIGGER USED TO BE WRITTEN AS **"WHEN THE
- * LIBRARY INDEX LANDS"**, AND THAT PREMISE IS DEAD WITH THE ONE IN
- * `hasIndexer` above: the index landed with the catalogue import — migration
- * `00005_library_sync.sql` creates `search_doc`, `search_fts` and
- * `search_trgm`, and `ApplyCatalogueBatch` fills them — and this string did not
- * change, because the index was never what it was waiting on. WHAT IT IS
- * WAITING ON IS THE QUERY: `internal/httpapi/server.go` registers no
- * library-search route, only `GET /api/v1/library/recent`. §8.3 gives library
- * search a persistent input, at which point
- * Home's box becomes library search: same element, same submit, a different
- * destination and this sentence rewritten. Keeping the destination in
- * `requestsSearchHref` and the scope in a constant is what makes that a
- * two-line change rather than a rebuild. The seam ships; the feature does not.
+ * ⚠️ THE SEAM THIS STRING WAS WRITTEN AS HAS NOW BEEN USED, WHICH IS THE ONE
+ * THING A SEAM IS FOR. It said: *"§8.3 gives library search a persistent input,
+ * at which point Home's box becomes library search: same element, same submit,
+ * a different destination and this sentence rewritten. Keeping the destination
+ * in `requestsSearchHref` and the scope in a constant is what makes that a
+ * two-line change rather than a rebuild."* That is what happened, on the
+ * owner's instruction — *"the search on home should be searching your own
+ * library"* — and it cost the two lines it said it would: the base passed to
+ * `requestsSearchHref` moved from `/requests` to `/search`, and this string was
+ * rewritten. What the seam did NOT predict is the third line, and it is worth
+ * recording because it is the part a seam cannot carry: the box's own GATE had
+ * to move from `hasIndexer` to `mode === 'library'`, since the precondition for
+ * a control is a fact about its destination and the destination changed.
+ *
+ * ⚠️ THE OLD STRING NAMED A CORPUS THIS BOX NO LONGER REACHES. It read:
+ * *"This searches releases on your indexers, not your own library. Results, the
+ * indexer and category pickers and the grab are on Requests, and pressing
+ * Search takes you there."* Every clause of it is still true OF REQUESTS, which
+ * is why none of it was deleted from the product, only from here.
+ *
+ * ⚠️ AND IT DOES NOT POINT AT THE OTHER SEARCH, deliberately. `routes/search`
+ * carries a `Search indexers` action on every incomplete result row and another
+ * on its zero-results state (§17.4 rules 6 and 7), so a user who wanted
+ * indexers is one click from them at the moment they discover they wanted them,
+ * which is later than this sentence and better informed. A pointer here would
+ * be a third mention of release search on a screen the owner has just said has
+ * too many searches on it.
  */
 export const HOME_SEARCH_SCOPE_NOTE =
-	'This searches releases on your indexers, not your own library. Results, the indexer and ' +
-	'category pickers and the grab are on Requests, and pressing Search takes you there.';
+	'This searches the library UsArr has replicated from your services, not your indexers. ' +
+	'It renders from SQLite, so it never waits on a service.';
 
 /**
  * One row of Block B. §17.2: the block is the differentiator and no surveyed

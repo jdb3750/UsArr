@@ -79,6 +79,7 @@
 	let scrollMemory: ScrollMemory | null = null;
 
 	const loginPath = resolve('/login');
+	const searchPath = resolve('/search');
 	const onLoginRoute = $derived(page.url.pathname === loginPath);
 
 	/**
@@ -268,6 +269,88 @@
 	}
 
 	/**
+	 * TRUE WHEN THE KEYBOARD BELONGS TO SOMETHING THAT TAKES TEXT, and the one
+	 * precondition `/` has that a scroll key does not.
+	 *
+	 * `focusIsUnclaimed` ($lib/shellscroll) is the wrong test here and the
+	 * difference is the whole point: it is true ONLY on `<body>`, because a
+	 * scroll key must never be second-guessed away from a control that would
+	 * have handled it. §17.4 wants Search *reachable from every screen*, so `/`
+	 * has to keep working with focus on a nav link, a button or an `<h1>` — the
+	 * places focus actually sits after one Tab or one navigation. The test is
+	 * therefore the narrow one: is this element eating characters?
+	 *
+	 * EVERY `<input>` COUNTS, INCLUDING A CHECKBOX, and that is deliberate. The
+	 * alternative is an allowlist of the non-text `type=` values, which has to
+	 * track the HTML spec forever to buy a shortcut on a control the user is
+	 * about to press Space on anyway. `<select>` is in for a reason of its own:
+	 * a closed select does typeahead, so a swallowed `/` is a swallowed jump.
+	 *
+	 * `isContentEditable` is read rather than the attribute, because it is the
+	 * computed value — an editor's inner nodes inherit editability from an
+	 * ancestor that carries the attribute, and the attribute test misses them.
+	 */
+	function focusTakesText(node: EventTarget | null): boolean {
+		if (!(node instanceof HTMLElement)) return false;
+		if (node.isContentEditable) return true;
+		const tag = node.tagName;
+		return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+	}
+
+	/**
+	 * `/` OPENS SEARCH (ARCHITECTURE §17.4), and it opens the SCREEN.
+	 *
+	 * §17.4 specifies the key and the destination — Search is "reachable from
+	 * every screen (and from `/` with a keyboard shortcut)" — and says nothing
+	 * about focus. So this does exactly what clicking the Search nav row does
+	 * and not one thing more: `goto`, and let `afterNavigate` put focus on the
+	 * new screen's h1. IT DOES NOT FOCUS THE SEARCH FIELD, and that is the
+	 * cautious reading rather than the conventional one. Jumping focus into the
+	 * input would land the user PAST the skip link on a screen they have not
+	 * seen yet, which is the SC 2.4.1 failure `afterNavigate` above already
+	 * documents itself having fixed once. `reachable` is satisfied by arriving;
+	 * spending the shell's one promise about focus order to save a Tab is not a
+	 * trade this file gets to make twice.
+	 *
+	 * IT IS GATED ON `showNav`, not on the key alone. Search is reachable where
+	 * the nav that reaches it is: signed out, on /login, or on the unreachable
+	 * screen, `/` is an ordinary character and stays one.
+	 *
+	 * WHAT IT REFUSES TO SWALLOW:
+	 *
+	 *   · anything already claimed (`defaultPrevented`), on the same reasoning
+	 *     as `scrollDeltaFor`;
+	 *   · Ctrl, Alt and Meta combinations, which are browser and OS shortcuts —
+	 *     Meta+/ and Ctrl+/ both mean something to somebody;
+	 *   · a composition in progress, where the key belongs to the IME;
+	 *   · a repeat, so holding the key is one navigation and not a history run;
+	 *   · the field cases, via `focusTakesText`.
+	 *
+	 * ⚠️ SHIFT IS DELIBERATELY NOT IN THAT LIST, and it is the one modifier that
+	 * would be wrong to exclude. On a US layout Shift+/ produces `?` and never
+	 * reaches this; on the German and French layouts `/` IS a shifted key, so
+	 * `event.key === '/'` arrives with `shiftKey` true and excluding it would
+	 * delete the shortcut on those keyboards. The test is the character the
+	 * layout produced, which is what `key` reports, not the keys pressed to
+	 * produce it. This is the opposite call from `scrollDeltaFor`, which drops
+	 * Shift because Shift is a selection modifier on a NAMED key; here the key
+	 * is a character and Shift may be part of typing it.
+	 *
+	 * Already on Search, it returns false rather than preventing: there is
+	 * nothing to navigate to, and swallowing the key to do nothing is worse
+	 * than letting it through.
+	 */
+	function openSearchKey(event: KeyboardEvent): boolean {
+		if (event.key !== '/' || event.defaultPrevented || event.repeat) return false;
+		if (event.ctrlKey || event.altKey || event.metaKey || event.isComposing) return false;
+		if (!showNav || page.url.pathname === searchPath) return false;
+		if (focusTakesText(event.target)) return false;
+		event.preventDefault();
+		void goto(searchPath);
+		return true;
+	}
+
+	/**
 	 * Escape closes the drawer and returns focus to the control that opened it.
 	 *
 	 * The listener is on the window rather than on the drawer, and that is the
@@ -289,6 +372,15 @@
 	 * is inert for the whole rest of the session; and it is not reached at all
 	 * while the drawer is open, since the region behind a modal layer is inert
 	 * and scrolling it would be scrolling something the user cannot see into.
+	 *
+	 * AND IT CARRIES `/`, §17.4's shortcut to Search, for the third time the
+	 * same reason applies: a shortcut that has to work from every screen has to
+	 * be listened for somewhere that is on every screen. `openSearchKey` runs
+	 * FIRST and its precondition is narrower than the scroll keys' — see its own
+	 * note — but the two cannot collide regardless, since `/` is not a scroll
+	 * key and `scrollDeltaFor` returns null for it. It sits behind the drawer
+	 * branch with everything else: while a modal layer is open, Escape is the
+	 * only key this handler has.
 	 */
 	function onWindowKeydown(event: KeyboardEvent) {
 		if (isDrawer) {
@@ -297,6 +389,7 @@
 			closeDrawer();
 			return;
 		}
+		if (openSearchKey(event)) return;
 		if (mainEl) forwardScrollKey(event, mainEl);
 	}
 
