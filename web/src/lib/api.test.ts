@@ -27,7 +27,8 @@ const SERVER_EVENT_NAMES = [
 	'search.results',
 	'search.done',
 	'search.failed',
-	'stream.missed'
+	'stream.missed',
+	'import.progress'
 ];
 
 describe('the SSE event-name contract', () => {
@@ -44,7 +45,8 @@ describe('the SSE event-name contract', () => {
 			'search.results': { search_id: 's1', results: [] },
 			'search.done': { search_id: 's1', report: {} },
 			'search.failed': { search_id: 's1', message: 'out of time' },
-			'stream.missed': { message: 'events were dropped' }
+			'stream.missed': { message: 'events were dropped' },
+			'import.progress': { instance_id: 4, phase: 'items', items_read: 0, applied: 0 }
 		};
 		for (const name of STREAM_EVENT_NAMES) {
 			const event = normalizeStreamEvent(name, JSON.stringify(minimal[name]));
@@ -484,5 +486,60 @@ describe('toRecentGrab', () => {
 		// way would assert the one thing this screen may only say when the server
 		// has said it first.
 		expect(toRecentGrab({ id: 'g_1', release_title: 'x' })?.outcome).toBe('');
+	});
+});
+
+/**
+ * The seventh frame, parsed against what internal/libsync actually marshals.
+ *
+ * ⚠️ THE FIELD SPELLINGS ARE THE POINT, exactly as they were for the two search
+ * frames that drifted. `items_read` and `applied` are untagged Go ints, so they
+ * arrive as zeroes rather than as absences; `total` is `omitempty`, so a zero
+ * NEVER arrives at all and an absent one means the source named no total. A
+ * parser that folded the two together would report "0 of 0" for the item phase,
+ * which reads as a finished import with nothing in it.
+ */
+describe('the import.progress frame', () => {
+	const parse = (data: unknown) => normalizeStreamEvent('import.progress', JSON.stringify(data));
+
+	it('carries the four counting phases through verbatim', () => {
+		for (const phase of ['containers', 'items', 'credits', 'done']) {
+			const event = parse({ instance_id: 7, phase, items_read: 3, applied: 2 });
+			expect(event.kind).toBe('import');
+			if (event.kind !== 'import') throw new Error('unreachable');
+			expect(event.progress.phase).toBe(phase);
+		}
+	});
+
+	it('reads a zero count as zero and an absent total as unknown', () => {
+		const event = parse({ instance_id: 7, phase: 'containers', items_read: 0, applied: 0 });
+		if (event.kind !== 'import') throw new Error('the frame must parse');
+		expect(event.progress.itemsRead).toBe(0);
+		expect(event.progress.applied).toBe(0);
+		// UNKNOWN, and never 0. Only the credits pass sends a total.
+		expect(event.progress.total).toBeUndefined();
+	});
+
+	it('keeps a total the credits pass did send', () => {
+		const event = parse({
+			instance_id: 7,
+			phase: 'credits',
+			items_read: 40,
+			applied: 118,
+			total: 400
+		});
+		if (event.kind !== 'import') throw new Error('the frame must parse');
+		expect(event.progress.total).toBe(400);
+		expect(event.progress.applied).toBe(118);
+	});
+
+	it('drops a frame that names no instance, rather than filing it under a guess', () => {
+		expect(parse({ phase: 'items', items_read: 9, applied: 9 }).kind).toBe('unknown');
+	});
+
+	it('keeps a phase name this client has never heard of', () => {
+		const event = parse({ instance_id: 7, phase: 'reconciling', items_read: 1, applied: 1 });
+		if (event.kind !== 'import') throw new Error('the frame must parse');
+		expect(event.progress.phase).toBe('reconciling');
 	});
 });

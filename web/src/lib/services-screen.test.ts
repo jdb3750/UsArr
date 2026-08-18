@@ -25,11 +25,12 @@ import {
 	syncButtonBlocked,
 	syncButtonLabel,
 	syncCell,
+	syncNoteWithProgress,
 	syncRefusal,
 	syncStarted,
 	type ServiceRow
 } from './services';
-import type { ServiceHealth } from './api';
+import type { ImportProgress, ServiceHealth } from './api';
 
 /**
  * The Services screen's vocabulary, pinned.
@@ -673,5 +674,136 @@ describe('the button says which of the two waits it is in', () => {
 	it('is unavailable while starting and while another import is running', () => {
 		expect(syncButtonBlocked('starting')).toBe(true);
 		expect(syncButtonBlocked('running')).toBe(true);
+	});
+});
+
+/**
+ * THE STREAM FOLDED ONTO THE PRESS, and mostly the four cases where it must
+ * refuse to say anything new.
+ *
+ * The constraint that outranks the feature: a readout that stops moving is
+ * worse than no readout, because the user reads a frozen count as a frozen
+ * import. So the numbers exist only while the socket is up, and the only
+ * sentence that ends an import is the one the server sent.
+ */
+describe('the import stream folded onto the note', () => {
+	const frame = (over: Partial<ImportProgress> = {}): ImportProgress => ({
+		instanceId: 4,
+		phase: 'items',
+		itemsRead: 0,
+		applied: 0,
+		...over
+	});
+	const started = () => syncStarted({ name: 'Kavita' });
+
+	it('says exactly what it said before, when no frame has arrived', () => {
+		const before = started();
+		expect(syncNoteWithProgress(before, undefined, true)).toEqual(before);
+		// And identically when the socket never opened at all.
+		expect(syncNoteWithProgress(before, undefined, false)).toEqual(before);
+	});
+
+	it('reports the container phase as read but not applied', () => {
+		const note = syncNoteWithProgress(started(), frame({ phase: 'containers' }), true);
+		expect(note.consequence).toContain('Reading the list of libraries');
+		expect(note.phase).toBe('started');
+	});
+
+	it('reports real item counts, with no denominator the server did not send', () => {
+		const note = syncNoteWithProgress(started(), frame({ itemsRead: 1200, applied: 1000 }), true);
+		expect(note.consequence).toContain('Read 1,200 items so far, and applied 1,000 of them.');
+		expect(note.consequence).not.toContain(' of 0');
+		expect(note.consequence).not.toContain('%');
+	});
+
+	it('uses a denominator only in the phase that sends one', () => {
+		const note = syncNoteWithProgress(
+			started(),
+			frame({ phase: 'credits', itemsRead: 40, applied: 118, total: 400 }),
+			true
+		);
+		expect(note.consequence).toContain('40 of 400 items read');
+		expect(note.consequence).toContain('118 credits written');
+	});
+
+	it('never claims completion from a count that reached its total', () => {
+		const note = syncNoteWithProgress(
+			started(),
+			frame({ phase: 'credits', itemsRead: 400, applied: 400, total: 400 }),
+			true
+		);
+		expect(note.phase).toBe('started');
+		expect(note.title).toBe('Kavita is re-importing');
+		expect(note.consequence).toContain('Last successful sync');
+	});
+
+	it('ends the import on the terminal frame and on nothing else', () => {
+		const note = syncNoteWithProgress(
+			started(),
+			frame({ phase: 'done', itemsRead: 1200, applied: 1200 }),
+			true
+		);
+		expect(note.phase).toBe('finished');
+		expect(note.title).toBe('The import has finished');
+		expect(note.consequence).toContain('read 1,200 items and applied 1,200');
+		// A finished import releases the button again.
+		expect(syncButtonBlocked(note.phase)).toBe(false);
+		expect(syncButtonLabel(note.phase)).toBe('Run full sync now');
+	});
+
+	it('withdraws the counts when the socket drops mid import, rather than freezing them', () => {
+		const live = syncNoteWithProgress(started(), frame({ itemsRead: 900, applied: 900 }), true);
+		const dropped = syncNoteWithProgress(started(), frame({ itemsRead: 900, applied: 900 }), false);
+		expect(live.consequence).toContain('900');
+		expect(dropped.consequence).not.toContain('900');
+		expect(dropped.consequence).toContain('not connected');
+		expect(dropped.consequence).toContain('Last successful sync');
+		// AND IT IS NOT AN ENDING. A drop says unknown, never finished.
+		expect(dropped.phase).toBe('started');
+	});
+
+	it('drops a wait instruction that the completion has made false', () => {
+		const running = syncRefusal(409, 'import_in_progress', 'already running', 'Wait for it');
+		const note = syncNoteWithProgress(
+			running,
+			frame({ phase: 'done', itemsRead: 9, applied: 9 }),
+			true
+		);
+		expect(note.title).toBe('The import has finished');
+		// Verbatim means never PARAPHRASED. A live instruction to wait for
+		// something that is over is not the server's current word on anything.
+		expect(note.message).toBe('');
+		expect(note.action).toBe('');
+	});
+
+	it('keeps a completion that was observed, whatever the socket does afterwards', () => {
+		const done = frame({ phase: 'done', itemsRead: 12, applied: 12 });
+		expect(syncNoteWithProgress(started(), done, false).phase).toBe('finished');
+	});
+
+	it('shows the progress of an import that was already running when the press was refused', () => {
+		const running = syncRefusal(409, 'import_in_progress', 'already running', 'Wait');
+		const note = syncNoteWithProgress(running, frame({ itemsRead: 5, applied: 5 }), true);
+		expect(note.consequence).toContain('Read 5 items');
+		expect(note.title).toBe('An import is already running');
+	});
+
+	it('leaves a refusal and a fault entirely alone, whatever the stream says', () => {
+		for (const refused of [
+			syncRefusal(409, 'service_disabled', 'off', 'Enable the service'),
+			syncRefusal(500, 'internal', 'the credential would not open', 'Test connection')
+		]) {
+			expect(syncNoteWithProgress(refused, frame({ phase: 'done' }), true)).toEqual(refused);
+		}
+	});
+
+	it('renders a phase it has never heard of as counts, rather than dropping it', () => {
+		const note = syncNoteWithProgress(
+			started(),
+			frame({ phase: 'reconciling', itemsRead: 3, applied: 2 }),
+			true
+		);
+		expect(note.consequence).toContain('Read 3 so far, and applied 2.');
+		expect(note.phase).toBe('started');
 	});
 });
