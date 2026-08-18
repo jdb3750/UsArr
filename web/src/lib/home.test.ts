@@ -57,6 +57,13 @@ function health(over: Partial<ServiceHealth> = {}): ServiceHealth {
 		warnings: [],
 		blockedIndexers: [],
 		stale: false,
+		// The two catalogue-freshness fields are REQUIRED on ServiceHealth, so
+		// they are supplied here even though Home reads neither: `attention()`
+		// looks at state and breaker only. Home's block A counts and its block C
+		// table have their own sources, and neither is `work_count` — see
+		// itemsCell() in ./services for what that number is scoped to.
+		lastFullSyncAt: null,
+		workCount: 0,
 		...over
 	};
 }

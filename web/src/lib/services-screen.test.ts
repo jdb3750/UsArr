@@ -61,6 +61,11 @@ function health(over: Partial<ServiceHealth> = {}): ServiceHealth {
 		warnings: [],
 		blockedIndexers: [],
 		stale: false,
+		// Both are REQUIRED on ServiceHealth, so this default is what makes the
+		// type a guard rather than a suggestion: drop either field from the
+		// interface and every construction in this file stops compiling.
+		lastFullSyncAt: null,
+		workCount: 0,
 		...over
 	};
 }
@@ -175,11 +180,161 @@ describe('the Problem column holds one object and nothing else', () => {
 describe('Items and Last successful sync are `Not applicable`, not zero', () => {
 	it('says an indexer contributes no catalogue rather than showing 0', () => {
 		expect(itemsCell(row())).toMatchObject({ text: 'Not applicable', muted: true });
-		expect(syncCell(row())).toMatchObject({ text: 'Not applicable', sub: 'no catalogue' });
+		expect(syncCell(row(), NOW)).toMatchObject({ text: 'Not applicable', sub: 'no catalogue' });
 	});
 
-	it('keeps `Never` for a catalogue source that has not synced', () => {
-		expect(syncCell(row({ kind: 'sonarr', role: 'catalogue' })).text).toBe('Never');
+	/*
+	 * ⚠️ THIS TEST WAS REVERSED, and what it used to demand is recorded because
+	 * the old form is the shape of the mistake rather than an old opinion.
+	 *
+	 * IT USED TO READ, in full:
+	 *
+	 *   it('keeps `Never` for a catalogue source that has not synced', () => {
+	 *     expect(syncCell(row({ kind: 'sonarr', role: 'catalogue' })).text).toBe('Never');
+	 *   });
+	 *
+	 * It was green, it was specific, and it asserted a DEFECT as required
+	 * behaviour. `syncCell` hardcoded `Never` for every catalogue row — no field
+	 * was read, because none existed on the wire — so the assertion held for a
+	 * row that had never synced and equally for one that synced this morning
+	 * with 12,000 works behind it. A test that passes on the constant is a test
+	 * that passes on the bug, and it would have passed straight through a change
+	 * that declared `last_full_sync_at` on the type and then forgot to render it.
+	 *
+	 * WHAT CHANGED IS THE WIRE, not the taste: the endpoint now sends
+	 * `last_full_sync_at` and `work_count` (internal/httpapi/services.go:655 and
+	 * :660). `Never` survives as ONE of five answers, and it is now pinned to the
+	 * state that earns it — a null timestamp AND a zero count — so a regression
+	 * back to the constant fails on the four cases below rather than passing.
+	 *
+	 * It is kept and inverted rather than deleted: the `Never` word itself is
+	 * still §9.1 vocabulary that a later refactor could quietly drop.
+	 */
+	it('says `Never` only when the timestamp is null AND the count is zero', () => {
+		const cell = syncCell(row({ kind: 'sonarr', role: 'catalogue' }), NOW);
+		expect(cell).toEqual({ text: 'Never', sub: '', muted: true });
+
+		// The same row with a real timestamp must NOT still say `Never`. This is
+		// the half the old assertion could not have caught.
+		const synced = syncCell(
+			row({ kind: 'sonarr', role: 'catalogue', lastFullSyncAt: '2026-08-16T14:02:00Z' }),
+			NOW
+		);
+		expect(synced.text).not.toBe('Never');
+		expect(synced.muted).toBe(false);
+	});
+});
+
+/*
+ * THE FOUR-STATE PAIR, which is the point of both fields existing.
+ *
+ * `last_full_sync_at` and `work_count` are read TOGETHER or not at all
+ * (docs/reference/http-api.md §3.2). `null` does not mean "no data" and `0` does
+ * not mean "never ran", and each of the four combinations below is a fact the
+ * screen has to state differently. They are asserted as whole `Cell` objects on
+ * BOTH columns, because the distinction lives in the pair of cells rather than
+ * in either one.
+ */
+describe('the four states of last_full_sync_at x work_count', () => {
+	const catalogue = (over: Partial<ServiceHealth>) =>
+		row({ kind: 'sonarr', role: 'catalogue', ...over });
+
+	it('null + 0 is `Never` and an em-dash count: nothing has been counted', () => {
+		const r = catalogue({ lastFullSyncAt: null, workCount: 0 });
+		expect(syncCell(r, NOW)).toEqual({ text: 'Never', sub: '', muted: true });
+		expect(itemsCell(r)).toEqual({ text: '—', sub: '', muted: true });
+	});
+
+	it('a timestamp + 0 is a real `0`, because the import ran and found nothing', () => {
+		const r = catalogue({ lastFullSyncAt: '2026-08-16T14:02:00Z', workCount: 0 });
+		expect(syncCell(r, NOW)).toEqual({ text: '14:02', sub: '6 minutes ago', muted: false });
+		// NOT `—`. An import completed; zero is the measurement it took.
+		expect(itemsCell(r)).toEqual({ text: '0', sub: '', muted: false });
+	});
+
+	it('a timestamp + a count is the ordinary case', () => {
+		const r = catalogue({ lastFullSyncAt: '2026-08-16T14:02:00Z', workCount: 3 });
+		expect(syncCell(r, NOW)).toEqual({ text: '14:02', sub: '6 minutes ago', muted: false });
+		expect(itemsCell(r)).toEqual({ text: '3', sub: '', muted: false });
+	});
+
+	/*
+	 * ⚠️ THE ROW THAT FORBIDS THE OBVIOUS SIMPLIFICATION. A null timestamp with a
+	 * positive count is a PARTIAL import whose committed batches stand. Treating
+	 * the null as "no data" and blanking the count — the tidy-looking change —
+	 * would hide rows that are really in the replica.
+	 */
+	it('null + a count is a partial import, and the rows are NOT hidden', () => {
+		const r = catalogue({ lastFullSyncAt: null, workCount: 12 });
+		expect(syncCell(r, NOW)).toEqual({
+			text: 'Partial import',
+			sub: 'some rows landed',
+			muted: false
+		});
+		expect(itemsCell(r)).toEqual({ text: '12', sub: '', muted: false });
+	});
+
+	it('renders all four states differently as a pair', () => {
+		const states: Array<Partial<ServiceHealth>> = [
+			{ lastFullSyncAt: null, workCount: 0 },
+			{ lastFullSyncAt: '2026-08-16T14:02:00Z', workCount: 0 },
+			{ lastFullSyncAt: '2026-08-16T14:02:00Z', workCount: 3 },
+			{ lastFullSyncAt: null, workCount: 12 }
+		];
+		const rendered = states.map((over) => {
+			const r = catalogue(over);
+			const sync = syncCell(r, NOW);
+			return `${sync.text}|${sync.sub}|${itemsCell(r).text}`;
+		});
+		expect(new Set(rendered).size).toBe(4);
+	});
+
+	it('past a day the sync cell carries the date, matching stampOf', () => {
+		const iso = '2026-08-15T11:47:00Z';
+		const r = catalogue({ lastFullSyncAt: iso, workCount: 5 });
+		const cell = syncCell(r, NOW);
+		expect(cell.text).toBe('11:47 on 15 Aug 2026');
+		expect(cell.sub).toBe('1 day ago');
+		// The cell splits §9.1's pair across two slots; stampOf joins the same two
+		// halves for a one-slot caller. Neither may invent its own absolute form.
+		expect(stampOf(iso, NOW)).toBe(`${cell.text}, ${cell.sub}`);
+	});
+
+	/*
+	 * An indexer reports null / 0 exactly like an unsynced catalogue source, so
+	 * `role` is the only thing that can separate them — and it must win even when
+	 * a count somehow rides along.
+	 */
+	it('keeps `Not applicable` for an indexer whatever the two fields say', () => {
+		const r = row({ lastFullSyncAt: '2026-08-16T14:02:00Z', workCount: 9 });
+		expect(syncCell(r, NOW).text).toBe('Not applicable');
+		expect(itemsCell(r).text).toBe('Not applicable');
+	});
+
+	/*
+	 * THE REGRESSION THIS WHOLE BLOCK EXISTS FOR. Undeclared JSON is dropped
+	 * silently by the parser, so dropping `last_full_sync_at` from ServiceHealth
+	 * again would not throw anywhere — every catalogue row would simply fall back
+	 * to the never-synced rendering, and a suite that only checked the null case
+	 * would stay green. This asserts the rendering that is IMPOSSIBLE without the
+	 * field, so losing it fails here.
+	 */
+	it('fails if last_full_sync_at is dropped from the type again', () => {
+		const r = catalogue({ lastFullSyncAt: '2026-08-16T14:02:00Z', workCount: 3 });
+		const cell = syncCell(r, NOW);
+		expect(cell.text).toBe('14:02');
+		expect(cell.text).not.toBe('Never');
+		expect(cell.muted).toBe(false);
+	});
+
+	/*
+	 * And the same for the count: without `work_count` every catalogue row shows
+	 * `—`, which is a defensible-looking blank rather than a crash.
+	 */
+	it('fails if work_count is dropped from the type again', () => {
+		const r = catalogue({ lastFullSyncAt: null, workCount: 12 });
+		expect(itemsCell(r).text).toBe('12');
+		expect(itemsCell(r).muted).toBe(false);
 	});
 });
 
