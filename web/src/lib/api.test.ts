@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
 	STREAM_EVENT_NAMES,
@@ -30,6 +33,84 @@ const SERVER_EVENT_NAMES = [
 	'stream.missed',
 	'import.progress'
 ];
+
+/**
+ * THE `import.progress` PHASE SET, READ OFF THE PRODUCER RATHER THAN REMEMBERED.
+ *
+ * WHY THIS IS NOT A SECOND `SERVER_EVENT_NAMES`. That constant is a mirror pin,
+ * and a mirror only works because internal/httpapi pins the same literals from
+ * its own side, so a rename fails one of the two. NOTHING pins the phase set on
+ * the server side — `cmd/usarr` asserts that a run BEGINS at `containers` and
+ * says nothing about the rest — so a hardcoded list here would be corroborated
+ * by nobody and would drift silently. It already had: this file listed four
+ * phases while `internal/libsync` had published five since the volume walk
+ * landed, and the whole suite stayed green.
+ *
+ * So the producer is the authority, exactly as designrules.test.ts reads
+ * ARCHITECTURE.md and tokenparity.test.ts reads tokens.css. Two independent
+ * places in importer.go have to agree before this file will believe either:
+ * the `Phase` field's own declared list, which is the line a human reads and
+ * which the fixture generator was written against, and the actual `Phase:`
+ * publish sites, which are what a browser will really receive. A phase declared
+ * and never published, or published and never declared, fails here.
+ *
+ * ⚠️ THE CLIENT PARSER IS PHASE-AGNOSTIC AND MUST STAY THAT WAY, so this is NOT
+ * an enum being enforced onto it. `normalizeStreamEvent` carries any phase
+ * string through verbatim (api.ts: a phase this client has not heard of is a
+ * phase the server has), and the test below it proves an invented name still
+ * parses. What this pin catches is the OTHER failure: the client's known set
+ * falling behind the server's without a single test going red, which leaves
+ * `progressCounts` rendering its unnamed default arm for a phase that has had a
+ * sentence of its own available for months.
+ */
+const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+const IMPORTER_GO = readFileSync(join(REPO, 'internal/libsync/importer.go'), 'utf8');
+
+/** `Phase      string `json:"phase"` // containers | items | credits | files | done` */
+function declaredPhases(): string[] {
+	const line = /\bPhase\s+string\s+`json:"phase"`\s*\/\/\s*([a-z |]+)/.exec(IMPORTER_GO);
+	if (line === null) throw new Error('internal/libsync no longer declares the phase list inline');
+	return line[1]
+		.split('|')
+		.map((p) => p.trim())
+		.filter((p) => p !== '');
+}
+
+/** Every `Phase: "…"` the importer actually publishes. */
+function publishedPhases(): string[] {
+	const found = [...IMPORTER_GO.matchAll(/\bPhase:\s*"([a-z_]+)"/g)].map((m) => m[1]);
+	return [...new Set(found)].sort();
+}
+
+/**
+ * The phases this client claims to know about.
+ *
+ * ⚠️ `stopped` IS NOT HERE, and its absence is the point rather than an
+ * oversight. http-api.md §5.5 specifies it and NOTHING in the repository
+ * publishes it (api.ts records the same 🚩), so it cannot appear in a set read
+ * off the producer. Folding it in would mean writing the one exemption this
+ * pin must not have — the moment a name is allowed to sit in the list without
+ * a publisher behind it, the list stops being read off anything. The `stopped`
+ * renderer is asserted on its own terms in services-screen.test.ts.
+ */
+const CLIENT_PHASES = ['containers', 'credits', 'done', 'files', 'items'];
+
+describe('the import.progress phase set matches the producer', () => {
+	it('finds a plausible number of publish sites, so a stale regex fails rather than passes', () => {
+		// A floor, not a pin: this exists so an empty match set — the regex
+		// rotting, the file moving — cannot render every assertion below vacuous.
+		expect(publishedPhases().length).toBeGreaterThanOrEqual(4);
+		expect(IMPORTER_GO.length).toBeGreaterThan(10000);
+	});
+
+	it('has the importer declaring exactly the phases it publishes', () => {
+		expect(publishedPhases()).toEqual([...declaredPhases()].sort());
+	});
+
+	it('has this client knowing exactly the phases the importer publishes', () => {
+		expect([...CLIENT_PHASES].sort()).toEqual(publishedPhases());
+	});
+});
 
 describe('the SSE event-name contract', () => {
 	it('is exactly the set internal/httpapi emits', () => {
@@ -81,10 +162,39 @@ describe('replaying recorded server frames', () => {
 	);
 
 	it('understands every recorded frame', () => {
+		/* THE FLOOR THIS ASSERTION WAS MISSING. `unknown` is derived from
+		   `frames`, so an empty recording satisfies the `toEqual([])` below
+		   perfectly — a fixture truncated to `[]`, or a JSON import that
+		   resolved to nothing, would have printed the same green as a fixture
+		   that exercised the whole contract. The count is stated so that the
+		   recording going away is a failure rather than a pass. */
+		expect(frames.length).toBeGreaterThanOrEqual(8);
+		expect(events.length).toBe(frames.length);
 		const unknown = events
 			.map((event, i) => ({ kind: event.kind, name: frames[i].name }))
 			.filter(({ kind }) => kind === 'unknown');
 		expect(unknown).toEqual([]);
+	});
+
+	/* ⚠️ THE RECORDING IS A RUN, NOT THE CONTRACT, so this asks the weaker
+	   question on purpose: every phase the fixture DOES carry must be one the
+	   producer still publishes. It deliberately does NOT require the fixture to
+	   cover all of `CLIENT_PHASES` — one import over one source legitimately
+	   emits no `credits` frame when the source reports no credits, so a
+	   coverage demand here would fail on a true recording. The set the client
+	   must keep up with is pinned against importer.go above; this arm catches
+	   the different fault of a recorded phase name that the producer has since
+	   renamed out from under it. */
+	it('carries no phase the producer has stopped publishing', () => {
+		const phases = [
+			...new Set(
+				events
+					.filter((e): e is Extract<StreamEvent, { kind: 'import' }> => e.kind === 'import')
+					.map((e) => e.progress.phase)
+			)
+		].sort();
+		expect(phases.length).toBeGreaterThan(0);
+		expect(phases.filter((p) => !CLIENT_PHASES.includes(p))).toEqual([]);
 	});
 
 	it('renders the releases the server actually sent', () => {
@@ -502,8 +612,14 @@ describe('toRecentGrab', () => {
 describe('the import.progress frame', () => {
 	const parse = (data: unknown) => normalizeStreamEvent('import.progress', JSON.stringify(data));
 
-	it('carries the four counting phases through verbatim', () => {
-		for (const phase of ['containers', 'items', 'credits', 'done']) {
+	/* DRIVEN FROM `CLIENT_PHASES`, WHICH IS PINNED TO THE PRODUCER, rather than
+	   from a list retyped here. The retyped one said `containers, items,
+	   credits, done` and went on passing for as long as it took nobody to
+	   notice that the importer had grown a fifth. A loop over a literal proves
+	   the parser handles the names somebody remembered. */
+	it('carries every phase the producer publishes through verbatim', () => {
+		expect(CLIENT_PHASES.length).toBeGreaterThanOrEqual(4);
+		for (const phase of CLIENT_PHASES) {
 			const event = parse({ instance_id: 7, phase, items_read: 3, applied: 2 });
 			expect(event.kind).toBe('import');
 			if (event.kind !== 'import') throw new Error('unreachable');
