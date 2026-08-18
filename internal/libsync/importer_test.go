@@ -403,3 +403,58 @@ func TestReportDurationAndProgressShape(t *testing.T) {
 		t.Errorf("Duration = %v, want 1s", r.Duration())
 	}
 }
+
+func TestFullImportSurvivesAContainerThatCannotBeBound(t *testing.T) {
+	// The IMPORT-LEVEL half of the store's bind-skip tests. BindContainers used
+	// to return an error for a container it could not create, FullImport
+	// returned it at once, and NOTHING was imported — no item was even read.
+	// CLAUDE.md principle 3: one unusable container degrades to one missing
+	// library, with the reason recorded, not to an empty database.
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s)
+	src := &fakeSource{
+		containers: []store.CatalogueContainer{
+			{RemoteID: "1", Name: "Manga", Kind: "comic"},
+			// A kind the library CHECK does not know. The adapter drifting ahead
+			// of the schema is the reachable version of this.
+			{RemoteID: "2", Name: "Sheet Music", Kind: "score"},
+		},
+		items: genItems(3, "1", "comic"),
+	}
+
+	rep, err := newImporter(t, s, src).FullImport(t.Context(), inst)
+	if err != nil {
+		t.Fatalf("FullImport aborted over one unbindable container: %v", err)
+	}
+	if !rep.Completed {
+		t.Error("the import did not report itself complete; the skipped container is not a failure")
+	}
+	if rep.LibrariesCreated != 1 {
+		t.Errorf("LibrariesCreated = %d, want 1", rep.LibrariesCreated)
+	}
+	if len(rep.SkippedContainers) != 1 || rep.SkippedContainers[0].RemoteID != "2" {
+		t.Fatalf("SkippedContainers = %+v, want exactly the Sheet Music container", rep.SkippedContainers)
+	}
+	if rep.SkippedContainers[0].Reason == "" {
+		t.Error("a skip with no reason is a silent skip")
+	}
+	if len(rep.DeclinedContainers) != 0 {
+		t.Errorf("a skip was reported as a DECLINE: %+v — they are different operator problems",
+			rep.DeclinedContainers)
+	}
+	// The rest of the import actually ran.
+	if rep.ItemsRead != 3 || rep.ItemsApplied != 3 || rep.WorksCreated != 3 {
+		t.Errorf("items: read %d applied %d created %d, want 3/3/3",
+			rep.ItemsRead, rep.ItemsApplied, rep.WorksCreated)
+	}
+	// And the skip is durable, written by the bind transaction itself.
+	var remoteID, detail string
+	if err := s.DB().Read().QueryRowContext(t.Context(),
+		`SELECT remote_id, detail FROM sync_report WHERE kind = 'container_bind_failed'`).
+		Scan(&remoteID, &detail); err != nil {
+		t.Fatalf("read sync_report: %v", err)
+	}
+	if remoteID != "2" || detail == "" {
+		t.Errorf("sync_report row = (%q, %q)", remoteID, detail)
+	}
+}
