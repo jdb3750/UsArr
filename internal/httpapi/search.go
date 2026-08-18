@@ -15,8 +15,18 @@ import (
 	"github.com/jdb3750/UsArr/internal/store"
 )
 
-// GET /api/v1/search does not search. It validates the query, picks the
-// instance, allocates a search id and returns — then a background goroutine runs
+// The route is /api/v1/releases/search, not /api/v1/search, and the reason is a
+// budget rather than a taste. ARCHITECTURE.md §2073's performance table assigns
+// `GET /api/v1/search?q=…` (the FTS hybrid over the local corpus) p50 < 15 ms
+// and p99 < 50 ms — a target §8.4 says a release search cannot meet by
+// construction, because it is an upstream fan-out and not a local read. Two
+// endpoints with the same name and budgets three orders of magnitude apart is
+// not a naming problem, it is a category error. `POST /api/v1/releases/{id}/grab`
+// already existed, so releases/search + releases/{id}/grab is the coherent pair
+// and /api/v1/search is left to the corpus the budget was written for.
+//
+// GET /api/v1/releases/search does not itself search. It validates the query,
+// picks the instance, allocates a search id and returns — then a background goroutine runs
 // the fan-out and publishes onto the one SSE stream.
 //
 // That is not an optimisation. Prowlarr's aggregate endpoint answers only when

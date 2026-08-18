@@ -318,7 +318,7 @@ func TestBrowserFlowSetupLoginSearchAndGrab(t *testing.T) {
 	prowlarr.blockIndexer(2)
 
 	var accepted searchAcceptedBody
-	b.mustGet("/api/v1/search?query=Test+Release&type=search&category=2000", &accepted)
+	b.mustGet("/api/v1/releases/search?query=Test+Release&type=search&category=2000", &accepted)
 	if accepted.SearchID == "" {
 		t.Fatal("the search must return a search id immediately")
 	}
@@ -451,7 +451,7 @@ func TestBrowserFirstRunConfiguresAServiceAndSearches(t *testing.T) {
 	// The 409 must NAME the fix, because the Requests screen (§17.5) turns
 	// `error` into the link to /services. A 409 whose code the client cannot match on is a
 	// banner with nothing to click, which is where a new install used to stop.
-	deadEnd := b.get("/api/v1/search?query=Test+Release")
+	deadEnd := b.get("/api/v1/releases/search?query=Test+Release")
 	if deadEnd.status != http.StatusConflict {
 		t.Fatalf("search with nothing configured = %d, want 409: %s", deadEnd.status, deadEnd.body)
 	}
@@ -549,7 +549,7 @@ func TestBrowserFirstRunConfiguresAServiceAndSearches(t *testing.T) {
 	prowlarr.blockIndexer(2)
 
 	var accepted searchAcceptedBody
-	b.mustGet("/api/v1/search?query=Test+Release&type=search&category=2000", &accepted)
+	b.mustGet("/api/v1/releases/search?query=Test+Release&type=search&category=2000", &accepted)
 	if accepted.SearchID == "" {
 		t.Fatal("the search must return a search id immediately")
 	}
@@ -600,7 +600,7 @@ func TestBrowserFirstRunConfiguresAServiceAndSearches(t *testing.T) {
 	if len(listed.Services) != 0 {
 		t.Fatalf("the removed service is still listed: %+v", listed.Services)
 	}
-	if again := b.get("/api/v1/search?query=Test+Release"); again.status != http.StatusConflict {
+	if again := b.get("/api/v1/releases/search?query=Test+Release"); again.status != http.StatusConflict {
 		t.Fatalf("with the only indexer removed, search must be 409 again, got %d: %s", again.status, again.body)
 	}
 
@@ -845,7 +845,7 @@ func TestBrowserAddsAProwlarrBehindASubPath(t *testing.T) {
 	defer stream.close()
 
 	var accepted searchAcceptedBody
-	b.mustGet("/api/v1/search?query=Test+Release&type=search&category=2000", &accepted)
+	b.mustGet("/api/v1/releases/search?query=Test+Release&type=search&category=2000", &accepted)
 	if accepted.SearchID == "" {
 		t.Fatal("the search must return a search id immediately")
 	}
@@ -913,7 +913,7 @@ func TestSPARequestsSatisfyTheMiddleware(t *testing.T) {
 	}{
 		{"checkReady", "", "/api/health/ready", nil},
 		{"fetchSession", "", "/api/v1/auth/session", nil},
-		{"startSearch", "", "/api/v1/search?query=anything", nil},
+		{"startSearch", "", "/api/v1/releases/search?query=anything", nil},
 		{"openEventStream", "", "/api/events", nil},
 		{"listServices", "", "/api/v1/services", nil},
 		{"fetchServicesHealth", "", "/api/v1/services/health", nil},

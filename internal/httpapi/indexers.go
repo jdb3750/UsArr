@@ -96,7 +96,7 @@ type indexerResponse struct {
 	InstanceID   int64  `json:"instance_id"`
 	InstanceName string `json:"instance_name,omitempty"`
 
-	// IndexerID is the id to send back as ?indexer= on GET /api/v1/search.
+	// IndexerID is the id to send back as ?indexer= on GET /api/v1/releases/search.
 	IndexerID int64  `json:"indexer_id"`
 	Name      string `json:"name"`
 

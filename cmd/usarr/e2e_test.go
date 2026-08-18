@@ -113,7 +113,7 @@ func TestEndToEndSearchAndGrab(t *testing.T) {
 	prowlarr.blockIndexer(2) // so the report has something honest to say
 
 	var accepted searchAcceptedBody
-	env.do(t, "GET", "/api/v1/search?query=Test+Release&type=search&category=2000", nil, &accepted)
+	env.do(t, "GET", "/api/v1/releases/search?query=Test+Release&type=search&category=2000", nil, &accepted)
 	if accepted.SearchID == "" {
 		t.Fatal("the search must return a search id immediately")
 	}
@@ -292,7 +292,7 @@ func TestSearchRequiresIndexerService(t *testing.T) {
 	env.do(t, "POST", "/api/v1/auth/setup",
 		map[string]any{"username": "joe", "password": "correct horse battery"}, &sess)
 
-	code, body := env.raw(t, "GET", "/api/v1/search?query=anything", nil)
+	code, body := env.raw(t, "GET", "/api/v1/releases/search?query=anything", nil)
 	if code != http.StatusConflict || !strings.Contains(body, "no_indexer_service") {
 		t.Fatalf("search with no indexer must be a 409 that says so, got %d: %s", code, body)
 	}
@@ -314,7 +314,7 @@ func TestUnauthenticatedAndURLBase(t *testing.T) {
 	for _, path := range []string{
 		"/usarr/api/v1/services",
 		"/usarr/api/v1/services/health",
-		"/usarr/api/v1/search?query=x",
+		"/usarr/api/v1/releases/search?query=x",
 		"/usarr/api/events",
 		"/usarr/api/v1/system/status",
 	} {

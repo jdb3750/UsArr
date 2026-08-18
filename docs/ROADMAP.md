@@ -44,8 +44,8 @@ Ordered roughly by what the rest depends on, not by size.
       that **sets** a non-NULL value. Today every one clears it.
 
 - [ ] **Search over your own library — the query, tiers 1 and 2.** The corpus exists and is written;
-      the query does not. `GET /api/v1/search` is the Prowlarr indexer fan-out, a different thing
-      over a different corpus.
+      the query does not. `GET /api/v1/releases/search` is the Prowlarr indexer fan-out, a
+      different thing over a different corpus.
       *Authority:* §8.2, §17.4, §16 v0.1 entry.
       *Done when:* `internal/httpapi/server.go` registers a library-search route, and
       `web/src/routes/search/+page.svelte` stops being the gap notice it is now.

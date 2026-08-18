@@ -161,7 +161,7 @@ func TestAddingAKavitaInstance(t *testing.T) {
 	// answers first with no_indexer_service — which is the better refusal and is
 	// the point: a Kavita is now a storable, probeable instance that simply is
 	// not searchable, rather than a row nothing can open.
-	code, body = env.raw(t, "GET", "/api/v1/search?query=anything", nil)
+	code, body = env.raw(t, "GET", "/api/v1/releases/search?query=anything", nil)
 	if code == http.StatusOK {
 		t.Fatalf("search against a library-only install must not succeed: %s", body)
 	}

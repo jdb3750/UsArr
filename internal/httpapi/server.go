@@ -288,7 +288,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 	// client fetches it yet; handleListIndexers in indexers.go carries the
 	// argument and the wiring status.
 	mux.Handle("GET /api/v1/indexers", s.authenticated(s.wrap(s.handleListIndexers)))
-	mux.Handle("GET /api/v1/search", s.authenticated(s.wrap(s.handleSearch)))
+	mux.Handle("GET /api/v1/releases/search", s.authenticated(s.wrap(s.handleSearch)))
 	mux.Handle("POST /api/v1/releases/{id}/grab", s.csrfProtected(s.authenticated(s.wrap(s.handleGrab))))
 	// Reads from SQLite only. It is the Requests screen's memory of the one
 	// irreversible action v0.1 takes (§17.5).

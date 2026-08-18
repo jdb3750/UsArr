@@ -28,7 +28,7 @@ func seedIndexer(t *testing.T, s *Server, name string, enabled bool, priority in
 
 func resolveWithInstance(t *testing.T, s *Server, query string) (int64, error) {
 	t.Helper()
-	r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/search?query=dune"+query, nil)
+	r := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/releases/search?query=dune"+query, nil)
 	return s.resolveIndexerInstance(r, authSession{
 		User: store.User{ID: 1, Username: "joe", IsOwner: true},
 	})

@@ -162,7 +162,7 @@ func TestSSEFramesMatchTheClientContract(t *testing.T) {
 	defer stream.close()
 
 	var accepted searchAcceptedBody
-	env.do(t, "GET", "/api/v1/search?query=Test+Release&type=search&category=2000", nil, &accepted)
+	env.do(t, "GET", "/api/v1/releases/search?query=Test+Release&type=search&category=2000", nil, &accepted)
 	if accepted.SearchID == "" {
 		t.Fatal("the search must return a search id immediately")
 	}

@@ -15,11 +15,16 @@
  *   PATCH  /api/v1/services/{id}       edit one                      — CSRF + session + sudo
  *   DELETE /api/v1/services/{id}       remove one                    — CSRF + session + sudo
  *   POST /api/v1/services/{id}/test    re-test a saved one           — CSRF + session + sudo
- *   GET  /api/v1/search?query=...      starts a search               — session
+ *   GET  /api/v1/releases/search       start a Prowlarr indexer scan — session
  *   GET  /api/v1/indexers              the scope picker's catalogue  — session
  *   GET  /api/events                   the one SSE stream            — session
  *   POST /api/v1/releases/{id}/grab    grab a release candidate      — CSRF + session
  *   GET  /api/v1/grabs/recent          the Recent-grabs block        — session
+ *
+ * `releases/search` fans out to the indexers and answers 202 immediately; the
+ * results arrive on /api/events, never in its response body. It is NOT a search
+ * of your own library: `/api/v1/search` is that, over the local corpus, and this
+ * client does not call it yet.
  *
  * `sudo` is the third gate and it is NOT the same as being signed in. All FIVE
  * service writes — create, the unsaved test, PATCH, DELETE and the saved-instance
@@ -1486,7 +1491,7 @@ export async function startSearch(query: string, scope: SearchScope = {}): Promi
 	if (scope.instanceId !== undefined && scope.instanceId > 0) {
 		params.set('instance', String(scope.instanceId));
 	}
-	const url = `/api/v1/search?${params.toString()}`;
+	const url = `/api/v1/releases/search?${params.toString()}`;
 	const payload = await requestJson(url);
 	if (!isRecord(payload)) {
 		throw new ApiError('the backend accepted the search without a search id', 200, url);

@@ -235,7 +235,7 @@ func TestStateChangingRoutesRequireAuth(t *testing.T) {
 	defer srv.Close()
 
 	for _, path := range []string{
-		"/api/v1/services", "/api/v1/services/health", "/api/v1/search?query=x",
+		"/api/v1/services", "/api/v1/services/health", "/api/v1/releases/search?query=x",
 		"/api/events", "/api/v1/system/status",
 	} {
 		if code, _ := get(t, srv.URL+path); code != http.StatusUnauthorized {

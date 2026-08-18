@@ -11,10 +11,14 @@
 //
 // Two consequences that look like awkwardness and are not:
 //
-//   - GET /api/v1/search does not search. It validates, allocates a search id,
-//     hands the work to a background goroutine and returns. Results arrive on
-//     GET /api/events. A render path that waited for Prowlarr would wait 45-60 s
-//     on an ordinary bad day.
+//   - GET /api/v1/releases/search — the Prowlarr indexer fan-out — does not
+//     itself search. It validates, allocates a search id, hands the work to a
+//     background goroutine and returns 202. Results arrive on GET /api/events,
+//     never in its response body. A render path that waited for Prowlarr would
+//     wait 45-60 s on an ordinary bad day. It is not a search of the local
+//     library: /api/v1/search is that, over internal/store's own corpus, and the
+//     two are separate routes because ARCHITECTURE.md §2073 budgets the local
+//     one at p50 < 15 ms and §8.4 says the fan-out cannot meet that.
 //   - GET /api/v1/services/health renders entirely from SQLite plus the last
 //     probe snapshot taken off the render path. The *Arr's own health warnings
 //     and its blocked indexers are in that snapshot; they are never fetched
