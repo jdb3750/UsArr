@@ -71,6 +71,12 @@ type registry struct {
 	// a second one while the first is still running. It is guarded by mu.
 	bootstrapped map[int64]bool
 
+	// importMu guards importing, and it is deliberately NOT mu: mu is taken on
+	// the probe and request paths, and an import holds its claim for minutes.
+	// See beginImport in import.go for why the claim lives in memory at all.
+	importMu  sync.Mutex
+	importing map[int64]bool
+
 	mu      sync.Mutex
 	entries map[int64]*registryEntry
 
@@ -129,6 +135,7 @@ func newRegistry(st *store.Store, keyring *crypto.Keyring, log *slog.Logger, ver
 		probeReq: make(chan int64, 32),
 
 		bootstrapped: map[int64]bool{},
+		importing:    map[int64]bool{},
 	}
 }
 

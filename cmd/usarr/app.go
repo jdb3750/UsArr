@@ -240,6 +240,7 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 		Releases:       reg,
 		Tester:         reg,
 		Probes:         reg,
+		Imports:        reg,
 		Logger:         log,
 	})
 	if err != nil {

@@ -15084,3 +15084,151 @@ whose backend half is correct.
 
 **No ADR is proposed.** Neither change closes off an alternative: `work.year`'s source can still be
 displaced by a metadata provider later, and the two health fields are additive.
+
+## LS-130 — a catalogue import had exactly one trigger, and it was a once-per-database one
+
+**Severity: high — it made every future fix to the importer undeliverable.** `bootstrapImport` runs
+on first connect and is gated on `last_full_sync_at`, which is written on success only. That gate is
+correct for what it guards: a restart must not silently re-read a whole library. But it was the
+*only* trigger in the process, so an instance that had imported once could never import again, for
+the life of the database.
+
+The consequence is not hypothetical. `work.year` is written by the credit pass; the 151 series of a
+real Kavita import were already on disk with a NULL year, and no code path existed that could ask for
+them to be read again. **The deliverable is therefore the re-run, not a backfill** — a backfill
+repairs one field once and the next fix has the same problem.
+
+`POST /api/v1/services/{id}/sync` is the second trigger (`internal/httpapi/imports.go`,
+`registry.StartImport` in `cmd/usarr/import.go`). It is §17.3's own *Run full sync now* action,
+already specified there for a *degraded, partial data* row, so this builds what the screen describes
+rather than inventing a shape.
+
+**A FULL re-import, not a delta**, and the choice is forced twice over. `internal/libsync` implements
+channel 1 and nothing else — its package doc names channel 3b and channel 4 as unbuilt — and a delta
+would be the wrong tool even if it existed: ADR-0035 §2a's watermark moves on an upstream *change*,
+so a walk keyed on it can never revisit a row that UsArr itself wrote wrongly.
+
+## LS-131 — the concurrency guard: an in-process claim, and why not a column
+
+**Two concurrent writers over one instance must be impossible**, which is a double-click, an
+impatient retry, and a scheduled call landing on a running import — all three are the same case.
+The mechanism is an in-process map guarded by its own mutex (`registry.beginImport`), claimed
+**synchronously** by `StartImport` before it launches anything, so "already running" is decided
+before the HTTP response is written rather than by a goroutine that may not have been scheduled yet.
+
+The two alternatives were considered and rejected in writing at the call site:
+
+* **A `state` column on `service_instance`** survives the process, which sounds stronger and is
+  weaker: a crash mid-import leaves it reading `running` with nothing running, and the instance can
+  never be imported again without a hand-edited database. A lock whose holder cannot die needs a
+  lease, a clock and a reaper.
+* **`sync_report`** is an append-only journal (`00005_library_sync.sql`), not a mutual-exclusion
+  primitive; "did the last row say started" is a TOCTOU race by construction.
+
+The map is exactly as durable as the thing it guards — an import only exists inside this process —
+and UsArr is one binary against one SQLite file.
+
+**The guard is placed in `FullImport`, not in the handler**, because there are three callers and only
+one of them is the endpoint. A bootstrap racing a hand-pressed sync is the case a handler-level guard
+would miss entirely.
+
+**Fired, not asserted.** With the `if g.importing[id] { return false }` line removed:
+
+```
+--- FAIL: TestASecondImportIsRefusedWhileTheFirstIsStillRunning (0.14s)
+    import_rerun_test.go:143: a second import while one is running = 202, want 409: {"status":"started","instance_id":1,"kind":"kavita","name":"Kavita"}
+--- FAIL: TestOnlyOneOfManySimultaneousImportsStarts (0.15s)
+    import_rerun_test.go:216: 8 of 8 simultaneous imports started (0 refused), want exactly 1 — two writers over one instance is what the guard exists to prevent
+```
+
+The upstream double parks inside `POST /api/Series/all-v2` (`fakeKavita.holdSeriesList`), which is
+what makes an import *observably* in flight; without it a fixture import finishes in microseconds and
+"a second import while the first is running" is a state no test can stand in.
+
+**The release is fired separately**, because a leak is invisible to every test above: dropping
+`defer g.endImport(...)` from `StartImport`'s goroutine passed the whole suite until an assertion was
+added that presses a third time.
+
+```
+--- FAIL: TestACompletedImportCanBeRunAgainAndRewritesItsRows (20.17s)
+    import_rerun_test.go:120: timed out waiting for the claim from the requested import to be released
+```
+
+## LS-132 — `202` must not be readable as "imported", and a non-2xx must not be readable as "nothing happened"
+
+**This project has been bitten twice by the second half** — the Prowlarr grab that 500s on an
+operation that materially succeeded, and the whole `sent_outcome_unknown` vocabulary that exists
+because of it. So the contract is written down (`docs/reference/http-api.md` §4.3, §4.4) rather than
+left to the status code:
+
+* **202 means accepted and started.** The import outlives the response by minutes and this endpoint
+  never learns how it ended. `last_full_sync_at` (written on success only) is the *only* positive
+  evidence of completion, and a repeat press distinguishes still-running (`409`) from finished
+  (`202`) — so **"started, then failed"** is representable: not running, and the timestamp has not
+  moved.
+* **A failed import leaves its committed batches standing**, so that state is a *partially* updated
+  catalogue, which is exactly §3.2's `null` / `>0` row. Reporting it as "nothing happened" would be
+  the same lie in a new place.
+* **Every non-2xx is decided before anything upstream is touched** — the kind check, the enabled
+  check and the claim are all synchronous — so a refusal means no import started *for this call*.
+  It does not mean nothing is running, and `import_in_progress` says so in its own code.
+
+**No progress field, and deliberately never one.** Nothing has been read when the 202 is written, so
+a count or a percentage would be invented, and a field that invites a progress bar the server cannot
+feed is worse than no field. Real counts are on the SSE stream's `import.progress`, published by the
+importer as batches commit.
+
+## LS-133 — the response is an allowlist, and the route is gated like its five neighbours
+
+**Four fields — `status`, `instance_id`, `kind`, `name` — chosen one at a time.** The row behind them
+carries an encrypted full-admin credential, a KEK id, a TLS pin and a base URL; the response is not
+built by spreading it. Fired by adding `base_url`:
+
+```
+--- FAIL: TestSyncStartsAnImportAndSaysSoWithoutWaiting (0.05s)
+    imports_test.go:69: the 202 body carries "base_url", which is not allowlisted: {"status":"started","instance_id":1,"kind":"kavita","name":"Kavita","base_url":"http://kavita.example:5000"}
+```
+
+**Gated exactly like the five other writes on this screen**: `csrfProtected` → `authenticated` →
+`sudo`. §17.3.3's "five endpoints … which is every way this screen changes anything" is amended to
+six rather than left to rot — the count moved because the screen grew an action, not because the rule
+changed. **The sudo layer is fired**, because a route that silently lost it would pass every other
+test in the file: with `s.sudo(...)` removed from the route, and the server's clock advanced six
+minutes past a real sign-in,
+
+```
+--- FAIL: TestSyncIsGatedLikeEveryOtherServiceWrite (0.11s)
+    imports_test.go:214: a sync outside the sudo window = 202 {"status":"started","instance_id":1,"kind":"kavita","name":"Kavita"}, want 403 sudo_required — this write is gated like the five beside it
+```
+
+**The two 409s are separate codes**, `import_in_progress` and `not_a_catalogue_source`, because their
+fixes are opposite. Collapsing the first into the generic `conflict` fires
+`TestSyncOutcomesAreDistinguishableOnTheWire/already_running`.
+
+## LS-134 — the once-only assertion that was checked, and is CORRECT
+
+`TestTheBootstrapImportRunsOnceAndThenStopsAskingAgain`
+(`cmd/usarr/import_e2e_test.go`) asserts that a second connect does **not** re-import. Three tests in
+this repository have been found asserting a bug as required behaviour, so this one was read against
+the change rather than around it: it is **correct and stays**. What it gates is the *on-connect*
+trigger — a restart must not silently re-read a whole library — not the proposition that an import
+can only ever happen once.
+
+A comment was added at the assertion site saying exactly that, and naming the test that requires the
+opposite outcome from the same instance state, so the next reader cannot mistake one for the other.
+
+## What was deliberately left for the frontend thread
+
+**No file under `web/` was touched**, per the split. Nothing forced a TypeScript declaration: the
+error-code list is enumerated on the Go side only, and `web/src/lib/api.ts` drops JSON it does not
+declare, so the new endpoint and the new codes break nothing by being unknown.
+
+What the consumer needs, in the order it is needed:
+
+* A per-row **Run full sync now** action posting `POST /api/v1/services/{id}/sync` with `{}`, the
+  CSRF header, and the existing sudo-retry flow (§17.3.3) around a `403 sudo_required`.
+* Render `202` as **started** and nothing stronger. There is no progress to show and no completion in
+  the response; the row's `last_full_sync_at` (§3) moving is what "it finished" looks like.
+* Branch on `error`, not on the status: `import_in_progress` is **already running**, not a failure,
+  and is the state to disable the button against.
+* A `409` and a `500` both mean no import started for that press — but only the `500` is a fault.

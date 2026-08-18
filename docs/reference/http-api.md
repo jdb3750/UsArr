@@ -442,3 +442,98 @@ containers across instances (§17.8), so a per-library number is a different que
 
 Credited people are outside it by construction rather than by a filter: the credit pass creates a
 `work` of kind `person` with no `service_item_link` at all, so no instance contributes one.
+
+---
+
+## 4 · `POST /api/v1/services/{id}/sync` — re-run the catalogue import
+
+The Services screen's **Run full sync now** (ARCHITECTURE §17.3, the action named for a
+*degraded, partial data* row). It is **per instance**: there is no "re-import everything" route,
+because the control lives on a service's own row.
+
+**Why it exists.** The catalogue import had exactly one trigger — a bootstrap that runs on first
+connect and is gated on `last_full_sync_at` forever after — so an instance that had imported once
+could never import again. That makes every later fix to what an import *writes* undeliverable to
+rows already imported. This is the re-run, not a backfill: a backfill repairs one field once.
+
+**It is a full re-import, not a delta.** `internal/libsync` implements channel 1 and nothing else
+(read its package doc), and a delta walk would be the wrong tool anyway: ADR-0035 §2a's watermark
+moves on an upstream *change*, so a delta could never revisit a row that UsArr itself wrote wrongly.
+
+Gated exactly like the five other writes on this screen: `Content-Type: application/json`, the
+double-submit CSRF token, an authenticated session, and the **five-minute sudo window** (§17.3.3).
+
+### 4.1 Request
+
+No body fields. Send `{}` — `Content-Type: application/json` with a JSON body is what
+`csrfProtected` requires.
+
+### 4.2 Response — `202 Accepted`
+
+```jsonc
+{
+  "status": "started",
+  "instance_id": 3,
+  "kind": "kavita",
+  "name": "Kavita"
+}
+```
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `status` | string | `"started"`. The only value a 202 carries. |
+| `instance_id` | integer | The instance the import was started for. |
+| `kind` | string | Its service kind, e.g. `kavita`. |
+| `name` | string | Its configured name — what the row is called on screen. |
+
+**Four fields, allowlisted one at a time.** A `service_instance` row also holds an encrypted
+full-admin credential, a KEK id, a TLS pin and a base URL. None of those is here, and the response is
+not built by spreading the row.
+
+🚩 **There is no progress field, and there will not be one on this response.** Nothing has been read
+when the 202 is written, so any count, percentage or estimate would be invented. Progress, where a
+client wants it, is the `import.progress` frame on `GET /api/events`, which carries real counts
+because the importer publishes it as batches commit.
+
+### 4.3 `202` does not mean "imported"
+
+**It means accepted and started, and nothing more.** The import outlives the response by minutes and
+this endpoint never learns how it ended. A client that renders 202 as "done" is wrong on every
+failure.
+
+Two observations are available, and between them they make **"started, then failed"** representable
+rather than collapsing it into a binary:
+
+| Question | How a caller answers it |
+| --- | --- |
+| Is it still running? | `POST` again. `409 import_in_progress` means yes; a `202` means no. |
+| Did it succeed? | `last_full_sync_at` on `GET /api/v1/services/health` (§3). It is written **on success only**, so it advancing is the only positive evidence. |
+| Did it start and then fail? | It is no longer running (a `202` on a repeat press) **and** `last_full_sync_at` has not moved. |
+
+⚠️ **A failed import leaves the batches it already committed in place.** "Started, then failed"
+therefore means a *partially* updated catalogue, never a rolled-back one — which is exactly the
+`last_full_sync_at: null` / `work_count > 0` row of §3.2's table. Say so; do not report it as though
+nothing happened.
+
+### 4.4 A non-2xx never means "an import you asked for is running"
+
+**Every refusal below is decided before anything upstream is touched.** The kind check, the enabled
+check and the in-progress claim all complete synchronously, so a non-2xx means **no import started
+for this call**. It does not always mean nothing is running: `import_in_progress` means another one
+is, and says so in its own code.
+
+| Status | `error` | Meaning | `action` |
+| --- | --- | --- | --- |
+| `202` | — | Started. | — |
+| `409` | `import_in_progress` | An import for this instance is already running; a second was **not** started. Safe to press twice — the second press changes nothing. | `Wait for the running import to finish` |
+| `409` | `not_a_catalogue_source` | The instance has no library to import — an indexer, not a catalogue source ([ADR-0041](../DECISIONS.md#adr-0041)). | `Run a sync on a catalogue service` |
+| `409` | `service_disabled` | The service exists and is switched off. | `Enable the service` |
+| `404` | `not_found` | No such instance **for this user** — the read is access-scoped. | — |
+| `403` | `sudo_required` | The sudo window closed. Prompt, then retry the pending press (§17.3.3). | `Confirm your password` |
+| `403` | `csrf` | Stale page token. | (its own) |
+| `501` | `not_configured` | This build has no catalogue importer wired in. | — |
+| `500` | `internal` | The import could not be started — most often a stored credential that will not open. The upstream reason is in `message`, redacted. | `Test connection` |
+
+**The two 409s are separate codes on purpose.** Their fixes are opposite — wait, versus press this
+somewhere else — and a client that switched on the status alone would have to guess which sentence
+to show.

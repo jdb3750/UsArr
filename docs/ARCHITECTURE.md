@@ -3354,10 +3354,15 @@ only pre-empts it turns the server's refusal into an unexplained failure.
 #### 17.3.3 `re-authentication required` — a named state, and not an authorisation failure
 
 **Every write on this screen sits behind sudo mode**, a window that opens on sign-in and on each
-password confirmation and closes **five minutes** later. Five endpoints are gated, which is every
-way this screen changes anything: create, update, delete, test-an-unsaved-service, and
-test-a-saved-service. Both test endpoints are gated because a test is what sends a credential
-somewhere.
+password confirmation and closes **five minutes** later. Six endpoints are gated, which is every
+way this screen changes anything: create, update, delete, test-an-unsaved-service,
+test-a-saved-service, and **run-a-full-sync**. Both test endpoints are gated because a test is what
+sends a credential somewhere. ⚠️ **This read *"Five endpoints"* and named the first five**; the sixth
+is `POST /api/v1/services/{id}/sync`, the *Run full sync now* action this section already names for a
+*degraded, partial data* row, and it is gated for the same reason its five neighbours are rather than
+as a new rule — it is a write this screen makes, and one that reads a whole library over a stored
+full-admin credential. The count moved because the screen grew an action, not because the rule
+changed.
 
 **The response is `403` with `error: sudo_required`** and `action: "Confirm your password"`. The
 screen branches on `error`, never on the status alone, because 403 is also how an ordinary

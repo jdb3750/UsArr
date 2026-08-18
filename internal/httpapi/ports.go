@@ -150,3 +150,36 @@ type HealthProbes interface {
 	// whole probe interval; it must return promptly and do its work elsewhere.
 	ProbeNow(instanceID int64)
 }
+
+// CatalogueImports re-runs the catalogue full import for one service instance —
+// the Services screen's "Run full sync now" (ARCHITECTURE.md §17.3).
+//
+// It is a THIRD port rather than a method on HealthProbes because it is a
+// different kind of thing: a probe is a read this package may take at will, and
+// an import is a write that rewrites the catalogue rows an instance contributes.
+// The implementation is in cmd/usarr, which is the only package that may hold an
+// outbound client (§2.3 rule 1).
+type CatalogueImports interface {
+	// StartImport begins an import and RETURNS WITHOUT WAITING FOR IT. A
+	// handler on a render path may call it; a handler that waited for it would
+	// be principle 1's violation, since an import is minutes.
+	//
+	// Nil means an import is now running. The two states a caller must be able
+	// to tell apart are the sentinels below, and both must be decided BEFORE
+	// this returns — an implementation that decides "already running" inside
+	// its own goroutine cannot report it.
+	StartImport(instanceID int64) error
+}
+
+// ErrImportInProgress means this instance already has an import running, so a
+// second one was refused. It is the double-click answer, and it is a refusal
+// rather than a queued second run: two concurrent writers over one instance
+// would interleave batches for no gain, and the running import is already doing
+// the work the caller asked for.
+var ErrImportInProgress = errors.New("httpapi: a catalogue import is already running for this instance")
+
+// ErrNotCatalogueSource means the instance exists and is fine, and simply has no
+// catalogue to import — a Prowlarr is an indexer, not a library (ADR-0041). It
+// is distinct from ErrImportInProgress because the fixes are opposite: wait, vs
+// stop asking this service for something it does not have.
+var ErrNotCatalogueSource = errors.New("httpapi: this service instance carries no catalogue")
