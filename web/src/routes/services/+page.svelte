@@ -886,9 +886,9 @@
 			<div class="banner__body">
 				<div class="banner__title">Confirm your password to change a service</div>
 				<p class="banner__text">
-					Changing a service credential needs a password confirmation from the last five minutes,
-					and this session's has expired. Nothing is wrong and nothing was lost: the change you made
-					is still in the form.
+					Changing anything on this screen needs a password confirmation from the last five minutes,
+					and this session's has expired. Nothing is wrong and nothing was lost: what you asked for
+					is held, and confirming runs it.
 				</p>
 				<form class="form sudo-form" onsubmit={submitSudo}>
 					<div class="field">
