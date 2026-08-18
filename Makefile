@@ -507,17 +507,52 @@ test-integration: ## Tests behind the `integration` tag. Needs a live stack. NEV
 # suffix — and so read as drift-checked while holding no upstream-tagged test at
 # all. The output was actively misleading about its own coverage.
 #
-# Both halves are closed the same way. The selector is now the reserved
-# `^TestSpecDrift` prefix, which no unrelated test may take, and the run is
+# Both halves are closed the same way. The selector is the reserved
+# `TestSpecDrift` prefix, which no unrelated test may take, and the run is
 # counted: `-v` prints one top-level `--- PASS:`/`--- FAIL:` line per test that
 # actually EXECUTED, and fewer than SPEC_DRIFT_FLOOR of them fails the target
 # loudly and says why. Counting PASS|FAIL rather than "=== RUN" is deliberate —
 # a `--- SKIP:` drift check looked at nothing too, and must not satisfy a floor.
 #
+# WHY THERE IS ALSO A PREFLIGHT. The runtime count is a good detector of "nothing
+# ran" and a terrible EXPLAINER of it: every distinct way to break the guard
+# arrived at the same `0 drift check(s) ran` and the same list of guesses, one of
+# which (a lost `//go:build upstream` line) could not produce that state at all
+# while the state it DID produce — `--- PASS`, exit 0 — was invisible. So the
+# static, offline facts are now established statically, before the network is
+# touched, and each gets its own reading: does the tagged tree COMPILE, is the
+# guard HIDDEN behind the tag, does it CARRY the prefix. What reaches the runtime
+# floor check is then only "it existed and did not run", which is a small enough
+# question to answer honestly.
+#
+# `-count=1` on the run is load-bearing, not decoration. `go test` caches
+# results, and a cached PASS replays the `--- PASS:` line verbatim — measured
+# 2026-08-18, `make spec-drift GOTESTFLAGS=` announced the floor satisfied over
+# ZERO network calls on its second run. Only `-shuffle=on` in the default
+# GOTESTFLAGS was incidentally defeating the cache, which is not a guarantee and
+# was never meant to be one. A drift check served from cache is exactly the
+# "looked at nothing" this whole target exists to refuse.
+#
 # ADDING A DRIFT TEST: name it TestSpecDrift…, and raise SPEC_DRIFT_FLOOR here.
 # The floor is a floor, not an equality, so it never fights a test being added.
 SPEC_DRIFT_FLOOR ?= 1
-SPEC_DRIFT_RUN   ?= ^TestSpecDrift
+
+# THE PREFIX HAS EXACTLY ONE DEFINITION, HERE. It used to have three — this
+# variable, the Go function's name, and a hardcoded
+# `grep -cE '^--- (PASS|FAIL): TestSpecDrift'` in the recipe below — which made
+# the old cause (a)'s advice circular. "Rename it back, or change both together"
+# named two of the three, so following it LITERALLY reproduced the failure it was
+# explaining. Measured 2026-08-18: rename the function to TestDriftGuard… and
+# move SPEC_DRIFT_RUN with it, and the test prints `--- PASS:` having checked
+# both refs while the target says `0 drift check(s) ran, floor is 1`. Fail-closed
+# but useless.
+#
+# SPEC_DRIFT_RUN is now DERIVED, and `override` keeps it derived: setting it on
+# the command line can no longer desync the selector from the counter. Two places
+# remain — this variable and the Go function name — and the preflight below
+# ASSERTS they agree rather than leaving it to advice.
+SPEC_DRIFT_PREFIX ?= TestSpecDrift
+override SPEC_DRIFT_RUN := ^$(SPEC_DRIFT_PREFIX)
 
 .PHONY: spec-drift
 spec-drift: export CGO_ENABLED := 1
@@ -526,10 +561,71 @@ spec-drift: ## Tests behind the `upstream` tag: are the vendored specs still wha
 		echo "refusing: set USARR_SPEC_DRIFT=1 — this target talks to github.com"; \
 		echo "see docs/DEVELOPMENT.md §7.2"; exit 1; }
 	@set +e; \
+	pre="$$(mktemp)"; \
+	$(GO) test -tags=upstream -list '$(SPEC_DRIFT_RUN)' ./internal/... >"$$pre" 2>&1; \
+	prc=$$?; \
+	tagged="$$(grep -cE '^$(SPEC_DRIFT_PREFIX)' "$$pre")"; \
+	if [ "$$prc" -ne 0 ]; then \
+		cat "$$pre"; rm -f "$$pre"; \
+		echo ""; \
+		echo "spec-drift: FAILED — THE UPSTREAM-TAGGED TESTS DO NOT COMPILE (go test -list exit $$prc)."; \
+		echo ""; \
+		echo "Nothing ran, and this establishes NOTHING about upstream. The compiler output above"; \
+		echo "is the whole story: fix it and re-run."; \
+		echo ""; \
+		echo "This is easy to reach and was easy to miss. \`//go:build upstream\` hides the file from"; \
+		echo "\`go build\`, \`go test\` and the linter alike, so \`make build-tagged\` was the only other"; \
+		echo "thing in the repo that compiled it at all — and a broken file used to arrive here as"; \
+		echo "\`0 drift check(s) ran\` under four causes, none of which was 'it does not compile'."; \
+		exit 1; \
+	fi; \
+	$(GO) test -list '$(SPEC_DRIFT_RUN)' ./internal/... >"$$pre" 2>&1; \
+	urc=$$?; \
+	untagged="$$(grep -cE '^$(SPEC_DRIFT_PREFIX)' "$$pre")"; \
+	if [ "$$urc" -ne 0 ]; then \
+		cat "$$pre"; rm -f "$$pre"; \
+		echo ""; \
+		echo "spec-drift: FAILED — the UNTAGGED build is broken (go test -list exit $$urc)."; \
+		echo ""; \
+		echo "This target cannot check whether the drift test is still hidden behind its build tag"; \
+		echo "while the tree it would be hidden from does not compile. That is \`make check\`'s"; \
+		echo "problem, not upstream's; nothing here says anything about the specs."; \
+		exit 1; \
+	fi; \
+	rm -f "$$pre"; \
+	if [ "$$untagged" -ne 0 ]; then \
+		echo "spec-drift: FAILED — $$untagged \`$(SPEC_DRIFT_PREFIX)…\` test(s) are visible WITHOUT -tags=upstream."; \
+		echo ""; \
+		echo "The \`//go:build upstream\` line is gone. That tag is the whole reason \`make check\`"; \
+		echo "makes exactly two network calls, so losing it puts a github.com fetch on every"; \
+		echo "commit's gate — an upstream outage would turn unrelated commits red."; \
+		echo ""; \
+		echo "Nothing else in the repo asserts that tag, and this guard did not either: measured"; \
+		echo "2026-08-18, deleting the line gave \`--- PASS\` and \`spec-drift: OK\` at exit 0 while a"; \
+		echo "cause here claimed it would have been caught. Put the line back at the top of the"; \
+		echo "file, above the package doc comment."; \
+		exit 1; \
+	fi; \
+	if [ "$$tagged" -lt "$(SPEC_DRIFT_FLOOR)" ]; then \
+		echo "spec-drift: FAILED — $$tagged test(s) carry the \`$(SPEC_DRIFT_PREFIX)\` prefix, floor is $(SPEC_DRIFT_FLOOR)."; \
+		echo ""; \
+		echo "The tagged tree compiles, so the guard has been renamed, deleted, or never existed."; \
+		echo "The prefix has ONE definition — SPEC_DRIFT_PREFIX in the Makefile — and the Go"; \
+		echo "function name must match it. Change both, or change neither:"; \
+		echo "  (a) RENAMED out of the prefix. Rename the function back, or set SPEC_DRIFT_PREFIX"; \
+		echo "      to the new name; SPEC_DRIFT_RUN and the result counter both derive from it and"; \
+		echo "      cannot be left behind."; \
+		echo "  (b) DELETED."; \
+		echo "  (c) SPEC_DRIFT_FLOOR was raised for a test that was never added."; \
+		exit 1; \
+	fi; \
+	echo "spec-drift: preflight OK — $$tagged \`$(SPEC_DRIFT_PREFIX)…\` test(s) compile, behind the tag. Running them."; \
+	echo ""; \
 	out="$$(mktemp)"; \
-	$(GO) test -tags=upstream $(GOTESTFLAGS) -v -run '$(SPEC_DRIFT_RUN)' ./internal/... 2>&1 | tee "$$out"; \
+	$(GO) test -tags=upstream $(GOTESTFLAGS) -count=1 -v -run '$(SPEC_DRIFT_RUN)' ./internal/... 2>&1 | tee "$$out"; \
 	rc=$${PIPESTATUS[0]}; \
-	ran="$$(grep -cE '^--- (PASS|FAIL): TestSpecDrift' "$$out")"; \
+	ran="$$(grep -cE '^--- (PASS|FAIL): $(SPEC_DRIFT_PREFIX)' "$$out")"; \
+	verdict="$$(sed -n 's/.*SPEC_DRIFT_VERDICT: \([a-z-]*\).*/\1/p' "$$out" | head -1)"; \
 	rm -f "$$out"; \
 	echo ""; \
 	if [ "$$ran" -lt "$(SPEC_DRIFT_FLOOR)" ]; then \
@@ -540,20 +636,44 @@ spec-drift: ## Tests behind the `upstream` tag: are the vendored specs still wha
 		echo "matches nothing exits 0, so without this assertion the target would have printed"; \
 		echo "a clean bill of health over zero drift checks."; \
 		echo ""; \
-		echo "Likely causes, in the order worth checking:"; \
-		echo "  (a) THE DRIFT TEST WAS RENAMED out of the reserved \`TestSpecDrift\` prefix that"; \
-		echo "      SPEC_DRIFT_RUN ('$(SPEC_DRIFT_RUN)') selects on. Rename it back, or change both together."; \
-		echo "  (b) IT WAS DELETED, or its file lost its \`//go:build upstream\` line."; \
-		echo "  (c) IT SKIPPED — a --- SKIP: does not count, because a skipped check looked at"; \
-		echo "      nothing. Read the output above for the skip reason."; \
-		echo "  (d) SPEC_DRIFT_FLOOR was raised for a test that was never added."; \
+		echo "The preflight above already proved the guard exists, carries the prefix, is hidden"; \
+		echo "behind \`//go:build upstream\`, and compiles — so what is left is:"; \
+		echo "  (a) IT SKIPPED. A --- SKIP: does not count: a skipped check looked at nothing."; \
+		echo "      Read the output above for the reason (a missing USARR_SPEC_DRIFT is the usual"; \
+		echo "      one, though this target sets it)."; \
+		echo "  (b) THE TEST BINARY DIED before printing a result line — a panic, a timeout, or the"; \
+		echo "      runner killed. The output above is then the whole story."; \
 		exit 1; \
 	fi; \
 	if [ "$$rc" -ne 0 ]; then \
 		echo "spec-drift: $$ran drift check(s) ran; the run FAILED (go test exit $$rc)."; \
 		echo ""; \
-		echo "a failure here is NEWS, not a broken build: it means upstream moved. Read the message,"; \
-		echo "re-vendor deliberately, and revisit the ADR whose premise just changed."; \
+		case "$$verdict" in \
+		drift) \
+			echo "VERDICT: DRIFT — and this one IS news, not a broken build. Upstream answered, and"; \
+			echo "the spec is no longer the pinned blob. Read the test's message above, re-vendor"; \
+			echo "deliberately, and revisit the ADR whose premise just changed."; \
+			;; \
+		path-moved) \
+			echo "VERDICT: PATH MOVED — upstream answered, but the spec is not at the path this"; \
+			echo "guard reads, so the blob comparison NEVER HAPPENED. That is upstream news too,"; \
+			echo "and a different piece of news from a changed blob: fix specPathInUpstream (or"; \
+			echo "ownerRelease, if the ref itself is gone) before reading anything into drift."; \
+			;; \
+		unreached) \
+			echo "VERDICT: UPSTREAM NOT REACHED — THIS IS NOT NEWS ABOUT UPSTREAM. The fetch never"; \
+			echo "got an answer: DNS, a proxy, an outage, a rate limit, or git failing locally."; \
+			echo "NO FACT ABOUT THE SPEC WAS ESTABLISHED, in either direction. Check the network"; \
+			echo "and re-run; if it reproduces from a known-good network, the remote or the ref in"; \
+			echo "the test is wrong."; \
+			;; \
+		*) \
+			echo "VERDICT: UNCLASSIFIED — this target does not know why, and will not guess. The run"; \
+			echo "failed without printing a SPEC_DRIFT_VERDICT line, so it is NOT established that"; \
+			echo "upstream moved, and NOT established that it did not. The go test output above is"; \
+			echo "the only evidence there is; read it."; \
+			;; \
+		esac; \
 		exit "$$rc"; \
 	fi; \
 	echo "spec-drift: OK — $$ran drift check(s) actually ran and passed (floor $(SPEC_DRIFT_FLOOR))."
@@ -694,6 +814,8 @@ fmt-check: web-deps ## Verify formatting without modifying files (used by `make 
 .PHONY: build-tagged
 build-tagged: ## Compile packages hidden behind build tags (`bench`: internal/db/spike; `upstream`: the spec-drift tests)
 	@n=$$($(GO) list -tags=bench ./... | wc -l); \
+	test "$$n" -gt 0 || { \
+		echo "build-tagged: 0 packages — go build would compile nothing and exit 0."; exit 1; }; \
 	echo "build-tagged: compiling $$n Go packages with -tags=bench"
 	$(GO) build -tags=bench ./...
 	@echo "build-tagged: type-checking the -tags=upstream test files (go vet; go build cannot see them)"

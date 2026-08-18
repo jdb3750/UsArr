@@ -44,6 +44,36 @@ const specPathInUpstream = "src/Prowlarr.Api.V1/openapi.json"
 // pin so re-confirming it later is a one-line change.
 const ownerRelease = "v2.5.2.5491"
 
+// The SPEC_DRIFT_VERDICT lines are a CONTRACT WITH THE MAKEFILE, and they exist
+// so that `make spec-drift` never states a cause nobody established.
+//
+// The target used to answer every non-zero exit with "a failure here is NEWS,
+// not a broken build: it means upstream moved." Measured 2026-08-18: point
+// upstreamRepo at an unreachable host, get `fatal: unable to access ...: CONNECT
+// tunnel failed, response 502` — and the target still reported that upstream had
+// moved. It had not. Standing advice about the interesting failure had been
+// wired to the *commonest* one, which is an outage, and a guard that guesses
+// will have its guess read as a finding.
+//
+// A t.Fatalf out of run() cannot reach the drift message below, so the test has
+// to classify itself on the way out. Exactly one of these is printed per failing
+// run; the Makefile reads it and says only what that verdict supports.
+const (
+	// verdictDrift — upstream answered and the blob is not the pinned one.
+	// The premise of ADR-0047 is what changed. This is the news.
+	verdictDrift = "SPEC_DRIFT_VERDICT: drift"
+
+	// verdictUnreached — upstream's answer was never obtained at all: DNS, a
+	// proxy, an outage, a rate limit, or git failing locally. NOTHING about
+	// upstream is established by this, in either direction.
+	verdictUnreached = "SPEC_DRIFT_VERDICT: unreached"
+
+	// verdictPathMoved — upstream answered, but the spec is no longer at
+	// specPathInUpstream on that ref, so the blob comparison never happened.
+	// Also upstream news, and a DIFFERENT piece of news from a changed blob.
+	verdictPathMoved = "SPEC_DRIFT_VERDICT: path-moved"
+)
+
 // TestSpecDriftRefsStillShareThePinnedBlob is the guard that fires the day
 // ADR-0047's premise changes.
 //
@@ -56,6 +86,13 @@ const ownerRelease = "v2.5.2.5491"
 // packages printed a bare `ok` and looked drift-checked while holding no
 // upstream-tagged test at all. A new drift test takes this prefix and raises
 // SPEC_DRIFT_FLOOR in the Makefile; nothing else may take it.
+//
+// The prefix lives in ONE other place: SPEC_DRIFT_PREFIX in the Makefile, which
+// the -run selector and the result counter both derive from. Renaming this
+// function without moving SPEC_DRIFT_PREFIX no longer merely misfires with bad
+// advice — the target's preflight lists the tagged tests and refuses when none
+// carries the prefix, so the two names are asserted to agree rather than assumed
+// to.
 //
 // The premise: Prowlarr does NOT regenerate its checked-in OpenAPI document per
 // release, so the release the owner runs and `develop` carry the byte-identical
@@ -76,8 +113,8 @@ func TestSpecDriftRefsStillShareThePinnedBlob(t *testing.T) {
 	// --filter=blob:none --no-checkout: fetch commits and trees, no file
 	// contents. Resolving a path to its blob NAME needs the tree and nothing
 	// more, so this stays small even against a repo this size.
-	run(ctx, t, dir, "git", "init", "--quiet")
-	run(ctx, t, dir, "git", "remote", "add", "origin", upstreamRepo)
+	run(ctx, t, verdictUnreached, dir, "git", "init", "--quiet")
+	run(ctx, t, verdictUnreached, dir, "git", "remote", "add", "origin", upstreamRepo)
 
 	// Mismatches are COLLECTED and reported once, after the loop. Reporting
 	// inside it printed this whole 14-line explanation per diverging ref — and
@@ -93,8 +130,8 @@ func TestSpecDriftRefsStillShareThePinnedBlob(t *testing.T) {
 		{spec: "refs/tags/" + ownerRelease, role: "the FLOOR — the release the owner confirmed running"},
 		{spec: "refs/heads/develop", role: "the CEILING — where the API is defined"},
 	} {
-		run(ctx, t, dir, "git", "fetch", "--quiet", "--filter=blob:none", "--depth", "1", "origin", ref.spec)
-		got := strings.TrimSpace(run(ctx, t, dir, "git", "rev-parse", "FETCH_HEAD:"+specPathInUpstream))
+		run(ctx, t, verdictUnreached, dir, "git", "fetch", "--quiet", "--filter=blob:none", "--depth", "1", "origin", ref.spec)
+		got := strings.TrimSpace(run(ctx, t, verdictPathMoved, dir, "git", "rev-parse", "FETCH_HEAD:"+specPathInUpstream))
 
 		t.Logf("%s (%s): %s is blob %s", ref.spec, ref.role, specPathInUpstream, got)
 		if got != vendoredSpecBlob {
@@ -103,6 +140,7 @@ func TestSpecDriftRefsStillShareThePinnedBlob(t *testing.T) {
 	}
 
 	if len(diverged) > 0 {
+		t.Log(verdictDrift)
 		t.Errorf("%s has moved away from the pinned blob on %d of 2 refs; "+
 			"api/specs/prowlarr.json is %s.\n%s\n\n"+
 			"THIS IS THE NEWS THIS TEST EXISTS FOR, not a broken test. Three readings, in the\n"+
@@ -135,12 +173,22 @@ func requireOptIn(t *testing.T) {
 	}
 }
 
-func run(ctx context.Context, t *testing.T, dir, name string, args ...string) string {
+// run executes one git command, and takes the verdict to print if it fails.
+//
+// The verdict is a PARAMETER rather than a constant because the failures are not
+// alike: a fetch that never completes says nothing about upstream, while a
+// rev-parse that cannot resolve the path says upstream moved the file. Both used
+// to exit through the same bare t.Fatalf, which is precisely why the caller had
+// nothing to classify them by.
+func run(ctx context.Context, t *testing.T, verdict, dir, name string, args ...string) string {
 	t.Helper()
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
+		// Logged BEFORE the Fatalf: t.Fatalf ends the test, and the make target
+		// needs this line in the captured output to know what it may say.
+		t.Log(verdict)
 		t.Fatalf("%s %s: %v\n%s", name, strings.Join(args, " "), err, out)
 	}
 	return string(out)
