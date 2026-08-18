@@ -544,7 +544,9 @@ to show.
 
 §4.2 sends every client that wants progress here, so what the frame does and does not promise
 belongs here rather than in one screen's design section. Four facts, each measured at the publish
-sites, and each one a thing the JSON shape does not say by itself.
+sites, and each one a thing the JSON shape does not say by itself — then **§5.5, which is not one of
+them**: it specifies a `failed` frame that no code emits yet, so the consumer can be built against
+authoritative names. §5.1 to §5.4 are measurements; §5.5 is a contract.
 
 ```jsonc
 {"instance_id": 2, "phase": "credits", "items_read": 2, "applied": 3, "total": 2}
@@ -570,7 +572,11 @@ running one from a dead server. §4.3's table is the only way to answer "did it 
 `last_full_sync_at`, which is written on success alone. This is recorded as a defect, not a design,
 in [`REVIEW-LOG.md` LS-152](../REVIEW-LOG.md).
 
-### 5.2 There are exactly four phases, and they are not a progress scale
+**This paragraph is what §5.5's `failed` frame is designed to falsify, and it has not falsified it
+yet.** Until a producer exists, everything above holds unchanged, and §4.3 stays the authority even
+after one does.
+
+### 5.2 There are exactly four phases today, and they are not a progress scale
 
 `containers` · `items` · `credits` · `done` — published at `internal/libsync/importer.go:213`,
 `:370`, `:443` and `:290` respectively. They are ordered, but `credits` is **skipped entirely** for
@@ -578,7 +584,10 @@ a source that reports no credits or is not a `CreditSource` (`:415-418`), so thr
 complete healthy run as readily as four.
 
 A phase is carried as the string the server sent. A client that has not heard of a phase should say
-less about the frame, not drop it.
+less about the frame, not drop it — which `progressCounts`
+(`web/src/lib/services.ts`) already does, rendering an unrecognised phase's counts under a `default`
+arm that declines to name it. **§5.5 specifies a fifth, `stopped`, which nothing emits yet**, so a
+client built against it must also handle a `stopped` that never arrives.
 
 ### 5.3 Only `credits` ever sends a `total`
 
@@ -604,3 +613,223 @@ sentence with real counts rather than a bar.
 not a fraction of anything. One item can carry several credits: the recorded frame above is a real
 run of two series where one had three credited people and the other had none, giving `applied: 3`
 against `total: 2`. The ratio that is meaningful there is `items_read / total`.
+
+### 5.5 `stopped` — the terminal failure frame, SPECIFIED BUT NOT BUILT
+
+🚩 **Nothing in this repository emits a `stopped` frame today, and §5.1 above is still the shipped
+behaviour: a failed import publishes nothing at all.** This subsection is the contract the producer
+will be built to, written ahead of it so the consuming arm has authoritative names to compile
+against rather than invented ones. **Do not read it as a description of what the server does** —
+`grep -rn '"stopped"' internal/ cmd/` returns nothing. When the producer lands, §5.1's 🚩 and §5.2's
+phase count are what it falsifies, and both say so in place.
+
+#### 5.5.1 The frame — one new `phase` value and NO new field
+
+It is the **same struct**, `internal/libsync`'s `Progress`: consumers parse one shape per event name,
+and a second shape under one name is how a client ends up with two decoders and one of them wrong.
+The frame gains **no field at all**. The only change is a fifth legal value of `phase`.
+
+```jsonc
+{"instance_id": 2, "phase": "stopped", "items_read": 41, "applied": 40}
+```
+
+| Field | On a `stopped` frame | Type | Notes |
+| --- | --- | --- | --- |
+| `instance_id` | **present** | integer | The instance whose import stopped. Same field, same meaning as every other phase. |
+| `phase` | **present**, always the literal `"stopped"` | string | The discriminator, and the whole of the new information. |
+| `items_read` | **present** | integer | Catalogue items read before the stop. Not a final count of anything — it is how far it got. |
+| `applied` | **present** | integer | Catalogue items in **committed** batches, i.e. rows that **stand**. §5.5.4 is why this is the load-bearing field. |
+| `total` | **absent** | — | `omitempty`, and only the `credits` publish site ever sets it (§5.3). A `stopped` frame is a different site, so absent — which means unknown, as it always does. |
+
+**There is no `reason` field, deliberately, and §5.5.5 owns that decision.** No upstream message, no
+status code, no error object, and no field for one to arrive in later without this section changing
+first.
+
+#### 5.5.2 The name is `stopped` because `failed` is TAKEN, in this product, with the OPPOSITE meaning
+
+⚠️ **Do not rename this to `failed`, now or later.** `failed` is already a member of `SyncPhase` in
+`web/src/lib/services.ts:752-753`, and `syncRefusal`'s `default:` arm returns it for the `500`
+"could not be started" fault with the consequence copy `NO_IMPORT_STARTED` (`:835`) — verbatim:
+
+> **`'No import started for this press, so the catalogue is untouched.'`**
+
+**That is the exact negation of what this frame means.** A terminal stream frame says the import
+*did* start, *did* run, and stopped partway — and per §5.5.4 the batches it committed **stand**, so
+the catalogue is emphatically *touched*. One word, one product surface, two opposite claims about the
+single fact a user most needs.
+
+🚩 **And the two vocabularies genuinely meet in one field, so this is a structural collision rather
+than a naming preference.** `syncNoteWithProgress` (`web/src/lib/services.ts:982-1020`) folds a
+stream frame into `SyncNote.phase` — it assigns `phase: 'finished'` on seeing `phase: "done"` — and
+`syncButtonLabel` and `syncButtonBlocked` then switch on that same field. A wire `failed` folded into
+that field would sit beside a refusal `failed` meaning the opposite, and every switch over it would
+be correct for one and wrong for the other. This project has already paid for that shape once: two
+constants named `outcomeSentUnknown` with different values, where a rename compiled clean because a
+call site silently rebound to its twin.
+
+**Why `stopped` and not the alternatives**, on the two tests that matter — does it collide, and does
+it claim more than the frame knows?
+
+| Candidate | Verdict |
+| --- | --- |
+| **`stopped`** | **Chosen.** No collision, and — decisively — it is the only candidate that does not assert *fault*. With no `reason` field (§5.5.5) the frame genuinely cannot tell a broken upstream from a clean shutdown, and a name that said "failed" would over-claim on every cancellation. |
+| `aborted` | Rejected, and not merely on taste: "abort" is the database word for **rollback**, and §5.5.4's whole point is that committed batches are *not* rolled back. It contradicts the frame's most important fact. |
+| `halted` | Rejected. Reads as stopped *by* something external, which is one cause of several. |
+| `interrupted` | Rejected. Implies an external cause and a resumable operation; a re-run is a **full** re-import, never a resume. |
+| `error` | Rejected. Asserts fault, like `failed`, and collides conceptually with the `ApiError`/`error`-code vocabulary §4.4 already owns. |
+| `import_failed` | Rejected. Relocates the collision rather than avoiding it — a reader still has to hold two senses of "failed" apart. |
+
+**One argument for `stopped` that does NOT hold, recorded so it is not repeated as support.** It has
+been said that shipped copy already reads *"the import stopped"*, so wire and prose would agree. They
+do not: `grep -n "stopped" web/src/lib/services.ts` finds the word only in doc comments, about a
+*stalled* readout (`:967-968`). No user-facing string in `services.ts` says it. The name is chosen on
+the two tests above, which stand on their own; the copy is the frontend's to write.
+
+**Recommendation for the SPA's own `failed`, which is the frontend thread's call and not this
+document's.** Renaming `SyncPhase.failed` is **no longer urgent** — this frame avoids it, so nothing
+is ambiguous today. It becomes worth doing at one specific moment: when the SPA folds `stopped` into
+`SyncNote.phase`, that single union will hold both vocabularies, and a reader will have `failed`
+(nothing started) beside `stopped` (started, then stopped) with no cue that the first is the stronger
+claim about the catalogue. The accurate replacement is **`not_started`**, because that is literally
+what its own `consequence` string says. Recorded as a recommendation; `web/` is untouched by this
+change.
+
+#### 5.5.3 `stopped` is terminal exactly as `done` is — for **one run**, and the stream has no run id
+
+**Confirmed, with one correction a consumer must build for.** `done` publishes once, at the end of
+`FullImport` (`internal/libsync/importer.go:290`), and nothing follows it for that run; `stopped`
+gets the same rule. A later **silence**, a socket drop, a reconnect, or a `stream.missed` frame
+therefore **cannot** downgrade a `stopped` a client has already seen — silence is `UNKNOWN` (§5.1),
+and unknown never overwrites a fact.
+
+⚠️ **A later non-terminal frame can, and legitimately does.** The frame carries `instance_id` and
+**no run identifier** — unlike `search.*`, which carries `search_id`. So a fresh `containers` frame
+for the same `instance_id` is not a retraction; it is a **second run starting** (§4's `POST`, or the
+bootstrap). The rule a client implements is therefore: *terminal until a non-terminal phase arrives
+for that `instance_id`, and that arrival begins a new run whose counters start over.* Two imports for
+one instance cannot overlap — `cmd/usarr/import.go`'s `beginImport` guard makes them mutually
+exclusive — so a client never has to hold two live runs for one id.
+
+⚠️ **The frame is deliverable at most once and may be lost.** `Hub.Publish` never blocks and drops a
+subscriber whose queue is full (`internal/httpapi/events.go:129`, `:166`); a client that reconnects
+past the buffer gets `stream.missed` (`:263-268`) and the `stopped` frame with it. **So this frame is
+better evidence, not authoritative evidence.** §4.3's table stays the authority on "did it succeed",
+and a client that has seen `stream.missed` must fall back to it rather than to the last frame it
+holds.
+
+#### 5.5.4 It must not read as success, and the batches that committed still stand
+
+**Confirmed against the tree.** `StampFullSync` is reached only after `rep.Completed = true`
+(`internal/libsync/importer.go:283-289`), so **`last_full_sync_at` does not move on any failure** —
+it is written on success alone, which is what makes §3's timestamp the positive evidence and this
+frame merely the fast notice.
+
+⚠️ **Committed batches are not rolled back.** `streamAndApply` commits per batch and every error path
+returns after the commits that already happened, so a stopped import leaves a **partially updated**
+catalogue. On §3 that is the `last_full_sync_at: null` **with** `work_count > 0` row of §3.2's
+table — a real state with a real meaning, not a contradiction to smooth over. The `applied` count on
+this frame is that same fact arriving early.
+
+So the copy has three jobs, and a client that drops any one of them is misreporting: **say it
+stopped**, **say how much stands** (`applied`), and **say the catalogue is not known to be
+complete**. Never "imported", never a tick, and never a count presented as a result. In particular it
+must not reuse the `failed` refusal's sentence: *"the catalogue is untouched"* is false here, which
+is §5.5.2 restated as copy.
+
+#### 5.5.5 There is NO reason field, and there is no upstream text anywhere on this frame
+
+**The frame carries no cause. The first version ships one phase value and zero new fields.**
+
+**The rule, first, because it outlives this version: no `import.progress` frame may ever carry an
+upstream message, response body, URL, status line, or any string derived from one.** That holds
+whether or not a cause field is ever added.
+
+**Why no field at all, rather than a field with a rule attached.** A field that no producer writes and
+no consumer reads is not a seam, it is unbuilt feature surface — and the *absence* of a field is a
+stronger guarantee than a rule about its contents, because there is nowhere for upstream text to land
+in the first place. `CLAUDE.md`'s "cut before you add" and "the seam ships, the feature does not" both
+point the same way. The frame's actual job is to make failure **distinguishable from silence**, which
+is LS-152's defect; one phase value does that completely.
+
+**This does not contradict ARCHITECTURE §17.3, because §17.3 already bounds itself.** Its verbatim
+requirement is scoped to one column — *"| Problem | **The actual error text**, verbatim, not "an
+error occurred" — **and nothing else.** The column holds one object: what the upstream said, or
+`—` |"* — and the paragraph immediately below draws the boundary: *"**The `State` column is UsArr's
+own words, in plain language.** The verbatim-upstream rule is right and it stops at the `Problem`
+column"*. **A progress phase is a State, not a Problem** — a machine value a client switches on,
+exactly the class §17.3 assigns to UsArr's own vocabulary. The frame was never covered by the
+verbatim rule.
+
+**And free text here would additionally break two rules that are not §17.3's.**
+
+1. **`reference/security.md` §5 forbids it.** Its deny-list redacts *"BEFORE any log line, audit row,
+   error message, **SSE payload** or support bundle is produced"*. This frame is an SSE payload by
+   construction.
+2. **The redactor that would have to clear it does not cover this case, in the exact package v0.1's
+   only catalogue source uses.** security.md §5 flags upstream **response bodies** as gap 1, and it is
+   open: `internal/kavita/errors.go:167`, `:174`, `:177`, `:179` assign the upstream body to
+   `APIError.Message` through `truncate` alone — **no redactor** — and `Error()` (`:95-113`) prints
+   it. Transport errors *are* redacted (`internal/kavita/client.go:374`, `:386` via `redactErr`),
+   which is what makes the body path easy to believe covered. Gap 2 compounds it: Kavita carries its
+   key in a **path segment** (`/api/Opds/{apiKey}/…`), and §5 says the shipped shape heuristic matches
+   that only by luck and *"must not be relied on"*. A cause fed from `err.Error()` inherits both.
+
+⚠️ **And the guard that looks like a bound is not one.** `cmd/usarr/import_e2e_test.go:519` sweeps the
+whole stream dump, but `assertNoSecret` (`cmd/usarr/e2e_test.go:581-593`) is `strings.Contains`
+against **secrets the test was told about**, on the error paths that suite happens to drive. It
+catches a known literal on a covered path — not an unknown secret, not an uncovered path, not the
+first unusual upstream error. "The handler only puts safe things in it" is a property of today's
+handler, not a bound on the field.
+
+**The precedent on this stream agrees.** `search.failed`, the only failure frame that exists, carries
+a fixed UsArr-authored sentence and an action (`internal/httpapi/search.go:152-156`), never upstream
+text.
+
+⚠️ **Where the operator sees the real error instead**, since the frame will not carry it: the
+**process log** (`FullImport` logs every failure with the instance id); **`sync_report`** rows for the
+per-container detail recorded before the stop; and the **Services health row** — its `Problem` column
+and §4.4's `500 internal` `message`, which is where §17.3's verbatim contract actually lives. Those
+surfaces are governed by security.md §5's redaction requirement, and gap 1 above is open on them too;
+closing it is that section's work, and this frame is deliberately not a fourth place to have to close
+it.
+
+##### 5.5.5.1 If a cause is ever added, it is THIS shape and no other
+
+Normative on *how*, deferred on *whether*. Adding it is a wire change and is written here first.
+
+The field would be **`reason`** — `string`, `omitempty`, present only on `phase: "stopped"` — and its
+value would be one member of the closed set below and **nothing else**. The user-facing sentence
+stays the client's, taken from this table, which is the shape §4.4 already uses for its REST `error`
+codes so a client has one vocabulary pattern rather than two. The test each member had to pass is
+**does it name a different fix**.
+
+| `reason` | What failed | Which paths map to it | What a client would say, and offer |
+| --- | --- | --- | --- |
+| `upstream_unreachable` | The source could not be reached, or did not answer in time. | Transport failures out of `Containers`/`StreamItems`, plus `internal/kavita`'s `ErrTimeout`, `ErrBreakerOpen`, `ErrWrongService`. | "UsArr could not reach this service." → `Test connection` |
+| `upstream_rejected` | It was reached and it refused. | `ErrUnauthorized` (401), `ErrForbidden` (403 — a valid key whose account lacks the role), `ErrValidation`, `ErrNotFound`, `ErrUnexpectedStatus`. | "This service refused the request." → `Update API key` |
+| `upstream_error` | It answered, but not with a usable catalogue. | `ErrServer` (5xx), `ErrDecode`, `ErrResponseTooLarge`. | "This service returned an error." → `Test connection` |
+| `credential_unavailable` | The **stored** credential would not open — nothing was sent upstream. | `g.entry` at `cmd/usarr/import.go:75-78`; one of §5.1's two pre-importer silences, and the cause §4.4 maps to `500 internal`. | "UsArr could not open the saved credential for this service." → `Update API key` |
+| `not_a_catalogue_source` | The instance has no catalogue to import. | `cmd/usarr/import.go:79-83`, the other pre-importer silence. **Same spelling as §4.4's `409`**, so one cause has one name across two surfaces. | "This service has no library to import." → `—` |
+| `local_store_error` | The **local replica** could not be written. Not the upstream's fault. | Every `im.Store.*` return in `FullImport`: `BindContainers`, `RecordSyncReport`, `ApplyCatalogueBatch`, `ApplyCredits`, `Analyze`, `StampFullSync`. | "UsArr could not write to its own database." → `—`; it is a disk or database problem and the log has it |
+| `cancelled` | Stopped deliberately — shutdown, or a cancelled context. | `ctx.Err()` on any path. Not a fault of either side, and not a reason to tell anyone to fix anything. | "The import was stopped before it finished." → `Run full sync now` |
+| `unknown` | It did not classify. | The floor, and **mandatory**: without it a handler meeting an unclassifiable error has two exits — invent a member, or reach for free text — and the second is what this whole rule exists to prevent. | "The import stopped before it finished." → `—` |
+
+**A value not in the table must be read as `unknown`**, never dropped and never rendered raw — §5.2's
+discipline for an unrecognised phase, applied to an unrecognised reason.
+
+**Until such a field exists, a client says the import stopped and says nothing about why.** Inventing
+a cause from the last phase seen, or from the counters, is how a disk error gets reported to a user as
+a broken API key.
+
+#### 5.5.6 What the producer owes when it lands
+
+Not a design, just the two guards that will not notice this frame on their own:
+
+* `internal/httpapi/fixture_shape_test.go`'s `importProgressFrame` is a **hand mirror** of `Progress`
+  and its own comment puts drift detection at *"the next regeneration"* of
+  `web/src/lib/__fixtures__/sse-frames.json`. Since §5.5.1 adds **no field**, that mirror needs no
+  change — which is one more reason the fieldless version is the cheap one.
+* **A healthy run produces no `stopped` frame**, so the recording cannot contain one — the same
+  position that test already records for `search.failed` and `stream.missed`. Its shape is therefore
+  unchecked by the fixture guard unless a test drives a real failure, and `assertNoSecret` over the
+  stream dump only proves anything on paths the suite actually fails.

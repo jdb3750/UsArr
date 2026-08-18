@@ -15489,3 +15489,155 @@ arms and its expander-opening fallback in `web/src/routes/services/+page.svelte`
 `git log -S 'return "Run full sync now"'` over `internal/httpapi/services.go`, which returns nothing
 — no commit has ever emitted the string. Option (1) was not taken, for the reason LS-140 gave: it
 would reopen a settled placement decision in order to satisfy a sentence.
+
+## LS-160 — the terminal import frame, specified ahead of its producer: named `stopped`, and carrying no cause at all
+
+**Applied as documentation only, deliberately.** LS-152 assessed the missing failure state and did
+not fix it, on the ground that a new `phase` value is a wire change other threads consume. This entry
+does the half that is not a wire change: it **specifies** the frame in `docs/reference/http-api.md`
+§5.5 so a consumer can be built against authoritative names, and changes no producer. Nothing in
+`internal/libsync`, `cmd/usarr`, `internal/httpapi` or `web/` moved, and `Progress` gains no Go field.
+`grep -rn '"stopped"' internal/ cmd/` returns nothing, and §5.5 leads with that fact so it cannot be
+mistaken for shipped behaviour (`CLAUDE.md`, "no invented status").
+
+### The name: `failed` was taken, in this product, with the opposite meaning
+
+**Verified first-hand rather than taken on report, and it is worse than a clash of taste.**
+`SyncPhase` in `web/src/lib/services.ts:752-753` already has a `failed` member, and `syncRefusal`'s
+`default:` arm (`:904-916`) returns it for the `500` "could not be started" fault with the consequence
+constant `NO_IMPORT_STARTED` (`:835`), verbatim:
+
+> `'No import started for this press, so the catalogue is untouched.'`
+
+**That is the exact negation of the stream frame's meaning.** A terminal stream frame says the import
+*did* run and stopped partway, and its committed batches **stand** — the catalogue is touched. Same
+word, same product surface, opposite claims about the single fact a user most needs.
+
+🚩 **And the two vocabularies meet in one field, which makes it structural.**
+`syncNoteWithProgress` (`:982-1020`) folds a stream frame into `SyncNote.phase` — it assigns
+`phase: 'finished'` on seeing the wire's `done` — and `syncButtonLabel` / `syncButtonBlocked`
+(`:1023-1032`) then switch on that same field. A wire `failed` folded there would sit beside a refusal
+`failed` meaning the opposite, and every switch over the union would be right for one and wrong for
+the other. That is the `outcomeSentUnknown` shape this project has already paid for once.
+
+**`stopped` chosen, on two tests: does it collide, and does it claim more than the frame knows.**
+The second test is what decides it. With no cause field (below), the frame **cannot** distinguish a
+broken upstream from a clean shutdown — so `failed`, `error` and `aborted` all over-claim on every
+cancellation, and `stopped` is the only candidate that asserts exactly what is known. `aborted` is
+rejected on a second and independent ground: "abort" is the database word for **rollback**, and the
+frame's most important fact is that committed batches are *not* rolled back. `halted` and
+`interrupted` both imply an external cause, and `interrupted` additionally implies resumability — a
+re-run is a **full** re-import, never a resume. `import_failed` relocates the collision instead of
+avoiding it.
+
+⚠️ **One argument offered in support does not hold, and §5.5.2 records it as not holding.** It was
+put that shipped copy already reads *"the import stopped"*, so wire and prose would agree.
+`grep -n "stopped" web/src/lib/services.ts` finds the word only in doc comments about a *stalled*
+readout (`:967-968`); no user-facing string says it. The name stands on the two tests above, which do
+not need it.
+
+**The SPA's own `failed` — recorded as a recommendation, not touched.** `web/` is the frontend
+thread's file. The rename is **no longer urgent**, because this frame avoids the collision outright;
+it becomes worth doing at one specific moment — when the SPA folds `stopped` into `SyncNote.phase`,
+that union will hold both vocabularies at once. The accurate replacement is **`not_started`**, which
+is literally what its own `consequence` string says.
+
+### The cause: no field at all, and the rule that outlives the decision
+
+**Decided: the first version carries NO `reason` field.** The brief allowed either a classified
+enumeration or nothing; the consuming thread had already banked that it will render no cause until
+the vocabulary settles, and no raw upstream text under any circumstances.
+
+**Why nothing beats a classified field shipped now.** The frame's job is to make failure
+**distinguishable from silence**, which is LS-152's actual defect, and one phase value does that
+completely. A field no producer writes and no consumer reads is not a seam, it is unbuilt feature
+surface — `CLAUDE.md`'s "cut before you add" and "the seam ships, the feature does not". And the
+**absence** of a field is a strictly stronger guarantee than a rule about its contents: there is
+nowhere for upstream text to land, so the leak is not governed, it is impossible. It also costs
+nothing downstream — §5.5.6 notes that `internal/httpapi/fixture_shape_test.go`'s hand-mirror
+`importProgressFrame` needs no change at all, because no field was added.
+
+**The rule is written anyway, because it outlives this version:** no `import.progress` frame may ever
+carry an upstream message, response body, URL, status line, or any string derived from one. §5.5.5.1
+then specifies, normatively, the only shape a cause may take if one is ever added — `reason`,
+`omitempty`, one member of an eight-member closed set, with the user-facing sentence supplied
+client-side from the table, the same shape §4.4 already uses for its REST `error` codes.
+
+**The §17.3 tension resolves inside §17.3, with no trade-off to make.** Its verbatim requirement is
+scoped to one column — *"| Problem | **The actual error text**, verbatim, not "an error occurred" —
+**and nothing else.** …"* — and the paragraph immediately below draws the boundary itself: *"**The
+`State` column is UsArr's own words, in plain language.** The verbatim-upstream rule is right and it
+stops at the `Problem` column"*. A progress phase is a **State**: a machine value a client switches
+on, which is the class §17.3 explicitly assigns to UsArr's own vocabulary. The frame was never
+covered.
+
+**Two further measurements, either of which alone would rule free text out.**
+
+1. `reference/security.md` §5's deny-list redacts *"BEFORE any log line, audit row, error message,
+   **SSE payload** or support bundle is produced"*. This frame is an SSE payload by construction.
+2. **The redactor free text would have to clear does not cover the case, in the exact package v0.1's
+   only catalogue source uses.** security.md §5 flags upstream **response bodies** as gap 1 and it is
+   open: `internal/kavita/errors.go:167`, `:174`, `:177`, `:179` assign the upstream body to
+   `APIError.Message` through `truncate` alone — **no redactor** — and `Error()` (`:95-113`) prints
+   it. Transport errors *are* redacted (`internal/kavita/client.go:374`, `:386` via `redactErr`),
+   which is exactly what makes the body path easy to believe covered. Gap 2 compounds it: Kavita
+   carries its key in a **path segment** (`/api/Opds/{apiKey}/…`), where §5 says the shipped shape
+   heuristic matches it only by luck and *"must not be relied on"*.
+
+⚠️ **And the guard that looks like a bound is not one.** `cmd/usarr/import_e2e_test.go:519` sweeps the
+whole stream dump, but `assertNoSecret` (`cmd/usarr/e2e_test.go:581-593`) is `strings.Contains`
+against **secrets the test was told about**, on the error paths that suite happens to drive. It
+catches a known literal on a covered path — not an unknown secret, not an uncovered path, not the
+first unusual upstream error. "The handler only puts safe things in it" is a property of today's
+handler and not a bound on the field. This was the prior the brief brought, and the measurement
+confirms it.
+
+**The precedent on this stream agrees.** `search.failed`, the only failure frame that exists, carries
+a fixed UsArr-authored sentence and an action (`internal/httpapi/search.go:152-156`), never upstream
+text.
+
+**Where the operator reads the real error instead**, named in §5.5.5 so the information is relocated
+rather than lost: the process log, `sync_report`, and the Services health row with §4.4's
+`500 internal` `message` — the surfaces §17.3's verbatim contract actually governs. security.md §5's
+gap 1 is open on those too; closing it is that section's work, and the frame is deliberately not a
+fourth place to have to close it.
+
+### The three semantics the consuming thread stated, each checked against the tree
+
+| Stated | Verdict | Measurement |
+| --- | --- | --- |
+| Terminal exactly as `done` is; a later silence or socket drop cannot overwrite it | **Confirmed, with a correction** | `done` publishes once at `internal/libsync/importer.go:290` and nothing follows for that run. But the frame carries **no run id** — `instance_id` only, unlike `search.*`'s `search_id` — so a later *non-terminal* frame for the same instance is a **second run**, not a retraction. §5.5.3 states it as *terminal until a non-terminal phase arrives for that `instance_id`*. `beginImport` (`cmd/usarr/import.go`) makes two runs for one instance mutually exclusive, so a client never holds two live runs |
+| Must not read as success: `last_full_sync_at` does not move, committed batches stand, which is §3's `null` + non-zero count row | **Confirmed exactly** | `StampFullSync` is reached only after `rep.Completed = true` (`internal/libsync/importer.go:283-289`), so the timestamp is written on success alone; `streamAndApply` commits per batch and every error path returns after the commits already made. That is §3.2's fourth row verbatim — `last_full_sync_at: null` with `work_count > 0`. §5.5.4 adds the copy consequence: the `failed` refusal's *"the catalogue is untouched"* is **false** here |
+| If the frame carries a reason the consumer renders it; if not, it says the import stopped without inventing a cause | **Confirmed, and now unconditional** | With no `reason` field, the safe branch is the only branch — permanently, rather than at a handler's discretion. §5.5.5.1 keeps the vocabulary for the day one is added, and adds that an **unrecognised** value must also be read as `unknown`, never rendered raw |
+
+**A fourth caveat the stated semantics did not carry, and a consumer needs.** `Hub.Publish` never
+blocks and **drops** a subscriber whose queue is full (`internal/httpapi/events.go:129`, `:166`); a
+reconnect past the buffer yields `stream.missed` (`:263-268`). The frame is therefore deliverable at
+most once and is losable. §5.5.3 says so and keeps §4.3's REST pair as the authority on "did it
+succeed" — the frame is a faster notice, not a replacement.
+
+**The third pre-importer silence gets no treatment, correctly.** `cmd/usarr/import.go:111-118` returns
+a nil `ProgressFunc` when the hub is unwired, and the import then runs **to success** in silence. That
+is not a failure and must never be published as one; §5.1 already covers it.
+
+### No ADR
+
+The cause decision closes nothing that was open: §17.3 already bounds verbatim text to the `Problem`
+column, and `reference/security.md` §5 already requires redaction before any SSE payload. §5.5.5 is
+those two rules applied to a new surface, not a new choice against a live alternative — and the
+version that ships adds no field, so there is no alternative foreclosed at all. The **name** decision
+is recorded in §5.5.2 with its reasoning inline, which is where a future tidier will meet it. No
+number was allocated.
+
+### Scope refused, and the bound on this entry
+
+`internal/libsync`'s `Progress` is unchanged — no Go field was added, because a field on that struct
+is published the moment a publish site sets it, and the producer belongs to another thread.
+`web/src/lib/services.ts` is unchanged — the `SyncPhase.failed` rename is the frontend thread's call
+and is recorded as a recommendation only.
+
+**Bounded, honestly.** This entry is prose about code it did not change. `make check` on a
+documentation commit attests that the tree still builds and that no credential-shaped literal was
+added; it cannot attest that the section is *correct*. Every claim above was re-read at the cited file
+and line before it was written — including the one relayed claim that turned out not to hold — and
+that reading, not the gate, is what stands behind it.
