@@ -16415,3 +16415,121 @@ work-saving measure, the debounce constant — were all made at `917ddda` and ar
 properly needs a hand-typed run in a browser with the inter-keystroke gaps recorded, which is a
 measurement task and not this one. The row now says it cannot be reproduced from a uniform cadence,
 which is enough for the next reader not to trust it.
+
+---
+
+## LS-200 — the volume walk's cost is unknown, and no amount of reading this repo will settle it
+
+**Raised, not fixed — because it is not fixable here.** The deliverable is a probe the owner runs
+against his own Kavita, `kavita-volume-walk-probe.sh` at the repo root, and this entry is the
+criterion written down **before** it runs.
+
+**What is unknown.** `internal/libsync`'s package doc already names the gap: *"what is still NOT
+fetched for Kavita is the per-series volume and chapter walk — one call per series, the shape §7.2
+budgets for Sonarr's episodes — and that is where `work_comic_issue` and `media_file` get their
+rows."* That sentence contains an assumption the tree cannot check. `GET /api/Series/volumes` returns
+`VolumeDto[]`; `VolumeDto.chapters` is `ChapterDto[]`; `ChapterDto.files` is `MangaFileDto[]`, and
+`MangaFileDto` is where `filePath`, `bytes`, `pages` and `extension` live. **If the handler populates
+`files[]`, the walk is one request per series. If it returns null or an empty array, the walk is one
+request per CHAPTER**, and a library whose series average ten chapters costs ten times what §7.2
+budgeted. That is not a tuning difference; it changes whether the walk belongs in phase B at all.
+
+**Why the repo cannot answer it, in the words this package already uses.** `internal/libsync/doc.go`:
+*"A SPEC TELLS YOU A FIELD EXISTS. IT DOES NOT TELL YOU WHICH CODE PATH POPULATES IT, OR WHETHER ANY
+DOES."* Both vendored specs declare `chapters[].files[]` and neither says who fills it. The same doc
+records what happened the last time that gap was closed by reading a schema instead of a writer —
+`SeriesDto.comicVineId`, read as a matcher-written identifier when Kavita's plain scanner in fact
+fills it out of `ComicInfo.xml`'s free-text `<Web>` element. This is the same class of question and
+it gets the same treatment: measure it.
+
+**Four more questions ride along, because the walk is the only call that can answer them and a
+second round trip to the owner is the expensive part**, not a second `jq` filter:
+
+| # | Question | What it decides |
+|---|---|---|
+| **1** | Does `chapters[].files[]` arrive populated? | one request per series, or one per chapter |
+| **2** | Are `filePath` values absolute or relative? | whether `media_file.path` — keyed `(service_instance_id, path)` per ARCHITECTURE §6.1 — puts the owner's host filesystem layout in UsArr's database |
+| **3** | How many files per series? | the true `media_file` row count at the library's real size |
+| **4** | Are `publicationStatus` and `totalCount` populated on a **free** instance? | whether ARCHITECTURE §6.1's honest *"43 of 60"* denominator is reachable at all, or whether comics render a bare count. ADR-0035 §1 already established that free Kavita's identifier fields are null; whether the same is true of the *counts* has never been checked |
+| **5** | What does one call cost in wall clock? | whether a 151-series walk is seconds or minutes, measured rather than guessed |
+
+**The criterion, stated in advance so the result is a result and not an impression** — the shape
+ADR-0035 §2 used, and the reason its §2a is recordable. Question 1 **PASSES** if every sampled
+chapter carries a non-empty `files[]`; **FAILS** if none does; and any split is **MIXED**, which the
+probe refuses to round into either answer and reports as *"do not design for either shape"*. The
+probe prints `PASS` / `FAIL` / `MIXED` / `INCONCLUSIVE` per question and never grades on a curve.
+
+**Endpoints verified against `api/specs/kavita-v0.9.0.2.json`** — the floor spec, the release the
+owner runs — before a line of the script was written, not after: `GET /api/Series/volumes?seriesId=`
+(one `int32` query parameter, returns `VolumeDto[]`), `GET /api/Series/metadata?seriesId=` (same,
+returns `SeriesMetadataDto` carrying `publicationStatus`, `totalCount`, `maxCount`),
+`POST /api/Series/all-v2` with `PageNumber` / `PageSize` / `context` in the query and
+`SeriesFilterV2Dto` in the body, and `GET /api/Health`. Auth is the single global `AuthKey` scheme,
+`x-api-key` in a header, which `internal/kavita/doc.go` already pins in both specs — so the probe
+needs no token dance and `POST /api/Plugin/authenticate` is not used.
+
+**The output constraint is the whole reason this is a script rather than five questions asked in
+chat.** The answers live inside the owner's private library, and the questions can all be answered
+by *shapes*: the probe prints counts, distributions and classifications, and **never** the Auth Key,
+the base URL, a library name, a series title or a file path. Where a path's shape is the finding, it
+prints `absolute (starts with /)` or `relative`, a mount-like/not classification against a stated
+list of mount roots, and length and depth distributions — never the string. Series are named by
+sample slot, never by id. There is deliberately **no `--api-key` flag**: a credential on a command
+line lands in the shell history and the process table, so the key comes from `KAVITA_API_KEY` or a
+silent prompt, travels only in the `x-api-key` header, and is written to no file. `curl`'s own error
+text is swallowed rather than printed, because `*url.Error`'s problem is `curl`'s problem too — the
+message carries the URL.
+
+**Where it lives, and why there.** Repo root, following the precedent `DEVELOPMENT.md` §12 records:
+the owner's checkout already carries a `kavita-watermark-probe.sh` in its root. That one was never
+committed, which is why its wording had to be reconstructed from ADR-0035 §2a rather than read. This
+one is tracked, so the next probe can be read instead of reconstructed. **Re-run it** when the Kavita
+release moves off `0.9.0.2`, when the owner's library grows enough to move the row estimate, or
+before any commit that changes how `media_file` rows are produced.
+
+## LS-201 — what `make check` green is worth on this change, stated rather than implied
+
+**A shell script and a log entry. `make check` compiles no line of either.** `gofumpt`,
+`golangci-lint`, `go build -tags=bench`, `go test` and `govulncheck` do not read `.sh` files, and
+`gitleaks` reads this entry only for credential-shaped strings — of which there are none, the probe
+holding no key and no fixture key. The green attests that **the rest of the tree still builds and
+passes**, which on a change that touches no Go is exactly the claim it should make and no larger one.
+
+**So the script was checked by three other means, named so the next reader can repeat them.**
+`shellcheck` **is not installed in this container**, and that is recorded as a gap rather than
+skipped past — anyone with it on their box should run it. Instead: `bash -n` for syntax; a careful
+read against the vendored spec for every endpoint, parameter and enum value the script sends
+(`combination: 1`, `entityType: 0`, `sortField: 1` and `context: 1` are
+`internal/kavita/resources.go`'s constants, each one a member of the corresponding integer enum in
+the vendored spec — `FilterCombination.And`, `FilterEntityType.Series`, `SortField`, `QueryContext.None`);
+and **a dry run against a fake Kavita**, written for the purpose, in every shape the real one might
+take. That stub is **not committed** — it is ~90 lines of `http.server` that exists to answer what
+UsArr asks, it carries a hard-coded fake key that `gitleaks` would rightly object to, and a Python
+fixture with no gate step reading it is a file that rots. Re-creating it is an hour; the eight shapes
+it has to drive are the table below.
+
+Eight runs, and each one changed the script:
+
+| Shape driven | What it caught |
+|---|---|
+| `files[]` populated | the happy path, `PASS` |
+| `files[]` JSON `null` | `FAIL` renders, and sections 3 and 4 say `UNANSWERED` instead of dividing by zero |
+| `files[]` populated on half the chapters | `MIXED` renders and refuses to pick a side |
+| `401` on every authenticated call | the run stops at section 0 with `INCONCLUSIVE`, exit 1, and no URL in the message |
+| host unreachable | same, and `curl`'s message is swallowed as designed |
+| no `Pagination` response header | the sampler falls back to one page and says the total is unknown |
+| `jq` removed from `PATH` entirely | the reduced mode answers questions 1 and 3 and marks 2, 4 and 5 `UNANSWERED` |
+| `--api-key` passed on the command line | refused, with the reason |
+
+🔥 **Two real defects came out of that, both of which would have fired on the owner's first run.**
+First, `--fail-with-body` made `curl` exit non-zero on a 4xx, so the probe reported `000 no HTTP
+response` for a **401** — the one status whose remedy is a sentence long ("Manage Auth Keys") — and
+threw away every other status with it. Second, and worse, `set -o pipefail` turned `grep`'s
+*no-match* exit 1 into a fatal error: in the no-`jq` mode, a library where **no** chapter carried
+`files[]` — the `FAIL` case, the single most important result the probe can produce — killed the
+script mid-table with no output and exit 1, indistinguishable from a crash. "No match" is an answer
+here, not a failure, and the counting helper now says so at the site.
+
+⚠️ **What the fake server cannot prove.** It answers what UsArr *asks*, so it validates the script's
+parsing, arithmetic, redaction and failure handling — and nothing at all about what Kavita's real
+handler does. **That is the entire question**, and it is why the script exists.
