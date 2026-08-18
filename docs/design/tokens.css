@@ -527,8 +527,23 @@
   --row-pad-x:      var(--space-5); /* 12px — NOT --space-6; measured, see above */
 }
 
+/* ⚠️ THERE IS NO TOOLBAR-HEIGHT TOKEN, and its absence is the design, so nobody
+ * restores it as an obvious omission. `--toolbar-h` was 40px here, and it had
+ * two jobs: a minimum height for the two bars, and the sticky or fixed offset
+ * for everything sitting under the shell top bar. The second job is what broke
+ * it — implementations hand-fitted the value to a two-line bar, and a
+ * three-line bar overran it by a measured 29px, painting the bar over what sat
+ * below and hanging that element the same 29px past the viewport. The
+ * application now sizes both bars from their own contents and puts everything
+ * that used to be offset into the scrolling row of a viewport-height grid, so
+ * no offset needs the number. Do not reintroduce it, or a replacement for it,
+ * to fix an offset. Retired 2026-08-18; web/src/app.css carries the same
+ * warning at the point of use. The mockups under docs/design/mockups keep a
+ * local --toolbar-h of their own: they are a static prototype, they use it as
+ * a `minmax()` MINIMUM rather than a fixed track, and nothing here binds them.
+ * --------------------------------------------------------------------------- */
+
 :root {
-  --toolbar-h:  40px; /* page toolbar and sticky table header                  */
   --nav-item-h: 32px; /* sidebar entry                                         */
 
   --control-h-sm: 28px; /* compact button                                      */

@@ -14645,3 +14645,80 @@ One residue inside the mockups, found rather than inherited from the survey: the
 `/api/v3/system/status`. That is an ecosystem fact rather than a claim about the selected install,
 the success panel beside it now forks by install, and rewriting the failure panel over Kavita would
 destroy the finding it exists to show. It is left as prose about the ecosystem, deliberately.
+
+# VN9-10 — `--toolbar-h` retired from the design system, and the mockups' "fixed track" defect was already fixed
+
+**Date:** 2026-08-18. **Prefix:** `VN9-`, continuing from
+[`VN9-09`](#vn9-09--the-two-install-mockup-drew-v01-as-sonarr-and-radarr-adr-0041-makes-it-kavita-and-the-argument-inverted-with-the-rows),
+which was the highest `VN9-` **entry** on `main` when this was written, re-read immediately before
+writing rather than remembered. Appended, never renumbered.
+
+## What was wrong
+
+`docs/design/tokens.css` still published `--toolbar-h: 40px` as a role of the design system after the
+application had removed the need for it entirely. `bafeb9b` made `.app` a viewport-height grid whose
+second row is the only scrollport and sized both bars from their own contents, so nothing in
+`web/src/` reads a toolbar height any more and `web/src/app.css` deliberately declares no such token.
+A token the design file names and the application refuses to port is not a harmless leftover: the
+parity suite reports exactly that as drift, and it was only silent because an allowlist entry in
+`web/src/lib/tokenparity.test.ts` was holding it open with its own retirement condition written in.
+
+## What was applied — as one inseparable commit, across two threads' files
+
+The token is deleted from `docs/design/tokens.css` §Sizing, and the matching `TOKENS_ONLY_ALLOWED`
+entry is deleted from `web/src/lib/tokenparity.test.ts` in the **same commit**. The `web/` line was
+deleted with the frontend thread's recorded authorisation, which named that single line.
+
+**Neither half is separable, and this was proven rather than asserted.** Both failure directions were
+fired deliberately on this tree before the commit:
+
+- Entry kept, token deleted → `tokenparity.test.ts` fails at line 496 with
+  `--toolbar-h is allowlisted but tokens.css no longer declares it` — **1 failed | 12 passed**.
+- Token kept, entry deleted → the parity walk fails with
+  `--toolbar-h: tokens.css 40px, app.css (absent)` in **all six** density × theme states —
+  **6 failed | 7 passed**.
+- Both deleted → **13 passed**, which is the state committed.
+
+`tokens.css` does not simply lose a line. A warning takes its place, matching the one `app.css`
+already carries at the point of use, so the token is not restored later as an obvious omission: what
+the two jobs were, that the second one is what broke it, and that the measured overrun of a
+hand-fitted two-line value by a three-line bar was 29px.
+
+## The claim that was checked rather than trusted, and found false
+
+This pass was told the mockups *"still carry the old fixed-track shape and therefore the overlap
+defect"*. **They do not, and nothing was changed there.** `docs/design/mockups/usarr.css:451` and the
+generated `prototype.html:530` both read
+`grid-template-rows: minmax(var(--toolbar-h), auto) minmax(0, 1fr)`, with the comment directly above
+recording the fixed track as a bug it had already fixed — the same fix `SW-15`(4) logged when it was
+made. The mockups were the file that fixed it **first**; `web/src/app.css` was the one carrying the
+fixed track until the frontend thread ported the fix and then went further by removing the number.
+The deleted allowlist entry asserted the opposite (*"the mockups still carry the defect with it"*),
+and that sentence was wrong when it was written; it leaves with the entry.
+
+## What was deliberately not done
+
+**The mockups keep their own `--toolbar-h`, declared at `usarr.css:129` and consumed in about ten
+places.** Retiring a role from the design system does not oblige a static prototype to drop a local
+variable: the mockups are not the application, they use it as a `minmax()` **minimum** rather than as
+a fixed track or an offset, so it carries none of the liability the app's copy did, and removing it
+would mean re-deriving ten call sites across two files for no rendered difference. It is recorded in
+the `tokens.css` warning as a local of the prototype rather than a token of the system. If a later
+pass wants it gone, the work is mechanical and the reason would be tidiness, not correctness.
+
+## The gates
+
+Both were run on this tree, with `GOCACHE` and `GOLANGCI_LINT_CACHE` isolated under the scratchpad
+and neither shared cache cleaned.
+
+`make design` — **exit 0**, ending `all design checks pass`. `make check` — **exit 0**, ending
+`check: OK`, over 13 Go packages (`ok` on every one) and 13 web test files / **489 tests passed**;
+`govulncheck v1.7.0` asserted against the pin reported **no vulnerabilities**, `pnpm audit` reported
+none.
+
+**What neither gate can see.** `make design` renders the mockups and never opens `tokens.css`; the
+parity suite reads `tokens.css` and `app.css` and never opens the mockups. So nothing mechanical
+relates the design system's tokens to the prototype's locals in either direction — the decision above
+is unguarded by construction, and a future divergence between them is a reading job. What was
+verified by reading: every one of the 22 `--toolbar-h` occurrences under `docs/design/mockups/`, and
+the five `app.css` comments that mention the token by name to explain its absence.
