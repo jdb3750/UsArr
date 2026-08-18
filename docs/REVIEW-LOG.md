@@ -14305,3 +14305,118 @@ default**, investigated and reported verbatim, and the gate is never called pass
 red; "cache poisoning" is not an available explanation unless it can be demonstrated on the tree in
 hand, and **"unexplained" is the honest word otherwise**. None of that was exercised on this run,
 which is a fact about the run and not evidence about the mechanism.
+
+---
+
+# FLOORPIN-01 — `spec-drift`'s floor was a pin nobody checked the provenance of, and its OK banner read the same either way
+
+**Date:** 2026-08-18. **Tree:** detached `git worktree` off `origin/main`, written and fired at
+`90cd580`, rebased onto `af5372d` and re-gated there.
+**One finding, and the fix already existed in this file.** `PINSRC-01` gave `require_tool` a banner
+that says whether a tool's version pin held or was moved on the command line. `make spec-drift`
+ships the same shape of claim about a *floor* and never got the same treatment, so the target whose
+entire purpose is refusing a vacuous green had a green that could not describe its own invocation.
+
+## FLOORPIN-1 The banner could not tell "the floor held" from "someone moved the floor"
+
+`SPEC_DRIFT_FLOOR ?= 1` is overridable, as it should be. But the closing banner interpolated the
+floor and said nothing about where the number came from, so a run that demanded one drift check and
+got it, and a run that demanded none and got none, differed by **one character**.
+
+Fired both ways against the **unchanged** `Makefile` at `90cd580` first, because a guard that fires
+identically before and after has proven nothing. Verbatim:
+
+```
+$ USARR_SPEC_DRIFT=1 make -f <git show HEAD:Makefile> spec-drift
+spec-drift: OK — 1 drift check(s) actually ran and passed (floor 1).
+
+$ USARR_SPEC_DRIFT=1 make -f <git show HEAD:Makefile> spec-drift \
+      SPEC_DRIFT_FLOOR=0 SPEC_DRIFT_PREFIX=TestNothingMatchesThis
+spec-drift: OK — 0 drift check(s) actually ran and passed (floor 0).      exit 0
+```
+
+The clause that would have said "somebody moved the floor" is absent from **both**, which is the
+control: the difference after the fix is the fix, not the invocation.
+
+**The second one is worse than it looks, and this is the part worth keeping.** It makes **zero
+network calls** — `go test -list` never executes, and a `-run` matching nothing exits 0 without
+dialling — so it is not even slow enough to arouse suspicion. It is also not distinguishable from a
+legitimate configuration: a reader who greps the `Makefile` finds `SPEC_DRIFT_FLOOR ?= 1` and has no
+way to learn that the `0` in the banner is not it.
+
+**APPLIED.** After, same two invocations, same tree, verbatim:
+
+```
+$ USARR_SPEC_DRIFT=1 make spec-drift
+spec-drift: OK — 1 drift check(s) actually ran and passed (floor 1, asserted against the pin).
+
+$ USARR_SPEC_DRIFT=1 make spec-drift SPEC_DRIFT_FLOOR=0 SPEC_DRIFT_PREFIX=TestNothingMatchesThis
+spec-drift: OK — 0 drift check(s) actually ran and passed (floor 0, asserted against an OVERRIDDEN
+pin (SPEC_DRIFT_FLOOR=0 from the command line SPEC_DRIFT_PREFIX=TestNothingMatchesThis from the
+command line) — NOT the floor and prefix this Makefile ships).
+```
+
+(Line-wrapped here for the margin; the recipe emits one line.) Overriding is still **allowed** — a
+floor is a legitimate thing to move while bisecting, and a guard that answered this by refusing would
+have traded a banner that lies for a gate that obstructs. It is reported, not rejected. The floor
+held on the first invocation, and that run did reach `github.com`: both refs resolved
+`src/Prowlarr.Api.V1/openapi.json` to blob `134d31d7df5e80714c454a6224e7449df512c55e`.
+
+## FLOORPIN-2 `pin_note` was generalised by one argument, not copied
+
+`moved_pins` was already fully generic — it asks `$(origin)` of a list of names and reports the
+movers. Only `pin_note`'s tail was tool-specific, ending on the literal word *version*. So the tail's
+noun became **arg 2**, and `require_tool`'s two banners pass `version` explicitly; their output is
+byte-identical to before. `spec-drift` passes `floor and prefix`. **Three call sites, one mechanism.**
+
+Copying the clause was the obvious alternative and was rejected on the standard this repo already
+applies to duplicated definitions: `d10ca98` had just finished collapsing the drift prefix from three
+definitions to one *because* the three had desynchronised and made the failure advice circular.
+Adding a second provenance clause four weeks later would have re-run that. The copy nobody edits is
+the one still lying next month.
+
+## FLOORPIN-3 What else the banner's honesty rests on — enumerated, not assumed
+
+The brief asked whether `SPEC_DRIFT_RUN` needed the same treatment. It does not, and the reason is
+that **`d10ca98` already closed it**: `override SPEC_DRIFT_RUN := ^$(SPEC_DRIFT_PREFIX)` makes the
+command line inert. Confirmed by firing it — `make spec-drift SPEC_DRIFT_FLOOR=0
+SPEC_DRIFT_RUN='^TestNothingMatchesThis'` still ran the real drift check and reported `1 drift
+check(s)`, so the brief's original reproduction no longer reproduces through that lever. It is
+deliberately **excluded** from `SPEC_DRIFT_PINVARS`: `$(origin)` answers `override` for it on every
+run, so listing it would flag every run as overridden, and a banner that cries wolf fails the same
+way as one that stays silent.
+
+Every variable the recipe interpolates was checked rather than assumed:
+
+| Variable | In `SPEC_DRIFT_PINVARS`? | Why |
+|---|---|---|
+| `SPEC_DRIFT_FLOOR` | **yes** | the banner quotes it; it *is* the claim |
+| `SPEC_DRIFT_PREFIX` | **yes** | defines what counts as a drift check — the other half of the vacuous green above, and the OK banner does not print it |
+| `SPEC_DRIFT_RUN` | no | `override`; inert from the command line, and would flag every run |
+| `GOTESTFLAGS` | no | cannot make the green false. Fired: `GOTESTFLAGS='-run ^ZZZNope$'` still reported `1 drift check(s)` because the recipe's own `-run` comes after it, and `GOTESTFLAGS='-skip .'` gave `FAILED — 0 drift check(s) ran, floor is 1` at exit 2. It fails **closed**. |
+| `GO` | no | the banner makes no claim about which toolchain |
+
+`-count=1` remains **after** `$(GOTESTFLAGS)` in the run line, where `d10ca98` deliberately put it so
+an override cannot drop it. Verified in the artefact, unmoved.
+
+⚠️ **The FAILED lines quote the floor without the clause, on purpose.** Raising the floor on the
+command line still produces ``FAILED — 1 test(s) carry the `TestSpecDrift` prefix, floor is 5`` with
+cause (c) pointing at the `Makefile`. That is a lesser misdescription and it was left alone twice
+over: a red establishes nothing whichever floor produced it, and `d10ca98`'s failure text landed
+hours ago in response to a live review. Recorded rather than fixed.
+
+ℹ️ **`Makefile:495`'s stale quote, left for this thread by the `§11 rule 4` change above, is
+closed.** That change's own note said it was out of scope there and that a `SPEC_DRIFT_FLOOR` edit
+would land in the same comment block. It was checked rather than taken on trust: the block **quotes**
+the deleted epilogue rather than merely referring to it, so the first branch of that note's own
+instruction applies. Re-quoted in full from the commit that had it — `` `a failure here is NEWS, not
+a broken build: it means upstream moved.` (`Makefile:555` at `d81a66f`) `` — and marked as the
+historical form, with a pointer to the four verdict readings that replaced it. The example survives;
+the reader who greps now finds the string attributed to a commit instead of missing from the recipe.
+
+ℹ️ **One thing found and not fixed.** With two movers, `moved_pins` runs its clauses together —
+`…from the command line SPEC_DRIFT_PREFIX=… from the command line`, no separator. Unambiguous but
+run-on, and now reachable in the tool banners too, since `GOFUMPT_PINVARS` and friends already list
+two names each. Pre-existing behaviour from `PINSRC-01`, not introduced here, and a separator is a
+change to every banner in the gate rather than to this one. Left for whoever touches `moved_pins`
+next.

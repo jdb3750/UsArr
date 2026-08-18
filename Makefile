@@ -255,9 +255,17 @@ GITLEAKS_PINVARS    := GITLEAKS_MODULE GITLEAKS_VERSION GITLEAKS_WANT
 moved_pins = $(strip $(foreach v,$(1),\
     $(if $(filter-out file,$(origin $(v))),$(v)=$($(v)) from the $(origin $(v)))))
 
-# usage: $(call pin_note,<names of the pin variables>) -> the clause require_tool
-# puts after the version it measured. Says which pin was moved and from where.
-pin_note = $(if $(call moved_pins,$(1)),asserted against an OVERRIDDEN pin ($(call moved_pins,$(1))) — NOT the version this Makefile ships,asserted against the pin)
+# usage: $(call pin_note,<names of the pin variables>,<noun completing "NOT the
+# ___ this Makefile ships">) -> the clause a banner puts after the value it
+# measured. Says which pin was moved and from where.
+#
+# ARG 2 IS WHY THIS TAKES A NOUN INSTEAD OF HARDCODING "version". `spec-drift`
+# below pins a floor and a prefix, not a version, and they are pins in exactly
+# this sense: `?=`, moved the same way, and load-bearing for a banner that reads
+# the same either way. It reuses this clause rather than growing a second one —
+# two mechanisms for one idea is worse than either, because the copy nobody
+# edited is the one still lying a month later.
+pin_note = $(if $(call moved_pins,$(1)),asserted against an OVERRIDDEN pin ($(call moved_pins,$(1))) — NOT the $(2) this Makefile ships,asserted against the pin)
 
 # ─── Report what was measured, not just the verdict ──────────────────────────
 # A CHECK THAT REPORTS ONLY PASS/FAIL CANNOT DISTINGUISH "PASSED" FROM "DID NOT
@@ -309,7 +317,7 @@ define require_tool
 			   echo "run: make tools"; \
 			   exit 1 ;; \
 		esac; \
-		echo "tool: $(1) — version $(2), $(call pin_note,$(4))"; \
+		echo "tool: $(1) — version $(2), $(call pin_note,$(4),version)"; \
 	elif [ -n "$(3)" ]; then \
 		got=$$($(GO) version -m $(1) 2>/dev/null \
 			| awk '$$1=="mod"{print $$2"@"$$3; exit}' || true); \
@@ -327,7 +335,7 @@ define require_tool
 			echo "run: make tools"; \
 			exit 1; \
 		fi; \
-		echo "tool: $(1) — build-info module $(3), $(call pin_note,$(4)) (--version is unstamped)"; \
+		echo "tool: $(1) — build-info module $(3), $(call pin_note,$(4),version) (--version is unstamped)"; \
 	else \
 		echo "unasserted pinned tool: $(1)"; \
 		echo "  require_tool needs a --version substring (arg 2) or a module@version (arg 3)."; \
@@ -491,10 +499,13 @@ test-integration: ## Tests behind the `integration` tag. Needs a live stack. NEV
 # WHY THERE IS A FLOOR ASSERTION, and it is the whole reason this target is more
 # than one line. `go test -run <re>` that matches nothing exits 0. So the target
 # as first written — `-run Upstream ./internal/...` — could report success having
-# executed zero drift checks, and would have printed its reassuring "a failure
-# here is NEWS" epilogue while doing it. Renaming the one drift test was enough
-# to produce that. DEVELOPMENT.md §11 rule 4: "found nothing" and "looked at
-# nothing" must never share an exit code.
+# executed zero drift checks, and would have printed the reassuring epilogue it
+# carried AT THE TIME — `a failure here is NEWS, not a broken build: it means
+# upstream moved.` (`Makefile:555` at `d81a66f`) — while doing it. That line no
+# longer exists: `d10ca98` replaced it with the four verdict readings at the foot
+# of this recipe, which say only what the run established. Renaming the one drift
+# test was enough to produce that. DEVELOPMENT.md §11 rule 4: "found nothing"
+# and "looked at nothing" must never share an exit code.
 #
 # It was not hypothetical, either. `Upstream` is an ordinary English word and
 # `-run` is an unanchored regex, so it also swept in FIVE unrelated tests whose
@@ -553,6 +564,34 @@ SPEC_DRIFT_FLOOR ?= 1
 # ASSERTS they agree rather than leaving it to advice.
 SPEC_DRIFT_PREFIX ?= TestSpecDrift
 override SPEC_DRIFT_RUN := ^$(SPEC_DRIFT_PREFIX)
+
+# ─── The floor and the prefix are PINS, and `?=` means either can be moved ────
+# THE OK BANNER READ WORD FOR WORD THE SAME WHETHER THE FLOOR HELD OR SOMEBODY
+# MOVED IT. Same defect as the tool pins above, in the one target whose entire
+# job is to refuse a vacuous green: measured 2026-08-18, `make spec-drift
+# SPEC_DRIFT_FLOOR=0 SPEC_DRIFT_PREFIX=TestNothingMatchesThis` printed
+# `spec-drift: OK — 0 drift check(s) actually ran and passed (floor 0).` at exit
+# 0 — and it is not even slow enough to notice, because a `-run` matching nothing
+# makes ZERO network calls. The target could tell "nothing ran" from "everything
+# passed"; it could not tell "the floor held" from "the floor was moved".
+#
+# So the banner carries $(call pin_note,…) — the same clause require_tool prints,
+# reused, not reimplemented. BOTH variables are named because the banner's claim
+# rests on both: SPEC_DRIFT_FLOOR is how many checks it demanded, and
+# SPEC_DRIFT_PREFIX is what it was willing to count as one.
+#
+# SPEC_DRIFT_RUN is deliberately NOT in this list, and needs nothing: `override`
+# above makes it underivable from the command line, and $(origin) would report
+# `override` for it on every single run — so listing it would flag every run as
+# overridden. A banner that cries wolf fails the same way as one that stays
+# silent.
+#
+# Overriding stays ALLOWED, for the reason given above the tool pins: somebody
+# debugging has a real reason to move a floor. It is reported, not rejected. The
+# FAILED lines below quote the floor without this clause on purpose — a red says
+# "nothing was established" whichever floor produced it, and the lie this exists
+# to stop is the reassuring green.
+SPEC_DRIFT_PINVARS := SPEC_DRIFT_FLOOR SPEC_DRIFT_PREFIX
 
 .PHONY: spec-drift
 spec-drift: export CGO_ENABLED := 1
@@ -676,7 +715,7 @@ spec-drift: ## Tests behind the `upstream` tag: are the vendored specs still wha
 		esac; \
 		exit "$$rc"; \
 	fi; \
-	echo "spec-drift: OK — $$ran drift check(s) actually ran and passed (floor $(SPEC_DRIFT_FLOOR))."
+	echo "spec-drift: OK — $$ran drift check(s) actually ran and passed (floor $(SPEC_DRIFT_FLOOR), $(call pin_note,$(SPEC_DRIFT_PINVARS),floor and prefix))."
 
 .PHONY: bench
 bench: ## Wall-clock performance harness. A RELEASE gate on named hardware, never a merge gate.
