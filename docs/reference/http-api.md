@@ -545,8 +545,10 @@ to show.
 §4.2 sends every client that wants progress here, so what the frame does and does not promise
 belongs here rather than in one screen's design section. Four facts, each measured at the publish
 sites, and each one a thing the JSON shape does not say by itself — then **§5.5, which is not one of
-them**: it specifies a `failed` frame that no code emits yet, so the consumer can be built against
-authoritative names. §5.1 to §5.4 are measurements; §5.5 is a contract.
+them**: it is the contract for the terminal **`stopped`** frame, written ahead of its producer so the
+consumer could be built against authoritative names — and **the producer has since landed**
+(`cmd/usarr/import.go`'s `publishImportStopped`, LS-180). §5.1 to §5.4 are measurements; §5.5 is a
+contract, and §5.1 below is the measurement it falsified.
 
 ```jsonc
 {"instance_id": 2, "phase": "credits", "items_read": 2, "applied": 3, "total": 2}
@@ -558,25 +560,31 @@ The recorded frames a client can hold this against are in
 
 ### 5.1 Silence means UNKNOWN — never finished, and never failed
 
-🚩 **A failed import publishes nothing.** Every error path in `FullImport`
-(`internal/libsync/importer.go:197-308`) returns before the terminal publish at
-`internal/libsync/importer.go:290`, and two failures happen even earlier than that: a service that
-is not a Kavita, and a stored credential that will not open, are both refused in
-`cmd/usarr/import.go:75-83` before an `Importer` exists, so not even a `containers` frame is sent.
-A third case sends nothing for a different reason — `cmd/usarr/import.go:111-118` returns a nil
-callback when the hub is not wired, and the import then runs to completion in silence.
+⚠️ **This paragraph used to read "a failed import publishes nothing", and the `stopped` producer
+falsified it.** A failed run now publishes exactly one terminal frame (§5.5). It is published by a
+wrapper around `cmd/usarr`'s `fullImportLocked` rather than from inside `libsync.FullImport`, and
+that seam is forced: two of the failures happen **before an `Importer` exists** — a service that is
+not a Kavita, and a stored credential that will not open, both refused in `cmd/usarr/import.go`'s
+pre-importer checks — so a publish inside `libsync` could not see either, and those two used to send
+not even a `containers` frame.
 
-So a stream that stops is a stream that stops. **`phase: "done"` is the only positive evidence of
-completion**, and there is no negative evidence at all: a client cannot tell a failed import from a
-running one from a dead server. §4.3's table is the only way to answer "did it succeed" — poll
-`last_full_sync_at`, which is written on success alone. This is recorded as a defect, not a design,
-in [`REVIEW-LOG.md` LS-152](../REVIEW-LOG.md).
+🚩 **Silence still means UNKNOWN, and for three reasons the producer does not touch.** It is now
+*usually* possible to tell a stopped run from a running one; it is not guaranteed.
 
-**This paragraph is what §5.5's `failed` frame is designed to falsify, and it has not falsified it
-yet.** Until a producer exists, everything above holds unchanged, and §4.3 stays the authority even
-after one does.
+1. **The frame is best-effort.** `Hub.Publish` never blocks and drops a subscriber whose queue is
+   full, so a client can miss it entirely (§5.5.3).
+2. **A build with no hub publishes nothing at all.** `cmd/usarr/import.go`'s `importProgress`
+   returns a nil callback when the hub is not wired (the registry is built before the server), and
+   on that build a **successful** run is equally silent — so silence there is not a claim about the
+   import in either direction.
+3. **A dead server sends nothing**, by construction.
 
-### 5.2 There are exactly four phases today, and they are not a progress scale
+So **`phase: "done"` is still the only positive evidence of completion**, `stopped` is a fast notice
+rather than a verdict of record, and §4.3's table remains the only way to answer "did it succeed" —
+poll `last_full_sync_at`, which is written on success alone. The defect this closes is
+[`REVIEW-LOG.md` LS-152](../REVIEW-LOG.md); the producer is LS-180.
+
+### 5.2 There are exactly four phases on a healthy run, and they are not a progress scale
 
 `containers` · `items` · `credits` · `done` — published at `internal/libsync/importer.go:213`,
 `:370`, `:443` and `:290` respectively. They are ordered, but `credits` is **skipped entirely** for
@@ -586,8 +594,10 @@ complete healthy run as readily as four.
 A phase is carried as the string the server sent. A client that has not heard of a phase should say
 less about the frame, not drop it — which `progressCounts`
 (`web/src/lib/services.ts`) already does, rendering an unrecognised phase's counts under a `default`
-arm that declines to name it. **§5.5 specifies a fifth, `stopped`, which nothing emits yet**, so a
-client built against it must also handle a `stopped` that never arrives.
+arm that declines to name it. **§5.5's fifth phase, `stopped`, is emitted today**, but from
+`cmd/usarr` rather than from any of the sites above — which is why a healthy run still shows only
+these four, and why a client must handle both a `stopped` that arrives and one that never does
+(§5.1's three silences).
 
 ### 5.3 Only `credits` ever sends a `total`
 
@@ -614,14 +624,13 @@ not a fraction of anything. One item can carry several credits: the recorded fra
 run of two series where one had three credited people and the other had none, giving `applied: 3`
 against `total: 2`. The ratio that is meaningful there is `items_read / total`.
 
-### 5.5 `stopped` — the terminal failure frame, SPECIFIED BUT NOT BUILT
+### 5.5 `stopped` — the terminal failure frame
 
-🚩 **Nothing in this repository emits a `stopped` frame today, and §5.1 above is still the shipped
-behaviour: a failed import publishes nothing at all.** This subsection is the contract the producer
-will be built to, written ahead of it so the consuming arm has authoritative names to compile
-against rather than invented ones. **Do not read it as a description of what the server does** —
-`grep -rn '"stopped"' internal/ cmd/` returns nothing. When the producer lands, §5.1's 🚩 and §5.2's
-phase count are what it falsifies, and both say so in place.
+✅ **Built.** This subsection was written as a contract *ahead* of its producer, so the consuming arm
+had authoritative names to compile against rather than invented ones; the producer has since landed
+and is held to every clause below by `cmd/usarr/import_stopped_test.go`. `grep -rn '"stopped"'
+cmd/ internal/` reaches it at `cmd/usarr/import.go`'s `importPhaseStopped`. §5.1's paragraph and
+§5.2's phase count are what it falsified, and both say so in place.
 
 #### 5.5.1 The frame — one new `phase` value and NO new field
 
@@ -720,7 +729,7 @@ holds.
 #### 5.5.4 It must not read as success, and the batches that committed still stand
 
 **Confirmed against the tree.** `StampFullSync` is reached only after `rep.Completed = true`
-(`internal/libsync/importer.go:283-289`), so **`last_full_sync_at` does not move on any failure** —
+(`internal/libsync/importer.go:261-271`), so **`last_full_sync_at` does not move on any failure** —
 it is written on success alone, which is what makes §3's timestamp the positive evidence and this
 frame merely the fast notice.
 
@@ -808,8 +817,8 @@ codes so a client has one vocabulary pattern rather than two. The test each memb
 | `upstream_unreachable` | The source could not be reached, or did not answer in time. | Transport failures out of `Containers`/`StreamItems`, plus `internal/kavita`'s `ErrTimeout`, `ErrBreakerOpen`, `ErrWrongService`. | "UsArr could not reach this service." → `Test connection` |
 | `upstream_rejected` | It was reached and it refused. | `ErrUnauthorized` (401), `ErrForbidden` (403 — a valid key whose account lacks the role), `ErrValidation`, `ErrNotFound`, `ErrUnexpectedStatus`. | "This service refused the request." → `Update API key` |
 | `upstream_error` | It answered, but not with a usable catalogue. | `ErrServer` (5xx), `ErrDecode`, `ErrResponseTooLarge`. | "This service returned an error." → `Test connection` |
-| `credential_unavailable` | The **stored** credential would not open — nothing was sent upstream. | `g.entry` at `cmd/usarr/import.go:75-78`; one of §5.1's two pre-importer silences, and the cause §4.4 maps to `500 internal`. | "UsArr could not open the saved credential for this service." → `Update API key` |
-| `not_a_catalogue_source` | The instance has no catalogue to import. | `cmd/usarr/import.go:79-83`, the other pre-importer silence. **Same spelling as §4.4's `409`**, so one cause has one name across two surfaces. | "This service has no library to import." → `—` |
+| `credential_unavailable` | The **stored** credential would not open — nothing was sent upstream. | `g.entry` at `cmd/usarr/import.go:98-101`; one of §5.1's two former pre-importer silences, and the cause §4.4 maps to `500 internal`. | "UsArr could not open the saved credential for this service." → `Update API key` |
+| `not_a_catalogue_source` | The instance has no catalogue to import. | `cmd/usarr/import.go:102-107`, the other former pre-importer silence. **Same spelling as §4.4's `409`**, so one cause has one name across two surfaces. | "This service has no library to import." → `—` |
 | `local_store_error` | The **local replica** could not be written. Not the upstream's fault. | Every `im.Store.*` return in `FullImport`: `BindContainers`, `RecordSyncReport`, `ApplyCatalogueBatch`, `ApplyCredits`, `Analyze`, `StampFullSync`. | "UsArr could not write to its own database." → `—`; it is a disk or database problem and the log has it |
 | `cancelled` | Stopped deliberately — shutdown, or a cancelled context. | `ctx.Err()` on any path. Not a fault of either side, and not a reason to tell anyone to fix anything. | "The import was stopped before it finished." → `Run full sync now` |
 | `unknown` | It did not classify. | The floor, and **mandatory**: without it a handler meeting an unclassifiable error has two exits — invent a member, or reach for free text — and the second is what this whole rule exists to prevent. | "The import stopped before it finished." → `—` |
@@ -821,15 +830,22 @@ discipline for an unrecognised phase, applied to an unrecognised reason.
 a cause from the last phase seen, or from the counters, is how a disk error gets reported to a user as
 a broken API key.
 
-#### 5.5.6 What the producer owes when it lands
+#### 5.5.6 What the producer owed, and what it did
 
-Not a design, just the two guards that will not notice this frame on their own:
+The two guards that would not have noticed this frame on their own, and how the producer that landed
+answered each:
 
 * `internal/httpapi/fixture_shape_test.go`'s `importProgressFrame` is a **hand mirror** of `Progress`
   and its own comment puts drift detection at *"the next regeneration"* of
-  `web/src/lib/__fixtures__/sse-frames.json`. Since §5.5.1 adds **no field**, that mirror needs no
-  change — which is one more reason the fieldless version is the cheap one.
+  `web/src/lib/__fixtures__/sse-frames.json`. Since §5.5.1 adds **no field**, that mirror needed no
+  change and got none — which is one more reason the fieldless version was the cheap one.
 * **A healthy run produces no `stopped` frame**, so the recording cannot contain one — the same
   position that test already records for `search.failed` and `stream.missed`. Its shape is therefore
-  unchecked by the fixture guard unless a test drives a real failure, and `assertNoSecret` over the
-  stream dump only proves anything on paths the suite actually fails.
+  unchecked by the fixture guard, and `assertNoSecret` over the stream dump proves nothing on a path
+  the suite never fails. **`cmd/usarr/import_stopped_test.go` is the answer to both**: it drives four
+  real failures — an upstream 500 mid-import, a non-catalogue service, and a sealed credential that
+  will not open — asserts the frame's **whole key set** off the raw JSON (so a field added later is
+  caught even though no Go struct would decode it), and runs `assertNoSecret` over the stream with
+  the upstream 500's own body as the needle. It also pins the two negatives: a **successful** run
+  publishes no `stopped` frame, before or after its `done`, and a second run supersedes an earlier
+  `stopped` with ordinary phases (§5.5.3).

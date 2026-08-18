@@ -72,6 +72,29 @@ func (g *registry) FullImport(ctx context.Context, instanceID int64) (libsync.Re
 // so its caller gets a truthful "started" or "already running" — and release it
 // from the goroutine that actually finishes the work.
 func (g *registry) fullImportLocked(ctx context.Context, instanceID int64) (libsync.Report, error) {
+	rep, err := g.runImport(ctx, instanceID)
+	if err != nil {
+		// THE TERMINAL FRAME FOR A RUN THAT STOPPED, and this wrapper is the
+		// only site that can publish it. Two of the failures below happen
+		// BEFORE an Importer exists — a service that is not a Kavita, and a
+		// stored credential that will not open — so libsync.FullImport cannot
+		// see them and a publish inside it would leave those two silent, which
+		// is exactly half of the defect (REVIEW-LOG LS-152, LS-180).
+		//
+		// It is deliberately NOT published for the refusals decided before this
+		// function is entered — an import already running (FullImport), and
+		// StartImport's own kind/armed checks. Those callers get a synchronous
+		// non-2xx and http-api.md §4.4 is explicit that it means NO IMPORT
+		// STARTED for that press; a terminal frame there would claim a run that
+		// never existed.
+		g.publishImportStopped(instanceID, rep)
+	}
+	return rep, err
+}
+
+// runImport is fullImportLocked's body: everything that can fail, with nothing
+// between it and the publish above.
+func (g *registry) runImport(ctx context.Context, instanceID int64) (libsync.Report, error) {
 	entry, err := g.entry(ctx, instanceID)
 	if err != nil {
 		return libsync.Report{}, err
@@ -99,6 +122,46 @@ func (g *registry) fullImportLocked(ctx context.Context, instanceID int64) (libs
 		Progress: g.importProgress(),
 	}
 	return im.FullImport(ctx, instanceID)
+}
+
+// importPhaseStopped is the terminal failure phase, specified by
+// docs/reference/http-api.md §5.5 and consumed by web/src/lib/services.ts.
+//
+// IT IS `stopped`, NEVER `failed`. `failed` is already taken in the SPA
+// (SyncPhase, services.ts) for the refusal that means NO IMPORT STARTED, so the
+// catalogue is untouched — the exact negation of this frame, which says a run
+// did start, did commit batches, and those rows STAND. §5.5.2 owns that
+// reasoning; do not rename it.
+const importPhaseStopped = "stopped"
+
+// publishImportStopped sends the one terminal frame a stopped run gets.
+//
+// IT IS THE SAME Progress STRUCT AND IT GAINS NO FIELD (§5.5.1). There is no
+// cause, no reason, no status code and no upstream text — deliberately, and
+// §5.5.5 owns that: reference/security.md §5 forbids upstream strings in an SSE
+// payload, and the absence of a field is a stronger guarantee than a rule about
+// what may be put in one. The operator reads the real error in the process log,
+// in sync_report, and on the Services health row.
+//
+// The counters are how far the run got, not a result: Applied is the rows that
+// reached a COMMITTED batch and therefore stand, because a stopped import is
+// never rolled back (§5.5.4). Both are 0 for the two failures that happen
+// before an Importer exists, which is honest — nothing was written.
+//
+// If the hub is not wired it publishes nothing, exactly as a healthy run's
+// frames are not published: importProgress returns nil there, so silence on
+// that build is not a claim about the import either way.
+func (g *registry) publishImportStopped(instanceID int64, rep libsync.Report) {
+	publish := g.importProgress()
+	if publish == nil {
+		return
+	}
+	publish(libsync.Progress{
+		InstanceID: instanceID,
+		Phase:      importPhaseStopped,
+		ItemsRead:  rep.ItemsRead,
+		Applied:    rep.ItemsApplied,
+	})
 }
 
 // importProgress is the one line that puts §7.2's "progress over SSE with real
@@ -226,8 +289,10 @@ func (g *registry) endImport(instanceID int64) {
 // before this function returns, not by a goroutine that has not been scheduled
 // yet — and then hands the claim to the goroutine that does the work. Returning
 // nil means an import is now running; a caller learns it finished from the
-// terminal import.progress frame on the SSE stream (phase "done"), or by asking
-// again and being told it may start.
+// terminal import.progress frame on the SSE stream — phase "done" for a run
+// that completed, phase "stopped" for one that did not (http-api.md §5.5) — or
+// by asking again and being told it may start. Neither frame is authoritative:
+// it can be dropped or missed, so last_full_sync_at stays the evidence (§4.3).
 //
 // The context is deliberately NOT the caller's. Same reason bootstrapImport's
 // is not: a request deadline measured in seconds would kill a five-minute

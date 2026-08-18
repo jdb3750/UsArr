@@ -313,11 +313,19 @@ func collectSearchFrames(t *testing.T, stream *sseStream, searchID string) []rec
 // ever sets `total`, so recording `done` alone would leave that field's spelling
 // unpinned on the wire the SPA reads it from.
 //
-// ⚠️ The loop can only end on `done`. A FAILED import publishes nothing at all —
-// every error path in FullImport returns before the terminal publish — so this
-// deadline firing means "no terminal frame", never "the import failed", and the
-// two are indistinguishable from here. That is the fact docs/reference/http-api.md
-// §5 records for consumers, and it is why the failure message says so.
+// ⚠️ The loop can only end on `done`, so a run that STOPS parks it until the
+// deadline. That is deliberate: this helper records a HEALTHY run's frames, and
+// a `stopped` in the recording would be a broken fixture, not a shape to pin.
+//
+// ⚠️ THIS COMMENT USED TO SAY "a FAILED import publishes nothing at all", and
+// the failure message with it. That was true of the whole tree and is now false:
+// a failed run publishes one terminal `stopped` frame (http-api.md §5.5,
+// REVIEW-LOG LS-180), published by cmd/usarr around fullImportLocked rather than
+// by libsync — whose error paths do still all return before its own terminal
+// publish, which is why the frame could not live there. The deadline therefore
+// no longer means "failure and hang are indistinguishable": the phases it
+// reports include `stopped` when one arrived. cmd/usarr/import_stopped_test.go
+// is where that frame is asserted; nothing here drives a failure.
 func collectImportFrames(t *testing.T, stream *sseStream, instanceID int64) []recordedFrame {
 	t.Helper()
 	byPhase := map[string]recordedFrame{}
@@ -327,8 +335,9 @@ func collectImportFrames(t *testing.T, stream *sseStream, instanceID int64) []re
 		select {
 		case <-deadline:
 			t.Fatalf("no terminal %s frame for instance %d within the deadline; "+
-				"got phases %v. A failed import publishes nothing, so this cannot "+
-				"tell a failure from a hang. Stream:\n%s",
+				"got phases %v. A `stopped` among them is a FAILED import (§5.5) and the "+
+				"fixture data is what to look at; no frames at all is a hang or an "+
+				"unwired hub. Stream:\n%s",
 				httpapi.EventImportProgress, instanceID, order, stream.dump())
 		case ev := <-stream.events:
 			if ev.name != httpapi.EventImportProgress {

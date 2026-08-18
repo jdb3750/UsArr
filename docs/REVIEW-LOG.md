@@ -15848,3 +15848,96 @@ the tree still builds and that no credential-shaped literal was added; it cannot
 claim above is correct. The re-reading is what stands behind them — including the 403 sub-claim and
 the Kavita 5xx body shape, both of which are marked inference above precisely because re-reading
 could not settle them from this repo.
+
+---
+
+## LS-180 — the `stopped` producer: LS-152's silence closed, built to LS-160's contract without changing it
+
+**Applied.** LS-152 measured the defect — a failed import published nothing, so stream silence meant
+failed *or* still running *or* dead server — and did not fix it, because a new `phase` value is a
+wire change. LS-160 then specified the frame ahead of its producer. This entry is the producer, and
+it was built to `docs/reference/http-api.md` §5.5 **as written**: nothing in §5.5 turned out to be
+unimplementable, and no clause was renegotiated on the way in. A consumer is already shipped against
+that document (`web/src/lib/services.ts`), which is why the specification, not the implementer's
+judgement, decided every name.
+
+**What landed.** One terminal frame per stopped run: the **existing** `libsync.Progress` struct with
+`phase: "stopped"`, `instance_id`, `items_read`, `applied`, and `total` absent. **No new field, no
+cause, no reason, no upstream text** (§5.5.1, §5.5.5). `libsync.Progress` was not touched at all —
+not its fields, not its file — so the hand mirror at `internal/httpapi/fixture_shape_test.go` needed
+no change, exactly as §5.5.6 predicted.
+
+### The seam: a wrapper around `cmd/usarr`'s `fullImportLocked`, and it is forced rather than chosen
+
+`fullImportLocked` is now a four-line wrapper that calls `runImport` (its former body) and publishes
+on the error return; `publishImportStopped` and the `importPhaseStopped` constant sit beside it.
+
+**Publishing from inside `libsync.FullImport` would have been wrong, and not by a little.** Two of
+the failures §5.5 names happen **before an `Importer` exists** — a service that is not a Kavita, and
+a stored credential that will not open, both refused in `runImport` before `libsync` is reached — so
+a publish inside `libsync` would have left exactly those two silent. They are the two silences §5.1
+called out by name, so half the defect would have survived the fix. `fullImportLocked` is the
+narrowest point that sees all three of the pre-importer refusals, `libsync`'s own error paths, and
+all three import triggers (bootstrap, `StartImport`'s goroutine, and a direct in-process
+`FullImport`), because every one of them reaches the importer through it.
+
+**What deliberately does NOT publish**, and this is a correctness claim rather than an omission:
+
+| Path | Frame? | Why |
+| --- | --- | --- |
+| `libsync.FullImport`'s error returns (containers, bind, sync-report, items, credits, ANALYZE, stamp) | **yes** | The run started; `applied` says how much stands. |
+| `runImport`: `g.entry` fails — credential will not open, instance missing, service disabled | **yes** | §5.5.5.1's `credential_unavailable`; one of §5.1's two pre-importer silences. Counters are 0, which is honest: nothing was written. |
+| `runImport`: the instance is not a Kavita | **yes** | The other pre-importer silence. |
+| `FullImport`'s `ErrImportInProgress` | **no** | Decided **before** `fullImportLocked` is entered. §4.4 is explicit that a non-2xx means *no import started for this call*; a terminal frame would claim a run that never existed, and the run that IS in flight will publish its own. |
+| `StartImport`'s own kind check, `errImportsNotArmed`, and its `beginImport` refusal | **no** | Same reason: synchronous refusals, answered to the caller as `409`/`500`, no goroutine launched. |
+| Any path, on a build whose hub is not wired | **no** | `importProgress` returns a nil callback there, and on that build a **successful** run is equally silent. Silence is not a claim in either direction, which is why this is not a gap the frame could close. §5.1 now says so in place. |
+
+### The guards, fired rather than asserted
+
+Four tests in `cmd/usarr/import_stopped_test.go` drive real failures through the real binary:
+an upstream 500 mid-import, a second run after one, a non-catalogue service, and a sealed credential
+corrupted in SQLite so the keyring genuinely cannot open it. Each new assertion was fired by breaking
+the production code deliberately and restoring it.
+
+| Break | Fired | Verbatim |
+| --- | --- | --- |
+| Publish removed from the wrapper | all four tests | `no import.progress frame with phase "stopped" for instance 1 arrived; phases seen: [containers].` — and `phases seen: []` for the two pre-importer cases, which is the proof that nothing else in the tree publishes this frame |
+| Publish made **unconditional** (after success too) | ⚠️ **absorbed at first** | The wait helper returns on `done` and never read the `stopped` frame published after it. `assertNoPhase` was added for exactly this, drains the window, and then fired: `a "stopped" frame arrived for instance 1 when none was allowed: {"instance_id":1,"phase":"stopped","items_read":1,"applied":1}` |
+| A `reason` field carrying `err.Error()` | key-set **and** leak guard | `the stopped frame carries fields [applied instance_id items_read phase reason], want exactly [applied instance_id items_read phase]` **and** `SSE stream leaked "kavita-said-this-and-it-must-not-reach-the-browser"` — which is also the measurement that `assertNoSecret` really does sweep this new frame, rather than being assumed to |
+| Phase renamed to `failed` (§5.5.2's forbidden rename) | test 1 | `no import.progress frame with phase "stopped" for instance 1 arrived; phases seen: [containers failed]` |
+| `ItemsRead: rep.ItemsRead + 1` | the non-catalogue test | `items_read = 1 on a run that never started, want 0` |
+
+**The field set is asserted off the raw JSON, not off a Go struct**, because a `reason` added later
+would decode into no field and a struct-based assertion would never see it — the `reason` break above
+is what demonstrates the difference. **Not separately fired, and stated rather than claimed:** the
+`last_full_sync_at`-did-not-move assertion and the "stopped alone, no `containers` before it"
+assertion are corroborating; the `stopped`-alone one is shown to read the real wire by the
+phase-rename break's output.
+
+### One claim reversed, at its site
+
+`cmd/usarr/sse_contract_test.go`'s `collectImportFrames` carried *"A FAILED import publishes nothing
+at all"* in its doc comment and in its own failure message. It was a true measurement of the tree and
+is now false. Both were rewritten in place, with the old wording quoted and dated so the reversal is
+visible rather than silent. **No test asserted the silence as required behaviour** — that comment was
+the only place it was written down in code, and nothing depended on it.
+
+### `http-api.md` §5, made true again
+
+§5's preamble still said §5.5 *"specifies a `failed` frame that no code emits yet"* — stale by one
+word (§5.5 has said `stopped` throughout since LS-160) and made false in its second half by this
+change. Both halves are fixed, and so is everything else the producer falsified, which §5.5 had
+already nominated in advance: §5.1's 🚩 (rewritten — a failed run now publishes, and silence still
+means unknown for **three** reasons that survive the producer), §5.2's phase count and its "nothing
+emits yet", §5.5's own "SPECIFIED BUT NOT BUILT" heading and lead, and §5.5.6's "what the producer
+owes" list, now answered. §4.3 is unchanged on purpose: **the frame is a fast notice, not the
+authority.** It can be dropped by a full subscriber, so `last_full_sync_at` stays the evidence of
+success — §5.5.3 said so before the producer existed and it is still true after it.
+
+### Bounded, honestly
+
+The frame is **better** evidence, not authoritative evidence, and the three silences in §5.1 are
+real: a dropped subscriber, an unwired hub, and a dead server all still produce nothing. What
+changed is that a stopped run is now *usually* distinguishable from a running one instead of
+*never*. No ADR: LS-160 already recorded the decision this implements, and this entry closes off no
+alternative it left open.

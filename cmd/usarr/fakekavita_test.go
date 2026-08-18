@@ -61,6 +61,15 @@ type fakeKavita struct {
 	// connection test actually called.
 	paths []string
 
+	// seriesListFault, when non-empty, makes POST /api/Series/all-v2 answer 500
+	// with this string as its body instead of a catalogue. It is what drives a
+	// real MID-IMPORT failure — the importer is already built, the `containers`
+	// frame is already out — and the body is deliberately the caller's own
+	// string so a test can assert that no upstream text reached the SSE stream.
+	// Set under mu by failSeriesList, because the handler reads it while the
+	// server is running.
+	seriesListFault string
+
 	// hold, when non-nil, parks every POST /api/Series/all-v2 until it is
 	// closed. It is what makes an import OBSERVABLY IN FLIGHT: without it a
 	// fixture import finishes in microseconds and "a second import while the
@@ -115,6 +124,11 @@ func newFakeKavita(t *testing.T, authKey string) *fakeKavita {
 		// test can see that the request arrived while it is still stuck here.
 		if h := k.currentHold(); h != nil {
 			<-h
+		}
+		if fault := k.currentSeriesListFault(); fault != "" {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(fault))
+			return
 		}
 		// A JSON ARRAY, never `null`. An empty `series` slice would encode as
 		// `null` and the streaming decoder would reject the body as "expected a
@@ -176,6 +190,21 @@ func (k *fakeKavita) releaseSeriesList() {
 	if h != nil {
 		close(h)
 	}
+}
+
+// failSeriesList makes the series list answer 500 with body, WHILE THE SERVER
+// IS RUNNING, so one test can drive a failed import and then a healthy one
+// against the same instance. An empty body restores the catalogue.
+func (k *fakeKavita) failSeriesList(body string) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.seriesListFault = body
+}
+
+func (k *fakeKavita) currentSeriesListFault() string {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.seriesListFault
 }
 
 func (k *fakeKavita) currentHold() chan struct{} {
