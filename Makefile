@@ -587,10 +587,17 @@ override SPEC_DRIFT_RUN := ^$(SPEC_DRIFT_PREFIX)
 # silent.
 #
 # Overriding stays ALLOWED, for the reason given above the tool pins: somebody
-# debugging has a real reason to move a floor. It is reported, not rejected. The
-# FAILED lines below quote the floor without this clause on purpose — a red says
-# "nothing was established" whichever floor produced it, and the lie this exists
-# to stop is the reassuring green.
+# debugging has a real reason to move a floor. It is reported, not rejected.
+#
+# THE TWO FAILED LINES CARRY THE SAME CLAUSE, from the same $(call pin_note,…).
+# They were deliberately left without it when the OK banner got it, on the
+# reasoning that a red establishes nothing whichever floor produced it, so the
+# reassuring green was the only lie worth stopping. That undersold it: `FAILED —
+# 0 drift check(s) ran, floor is 5` states a number without saying where it came
+# from, so the reader who set the 5 themselves is invited to read it as the floor
+# this Makefile ships. Same defect shape as the epilogue that told a reader
+# "upstream moved" about a network outage. One mechanism, three banners; the
+# diagnoses printed under each FAILED line are unchanged.
 SPEC_DRIFT_PINVARS := SPEC_DRIFT_FLOOR SPEC_DRIFT_PREFIX
 
 .PHONY: spec-drift
@@ -646,7 +653,7 @@ spec-drift: ## Tests behind the `upstream` tag: are the vendored specs still wha
 		exit 1; \
 	fi; \
 	if [ "$$tagged" -lt "$(SPEC_DRIFT_FLOOR)" ]; then \
-		echo "spec-drift: FAILED — $$tagged test(s) carry the \`$(SPEC_DRIFT_PREFIX)\` prefix, floor is $(SPEC_DRIFT_FLOOR)."; \
+		echo "spec-drift: FAILED — $$tagged test(s) carry the \`$(SPEC_DRIFT_PREFIX)\` prefix, floor is $(SPEC_DRIFT_FLOOR) ($(call pin_note,$(SPEC_DRIFT_PINVARS),floor and prefix))."; \
 		echo ""; \
 		echo "The tagged tree compiles, so the guard has been renamed, deleted, or never existed."; \
 		echo "The prefix has ONE definition — SPEC_DRIFT_PREFIX in the Makefile — and the Go"; \
@@ -668,7 +675,7 @@ spec-drift: ## Tests behind the `upstream` tag: are the vendored specs still wha
 	rm -f "$$out"; \
 	echo ""; \
 	if [ "$$ran" -lt "$(SPEC_DRIFT_FLOOR)" ]; then \
-		echo "spec-drift: FAILED — $$ran drift check(s) ran, floor is $(SPEC_DRIFT_FLOOR)."; \
+		echo "spec-drift: FAILED — $$ran drift check(s) ran, floor is $(SPEC_DRIFT_FLOOR) ($(call pin_note,$(SPEC_DRIFT_PINVARS),floor and prefix))."; \
 		echo ""; \
 		echo "THIS IS NOT 'THE SPECS ARE FINE'. It is 'nothing was checked', and the two must"; \
 		echo "never share an exit code (docs/DEVELOPMENT.md §11 rule 4). \`go test -run\` that"; \

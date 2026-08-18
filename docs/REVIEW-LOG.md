@@ -14420,3 +14420,111 @@ run-on, and now reachable in the tool banners too, since `GOFUMPT_PINVARS` and f
 two names each. Pre-existing behaviour from `PINSRC-01`, not introduced here, and a separator is a
 change to every banner in the gate rather than to this one. Left for whoever touches `moved_pins`
 next.
+
+---
+
+# EXPL-05 — `spec-drift`'s FAILED lines quoted the floor without saying whose floor it was
+
+**Date:** 2026-08-18. **Tree:** `claude/hearth-thread-fb5te9-floorprov` off `origin/main` at
+`f2ecd11`, which is `FLOORPIN-01`'s fix.
+**One finding, taken from the previous thread's own ⚠️.** `FLOORPIN-01` gave the `spec-drift` OK
+banner a clause saying whether `SPEC_DRIFT_FLOOR` was the shipped pin or a command-line override,
+and recorded — deliberately, under `FLOORPIN-3` — that it was **leaving the two FAILED lines
+without it** because *"a red establishes nothing whichever floor produced it"*. That judgement is
+overturned here, and `FLOORPIN-3`'s ⚠️ is **closed**.
+
+## EXPL5-1 A red that names a number still has to say where the number came from
+
+The FAILED lines do not merely fail; they **quote the floor as a fact**, and a reader who set that
+floor themselves is invited to read it back as the project's:
+
+```
+spec-drift: FAILED — 0 drift check(s) ran, floor is 5.
+```
+
+Nothing in that line distinguishes *"this repo demands five drift checks and got none"* from
+*"you asked for five on this command line."* It is the same defect shape `EXPL-04` closed one target
+over — a message stating a conclusion (`upstream moved`) without stating what it rests on, in that
+case a fetch that never got an answer. **What is stale is the previous thread's premise, not its
+reasoning:** a red does establish nothing about the specs, but the FAILED *line* is still an
+assertion about the Makefile, and that assertion could be wrong.
+
+**APPLIED, to both FAILED lines, via the mechanism `FLOORPIN-2` already generalised.** No second
+clause was written: `$(call pin_note,$(SPEC_DRIFT_PINVARS),floor and prefix)` is the identical call
+the OK banner makes, now at three call sites in this target instead of one. The **diagnoses printed
+under each FAILED line are untouched** — causes (a)/(b)/(c) and the two runtime readings are
+byte-unchanged. The change is the floor's provenance and nothing else.
+
+## EXPL5-2 Fired, with a control, and with the two runs differing only in provenance
+
+A guard that fires the same before and after has proven nothing, so the **before** case was fired
+first, against `origin/main`'s `Makefile` extracted to a scratch path and run with `make -f`. The
+failing state is `GOTESTFLAGS='-skip .'`: the preflight passes, the test is skipped, and a `--- SKIP:`
+does not satisfy a floor. Verbatim, all four runs at exit 2:
+
+```
+=== CONTROL A: before-fix Makefile, default floor ===
+spec-drift: FAILED — 0 drift check(s) ran, floor is 1.
+
+=== CONTROL B: before-fix, floor overridden on the command line (SPEC_DRIFT_FLOOR=1) ===
+spec-drift: FAILED — 0 drift check(s) ran, floor is 1.
+
+=== A: after, default floor ===
+spec-drift: FAILED — 0 drift check(s) ran, floor is 1 (asserted against the pin).
+
+=== B: after, SPEC_DRIFT_FLOOR=1 on the command line ===
+spec-drift: FAILED — 0 drift check(s) ran, floor is 1 (asserted against an OVERRIDDEN pin
+(SPEC_DRIFT_FLOOR=1 from the command line) — NOT the floor and prefix this Makefile ships).
+```
+
+(Line-wrapped here for the margin; the recipe emits one line.) **The override deliberately sets the
+floor to the value it already has**, which is the sharpest available demonstration: A and B agree on
+every number, the before-fix pair is byte-identical, and after the fix the only difference between
+them is the provenance — which is exactly the fact that was missing.
+
+The preflight FAILED line was fired separately, since a floor above the number of tests that exist
+never reaches the runtime check. This is the brief's own `floor is 5` case:
+
+```
+=== CONTROL C: before-fix, SPEC_DRIFT_FLOOR=5 ===
+spec-drift: FAILED — 1 test(s) carry the `TestSpecDrift` prefix, floor is 5.
+
+=== C: after, SPEC_DRIFT_FLOOR=5 ===
+spec-drift: FAILED — 1 test(s) carry the `TestSpecDrift` prefix, floor is 5 (asserted against an
+OVERRIDDEN pin (SPEC_DRIFT_FLOOR=5 from the command line) — NOT the floor and prefix this Makefile
+ships).
+```
+
+## EXPL5-3 The exclusion this change had to not undo, checked by firing it
+
+`SPEC_DRIFT_RUN` is **excluded** from `SPEC_DRIFT_PINVARS` on purpose (`FLOORPIN-3`): `d10ca98`'s
+`override SPEC_DRIFT_RUN :=` makes `$(origin)` answer `override` on **every** run, so listing it
+would mark every run overridden, and a banner that cries wolf fails the same way as one that stays
+silent. Reusing the existing list rather than assembling a new one per line is what keeps that
+closed, but it was **verified by execution rather than by reading**:
+
+```
+=== D: SPEC_DRIFT_RUN='^TestNothingMatchesThis' on the command line ===
+spec-drift: FAILED — 0 drift check(s) ran, floor is 1 (asserted against the pin).
+```
+
+Not flagged, and the drift check still selected by the derived value — the exclusion and the
+`override` both intact.
+
+The OK banner was re-fired too, to confirm this change did not disturb it. It reached `github.com`
+and passed: `spec-drift: OK — 1 drift check(s) actually ran and passed (floor 1, asserted against
+the pin).`, exit 0 — byte-identical to what `FLOORPIN-01` recorded.
+
+## EXPL5-4 One dated quote left byte-unchanged, on purpose
+
+`Makefile:558`'s *"Measured 2026-08-18: … the target says `0 drift check(s) ran, floor is 1`"*
+belongs to the prefix-desync argument, not to this one. It was checked rather than assumed: the
+quoted string is still a true **prefix** of the emitted line (the new clause is appended, and the
+quote carries no closing period), so it is not falsified and needed no re-quoting. The comment block
+above `SPEC_DRIFT_PINVARS` **is** rewritten, because its final sentence asserted the old behaviour
+outright — *"The FAILED lines below quote the floor without this clause on purpose"* — and would
+otherwise have been a comment describing a recipe it no longer describes.
+
+ℹ️ **Still open, still not this thread's.** `moved_pins` runs two movers together with no separator,
+found and left by `FLOORPIN-01`. Unchanged here, and now reachable from two more banners; it remains
+a change to every banner in the gate.
