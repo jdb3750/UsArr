@@ -45,9 +45,17 @@
  * lingering in localStorage for ever.
  *
  * A learned entry is filed under the instance the search actually ran against —
- * `POST /api/v1/search` returns `instance_id` in its accepted body, so the
- * client is told rather than guessing — for the same reason the selection is:
- * an indexer id from one Prowlarr means nothing in another.
+ * `GET /api/v1/releases/search` returns `instance_id` in its accepted body, so
+ * the client is told rather than guessing — for the same reason the selection
+ * is: an indexer id from one Prowlarr means nothing in another.
+ *
+ * ⚠️ THAT LINE USED TO READ `POST /api/v1/search`, AND BOTH HALVES WERE WRONG.
+ * The verb was never right — `internal/httpapi/server.go` has only ever routed
+ * the fan-out on GET — and the PATH stopped being right at `4a51bd4`, which
+ * moved the release fan-out to `/api/v1/releases/search` so that `04a28a4`
+ * could give `/api/v1/search` to the library search (`docs/reference/
+ * http-api.md` §6). The two are different questions over different corpora and
+ * nothing in this module speaks to the library one.
  *
  * ⚠️ STORAGE KEYS ARE PART OF THE CONTRACT, exactly as in `$lib/prefs.svelte`.
  * `usarr.search.categories` is unchanged and stays frozen: a Newznab category
