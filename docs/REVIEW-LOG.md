@@ -13199,3 +13199,84 @@ matched-pair measurement, because that section is the config's stated source of 
 * **`make spec-drift` is still unautomated**, exactly as [ADR-0047](./DECISIONS.md#adr-0047)'s open
   question 2 says. A floor assertion makes the target honest when someone types it; it does not make
   anyone type it. There is no CI in this repo.
+
+---
+
+# HUE-01 — 173° of room that was really 50.84°, because hue is circular
+
+**Prefix note.** `HUE-` is this thread's prefix and this is its first use, allocated under
+`DEVELOPMENT.md` §11 (*"an id should be a fact about its author, not a claim on a global sequence"*).
+Checked free immediately before the write, against the tree being pushed: no `HUE-NN` on
+`origin/main`, and none on any of the **22 remote heads** — `git for-each-ref refs/remotes/origin/`
+piped through `git grep -ohE '\bHUE-[0-9]+\b' -- docs/REVIEW-LOG.md`, zero hits. No shared counter was
+read and no `M5-` id was taken.
+
+**Disposition: applied — this entry is the record, not the request.** The correction is already in the
+tree. The work is **`5f34195`** *("test: re-derive §13's chroma floor off hue stability, not the
+palette maximum")*, authored 2026-08-17 22:57:21 +0000 on `wip/oklch-floor-rederive-20260817-224439`;
+**`96227f6`** is the merge of that branch, and it reached `main` as the second parent of the
+first-parent merge **`999f538`** (23:06:43). Located with
+`git log -S '50.84°' -- web/src/lib/designrules.test.ts`, which names that one commit; `-S 'arc('`
+over the same path returns the same single commit, so the corrected number and the helper that makes
+it computable arrived together rather than one trailing the other.
+
+## HUE-01.1 The claim, and what it was actually measuring
+
+`web/src/lib/designrules.test.ts` enforces ARCHITECTURE §13's ban on the indigo/violet/purple hue
+band, which the file pins in OKLCH as `BAND_LO = 265` to `BAND_HI = 335`. A comment beside the rule
+stated that the nearest real design token sat **173° from the band** — carried as reassurance that the
+palette is nowhere near the thing it bans.
+
+The arithmetic behind it was `265 − 91.6 = 173.4`: `--n-1` dark `#1e1d1a` at hue 91.6°, subtracted
+from the band's **lower** edge. That is a distance along a line, and hue is not a line. The band has a
+second edge at **335°**, and the short way round from 335° runs through 0°.
+
+## HUE-01.2 Remeasured on the axis the quantity actually lives on
+
+Recomputed from the hexes in `docs/design/tokens.css` (sRGB → linear → OKLab → OKLCh), independently
+of the file under review rather than by reading its own output back:
+
+| Token (dark) | Hex | Hue | To 265° | To 335°, the short way | True distance |
+|---|---|---|---|---|---|
+| `--n-1` | `#1e1d1a` | 91.612° | 173.388° | 116.612° | **116.61°** |
+| `--status-error` | `#f0837a` | 25.841° | 120.841° | **50.841°** | **50.84°** |
+
+The old figure was wrong twice over. It measured in one direction only, **and** it named the wrong
+token — `--n-1` is not the nearest even once the measurement is corrected. Worse, `--n-1` is a
+near-grey: chroma **0.0059** against `--status-error`'s **0.1351**. The reassuring number was the
+angular position of a colour that barely has a hue, quoted as the palette's closest approach to a hue
+band.
+
+## HUE-01.3 The consequence: the guard clears by 10.84°, not by 133°
+
+Design's proximity guard (`BAND_PROXIMITY_MIN = 40`) asserts that no token comes within 40° of the
+band, and exists because the chroma floor's derivation assumes the band is **empty** — a token
+drifting toward it invalidates the floor's premise, which is why the guard says *re-derive the floor*
+rather than *banned colour*.
+
+**The verdict does not move: it passed before and it passes now.** What moves is what the pass is
+worth. Under 173° the guard reads as a formality with 133° of slack; the real margin is **10.84°**,
+about a quarter of the advertised one. And the direction matters — a warm-red palette is exactly the
+shape that approaches a magenta band **from below zero**, so `--status-error` at 25.8° is one warm
+retune away from the wrap, not comfortably distant from a purple it never goes near. The guard earns
+its place far more than the old number implied.
+
+## HUE-01.4 The transferable half, and what this entry does not do
+
+**A distance on a circular axis measured in one direction is not a distance.** The failure mode is
+not imprecision — it is that the error runs toward comfort. `Math.abs(a - b)` on a pair 51° apart
+across 0° reports 309°, and nothing about the output looks wrong; it reads as a margin, and gets
+quoted as one. The fix in the tree is shaped accordingly: `arc()` takes the wrap
+(`min(d, 360 − d)` on the modulo), `bandDistance` takes the minimum over **both** edges, and the
+comment is corrected **in place with the old figure named** rather than quietly replaced — the same
+rule as §6.1's, that a wrong record is amended visibly, not overwritten.
+
+* **Nothing outside `docs/REVIEW-LOG.md` changed here.** The code correction landed in `5f34195`;
+  this is the log catching up with it.
+* **§13's ban and its chroma floor are not reopened.** `banned()` is the conjunction
+  `inBand(v.oklch) && v.oklch.C >= CHROMA_FLOOR`, and no token is in the band, so no colour's verdict
+  changes — only the honesty of the margin around it.
+* **The gate green attests very little for this entry.** `CI=true make check` passed, but it reads
+  `docs/` through **gitleaks alone**: it says no credential-shaped string was added, not that any
+  number above is right. The numbers are load-bearing and were re-measured here, not inherited from
+  the comment being corrected.
