@@ -99,12 +99,28 @@ const DIVERGENT_ALLOWED: Record<string, { tokens: string; app: string; reason: s
 /**
  * Declared in tokens.css, absent from app.css. Reason + what retires it.
  *
- * Currently empty, and that is the healthy state: it means app.css ports every
- * token tokens.css declares. The last entry was --spacing, Tailwind v4's base
- * unit, which tokens.css §5 cut once the retired Tailwind path left it with no
- * reader — so the exception went with the token rather than being carried.
+ * The healthy state for this list is empty, because that means app.css ports
+ * every token tokens.css declares. An entry here is a token the APPLICATION has
+ * stopped needing while the design file still names it, and it is a request to
+ * the design thread rather than a place to leave things.
  */
-const TOKENS_ONLY_ALLOWED: Record<string, string> = {};
+const TOKENS_ONLY_ALLOWED: Record<string, string> = {
+	'--toolbar-h':
+		'Design ruled on 2026-08-18 that the published toolbar height goes away ' +
+		'ENTIRELY, with no replacement token, so app.css no longer declares it. ' +
+		'It had two jobs — a minimum height for the two bars, and the sticky or ' +
+		'fixed offset for everything sitting under the shell top bar — and the ' +
+		'second is what broke: the value was hand-fitted to a two-line bar and a ' +
+		'three-line bar overran it by a measured 29px. app.css now sizes both ' +
+		'bars from their own contents and the shell is a viewport-height grid ' +
+		'whose second row scrolls, so no offset needs the number and there is ' +
+		'nothing left in the application to port the token to. docs/design is ' +
+		'the design thread\'s to edit, not this one\'s, so tokens.css §"Sizing" ' +
+		'and the mockups under docs/design/mockups still carry it — and the ' +
+		'mockups still carry the defect with it. RETIRED BY: the design thread ' +
+		'deleting --toolbar-h from docs/design/tokens.css, at which point the ' +
+		'staleness check below fails on this entry and it is removed.'
+};
 
 /**
  * tokens.css blocks that declare custom properties which are not tokens of the
