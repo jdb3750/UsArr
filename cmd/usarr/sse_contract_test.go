@@ -30,6 +30,19 @@ import (
 // this side breaks this test; the same rename on the client side breaks
 // api.test.ts. Neither can move alone.
 //
+// It records TWO runs into the one file, because the stream carries two
+// unrelated subsystems and a recording of only one of them pins only half the
+// contract: a Prowlarr search, and a Kavita catalogue import. The import half is
+// the reason the fixture has to drive a second service at all — `import.progress`
+// has no search_id, is published by a different package (internal/libsync,
+// through cmd/usarr's importProgress), and carries `total`, a field no search
+// frame has.
+//
+// NOT RECORDED, and it is four of the seven names rather than a gap:
+// `search.failed` and `stream.missed` do not occur on a healthy run, so there is
+// nothing here to record them from — web/src/lib/api.test.ts covers those two
+// from synthesised payloads instead.
+//
 // Regenerate the recording with:
 //
 //	USARR_UPDATE_SSE_FIXTURE=1 go test ./cmd/usarr -run TestSSEFramesMatchTheClientContract
@@ -156,12 +169,42 @@ func TestSSEFramesMatchTheClientContract(t *testing.T) {
 
 	live := collectSearchFrames(t, stream, accepted.SearchID)
 
+	// ── the second subsystem on the same stream ─────────────────────────────
+	//
+	// A Kavita is added AFTER the search has finished, so no import frame can be
+	// swallowed by collectSearchFrames — that collector drops every frame whose
+	// search_id is not the one it wants, and an import.progress frame has no
+	// search_id at all.
+	kav := newFakeKavita(t, importAuthKey)
+	kav.libraries = 1
+	kav.series = []map[string]any{
+		kavitaSeries(41, 1, "Frieren", nil),
+		// No metadata entry, so this one contributes a credit REQUEST and no
+		// credits — which is what makes the credits phase's `applied` differ
+		// from its `total` in the recording rather than coincide with it.
+		kavitaSeries(42, 1, "Saga", nil),
+	}
+	kav.metadata = map[int]map[string]any{
+		41: kavitaMetadata(41, map[string][]string{
+			"writers": {"Kanehito Yamada"}, "coverArtists": {"Tsukasa Abe"},
+			"pencillers": {"Tsukasa Abe"},
+		}),
+	}
+	armBootstrapImport(t, env)
+
+	var kavitaSvc serviceBody
+	env.do(t, "POST", "/api/v1/services", map[string]any{
+		"kind": "kavita", "name": "Kavita", "base_url": kav.URL(), "api_key": importAuthKey,
+	}, &kavitaSvc)
+	live = append(live, collectImportFrames(t, stream, kavitaSvc.ID)...)
+
 	// ── the names, exactly ──────────────────────────────────────────────────
 	//
 	// search.failed and stream.missed are real names (events.go) but neither
 	// occurs on a healthy run, so they are covered by the client's unit test
 	// rather than recorded here.
 	wantNames := []string{
+		httpapi.EventImportProgress,
 		httpapi.EventSearchDone,
 		httpapi.EventSearchIndexer,
 		httpapi.EventSearchResults,
@@ -252,6 +295,65 @@ func collectSearchFrames(t *testing.T, stream *sseStream, searchID string) []rec
 			frames = append(frames, recordedFrame{Name: ev.name, Data: json.RawMessage(ev.data)})
 			if ev.name == httpapi.EventSearchDone {
 				return frames
+			}
+		}
+	}
+}
+
+// collectImportFrames reads import.progress frames for one instance until the
+// terminal `done` arrives, and returns the LAST frame of each phase in the order
+// the phases occur.
+//
+// One per phase, and the last one, for two reasons. The batcher flushes on
+// min(2000 rows, 100 ms) (internal/libsync), so how MANY items/credits frames a
+// run produces is wall-clock dependent and nothing stable can be recorded from
+// it — but the last frame of a phase always carries that phase's final counts,
+// which are a function of the fixture data alone. And all four phases have to be
+// in the recording, because they do not carry the same fields: only `credits`
+// ever sets `total`, so recording `done` alone would leave that field's spelling
+// unpinned on the wire the SPA reads it from.
+//
+// ⚠️ The loop can only end on `done`. A FAILED import publishes nothing at all —
+// every error path in FullImport returns before the terminal publish — so this
+// deadline firing means "no terminal frame", never "the import failed", and the
+// two are indistinguishable from here. That is the fact docs/reference/http-api.md
+// §5 records for consumers, and it is why the failure message says so.
+func collectImportFrames(t *testing.T, stream *sseStream, instanceID int64) []recordedFrame {
+	t.Helper()
+	byPhase := map[string]recordedFrame{}
+	var order []string
+	deadline := time.After(30 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatalf("no terminal %s frame for instance %d within the deadline; "+
+				"got phases %v. A failed import publishes nothing, so this cannot "+
+				"tell a failure from a hang. Stream:\n%s",
+				httpapi.EventImportProgress, instanceID, order, stream.dump())
+		case ev := <-stream.events:
+			if ev.name != httpapi.EventImportProgress {
+				continue
+			}
+			var envelope struct {
+				InstanceID int64  `json:"instance_id"`
+				Phase      string `json:"phase"`
+			}
+			mustUnmarshal(t, ev.data, &envelope)
+			if envelope.InstanceID != instanceID {
+				continue
+			}
+			if _, seen := byPhase[envelope.Phase]; !seen {
+				order = append(order, envelope.Phase)
+			}
+			byPhase[envelope.Phase] = recordedFrame{
+				Name: ev.name, Data: json.RawMessage(ev.data),
+			}
+			if envelope.Phase == "done" {
+				out := make([]recordedFrame, 0, len(order))
+				for _, phase := range order {
+					out = append(out, byPhase[phase])
+				}
+				return out
 			}
 		}
 	}

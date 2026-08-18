@@ -151,5 +151,42 @@
 			},
 			"search_id": "SEARCH_ID"
 		}
+	},
+	{
+		"name": "import.progress",
+		"data": {
+			"applied": 0,
+			"instance_id": 2,
+			"items_read": 0,
+			"phase": "containers"
+		}
+	},
+	{
+		"name": "import.progress",
+		"data": {
+			"applied": 2,
+			"instance_id": 2,
+			"items_read": 2,
+			"phase": "items"
+		}
+	},
+	{
+		"name": "import.progress",
+		"data": {
+			"applied": 3,
+			"instance_id": 2,
+			"items_read": 2,
+			"phase": "credits",
+			"total": 2
+		}
+	},
+	{
+		"name": "import.progress",
+		"data": {
+			"applied": 2,
+			"instance_id": 2,
+			"items_read": 2,
+			"phase": "done"
+		}
 	}
 ]

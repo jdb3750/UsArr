@@ -9428,7 +9428,7 @@ them.
 | **LS-02** | Progress over SSE was published to `store.SystemUserID`, which the hub matched **exactly**, so every `import.progress` frame reached **nobody** | **High** | **Applied.** `visibleTo` in `internal/httpapi/events.go`; the sentinel now means "shared" on the stream as it already did in the database |
 | **LS-03** | The whole `cmd/usarr` import wiring had **zero test coverage** — `FullImport`, `bootstrapImport` and `importProgress` all at 0.0% | **High** | **Applied.** `cmd/usarr/import_e2e_test.go` drives the real `buildApp`, prober, service-creation endpoint and SSE stream |
 | **LS-04** | `ARCHITECTURE.md` §17.8 withdraws Kavita's `LibraryType 3 (Image)`; the **vendored spec declares it**, with six members | Medium | **Raised, not fixed** — see LS.5 |
-| **LS-05** | `EventImportProgress` is a seventh event name with a producer and **no SPA listener**; the Go and TypeScript name lists are two hardcoded copies that cannot see each other | Medium | **Raised, not fixed** — `web/` is out of this pass's scope. See LS.6 |
+| **LS-05** | `EventImportProgress` is a seventh event name with a producer and **no SPA listener**; the Go and TypeScript name lists are two hardcoded copies that cannot see each other | Medium | **CLOSED** by `fe40f6d` (merged `74ea1e5`), which added the listener. The stale comment it left behind is LS-150. The name lists are still two copies that cannot see each other — that half is unclosed and is restated in LS-150 |
 | **LS-06** | The code cited **`ADR-0042`** for the `container_kind='remote_library'` decision. `ADR-0042` has since landed as a **different decision** | Low | **Applied.** The citation is removed, not repointed; the decision is still owed an ADR |
 | **LS-07** | A work merged across two containers of different reading conventions gets **last-writer-wins** `work_comic.reading_direction` | Low | **Recorded as a deliberate consequence**, asserted in a test rather than left to be rediscovered |
 | **LS-08** | `go.mod` carried `golang.org/x/text` as **`// indirect`** for a direct import; `modverify` catches it, the crashed agent never ran it | Nit | **Applied.** `go mod tidy` |
@@ -15305,3 +15305,187 @@ the reassurance now promises what the banner actually delivers on every path, wh
 write being held and re-run on success (§17.3.3's `On success` row), rather than a form's contents.
 No second banner, no restructuring: it is the same snippet, the same `pending` closure, and the same
 retry. §13's ban on the mid-sentence em-dash beat is respected — the new copy has none.
+
+## LS-150 — LS-05 closed, and the false comment a green test was protecting
+
+**LS-05 is closed.** `fe40f6d` (merged `74ea1e5`) added `'import.progress'` to
+`web/src/lib/api.ts`'s `STREAM_EVENT_NAMES`, gave the frame a parser, and put
+`web/src/lib/importstream.svelte.ts` in front of it. Both halves of the contract — a producer and a
+listener — are now live, verified by reading `api.ts:91-105`, `api.ts:470-489` and `api.test.ts:24-36`
+rather than by taking the commit message's word for it.
+
+**What it left behind is the finding.** `internal/httpapi/events_test.go` still said, in a comment,
+that `STREAM_EVENT_NAMES` *"does NOT yet carry it, so today's SPA drops the frame"*, and recorded
+`LS-05` as open in two places. **The test stayed green throughout**, because it asserts only that the
+constant equals the literal `"import.progress"` — nothing in it reads the TypeScript side at all. So
+the failure mode here is not a red test that nobody ran; it is a green test whose prose is the only
+thing a reader has, and that prose had gone false. **Applied:** both comments rewritten to say what
+is true now, and `LS-05` marked closed in its table row.
+
+⚠️ **One half of LS-05 does not close, and the rewritten comment says so.** The Go list and the
+TypeScript list are still two independent hand-written literals, and nothing joins them: a name added
+to `events.go` and to neither list still breaks no test. What *has* since acquired a joining test is
+the frame **shape** — see LS-151 — which is a different property and does not substitute for a
+name guard.
+
+## LS-151 — the recorded-frame fixture covered four of seven names, not six
+
+**The relayed claim was wrong in two ways, and the tree is the authority.**
+
+* The generator is **`cmd/usarr/sse_contract_test.go`** (`TestSSEFramesMatchTheClientContract`,
+  regenerated with `USARR_UPDATE_SSE_FIXTURE=1`), **not** `cmd/usarr/import_e2e_test.go`. The latter
+  reads `import.progress` frames off a live stream and asserts the terminal one, but writes no
+  fixture.
+* The fixture covered **four** names, not six: `search.started`, `search.indexer`, `search.results`,
+  `search.done`. `search.failed` and `stream.missed` were absent by an explicitly documented
+  decision — neither occurs on a healthy run, so there is nothing to record them *from*, and
+  `web/src/lib/api.test.ts` covers those two from synthesised payloads instead. That decision is
+  sound and was not disturbed.
+
+**Applied: `import.progress` is now recorded, taking the fixture from four names to five.** The
+generator drives a fake Kavita after the Prowlarr search completes — after, so that
+`collectSearchFrames`, which drops every frame whose `search_id` is not the one it wants, cannot
+swallow a frame that has no `search_id` at all — and `collectImportFrames` records **the last frame
+of each phase**. One per phase because the batcher flushes on `min(2000 rows, 100 ms)`, so how many
+`items`/`credits` frames a run produces is wall-clock dependent while the last frame of a phase is a
+function of the fixture data alone. All four phases, rather than the terminal frame alone, because
+they do not carry the same fields: only `credits` ever sets `total`, so a `done`-only recording would
+leave that field's spelling unpinned on the very wire the SPA reads it from.
+
+**No `web/` file was hand-edited and none needed changing.** `sse-frames.json` is generated output
+and was regenerated; `normalizeStreamEvent` already parses the frame, so the SPA's replay test
+consumes the four new frames without a line of frontend change.
+
+`internal/httpapi/fixture_shape_test.go` grew the matching target. Its `importProgressFrame` is a
+**hand mirror** of `internal/libsync`'s `Progress` rather than the type itself: §2.3 rule 1 keeps the
+handler package and the sync core apart, and a test-only import edge would still link
+`internal/kavita` into this package's test binary. The mirror's drift mode is loud, not silent — a
+field added to `Progress` reaches the fixture on the next regeneration and fails there as an unknown
+field.
+
+## LS-152 — a failed import is indistinguishable from a hung one, and from a dead server
+
+**Assessed, recorded, and deliberately NOT fixed.** It is a wire change, and it is made with the
+consuming thread told first rather than folded into a documentation merge.
+
+**The measurement.** `internal/libsync/importer.go`'s `FullImport` (`:197-308`) publishes its
+terminal frame at `:290`, and every error path returns before it. Two failures do not even reach the
+importer: `cmd/usarr/import.go:75-83` refuses a non-Kavita instance and fails on a stored credential
+that will not open, so not even the `containers` frame at `:213` is sent. A third silence has a
+different cause — `cmd/usarr/import.go:111-118` returns a nil `ProgressFunc` when the hub is not
+wired, and the import then runs to *success* in complete silence.
+
+**So the stream has one terminal state and no failure state.** `phase: "done"` is positive evidence
+of success; there is no evidence of anything else. A consumer watching the stream cannot separate
+*failed*, *still running*, *server gone* or *progress never wired* — all four look identical, which
+is a socket that stops saying things. The SPA has already had to absorb this: `importstream.svelte.ts`
+exports `connected` beside the counts precisely because a reader who cannot see the connection state
+cannot tell a stalled readout from a live one, and it refuses to conclude completion from anything
+but the `done` frame.
+
+**Is it a defect or a documentation gap? A defect — a small one, with a real workaround.** §4.3 of
+`docs/reference/http-api.md` already gives a correct answer to "did it succeed": poll
+`last_full_sync_at`, written on success alone, and re-`POST` to learn whether one is still running.
+That is two REST reads standing in for a frame the stream could have sent, and it is why this is
+minor rather than serious: the information exists, it is simply not on the channel the client is
+already holding open.
+
+**What a terminal failure frame would cost.**
+
+* **Wire.** It fits the existing vocabulary in **shape** but needs a new `phase` value — `failed` —
+  because the four current values are all *"work is happening here"* and none can carry an ending
+  that is not `done`. Reusing `done` with an added `error` field would be worse: every consumer that
+  today treats `done` as success would silently start reporting failures as completions, which is
+  precisely the class of bug this log exists to catch. A new value is the safe direction, since
+  `web/src/lib/api.ts` already carries `phase` through as an opaque string and a client that has not
+  heard of `failed` says less about the frame rather than dropping it.
+* **Producer.** One `defer`-shaped publish in `FullImport`, or a wrapper in
+  `cmd/usarr/fullImportLocked` that publishes on a non-nil error return. The wrapper is the smaller
+  change and is where both pre-importer refusals already live, so it covers the cases `FullImport`
+  itself cannot see. Redaction has to be considered at that publish site: the error strings carry
+  upstream detail, and `import_e2e_test.go`'s `assertNoSecret` over the whole stream dump is the
+  existing guard that would have to keep passing.
+* **Consumers.** `web/src/lib/services.ts`'s `syncNoteWithProgress`, and `importstream.svelte.ts`'s
+  `#receive`. Neither would break on an unknown phase, but neither would *say* anything useful about
+  one until it is taught the value. The `web/` thread has to be told before the frame ships, not
+  after.
+* **Fixture.** `cmd/usarr/sse_contract_test.go` records only healthy runs, so a `failed` frame would
+  be recorded from nowhere — it joins `search.failed` and `stream.missed` in the category the
+  client's own unit tests cover from synthesised payloads.
+
+**What a consumer would do differently with it.** Today the Services screen's re-import readout can
+only decay from *"it read N items"* to silence, and it hedges with the connection state and the
+`Last successful sync` column. With a `failed` frame it could say *the import stopped* at the moment
+it stopped, name the upstream reason under §17.3's verbatim rule, and re-enable its button — instead
+of leaving a row that read *"reading items"* four minutes ago and has said nothing since. That is a
+real improvement and it is the argument for doing it.
+
+**Should it be done next? Yes — but as its own change, and not first.** It is a small, well-bounded
+producer change with one new enum value, and it removes a hedge from a screen that already ships.
+What makes it *not* urgent is that no user-visible claim is currently false: nothing renders
+"finished" off silence, because `importstream.svelte.ts` refuses to. The order that costs least is
+to tell the `web/` thread the value is coming, land the producer and the client arm close together,
+and record the phase in `docs/reference/http-api.md` §5.2 in the same commit — a phase value that
+exists on the wire and in no consumer is exactly the shape LS-05 was.
+
+**No ADR.** A `failed` phase closes off no alternative that this log has not already weighed; it is
+an addition to a vocabulary the stream already owns.
+
+## LS-153 — §17.8's reopen trigger fired, and the reason it named is retired
+
+`f040a1d` recorded the decision not to subscribe the Libraries screen to `GET /api/events`, and named
+a reopen trigger: *"when the Services screen's own subscription lands and the event plumbing sits in
+a shared store"*. **Both landed at `74ea1e5`.** `web/src/lib/importstream.svelte.ts` is a
+reference-counted singleton — first `subscribe()` opens the socket, the last release closes it, and a
+second screen subscribing while the first is up joins the one that exists — so the cost the paragraph
+weighed, *a second subscription built for this one screen*, no longer exists.
+
+**The answer is unchanged and the reason is not, which is the whole finding.** Leaving the cost
+argument standing after its own trigger had fired would be a retracted reason still doing work.
+**Applied:** §17.8's paragraph rewritten rather than appended to. It now states that the trigger
+fired, that the cost objection is retired, and names `web/src/lib/importstream.svelte.ts` so the next
+reader can check rather than take it on trust. What holds the answer up now is the smaller point that
+survived: an import is a service-level event whose home is §17.3, and whether the *importing* state
+belongs on the Libraries screen at all is the design-taste question the original paragraph already
+flagged and did not settle. That question is now the *only* one left, so the next move there is a
+design ask and not another measurement.
+
+## LS-154 — the `import.progress` frame's shape facts had no home a screen author would find
+
+Four facts about the frame were true in the code, half-recorded in one client module's doc comment,
+and written down nowhere a second consumer would look. **Applied:** they are now
+`docs/reference/http-api.md` **§5**, each cited to its publish site.
+
+**Why there and not §17.8.** These are wire facts about a stream that **two** screens can consume —
+Services already does — not a Libraries-screen design decision. Filing them under one screen's
+section would hide them from the author who needs them today, and `docs/reference/http-api.md` §4.2
+already sends every client that wants progress to this stream while saying nothing about what it
+promises. That file's own header sets exactly this bar: an endpoint appears when a client has to rely
+on something the JSON shape does not say by itself. §17.8 carries a one-clause pointer, not a copy.
+
+The four, each measured rather than relayed:
+
+| Fact | Where it is true |
+| --- | --- |
+| A failed import publishes **nothing**; stream silence means unknown, never finished and never failed | `internal/libsync/importer.go:197-308` (terminal publish at `:290`, after every error return); `cmd/usarr/import.go:75-83` and `:111-118` for two silences that precede the importer entirely. Assessed as LS-152 |
+| Exactly four phases — `containers`, `items`, `credits`, `done` | `internal/libsync/importer.go:213`, `:370`, `:443`, `:290`. **And `credits` is skipped whole** for a source that is not a `CreditSource` or has no requests (`:415-418`), so a three-frame run is complete |
+| No `total` is ever sent except by `credits` | `internal/libsync/importer.go:446` is the only site that sets it; the field is `omitempty`, so absent means **unknown**, not zero, and never a denominator |
+| `applied` counts a different thing in each phase | `items`/`done` count catalogue items (`:372`, `:292`); `credits` counts **credit rows written** (`:445`) against a `total` that counts **items** (`:446`) |
+
+⚠️ **The fourth one is sharper than "different things", and the fixture now demonstrates it.** In the
+`credits` phase `applied` and `total` are in different units, so `applied / total` is not a fraction
+of anything and can exceed 1. The frame recorded by LS-151's generator is a real run of two series,
+one with three credited people and one with none: `applied: 3`, `total: 2`. The meaningful ratio in
+that phase is `items_read / total`.
+
+## LS-140 — closed
+
+**Closed by this pass, option (2) as recommended.** §17.3's action map now says of a degraded row
+what `healthAction` actually emits — *Test connection* — and a following paragraph names the row
+expander as where *Run full sync now* lives, gated on `role` by `canRunFullSync` and kept out of the
+Action column to protect the 248px reserve ADR-0029 depends on. Every claim was re-measured before
+the edit: `healthAction`'s range at `internal/httpapi/services.go:799-819`, `actionFor`'s three named
+arms and its expander-opening fallback in `web/src/routes/services/+page.svelte`, and
+`git log -S 'return "Run full sync now"'` over `internal/httpapi/services.go`, which returns nothing
+— no commit has ever emitted the string. Option (1) was not taken, for the reason LS-140 gave: it
+would reopen a settled placement decision in order to satisfy a sentence.

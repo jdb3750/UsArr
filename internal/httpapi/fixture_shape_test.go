@@ -32,6 +32,14 @@ import (
 //     recording has no frame of either name, and there is nothing here to
 //     decode. The table rejects unknown names so adding one to the fixture
 //     forces this test to grow.
+//   - import.progress's field VALUES against the producing type. The frame is
+//     internal/libsync's Progress marshalled whole, and this package does not
+//     import internal/libsync — §2.3 rule 1 keeps handlers and the sync core
+//     apart, and a test-only edge would still link internal/kavita into this
+//     package's test binary. So importProgressFrame below is a hand mirror, in
+//     the same spirit as the envelopes above. Its drift mode is LOUD rather than
+//     silent: a field added to Progress reaches the fixture on the next
+//     regeneration and fails here as an unknown field.
 //   - everything outside the SSE stream. sse-frames.json is the only fixture
 //     under web/src; the REST response shapes have no recorded counterpart to
 //     check, so this proves nothing about them.
@@ -60,6 +68,19 @@ type doneFrame struct {
 	Report   reportResponse `json:"report"`
 }
 
+// importProgressFrame mirrors internal/libsync's Progress, field for field.
+//
+// `total` is `omitempty` there and is therefore absent from three of the four
+// phases; it is a plain field here because this decoder only ever needs to
+// ACCEPT it, never to reproduce its omission.
+type importProgressFrame struct {
+	InstanceID int64  `json:"instance_id"`
+	Phase      string `json:"phase"`
+	ItemsRead  int    `json:"items_read"`
+	Applied    int    `json:"applied"`
+	Total      int    `json:"total"`
+}
+
 func TestRecordedFramesCarryNoFieldTheAPINeverEmits(t *testing.T) {
 	// One fresh destination per frame, because a decoder cannot report unknown
 	// fields into a shared value.
@@ -68,6 +89,8 @@ func TestRecordedFramesCarryNoFieldTheAPINeverEmits(t *testing.T) {
 		EventSearchIndexer: func() any { return new(indexerFrame) },
 		EventSearchResults: func() any { return new(resultsFrame) },
 		EventSearchDone:    func() any { return new(doneFrame) },
+
+		EventImportProgress: func() any { return new(importProgressFrame) },
 	}
 
 	blob, err := os.ReadFile(sseFixturePath)

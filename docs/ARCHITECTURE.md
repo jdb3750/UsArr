@@ -3232,7 +3232,21 @@ like a fault. It is a prompt, in UsArr's own words, with no verbatim block, and 
 it; *TLS pin changed* → show both fingerprints and require
 an explicit accept; *needs re-identification* (§7.4 guard 2) → explain that the instance's identity
 changed, that sync is paused deliberately, and offer **two** actions, not one; *degraded, partial
-data* → Run full sync now.
+data* → Test connection.
+
+⚠️ **This last one used to read *"→ Run full sync now"*, and `healthAction` has never emitted that
+string in any commit** (`git log -S`, `internal/httpapi/services.go`). Its range
+(`internal/httpapi/services.go:799-819`) is closed —
+`Re-link this instance`, `Update API key`, `Review the TLS fingerprint`, `Test connection`,
+`Enable this service`, and `""` — and the *degraded* arm returns `Test connection`. The frontend has
+no arm bound to a re-import either: `actionFor` (`web/src/routes/services/+page.svelte`) switches on
+`Update API key`, `Test connection` and `Enable this service` by name, and anything else falls
+through to a control that merely opens the row's expander. **The re-import is real, but it is not an
+Action-column button.** It renders in every non-indexer row's expander as *Run full sync now*
+(`canRunFullSync` gates it on `role`, so an indexer gets a sentence saying why instead), and it is
+kept out of the Action column deliberately: that cell holds the ONE button the server named as this
+row's fix, sized to a measured 248px reserve, and a second permanent control there would push past
+the reserve [ADR-0029](./DECISIONS.md#adr-0029) makes every row resolve independently.
 
 **The re-identification banner needs both branches, because its own copy tells you not to press its
 only button.** It says *"Re-link only if you know this is the same library"* and then offers
@@ -4262,23 +4276,28 @@ being on 3b and Prowlarr carrying no catalogue. The reason previously read `whos
 rather than an absent delta time, because "no number" and "a number from four hours ago" read
 identically otherwise).
 
-**The *importing* state does not subscribe to `GET /api/events`, and that is a decision rather than
-an omission.** Nothing blocks it technically: an SSE subscription is not a synchronous upstream call
-on a render path, so principle 1 is not in play, and the server already publishes `import.progress`
-as each batch commits, with a terminal `done` frame — `internal/libsync/importer.go` and
-`cmd/usarr/import.go` publish it, `internal/httpapi/server.go` routes the stream. It is not wired
-because **an import is a service-level event, and its home is §17.3**; a live indicator on a second
-screen creates two places that can disagree about one fact. And the two failure modes are not
-symmetric. What this screen derives today from its two point-in-time reads degrades to a **true**
-statement — *"An import did not finish"*, *"this count may be short"* (`web/src/lib/libraries.ts`) —
-where a dropped or missed event degrades to a **false** one: a row asserting an import is running
-after it finished, or finished while it runs. **Reopen when the Services screen's own subscription
-lands and the event plumbing sits in a shared store**, because that is the point at which the cost
-argument changes: one subscription already held, read by a second screen, rather than a second
-subscription built for this one. Reopen on that measurement, not on preference. 🔍 **Whether the
-*importing* state belongs on this screen at all, in principle, is a design-taste question and is not
-settled here** — this paragraph settles only that it is not wired now, and flags the other question
-for a design ask.
+**The *importing* state does not subscribe to `GET /api/events`. The answer is still "not yet", but
+⚠️ the reason that used to carry it has been retracted — do not repeat it.** This paragraph
+previously named a reopen trigger: *when the Services screen's own subscription lands and the event
+plumbing sits in a shared store*. **Both have happened.** `web/src/lib/importstream.svelte.ts` is a
+reference-counted singleton — the first subscriber opens the socket, the last release closes it, and
+a second screen subscribing while the first is up joins the socket that already exists — so
+subscribing this screen is now one `subscribe((event) => …)` call and no second connection.
+**The cost objection is therefore retired**, and the trigger fired without changing the answer.
+
+What is left is smaller and is not about cost. **An import is a service-level event and its home is
+§17.3**; a live indicator on a second screen creates two places that can disagree about one fact.
+That reason is unchanged and it is the whole of what holds the answer up now. The asymmetry argument
+is a supporting note rather than a load-bearing one: what this screen derives from its two
+point-in-time reads degrades to a **true** statement — *"An import did not finish"*, *"this count may
+be short"* (`web/src/lib/libraries.ts`) — where a dropped event degrades to a **false** one.
+
+🔍 **Whether the *importing* state belongs on this screen at all, in principle, is a design-taste
+question and is not settled here.** It is the only question left, so the next move is a design ask
+and not a measurement. If it is answered yes, the wire facts a subscriber has to hold are in
+[`docs/reference/http-api.md` §5](./reference/http-api.md) — in particular that **stream silence
+means unknown, never finished and never failed**, which is the trap a row rendering "importing" off
+this stream would fall into first.
 
 **Overrides must be listable in one place** — what was excluded, re-linked or overridden, by whom,
 when and why, each revertible in one click — or they become invisible magic nobody can undo.

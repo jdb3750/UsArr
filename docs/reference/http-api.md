@@ -537,3 +537,70 @@ is, and says so in its own code.
 **The two 409s are separate codes on purpose.** Their fixes are opposite — wait, versus press this
 somewhere else — and a client that switched on the status alone would have to guess which sentence
 to show.
+
+---
+
+## 5 · `GET /api/events` — the `import.progress` frame
+
+§4.2 sends every client that wants progress here, so what the frame does and does not promise
+belongs here rather than in one screen's design section. Four facts, each measured at the publish
+sites, and each one a thing the JSON shape does not say by itself.
+
+```jsonc
+{"instance_id": 2, "phase": "credits", "items_read": 2, "applied": 3, "total": 2}
+```
+
+The recorded frames a client can hold this against are in
+`web/src/lib/__fixtures__/sse-frames.json`, regenerated off a live stream by `cmd/usarr`'s
+`TestSSEFramesMatchTheClientContract`; the type is `internal/libsync/importer.go:99` (`Progress`).
+
+### 5.1 Silence means UNKNOWN — never finished, and never failed
+
+🚩 **A failed import publishes nothing.** Every error path in `FullImport`
+(`internal/libsync/importer.go:197-308`) returns before the terminal publish at
+`internal/libsync/importer.go:290`, and two failures happen even earlier than that: a service that
+is not a Kavita, and a stored credential that will not open, are both refused in
+`cmd/usarr/import.go:75-83` before an `Importer` exists, so not even a `containers` frame is sent.
+A third case sends nothing for a different reason — `cmd/usarr/import.go:111-118` returns a nil
+callback when the hub is not wired, and the import then runs to completion in silence.
+
+So a stream that stops is a stream that stops. **`phase: "done"` is the only positive evidence of
+completion**, and there is no negative evidence at all: a client cannot tell a failed import from a
+running one from a dead server. §4.3's table is the only way to answer "did it succeed" — poll
+`last_full_sync_at`, which is written on success alone. This is recorded as a defect, not a design,
+in [`REVIEW-LOG.md` LS-152](../REVIEW-LOG.md).
+
+### 5.2 There are exactly four phases, and they are not a progress scale
+
+`containers` · `items` · `credits` · `done` — published at `internal/libsync/importer.go:213`,
+`:370`, `:443` and `:290` respectively. They are ordered, but `credits` is **skipped entirely** for
+a source that reports no credits or is not a `CreditSource` (`:415-418`), so three frames is a
+complete healthy run as readily as four.
+
+A phase is carried as the string the server sent. A client that has not heard of a phase should say
+less about the frame, not drop it.
+
+### 5.3 Only `credits` ever sends a `total`
+
+`total` is `omitempty` and the credits publish is the **only** site that sets it
+(`internal/libsync/importer.go:446`). `containers`, `items` and `done` send no total at all, because
+Kavita reports its own in a `Pagination` header that is middleware and is absent from its OpenAPI
+document.
+
+🚩 **Absent means unknown. It does not mean zero, and it is not a denominator to fall back on.**
+Two of the four phases can never fill a progress bar, which is why the Services screen renders a
+sentence with real counts rather than a bar.
+
+### 5.4 `applied` counts a different thing in each phase — and is not `total`'s numerator
+
+| `phase` | `items_read` counts | `applied` counts | `total` |
+| --- | --- | --- | --- |
+| `containers` | nothing yet — always `0` | nothing yet — always `0` | absent |
+| `items` | catalogue items read from the source | catalogue items in a **committed** batch | absent |
+| `credits` | credit sets read | **credit rows written** | credit *requests*, i.e. **items** |
+| `done` | catalogue items read, final | catalogue items applied, final | absent |
+
+⚠️ **In the `credits` phase, `applied` and `total` are in different units**, so `applied / total` is
+not a fraction of anything. One item can carry several credits: the recorded frame above is a real
+run of two series where one had three credited people and the other had none, giving `applied: 3`
+against `total: 2`. The ratio that is meaningful there is `items_read / total`.

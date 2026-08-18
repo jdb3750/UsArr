@@ -29,12 +29,13 @@ func TestEventNamesAreTheWireContract(t *testing.T) {
 		}
 	}
 
-	// import.progress is the SEVENTH name, and it is listed here deliberately
-	// rather than quietly: it HAS a producer (cmd/usarr's importProgress, proved
-	// end to end over a real SSE connection by
-	// TestAddingAKavitaProducesACatalogue), while web/src/lib/api.ts's
-	// STREAM_EVENT_NAMES does NOT yet carry it, so today's SPA drops the frame.
-	// That gap is recorded as LS-05 rather than closed here.
+	// import.progress is the SEVENTH name. It HAS a producer (cmd/usarr's
+	// importProgress, proved end to end over a real SSE connection by
+	// TestAddingAKavitaProducesACatalogue) and, since 74ea1e5, a listener:
+	// web/src/lib/api.ts's STREAM_EVENT_NAMES carries it and
+	// web/src/lib/importstream.svelte.ts folds it into the Services screen. Both
+	// halves of the contract are live, so this name is pinned on the same footing
+	// as the six above rather than as a known gap. LS-05 is closed.
 	if EventImportProgress != "import.progress" {
 		t.Errorf("event name = %q, want %q", EventImportProgress, "import.progress")
 	}
@@ -42,10 +43,18 @@ func TestEventNamesAreTheWireContract(t *testing.T) {
 	// ⚠️ THIS BLOCK IS A REMINDER, NOT A DETECTOR, AND SAYING SO IS THE POINT.
 	// The map is a hand-written literal, so len(names) can only ever be the
 	// number of keys someone typed — it CANNOT notice a constant added to
-	// events.go, and it did not notice `import.progress`. The real contract is
-	// cross-language (this list against web/src/lib/api.ts's
-	// STREAM_EVENT_NAMES) and is currently pinned by two independent hardcoded
-	// lists that drift in silence. See LS-05.
+	// events.go, and it did not notice `import.progress` for as long as that one
+	// went unlistened-for. The real contract is cross-language (this list against
+	// web/src/lib/api.ts's STREAM_EVENT_NAMES) and is still pinned by two
+	// independent hardcoded lists, which now AGREE but which nothing joins: a
+	// name added to events.go and to neither list breaks nothing.
+	//
+	// What does have a joining test is the frame SHAPE, for the five names a
+	// healthy run emits: cmd/usarr's TestSSEFramesMatchTheClientContract records
+	// them off a live stream into web/src/lib/__fixtures__/sse-frames.json, and
+	// TestRecordedFramesCarryNoFieldTheAPINeverEmits checks the other direction.
+	// search.failed and stream.missed occur on no healthy run and so are outside
+	// even that.
 	names := map[string]bool{
 		EventSearchStarted: true, EventSearchIndexer: true, EventSearchResults: true,
 		EventSearchDone: true, EventSearchFailed: true,
