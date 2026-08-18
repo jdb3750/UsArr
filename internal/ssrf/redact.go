@@ -337,3 +337,73 @@ func stripCredentials(u *url.URL) {
 		u.RawQuery = q.Encode()
 	}
 }
+
+// RedactText strips credentials out of free-form text that may embed a URL.
+//
+// Upstream error strings are shown VERBATIM on the Services screen (§17.3), ride
+// the SSE stream, reach slog and are stored in service_instance.last_error, and
+// an upstream error routinely quotes the URL it failed on — which for Prowlarr
+// carries ?apikey= and for Kavita's GET /api/Plugin/version carries ?apiKey=.
+// Verbatim means "the actual error, not a placeholder"; it does not mean
+// "including the key".
+//
+// It lives here rather than in a caller because of the one-implementation rule
+// this file states above: the deny-list has exactly one copy, and so does the
+// text scanner that feeds it. internal/httpapi and internal/kavita both call
+// this; neither has its own.
+//
+// LIMIT, stated so no caller mistakes it for a general secret scrubber: a bare
+// secret that is not inside a URL passes through untouched. The URL rewriting is
+// RedactRawURL's; this function only finds the substrings to hand it.
+func RedactText(s string) string {
+	if s == "" {
+		return s
+	}
+	lower := strings.ToLower(s)
+	if !strings.Contains(lower, "http://") && !strings.Contains(lower, "https://") {
+		return s
+	}
+
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		start := indexScheme(s[i:])
+		if start < 0 {
+			b.WriteString(s[i:])
+			break
+		}
+		start += i
+		b.WriteString(s[i:start])
+		end := start
+		for end < len(s) && !isURLTerminator(s[end]) {
+			end++
+		}
+		// Trailing punctuation belongs to the sentence, not to the URL.
+		for end > start && strings.ContainsRune(".,;:!?)]}'\"", rune(s[end-1])) {
+			end--
+		}
+		b.WriteString(RedactRawURL(s[start:end]))
+		i = end
+	}
+	return b.String()
+}
+
+func indexScheme(s string) int {
+	lower := strings.ToLower(s)
+	h := strings.Index(lower, "http://")
+	s2 := strings.Index(lower, "https://")
+	switch {
+	case h < 0:
+		return s2
+	case s2 < 0:
+		return h
+	case h < s2:
+		return h
+	default:
+		return s2
+	}
+}
+
+func isURLTerminator(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '"' || c == '<' || c == '>'
+}

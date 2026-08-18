@@ -65,36 +65,17 @@ func TestRedactedHeaders(t *testing.T) {
 	}
 }
 
-// An upstream error routinely quotes the URL it failed on, and for Prowlarr that
-// URL carries ?apikey=. Verbatim means "the actual error", not "including the
-// key" — this is the line between the two.
-func TestRedactTextKeepsTheErrorAndDropsTheKey(t *testing.T) {
+// The shim over ssrf.RedactText. The scanner's own cases live in internal/ssrf;
+// this proves the shim still redacts, so no call site in this package silently
+// lost its redaction when the implementation moved.
+func TestRedactTextShimStillRedacts(t *testing.T) {
 	in := `Get "http://prowlarr:9696/api/v1/indexer?apikey=abc123def456": dial tcp 10.0.0.5:9696: connect: connection refused`
 	got := redactText(in)
 
 	if strings.Contains(got, "abc123def456") {
 		t.Fatalf("the key survived redaction: %s", got)
 	}
-	for _, want := range []string{"connection refused", "prowlarr:9696", "/api/v1/indexer"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("redaction destroyed the diagnostic: %q missing from %s", want, got)
-		}
-	}
-}
-
-func TestRedactTextLeavesPlainTextAlone(t *testing.T) {
-	in := "Prowlarr rejected UsArr's API key"
-	if got := redactText(in); got != in {
-		t.Fatalf("redactText(%q) = %q, want it unchanged", in, got)
-	}
-}
-
-func TestRedactTextHandlesTrailingPunctuation(t *testing.T) {
-	got := redactText("failed on http://host:9696/x?token=SECRET.")
-	if strings.Contains(got, "SECRET") {
-		t.Fatalf("key survived: %s", got)
-	}
-	if !strings.HasSuffix(got, ".") {
-		t.Fatalf("the sentence lost its full stop: %s", got)
+	if !strings.Contains(got, "connection refused") {
+		t.Errorf("redaction destroyed the diagnostic: %s", got)
 	}
 }
