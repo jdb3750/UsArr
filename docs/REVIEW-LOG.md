@@ -14528,3 +14528,120 @@ otherwise have been a comment describing a recipe it no longer describes.
 ℹ️ **Still open, still not this thread's.** `moved_pins` runs two movers together with no separator,
 found and left by `FLOORPIN-01`. Unchanged here, and now reachable from two more banners; it remains
 a change to every banner in the gate.
+
+---
+
+# VN9-09 — the two-install mockup drew v0.1 as Sonarr and Radarr; ADR-0041 makes it Kavita, and the argument inverted with the rows
+
+**Date:** 2026-08-18. **Prefix:** `VN9-`, continuing from
+[`VN9-08`](#vn9-08--two-drafts-applied-against-a-tree-that-had-moved-five-citations-dead-one-falsified-by-its-own-rule),
+which was the highest `VN9-` **entry** on `main` when this was written, re-read immediately before
+writing rather than remembered. Appended, never renumbered.
+
+## What was wrong
+
+`docs/design/mockups/` demonstrates two installs behind a switcher. Its **v0.1** install predated
+[ADR-0041](./DECISIONS.md#adr-0041) and drew the exact complement of the truth: Movies and TV
+populated from Sonarr and Radarr, and books and comics as the sourceless types waiting for a
+service. ADR-0041 makes **Kavita** v0.1's one catalogue source and
+[ADR-0045](./DECISIONS.md#adr-0045) fixes Sonarr and Radarr at **v0.2**, so v0.1's catalogue is
+exactly ebooks and comics and the four sourceless types are films, TV, music and audiobooks.
+
+This was **not a stale label**. A prior survey (read at `1b9259e`, verified line by line against the
+tree before each edit) enumerated 177 `data-inst` sites, every service- and type-naming string, and
+the sample data screen by screen. Its central finding, confirmed here, is that a row swap does not
+work: the two installs were built to demonstrate the **opposite identity tiers** from the ones they
+now hold. `matched by title` was drawn as *unreachable in v0.1 because Sonarr carries TVDB ids*; it
+is now v0.1's **ordinary** case, because a free Kavita returns null `aniListId`, `malId` and
+`comicVineId`.
+
+## What was applied
+
+Five screens, `usarr.js`, `usarr.css`, and the regenerated `prototype.html`. The v0.1 install now
+reads: **Kavita and Prowlarr**; four libraries (Ebooks 424, Comics 512, Manga 0, the orphaned Ongoing
+comics 41); Home Block A with Ebooks and Comics counted and `Radarr · v0.2`, `Sonarr · v0.2`,
+`Navidrome · after v0.1`, `Audiobookshelf · after v0.1` on the four without; two attention items;
+search returning 6 results in 2 groups.
+
+**The reconciliation rule was kept, and keeping it cost the full stack a new library.** `usarr.js`
+and the mockups' `README.md` both state that every v0.1 figure is the full stack's own figure with
+the absent services' contribution removed. The full stack drew **no Kavita book library at all**, so
+a swapped v0.1 Ebooks row had no parent figure to be derived from. The full stack therefore gains
+one: Kavita's `Books` container, 424 books, joined to the existing Ebooks library so that library is
+**2,266 over two instances, 1,842 + 424**, and v0.1 shows Kavita's 424. That is the one row where
+the two installs differ by arithmetic rather than by presence, and it is drawn as such.
+
+Three demonstrations that rested on **two Sonarrs** were re-homed rather than faked. No second Kavita
+was invented for v0.1. The full stack's now-two-source Ebooks library carries the metadata-authority
+radio as a real choice and a mixed identity panel (1,703 on an external id, 563 by title); the v0.1
+edit screen carries the polarity reversal — one source, `the only source` in the authority cell, and
+**0 on an external id, 424 by title**. The v0.1 drilldown was **re-cut to two levels** rather than
+deleted: `Comics › Dune: House Atreides`, eleven issues with #7 missing, against the full stack's
+three-level `Music › Boards of Canada › Geogaddi`. Depth belongs to the medium, which is a stronger
+demonstration than the one it replaces. The `filtered` state's chips fork by install, because
+`format:flac` + `quality:2160p` name two things a Kavita install cannot hold at all; v0.1 filters on
+`format:cbz` + `author:Frank Herbert`, whose intersection is genuinely empty over the six results on
+screen.
+
+Sites **wrong by omission** — carrying no `data-inst` and therefore rendering on both installs — were
+forked, not edited: the \*Arr rows in Add-service and Add-library, the two Requests lines naming
+Radarr and Sonarr as connected, the `stale` banners on Home and Search, the fingerprint re-link
+banner, the connection test's success panel, and the System-status list, which also gained the Kavita
+warning it was missing so that it and Home's Block B state the same set on either install.
+
+## What was rebutted rather than applied
+
+**One of the four rulings was not followed to the letter, and this says so rather than reporting it
+as done.** The instruction was that *two catalogue sources, one degraded, and a metadata-authority
+radio that is a real choice* all move to the full stack's new two-source book library. The first and
+third are applied there. **"One degraded" was left where the full stack already earns it** — the TV
+library over Sonarr and Sonarr Anime, a `full` row this pass did not touch. Relocating it would have
+required degrading Audiobookshelf on the full stack, and that cascades into Home's Block B count and
+pagehead, the Services health row, the System-status list and the Libraries pagehead: five to nine
+`full` sites that are correct today, changed only to move a demonstration the full stack already
+carries. The demonstration is preserved; only its relocation is declined.
+
+## The gate, and what it cannot see
+
+`make design` — **exit 0**, ending `all design checks pass`. Measured: 9 source files, 858,021 chars
+in the static sweep; `prototype.html` 744,520 bytes against the 400,000 floor; 110 screen × state ×
+install × panel combinations clean of overflow at each of five viewports; row heights inside the band
+at all three densities on all five screens; 360 availability glyphs carrying a word; 140 list
+renderings at one tab stop; **0 copy violations** over 6,932 user-visible strings.
+
+**The guard was fired, not assumed.** The first run of this pass reported **7 FAILURES** on this
+tree: `"!"` in *"BOOM! Studios"* promoted from a `<td>` into a group heading, the Requests post-grab
+row pushed past the 80px ceiling by a longer v0.1 sentence, and the Services row floor. All three
+were real, all three were fixed in the drawing rather than in the check — except the floor, below.
+
+**`ROW_FLOOR.services` was restated from 190 to 145, and that is a change to the gate.** v0.1's health
+table went from five \*Arr rows to two, which took the measured population from 221 row renderings to
+170. The floor exists to catch a check that stopped matching, not to require a table to stay a
+certain size; it is set at the same ~85% of the live population as every other screen's, and the
+reason is written into `check.mjs` beside it so the next reader does not have to reconstruct it. A
+floor lowered without that note would be indistinguishable from a gate quietly softened.
+
+**The gate cannot see this defect class, before or after.** §1c asserts that ≥ 60 `data-inst`
+elements exist, that no element carries both `data-when` and `data-inst`, and that every value is
+`full` or `v01` — it is blind to *which content* sits under which value. §8b asserts that the
+switcher is wired, that both labels name a milestone, that the page loads in the full stack, and that
+all five screens' rendered text **differs** between the installs — it never asserts that either one is
+**true**. A green here is not evidence this fix is correct. What was verified by reading: both
+installs' complete rendered text was dumped screen by screen and state by state under Chromium and
+read for every mention of a service, a milestone and a media type. What nobody verified: nothing
+mechanised checks that v0.1 names Kavita rather than Sonarr, and nothing ever will until such a check
+is written.
+
+## What was left, deliberately
+
+Out of this pass's scope by instruction, and named so the next one does not have to find it:
+`docs/design/mockups/README.md` (the two-install table, the derivation section and the *"what each
+install is for"* argument, six of whose ten claims change hands) and the adjacent
+`DESIGN-DIRECTION.md` items — both depend on the figures this pass settled. Two are already done and
+should be verified rather than redone: rule 13's exemplar and §8.4's sentence landed in `2895961`.
+
+One residue inside the mockups, found rather than inherited from the survey: the Services screen's
+`addservice` state still teaches the *"wrong kind"* failure over Sonarr and Radarr answering the same
+`/api/v3/system/status`. That is an ecosystem fact rather than a claim about the selected install,
+the success panel beside it now forks by install, and rewriting the failure panel over Kavita would
+destroy the finding it exists to show. It is left as prose about the ecosystem, deliberately.

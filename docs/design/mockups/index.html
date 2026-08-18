@@ -57,18 +57,22 @@
          Both options name a milestone rather than only a stack, because the
          default view is six populated media types and a reader who takes that
          for v0.1 has been misled by the drawing. "A later milestone" is the
-         strongest true statement available: §16 sequences the catalogue
-         sources one at a time after v0.1 and has not fixed which lands in
-         which release, so naming v0.2 here would invent a status. -->
+         strongest true statement available for the stack as a whole: §16
+         fixes Sonarr and Radarr at v0.2 (ADR-0045), but §16.1 sequences
+         Navidrome, Audiobookshelf and Komga one at a time after v0.1 without
+         fixing which release each lands in, and the full stack is every one of
+         them at once. Naming a single version here would invent a status.
+         The v0.1 option names its two services outright, because there are
+         two and §16.1 fixes them. -->
     <div class="mocknote">
       <span class="statebar__tag">mockup</span>
       <label class="sr" for="install">Which install these screens are drawn over</label>
       <select id="install" class="select mocknote__install" data-act="install">
         <option value="full">Full stack: a later milestone</option>
-        <option value="v01">v0.1: Sonarr, Radarr, Prowlarr</option>
+        <option value="v01">v0.1: Kavita, Prowlarr</option>
       </select>
       <span class="mocknote__long" data-inst="full">Static design mockup of UsArr. Every value on these screens is invented. Drawn over an install with every catalogue source connected, which is later than v0.1.</span>
-      <span class="mocknote__long" data-inst="v01" hidden>Static design mockup of UsArr. Every value on these screens is invented. Drawn over the three services v0.1 connects.</span>
+      <span class="mocknote__long" data-inst="v01" hidden>Static design mockup of UsArr. Every value on these screens is invented. Drawn over the two services v0.1 connects.</span>
       <span class="mocknote__short" data-inst="full">Mockup, invented data, full stack</span>
       <span class="mocknote__short" data-inst="v01" hidden>Mockup, invented data, v0.1 install</span>
     </div>
@@ -148,7 +152,7 @@
     <!-- Navidrome's LibrarySelector model, including the part that matters:
          the component renders nothing at all when the user has 0 or 1 library,
          so no control appears for a distinction they do not have. The full
-         stack has eight libraries and the v0.1 install has two, so the chip
+         stack has eight libraries and the v0.1 install has four, so the chip
          appears on both — and every number it states is counted over the
          libraries the selected install actually has, never over the markup. -->
     <div class="scope">
@@ -169,18 +173,20 @@
         <fieldset>
           <legend>Select libraries</legend>
           <label class="check"><input type="checkbox" data-act="scope-all" checked> Everything</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="movies" checked> Movies</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="tv" checked> TV</label>
-          <!-- Six of the eight libraries are made of containers Navidrome,
-               Audiobookshelf and Kavita named, so on the v0.1 install they do
-               not exist to be scoped. The chip's total falls to two with them,
-               which is what "All libraries (2)" is counted from. -->
+          <!-- Four of the eight libraries are bound only to containers Sonarr,
+               Radarr, Navidrome and Audiobookshelf named, so on the v0.1
+               install they do not exist to be scoped. Ebooks survives the cut
+               because Kavita is one of its two sources, and it arrives here
+               carrying only Kavita's half. The chip's total falls to four,
+               which is what "All libraries (4)" is counted from. -->
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="movies" checked> Movies</label>
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="tv" checked> TV</label>
           <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="music" checked> Music</label>
           <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="audiobooks" checked> Audiobooks</label>
-          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="ebooks" checked> Ebooks</label>
-          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="comics" checked> Comics</label>
-          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="manga" checked> Manga</label>
-          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="comics-ongoing" checked> Ongoing comics</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="ebooks" checked> Ebooks</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="comics" checked> Comics</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="manga" checked> Manga</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="comics-ongoing" checked> Ongoing comics</label>
         </fieldset>
         <!-- Libraries are unbounded, which is why they are a scope chip and
              not a nav list, so ticking twenty of them one at a time is a real
@@ -215,12 +221,16 @@
          and the difference is what the two surfaces can hold.
          ARCHITECTURE.md 17.2, DESIGN-DIRECTION rule 13. -->
     <ul class="nav__group">
-      <li><a class="nav__link" href="search.html?type=movie" data-route="search">Movies <span class="nav__num">1,204<span class="sr"> films</span></span></a></li>
-      <li><a class="nav__link" href="search.html?type=series" data-route="search">TV <span class="nav__num">275<span class="sr"> series</span></span></a></li>
+      <li data-inst="full"><a class="nav__link" href="search.html?type=movie" data-route="search">Movies <span class="nav__num">1,204<span class="sr"> films</span></span></a></li>
+      <li data-inst="full"><a class="nav__link" href="search.html?type=series" data-route="search">TV <span class="nav__num">275<span class="sr"> series</span></span></a></li>
       <li data-inst="full"><a class="nav__link" href="search.html?type=music" data-route="search">Music <span class="nav__num">612<span class="sr"> artists</span></span></a></li>
       <li data-inst="full"><a class="nav__link" href="search.html?type=audiobook" data-route="search">Audiobooks <span class="nav__num">418<span class="sr"> books</span></span></a></li>
-      <li data-inst="full"><a class="nav__link" href="search.html?type=ebook" data-route="search">Ebooks <span class="nav__num">1,842<span class="sr"> books</span></span></a></li>
-      <li data-inst="full"><a class="nav__link" href="search.html?type=comic" data-route="search">Comics <span class="nav__num">553<span class="sr"> series</span></span></a></li>
+      <!-- Ebooks is the one type whose count is not the same on both installs:
+           the library is bound to two sources and only Kavita's half is here,
+           so the row forks where the other five do not. -->
+      <li data-inst="full"><a class="nav__link" href="search.html?type=ebook" data-route="search">Ebooks <span class="nav__num">2,266<span class="sr"> books</span></span></a></li>
+      <li data-inst="v01" hidden><a class="nav__link" href="search.html?type=ebook" data-route="search">Ebooks <span class="nav__num">424<span class="sr"> books</span></span></a></li>
+      <li><a class="nav__link" href="search.html?type=comic" data-route="search">Comics <span class="nav__num">553<span class="sr"> series</span></span></a></li>
     </ul>
 
     <ul class="nav__group">
@@ -254,9 +264,9 @@
        accessibility tree. -->
   <div class="pagehead">
     <h1>Home</h1>
-    <span class="pagehead__meta" data-when="live">Last delta sync 14:02, 6 minutes ago. <span data-inst="full">4 items need attention.</span><span data-inst="v01" hidden>3 items need attention.</span></span>
+    <span class="pagehead__meta" data-when="live">Last delta sync 14:02, 6 minutes ago. <span data-inst="full">4 items need attention.</span><span data-inst="v01" hidden>2 items need attention.</span></span>
     <span class="pagehead__meta" data-when="calm" hidden>Every service is healthy. Last delta sync 14:02, 6 minutes ago.</span>
-    <span class="pagehead__meta" data-when="stale" hidden>Radarr unreachable since 11:47, 2 hours ago. Everything else synced 14:02.</span>
+    <span class="pagehead__meta" data-when="stale" hidden><span data-inst="full">Radarr</span><span data-inst="v01" hidden>Kavita</span> unreachable since 11:47, 2 hours ago. Everything else synced 14:02.</span>
     <span class="pagehead__meta" data-when="partial" hidden>First import running. No sync has completed yet.</span>
     <span class="pagehead__meta" data-when="empty" hidden>Every service is healthy. No import has run.</span>
     <span class="pagehead__meta" data-when="scope-empty" hidden>No library is in scope, so nothing is shown.</span>
@@ -290,12 +300,16 @@
        string carries 14:02 because it is written about a different instance;
        copying the literal across gave a banner that overstated freshness by
        2h 15m, which is the exact failure the replica principle's honesty
-       rules exist to prevent. -->
+       rules exist to prevent.
+
+       The instance named is the one this install has. On v0.1 that is Kavita,
+       and the sentence below it is the same sentence: what a replica can and
+       cannot go stale about does not depend on which service went away. -->
   <div class="banner banner--warn" data-when="stale" role="status" hidden>
     <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
     <div class="banner__body">
-      <div class="banner__title">Radarr is unreachable — showing cached data from 11:47, 2 hours ago</div>
-      <div class="banner__text">Browse, search, sort and filter keep working from the replica. Writes to Radarr are queued until it answers.</div>
+      <div class="banner__title"><span data-inst="full">Radarr</span><span data-inst="v01" hidden>Kavita</span> is unreachable — showing cached data from 11:47, 2 hours ago</div>
+      <div class="banner__text">Browse, search, sort and filter keep working from the replica. <span data-inst="full">Writes to Radarr are queued until it answers.</span><span data-inst="v01" hidden>Kavita takes no writes from UsArr, so nothing is queued behind it.</span></div>
     </div>
     <div class="banner__actions"><a href="services.html">Open Services</a></div>
   </div>
@@ -310,7 +324,7 @@
            source's declared total and Have is not yet computed for any type:
            the have/wanted split cannot be known 68% of the way through, and
            the summary below says "importing" rather than a sync time. -->
-      <div class="banner__text"><span data-inst="full"><span class="num">820</span> of <span class="num">1,204</span> films, <span class="num">141</span> of <span class="num">275</span> series, <span class="num">96</span> of <span class="num">553</span> comic series, over totals each service reports for itself.</span><span data-inst="v01" hidden><span class="num">820</span> of <span class="num">1,204</span> films and <span class="num">141</span> of <span class="num">275</span> series, over totals each service reports for itself.</span> Rows appear as each batch commits, and no availability figure is computed until the first phase commits.</div>
+      <div class="banner__text"><span data-inst="full"><span class="num">820</span> of <span class="num">1,204</span> films, <span class="num">141</span> of <span class="num">275</span> series, <span class="num">96</span> of <span class="num">553</span> comic series and <span class="num">1,004</span> of <span class="num">2,266</span> books, over totals each service reports for itself.</span><span data-inst="v01" hidden><span class="num">96</span> of <span class="num">553</span> comic series and <span class="num">214</span> of <span class="num">424</span> books, over totals each service reports for itself.</span> Rows appear as each batch commits, and no availability figure is computed until the first phase commits.</div>
     </div>
     <div class="banner__actions"><a href="services.html">Open Services</a></div>
   </div>
@@ -320,17 +334,17 @@
       <!-- Every service named here has to be one the selected install can
            actually read a library from, which is why the sentence is not the
            same on both. Lidarr is a request sink and a v1.0 item, so naming it
-           would offer a library in no milestone at all. On the v0.1 install
-           the list is exactly the three services v0.1 connects: naming the
-           catalogue sources here would be this screen promising, on the very
-           first thing a new user sees, something the milestone does not ship.
+           would offer a library in no milestone at all.
            One sentence either way: the base-URL-and-API-key detail and the
            mandatory connection test both belong to the dialog the button
            opens, and saying them here was the empty state doing the dialog's
-           job. -->
+           job. On the v0.1 install the list is exactly the two services v0.1
+           connects, Kavita and Prowlarr, and naming a catalogue source that
+           arrives later would be this screen promising, on the very first
+           thing a new user sees, something the milestone does not ship. -->
       <h2 class="empty__title">No services configured</h2>
       <p class="empty__text" data-inst="full">UsArr reads your library from the services you already run — Sonarr, Radarr, Navidrome, Audiobookshelf, Kavita — and searches indexers through Prowlarr, and none of them is connected yet.</p>
-      <p class="empty__text" data-inst="v01" hidden>UsArr reads your library from the services you already run — Sonarr and Radarr — and searches indexers through Prowlarr, and none of them is connected yet.</p>
+      <p class="empty__text" data-inst="v01" hidden>UsArr reads your library from a service you already run, which on this install is Kavita, and searches indexers through Prowlarr, and neither is connected yet.</p>
       <div class="empty__actions">
         <a class="btn btn--primary" href="services.html">Add a service</a>
         <a class="btn" href="requests.html">Search indexers instead</a>
@@ -417,8 +431,8 @@
             </tr>
             <tr role="row" aria-rowindex="6">
               <td data-col="type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span><a href="search.html?type=ebook">Ebooks</a></td>
-              <td data-col="items" class="is-num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Items</span>1,842 books</td>
-              <td data-col="have" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>1,842 have</span></td>
+              <td data-col="items" class="is-num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Items</span>2,266 books</td>
+              <td data-col="have" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>2,266 have</span></td>
               <td data-col="synced" class="num" role="cell" aria-colindex="4" title="16 Aug 2026, 13:40"><span class="stacklabel" aria-hidden="true">Synced</span>28 minutes ago</td>
             </tr>
             <!-- No "7,891 / 9,400" here on purpose. A comic issue total is a
@@ -437,18 +451,26 @@
     </section>
 
     <!-- Block A on the v0.1 install. Still six rows, and that is the decision:
-         v0.1 connects Sonarr, Radarr and Prowlarr, so Movies and TV have a
+         v0.1 connects Kavita and Prowlarr, so ebooks and comics have a
          catalogue source and the other four do not. Dropping the four would
-         leave a home screen showing films and TV from which the only available
-         inference is that UsArr does not do books, music or comics, which is
-         the misreading principle 3 exists to prevent. Each of the four
-         therefore renders in the per-type unconfigured state and carries what
-         a nav entry cannot: the state, the service that will populate it, when
-         it lands, and the action. ARCHITECTURE.md 17.2.
+         leave a home screen showing books and comics from which the only
+         available inference is that UsArr does not do films, TV or music,
+         which is the misreading principle 3 exists to prevent. Each of the
+         four therefore renders in the per-type unconfigured state and carries
+         what a nav entry cannot: the state, the service that will populate it,
+         when it lands, and the action. ARCHITECTURE.md 17.2.
+
+         The rows stay in the media-type enum's own order rather than being
+         sorted so the two counted ones lead. The order of a closed enum is not
+         a ranking and reordering it by how full each row is would make the
+         list move every time a source is added.
 
          The counts are not a second data set. Every populated number here is
-         the full stack's own number for a source v0.1 has; every number that
-         disappeared belonged to Navidrome, Audiobookshelf or Kavita. -->
+         the full stack's own number for the source v0.1 has; every number that
+         shrank or disappeared belonged to Sonarr, Radarr, Navidrome or
+         Audiobookshelf. Ebooks is the row where that is visible rather than
+         binary: the library is bound to two sources on the full stack and only
+         Kavita's 424 of its 2,266 books are here. -->
     <section class="section" id="summary-v01" data-inst="v01" hidden>
       <div class="section__head">
         <h2>Your library</h2>
@@ -468,23 +490,31 @@
             </tr>
           </thead>
           <tbody role="rowgroup">
-            <tr role="row" aria-rowindex="2">
-              <td data-col="type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span><a href="search.html?type=movie">Movies</a></td>
-              <td data-col="items" class="is-num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Items</span>1,204 films</td>
-              <td data-col="have" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--part">1,187 have · 17 wanted</span></td>
-              <td data-col="synced" class="num" role="cell" aria-colindex="4" title="16 Aug 2026, 11:47"><span class="stacklabel" aria-hidden="true">Synced</span>2 hours ago</td>
-            </tr>
-            <tr role="row" aria-rowindex="3">
-              <td data-col="type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span><a href="search.html?type=series">TV</a></td>
-              <td data-col="items" class="is-num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Items</span>275 series</td>
-              <td data-col="have" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--part">13,204 / 14,061 episodes</span></td>
-              <td data-col="synced" class="num" role="cell" aria-colindex="4" title="16 Aug 2026, 14:02"><span class="stacklabel" aria-hidden="true">Synced</span>6 minutes ago</td>
-            </tr>
             <!-- The four without a source. The type name is NOT a link: there
                  is no screen behind it, and a link to an empty table is the
                  thing this row exists instead of. The status vocabulary is the
                  Services screen's own "not configured", because that is what
-                 this is — nothing is broken and nothing failed. -->
+                 this is -- nothing is broken and nothing failed.
+
+                 Two of the four name a version and two name a sequence
+                 position, which is the strongest true statement available for
+                 each: ADR-0045 fixes Sonarr and Radarr at v0.2, and §16.1
+                 orders Navidrome and Audiobookshelf after v0.1 without fixing
+                 which release either lands in. -->
+            <tr role="row" aria-rowindex="2">
+              <td data-col="type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>Movies</td>
+              <td data-col="items" class="is-num muted" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Items</span>—</td>
+              <td data-col="have" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Have</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>no catalogue source</span>
+                <div class="cell-sub">Radarr · v0.2 · <a href="services.html">Add</a></div></td>
+              <td data-col="synced" class="num muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Synced</span>never</td>
+            </tr>
+            <tr role="row" aria-rowindex="3">
+              <td data-col="type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>TV</td>
+              <td data-col="items" class="is-num muted" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Items</span>—</td>
+              <td data-col="have" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Have</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>no catalogue source</span>
+                <div class="cell-sub">Sonarr · v0.2 · <a href="services.html">Add</a></div></td>
+              <td data-col="synced" class="num muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Synced</span>never</td>
+            </tr>
             <tr role="row" aria-rowindex="4">
               <td data-col="type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>Music</td>
               <td data-col="items" class="is-num muted" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Items</span>—</td>
@@ -499,21 +529,24 @@
                 <div class="cell-sub">Audiobookshelf · after v0.1 · <a href="services.html">Add</a></div></td>
               <td data-col="synced" class="num muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Synced</span>never</td>
             </tr>
+            <!-- Kavita, not Komga: ADR-0035 chose it and ADR-0041 put it in
+                 v0.1, and the reason is on the Libraries screen rather than
+                 repeated here. -->
             <tr role="row" aria-rowindex="6">
-              <td data-col="type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>Ebooks</td>
-              <td data-col="items" class="is-num muted" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Items</span>—</td>
-              <td data-col="have" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Have</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>no catalogue source</span>
-                <div class="cell-sub">Audiobookshelf too · after v0.1 · <a href="services.html">Add</a></div></td>
-              <td data-col="synced" class="num muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Synced</span>never</td>
+              <td data-col="type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span><a href="search.html?type=ebook">Ebooks</a></td>
+              <td data-col="items" class="is-num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Items</span>424 books</td>
+              <td data-col="have" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>424 have</span></td>
+              <td data-col="synced" class="num" role="cell" aria-colindex="4" title="16 Aug 2026, 13:31"><span class="stacklabel" aria-hidden="true">Synced</span>37 minutes ago</td>
             </tr>
-            <!-- Kavita, not Komga: ADR-0035 chose it, and the reason is on the
-                 Libraries screen rather than repeated here. -->
+            <!-- No "7,891 / 9,400" here on purpose. A comic issue total is a
+                 declaration, and the ComicInfo spec concedes it: "The Count
+                 could be different on each book in a series." What is always
+                 honest is contiguity, computed locally from issue numbers. -->
             <tr role="row" aria-rowindex="7">
-              <td data-col="type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>Comics</td>
-              <td data-col="items" class="is-num muted" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Items</span>—</td>
-              <td data-col="have" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Have</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>no catalogue source</span>
-                <div class="cell-sub">Kavita · after v0.1 · <a href="services.html">Add</a></div></td>
-              <td data-col="synced" class="num muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Synced</span>never</td>
+              <td data-col="type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span><a href="search.html?type=comic">Comics</a></td>
+              <td data-col="items" class="is-num" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Items</span>553 series</td>
+              <td data-col="have" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--part">7,891 issues · 34 with gaps</span></td>
+              <td data-col="synced" class="num" role="cell" aria-colindex="4" title="16 Aug 2026, 13:31"><span class="stacklabel" aria-hidden="true">Synced</span>37 minutes ago</td>
             </tr>
           </tbody>
         </table>
@@ -522,7 +555,7 @@
            that those types are missing from the product as well as from the
            catalogue. They are not. Requests searches indexers for all six in
            v0.1, over the Prowlarr free-text path. -->
-      <p class="cell-sub u-mt-8">The four rows without a count name the service that will catalogue that type and when it arrives; §16 fixes the milestone, and none of them is in v0.1. Requests searches indexers for all six types over Prowlarr today, including those four. <a href="requests.html">Open Requests</a></p>
+      <p class="cell-sub u-mt-8">The four rows without a count name the service that will catalogue that type and when it arrives; §16 fixes Movies and TV at v0.2 and sequences music and audiobooks after v0.1. Requests searches indexers for all six types over Prowlarr today, including those four. <a href="requests.html">Open Requests</a></p>
     </section>
 
     <!-- Block B: the thing neither Jellyfin nor Plex can put on a home screen,
@@ -533,7 +566,7 @@
       <div class="section__head">
         <h2>Needs attention</h2>
         <span class="section__count num" data-inst="full">4 items</span>
-        <span class="section__count num" data-inst="v01" hidden>3 items</span>
+        <span class="section__count num" data-inst="v01" hidden>2 items</span>
       </div>
       <div class="tablewrap" data-inst="full">
         <table aria-rowcount="5" class="tbl tbl--stack cols-home-attention-full" data-roving="tbody tr" aria-label="Items needing attention" aria-colcount="3" role="table">
@@ -572,12 +605,15 @@
           </tbody>
         </table>
       </div>
-      <!-- The v0.1 install, derived: the Kavita/Komga identifier warning is
-           the one row of the four that belongs to a service it does not have,
-           so three remain and the count above follows. Nothing else changes,
-           because Prowlarr, Radarr and Sonarr Anime are all v0.1 services. -->
+      <!-- The v0.1 install, derived: the two rows that belong to services it
+           does not have -- the Radarr outage and the Sonarr Anime clock skew --
+           are gone, so two remain and the count above follows. The Kavita
+           identifier warning is not an edge case here. It is what a free
+           Kavita reports about every series it holds, which on this install is
+           the whole catalogue, so the row that reads as an exception on the
+           full stack is the ordinary state of the only source there is. -->
       <div class="tablewrap" data-inst="v01" hidden>
-        <table aria-rowcount="4" class="tbl tbl--stack cols-home-attention-v01" data-roving="tbody tr" aria-label="Items needing attention" aria-colcount="3" role="table">
+        <table aria-rowcount="3" class="tbl tbl--stack cols-home-attention-v01" data-roving="tbody tr" aria-label="Items needing attention" aria-colcount="3" role="table">
           <thead role="rowgroup">
             <tr role="row" aria-rowindex="1">
               <th scope="col" role="columnheader" aria-colindex="1">State</th>
@@ -593,16 +629,10 @@
               <td data-col="action" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Action</span><a href="services.html">Update API key</a></td>
             </tr>
             <tr role="row" aria-rowindex="3">
-              <td data-col="state" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg>error</span></td>
-              <td data-col="what-is-wrong" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What is wrong</span><span class="cell-title">Radarr</span> has been unreachable since 11:47
-                <div class="cell-sub">Movies is served entirely from the replica while this lasts.</div></td>
-              <td data-col="action" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Action</span><a href="services.html">Test connection</a></td>
-            </tr>
-            <tr role="row" aria-rowindex="4">
               <td data-col="state" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span></td>
-              <td data-col="what-is-wrong" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What is wrong</span><span class="cell-title">Sonarr Anime</span> clock is 212 seconds ahead of this host
-                <div class="cell-sub">Delta polling can miss changes inside the skew window.</div></td>
-              <td data-col="action" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Action</span><a href="services.html">Run full sync</a></td>
+              <td data-col="what-is-wrong" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What is wrong</span><span class="cell-title">Kavita</span> reports no external identifier for any series
+                <div class="cell-sub">Identifier fields need Kavita+, so 512 series match by title alone.</div></td>
+              <td data-col="action" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Action</span><a href="libraries.html">Open Libraries</a></td>
             </tr>
           </tbody>
         </table>
@@ -665,26 +695,28 @@
           <tr role="row" aria-rowindex="16"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>movie</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Anatomy of a Fall</td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>09:41</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">Bluray-1080p</span> · 11.0 GiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Movies</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Radarr</td></tr>
           <tr role="row" aria-rowindex="17"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>episode</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Severance <span class="muted">S02E10</span> Cold Harbor</td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>09:20</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">WEBDL-1080p</span> · 2.9 GiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--part">17/19</span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>TV</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Sonarr</td></tr>
           <tr role="row" aria-rowindex="18"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>album</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>In Rainbows <span class="muted">· Radiohead</span></td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>09:02</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">FLAC</span> · 10 tracks · 42 m</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Music</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Navidrome</td></tr>
-          <tr role="row" aria-rowindex="19"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>ebook</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Blindsight <span class="muted">· Peter Watts</span></td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>08:44</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">EPUB</span> · 879 KiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Ebooks</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Audiobookshelf</td></tr>
+          <tr role="row" aria-rowindex="19"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>ebook</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Blindsight <span class="muted">· Peter Watts</span></td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>08:44</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">EPUB</span> · 879 KiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Ebooks</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Kavita</td></tr>
           <tr role="row" aria-rowindex="20"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>issue</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Berserk vol. 41</td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>08:26</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">CBZ</span> · 226 p · 113 MiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Comics</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Kavita</td></tr>
           <tr role="row" aria-rowindex="21"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>audiobook</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Project Hail Mary <span class="muted">· Andy Weir, read by Ray Porter</span></td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>08:05</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">M4B</span> · 16 h 10 m · 713 MiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Audiobooks</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Audiobookshelf</td></tr>
           <tr role="row" aria-rowindex="22"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>movie</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Past Lives</td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>07:48</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">WEBDL-1080p</span> · 6.0 GiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Movies</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Radarr</td></tr>
           <tr role="row" aria-rowindex="23"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>album</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Ys <span class="muted">· Joanna Newsom</span></td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>07:30</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">FLAC</span> · 5 tracks · 56 m</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Music</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Navidrome</td></tr>
           <tr role="row" aria-rowindex="24"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>episode</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Slow Horses <span class="muted">S04E06</span> Hello Goodbye</td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>07:12</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">WEBDL-1080p</span> · 2.6 GiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>24/24</span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>TV</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Sonarr</td></tr>
           <tr role="row" aria-rowindex="25"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>issue</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Saga #60</td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>06:55</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">CBZ</span> · 22 p · 36.4 MiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Comics</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Kavita</td></tr>
-          <tr role="row" aria-rowindex="26"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>ebook</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>The Dispossessed <span class="muted">· Ursula K. Le Guin</span></td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>06:31</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">EPUB</span> · 1.0 MiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Ebooks</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Audiobookshelf</td></tr>
+          <tr role="row" aria-rowindex="26"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>ebook</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>The Dispossessed <span class="muted">· Ursula K. Le Guin</span></td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>06:31</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">EPUB</span> · 1.0 MiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Ebooks</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Kavita</td></tr>
           <tr role="row" aria-rowindex="27"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>album</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Spirit of Eden <span class="muted">· Talk Talk</span></td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>06:04</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">FLAC</span> · 6 tracks · 41 m</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Music</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Navidrome</td></tr>
         </tbody>
       </table>
     </div>
-    <!-- The same table on the v0.1 install: the eight rows Radarr and Sonarr
-         contributed, and not one row invented to make the block look fuller.
-         This is Block C's argument working in the direction nobody draws --
-         a unified table loses rows when a source is absent, where six
-         per-type strips would have lost four whole regions and left the
-         screen looking broken. -->
+    <!-- The same table on the v0.1 install: the seven rows Kavita contributed,
+         and not one row invented to make the block look fuller. This is Block
+         C's argument working in the direction nobody draws -- a unified table
+         loses rows when a source is absent, where six per-type strips would
+         have lost four whole regions and left the screen looking broken.
+
+         Two of the seven are ebooks and five are comic issues, which is the
+         one source's own mix rather than a designed balance. -->
     <div class="tablewrap" data-inst="v01" hidden>
-      <table aria-rowcount="9" class="tbl tbl--stack cols-home-recent-v01" data-roving="tbody tr" aria-label="Recently added across all media types" aria-colcount="7" role="table">
+      <table aria-rowcount="8" class="tbl tbl--stack cols-home-recent-v01" data-roving="tbody tr" aria-label="Recently added across all media types" aria-colcount="7" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Type</th>
@@ -697,14 +729,13 @@
           </tr>
         </thead>
         <tbody role="rowgroup">
-          <tr role="row" aria-rowindex="2"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>movie</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Dune: Part Two</td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>14:02</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">Bluray-1080p</span> · 13.2 GiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Movies</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Radarr</td></tr>
-          <tr role="row" aria-rowindex="3"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>episode</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>ER <span class="muted">S12E14</span> Quintessence of Dust</td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>13:22</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">HDTV-1080p</span> · 1.8 GiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--part">250/331</span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>TV</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Sonarr</td></tr>
-          <tr role="row" aria-rowindex="4"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>movie</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>The Zone of Interest</td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>11:22</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">Bluray-1080p</span> · 8.5 GiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Movies</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Radarr</td></tr>
-          <tr role="row" aria-rowindex="5"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>episode</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Shogun <span class="muted">S01E10</span> A Dream of a Dream</td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>11:04</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">WEBDL-1080p</span> · 3.7 GiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>10/10</span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>TV</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Sonarr</td></tr>
-          <tr role="row" aria-rowindex="6"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>movie</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Anatomy of a Fall</td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>09:41</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">Bluray-1080p</span> · 11.0 GiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Movies</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Radarr</td></tr>
-          <tr role="row" aria-rowindex="7"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>episode</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Severance <span class="muted">S02E10</span> Cold Harbor</td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>09:20</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">WEBDL-1080p</span> · 2.9 GiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--part">17/19</span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>TV</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Sonarr</td></tr>
-          <tr role="row" aria-rowindex="8"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>movie</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Past Lives</td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>07:48</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">WEBDL-1080p</span> · 6.0 GiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Movies</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Radarr</td></tr>
-          <tr role="row" aria-rowindex="9"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>episode</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Slow Horses <span class="muted">S04E06</span> Hello Goodbye</td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>07:12</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">WEBDL-1080p</span> · 2.6 GiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>24/24</span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>TV</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Sonarr</td></tr>
+          <tr role="row" aria-rowindex="2"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>issue</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Saga #61</td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>13:55</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">CBZ</span> · 24 p · 39.9 MiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Comics</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Kavita</td></tr>
+          <tr role="row" aria-rowindex="3"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>issue</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Chainsaw Man vol. 12</td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>11:40</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">CBZ</span> · 192 p · 91.9 MiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Comics</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Kavita</td></tr>
+          <tr role="row" aria-rowindex="4"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>issue</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Monstress #50</td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>09:58</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">CBZ</span> · 30 p · 49.7 MiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Comics</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Kavita</td></tr>
+          <tr role="row" aria-rowindex="5"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>ebook</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Blindsight <span class="muted">· Peter Watts</span></td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>08:44</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">EPUB</span> · 879 KiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Ebooks</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Kavita</td></tr>
+          <tr role="row" aria-rowindex="6"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>issue</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Berserk vol. 41</td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>08:26</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">CBZ</span> · 226 p · 113 MiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Comics</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Kavita</td></tr>
+          <tr role="row" aria-rowindex="7"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>issue</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>Saga #60</td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>06:55</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">CBZ</span> · 22 p · 36.4 MiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Comics</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Kavita</td></tr>
+          <tr role="row" aria-rowindex="8"><td data-col="type" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Type</span>ebook</td><td data-col="title" class="cell-title" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Title</span>The Dispossessed <span class="muted">· Ursula K. Le Guin</span></td><td data-col="added" class="num" role="cell" aria-colindex="3" title="16 Aug 2026"><span class="stacklabel" aria-hidden="true">Added</span>06:31</td><td data-col="detail" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Detail</span><span class="mono">EPUB</span> · 1.0 MiB</td><td data-col="have" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Have</span><span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></td><td data-col="library" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Library</span>Ebooks</td><td data-col="instance" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Instance</span>Kavita</td></tr>
         </tbody>
       </table>
     </div>
@@ -741,14 +772,13 @@
         <a class="card card--sq" href="#recent" data-dc="#33393b"><span class="card__art" title="Spirit of Eden"></span><span class="card__t" title="Spirit of Eden">Spirit of Eden</span><span class="card__y">1988</span><span class="card__meta">album <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
       </div>
       <div class="grid" data-roving=".card" data-roving-axis="horizontal" aria-label="Recently added across all media types" data-inst="v01" hidden>
-        <a class="card" href="#recent" data-dc="#7d6a4f"><span class="card__art" title="Dune: Part Two"></span><span class="card__t" title="Dune: Part Two">Dune: Part Two</span><span class="card__y">2024</span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#443345"><span class="card__art" title="ER"></span><span class="card__t" title="ER">ER</span><span class="card__y">1994</span><span class="card__meta">episode <span class="avail avail--part">250/331</span></span></a>
-        <a class="card" href="#recent" data-dc="#55483a"><span class="card__art" title="The Zone of Interest"></span><span class="card__t" title="The Zone of Interest">The Zone of Interest</span><span class="card__y">2023</span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#4a3b30"><span class="card__art" title="Shogun"></span><span class="card__t" title="Shogun">Shogun</span><span class="card__y">2024</span><span class="card__meta">episode <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>10/10</span></span></a>
-        <a class="card" href="#recent" data-dc="#2f3a3d"><span class="card__art" title="Anatomy of a Fall"></span><span class="card__t" title="Anatomy of a Fall">Anatomy of a Fall</span><span class="card__y">2023</span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#26333f"><span class="card__art" title="Severance"></span><span class="card__t" title="Severance">Severance</span><span class="card__y">2022</span><span class="card__meta">episode <span class="avail avail--part">17/19</span></span></a>
-        <a class="card" href="#recent" data-dc="#4a5a63"><span class="card__art" title="Past Lives"></span><span class="card__t" title="Past Lives">Past Lives</span><span class="card__y">2023</span><span class="card__meta">movie <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
-        <a class="card" href="#recent" data-dc="#3e4438"><span class="card__art" title="Slow Horses"></span><span class="card__t" title="Slow Horses">Slow Horses</span><span class="card__y">2022</span><span class="card__meta">episode <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span>24/24</span></span></a>
+        <a class="card" href="#recent" data-dc="#5c3f42"><span class="card__art" title="Saga #61"></span><span class="card__t" title="Saga #61">Saga #61</span><span class="card__y">2025</span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#9c8a6e"><span class="card__art" title="Chainsaw Man vol. 12"></span><span class="card__t" title="Chainsaw Man vol. 12">Chainsaw Man vol. 12</span><span class="card__y">2023</span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#34443c"><span class="card__art" title="Monstress #50"></span><span class="card__t" title="Monstress #50">Monstress #50</span><span class="card__y">2024</span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#7d8a93"><span class="card__art" title="Blindsight"></span><span class="card__t" title="Blindsight">Blindsight</span><span class="card__y">2006</span><span class="card__meta">ebook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#3d2f2b"><span class="card__art" title="Berserk vol. 41"></span><span class="card__t" title="Berserk vol. 41">Berserk vol. 41</span><span class="card__y">2019</span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#5c3f47"><span class="card__art" title="Saga #60"></span><span class="card__t" title="Saga #60">Saga #60</span><span class="card__y">2025</span><span class="card__meta">issue <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
+        <a class="card" href="#recent" data-dc="#3a4a52"><span class="card__art" title="The Dispossessed"></span><span class="card__t" title="The Dispossessed">The Dispossessed</span><span class="card__y">1974</span><span class="card__meta">ebook <span class="avail avail--full"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><span class="sr">Have</span></span></span></a>
       </div>
     </div>
   </section>

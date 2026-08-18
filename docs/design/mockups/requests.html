@@ -57,18 +57,22 @@
          Both options name a milestone rather than only a stack, because the
          default view is six populated media types and a reader who takes that
          for v0.1 has been misled by the drawing. "A later milestone" is the
-         strongest true statement available: §16 sequences the catalogue
-         sources one at a time after v0.1 and has not fixed which lands in
-         which release, so naming v0.2 here would invent a status. -->
+         strongest true statement available for the stack as a whole: §16
+         fixes Sonarr and Radarr at v0.2 (ADR-0045), but §16.1 sequences
+         Navidrome, Audiobookshelf and Komga one at a time after v0.1 without
+         fixing which release each lands in, and the full stack is every one of
+         them at once. Naming a single version here would invent a status.
+         The v0.1 option names its two services outright, because there are
+         two and §16.1 fixes them. -->
     <div class="mocknote">
       <span class="statebar__tag">mockup</span>
       <label class="sr" for="install">Which install these screens are drawn over</label>
       <select id="install" class="select mocknote__install" data-act="install">
-        <option value="full">Full stack — a later milestone</option>
-        <option value="v01">v0.1 — Sonarr, Radarr, Prowlarr</option>
+        <option value="full">Full stack: a later milestone</option>
+        <option value="v01">v0.1: Kavita, Prowlarr</option>
       </select>
       <span class="mocknote__long" data-inst="full">Static design mockup of UsArr. Every value on these screens is invented. Drawn over an install with every catalogue source connected, which is later than v0.1.</span>
-      <span class="mocknote__long" data-inst="v01" hidden>Static design mockup of UsArr. Every value on these screens is invented. Drawn over the three services v0.1 connects.</span>
+      <span class="mocknote__long" data-inst="v01" hidden>Static design mockup of UsArr. Every value on these screens is invented. Drawn over the two services v0.1 connects.</span>
       <span class="mocknote__short" data-inst="full">Mockup, invented data, full stack</span>
       <span class="mocknote__short" data-inst="v01" hidden>Mockup, invented data, v0.1 install</span>
     </div>
@@ -148,7 +152,7 @@
     <!-- Navidrome's LibrarySelector model, including the part that matters:
          the component renders nothing at all when the user has 0 or 1 library,
          so no control appears for a distinction they do not have. The full
-         stack has eight libraries and the v0.1 install has two, so the chip
+         stack has eight libraries and the v0.1 install has four, so the chip
          appears on both — and every number it states is counted over the
          libraries the selected install actually has, never over the markup. -->
     <div class="scope">
@@ -169,18 +173,20 @@
         <fieldset>
           <legend>Select libraries</legend>
           <label class="check"><input type="checkbox" data-act="scope-all" checked> Everything</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="movies" checked> Movies</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="tv" checked> TV</label>
-          <!-- Six of the eight libraries are made of containers Navidrome,
-               Audiobookshelf and Kavita named, so on the v0.1 install they do
-               not exist to be scoped. The chip's total falls to two with them,
-               which is what "All libraries (2)" is counted from. -->
+          <!-- Four of the eight libraries are bound only to containers Sonarr,
+               Radarr, Navidrome and Audiobookshelf named, so on the v0.1
+               install they do not exist to be scoped. Ebooks survives the cut
+               because Kavita is one of its two sources, and it arrives here
+               carrying only Kavita's half. The chip's total falls to four,
+               which is what "All libraries (4)" is counted from. -->
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="movies" checked> Movies</label>
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="tv" checked> TV</label>
           <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="music" checked> Music</label>
           <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="audiobooks" checked> Audiobooks</label>
-          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="ebooks" checked> Ebooks</label>
-          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="comics" checked> Comics</label>
-          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="manga" checked> Manga</label>
-          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="comics-ongoing" checked> Ongoing comics</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="ebooks" checked> Ebooks</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="comics" checked> Comics</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="manga" checked> Manga</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="comics-ongoing" checked> Ongoing comics</label>
         </fieldset>
         <!-- Libraries are unbounded, which is why they are a scope chip and
              not a nav list, so ticking twenty of them one at a time is a real
@@ -215,12 +221,16 @@
          and the difference is what the two surfaces can hold.
          ARCHITECTURE.md 17.2, DESIGN-DIRECTION rule 13. -->
     <ul class="nav__group">
-      <li><a class="nav__link" href="search.html?type=movie" data-route="search">Movies <span class="nav__num">1,204<span class="sr"> films</span></span></a></li>
-      <li><a class="nav__link" href="search.html?type=series" data-route="search">TV <span class="nav__num">275<span class="sr"> series</span></span></a></li>
+      <li data-inst="full"><a class="nav__link" href="search.html?type=movie" data-route="search">Movies <span class="nav__num">1,204<span class="sr"> films</span></span></a></li>
+      <li data-inst="full"><a class="nav__link" href="search.html?type=series" data-route="search">TV <span class="nav__num">275<span class="sr"> series</span></span></a></li>
       <li data-inst="full"><a class="nav__link" href="search.html?type=music" data-route="search">Music <span class="nav__num">612<span class="sr"> artists</span></span></a></li>
       <li data-inst="full"><a class="nav__link" href="search.html?type=audiobook" data-route="search">Audiobooks <span class="nav__num">418<span class="sr"> books</span></span></a></li>
-      <li data-inst="full"><a class="nav__link" href="search.html?type=ebook" data-route="search">Ebooks <span class="nav__num">1,842<span class="sr"> books</span></span></a></li>
-      <li data-inst="full"><a class="nav__link" href="search.html?type=comic" data-route="search">Comics <span class="nav__num">553<span class="sr"> series</span></span></a></li>
+      <!-- Ebooks is the one type whose count is not the same on both installs:
+           the library is bound to two sources and only Kavita's half is here,
+           so the row forks where the other five do not. -->
+      <li data-inst="full"><a class="nav__link" href="search.html?type=ebook" data-route="search">Ebooks <span class="nav__num">2,266<span class="sr"> books</span></span></a></li>
+      <li data-inst="v01" hidden><a class="nav__link" href="search.html?type=ebook" data-route="search">Ebooks <span class="nav__num">424<span class="sr"> books</span></span></a></li>
+      <li><a class="nav__link" href="search.html?type=comic" data-route="search">Comics <span class="nav__num">553<span class="sr"> series</span></span></a></li>
     </ul>
 
     <ul class="nav__group">
@@ -415,9 +425,10 @@
        empty list read as a defect. It is scoped to music because that is where
        it is TRUE: the same search for a film on the same nine indexers returns
        a full page. Nothing here says music is a lesser media type in UsArr:
-       v0.1 ships no catalogue source and no write-capable service for ANY
-       non-*Arr type, so music sits exactly where audiobooks, ebooks and comics
-       sit. What is specific to music is the indexer ecosystem, and that is all
+       v0.1 ships no write-capable service for ANY type and no catalogue source
+       for four of the six, so music sits exactly where films, TV and
+       audiobooks sit, and one step behind ebooks and comics -- which have a
+       catalogue source that reads them and still nothing that imports one. What is specific to music is the indexer ecosystem, and that is all
        this state claims. See ARCHITECTURE.md 8.5 and 17.5. -->
   <div class="section" data-when="thinmusic" hidden>
     <div class="empty">
@@ -904,7 +915,7 @@
             <td data-col="release" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Release</span><span class="mono trunc" title="Shogun.S01.1080p.DSNP.WEB-DL.DDP5.1.Atmos.H.264-FLUX">Shogun.S01.1080p.DSNP.WEB-DL.DDP5.1.Atmos.H.264-FLUX</span></td>
             <td data-col="indexer" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Indexer</span>NZBgeek</td>
             <td data-col="sent-to" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Sent to</span>SABnzbd</td>
-            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip">sent</span><div class="cell-sub">your download client accepted it. Sonarr never requested this release, so nothing here will import it.</div></td>
+            <td data-col="state" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">State</span><span class="chip">sent</span><div class="cell-sub">your download client accepted it. <span data-inst="full">Sonarr never requested this release, so nothing here will import it.</span><span data-inst="v01" hidden>Nothing on this install catalogues series, so nothing here will import it.</span></div></td>
           </tr>
           <tr role="row" aria-rowindex="7">
             <td data-col="when" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">When</span>15 Aug 2026, 22:12<div class="cell-sub">yesterday</div></td>
@@ -976,7 +987,7 @@
       <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
       <div class="banner__body">
         <div class="banner__title">Nothing on this install imports a book, so a grab ends in your download client</div>
-        <div class="banner__text"><span data-inst="full">Neither Audiobooks nor Ebooks has a request destination, and neither does Music or Comics: this install connects no command sink, and Readarr — the *Arr that used to own books — was archived on 27 Jun 2025.</span><span data-inst="v01" hidden>No media type has a request destination, because v0.1 connects no command sink at all — and books have no catalogue source on this install either, so there is no Audiobooks or Ebooks library for a grab to land in. Readarr, the *Arr that used to own books, was archived on 27 Jun 2025.</span> Grabbing works and the file will download; after that no service renames it, moves it into a library, or tells UsArr what became of it. <span data-inst="full">Audiobookshelf will show the book once the file is in <span class="mono">/media/books</span>, which is the folder it reports as watched for this library.</span><span data-inst="v01" hidden>Nothing on this install will show it either: there is no books catalogue source connected yet, so the file sits in your download client until you file it yourself and UsArr has no library row to attach it to.</span></div>
+        <div class="banner__text"><span data-inst="full">Neither Audiobooks nor Ebooks has a request destination, and neither does Music or Comics: this install connects no command sink, and Readarr — the *Arr that used to own books — was archived on 27 Jun 2025.</span><span data-inst="v01" hidden>No media type has a request destination, because v0.1 connects no command sink at all. Kavita catalogues the ebooks and comics here and it reads a folder rather than filling one, and the audiobook this search is for has no catalogue source on this install at all. Readarr, the *Arr that used to own books, was archived on 27 Jun 2025.</span> Grabbing works and the file will download; after that no service renames it, moves it into a library, or tells UsArr what became of it. <span data-inst="full">Audiobookshelf will show the book once the file is in <span class="mono">/media/books</span>, which is the folder it reports as watched for this library.</span><span data-inst="v01" hidden>Nothing on this install will show this one either: the catalogue source here holds ebooks and comics, so an M4B sits in your download client until an audiobook server is connected. An EPUB is the other case, and it is worth the contrast: drop it in the folder Kavita scans and the next scan puts it in the Ebooks library.</span></div>
       </div>
       <div class="banner__actions"><a href="libraries.html">Open Libraries</a></div>
     </div>
@@ -1019,7 +1030,7 @@
             <td data-col="select" class="muted" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Select</span>n/a</td>
             <td data-col="protocol" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">Protocol</span><span class="proto proto--torrent">torrent</span></td>
             <td data-col="age" class="is-num" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Age</span>1095 <span class="unit unit--age">d</span></td>
-            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="David Grann - The Wager {Dion Graham} [2023] M4B 125kbps">David Grann - The Wager {Dion Graham} [2023] M4B 125kbps</span><div data-slot="grabstate"><span class="chip">grabbed 14:07 · sent to qBittorrent</span><div class="cell-sub"><span data-inst="full">UsArr does not import downloads. Audiobookshelf watches <span class="mono">/media/books</span> and will show it once the file is there.</span><span data-inst="v01" hidden>UsArr does not import downloads, and no service on this install catalogues books, so nothing will show it until one is connected.</span></div></div></td>
+            <td data-col="title" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Title</span><span class="mono trunc" title="David Grann - The Wager {Dion Graham} [2023] M4B 125kbps">David Grann - The Wager {Dion Graham} [2023] M4B 125kbps</span><div data-slot="grabstate"><span class="chip">grabbed 14:07 · sent to qBittorrent</span><div class="cell-sub"><span data-inst="full">UsArr does not import downloads. Audiobookshelf watches <span class="mono">/media/books</span> and will show it once the file is there.</span><span data-inst="v01" hidden>UsArr does not import downloads, and nothing on this install catalogues audiobooks, so nothing will show this M4B.</span></div></div></td>
             <td data-col="indexer" class="mono" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Indexer</span>MyAnonaMouse</td>
             <td data-col="size" class="is-num" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Size</span>650 <span class="unit unit--size">MiB</span></td>
             <td data-col="grabs" class="is-num" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Grabs</span>1,904</td>
@@ -1138,13 +1149,13 @@
           <tbody role="rowgroup">
             <tr role="row" aria-rowindex="2">
               <td data-col="media-type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Media type</span>Movies</td>
-              <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub">Radarr is connected and did not request this</div></td>
-              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span>UsArr does not import downloads. Radarr did not request this release, so Radarr will not import it either — the file stays in your download client until you move it into <span class="mono">/media/movies</span> yourself.</td>
+              <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub"><span data-inst="full">Radarr is connected and did not request this</span><span data-inst="v01" hidden>no film catalogue source connected</span></div></td>
+              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span><span data-inst="full">UsArr does not import downloads. Radarr did not request this release, so Radarr will not import it either — the file stays in your download client until you move it into <span class="mono">/media/movies</span> yourself.</span><span data-inst="v01" hidden>UsArr does not import downloads, and no connected service catalogues films. Radarr would import only the releases it asked for itself, and it arrives in v0.2; the file stays in your download client either way.</span></td>
             </tr>
             <tr role="row" aria-rowindex="3">
               <td data-col="media-type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Media type</span>TV</td>
-              <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub">Sonarr is connected and did not request this</div></td>
-              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span>UsArr does not import downloads. Sonarr did not request this release, so Sonarr will not import it either — the file stays in your download client until you move it into <span class="mono">/media/tv</span> yourself.</td>
+              <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub"><span data-inst="full">Sonarr is connected and did not request this</span><span data-inst="v01" hidden>no series catalogue source connected</span></div></td>
+              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span><span data-inst="full">UsArr does not import downloads. Sonarr did not request this release, so Sonarr will not import it either — the file stays in your download client until you move it into <span class="mono">/media/tv</span> yourself.</span><span data-inst="v01" hidden>UsArr does not import downloads, and no connected service catalogues series. Sonarr would import only the releases it asked for itself, and it arrives in v0.2; the file stays in your download client either way.</span></td>
             </tr>
             <tr role="row" aria-rowindex="4">
               <td data-col="media-type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Media type</span>Music</td>
@@ -1159,20 +1170,20 @@
             <tr role="row" aria-rowindex="6">
               <td data-col="media-type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Media type</span>Ebooks</td>
               <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub">Readarr archived 27 Jun 2025</div></td>
-              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span><span data-inst="full">UsArr does not import downloads, and Readarr — the *Arr that used to own books — was archived on 27 Jun 2025. Audiobookshelf watches <span class="mono">/media/books</span> and will show it once the file is there.</span><span data-inst="v01" hidden>UsArr does not import downloads, and Readarr — the *Arr that used to own books — was archived on 27 Jun 2025. No connected service catalogues ebooks either, so the file stays in your download client and no library row appears for it.</span></td>
+              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span><span data-inst="full">UsArr does not import downloads, and Readarr — the *Arr that used to own books — was archived on 27 Jun 2025. Audiobookshelf watches <span class="mono">/media/books</span> and will show it once the file is there.</span><span data-inst="v01" hidden>UsArr does not import downloads, and Readarr — the *Arr that used to own books — was archived on 27 Jun 2025. Kavita catalogues ebooks here and scans <span class="mono">/books</span>, so it will show the file once it is there and not before.</span></td>
             </tr>
             <tr role="row" aria-rowindex="7">
               <td data-col="media-type" class="cell-title" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Media type</span>Comics</td>
-              <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub"><span data-inst="full">Kavita is a catalogue, not an importer</span><span data-inst="v01" hidden>no comics catalogue source connected</span></div></td>
-              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span><span data-inst="full">UsArr does not import downloads, and no connected service accepts a comic request. Kavita shows what is already inside the folder it scans, so the file stays in your download client until you move it there.</span><span data-inst="v01" hidden>UsArr does not import downloads, and no connected service accepts a comic request. A comics server would show the file once it were inside the folder it scans; this install has none yet, so the file stays in your download client.</span></td>
+              <td data-col="what-imports-it" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">What imports it</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>nothing</span><div class="cell-sub">Kavita is a catalogue, not an importer</div></td>
+              <td data-col="what-the-row-says-after-the-grab" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">What the row says after the grab</span>UsArr does not import downloads, and no connected service accepts a comic request. Kavita shows what is already inside the folder it scans, so the file stays in your download client until you move it there.</td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="note u-pt-8">Two of the six have an *Arr connected and it still does not help, which is the case the copy exists for: a Prowlarr grab never went through Radarr or Sonarr, so neither has a record of it and neither will pick the file up. The *Arr-backed request path that would change that is v0.2. <span data-inst="v01" hidden>On this install the other four have no catalogue source either, so the honest sentence for them is shorter and worse — and it is drawn rather than softened.</span></p>
+      <p class="note u-pt-8"><span data-inst="full">Two of the six have an *Arr connected and it still does not help, which is the case the copy exists for: a Prowlarr grab never went through Radarr or Sonarr, so neither has a record of it and neither will pick the file up. The *Arr-backed request path that would change that is v0.2.</span><span data-inst="v01" hidden>Two of the six have a catalogue source and it still does not help, which is the case the copy exists for: Kavita reads the folder it is pointed at and asks for nothing, so a grab it did not request is a file it has never heard of until the file is in that folder. The other four have no catalogue source at all, so the honest sentence for them is shorter and worse, and it is drawn rather than softened.</span></p>
     </section>
 
-    <p class="section note"><span class="statebar__tag">mockup</span> The first row of the table above is the whole point of this state. It reads <span class="chip">grabbed 14:07 · sent to qBittorrent</span>, names the watched folder, says in words that UsArr does not import downloads, and then it stops. There is no progress bar, no percentage and no "importing" step, because nothing on this install imports a book and UsArr would have nothing to measure. Four of the six media types here are in exactly this position; the *Arr-backed request path that would change it for the two that are not is v0.2.</p>
+    <p class="section note"><span class="statebar__tag">mockup</span> The first row of the table above is the whole point of this state. It reads <span class="chip">grabbed 14:07 · sent to qBittorrent</span>, names the watched folder, says in words that UsArr does not import downloads, and then it stops. There is no progress bar, no percentage and no "importing" step, because nothing on this install imports a book and UsArr would have nothing to measure. <span data-inst="full">Four of the six media types here are in exactly this position; the *Arr-backed request path that would change it for the two that are not is v0.2.</span><span data-inst="v01" hidden>All six media types here are in exactly this position, and the two with a catalogue source are in it for a different reason from the four without one. The *Arr-backed request path is v0.2 and nothing before it changes this for any of them.</span></p>
   </div>
 
 </main>

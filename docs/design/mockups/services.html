@@ -57,18 +57,22 @@
          Both options name a milestone rather than only a stack, because the
          default view is six populated media types and a reader who takes that
          for v0.1 has been misled by the drawing. "A later milestone" is the
-         strongest true statement available: §16 sequences the catalogue
-         sources one at a time after v0.1 and has not fixed which lands in
-         which release, so naming v0.2 here would invent a status. -->
+         strongest true statement available for the stack as a whole: §16
+         fixes Sonarr and Radarr at v0.2 (ADR-0045), but §16.1 sequences
+         Navidrome, Audiobookshelf and Komga one at a time after v0.1 without
+         fixing which release each lands in, and the full stack is every one of
+         them at once. Naming a single version here would invent a status.
+         The v0.1 option names its two services outright, because there are
+         two and §16.1 fixes them. -->
     <div class="mocknote">
       <span class="statebar__tag">mockup</span>
       <label class="sr" for="install">Which install these screens are drawn over</label>
       <select id="install" class="select mocknote__install" data-act="install">
-        <option value="full">Full stack — a later milestone</option>
-        <option value="v01">v0.1 — Sonarr, Radarr, Prowlarr</option>
+        <option value="full">Full stack: a later milestone</option>
+        <option value="v01">v0.1: Kavita, Prowlarr</option>
       </select>
       <span class="mocknote__long" data-inst="full">Static design mockup of UsArr. Every value on these screens is invented. Drawn over an install with every catalogue source connected, which is later than v0.1.</span>
-      <span class="mocknote__long" data-inst="v01" hidden>Static design mockup of UsArr. Every value on these screens is invented. Drawn over the three services v0.1 connects.</span>
+      <span class="mocknote__long" data-inst="v01" hidden>Static design mockup of UsArr. Every value on these screens is invented. Drawn over the two services v0.1 connects.</span>
       <span class="mocknote__short" data-inst="full">Mockup, invented data, full stack</span>
       <span class="mocknote__short" data-inst="v01" hidden>Mockup, invented data, v0.1 install</span>
     </div>
@@ -148,7 +152,7 @@
     <!-- Navidrome's LibrarySelector model, including the part that matters:
          the component renders nothing at all when the user has 0 or 1 library,
          so no control appears for a distinction they do not have. The full
-         stack has eight libraries and the v0.1 install has two, so the chip
+         stack has eight libraries and the v0.1 install has four, so the chip
          appears on both — and every number it states is counted over the
          libraries the selected install actually has, never over the markup. -->
     <div class="scope">
@@ -169,18 +173,20 @@
         <fieldset>
           <legend>Select libraries</legend>
           <label class="check"><input type="checkbox" data-act="scope-all" checked> Everything</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="movies" checked> Movies</label>
-          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="tv" checked> TV</label>
-          <!-- Six of the eight libraries are made of containers Navidrome,
-               Audiobookshelf and Kavita named, so on the v0.1 install they do
-               not exist to be scoped. The chip's total falls to two with them,
-               which is what "All libraries (2)" is counted from. -->
+          <!-- Four of the eight libraries are bound only to containers Sonarr,
+               Radarr, Navidrome and Audiobookshelf named, so on the v0.1
+               install they do not exist to be scoped. Ebooks survives the cut
+               because Kavita is one of its two sources, and it arrives here
+               carrying only Kavita's half. The chip's total falls to four,
+               which is what "All libraries (4)" is counted from. -->
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="movies" checked> Movies</label>
+          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="tv" checked> TV</label>
           <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="music" checked> Music</label>
           <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="audiobooks" checked> Audiobooks</label>
-          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="ebooks" checked> Ebooks</label>
-          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="comics" checked> Comics</label>
-          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="manga" checked> Manga</label>
-          <label class="check" data-inst="full"><input type="checkbox" data-act="scope-lib" data-slug="comics-ongoing" checked> Ongoing comics</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="ebooks" checked> Ebooks</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="comics" checked> Comics</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="manga" checked> Manga</label>
+          <label class="check"><input type="checkbox" data-act="scope-lib" data-slug="comics-ongoing" checked> Ongoing comics</label>
         </fieldset>
         <!-- Libraries are unbounded, which is why they are a scope chip and
              not a nav list, so ticking twenty of them one at a time is a real
@@ -215,12 +221,16 @@
          and the difference is what the two surfaces can hold.
          ARCHITECTURE.md 17.2, DESIGN-DIRECTION rule 13. -->
     <ul class="nav__group">
-      <li><a class="nav__link" href="search.html?type=movie" data-route="search">Movies <span class="nav__num">1,204<span class="sr"> films</span></span></a></li>
-      <li><a class="nav__link" href="search.html?type=series" data-route="search">TV <span class="nav__num">275<span class="sr"> series</span></span></a></li>
+      <li data-inst="full"><a class="nav__link" href="search.html?type=movie" data-route="search">Movies <span class="nav__num">1,204<span class="sr"> films</span></span></a></li>
+      <li data-inst="full"><a class="nav__link" href="search.html?type=series" data-route="search">TV <span class="nav__num">275<span class="sr"> series</span></span></a></li>
       <li data-inst="full"><a class="nav__link" href="search.html?type=music" data-route="search">Music <span class="nav__num">612<span class="sr"> artists</span></span></a></li>
       <li data-inst="full"><a class="nav__link" href="search.html?type=audiobook" data-route="search">Audiobooks <span class="nav__num">418<span class="sr"> books</span></span></a></li>
-      <li data-inst="full"><a class="nav__link" href="search.html?type=ebook" data-route="search">Ebooks <span class="nav__num">1,842<span class="sr"> books</span></span></a></li>
-      <li data-inst="full"><a class="nav__link" href="search.html?type=comic" data-route="search">Comics <span class="nav__num">553<span class="sr"> series</span></span></a></li>
+      <!-- Ebooks is the one type whose count is not the same on both installs:
+           the library is bound to two sources and only Kavita's half is here,
+           so the row forks where the other five do not. -->
+      <li data-inst="full"><a class="nav__link" href="search.html?type=ebook" data-route="search">Ebooks <span class="nav__num">2,266<span class="sr"> books</span></span></a></li>
+      <li data-inst="v01" hidden><a class="nav__link" href="search.html?type=ebook" data-route="search">Ebooks <span class="nav__num">424<span class="sr"> books</span></span></a></li>
+      <li><a class="nav__link" href="search.html?type=comic" data-route="search">Comics <span class="nav__num">553<span class="sr"> series</span></span></a></li>
     </ul>
 
     <ul class="nav__group">
@@ -276,11 +286,11 @@
   <div class="banner banner--err" data-when="reident" role="alert" hidden>
     <svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>
     <div class="banner__body">
-      <div class="banner__title">This may be a different Sonarr from the one UsArr synced with</div>
-      <div class="banner__text">Sync for this instance is paused deliberately, and every library it feeds has stopped recomputing membership. The instance fingerprint changed from <span class="mono">a91c4f</span> to <span class="mono">0d33b8</span>, which happens when the host is rebuilt, restored from a different backup, or repointed at another Sonarr. Re-link only if you know this is the same library; removing and re-adding keeps the 214 works UsArr already holds and attaches the new instance as a separate source, so nothing you named or corrected is lost either way.</div>
+      <div class="banner__title">This may be a different <span data-inst="full">Sonarr</span><span data-inst="v01" hidden>Kavita</span> from the one UsArr synced with</div>
+      <div class="banner__text">Sync for this instance is paused deliberately, and every library it feeds has stopped recomputing membership. The instance fingerprint changed from <span class="mono">a91c4f</span> to <span class="mono">0d33b8</span>, which happens when the host is rebuilt, restored from a different backup, or repointed at another instance. Re-link only if you know this is the same library; removing and re-adding keeps the <span data-inst="full">214</span><span data-inst="v01" hidden>936</span> works UsArr already holds and attaches the new instance as a separate source, so nothing you named or corrected is lost either way.</div>
       <div class="verbatim u-mt-8">instance_id 1: identity_epoch 3 -&gt; 4, max_remote_id_seen 214 -&gt; 6, root_folder /media/tv -&gt; /srv/tv</div>
     </div>
-    <div class="banner__actions"><button type="button" class="btn btn--primary">Re-link — this is the same Sonarr</button><button type="button" class="btn">Not the same instance — remove and re-add</button></div>
+    <div class="banner__actions"><button type="button" class="btn btn--primary">Re-link — this is the same <span data-inst="full">Sonarr</span><span data-inst="v01" hidden>Kavita</span></button><button type="button" class="btn">Not the same instance — remove and re-add</button></div>
   </div>
 
   <div class="banner" data-when="denied" role="alert" hidden>
@@ -307,7 +317,7 @@
     <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
     <div class="banner__body">
       <div class="banner__title">The stored API key does not move to a new address</div>
-      <div class="banner__text">This key is stored encrypted against <span class="mono">http://10.0.0.4:7878</span>, so it cannot be sent to <span class="mono">http://10.0.0.4:7879</span>. Paste the key for the new address, or put the old address back. The stored key is not deleted until you save. The scheme counts too: changing <span class="mono">https</span> to <span class="mono">http</span> on the same port would put a full-admin credential on the wire in clear text, so it is treated as a new address. Changing only the URL base is not a new address and clears nothing.</div>
+      <div class="banner__text">This key is stored encrypted against <span class="mono">http://10.0.0.7:5000</span>, so it cannot be sent to <span class="mono">http://10.0.0.7:5001</span>. Paste the key for the new address, or put the old address back. The stored key is not deleted until you save. The scheme counts too: changing <span class="mono">https</span> to <span class="mono">http</span> on the same port would put a full-admin credential on the wire in clear text, so it is treated as a new address. Changing only the URL base is not a new address and clears nothing.</div>
       <div class="cell-sub u-mt-6">The server's answer, for the record: <span class="mono">PATCH /api/v1/services/3 → 400 credential_reentry_required</span></div>
     </div>
     <div class="banner__actions"><a href="#r-apikey">Go to the API key field</a></div>
@@ -320,14 +330,15 @@
       <div class="banner__title">Audiobookshelf feeds 2 libraries. Removing it leaves both of them with no source.</div>
       <div class="banner__text">Audiobooks and Ebooks are two UsArr libraries over the one Audiobookshelf library, split by edition format, and neither has a second source. Both become orphans: they are kept, marked with the reason, and offered for deletion — never deleted for you, because each carries a name you chose, the corrections made in it and the tags on its works. Deleting a library does discard the corrections that belong to it, and the confirmation says so. Nothing is removed from Audiobookshelf itself.</div>
     </div>
-    <!-- The same warning on the v0.1 install. Radarr is the one service there
-         whose removal orphans a library, and the lesson is identical: a service
-         is not only a pipe, it is what some library is made of. -->
+    <!-- The same warning on the v0.1 install. Kavita is the one service there
+         that feeds a library at all, so removing it orphans every library the
+         install has, and the lesson is identical: a service is not only a
+         pipe, it is what some library is made of. -->
     <div class="banner__body" data-inst="v01" hidden>
-      <div class="banner__title">Radarr feeds 1 library. Removing it leaves Movies with no source.</div>
-      <div class="banner__text">Movies is 1,204 films over one Radarr and it has no second source, so it becomes an orphan: kept, marked with the reason, and offered for deletion — never deleted for you, because it carries a name you chose, the corrections made in it and the tags on its works. Deleting a library does discard the corrections that belong to it, and the confirmation says so. Nothing is removed from Radarr itself, and the 1,204 films stay browsable from the replica exactly as they are while Radarr is unreachable.</div>
+      <div class="banner__title">Kavita feeds 3 libraries. Removing it leaves all three with no source.</div>
+      <div class="banner__text">Comics, Manga and Ebooks are bound to this one Kavita and none of them has a second source, so all three become orphans: kept, marked with the reason, and offered for deletion — never deleted for you, because each carries a name you chose, the corrections made in it and the tags on its works. Deleting a library does discard the corrections that belong to it, and the confirmation says so. Nothing is removed from Kavita itself, and all 936 items stay browsable from the replica exactly as they are.</div>
     </div>
-    <div class="banner__actions"><button type="button" class="btn btn--primary" data-inst="full">Keep Audiobookshelf</button><button type="button" class="btn btn--primary" data-inst="v01" hidden>Keep Radarr</button><a href="libraries.html">Open Libraries</a><button type="button" class="btn">Remove anyway</button></div>
+    <div class="banner__actions"><button type="button" class="btn btn--primary" data-inst="full">Keep Audiobookshelf</button><button type="button" class="btn btn--primary" data-inst="v01" hidden>Keep Kavita</button><a href="libraries.html">Open Libraries</a><button type="button" class="btn">Remove anyway</button></div>
   </div>
 
   <div class="section" data-when="unconfigured" hidden>
@@ -592,8 +603,8 @@ delta polling uses this host's clock, so recent changes can be missed</div>
             </td>
             <td data-col="state" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--ok"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>healthy</span></td>
             <td data-col="last-successful-sync" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Last successful sync</span>page walk 13:31<div class="cell-sub">37 minutes ago</div></td>
-            <td data-col="items" class="is-num" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Items</span>512</td>
-            <td data-col="libraries" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Libraries</span><a href="libraries.html">Comics</a>, <a href="libraries.html">Manga</a><div class="cell-sub">catalogue source, no destination</div></td>
+            <td data-col="items" class="is-num" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Items</span>936</td>
+            <td data-col="libraries" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Libraries</span><a href="libraries.html">Comics</a>, <a href="libraries.html">Manga</a>, <a href="libraries.html">Ebooks</a><div class="cell-sub">catalogue source, no destination</div></td>
             <td data-col="problem" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Problem</span><div class="cell-problem"><span class="prob trunc" title="0 of 512 series carry an external identifier, so matching is by title">0 of 512 series carry an identifier</span> <button type="button" class="linkish" data-act="expand" data-expand-label aria-expanded="false" aria-controls="x-kavita">Show detail</button></div></td>
             <td data-col="action" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Action</span><a href="libraries.html">Open Libraries</a></td>
           </tr>
@@ -603,25 +614,27 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
             <div class="detail">
               <div><h4>Sync channels</h4><ul><li>full <span class="num">02:31</span>, 12 hours ago</li><li>page-walk delta <span class="num">13:31</span>, 37 minutes ago</li><li>reconcile <span class="num">02:00</span>, 12 hours ago</li></ul></div>
               <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">CLOSED</span></li><li>Consecutive failures <span class="num">0</span></li></ul></div>
-              <div><h4>Delta strategy</h4><ul><li class="muted">Kavita has no "changed since" endpoint, so the plan is sort-by-modified plus pagination over <span class="mono">POST /api/Series/all-v2</span>, and the reconciliation sweep does more work here than it does for an *Arr. <strong>Pending a live probe:</strong> Kavita can sort by a field it does not return — <span class="mono">SortField.LastModifiedDate</span> exists but <span class="mono">SeriesDto</span> carries no such property — so the probe asks whether <span class="mono">LastChapterAdded</span> can carry the watermark instead. Without one there is no resumable page walk at all.</li></ul></div>
-              <div><h4>Contributes</h4><ul><li>512 series, 7,204 issues</li><li>2 upstream libraries: <span class="mono">Comics</span> · 512, and <span class="mono">Manga</span> · 0</li></ul></div>
+              <div><h4>Delta strategy</h4><ul><li class="muted">Kavita has no "changed since" endpoint, so the plan is sort-by-modified plus pagination over <span class="mono">POST /api/Series/all-v2</span>, and the reconciliation sweep does more work here than it does for an *Arr. <strong>Measured against a live instance, 17 Aug 2026:</strong> Kavita can sort by a field it does not return — <span class="mono">SortField.LastModifiedDate</span> exists but <span class="mono">SeriesDto</span> carries no such property — and <span class="mono">LastChapterAdded</span> carries the watermark instead, which is what makes the page walk resumable. It moves on a chapter add only, so a deletion is seen by the sweep rather than by the walk.</li></ul></div>
+              <div><h4>Contributes</h4><ul><li>512 series, 7,204 issues, 424 books</li><li>3 upstream libraries: <span class="mono">Comics</span> · 512, <span class="mono">Manga</span> · 0, and <span class="mono">Books</span> · 424</li></ul></div>
             </div>
           </td></tr>
 
         </tbody>
       </table>
     </div>
-    <!-- The same table on the v0.1 install, derived by removing the three
-         services it does not have. Five rows remain, and they are the five
-         that make the point: two Sonarrs feeding one library, a Radarr with
-         its breaker open, a second Radarr named and never connected, and a
-         Prowlarr refusing the stored key. Every state this screen exists to
-         show survives the cut, which is itself the finding -- the health
-         table does not need a media server to be worth drawing.
+    <!-- The same table on the v0.1 install, derived by removing the six
+         services it does not have. Two rows remain: the catalogue source and
+         the indexer manager, which is every service v0.1 connects. The states
+         that survive the cut are the two that matter most here -- a healthy
+         source whose every series is identifier-poor, and a service that
+         answers and refuses the stored credential -- and the finding reverses.
+         The full stack's version of this table shows that the screen is worth
+         drawing without a media server; this one shows that it is worth
+         drawing with nothing else.
          The row ids carry a -v01 suffix because the expander they open is a
          second element in the same document, not the same one. -->
     <div class="tablewrap" data-inst="v01" hidden>
-      <table aria-rowcount="10" class="tbl tbl--stack tbl--services cols-services-list-v01" data-roving="tbody tr[data-row]" aria-label="Configured services" aria-colcount="7" role="table">
+      <table aria-rowcount="5" class="tbl tbl--stack tbl--services cols-services-list-v01" data-roving="tbody tr[data-row]" aria-label="Configured services" aria-colcount="7" role="table">
         <thead role="rowgroup">
           <tr role="row" aria-rowindex="1">
             <th scope="col" role="columnheader" aria-colindex="1">Service</th>
@@ -634,123 +647,35 @@ aniListId, malId and comicVineId are null on every series: those fields are a Ka
           </tr>
         </thead>
         <tbody role="rowgroup">
-
-          <!-- healthy -->
           <tr data-row role="row" aria-rowindex="2">
             <td data-col="service" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Service</span>
               <div class="cell-title">
-                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-sonarr-v01" aria-label="Show detail for Sonarr">
+                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-kavita-v01" aria-label="Show detail for Kavita">
                   <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
                 </button>
-                Sonarr
+                Kavita
               </div>
-              <div class="cell-sub monoNone trunc" title="http://10.0.0.4:8989">http://10.0.0.4:8989</div>
+              <div class="cell-sub monoNone trunc" title="http://10.0.0.7:5000">http://10.0.0.7:5000</div>
             </td>
             <td data-col="state" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--ok"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>healthy</span></td>
-            <td data-col="last-successful-sync" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Last successful sync</span>delta 14:02<div class="cell-sub">6 minutes ago</div></td>
-            <td data-col="items" class="is-num" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Items</span>214</td>
-            <!-- Both nouns in full, on the screen where a user first meets the
-                 two terms, and the milestone on the half that has not shipped:
-                 the *Arr-backed request path is v0.2, so claiming this instance
-                 is a destination today would promise a write path that does not
-                 exist. The bare "source and destination" dropped both nouns at
-                 the point of first contact. -->
-            <td data-col="libraries" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Libraries</span><a href="libraries.html">TV</a><div class="cell-sub">catalogue source; destination from v0.2</div></td>
-            <td data-col="problem" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Problem</span>—</td>
-            <td data-col="action" class="muted" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Action</span>—</td>
+            <td data-col="last-successful-sync" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Last successful sync</span>page walk 13:31<div class="cell-sub">37 minutes ago</div></td>
+            <td data-col="items" class="is-num" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Items</span>936</td>
+            <td data-col="libraries" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Libraries</span><a href="libraries.html">Comics</a>, <a href="libraries.html">Manga</a>, <a href="libraries.html">Ebooks</a><div class="cell-sub">catalogue source, no destination</div></td>
+            <td data-col="problem" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Problem</span><div class="cell-problem"><span class="prob trunc" title="0 of 512 series carry an external identifier, so matching is by title">0 of 512 series carry an identifier</span> <button type="button" class="linkish" data-act="expand" data-expand-label aria-expanded="false" aria-controls="x-kavita-v01">Show detail</button></div></td>
+            <td data-col="action" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Action</span><a href="libraries.html">Open Libraries</a></td>
           </tr>
-          <tr id="x-sonarr-v01" hidden role="row" aria-rowindex="3"><td colspan="7" role="cell" aria-colindex="1" aria-colspan="7">
+          <tr id="x-kavita-v01" hidden role="row" aria-rowindex="3"><td colspan="7" role="cell" aria-colindex="1" aria-colspan="7">
+            <div class="verbatim">0 of 512 series carry an external identifier
+aniListId, malId and comicVineId are null on every series: those fields are a Kavita+ feature and this instance has not supplied them, so matching is by title and cross-media links stay below the merge threshold</div>
             <div class="detail">
-              <div><h4>Sync channels</h4><ul><li>full <span class="num">03:10</span>, 11 hours ago</li><li>delta <span class="num">14:02</span>, 6 minutes ago</li><li>reconcile <span class="num">02:00</span>, 12 hours ago</li></ul></div>
+              <div><h4>Sync channels</h4><ul><li>full <span class="num">02:31</span>, 12 hours ago</li><li>page-walk delta <span class="num">13:31</span>, 37 minutes ago</li><li>reconcile <span class="num">02:00</span>, 12 hours ago</li></ul></div>
               <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">CLOSED</span></li><li>Consecutive failures <span class="num">0</span></li></ul></div>
-              <div><h4>Health warnings from Sonarr</h4><ul><li class="muted">None reported by <span class="mono">/api/v3/health</span></li></ul></div>
-              <div><h4>Recent sync reports</h4><ul><li><span class="num">14:02</span> delta, 3 changed</li><li><span class="num">13:02</span> delta, 0 changed</li><li><span class="num">12:02</span> delta, 11 changed</li></ul></div>
-              <div><h4>Clock skew</h4><ul><li><span class="num">+0.4 s</span> measured from the <span class="mono">Date</span> header</li></ul></div>
+              <div><h4>Delta strategy</h4><ul><li class="muted">Kavita has no "changed since" endpoint, so the plan is sort-by-modified plus pagination over <span class="mono">POST /api/Series/all-v2</span>, and the reconciliation sweep does more work here than it does for an *Arr. <strong>Measured against a live instance, 17 Aug 2026:</strong> Kavita can sort by a field it does not return — <span class="mono">SortField.LastModifiedDate</span> exists but <span class="mono">SeriesDto</span> carries no such property — and <span class="mono">LastChapterAdded</span> carries the watermark instead, which is what makes the page walk resumable. It moves on a chapter add only, so a deletion is seen by the sweep rather than by the walk.</li></ul></div>
+              <div><h4>Contributes</h4><ul><li>512 series, 7,204 issues, 424 books</li><li>3 upstream libraries: <span class="mono">Comics</span> · 512, <span class="mono">Manga</span> · 0, and <span class="mono">Books</span> · 424</li></ul></div>
             </div>
           </td></tr>
 
-          <!-- healthy but skewed -->
           <tr data-row role="row" aria-rowindex="4">
-            <td data-col="service" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Service</span>
-              <div class="cell-title">
-                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-anime-v01" aria-label="Show detail for Sonarr Anime">
-                  <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
-                </button>
-                Sonarr Anime <span class="chip">sonarr</span>
-              </div>
-              <div class="cell-sub monoNone trunc" title="http://10.0.0.9:8989">http://10.0.0.9:8989</div>
-            </td>
-            <td data-col="state" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>degraded</span></td>
-            <td data-col="last-successful-sync" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Last successful sync</span>delta 14:01<div class="cell-sub">7 minutes ago</div></td>
-            <td data-col="items" class="is-num" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Items</span>61</td>
-            <td data-col="libraries" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Libraries</span><a href="libraries.html">TV</a><div class="cell-sub">catalogue source · <span class="mono">anime</span> tag</div></td>
-            <td data-col="problem" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Problem</span><div class="cell-problem"><span class="prob trunc" title="Clock is 212 seconds ahead of this host, so delta polling can miss recent changes">Clock is 212 s ahead of this host</span> <button type="button" class="linkish" data-act="expand" data-expand-label aria-expanded="false" aria-controls="x-anime-v01">Show detail</button></div></td>
-            <td data-col="action" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Action</span><button type="button" class="btn">Run full sync</button></td>
-          </tr>
-          <tr id="x-anime-v01" hidden role="row" aria-rowindex="5"><td colspan="7" role="cell" aria-colindex="1" aria-colspan="7">
-            <div class="verbatim">clock skew +212 s measured from Date: Sun, 16 Aug 2026 14:11:32 GMT
-delta polling uses this host's clock, so recent changes can be missed</div>
-            <div class="detail">
-              <div><h4>Sync channels</h4><ul><li>full <span class="num">03:20</span>, 11 hours ago</li><li>delta <span class="num">14:01</span>, 7 minutes ago</li><li>reconcile <span class="num">02:00</span>, 12 hours ago</li></ul></div>
-              <div><h4>Circuit breaker</h4><ul><li>State <span class="mono">CLOSED</span></li><li>Consecutive failures <span class="num">0</span></li></ul></div>
-              <div><h4>Health warnings from Sonarr Anime</h4><ul><li><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span> Indexers unavailable due to failures: Nyaa</li><li><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>warning</span> Enable Completed Download Handling</li></ul></div>
-              <div><h4>Recent sync reports</h4><ul><li><span class="num">14:01</span> delta, 2 changed</li><li><span class="num">13:01</span> delta, 0 changed</li><li><span class="num">12:01</span> delta, 4 changed</li></ul></div>
-              <div><h4>Clock skew</h4><ul><li><span class="num">+212 s</span>, warned above 60 s. A change that lands inside the skew window waits for the reconciliation sweep rather than being missed permanently.</li></ul></div>
-            </div>
-          </td></tr>
-
-          <!-- degraded, breaker open. "breaker open" is circuit-breaker jargon
-               and it told the user nothing about what to do or when it would
-               retry -- both of which are real facts UsArr already holds. The
-               State column is UsArr's own word; the mechanism is the detail. -->
-          <tr data-row role="row" aria-rowindex="6">
-            <td data-col="service" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Service</span>
-              <div class="cell-title">
-                <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-radarr-v01" aria-label="Show detail for Radarr">
-                  <svg class="i i--sm" aria-hidden="true"><use href="#i-chevron-right"/></svg>
-                </button>
-                Radarr
-              </div>
-              <div class="cell-sub monoNone trunc" title="http://10.0.0.4:7878">http://10.0.0.4:7878</div>
-            </td>
-            <td data-col="state" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--warn"><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>degraded</span></td>
-            <td data-col="last-successful-sync" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Last successful sync</span>delta 11:47<div class="cell-sub">2 hours ago</div></td>
-            <td data-col="items" class="is-num" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Items</span>1,204</td>
-            <td data-col="libraries" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Libraries</span><a href="libraries.html">Movies</a><div class="cell-sub">catalogue source; destination from v0.2</div></td>
-            <td data-col="problem" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Problem</span><div class="cell-problem"><span class="prob trunc" title="Connection refused. Paused after 7 failures, retrying 14:19">Connection refused, retrying 14:19</span> <button type="button" class="linkish" data-act="expand" data-expand-label aria-expanded="false" aria-controls="x-radarr-v01">Show detail</button></div></td>
-            <td data-col="action" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Action</span><button type="button" class="btn">Test connection</button></td>
-          </tr>
-          <tr id="x-radarr-v01" hidden role="row" aria-rowindex="7"><td colspan="7" role="cell" aria-colindex="1" aria-colspan="7">
-            <div class="verbatim">Get "http://10.0.0.4:7878/api/v3/movie": dial tcp 10.0.0.4:7878: connect: connection refused</div>
-            <div class="detail">
-              <div><h4>Sync channels</h4><ul><li>full <span class="num">03:12</span>, 11 hours ago</li><li>delta <span class="num">11:47</span>, 2 hours ago</li><li>reconcile <span class="num">02:00</span>, 12 hours ago</li></ul></div>
-              <div><h4>Retry schedule</h4><ul><li>Paused after <span class="num">7</span> consecutive failures</li><li>Next attempt <span class="num">14:19</span>, in 4 minutes</li><li>Waiting <span class="num">4 m 00 s</span> between attempts, capped at 15 m</li><li class="muted">Internally this is a circuit breaker in the <span class="mono">OPEN</span> state.</li></ul></div>
-              <div><h4>Health warnings from Radarr</h4><ul><li class="muted">Not readable while attempts are paused. Last body was empty.</li></ul></div>
-              <div><h4>Recent sync reports</h4><ul><li><span class="num">13:47</span> delta failed, connection refused</li><li><span class="num">12:47</span> delta failed, connection refused</li><li><span class="num">11:47</span> delta, 6 changed</li></ul></div>
-              <div><h4>Clock skew</h4><ul><li class="muted">Not measured since 11:47</li></ul></div>
-            </div>
-            <p class="muted">Browse and search keep working from the replica while this lasts. Writes to Radarr are accepted and queued.</p>
-          </td></tr>
-
-          <!-- not configured: grey, not red. The Problem cell used to open with
-               "Nothing is wrong." and then explain a rendering decision on a
-               different screen, which inverts the meaning of the one column a
-               user scans for what is broken. -->
-          <tr data-row role="row" aria-rowindex="8">
-            <td data-col="service" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Service</span>
-              <div class="cell-title">Radarr 4K <span class="chip">radarr</span></div>
-              <div class="cell-sub muted">No base URL set</div>
-            </td>
-            <td data-col="state" role="cell" aria-colindex="2"><span class="stacklabel" aria-hidden="true">State</span><span class="st st--none"><svg class="i i--sm" aria-hidden="true"><use href="#i-dash-circle"/></svg>not configured</span></td>
-            <td data-col="last-successful-sync" class="muted" role="cell" aria-colindex="3"><span class="stacklabel" aria-hidden="true">Last successful sync</span>Never</td>
-            <td data-col="items" class="is-num muted" role="cell" aria-colindex="4"><span class="stacklabel" aria-hidden="true">Items</span>0</td>
-            <td data-col="libraries" class="muted" role="cell" aria-colindex="5"><span class="stacklabel" aria-hidden="true">Libraries</span>—</td>
-            <td data-col="problem" class="muted" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Problem</span>Not configured. A 2160p instance has been named and never connected.</td>
-            <td data-col="action" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Action</span><button type="button" class="btn" data-act="dialog-open" aria-controls="add-service">Add service</button></td>
-          </tr>
-
-          <!-- down, 401 -->
-          <tr data-row role="row" aria-rowindex="9">
             <td data-col="service" role="cell" aria-colindex="1"><span class="stacklabel" aria-hidden="true">Service</span>
               <div class="cell-title">
                 <button type="button" class="btn btn--icon btn--sm" data-act="expand" aria-expanded="false" aria-controls="x-prowlarr-v01" aria-label="Show detail for Prowlarr">
@@ -767,7 +692,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
             <td data-col="problem" role="cell" aria-colindex="6"><span class="stacklabel" aria-hidden="true">Problem</span><div class="cell-problem"><span class="prob trunc" title="GET /api/v1/indexer 401 Unauthorized">401 Unauthorized on <span class="mono">/api/v1/indexer</span></span> <button type="button" class="linkish" data-act="expand" data-expand-label aria-expanded="false" aria-controls="x-prowlarr-v01">Show detail</button></div></td>
             <td data-col="action" role="cell" aria-colindex="7"><span class="stacklabel" aria-hidden="true">Action</span><button type="button" class="btn btn--primary">Update API key</button></td>
           </tr>
-          <tr id="x-prowlarr-v01" hidden role="row" aria-rowindex="10"><td colspan="7" role="cell" aria-colindex="1" aria-colspan="7">
+          <tr id="x-prowlarr-v01" hidden role="row" aria-rowindex="5"><td colspan="7" role="cell" aria-colindex="1" aria-colspan="7">
             <div class="verbatim">GET /api/v1/indexer 401 Unauthorized
 {"message":"Unauthorized","description":"The request requires a valid X-Api-Key header"}</div>
             <div class="detail">
@@ -778,7 +703,6 @@ delta polling uses this host's clock, so recent changes can be missed</div>
             </div>
             <p class="muted">Updating a credential opens a five-minute sudo window. Prowlarr carries no library, so nothing in the catalogue changes while this is down; only indexer search is unavailable.</p>
           </td></tr>
-
         </tbody>
       </table>
     </div>
@@ -786,7 +710,11 @@ delta polling uses this host's clock, so recent changes can be missed</div>
 
   <!-- System health messages -------------------------------------------- -->
   <section class="section" id="system" data-when="live reident denied reentry remove">
-    <div class="section__head"><h2>System status</h2><span class="section__count">1 error, 2 warnings</span></div>
+    <!-- This list and Home's Block B are the same set of facts on two
+         screens, so they carry the same membership and the same count on
+         either install. The two *Arr rows belong to services v0.1 does not
+         have; the Kavita row belongs to both. -->
+    <div class="section__head"><h2>System status</h2><span class="section__count" data-inst="full">1 error, 3 warnings</span><span class="section__count" data-inst="v01" hidden>1 error, 1 warning</span></div>
     <ul>
       <li class="banner banner--err u-mx-0">
         <svg class="i" aria-hidden="true"><use href="#i-x-circle"/></svg>
@@ -794,17 +722,23 @@ delta polling uses this host's clock, so recent changes can be missed</div>
         <div class="banner__text">Indexer search is unavailable until the key is replaced. Nothing in the catalogue changes: Prowlarr carries no library.</div></div>
         <div class="banner__actions"><button type="button" class="btn btn--sm">Update API key</button></div>
       </li>
-      <li class="banner banner--warn u-mx-0">
+      <li class="banner banner--warn u-mx-0" data-inst="full">
         <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
         <div class="banner__body"><div class="banner__title">Radarr has been unreachable for 2 hours</div>
         <div class="banner__text">The last successful delta poll was 11:47. Movies is served entirely from the replica, because Radarr is its only source.</div></div>
         <div class="banner__actions"><button type="button" class="btn btn--sm">Test connection</button></div>
       </li>
-      <li class="banner banner--warn u-mx-0">
+      <li class="banner banner--warn u-mx-0" data-inst="full">
         <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
         <div class="banner__body"><div class="banner__title">Sonarr Anime clock is 212 seconds ahead of this host</div>
         <div class="banner__text">Delta polling keys off the remote clock, so changes inside the skew window can be missed until the next reconciliation.</div></div>
         <div class="banner__actions"><button type="button" class="btn btn--sm">Run full sync</button></div>
+      </li>
+      <li class="banner banner--warn u-mx-0">
+        <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
+        <div class="banner__body"><div class="banner__title">Kavita reports no external identifier for any series</div>
+        <div class="banner__text">Identifier fields need Kavita+, so all 512 series are matched by title and cross-media links stay below the merge threshold.</div></div>
+        <div class="banner__actions"><a class="btn btn--sm" href="libraries.html">Open Libraries</a></div>
       </li>
     </ul>
   </section>
@@ -818,20 +752,20 @@ delta polling uses this host's clock, so recent changes can be missed</div>
        ===================================================================== -->
   <section class="section" data-when="reentry" hidden>
     <div class="section__head">
-      <h2>Radarr 4K: the form after the address changed</h2>
+      <h2>Kavita: the form after the address changed</h2>
       <span class="section__count">3 fields</span>
     </div>
-    <p class="note u-pb-12"><span class="statebar__tag">mockup</span> The port went from <span class="mono">7878</span> to <span class="mono">7879</span>. The key is encrypted against the old address and cannot be opened for the new one, so it is cleared rather than sent. Putting the old address back restores the field, which is the way out for someone who edited the wrong thing.</p>
+    <p class="note u-pb-12"><span class="statebar__tag">mockup</span> The port went from <span class="mono">5000</span> to <span class="mono">5001</span>. The key is encrypted against the old address and cannot be opened for the new one, so it is cleared rather than sent. Putting the old address back restores the field, which is the way out for someone who edited the wrong thing.</p>
     <div class="detail">
       <form class="form" novalidate>
         <div class="field">
           <label class="field__label" for="r-url">Base URL</label>
-          <input class="input" id="r-url" type="text" value="http://10.0.0.4:7879" aria-describedby="r-url-help">
-          <span class="field__help" id="r-url-help">Was <span class="mono">http://10.0.0.4:7878</span>. Scheme, host and port are what the key is stored against; a change to any of the three is a new address.</span>
+          <input class="input" id="r-url" type="text" value="http://10.0.0.7:5001" aria-describedby="r-url-help">
+          <span class="field__help" id="r-url-help">Was <span class="mono">http://10.0.0.7:5000</span>. Scheme, host and port are what the key is stored against; a change to any of the three is a new address.</span>
         </div>
         <div class="field">
           <label class="field__label" for="r-urlbase">URL base</label>
-          <input class="input" id="r-urlbase" type="text" value="/radarr" aria-describedby="r-urlbase-help">
+          <input class="input" id="r-urlbase" type="text" value="/kavita" aria-describedby="r-urlbase-help">
           <span class="field__help" id="r-urlbase-help">Unchanged, and it would not have mattered: the sub-path is not part of what the key is stored against, so moving a service to a different path never asks for the key again.</span>
         </div>
         <div class="field">
@@ -891,25 +825,25 @@ delta polling uses this host's clock, so recent changes can be missed</div>
             <div class="field">
               <label class="field__label" for="f-kind">Kind</label>
               <select class="select" id="f-kind">
-                <option>sonarr</option>
-                <option selected>radarr</option>
+                <option data-inst="full">sonarr</option>
+                <option data-inst="full">radarr</option>
                 <option>prowlarr</option>
                 <option data-inst="full">navidrome</option>
                 <option data-inst="full">audiobookshelf</option>
-                <option data-inst="full">kavita</option>
+                <option selected>kavita</option>
               </select>
-              <span class="field__help">Which application this is, and the list is exactly what this install can bind: Sonarr and Radarr use <span class="mono">/api/v3</span>, Prowlarr uses <span class="mono">/api/v1</span>. The API version does not track the application version, and it is probed rather than assumed.</span>
+              <span class="field__help">Which application this is, and the list is exactly what this install can bind: <span data-inst="full">Kavita answers under <span class="mono">/api</span>, Prowlarr uses <span class="mono">/api/v1</span>, and Sonarr and Radarr use <span class="mono">/api/v3</span>.</span><span data-inst="v01" hidden>Kavita answers under <span class="mono">/api</span> and Prowlarr uses <span class="mono">/api/v1</span>.</span> An API version does not track the application version, and it is probed rather than assumed.</span>
             </div>
 
             <div class="field">
               <label class="field__label" for="f-name">Name</label>
-              <input class="input" id="f-name" type="text" value="Radarr 4K">
-              <span class="field__help">The label shown throughout UsArr. It must be unique, because it is how you tell two Radarr instances apart.</span>
+              <input class="input" id="f-name" type="text" value="Kavita">
+              <span class="field__help">The label shown throughout UsArr. It must be unique, because it is how you tell two instances of one application apart.</span>
             </div>
 
             <div class="field">
               <label class="field__label" for="f-url">Base URL</label>
-              <input class="input" id="f-url" type="text" value="10.0.0.4:7879" aria-invalid="true" aria-describedby="f-url-err f-url-help" data-act="host">
+              <input class="input" id="f-url" type="text" value="10.0.0.7:5001" aria-invalid="true" aria-describedby="f-url-err f-url-help" data-act="host">
               <span class="field__err" id="f-url-err"><svg class="i i--sm" aria-hidden="true"><use href="#i-x-circle"/></svg><span class="sr">Error:</span>Base URL must include a scheme, for example http:// or https://</span>
               <span class="field__help" id="f-url-help">The address this host can reach, not the one your browser uses. Scheme, host and port only; a path goes in <strong>URL base</strong> below. UsArr resolves it once and pins the address for the life of the request, so a rebinding DNS answer cannot redirect the call. Changing any of the three clears the API key, because the key is encrypted against this address and cannot be opened for another one.</span>
             </div>
@@ -926,8 +860,8 @@ delta polling uses this host's clock, so recent changes can be missed</div>
                  on the screen that configures it. -->
             <div class="field">
               <label class="field__label" for="f-urlbase">URL base <span class="muted">optional</span></label>
-              <input class="input" id="f-urlbase" type="text" value="/radarr" aria-describedby="f-urlbase-help">
-              <span class="field__help" id="f-urlbase-help">Only needed when a reverse proxy serves the application under a path. For <span class="mono">https://home.tailnet.ts.net/radarr</span> the base URL is <span class="mono">https://home.tailnet.ts.net</span> and this is <span class="mono">/radarr</span>. A leading slash is added for you and a trailing one is trimmed. Changing it does <em>not</em> clear the API key: the key is encrypted against the address, and the sub-path is not part of the address.</span>
+              <input class="input" id="f-urlbase" type="text" value="/kavita" aria-describedby="f-urlbase-help">
+              <span class="field__help" id="f-urlbase-help">Only needed when a reverse proxy serves the application under a path. For <span class="mono">https://home.tailnet.ts.net/kavita</span> the base URL is <span class="mono">https://home.tailnet.ts.net</span> and this is <span class="mono">/kavita</span>. A leading slash is added for you and a trailing one is trimmed. Changing it does <em>not</em> clear the API key: the key is encrypted against the address, and the sub-path is not part of the address.</span>
             </div>
 
             <div class="field advanced">
@@ -1030,17 +964,20 @@ delta polling uses this host's clock, so recent changes can be missed</div>
           <label class="field__label" for="d-kind">Kind</label>
           <!-- The kind list is install-scoped, and this is the sharpest place
                the two installs have to differ: a v0.1 Add-service dialog that
-               offers `navidrome` promises a catalogue source v0.1 does not
-               ship, on the one control whose whole job is to say what UsArr
-               can connect to. Three kinds there, six on the full stack, and
-               `kavita` rather than `komga` per ADR-0035. -->
+               offers `sonarr` promises a catalogue source and a command sink
+               v0.1 does not ship, on the one control whose whole job is to say
+               what UsArr can connect to. Two kinds there, six on the full
+               stack, and `kavita` rather than `komga` per ADR-0035.
+               The default is `kavita` because it is the one catalogue source
+               both installs have, so the form below it is coherent on either.
+               ADR-0041 put it in v0.1; ADR-0045 put the two *Arrs in v0.2. -->
           <select class="select" id="d-kind">
-            <option>sonarr</option>
-            <option>radarr</option>
+            <option data-inst="full">sonarr</option>
+            <option data-inst="full">radarr</option>
             <option>prowlarr</option>
             <option data-inst="full">navidrome</option>
             <option data-inst="full">audiobookshelf</option>
-            <option data-inst="full">kavita</option>
+            <option selected>kavita</option>
           </select>
         </div>
         <!-- The flow never asked for a name, so a second Radarr arrived
@@ -1051,12 +988,12 @@ delta polling uses this host's clock, so recent changes can be missed</div>
              and there was no point in the add flow where it could be typed. -->
         <div class="field">
           <label class="field__label" for="d-name">Name</label>
-          <input class="input" id="d-name" type="text" value="Radarr" placeholder="Radarr">
-          <span class="field__help">Your label for this instance, shown everywhere in UsArr. It defaults to the application UsArr probes and it must be unique: a second Radarr called <span class="mono">Radarr 4K</span> is what makes "have it in 1080p, not in 2160p" a thing UsArr can say.</span>
+          <input class="input" id="d-name" type="text" value="Kavita" placeholder="Kavita">
+          <span class="field__help">Your label for this instance, shown everywhere in UsArr. It defaults to the application UsArr probes and it must be unique: two instances of one application are told apart by nothing else, and on the full stack a second Radarr called <span class="mono">Radarr 4K</span> is what makes "have it in 1080p, not in 2160p" a thing UsArr can say.</span>
         </div>
         <div class="field">
           <label class="field__label" for="d-url">Base URL</label>
-          <input class="input" id="d-url" type="text" placeholder="http://10.0.0.4:7878">
+          <input class="input" id="d-url" type="text" placeholder="http://10.0.0.7:5000">
           <span class="field__help">The address <em>this host</em> can reach, which is not always the one your browser uses. Scheme, host and port only. A path belongs in <strong>URL base</strong> below, because UsArr stores the two separately: the key is encrypted against the address, and the sub-path is not part of it.</span>
         </div>
         <!-- The field the wizard did not have. A reverse proxy serving an *Arr
@@ -1069,8 +1006,8 @@ delta polling uses this host's clock, so recent changes can be missed</div>
              all, so hiding it would mean not having it. -->
         <div class="field">
           <label class="field__label" for="d-urlbase">URL base <span class="muted">optional</span></label>
-          <input class="input" id="d-urlbase" type="text" placeholder="/radarr">
-          <span class="field__help">Leave this empty unless a reverse proxy serves the application under a path. If you reach Radarr at <span class="mono">https://home.tailnet.ts.net/radarr</span>, the base URL is <span class="mono">https://home.tailnet.ts.net</span> and the URL base is <span class="mono">/radarr</span>. It is the same value the application calls <span class="mono">urlBase</span> in its own settings. A leading slash is added for you and a trailing one is trimmed.</span>
+          <input class="input" id="d-urlbase" type="text" placeholder="/kavita">
+          <span class="field__help">Leave this empty unless a reverse proxy serves the application under a path. If you reach Kavita at <span class="mono">https://home.tailnet.ts.net/kavita</span>, the base URL is <span class="mono">https://home.tailnet.ts.net</span> and the URL base is <span class="mono">/kavita</span>. It is the same value an *Arr calls <span class="mono">urlBase</span> in its own settings. A leading slash is added for you and a trailing one is trimmed.</span>
         </div>
         <div class="field">
           <label class="field__label" for="d-key">API key</label>
@@ -1114,10 +1051,10 @@ delta polling uses this host's clock, so recent changes can be missed</div>
     <div class="detail u-pb-16">
       <div class="testresult testresult--ok">
         <div class="testresult__title"><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg>Connected</div>
-        <p class="u-mt-6"><strong>Sonarr 4.0.10.2544</strong> answered on <span class="mono">/api/v3</span> and reports <span class="num">214</span> series across <span class="num">1</span> root folder.</p>
+        <p class="u-mt-6"><span data-inst="full"><strong>Sonarr 4.0.10.2544</strong> answered on <span class="mono">/api/v3</span> and reports <span class="num">214</span> series across <span class="num">1</span> root folder.</span><span data-inst="v01" hidden><strong>Kavita 0.8.5</strong> answered on <span class="mono">/api</span> and reports <span class="num">936</span> items across <span class="num">3</span> libraries.</span></p>
         <ul>
           <li>Clock skew <span class="num">+0.4 s</span>, measured from the response's <span class="mono">Date</span> header.</li>
-          <li>The address resolved to <span class="mono">10.0.0.4</span> and is pinned for the life of each request.</li>
+          <li>The address resolved to <span class="mono" data-inst="full">10.0.0.4</span><span class="mono" data-inst="v01" hidden>10.0.0.7</span> and is pinned for the life of each request.</li>
           <li>Save is enabled. On save UsArr proposes the libraries this service can see, and you accept them in one step.</li>
         </ul>
       </div>
@@ -1127,7 +1064,7 @@ delta polling uses this host's clock, so recent changes can be missed</div>
         <p class="u-mt-6">Nothing was saved and no credential was sent anywhere except to the address below.</p>
         <div class="verbatim">GET https://home.tailnet.ts.net/api/v3/system/status
 404 Not Found (text/html, 1.2 kB, served by nginx)</div>
-        <p class="muted u-mt-8">A 404 from an HTML server, rather than a refused connection, means something answered but it was not Sonarr. The three usual causes, in the order they happen:</p>
+        <p class="muted u-mt-8">A 404 from an HTML server, rather than a refused connection, means something answered but it was not the application this form is set to. The three usual causes, in the order they happen:</p>
         <ul>
           <li><strong>A missing URL base.</strong> A reverse proxy serving Sonarr at <span class="mono">/sonarr</span> needs that path in the base URL. This is the most common one on a Tailscale or nginx install.</li>
           <li><strong>The wrong kind.</strong> Sonarr and Radarr both answer <span class="mono">/api/v3/system/status</span>, so a Radarr URL under the Sonarr kind connects and then reports the wrong application. The success panel names what answered for exactly this reason.</li>

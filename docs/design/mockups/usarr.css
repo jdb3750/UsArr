@@ -497,7 +497,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .mocknote__short { display: none; }
 /* The install switcher. It is sized to hold its longest option in full,
    because the option text is where the milestone is stated and a select that
-   ellipsises "Full stack — a later milestone" down to "Full stack…" drops
+   ellipsises "Full stack: a later milestone" down to "Full stack…" drops
    exactly the half that stops the drawing being read as v0.1. */
 .mocknote__install { max-width: none; flex: 0 0 auto; }
 @media (max-width: 1180px) {
@@ -1791,10 +1791,16 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 .cols-libraries-corrections-full { --cols: 116px minmax(max-content,auto) minmax(0,2fr) minmax(0,2.4fr) 76px; --row-lines: 2.06; }
 .cols-libraries-corrections-v01 { --cols: 116px minmax(max-content,auto) minmax(0,2fr) minmax(0,2.4fr) 76px; --row-lines: 2.06; }
 
-/* Search. One group per media type, plus the two expanded child lists and the
-   two library-scoped result tables. The v0.1 install has no ebook, audiobook,
-   comic or music catalogue, so only Movies and Series exist in both. */
-.cols-search-ebooks { --cols: minmax(0,2.6fr) minmax(0,1.3fr) 52px minmax(0,1fr) 80px; --row-lines: 1.11; }
+/* Search. One group per media type, plus the expanded child lists and the
+   library-scoped result tables. The v0.1 install has no film, series, music or
+   audiobook catalogue, so only Comics exists unchanged in both -- and Ebooks
+   exists in both with a different column set, because the full stack's Ebooks
+   library is fed by two instances and the v0.1 one by a single Kavita. A
+   column whose value is constant in every row of its group is hoisted into the
+   group header, so Instance is a column on the full stack and a header clause
+   on v0.1, and the two need different tracks. */
+.cols-search-ebooks-full { --cols: minmax(0,2.6fr) minmax(0,1.3fr) 52px 96px 80px minmax(0,1fr); --row-lines: 1.11; }
+.cols-search-ebooks-v01 { --cols: minmax(0,2.6fr) minmax(0,1.3fr) 52px minmax(0,1fr) 80px; --row-lines: 1.11; }
 .cols-search-audiobooks { --cols: minmax(0,2.4fr) minmax(0,1.5fr) minmax(0,1.5fr) 104px; --row-lines: 1.11; }
 .cols-search-movies-full { --cols: minmax(0,2.6fr) 52px 60px minmax(0,1fr) 80px minmax(max-content,auto); --row-lines: 1.11; }
 .cols-search-movies-v01 { --cols: minmax(0,2.6fr) 52px 60px minmax(0,1fr) 80px minmax(max-content,auto); --row-lines: 1.11; }
@@ -1803,6 +1809,11 @@ select[multiple] { min-height: 88px; padding: var(--sp-2); }
 .cols-search-series { --cols: minmax(0,2.4fr) 52px minmax(0,1fr) 80px 80px; --row-lines: 1.22; }
 .cols-search-tracks { --cols: 44px minmax(0,4fr) 68px minmax(0,1.6fr) 84px; --row-lines: 1.11; }
 .cols-search-episodes { --cols: 44px minmax(0,4fr) 68px minmax(0,1.6fr) 84px; --row-lines: 1.11; }
+/* Issues, not episodes: a comic series is two levels deep and a season is
+   three, so the v0.1 drilldown is one level shallower than the full stack's
+   and its child list carries Pages and Format where the other carries Aired
+   and Quality. Same container, different configuration. */
+.cols-search-issues { --cols: 44px minmax(0,4fr) 68px minmax(0,1.6fr) 84px; --row-lines: 1.11; }
 .cols-search-comics-scoped { --cols: minmax(0,2.2fr) minmax(0,1.2fr) 52px minmax(0,1.2fr) minmax(0,0.8fr) minmax(0,1fr) minmax(0,1.4fr) minmax(max-content,auto); --row-lines: 3.89; }
 .cols-search-series-scoped { --cols: minmax(0,2.4fr) 52px minmax(0,1fr) 80px 80px; --row-lines: 1.22; }
 
