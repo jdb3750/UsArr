@@ -223,6 +223,42 @@ GOVULNCHECK_WANT := $(GOVULNCHECK_VERSION)
 # exactly as `go version -m` prints the two fields.
 GITLEAKS_WANT    := $(GITLEAKS_MODULE)@$(GITLEAKS_VERSION)
 
+# ─── Did the pin hold, or was it moved? ──────────────────────────────────────
+# A BANNER THAT READS THE SAME WHETHER THE PIN HELD OR WAS OVERRIDDEN IS A GUARD
+# THAT MISDESCRIBES ITS OWN INVOCATION. `require_tool` compares the binary
+# against $(*_WANT) and prints "asserted against the pin" — but every pin here is
+# `?=`, and $(*_WANT) is a plain `:=` off it, so `make lint GOLANGCI_VERSION=2.5.0`
+# moves the target the assertion aims at. The assertion still passes, truthfully:
+# it did assert, against the version it was given. The banner just neglected to
+# mention that the version it was given was not the one this file ships, which is
+# the difference between a gate and a gate's echo.
+#
+# `$(origin V)` is the answer, and it is exact: `file` when the value is the one
+# assigned here, `command line` or `environment` when somebody moved it. The
+# *_PINVARS lists below name every variable a tool's pin is computed from —
+# including the derived `*_WANT`, which is overridable on its own — so moving any
+# one of them shows up. The BINARY's provenance needs no such help: the banner has
+# printed the absolute path since the `$PATH` incident above, so an overridden
+# `GOBIN_DIR` is already legible in the line itself.
+#
+# Overriding stays ALLOWED. Someone bisecting a version problem has a real reason
+# to, and a guard that answered this by refusing would have traded a banner that
+# lies for a gate that obstructs. The override is reported, not rejected.
+GOFUMPT_PINVARS     := GOFUMPT_VERSION GOFUMPT_WANT
+GOLANGCI_PINVARS    := GOLANGCI_VERSION GOLANGCI_WANT
+GOOSE_PINVARS       := GOOSE_VERSION GOOSE_WANT
+GOVULNCHECK_PINVARS := GOVULNCHECK_VERSION GOVULNCHECK_WANT
+GITLEAKS_PINVARS    := GITLEAKS_MODULE GITLEAKS_VERSION GITLEAKS_WANT
+
+# usage: $(call moved_pins,<names of the pin variables>) -> "" when every one of
+# them came from this file, else one "NAME=value from the <origin>" per mover.
+moved_pins = $(strip $(foreach v,$(1),\
+    $(if $(filter-out file,$(origin $(v))),$(v)=$($(v)) from the $(origin $(v)))))
+
+# usage: $(call pin_note,<names of the pin variables>) -> the clause require_tool
+# puts after the version it measured. Says which pin was moved and from where.
+pin_note = $(if $(call moved_pins,$(1)),asserted against an OVERRIDDEN pin ($(call moved_pins,$(1))) — NOT the version this Makefile ships,asserted against the pin)
+
 # ─── Report what was measured, not just the verdict ──────────────────────────
 # A CHECK THAT REPORTS ONLY PASS/FAIL CANNOT DISTINGUISH "PASSED" FROM "DID NOT
 # RUN." For this project's whole life so far it was the second one: `check: OK`
@@ -239,7 +275,7 @@ GITLEAKS_WANT    := $(GITLEAKS_MODULE)@$(GITLEAKS_VERSION)
 # One line per step, deliberately. This is a gate, not a build log; output
 # nobody reads is how the gate got here.
 
-# usage: $(call require_tool,<absolute path>,<--version substring or empty>,<module@version or empty>)
+# usage: $(call require_tool,<absolute path>,<--version substring or empty>,<module@version or empty>,<names of the pin variables>)
 # Fails loudly and tells you to run `make tools` — the guard style `secrets`
 # already used for gitleaks, now applied to every pinned tool.
 #
@@ -247,10 +283,21 @@ GITLEAKS_WANT    := $(GITLEAKS_MODULE)@$(GITLEAKS_VERSION)
 # error, not an existence-only fallback: an unasserted pinned binary is the hole
 # this macro exists to close, so a tool added without an identity pin fails the
 # gate instead of quietly opting out of it.
+#
+# Arg 4 is mandatory for the same reason one level up. Omitting it would leave a
+# tool whose banner reads "asserted against the pin" no matter where its pin came
+# from — the exact defect the *_PINVARS lists exist to close — and it would fail
+# silently and in the reassuring direction, so it fails loudly here instead.
 define require_tool
 	@test -x $(1) || { \
 		echo "missing pinned tool: $(1)"; \
 		echo "run: make tools"; \
+		exit 1; }
+	@test -n "$(4)" || { \
+		echo "unattributed pin for: $(1)"; \
+		echo "  require_tool needs the names of the variables this tool's pin"; \
+		echo "  is computed from (arg 4), so the banner can say whether the pin"; \
+		echo "  held or was overridden on the command line."; \
 		exit 1; }
 	@if [ -n "$(2)" ]; then \
 		got=$$($(1) --version 2>&1 | tr '\n' ' '); \
@@ -262,7 +309,7 @@ define require_tool
 			   echo "run: make tools"; \
 			   exit 1 ;; \
 		esac; \
-		echo "tool: $(1) — version $(2), asserted against the pin"; \
+		echo "tool: $(1) — version $(2), $(call pin_note,$(4))"; \
 	elif [ -n "$(3)" ]; then \
 		got=$$($(GO) version -m $(1) 2>/dev/null \
 			| awk '$$1=="mod"{print $$2"@"$$3; exit}' || true); \
@@ -280,7 +327,7 @@ define require_tool
 			echo "run: make tools"; \
 			exit 1; \
 		fi; \
-		echo "tool: $(1) — build-info module $(3), asserted against the pin (--version is unstamped)"; \
+		echo "tool: $(1) — build-info module $(3), $(call pin_note,$(4)) (--version is unstamped)"; \
 	else \
 		echo "unasserted pinned tool: $(1)"; \
 		echo "  require_tool needs a --version substring (arg 2) or a module@version (arg 3)."; \
@@ -509,7 +556,7 @@ lint: lint-go lint-web ## Run all linters
 
 .PHONY: lint-go
 lint-go: ## golangci-lint (v2 config format: .golangci.yml must declare version: "2")
-	$(call require_tool,$(GOLANGCI_LINT),$(GOLANGCI_WANT))
+	$(call require_tool,$(GOLANGCI_LINT),$(GOLANGCI_WANT),,$(GOLANGCI_PINVARS))
 	@n=$$($(GO) list ./... | wc -l); \
 	test "$$n" -gt 0 || { \
 		echo "lint-go: 0 packages — the linter would scan nothing and exit 0."; exit 1; }; \
@@ -536,13 +583,13 @@ lint-web: web-deps ## eslint + svelte-check
 # `git clone` on 2026-08-16, and fixed here. See docs/REVIEW-LOG.md FI-02.
 .PHONY: fmt
 fmt: web-deps ## Format everything IN PLACE (gofumpt + prettier)
-	$(call require_tool,$(GOFUMPT),$(GOFUMPT_WANT))
+	$(call require_tool,$(GOFUMPT),$(GOFUMPT_WANT),,$(GOFUMPT_PINVARS))
 	@$(GO_SRC_LIST) | xargs -r $(GOFUMPT) -l -w
 	$(call pnpm_if_web,format)
 
 .PHONY: fmt-check
 fmt-check: web-deps ## Verify formatting without modifying files (used by `make check`)
-	$(call require_tool,$(GOFUMPT),$(GOFUMPT_WANT))
+	$(call require_tool,$(GOFUMPT),$(GOFUMPT_WANT),,$(GOFUMPT_PINVARS))
 	@n=$$($(GO_SRC_LIST) | wc -l); \
 	test "$$n" -gt 0 || { \
 		echo "fmt-check: 0 .go files — gofumpt would scan nothing and exit 0."; exit 1; }; \
@@ -658,7 +705,7 @@ design: ## Run the design check (DESIGN-DIRECTION §13). Needs Chromium. NOT par
 
 .PHONY: secrets
 secrets: ## Scan the working tree for committed credentials. GATING, part of `check`.
-	$(call require_tool,$(GITLEAKS),,$(GITLEAKS_WANT))
+	$(call require_tool,$(GITLEAKS),,$(GITLEAKS_WANT),$(GITLEAKS_PINVARS))
 	@# No count is added here: gitleaks already ends with "scanned ~N bytes in Ns",
 	@# which is exactly the number this step needs to prove it looked at something.
 	$(GITLEAKS) dir . --redact=100 --no-banner --exit-code 1
@@ -684,7 +731,7 @@ modverify: ## Verify module contents against go.sum, and that go.mod/go.sum are 
 
 .PHONY: vuln
 vuln: ## govulncheck + pnpm audit. GATING, part of `check`. THE ONLY NETWORK STEP — two calls.
-	$(call require_tool,$(GOVULNCHECK),$(GOVULNCHECK_WANT))
+	$(call require_tool,$(GOVULNCHECK),$(GOVULNCHECK_WANT),,$(GOVULNCHECK_PINVARS))
 	@n=$$($(GO) list ./... | wc -l); \
 	test "$$n" -gt 0 || { \
 		echo "vuln: 0 packages — govulncheck would scan nothing and exit 0."; exit 1; }; \
@@ -712,23 +759,23 @@ vuln: ## govulncheck + pnpm audit. GATING, part of `check`. THE ONLY NETWORK STE
 
 .PHONY: migrate
 migrate: ## Apply pending migrations to the dev database
-	$(call require_tool,$(GOOSE),$(GOOSE_WANT))
+	$(call require_tool,$(GOOSE),$(GOOSE_WANT),,$(GOOSE_PINVARS))
 	@mkdir -p $(DEV_CONFIG_DIR)
 	$(GOOSE) -dir $(MIGRATIONS) sqlite3 $(DEV_DB) up
 
 .PHONY: migrate-down
 migrate-down: ## Roll back ONE migration on the dev database (local testing only)
-	$(call require_tool,$(GOOSE),$(GOOSE_WANT))
+	$(call require_tool,$(GOOSE),$(GOOSE_WANT),,$(GOOSE_PINVARS))
 	$(GOOSE) -dir $(MIGRATIONS) sqlite3 $(DEV_DB) down
 
 .PHONY: migrate-status
 migrate-status: ## Show migration status of the dev database
-	$(call require_tool,$(GOOSE),$(GOOSE_WANT))
+	$(call require_tool,$(GOOSE),$(GOOSE_WANT),,$(GOOSE_PINVARS))
 	$(GOOSE) -dir $(MIGRATIONS) sqlite3 $(DEV_DB) status
 
 .PHONY: migrate-new
 migrate-new: ## Scaffold a migration: make migrate-new name=add_tag_rules
-	$(call require_tool,$(GOOSE),$(GOOSE_WANT))
+	$(call require_tool,$(GOOSE),$(GOOSE_WANT),,$(GOOSE_PINVARS))
 	@test -n "$(name)" || { echo "usage: make migrate-new name=add_tag_rules"; exit 1; }
 	@mkdir -p $(MIGRATIONS)
 	$(GOOSE) -dir $(MIGRATIONS) create $(name) sql

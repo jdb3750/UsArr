@@ -13063,3 +13063,143 @@ one store while an assertion reads another that settles later. Every polling loo
 snapshot is the render path, the columns exist so a restart does not blank the screen — and the
 convergence window is a property of the design, not a bug. The defect was in the test's assumption
 that one store's arrival implied the other's.
+
+---
+
+# PINSRC-01 — where a version number comes from: a banner that could not tell a held pin from a moved one, and a report that asked `$PATH` instead of the banner
+
+**Date:** 2026-08-18. **Tree:** detached `git worktree` off `origin/main` at `e4780f9`.
+**Two findings in one commit because they are one defect at two altitudes — the provenance of a
+version number.** Downward, the `Makefile`'s assertion banner did not say where its pin came from.
+Upward, a report did not say where its number came from, and took it from the wrong binary.
+
+## PINSRC-1 The reported version was measured on a binary the gate never ran
+
+An agent piped `make check` through `tail -45`, which cut the gate's `tool:` banners out of view, and
+then supplied the version afterwards from a bare `golangci-lint --version`. On `$PATH` that is this
+box's stray `/usr/local/bin/golangci-lint` **2.5.0**, not the pinned `/root/go/bin/golangci-lint`
+**2.12.2** the gate had run. **Nothing was wrong with the gate.** That was settled two independent
+ways: `CI=true make lint-go` re-printed the 2.12.2 banner, and pointing the assertion at the stray
+binary made it exit 1 with want/got. The whole defect was in the report — and it is §11 rule 2's own
+first bullet, *"a true statement made by the wrong tool"*, **reproduced one level up by the reporter,
+against the very trap the absolute-path pin exists to close.**
+
+**APPLIED as an extension of `docs/DEVELOPMENT.md` §11 rule 2, in place, keeping its number.** The
+rule as written: a version number in a report is quoted from the gate's own `tool:` banner, path
+included; a version obtained any other way describes a different binary that happens to share a name;
+and the gate's output is never truncated past a banner that will need to be cited — `tail -45` is the
+cheap reflex and the banner is the *first* line of each step, so the part that says what ran is the
+first part a tail discards.
+
+⚠️ **The placement was the judgement, and three other rules were live candidates.** Recording why
+each lost, because the losing arguments are the useful part:
+
+* **Rule 5, *name the surface*.** Nearest by shape — a correct number about the wrong thing — but
+  rule 5 is about what the instrument was *pointed at*. Here the instrument's own identity was in
+  question. A version number is not a measurement taken on a surface; it *is* the instrument.
+* **Rule 7, *quote the tool; do not paraphrase it*.** One step later in the same sequence: rule 7
+  governs how faithfully a tool's output is transcribed, this governs whose output is being
+  transcribed. The new text cross-references rule 7 by name so a reader landing on either reaches
+  the other; a separate rule 9 would have split one two-clause discipline across two numbers.
+* **Rule 8, *compute a count from the artefact*.** Identical in form, different in mechanism. Rule
+  8's failure is staleness — the figure was true when formed and the artefact moved under it. This
+  figure was never true of the thing it was reported about.
+* **Rule 2 wins on ownership.** It already carries this incident's ancestor (the gate itself
+  resolving `golangci-lint` off `$PATH`), it is the rule that introduced the `tool:` banner as the
+  fix, and it already states the neighbouring duty — *"a gate result without a commit sha attached
+  is not a result"* — which is the same sentence with a different field missing. The new text is
+  appended at the end of rule 2, after the `require_tool` paragraph it depends on.
+
+📎 **No renumbering, and the citations were re-checked rather than assumed.** §11 carried **8**
+numbered rules at the base commit `e4780f9` and carries **8** here. The tracked tree at `e4780f9`
+held **40** `§11 rule N` citations across **11** files, citing the distinct numbers **1, 3, 4, 5, 6
+and 8** — every one of which still resolves to the rule it resolved to before, because nothing was
+renumbered. Counted with `git grep -c '§11 rule' <rev> -- .` summed over its files, and
+`git grep -ho '§11 rule [0-9]' <rev> -- . | sort -u`.
+
+⚠️ **The figure above was re-derived at the end, and it had already gone stale once.** It was first
+taken at 40 immediately after the `DEVELOPMENT.md` edit, and by the time this entry was written the
+tree held **46** — the six added being this entry's own citations, which introduce `§11 rule 2` to
+the cited set. Nothing was wrong with the first number when it was formed; the artefact moved under
+it, which is §11 rule 8 catching the entry that was being written about §11's own reporting rules.
+Both figures are given rather than one silently corrected: **40 across 11 files at `e4780f9`** is the
+count that had to keep resolving, **46 at the tree that ships** is what a re-run of the same command
+returns now.
+
+## PINSRC-2 The banner read the same whether the pin held or was overridden
+
+`require_tool` printed `tool: <path> — version <v>, asserted against the pin` unconditionally. Every
+pin in the file is `?=` and every `*_WANT` a plain `:=` derived from one, so
+`make lint GOLANGCI_VERSION=2.5.0` moves the target the assertion aims at — and the assertion still
+passes, truthfully, against the version it was handed. The banner simply never mentioned that the
+version it was handed was not the one the file ships. **A guard that misdescribes its own
+invocation**, the same family as `NOCI-01` and `OPTIN-01`.
+
+**APPLIED.** `$(origin V)` answers exactly this — `file` when the value is the one assigned in the
+`Makefile`, `command line` or `environment` when somebody moved it — so five `*_PINVARS` lists name
+every variable each tool's pin is computed from, `require_tool` takes them as a mandatory fourth
+argument, and two small functions turn them into the clause after the version. The banner, verbatim,
+before and after:
+
+```
+before, pin held:        tool: /root/go/bin/golangci-lint — version 2.12.2, asserted against the pin
+before, pin overridden:  tool: /usr/local/bin/golangci-lint — version 2.5.0, asserted against the pin
+```
+```
+after, pin held:         tool: /root/go/bin/golangci-lint — version 2.12.2, asserted against the pin
+after, pin overridden:   tool: /usr/local/bin/golangci-lint — version 2.5.0, asserted against an OVERRIDDEN pin (GOLANGCI_VERSION=2.5.0 from the command line) — NOT the version this Makefile ships
+```
+
+The two "before" lines are **character-identical in the clause that matters**, which is the finding;
+only the path differed, and a path differs for legitimate reasons (`GOBIN_DIR`) too.
+
+**The assertion was not weakened, deliberately.** Overriding a pin is a legitimate thing to do while
+bisecting a version problem, so the override is *reported*, not rejected — and it is still asserted:
+`make lint-go GOLANGCI_VERSION=2.5.0` against the unchanged pinned binary fails exactly as before,
+`want: 2.5.0` / `got: golangci-lint has version 2.12.2 …`.
+
+**All five pinned tools were treated the same**, not golangci-lint alone: the pins are `?=` across
+the board, so the defect was identical for `gofumpt`, `goose`, `govulncheck` and `gitleaks`. `9`
+`require_tool` call sites cover those `5` tools. The derived `*_WANT` variables are included in each
+list because they are independently overridable, and gitleaks' list carries all three of
+`GITLEAKS_MODULE`, `GITLEAKS_VERSION` and `GITLEAKS_WANT`. The binary's own provenance needed nothing
+new — the banner has printed the absolute path since the `$PATH` incident, so `make check
+GOBIN_DIR=…` is already legible in the line itself.
+
+## PINSRC-3 Fired deliberately, in three branches
+
+Per §11 rule 3, and reported as what was executed rather than as a verdict:
+
+1. **Pin held** — `CI=true make lint-go`: `asserted against the pin`, `0 issues.`, exit 0.
+2. **Pin moved, binary moved with it** — `CI=true make lint-go GOLANGCI_VERSION=2.5.0
+   GOBIN_DIR=/usr/local/bin`: the `OVERRIDDEN` banner above, exit 0. This is the original incident's
+   own configuration — the stray 2.5.0 actually running — now saying so out loud.
+3. **Pin moved, binary not** — `CI=true make lint-go GOLANGCI_VERSION=2.5.0`: `wrong version of
+   pinned tool`, want/got, exit 1. The assertion still bites.
+4. **Arg 4 omitted** — a scratch makefile that `include`s this one and calls `require_tool` with
+   three arguments: `unattributed pin for: /root/go/bin/golangci-lint`, exit 1. The failure branch
+   speaks under `.SHELLFLAGS := -eu -o pipefail` rather than dying at its own assignment, which is
+   the specific way a guard has already gone mute in this repo.
+
+🚩 **The sharpest firing is the build-info one, because it passes.** `make secrets
+GITLEAKS_WANT='github.com/zricethezav/gitleaks/v8@v8.30.1'` moves the pin to a value that happens to
+equal the shipped one. The assertion passes, correctly, and the banner still reports the move:
+
+```
+tool: /root/go/bin/gitleaks — build-info module github.com/zricethezav/gitleaks/v8@v8.30.1, asserted against an OVERRIDDEN pin (GITLEAKS_WANT=github.com/zricethezav/gitleaks/v8@v8.30.1 from the command line) — NOT the version this Makefile ships (--version is unstamped)
+```
+
+A pass is not the same fact as a held pin, and before this commit the banner could not tell you which
+one you had.
+
+ℹ️ **One thing the firing turned up that this commit does not fix.** The first `lint-go` in a fresh
+worktree came back **exit 2, 5 issues** — one `errcheck` and four `gosec`, every one of them against
+`../wt-kavita/…`, a sibling worktree that does not exist. That is §11's documented stale-cache false
+red, with a new detail: **it survived a brand-new `GOLANGCI_LINT_CACHE`.** Two runs differing only in
+`GOCACHE`, both with an empty golangci-lint cache — shared `/root/.cache/go-build` gave the 5 stale
+issues, an isolated `GOCACHE` gave `0 issues.` — so the surviving state was not in the cache §11's
+bullet tells you to clean. *Inference from that pair, not a mechanism read out of golangci-lint:* the
+replay is coming through the Go build cache, which means `/root/go/bin/golangci-lint cache clean`
+would not have cleared it. **Raised, not fixed** — amending §11's cache bullet is outside this
+commit's two changes, and `cache clean` was off-limits to this thread in any case. Every gate result
+below was taken with both caches isolated under the scratchpad and neither one cleaned.

@@ -1003,8 +1003,40 @@ be re-recorded reflexively and mean nothing. Build info is the one claim about t
 binary's author did not get to write.
 
 `require_tool` now takes an identity pin in one form or the other and **fails when given neither** —
-existence alone is no longer an accepted answer for a pinned tool. `go version -m` reads the file on
-disk and makes no network call, so `check-offline` keeps its contract.
+existence alone is no longer an accepted answer for a pinned tool. It also takes, and likewise
+requires, the names of the variables that pin was computed from, so the banner can say whether the
+pin held or was moved; a tool added without them fails the gate rather than printing a banner that
+cannot tell the two apart. `go version -m` reads the file on disk and makes no network call, so
+`check-offline` keeps its contract.
+
+**And the number in your report is quoted from that banner — never from a second question asked
+afterwards.** An agent piped `make check` through `tail -45`, which cut the `tool:` lines out of
+view, then filled the version in afterwards by running a bare `golangci-lint --version`. On `$PATH`
+that is this box's stray `/usr/local/bin/golangci-lint` 2.5.0, not the pinned
+`/root/go/bin/golangci-lint` 2.12.2 the gate had actually run, so the report named a version nothing
+in the gate had used. **Nothing was wrong with the gate** — settled twice over: re-running
+`CI=true make lint-go` printed the 2.12.2 banner, and pointing the assertion at the stray binary made
+it exit 1 with want/got. The defect was entirely in the report, and it is this rule's own first
+bullet — *a true statement made by the wrong tool* — **reproduced one level up, by the reporter,
+against the very trap the absolute-path pin exists to close.** The pin stops the *recipe* from asking
+`$PATH` which binary to run. Nothing stops a *reporter* from asking `$PATH` which binary ran.
+
+* **A version number in a report is quoted from the gate's own `tool:` banner, path included.** That
+  line is the only one naming the binary the assertion actually ran; a version obtained any other way
+  describes a different binary that happens to share a name.
+* **Never truncate the gate's output past a banner you will need to cite.** `tail -45` is the cheap
+  reflex and the banner is the *first* line of each step — so the part that says what ran is the
+  first part a tail discards. Keep the whole run in a file and read both ends.
+
+This is rule 7 (*quote the tool*) one step earlier: rule 7 governs how faithfully the tool's output is
+transcribed, this governs whose output is being transcribed. And the banner is worth quoting because
+it carries what a reporter cannot reconstruct from outside — the absolute path, the asserted version,
+and, since every pin here is `?=` and therefore overridable, whether that version is the one this repo
+ships or one moved on the command line:
+
+```
+tool: /usr/local/bin/golangci-lint — version 2.5.0, asserted against an OVERRIDDEN pin (GOLANGCI_VERSION=2.5.0 from the command line) — NOT the version this Makefile ships
+```
 
 **3. Exercise the failure path.** A guard's failure branch is code, and untested code does not work.
 It is also the branch that by definition only runs when something is already wrong, which is exactly
