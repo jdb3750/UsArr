@@ -30,11 +30,20 @@
  *
  * THE FACT THAT FORCES THIS. Two indexer services are creatable — `POST
  * /api/v1/services` answers 201 twice and `service_instance`'s only uniqueness
- * constraint is the name — but `GET /api/v1/search` takes `?instance=`, a
- * SINGLE service id, and `resolveIndexerInstance`
+ * constraint is the name — but `GET /api/v1/releases/search` takes
+ * `?instance=`, a SINGLE service id, and `resolveIndexerInstance`
  * (internal/httpapi/search.go) resolves exactly one instance per search:
  * the one named, or `candidates[0]` by priority-then-name when none is. There
  * is no wire shape for a fan-out across two Prowlarrs.
+ *
+ * ⚠️ THAT PATH USED TO READ `GET /api/v1/search`, AND IT NOW NAMES A DIFFERENT
+ * ENDPOINT ENTIRELY. `4a51bd4` moved the Prowlarr fan-out to
+ * `/api/v1/releases/search`, and `04a28a4` gave the vacated `/api/v1/search` to
+ * the search over your own replicated library (`docs/reference/http-api.md`
+ * §6). That one takes `q` alone: no `?instance=`, no `?indexer=`, no
+ * `?category=`, because its corpus is local and has no indexer in it. Nothing
+ * in this module applies to it, and a reader who followed the old path would
+ * have found a handler that ignores every parameter this file exists to build.
  *
  * WHAT THE SCREEN USED TO DO WITH THAT, AND WHY IT WAS THE WORST OPTION. The
  * picker drew BOTH services' indexers in one flat grid with no label, keyed
