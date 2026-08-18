@@ -521,6 +521,33 @@ func (c *Client) SeriesMetadata(ctx context.Context, seriesID int32) (SeriesMeta
 	return out, err
 }
 
+// SeriesVolumes calls GET /api/Series/volumes?seriesId=N — the volume and
+// chapter walk, and the ONLY endpoint that reports a file.
+//
+// ONE REQUEST PER SERIES, AND THAT IS MEASURED. A live probe against the
+// owner's Kavita 0.9.0.2 (151 series) found `files[]` populated on 90 of 90
+// sampled chapters, so volumes, chapters and files all arrive here and there is
+// no per-chapter follow-up call. Median 4 ms, ~0.6 s serially across the whole
+// library — which is why the caller paces nothing.
+//
+// IT GOES THROUGH `do`, on SeriesMetadata's reasoning and with one difference
+// worth naming: this response is larger than a metadata read, because it
+// carries every chapter of one series and each ChapterDto is 82 properties.
+// It is still ONE SERIES, so it is bounded by how much a comic series holds
+// rather than by how much a library holds — the line `do` draws. `do`'s 32 MB
+// buffered cap FAILS rather than truncating, so a series that somehow exceeds
+// it is diagnosed instead of silently importing a prefix of its files, and a
+// truncated file list is exactly the input that would drive the walk's
+// delete-what-was-not-seen reconciliation to delete real rows.
+func (c *Client) SeriesVolumes(ctx context.Context, seriesID int32) ([]VolumeDto, error) {
+	var out []VolumeDto
+	err := c.do(ctx, request{
+		op: "SeriesVolumes", method: http.MethodGet, path: apiPrefix + "/Series/volumes",
+		query: url.Values{"seriesId": []string{strconv.FormatInt(int64(seriesID), 10)}},
+	}, &out)
+	return out, err
+}
+
 // SeriesListOptions is one POST /api/Series/all-v2 read.
 type SeriesListOptions struct {
 	// Sort names the ordering key. Zero means SeriesSortFieldLastChapterAdded,

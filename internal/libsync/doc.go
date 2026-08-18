@@ -38,10 +38,18 @@
 // `year` — a phase-A field — has to come from the per-series metadata read that
 // runs after the stream closes. That read is what credits.go performs, and it
 // carries `releaseYear` back with the credits rather than paying a second GET
-// for it. What is still NOT fetched for Kavita is the per-series volume and
-// chapter walk — one call per series, the shape §7.2 budgets for Sonarr's
-// episodes — and that is where work_comic_issue and media_file get their rows.
-// Neither is written here, and neither is faked: see kavita.go.
+// for it.
+//
+// ⚠️ THIS PARAGRAPH USED TO END *"What is still NOT fetched for Kavita is the
+// per-series volume and chapter walk … and that is where work_comic_issue and
+// media_file get their rows. Neither is written here"*. HALF OF THAT IS NOW
+// FALSE. The walk is files.go — one GET /api/Series/volumes per series, the
+// shape §7.2 budgets for Sonarr's episodes, measured at ~4 ms against the
+// owner's instance — and it writes media_file plus one primary `edition` per
+// series. work_comic_issue is STILL not written by anything: a chapter would be
+// a work of its own, with its own identity resolution, search documents and
+// membership, and files.go's header says what that absence costs (no
+// contiguity, so the availability blob carries no `missing` key).
 //
 // # Before you trust a field on an upstream DTO
 //

@@ -147,7 +147,8 @@ func TestEditableIDEndToEndAgainstTheDatabase(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s)
 	src := NewKavitaSource(newCassetteClient(t,
-		"kavita_libraries_editable_ids.yaml", "kavita_series_all_v2_editable_ids.yaml"))
+		"kavita_libraries_editable_ids.yaml", "kavita_series_all_v2_editable_ids.yaml",
+		"kavita_series_metadata.yaml", "kavita_series_volumes.yaml"))
 
 	rep, err := newImporter(t, s, src).FullImport(t.Context(), inst)
 	if err != nil {

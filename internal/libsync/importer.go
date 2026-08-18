@@ -34,6 +34,33 @@ const (
 	DefaultBatchWindow = 100 * time.Millisecond
 )
 
+// ImportedItem is one item that reached a COMMITTED batch, carried forward to
+// the two per-item passes that run after the stream closes.
+//
+// IT IS ONE TYPE FEEDING TWO PASSES rather than two parallel slices, because
+// the slice it lives in is the import's one unbounded allocation
+// (streamAndApply's comment budgets it) and duplicating it per pass would
+// double that for no benefit. The per-pass request types are projections of it.
+type ImportedItem struct {
+	RemoteKind string
+	RemoteID   string
+	Kind       string
+
+	// RemoteSubtype is only read by the file pass, which needs it to give the
+	// edition a format without a second HTTP read — see files.go's FileRequest.
+	RemoteSubtype string
+}
+
+func (i ImportedItem) creditRequest() CreditRequest {
+	return CreditRequest{RemoteKind: i.RemoteKind, RemoteID: i.RemoteID, Kind: i.Kind}
+}
+
+func (i ImportedItem) fileRequest() FileRequest {
+	return FileRequest{
+		RemoteKind: i.RemoteKind, RemoteID: i.RemoteID, RemoteSubtype: i.RemoteSubtype,
+	}
+}
+
 // DeclinedContainer is one upstream container UsArr has no kind for.
 type DeclinedContainer struct {
 	RemoteID string
@@ -83,6 +110,14 @@ type Report struct {
 	// at the call site that already exists.
 	Credits store.CreditResult
 
+	// FileItemsRead is how many items the file walk got volumes for. It is 0
+	// when the source implements no FileSource, which is not a failure — see
+	// FullImport's phase 4.
+	FileItemsRead int
+
+	// Files is what the file walk wrote, on Credits's terms.
+	Files store.FileResult
+
 	// Completed is true only when the whole stream was read AND every batch
 	// committed. It is what gates last_full_sync_at.
 	Completed bool
@@ -99,7 +134,7 @@ func (r Report) Duration() time.Duration {
 // Progress is one progress observation, published as it happens.
 type Progress struct {
 	InstanceID int64  `json:"instance_id"`
-	Phase      string `json:"phase"` // containers | items | credits | done
+	Phase      string `json:"phase"` // containers | items | credits | files | done
 	ItemsRead  int    `json:"items_read"`
 	Applied    int    `json:"applied"`
 
@@ -179,7 +214,15 @@ func (im *Importer) publish(p Progress) {
 //     GET per series and issuing those from inside the stream callback would
 //     hold the streaming connection open across all of them
 //     (internal/libsync/credits.go carries the endpoint evidence).
-//  4. ANALYZE, then last_full_sync_at, ON SUCCESS ONLY. Both are skipped on a
+//  4. THEN THE FILE WALK, if the source reports one — phase C, after the
+//     credits, and third of the three per-item passes for the same reason the
+//     credit pass is second: it resolves through the service_item_link the item
+//     pass wrote. It runs AFTER the credits rather than before because the
+//     rollup's denominator comes off the credit pass's metadata read, so the
+//     order that leaves the least time with a numerator and no denominator is
+//     this one. It is also the pass that sets work.rollup_dirty, so it must be
+//     the last thing that touches a work before the flush.
+//  5. ANALYZE, then last_full_sync_at, ON SUCCESS ONLY. Both are skipped on a
 //     failed or partial import: a freshness claim written over half a library is
 //     worse than none, because the Services screen renders it as current.
 //
@@ -249,12 +292,16 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (Report, e
 		}
 	}
 
-	credited, err := im.streamAndApply(ctx, instanceID, bindings, &rep)
+	imported, err := im.streamAndApply(ctx, instanceID, bindings, &rep)
 	if err != nil {
 		return rep, err
 	}
 
-	if err := im.streamAndApplyCredits(ctx, instanceID, credited, &rep); err != nil {
+	if err := im.streamAndApplyCredits(ctx, instanceID, imported, &rep); err != nil {
+		return rep, err
+	}
+
+	if err := im.streamAndApplyFiles(ctx, instanceID, imported, &rep); err != nil {
 		return rep, err
 	}
 
@@ -300,6 +347,9 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (Report, e
 		"people_created", rep.Credits.PeopleCreated,
 		"credits_written", rep.Credits.CreditsWritten,
 		"years_written", rep.Credits.YearsWritten,
+		"files_written", rep.Files.FilesWritten,
+		"files_removed", rep.Files.FilesRemoved,
+		"editions_created", rep.Files.EditionsCreated,
 		"declined_containers", len(rep.DeclinedContainers),
 		"skipped_containers", len(rep.SkippedContainers),
 		"identity_conflicts", len(rep.IdentityConflicts),
@@ -333,7 +383,7 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (Report, e
 func (im *Importer) streamAndApply(
 	ctx context.Context, instanceID int64,
 	bindings map[string]store.CatalogueBinding, rep *Report,
-) ([]CreditRequest, error) {
+) ([]ImportedItem, error) {
 	rows := im.BatchRows
 	if rows <= 0 {
 		rows = DefaultBatchRows
@@ -345,7 +395,7 @@ func (im *Importer) streamAndApply(
 
 	batch := make([]store.CatalogueItem, 0, rows)
 	batchStarted := im.now()
-	var credited []CreditRequest
+	var imported []ImportedItem
 
 	flush := func() error {
 		if len(batch) == 0 {
@@ -361,8 +411,9 @@ func (im *Importer) streamAndApply(
 		// AFTER the commit, never before: these are the items whose links now
 		// exist.
 		for _, it := range batch {
-			credited = append(credited, CreditRequest{
+			imported = append(imported, ImportedItem{
 				RemoteKind: it.RemoteKind, RemoteID: it.RemoteID, Kind: it.Kind,
+				RemoteSubtype: it.RemoteSubtype,
 			})
 		}
 		batch = batch[:0]
@@ -389,14 +440,14 @@ func (im *Importer) streamAndApply(
 		// The tail is deliberately NOT flushed on a failed stream. A partial
 		// batch from a body that was cut mid-array is not known-good data, and
 		// the rows already committed are enough for the sweep to reconcile from.
-		return credited, fmt.Errorf("full import of service_instance %d: read items (delivered %d, applied %d): %w",
+		return imported, fmt.Errorf("full import of service_instance %d: read items (delivered %d, applied %d): %w",
 			instanceID, read, rep.ItemsApplied, streamErr)
 	}
 	if err := flush(); err != nil {
-		return credited, fmt.Errorf("full import of service_instance %d: final batch (delivered %d, applied %d): %w",
+		return imported, fmt.Errorf("full import of service_instance %d: final batch (delivered %d, applied %d): %w",
 			instanceID, read, rep.ItemsApplied, err)
 	}
-	return credited, nil
+	return imported, nil
 }
 
 // streamAndApplyCredits is phase B: one metadata read per imported item, batched
@@ -410,11 +461,15 @@ func (im *Importer) streamAndApply(
 // which reaches the store as "this series has no credits" rather than as
 // nothing.
 func (im *Importer) streamAndApplyCredits(
-	ctx context.Context, instanceID int64, reqs []CreditRequest, rep *Report,
+	ctx context.Context, instanceID int64, items []ImportedItem, rep *Report,
 ) error {
 	src, ok := im.Source.(CreditSource)
-	if !ok || len(reqs) == 0 {
+	if !ok || len(items) == 0 {
 		return nil
+	}
+	reqs := make([]CreditRequest, 0, len(items))
+	for _, it := range items {
+		reqs = append(reqs, it.creditRequest())
 	}
 
 	rows := im.BatchRows
@@ -467,6 +522,81 @@ func (im *Importer) streamAndApplyCredits(
 	}
 	if err := flush(); err != nil {
 		return fmt.Errorf("full import of service_instance %d: final credit batch (delivered %d): %w",
+			instanceID, read, err)
+	}
+	return nil
+}
+
+// streamAndApplyFiles is phase C: one volume walk per imported item, batched
+// into the same writer on the same sizing as the two passes before it.
+//
+// IT IS A NO-OP FOR A SOURCE THAT REPORTS NO FILES, on streamAndApplyCredits's
+// reasoning: a Source that does not implement FileSource is not an error and is
+// not logged as one.
+//
+// ⚠️ THE TAIL OF A FAILED WALK IS NOT FLUSHED, and here that is not merely
+// consistency with the other two passes — it is what stops a partial read
+// deleting rows. The store reconciles by deleting a work's files that the pass
+// did not report, so a batch assembled from a walk that died halfway would
+// present a truncated file list as the complete one. Dropping it leaves the
+// previous rows standing, which is the state a later import corrects.
+func (im *Importer) streamAndApplyFiles(
+	ctx context.Context, instanceID int64, items []ImportedItem, rep *Report,
+) error {
+	src, ok := im.Source.(FileSource)
+	if !ok || len(items) == 0 {
+		return nil
+	}
+	reqs := make([]FileRequest, 0, len(items))
+	for _, it := range items {
+		reqs = append(reqs, it.fileRequest())
+	}
+
+	rows := im.BatchRows
+	if rows <= 0 {
+		rows = DefaultBatchRows
+	}
+	window := im.BatchWindow
+	if window <= 0 {
+		window = DefaultBatchWindow
+	}
+
+	batch := make([]store.FileSet, 0, rows)
+	batchStarted := im.now()
+
+	flush := func() error {
+		if len(batch) == 0 {
+			return nil
+		}
+		res, err := im.Store.ApplyFiles(ctx, instanceID, batch)
+		if err != nil {
+			return err
+		}
+		rep.Files.Add(res)
+		batch = batch[:0]
+		batchStarted = im.now()
+		im.publish(Progress{
+			InstanceID: instanceID, Phase: "files",
+			ItemsRead: rep.FileItemsRead, Applied: rep.Files.FilesWritten,
+			Total: len(reqs),
+		})
+		return nil
+	}
+
+	read, streamErr := src.StreamFiles(ctx, reqs, func(set store.FileSet) error {
+		batch = append(batch, set)
+		if len(batch) >= rows || im.now().Sub(batchStarted) >= window {
+			return flush()
+		}
+		return nil
+	})
+	rep.FileItemsRead = read
+	if streamErr != nil {
+		return fmt.Errorf("full import of service_instance %d: walk files (delivered %d): %w",
+			instanceID, read, streamErr)
+	}
+	if err := flush(); err != nil {
+		return fmt.Errorf("full import of service_instance %d: final file batch (delivered %d): %w",
 			instanceID, read, err)
 	}
 	return nil

@@ -17066,3 +17066,108 @@ error instead"* paragraph, which also called gap 1 open, was corrected to match.
 guard critique (still accurate — it is `strings.Contains` against secrets the test was told about),
 and the decision itself. A closed redaction gap is a reason to update prose, not a reason to reopen a
 wire decision that rested mainly on something else.
+
+---
+
+## LS-230 — the volume walk landed, and what it did NOT bring with it
+
+**`LS-200` asked what the walk costs and said no amount of reading this repo would settle it. It was
+settled by a live probe against the owner's Kavita 0.9.0.2, and the numbers changed the design:**
+
+| Measured | Consequence in the code |
+|---|---|
+| `GET /api/Series/volumes?seriesId=N` returns volumes → chapters → **`files[]` populated on 90 of 90 sampled chapters**, none null | The walk is **one request per series**. `internal/kavita/client.go`'s `SeriesVolumes` goes through `do`, not through a per-chapter follow-up that does not exist. |
+| **Median 4 ms**, ~0.6 s serially across 151 series | **No token bucket, no concurrency, no pacing.** Stated as a decision in `internal/libsync/files.go`'s header rather than left as an absence, because "there is no rate limiter" reads as an oversight and "0.6 s does not need one" does not. |
+| ~2,700 files across 151 series (min 1, median 3, max 70) | The per-series batch is the existing 2,000-row / 100 ms window; nothing new was sized. |
+
+**`media_file.path` is an OPAQUE SURROGATE — `kavita:mangafile:<MangaFileDto.id>` — and the host
+filesystem path does not enter the replica at all.** Owner decision, 2026-08-18. The column is
+`NOT NULL` and half of `ux_file_path(service_instance_id, path)`, so it needs *a* stable per-instance
+value; the surrogate is one, and `reference/schema.md` §3 had already **withdrawn** the only argument
+for a real path (*"Two observations of one physical file are reconciled by `content_key`, once it
+exists … Container mount points differ per service, so `path` equality is not a substitute"*). It is
+the same class of value `kavita.SeriesView` drops as `folderPath` and `internal/servarr`'s
+`SystemResource` skip-list refuses.
+
+🚩 **The guard is in the WRITER, not in the adapter, and it was fired.** `validateReplicaPath`
+(`internal/store/files.go`) rejects a path containing `/` or `\`, so the rule survives the next
+adapter's author forgetting it. Both halves were broken deliberately: pointing the adapter at
+`MangaFileDto.FilePath` produced `media_file rows = 0 … FilesRejected = 6`, and disabling the
+separator check produced `FilesRejected = 1, want 3`. The fixture's `filePath` values are
+real-looking host paths (`/mnt/user/media/…`) **so that a regression has something to leak**.
+
+**Within-series reconciliation is part of the walk, because channel 4 does not exist.** The pass
+deletes the `(work_id, service_instance_id)` rows it did not see. Without it a chapter deleted
+upstream would keep its row forever and `have_count` would ratchet upward on a library that is
+shrinking — the rollup this walk exists to feed would then be confidently wrong rather than absent,
+which is worse. Two properties worth knowing: a **failed** walk delivers nothing rather than an empty
+set (an empty set would delete the series' rows, and a failed read is not evidence of an empty
+library), and the spare-list is accumulated across the **whole batch**, so two upstream items that
+tier 1 resolved onto one work do not delete each other's files.
+
+**`edition` is resolved, not reallocated** — it has no unique index, so a naive insert adds a row per
+import forever (`C-18`'s shape; `personWorkID` is the same pattern against the same absence). The
+archive case is ambiguous between `cbz` and `cbr` because `MangaFormat.Archive` covers both, and it
+is decided on **the walked files' extension**: all-zip → `cbz`, all-rar → `cbr`, **mixed or
+unrecognised → NULL**, which the column allows and the `CHECK` still guards. NULL rather than a coin
+flip is the point — a series held half as CBZ and half as CBR does not have an archive format.
+
+✅ **`library_member` stays at the whole-work sentinel, exactly as `LS-213` decided in advance.**
+`internal/store/files.go` ends with that decision written at the site, and
+`TestMembershipStaysAtTheWholeWorkSentinel` pins it.
+
+⚠️ **What the walk did NOT bring, stated so nobody looks for it:** `work_comic_issue` is still
+written by nothing. A chapter would be a work of its own — its own identity resolution, search
+documents and membership — which is a slice, not a rider. The cost is that **contiguity has nothing
+to compute from**, so the availability blob carries no `missing` key, and `missing` is the number
+ARCHITECTURE §6.1 calls the only always-honest one. `content_key` also stays NULL: it is defined as a
+read of the file's first 64 KiB and ADR-0026 forbids touching a filesystem. Kavita's own
+`koreaderHash` is **not** a substitute — different algorithm, different input — and writing it into
+that column would make two instances' rows for one file compare unequal while looking comparable.
+
+**No ADR.** The one decision that closes an alternative — the surrogate over the real path — was
+taken by the owner rather than proposed here, and `reference/schema.md` §3 had already withdrawn the
+alternative's supporting argument. There is nothing left to close.
+
+---
+
+## LS-231 — an assertion that pinned the absence of a pass, reversed rather than relaxed
+
+`internal/libsync/importer_test.go` asserted `COUNT(*) FROM media_file == 0` with the message *"POST
+/api/Series/all-v2 reports no file, no size and no path to a file — only a series FOLDER, which is
+not a file"*. **Every word of that was true of the series list and none of it was true of the
+upstream.**
+
+**That is the specific defect worth naming, because it is not "a stale expectation".** The assertion
+pinned *"no code writes this table"*, and an assertion of that shape cannot tell a walk that is
+absent from a walk that is present and silently writing nothing — the exact failure mode `LS-199`
+catalogues. So it was **reversed to a count** (6 rows: 3 + 2 + 1 across the three fixture series) and
+joined by assertions on the surrogate, on `size_bytes`/`date_added` being present, on `content_key`
+and `provenance_id` being NULL, on the three editions and their decided formats, and on the dirty
+mark. The original text is quoted verbatim at the assertion site with the reason it went.
+
+---
+
+## LS-232 — the credit pass was silently dead in every end-to-end test, and the file walk is what exposed it
+
+**Found by execution, not by reading.** Adding the file walk to `FullImport` turned five green
+end-to-end tests red with `kavita: walk files for series 201: … -> 0`. The cause was **not** the new
+pass: **no cassette had ever answered `GET /api/Series/metadata`**, so `StreamCredits`'s *"a
+per-series failure is DROPPED, not fatal"* rule had been swallowing one cassette miss per series
+since the credit pass landed. Every full-import test ran with a credit phase that read nothing, and
+passed — because none of them asserts a credit.
+
+**The second-order effect is what made it visible.** Those misses feed the circuit breaker
+(threshold 5, `ARCHITECTURE.md` §7.5), so on a fixture with five or six series the breaker **opened**,
+and the file walk — which stops on an open breaker, deliberately — inherited a failure the credit
+pass had been absorbing.
+
+**Fixed by giving the tests the cassette they were missing** (`kavita_series_metadata.yaml`), with
+empty person arrays: the fixture's job is to let the credit pass **succeed**, not to re-test a
+mapping `credits_test.go` already owns against hand-built DTOs. Its `publicationStatus` and
+`totalCount` are varied on purpose — they are the rollup's denominator gate, and `LS-233` uses them.
+
+⚠️ **The general lesson, recorded because it will recur:** a per-item failure policy that is correct
+in production (*one 404 must not cost 1,999 series their credits*) is **invisible in a test suite**,
+and a cassette that is simply absent is indistinguishable from an upstream that answers. A pass whose
+failure mode is "drop and continue" needs at least one assertion that it did **not** drop everything.

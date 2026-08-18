@@ -1,0 +1,1944 @@
+---
+# SYNTHETIC — hand-authored from api/specs/kavita-develop.json (VolumeDto,
+# ChapterDto, MangaFileDto) and NOT a wire capture. Claimed Kavita version:
+# 0.9.0.20.
+#
+# It answers GET /api/Series/volumes for EVERY series id the other libsync
+# cassettes stream, so the file walk runs end to end wherever a full import does.
+#
+# Three things this fixture carries on purpose:
+#
+#  1. `files[]` IS POPULATED ON EVERY CHAPTER. That is the shape a live probe
+#     against the owner's Kavita 0.9.0.2 measured — 90 of 90 sampled chapters
+#     carried a non-empty files array, none was null — and it is what makes the
+#     walk one request per series rather than one per chapter.
+#  2. `filePath` IS A REAL-LOOKING HOST PATH ON EVERY FILE, and it is here to be
+#     REFUSED. media_file.path stores an opaque surrogate
+#     (`kavita:mangafile:<id>`, owner decision 2026-08-18); a fixture with empty
+#     filePaths would let a regression that stores them pass unnoticed, which is
+#     the "guard green while the thing is broken" failure this repo keeps
+#     finding.
+#  3. THE EXTENSIONS ARE THE EDITION DECISION. MangaFormat.Archive covers both
+#     'cbz' and 'cbr', so the walked files' extension is what settles it —
+#     series 41 is .cbz, series 42 is .cbr, and series 105 is loose images whose
+#     format has no member in edition.format's vocabulary at all.
+#
+# Unread properties are omitted rather than filled with defaults: encoding/json
+# leaves an absent property at its zero value, which is exactly what a real
+# response's unread fields decode to anyway, and the struct-vs-spec coverage that
+# an omission WOULD hide is asserted directly by
+# internal/kavita/contract_test.go's TestStructsCoverSpecProperties.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=41
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 410,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 380,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 41,
+                "chapters": [
+                  {
+                    "id": 4101,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 11001,
+                        "filePath": "/mnt/user/media/manga/Frieren/Vol. 1.cbz",
+                        "pages": 190,
+                        "bytes": 62914560,
+                        "format": 1,
+                        "created": "2026-02-11T18:22:05.101Z",
+                        "extension": ".cbz",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 410,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 1,
+                    "count": 0,
+                    "totalCount": 0
+                  },
+                  {
+                    "id": 4102,
+                    "range": "2",
+                    "number": "2",
+                    "minNumber": 2.0,
+                    "maxNumber": 2.0,
+                    "sortOrder": 2.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "2",
+                    "files": [
+                      {
+                        "id": 11002,
+                        "filePath": "/mnt/user/media/manga/Frieren/Vol. 2.cbz",
+                        "pages": 190,
+                        "bytes": 60817408,
+                        "format": 1,
+                        "created": "2026-02-11T18:22:05.202Z",
+                        "extension": ".cbz",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 410,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 1,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              },
+              {
+                "id": 411,
+                "minNumber": 2.0,
+                "maxNumber": 2.0,
+                "name": "2",
+                "number": 2,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 41,
+                "chapters": [
+                  {
+                    "id": 4103,
+                    "range": "3",
+                    "number": "3",
+                    "minNumber": 3.0,
+                    "maxNumber": 3.0,
+                    "sortOrder": 3.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "3",
+                    "files": [
+                      {
+                        "id": 11003,
+                        "filePath": "/mnt/user/media/manga/Frieren/Vol. 3.cbz",
+                        "pages": 190,
+                        "bytes": 58720256,
+                        "format": 1,
+                        "created": "2026-03-02T08:11:00.303Z",
+                        "extension": ".cbz",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 411,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 1,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=42
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 420,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 42,
+                "chapters": [
+                  {
+                    "id": 4201,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 12001,
+                        "filePath": "/mnt/user/media/manga/Blame/Vol. 1 Part 1.cbr",
+                        "pages": 190,
+                        "bytes": 41943040,
+                        "format": 1,
+                        "created": "2026-03-01T09:14:52.100Z",
+                        "extension": ".cbr",
+                        "koreaderHash": ""
+                      },
+                      {
+                        "id": 12002,
+                        "filePath": "/mnt/user/media/manga/Blame/Vol. 1 Part 2.cbr",
+                        "pages": 190,
+                        "bytes": 39845888,
+                        "format": 1,
+                        "created": "2026-03-01T09:14:52.200Z",
+                        "extension": ".cbr",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 420,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 1,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 2
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=77
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 770,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 77,
+                "chapters": [
+                  {
+                    "id": 7701,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 17001,
+                        "filePath": "/mnt/user/media/books/Tolkien/The Hobbit.epub",
+                        "pages": 190,
+                        "bytes": 1048576,
+                        "format": 3,
+                        "created": "2026-01-04T11:02:19.500Z",
+                        "extension": ".epub",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 770,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 3,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 3
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=101
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 1010,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 101,
+                "chapters": [
+                  {
+                    "id": 10100,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 10101,
+                        "filePath": "/mnt/user/media/manga/S101/Vol. 1.cbz",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 1,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".cbz",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 1010,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 1,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 4
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=102
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 1020,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 102,
+                "chapters": [
+                  {
+                    "id": 10200,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 10201,
+                        "filePath": "/mnt/user/media/manga/S102/Vol. 1.cbz",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 1,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".cbz",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 1020,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 1,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 5
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=103
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 1030,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 103,
+                "chapters": [
+                  {
+                    "id": 10300,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 10301,
+                        "filePath": "/mnt/user/media/books/S103/Book.epub",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 3,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".epub",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 1030,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 3,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 6
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=104
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 1040,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 104,
+                "chapters": [
+                  {
+                    "id": 10400,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 10401,
+                        "filePath": "/mnt/user/media/manga/S104/Vol. 1.cbz",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 1,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".cbz",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 1040,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 1,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 7
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=105
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 1050,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 105,
+                "chapters": [
+                  {
+                    "id": 10500,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 10501,
+                        "filePath": "/mnt/user/media/images/S105/001.jpg",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 0,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".jpg",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 1050,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 0,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 8
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=106
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 1060,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 106,
+                "chapters": [
+                  {
+                    "id": 10600,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 10601,
+                        "filePath": "/mnt/user/media/books/S106/Book.epub",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 3,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".epub",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 1060,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 3,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 9
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=201
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 2010,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 201,
+                "chapters": [
+                  {
+                    "id": 20100,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 20101,
+                        "filePath": "/mnt/user/media/comics/S201/001.cbz",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 1,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".cbz",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 2010,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 1,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 10
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=202
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 2020,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 202,
+                "chapters": [
+                  {
+                    "id": 20200,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 20201,
+                        "filePath": "/mnt/user/media/comics/S202/001.cbz",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 1,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".cbz",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 2020,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 1,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 11
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=203
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 2030,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 203,
+                "chapters": [
+                  {
+                    "id": 20300,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 20301,
+                        "filePath": "/mnt/user/media/comics/S203/001.cbz",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 1,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".cbz",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 2030,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 1,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 12
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=204
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 2040,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 204,
+                "chapters": [
+                  {
+                    "id": 20400,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 20401,
+                        "filePath": "/mnt/user/media/comics/S204/001.cbz",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 1,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".cbz",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 2040,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 1,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 13
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=205
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 2050,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 205,
+                "chapters": [
+                  {
+                    "id": 20500,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 20501,
+                        "filePath": "/mnt/user/media/books/S205/Book.epub",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 3,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".epub",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 2050,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 3,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 14
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=301
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 3010,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 301,
+                "chapters": [
+                  {
+                    "id": 30100,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 30101,
+                        "filePath": "/mnt/user/media/comics/S301/001.cbz",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 1,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".cbz",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 3010,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 1,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 15
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=302
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 3020,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 302,
+                "chapters": [
+                  {
+                    "id": 30200,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 30201,
+                        "filePath": "/mnt/user/media/comics/S302/001.cbz",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 1,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".cbz",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 3020,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 1,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 16
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=303
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 3030,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 303,
+                "chapters": [
+                  {
+                    "id": 30300,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 30301,
+                        "filePath": "/mnt/user/media/comics/S303/001.cbz",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 1,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".cbz",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 3030,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 1,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 17
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=304
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 3040,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 304,
+                "chapters": [
+                  {
+                    "id": 30400,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 30401,
+                        "filePath": "/mnt/user/media/books/S304/Book.epub",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 3,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".epub",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 3040,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 3,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 18
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=305
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 3050,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 305,
+                "chapters": [
+                  {
+                    "id": 30500,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 30501,
+                        "filePath": "/mnt/user/media/books/S305/Book.epub",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 3,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".epub",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 3050,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 3,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 19
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=401
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 4010,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 401,
+                "chapters": [
+                  {
+                    "id": 40100,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 40101,
+                        "filePath": "/mnt/user/media/comics/S401/001.cbz",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 1,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".cbz",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 4010,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 1,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 20
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=402
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 4020,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 402,
+                "chapters": [
+                  {
+                    "id": 40200,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 40201,
+                        "filePath": "/mnt/user/media/comics/S402/001.cbz",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 1,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".cbz",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 4020,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 1,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 21
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=403
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 4030,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 403,
+                "chapters": [
+                  {
+                    "id": 40300,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 40301,
+                        "filePath": "/mnt/user/media/comics/S403/001.cbz",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 1,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".cbz",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 4030,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 1,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 22
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=404
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 4040,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 404,
+                "chapters": [
+                  {
+                    "id": 40400,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 40401,
+                        "filePath": "/mnt/user/media/comics/S404/001.cbz",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 1,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".cbz",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 4040,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 1,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]
+    - id: 23
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/volumes?seriesId=405
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            [
+              {
+                "id": 4050,
+                "minNumber": 1.0,
+                "maxNumber": 1.0,
+                "name": "1",
+                "number": 1,
+                "pages": 190,
+                "pagesRead": 0,
+                "created": "2026-02-11T18:22:04.900Z",
+                "createdUtc": "2026-02-11T18:22:04.900Z",
+                "lastModified": "2026-08-17T03:00:30.118",
+                "lastModifiedUtc": "2026-08-17T07:00:30.118Z",
+                "seriesId": 405,
+                "chapters": [
+                  {
+                    "id": 40500,
+                    "range": "1",
+                    "number": "1",
+                    "minNumber": 1.0,
+                    "maxNumber": 1.0,
+                    "sortOrder": 1.0,
+                    "pages": 190,
+                    "isSpecial": false,
+                    "title": "1",
+                    "files": [
+                      {
+                        "id": 40501,
+                        "filePath": "/mnt/user/media/comics/S405/001.cbz",
+                        "pages": 190,
+                        "bytes": 20971520,
+                        "format": 1,
+                        "created": "2026-04-01T10:00:00.000Z",
+                        "extension": ".cbz",
+                        "koreaderHash": ""
+                      }
+                    ],
+                    "volumeId": 4050,
+                    "created": "2026-02-11T18:22:05.001Z",
+                    "createdUtc": "2026-02-11T18:22:05.001Z",
+                    "releaseDate": "0001-01-01T00:00:00",
+                    "titleName": "",
+                    "format": 1,
+                    "count": 0,
+                    "totalCount": 0
+                  }
+                ]
+              }
+            ]

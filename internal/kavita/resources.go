@@ -593,3 +593,241 @@ type SeriesMetadataDto struct {
 	CoverArtistLocked       bool `json:"coverArtistLocked"`
 	ReleaseYearLocked       bool `json:"releaseYearLocked"`
 }
+
+// ---- the volume and chapter walk -------------------------------------------
+
+// VolumeDto is one element of GET /api/Series/volumes?seriesId=N.
+//
+// THE WHOLE WALK IS ONE REQUEST PER SERIES, AND THAT IS MEASURED RATHER THAN
+// HOPED FOR. A live probe against the owner's Kavita 0.9.0.2 (151 series) read
+// volumes → chapters → `files[]` from this one endpoint: 90 of 90 sampled
+// chapters carried a NON-EMPTY `files[]`, and none was null. So there is no
+// second call per volume and no third per chapter — the file rows this walk
+// exists to write are already in this response.
+//
+// The same probe measured a MEDIAN 4 ms per call, i.e. ~0.6 s serially across
+// the whole library. That is why this path has NO token bucket, NO concurrency
+// and NO pacing: there is nothing here for them to fix, and pacing a 0.6 s
+// sequential pass would be machinery answering a problem nobody has. If a much
+// larger library ever measures slow, the seam is the loop in
+// internal/libsync/files.go and nothing in this package changes.
+//
+// Volume is a level UsArr does NOT model — ADR-0030 flattens Kavita's Volume
+// onto the issue row as volume_label + volume_sort, and there is no third work
+// kind for it. This type is therefore a CONTAINER the walk descends through
+// rather than a row source.
+type VolumeDto struct {
+	ID        int32   `json:"id"`
+	MinNumber float32 `json:"minNumber"`
+	MaxNumber float32 `json:"maxNumber"`
+	Name      string  `json:"name"`
+
+	// Number is `deprecated: true` in the spec. Declared anyway, on the same
+	// rule every other unread field here is: an upstream removal should be a
+	// test failure rather than a silent behaviour change.
+	Number    int32 `json:"number"`
+	Pages     int32 `json:"pages"`
+	PagesRead int32 `json:"pagesRead"`
+
+	LastModifiedUtc Timestamp `json:"lastModifiedUtc"`
+	CreatedUtc      Timestamp `json:"createdUtc"`
+	Created         Timestamp `json:"created"`
+	LastModified    Timestamp `json:"lastModified"`
+
+	SeriesID int32        `json:"seriesId"`
+	Chapters []ChapterDto `json:"chapters"`
+
+	MinHoursToRead int32   `json:"minHoursToRead"`
+	MaxHoursToRead int32   `json:"maxHoursToRead"`
+	AvgHoursToRead float32 `json:"avgHoursToRead"`
+	WordCount      int64   `json:"wordCount"`
+
+	CoverImage     string `json:"coverImage"`
+	PrimaryColor   string `json:"primaryColor"`
+	SecondaryColor string `json:"secondaryColor"`
+
+	// The identifier set, carrying the same warning SeriesDto's does: none of
+	// these is a provenance-bearing claim, and CbrID is DEVELOP-ONLY on this
+	// type too (ceilingOnlyProperties pins it). Nothing reads them here — a
+	// volume is not a work.
+	AniListID   int32  `json:"aniListId"`
+	MalID       int64  `json:"malId"`
+	HardcoverID int32  `json:"hardcoverId"`
+	MetronID    int64  `json:"metronId"`
+	ComicVineID string `json:"comicVineId"`
+	MangaBakaID int64  `json:"mangaBakaId"`
+	CbrID       int32  `json:"cbrId"`
+}
+
+// ChapterDto is one chapter inside a VolumeDto, and it is the level that owns
+// the FILES.
+//
+// IT IS 82 PROPERTIES AND EVERY ONE IS DECLARED. That is not completionism: the
+// contract test asserts this struct covers both vendored specs, and a property
+// that is in the spec and absent from the struct is an upstream change nobody
+// sees. Most of it is per-user read state, `*Locked` flags and a duplicate of
+// SeriesMetadataDto's thirteen person arrays — UsArr reads NONE of those here.
+//
+// ⚠️ THE PERSON ARRAYS ON A CHAPTER ARE NOT A SECOND CREDIT SOURCE, and must
+// not be read as one. internal/libsync/credits.go maps credits from the SERIES'
+// metadata, one statement per series; chapter-level arrays would credit a series
+// by whichever chapter happened to be walked last. They are declared and unread.
+type ChapterDto struct {
+	ID        int32   `json:"id"`
+	Range     string  `json:"range"`
+	Number    string  `json:"number"`
+	MinNumber float32 `json:"minNumber"`
+	MaxNumber float32 `json:"maxNumber"`
+	SortOrder float32 `json:"sortOrder"`
+	Pages     int32   `json:"pages"`
+	IsSpecial bool    `json:"isSpecial"`
+	Title     string  `json:"title"`
+
+	// Files is the reason this walk exists. Measured non-empty on 90 of 90
+	// sampled chapters against the owner's instance — see VolumeDto.
+	Files []MangaFileDto `json:"files"`
+
+	PagesRead              int32     `json:"pagesRead"`
+	TotalReads             int32     `json:"totalReads"`
+	LastReadingProgressUtc Timestamp `json:"lastReadingProgressUtc"`
+	LastReadingProgress    Timestamp `json:"lastReadingProgress"`
+	CoverImageLocked       bool      `json:"coverImageLocked"`
+
+	VolumeID        int32     `json:"volumeId"`
+	CreatedUtc      Timestamp `json:"createdUtc"`
+	LastModifiedUtc Timestamp `json:"lastModifiedUtc"`
+	Created         Timestamp `json:"created"`
+	ReleaseDate     Timestamp `json:"releaseDate"`
+
+	TitleName   string    `json:"titleName"`
+	Summary     string    `json:"summary"`
+	AgeRating   AgeRating `json:"ageRating"`
+	WordCount   int64     `json:"wordCount"`
+	VolumeTitle string    `json:"volumeTitle"`
+
+	MinHoursToRead int32   `json:"minHoursToRead"`
+	MaxHoursToRead int32   `json:"maxHoursToRead"`
+	AvgHoursToRead float32 `json:"avgHoursToRead"`
+
+	WebLinks string `json:"webLinks"`
+	ISBN     string `json:"isbn"`
+
+	// The thirteen person arrays, declared and DELIBERATELY UNREAD. See the type
+	// comment: credits are a per-SERIES statement, not a per-chapter one.
+	Writers      []PersonDto `json:"writers"`
+	CoverArtists []PersonDto `json:"coverArtists"`
+	Publishers   []PersonDto `json:"publishers"`
+	Characters   []PersonDto `json:"characters"`
+	Pencillers   []PersonDto `json:"pencillers"`
+	Inkers       []PersonDto `json:"inkers"`
+	Imprints     []PersonDto `json:"imprints"`
+	Colorists    []PersonDto `json:"colorists"`
+	Letterers    []PersonDto `json:"letterers"`
+	Editors      []PersonDto `json:"editors"`
+	Translators  []PersonDto `json:"translators"`
+	Teams        []PersonDto `json:"teams"`
+	Locations    []PersonDto `json:"locations"`
+
+	Genres []GenreTagDto `json:"genres"`
+	Tags   []TagDto      `json:"tags"`
+
+	PublicationStatus PublicationStatus `json:"publicationStatus"`
+	Language          string            `json:"language"`
+
+	// Count and TotalCount are the CHAPTER's copy of the series declaration.
+	// The rollup's denominator reads SeriesMetadataDto.TotalCount instead — one
+	// statement per series, on a response the credit pass already fetches —
+	// rather than whichever chapter was walked last.
+	Count      int32 `json:"count"`
+	TotalCount int32 `json:"totalCount"`
+
+	LanguageLocked          bool `json:"languageLocked"`
+	SummaryLocked           bool `json:"summaryLocked"`
+	AgeRatingLocked         bool `json:"ageRatingLocked"`
+	PublicationStatusLocked bool `json:"publicationStatusLocked"`
+	GenresLocked            bool `json:"genresLocked"`
+	TagsLocked              bool `json:"tagsLocked"`
+	WriterLocked            bool `json:"writerLocked"`
+	CharacterLocked         bool `json:"characterLocked"`
+	ColoristLocked          bool `json:"coloristLocked"`
+	EditorLocked            bool `json:"editorLocked"`
+	InkerLocked             bool `json:"inkerLocked"`
+	ImprintLocked           bool `json:"imprintLocked"`
+	LettererLocked          bool `json:"lettererLocked"`
+	PencillerLocked         bool `json:"pencillerLocked"`
+	PublisherLocked         bool `json:"publisherLocked"`
+	TranslatorLocked        bool `json:"translatorLocked"`
+	TeamLocked              bool `json:"teamLocked"`
+	LocationLocked          bool `json:"locationLocked"`
+	CoverArtistLocked       bool `json:"coverArtistLocked"`
+	ReleaseDateLocked       bool `json:"releaseDateLocked"`
+	TitleNameLocked         bool `json:"titleNameLocked"`
+	SortOrderLocked         bool `json:"sortOrderLocked"`
+
+	CoverImage     string `json:"coverImage"`
+	PrimaryColor   string `json:"primaryColor"`
+	SecondaryColor string `json:"secondaryColor"`
+
+	// Format is the CHAPTER's MangaFormat. The edition writer reads the SERIES'
+	// format (SeriesDto.format, already stored as remote_subtype) and this one
+	// only to disambiguate an archive — see internal/libsync/files.go.
+	Format MangaFormat `json:"format"`
+
+	AniListID   int32  `json:"aniListId"`
+	MalID       int64  `json:"malId"`
+	HardcoverID int32  `json:"hardcoverId"`
+	MetronID    int64  `json:"metronId"`
+	ComicVineID string `json:"comicVineId"`
+	MangaBakaID int64  `json:"mangaBakaId"`
+	CbrID       int32  `json:"cbrId"`
+}
+
+// MangaFileDto is ONE FILE ON THE KAVITA HOST, and it is the source of every
+// media_file row this adapter writes. Eight properties, all declared.
+//
+// 🚩 FilePath IS A HOST FILESYSTEM PATH AND IT DOES NOT ENTER THE REPLICA AT
+// ALL. Not into media_file.path, not into a view type, not into a log line. The
+// owner decided (2026-08-18) that media_file.path carries an OPAQUE SURROGATE
+// keyed on ID instead — `kavita:mangafile:<id>` — and internal/store/files.go
+// carries the reasoning and the guard that enforces it. It is modelled here for
+// the same reason SeriesDto.FolderPath is: an upstream rename should be a test
+// failure, not a silent empty string.
+//
+// ⚠️ THERE IS DELIBERATELY NO MangaFileView. Every other browser-facing shape in
+// this package is an allowlist projection (see redact.go); the allowlist for
+// this type would be "not the path", and the honest form of that is no view at
+// all, because nothing on any v0.1 screen renders a file.
+type MangaFileDto struct {
+	ID int32 `json:"id"`
+
+	// FilePath — see the type comment. Read by nothing.
+	FilePath string `json:"filePath"`
+
+	Pages int32 `json:"pages"`
+
+	// Bytes lands on media_file.size_bytes.
+	Bytes int64 `json:"bytes"`
+
+	// Format is this FILE's MangaFormat, which is what makes the archive case
+	// decidable at all — see Extension.
+	Format MangaFormat `json:"format"`
+
+	// Created lands on media_file.date_added. It is Kavita's own record of when
+	// the file entered its database, which is the closest thing on offer to
+	// "when did this arrive"; it is NOT a filesystem mtime, and UsArr reads no
+	// filesystem (ADR-0026).
+	Created Timestamp `json:"created"`
+
+	// Extension is the file extension WITH its leading dot (".cbz"). It is what
+	// decides edition.format between 'cbz' and 'cbr', which MangaFormat.Archive
+	// cannot: Kavita collapses both into one enum member.
+	Extension string `json:"extension"`
+
+	// KoreaderHash is a partial MD5 Kavita computes for KOReader progress sync.
+	// It is NOT media_file.content_key and must not be written as one:
+	// content_key is defined as hex(size) || ':' || sha256(first 64 KiB)
+	// (schema.md §3), a different algorithm over a different input, so storing
+	// this under that column would make two instances' rows for one file
+	// compare unequal while looking comparable. content_key stays NULL.
+	KoreaderHash string `json:"koreaderHash"`
+}

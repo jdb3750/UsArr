@@ -1,0 +1,1324 @@
+---
+# SYNTHETIC — hand-authored from api/specs/kavita-develop.json
+# (SeriesMetadataDto) and NOT a wire capture. Claimed Kavita version: 0.9.0.20.
+#
+# ⚠️ IT EXISTS BECAUSE THE CREDIT PASS WAS SILENTLY DEAD IN EVERY END-TO-END
+# TEST. Before this file, no cassette answered GET /api/Series/metadata, so
+# StreamCredits's "a per-series failure is DROPPED, not fatal" rule swallowed one
+# cassette miss per series and every full-import test ran with a credit phase
+# that read nothing. The tests passed because none of them asserted a credit —
+# and the failures were also feeding the circuit breaker, so a fifth series
+# opened it. REVIEW-LOG.md LS-232.
+#
+# The person arrays are EMPTY on purpose. This fixture's job is to let the credit
+# pass SUCCEED, not to re-test the mapping — internal/libsync/credits_test.go
+# owns that against hand-built DTOs, where a role table is readable. An empty
+# array is also the honest ordinary case: a Kavita whose operator never filled in
+# any ComicInfo returns exactly this.
+#
+# publicationStatus and totalCount ARE varied, and they are the reason this file
+# has per-series bodies rather than one shared body: they are the availability
+# rollup's denominator gate (ARCHITECTURE §6.1 — show a fraction only when the
+# series has ENDED and a total is declared), and whether a free instance
+# populates either of them has never been measured. Series 42 is Completed with a
+# declared total, 77 is Ended with one, and everything else is OnGoing with
+# totalCount 0 — which is ALSO what an instance that populates neither looks
+# like, because both fields' "unset" value is 0.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=41
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 41,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 2020,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 41
+            }
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=42
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 42,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 1997,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 10,
+              "publicationStatus": 2,
+              "webLinks": "",
+              "seriesId": 42
+            }
+    - id: 2
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=77
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 77,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 1937,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 1,
+              "publicationStatus": 4,
+              "webLinks": "",
+              "seriesId": 77
+            }
+    - id: 3
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=101
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 101,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 101
+            }
+    - id: 4
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=102
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 102,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 102
+            }
+    - id: 5
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=103
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 103,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 103
+            }
+    - id: 6
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=104
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 104,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 104
+            }
+    - id: 7
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=105
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 105,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 105
+            }
+    - id: 8
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=106
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 106,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 106
+            }
+    - id: 9
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=201
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 201,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 201
+            }
+    - id: 10
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=202
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 202,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 202
+            }
+    - id: 11
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=203
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 203,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 203
+            }
+    - id: 12
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=204
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 204,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 204
+            }
+    - id: 13
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=205
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 205,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 205
+            }
+    - id: 14
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=301
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 301,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 301
+            }
+    - id: 15
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=302
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 302,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 302
+            }
+    - id: 16
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=303
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 303,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 303
+            }
+    - id: 17
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=304
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 304,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 304
+            }
+    - id: 18
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=305
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 305,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 305
+            }
+    - id: 19
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=401
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 401,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 401
+            }
+    - id: 20
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=402
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 402,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 402
+            }
+    - id: 21
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=403
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 403,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 403
+            }
+    - id: 22
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=404
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 404,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 404
+            }
+    - id: 23
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: kavita.test:5000
+        headers:
+            Accept:
+                - application/json, text/plain;q=0.9, */*;q=0.1
+            X-Api-Key:
+                - <redacted>
+        url: http://kavita.test:5000/api/Series/metadata?seriesId=405
+        method: GET
+        body: ""
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 4ms
+        body: |-
+            {
+              "id": 405,
+              "summary": "",
+              "genres": [],
+              "tags": [],
+              "writers": [],
+              "coverArtists": [],
+              "pencillers": [],
+              "inkers": [],
+              "colorists": [],
+              "letterers": [],
+              "editors": [],
+              "translators": [],
+              "publishers": [],
+              "imprints": [],
+              "teams": [],
+              "characters": [],
+              "locations": [],
+              "ageRating": 0,
+              "releaseYear": 0,
+              "language": "en",
+              "maxCount": 0,
+              "totalCount": 0,
+              "publicationStatus": 0,
+              "webLinks": "",
+              "seriesId": 405
+            }

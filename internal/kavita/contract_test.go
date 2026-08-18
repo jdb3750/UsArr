@@ -258,6 +258,14 @@ var coveredSchemas = []struct {
 	{schema: "PersonDto", typ: reflect.TypeOf(PersonDto{})},
 	{schema: "GenreTagDto", typ: reflect.TypeOf(GenreTagDto{})},
 	{schema: "TagDto", typ: reflect.TypeOf(TagDto{})},
+	// The volume and chapter walk. ChapterDto is 82 properties and every one is
+	// modelled, for the reason this test exists: the walk reads THREE of them
+	// (files, and each file's bytes/created/extension/id), and an upstream that
+	// renames one of the three must fail here rather than quietly write zero
+	// rows.
+	{schema: "VolumeDto", typ: reflect.TypeOf(VolumeDto{})},
+	{schema: "ChapterDto", typ: reflect.TypeOf(ChapterDto{})},
+	{schema: "MangaFileDto", typ: reflect.TypeOf(MangaFileDto{})},
 }
 
 // TestStructsCoverSpecProperties asserts every property EITHER spec declares has
@@ -320,6 +328,14 @@ func TestStructsCoverSpecProperties(t *testing.T) {
 var ceilingOnlyProperties = map[string][]string{
 	"SeriesDto":  {"cbrId", "isStandAlone", "mangaBakaEditionId", "nameLocked"},
 	"LibraryDto": {"metadataProvider"},
+	// The same `cbrId`, on the two types the walk descends through. Nothing
+	// reads either — a volume is not a work and a chapter is not a credit
+	// source — so unlike SeriesDto.cbrId these two have no unreachable
+	// consequence to track. MangaFileDto is deliberately ABSENT from this map:
+	// its eight properties are identical across the two specs, which is what
+	// makes the walk's four read fields safe on the release the owner runs.
+	"VolumeDto":  {"cbrId"},
+	"ChapterDto": {"cbrId"},
 }
 
 // TestCeilingOnlyPropertiesAreDeclared is ADR-0046's guard: it computes
@@ -574,6 +590,9 @@ func TestEndpointsExistInSpec(t *testing.T) {
 		// ASP.NET's binder matches what the controller declares, and the two
 		// controllers declare different things.
 		{path: "/api/Series/metadata", method: "get", params: []string{"seriesId"}},
+		// The volume and chapter walk. Same controller, same camelCase
+		// parameter, one call per series.
+		{path: "/api/Series/volumes", method: "get", params: []string{"seriesId"}},
 	}
 
 	eachSpec(t, func(t *testing.T, ps pinnedSpec, spec openAPI) {

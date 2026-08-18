@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -84,7 +85,8 @@ func TestFullImportFromTheCassettesEndToEnd(t *testing.T) {
 	// which is the ORDINARY case on a free instance.
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s)
-	src := NewKavitaSource(newCassetteClient(t, "kavita_libraries.yaml", "kavita_series_all_v2.yaml"))
+	src := NewKavitaSource(newCassetteClient(t, "kavita_libraries.yaml",
+		"kavita_series_all_v2.yaml", "kavita_series_metadata.yaml", "kavita_series_volumes.yaml"))
 
 	var progress []Progress
 	im := newImporter(t, s, src)
@@ -127,15 +129,95 @@ func TestFullImportFromTheCassettesEndToEnd(t *testing.T) {
 	if n := countRows(t, s, `SELECT COUNT(*) FROM work_book`); n != 1 {
 		t.Errorf("work_book rows = %d, want 1", n)
 	}
-	// Nothing writes work_comic_issue or media_file in this commit, and the
-	// reason is stated rather than left implicit: Kavita's series list carries
-	// no chapter and no file facts at all. See kavita.go and doc.go.
+	// Nothing writes work_comic_issue, and the reason is stated rather than
+	// left implicit: Kavita's series list carries no chapter facts, and the
+	// volume walk that has them does not create an issue-level work — see
+	// internal/libsync/files.go's header for what that costs.
 	if n := countRows(t, s, `SELECT COUNT(*) FROM work_comic_issue`); n != 0 {
-		t.Errorf("work_comic_issue rows = %d; channel 1's series read has no chapter facts to write", n)
+		t.Errorf("work_comic_issue rows = %d; no pass creates an issue-level work", n)
 	}
-	if n := countRows(t, s, `SELECT COUNT(*) FROM media_file`); n != 0 {
-		t.Errorf("media_file rows = %d; POST /api/Series/all-v2 reports no file, no size and no path "+
-			"to a file — only a series FOLDER, which is not a file", n)
+
+	// ⚠️ THIS ASSERTION IS REVERSED, and the reversal is the point of the
+	// commit that made it. It read:
+	//
+	//	if n := countRows(t, s, `SELECT COUNT(*) FROM media_file`); n != 0 {
+	//	    t.Errorf("media_file rows = %d; POST /api/Series/all-v2 reports no file, "+
+	//	        "no size and no path to a file — only a series FOLDER, which is not a file", n)
+	//	}
+	//
+	// Every word of that was true of the SERIES LIST and it was never true of
+	// the upstream: GET /api/Series/volumes reports volumes → chapters →
+	// files[], measured populated on 90 of 90 sampled chapters against the
+	// owner's instance. The old assertion pinned the ABSENCE of a pass rather
+	// than a property of the data, which is why it had to be reversed rather
+	// than merely relaxed — an assertion that "there are no files" would keep
+	// passing if the walk silently wrote nothing.
+	//
+	// Six rows: Frieren 3 (two volumes, three chapters), Blame! 2 (one chapter,
+	// two files), The Hobbit 1.
+	if n := countRows(t, s, `SELECT COUNT(*) FROM media_file`); n != 6 {
+		t.Errorf("media_file rows = %d, want 6 from the volume walk", n)
+	}
+	if rep.FileItemsRead != 3 || rep.Files.FilesWritten != 6 || rep.Files.FilesRemoved != 0 {
+		t.Errorf("files: read %d written %d removed %d, want 3/6/0",
+			rep.FileItemsRead, rep.Files.FilesWritten, rep.Files.FilesRemoved)
+	}
+	if rep.Files.FilesRejected != 0 {
+		t.Errorf("FilesRejected = %d; the adapter mints surrogates and none can be a real path",
+			rep.Files.FilesRejected)
+	}
+
+	// THE SURROGATE, asserted against the fixture's own filePaths. Every file
+	// in kavita_series_volumes.yaml carries a real-looking host path
+	// (/mnt/user/media/…) precisely so that storing one would be visible here.
+	if n := countRows(t, s,
+		`SELECT COUNT(*) FROM media_file WHERE path LIKE 'kavita:mangafile:%'`); n != 6 {
+		t.Errorf("%d of 6 media_file rows carry the kavita:mangafile: surrogate", n)
+	}
+	if n := countRows(t, s,
+		`SELECT COUNT(*) FROM media_file WHERE path LIKE '%/%' OR path LIKE '%\%' ESCAPE '\'`); n != 0 {
+		t.Errorf("%d media_file rows carry a path separator; media_file.path is an OPAQUE "+
+			"SURROGATE and a host filesystem path must never reach the replica", n)
+	}
+	// size_bytes and date_added come off the walk, not off a clock here.
+	if n := countRows(t, s,
+		`SELECT COUNT(*) FROM media_file WHERE size_bytes > 0 AND date_added IS NOT NULL`); n != 6 {
+		t.Errorf("%d of 6 media_file rows carry both size_bytes and date_added", n)
+	}
+	// content_key and provenance_id stay NULL — a filesystem read is forbidden
+	// (ADR-0026) and a replicated row has no acquisition history.
+	if n := countRows(t, s,
+		`SELECT COUNT(*) FROM media_file WHERE content_key IS NOT NULL OR provenance_id IS NOT NULL`); n != 0 {
+		t.Errorf("%d media_file rows carry a content_key or a provenance_id", n)
+	}
+
+	// One primary edition per series that has files, with the format the walk's
+	// extensions decided: .cbz → cbz, .cbr → cbr, .epub → ebook.
+	if rep.Files.EditionsCreated != 3 || rep.Files.EditionsReused != 0 {
+		t.Errorf("editions: created %d reused %d, want 3/0",
+			rep.Files.EditionsCreated, rep.Files.EditionsReused)
+	}
+	for _, tc := range []struct{ title, format string }{
+		{"Frieren: Beyond Journey's End", "cbz"},
+		{"Blame!", "cbr"},
+		{"The Hobbit", "ebook"},
+	} {
+		n := countRows(t, s, fmt.Sprintf(`
+			SELECT COUNT(*) FROM edition e JOIN work w ON w.id = e.work_id
+			 WHERE w.title = %s AND e.is_primary = 1 AND e.format = %s`,
+			sqlQuote(tc.title), sqlQuote(tc.format)))
+		if n != 1 {
+			t.Errorf("%q has %d primary editions with format %q, want 1", tc.title, n, tc.format)
+		}
+	}
+
+	// The dirty mark, which is the whole point of the pass for the rollup: the
+	// three walked works are queued for the flush and nothing else is.
+	if n := countRows(t, s, `SELECT COUNT(*) FROM work WHERE rollup_dirty = 1`); n != 3 {
+		t.Errorf("%d works are marked rollup_dirty, want the 3 the walk touched", n)
+	}
+	if rep.Files.WorksMarkedDirty != 3 {
+		t.Errorf("WorksMarkedDirty = %d, want 3", rep.Files.WorksMarkedDirty)
 	}
 
 	// §7 invariants 2 and 5, over a POPULATED corpus.
@@ -178,7 +260,8 @@ func TestFullImportDeclinesTheImageLibraryAndSaysWhy(t *testing.T) {
 	s := newTestStore(t)
 	inst := fixtureInstance(t, s)
 	src := NewKavitaSource(newCassetteClient(t,
-		"kavita_libraries_all_types.yaml", "kavita_series_all_v2_identified.yaml"))
+		"kavita_libraries_all_types.yaml", "kavita_series_all_v2_identified.yaml",
+		"kavita_series_metadata.yaml", "kavita_series_volumes.yaml"))
 
 	rep, err := newImporter(t, s, src).FullImport(t.Context(), inst)
 	if err != nil {
@@ -457,4 +540,11 @@ func TestFullImportSurvivesAContainerThatCannotBeBound(t *testing.T) {
 	if remoteID != "2" || detail == "" {
 		t.Errorf("sync_report row = (%q, %q)", remoteID, detail)
 	}
+}
+
+// sqlQuote renders a string literal for a test query. The tests here build a
+// couple of assertions by formatting rather than by binding, because countRows
+// takes no arguments; this keeps that from being a quoting bug.
+func sqlQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }

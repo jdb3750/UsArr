@@ -26,6 +26,11 @@ type KavitaReader interface {
 	// not read one series' metadata does not exist — both are the same
 	// controller and the same credential.
 	SeriesMetadata(ctx context.Context, seriesID int32) (kavita.SeriesMetadataDto, error)
+
+	// SeriesVolumes is the file walk (files.go). It is on this interface for
+	// SeriesMetadata's reason — same controller, same credential, and a Kavita
+	// client that could do one and not the other does not exist.
+	SeriesVolumes(ctx context.Context, seriesID int32) ([]kavita.VolumeDto, error)
 }
 
 // KavitaSource adapts one Kavita instance to Source.
