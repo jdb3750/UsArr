@@ -15,6 +15,7 @@
 		"bench:list": "node scripts/list-bench.mjs",
 		"test:freeze": "node scripts/freeze-check.mjs",
 		"probe:pointer": "node scripts/pointer-dispatch-probe.mjs",
+		"probe:shell": "node scripts/shell-geometry-probe.mjs",
 		"format": "prettier --write .",
 		"format:check": "prettier --check ."
 	},
