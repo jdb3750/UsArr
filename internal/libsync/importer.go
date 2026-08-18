@@ -299,6 +299,7 @@ func (im *Importer) FullImport(ctx context.Context, instanceID int64) (Report, e
 		"unidentified", rep.Unidentified,
 		"people_created", rep.Credits.PeopleCreated,
 		"credits_written", rep.Credits.CreditsWritten,
+		"years_written", rep.Credits.YearsWritten,
 		"declined_containers", len(rep.DeclinedContainers),
 		"skipped_containers", len(rep.SkippedContainers),
 		"identity_conflicts", len(rep.IdentityConflicts),

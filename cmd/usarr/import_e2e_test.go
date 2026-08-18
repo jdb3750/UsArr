@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -65,7 +66,10 @@ func kavitaSeries(id, libraryID int, name string, extra map[string]any) map[stri
 // populated. Every array Kavita declares is emitted, empty where unnamed, which
 // is the shape a real response has — an adapter that only works when an array is
 // absent would pass a fixture that omitted them.
-func kavitaMetadata(seriesID int, people map[string][]string) map[string]any {
+// extra is merged in last, so a test can set a scalar SeriesMetadataDto field —
+// releaseYear is the one that exists today — without every call site growing a
+// parameter for it.
+func kavitaMetadata(seriesID int, people map[string][]string, extra ...map[string]any) map[string]any {
 	out := map[string]any{"id": seriesID, "seriesId": seriesID, "summary": ""}
 	for _, array := range []string{
 		"writers", "coverArtists", "publishers", "characters", "pencillers",
@@ -77,6 +81,11 @@ func kavitaMetadata(seriesID int, people map[string][]string) map[string]any {
 			dtos = append(dtos, map[string]any{"id": i + 1, "name": name})
 		}
 		out[array] = dtos
+	}
+	for _, e := range extra {
+		for k, v := range e {
+			out[k] = v
+		}
 	}
 	return out
 }
@@ -153,8 +162,14 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 			// Not a creator: a publisher is an organisation, and UsArr credits
 			// none of Kavita's five non-creator arrays.
 			"publishers": {"Shogakukan"}, "characters": {"Frieren"},
-		}),
-		43: kavitaMetadata(43, map[string][]string{"writers": {"J. R. R. Tolkien"}}),
+			// A real year. work.year is a PHASE-A field that Kavita's series
+			// list cannot supply, so it arrives on this per-series read.
+		}, map[string]any{"releaseYear": 2020}),
+		// releaseYear 0 IS KAVITA'S OWN SENTINEL FOR "no year"
+		// (NumberHelper.IsValidYear is `>= 1000`), and writing it through would
+		// put a year on the Home screen that nobody claimed.
+		43: kavitaMetadata(43, map[string][]string{"writers": {"J. R. R. Tolkien"}},
+			map[string]any{"releaseYear": 0}),
 		44: kavitaMetadata(44, map[string][]string{
 			"writers": {"Kentaro Miura"}, "pencillers": {"Kentaro Miura"},
 		}),
@@ -237,6 +252,37 @@ func TestAddingAKavitaProducesACatalogue(t *testing.T) {
 	}
 	if frierenDir != "rtl" {
 		t.Errorf("Frieren reading_direction = %q, want rtl — LibraryType 0 is the only input there is", frierenDir)
+	}
+
+	// ── work.year, end to end ───────────────────────────────────────────────
+	//
+	// The series list carries no release year at all, so this value crossed the
+	// wire on the SAME per-series metadata read the credits came from. All three
+	// rows below are asserted because only the pair proves anything: a
+	// projection that wrote every releaseYear straight through would pass the
+	// first and fail the second, and one that wrote nothing would pass the
+	// second and third and fail the first.
+	yearOf := func(title string) sql.NullInt64 {
+		t.Helper()
+		var y sql.NullInt64
+		if err := env.app.store.DB().Read().QueryRowContext(t.Context(),
+			`SELECT year FROM work WHERE title = ?`, title).Scan(&y); err != nil {
+			t.Fatalf("read %s's year: %v", title, err)
+		}
+		return y
+	}
+	if got := yearOf("Frieren"); !got.Valid || got.Int64 != 2020 {
+		t.Errorf("Frieren year = %+v, want 2020 — releaseYear rode in on the credit pass's "+
+			"metadata read and nothing else can supply it", got)
+	}
+	if got := yearOf("The Hobbit"); got.Valid {
+		t.Errorf("The Hobbit year = %+v, want NULL — Kavita's releaseYear 0 is its own "+
+			"sentinel for 'no year' and must not render as one", got)
+	}
+	// Saga has no metadata entry at all, so the fake answers an empty DTO —
+	// releaseYear absent, which JSON-decodes to the same 0.
+	if got := yearOf("Saga"); got.Valid {
+		t.Errorf("Saga year = %+v, want NULL — its series has no metadata upstream", got)
 	}
 	// ⚠️ THE TWO BERSERK ROWS EACH KEEP THEIR OWN reading_direction, and LS-07's
 	// last-writer-wins case IS NO LONGER EXERCISED BY THIS FIXTURE. Said plainly

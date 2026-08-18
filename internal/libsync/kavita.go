@@ -294,9 +294,11 @@ func mapSeries(dto kavita.SeriesDto, d kindDecision) store.CatalogueItem {
 		HasFile: dto.Pages > 0,
 	}
 
-	// work.year is LEFT NULL. SeriesDto carries no release year — the year lives
-	// on SeriesMetadataDto, which is a per-series call this commit does not make.
-	// Deriving one from a title suffix is exactly the parse §6.5 rule 3 forbids.
+	// work.year is LEFT NULL BY THIS PASS, and filled by the next one.
+	// SeriesDto carries no release year — the year lives on SeriesMetadataDto,
+	// which is the per-series call phase B already makes for credits, so
+	// credits.go's releaseYearOf lands it on the same round trip. Deriving one
+	// from a title suffix here is exactly the parse §6.5 rule 3 forbids.
 
 	switch d.Kind {
 	case "book":

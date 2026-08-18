@@ -624,6 +624,41 @@ type serviceHealthResponse struct {
 
 	ObservedAt *time.Time `json:"observed_at,omitempty"`
 
+	// LastFullSyncAt and WorkCount are the two catalogue-freshness facts the
+	// Services screen's `Last successful sync` and `Items` columns render.
+	// Their wire contract — including the null/zero table a consumer has to
+	// read as a PAIR — is docs/reference/http-api.md §3. Both
+	// are ADDED FIELDS ON AN ALLOWLIST, chosen one at a time: this struct is
+	// built from a row that also holds an encrypted full-admin credential, and
+	// nothing here is ever derived by widening the row.
+	//
+	// ⚠️ NEITHER CARRIES `omitempty`, and that is the whole point of the pair.
+	// `last_full_sync_at: null` is the POSITIVE STATEMENT "this instance has
+	// never completed a full catalogue import" — an absent key would leave the
+	// browser unable to tell that from a field this version does not send. And
+	// the two together are what separate the two facts a single number cannot:
+	//
+	//	last_full_sync_at = null,  work_count = 0   → never synced
+	//	last_full_sync_at = <time>, work_count = 0  → synced, found nothing
+	//	last_full_sync_at = null,  work_count = 12  → a PARTIAL import's rows
+	//	                                              stand; the set is not
+	//	                                              known complete
+	//
+	// The third line is why work_count is not nulled out when the timestamp is:
+	// a partial import leaves its committed batches behind (see
+	// internal/libsync's FullImport), and hiding those rows would be a second
+	// lie in place of the first. work_count is always a real count.
+	//
+	// A service with no catalogue at all — an indexer — reports
+	// `null`/`0` like an unsynced library, and the field that separates THOSE
+	// is `role`, which is already on this row.
+	LastFullSyncAt *time.Time `json:"last_full_sync_at"`
+
+	// WorkCount is DISTINCT non-tombstoned works reachable from this instance's
+	// live item links. It is not a file count and not a link count; see
+	// store.WorkCountsByInstance for why each narrowing is there.
+	WorkCount int64 `json:"work_count"`
+
 	// Stale is true when no probe has been taken yet, or the last one predates
 	// the last recorded change. An honest "not measured yet" beats a green tick
 	// that means nothing.
@@ -641,10 +676,22 @@ func (s *Server) handleServicesHealth(w http.ResponseWriter, r *http.Request) er
 			"the configured services could not be read").wrapping(err)
 	}
 
+	// One grouped read for every row, not one per row: the alternative is N+1
+	// queries on a render path, which principle 1 rules out even at N=5.
+	counts, err := s.store.WorkCountsByInstance(r.Context(), storeScope(a))
+	if err != nil {
+		return errStatus(http.StatusInternalServerError, CodeInternal,
+			"the configured services could not be read").wrapping(err)
+	}
+
 	out := make([]serviceHealthResponse, 0, len(instances))
 	anyUnhealthy := false
 	for _, si := range instances {
 		row := s.healthRow(si)
+		// Absent from the map is 0 works, which is the zero value. See
+		// WorkCountsByInstance on why absent and 0 are the same answer HERE and
+		// last_full_sync_at is what makes them different on the wire.
+		row.WorkCount = counts[si.ID]
 		if row.State != stateHealthy {
 			anyUnhealthy = true
 		}
@@ -683,6 +730,11 @@ func (s *Server) healthRow(si store.ServiceInstance) serviceHealthResponse {
 	if si.BreakerUntil.Valid {
 		if t, err := store.ParseTime(si.BreakerUntil.String); err == nil {
 			row.BreakerRetryAt = &t
+		}
+	}
+	if si.LastFullSyncAt.Valid {
+		if t, err := store.ParseTime(si.LastFullSyncAt.String); err == nil {
+			row.LastFullSyncAt = &t
 		}
 	}
 
