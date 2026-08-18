@@ -15641,3 +15641,210 @@ documentation commit attests that the tree still builds and that no credential-s
 added; it cannot attest that the section is *correct*. Every claim above was re-read at the cited file
 and line before it was written — including the one relayed claim that turned out not to hold — and
 that reading, not the gate, is what stands behind it.
+
+## LS-170 — Kavita response-body text reaches logs and SQLite unredacted: latent, not breached, and two named routes make it live
+
+**Recorded, deliberately NOT fixed.** No `.go` file moved. The fix lifts a redactor between
+packages (§ *The fix* below), which is a change to a shared security primitive and not one to take
+in a hurry; it is scheduled rather than taken here. Every line cited was re-read at the cited file
+and line against `origin/main` `081c5bc` before it was written down, and the two claims that did not
+survive that reading are marked as such.
+
+### The gap: `parseErrorBody` bounds length and nothing else
+
+`internal/kavita/errors.go`'s `parseErrorBody` puts upstream response-body text into
+`APIError.Message` and `APIError.Validation` with **no redaction on any branch**:
+
+| Site | Branch | Treatment |
+| --- | --- | --- |
+| `errors.go:167` | `{`-shaped body that failed the `problemDetails` decode | `truncate` |
+| `errors.go:174` | bare JSON string body, unquoted | `truncate` |
+| `errors.go:177` | `"`-shaped body that failed the string decode | `truncate` |
+| `errors.go:179` | anything else | `truncate` |
+| **`errors.go:152-164`** | **`problemDetails` decoded** — `pd.Title`, `pd.Detail` → `e.Message`; `pd.Errors` → `e.Validation` | **neither redaction nor truncation** |
+
+`truncate` is a 512-byte length bound and nothing else, and says so in its own doc comment
+(`errors.go:197-198`: *"bounds an unrecognised body so a 2 MB HTML error page from a reverse proxy
+cannot end up inside an error string or a log line"*). It is a log-volume control, not a redactor.
+
+🚩 **The `problemDetails` path is broader than a `truncate`-shaped reading suggests, and a fix
+touching only the four `truncate` sites leaves it open.** It is the one branch with no bound of any
+kind, and `APIError.Error()` renders **both** `Message` and `Validation` into the error string
+(`errors.go:95-113`), so a `pd.Errors` map reaches every sink below at full length.
+
+**The asymmetry is what makes this easy to miss.** The transport-error path in the same package
+*does* redact — `client.go:374` and `client.go:386` both assign `redactErr(err)` — so the package
+reads as one that has thought about redaction. It has, for transport errors only. Both production
+callers of `parseErrorBody` (`client.go:323` and `stream.go:242`, the streaming import path)
+inherit the gap.
+
+### Where the text goes — including the negatives, because the negatives bound the severity
+
+**Logs, unredacted.** Three sites, each passing a `*kavita.APIError` straight to `slog`:
+
+- `cmd/usarr/import.go:164` — `"err", err` on a failed first full import
+- `cmd/usarr/import.go:264` — `"err", err` on a failed requested full import
+- `cmd/usarr/services.go:759` — `"err", err` on the soft version read
+
+**There is no redacting `slog.Handler`.** `cmd/usarr/main.go:245` and `:247` build a plain
+`slog.NewTextHandler` / `slog.NewJSONHandler` with nothing wrapped around them. `internal/httpapi`
+compensates by hand — **38** call sites of `redactText` across that package (measured:
+`grep -rn 'redactText(' internal/httpapi/*.go`, excluding tests and the definition; an earlier
+report of this finding said *"~20"*, which understated it). `cmd/usarr` has **zero**. The one
+redactor `cmd/usarr` does reach for is `servarr.RedactURL` at `maintenance.go:116`, and that is the
+*retroactive backfill* of the previous incident, not a live log-path guard.
+
+**Stored raw in SQLite.** `cmd/usarr/services.go:653`, `:666` and `:751` all assign
+`health.Error = err.Error()`; `:751` is the direct Kavita route (`entry.kavita.Libraries` failing).
+`recordProbe` (`:853-875`) hands `health.Error` to `UpdateServiceInstanceHealth`, which writes
+`service_instance.last_error` (`internal/store/serviceinstance.go:258`). Redaction happens **only on
+read-out**, at `internal/httpapi/services.go:722` (`Problem: redactText(si.LastError.String)`).
+
+🚩 **The file argues against what it does, 135 lines earlier.** `cmd/usarr/services.go:783-795` — the
+`replicateIndexers` doc comment — names this exact write-raw/redact-later shape as the mistake
+already paid for: *"This project has already written one credential to SQLite once —
+`release_candidate.info_url`, redacted after the fact, in every backup until it was — so the rule
+applied here is the stronger one: the value never reaches the row at all."* That rule is applied to
+the indexer projection at `:796` and not applied to `health.Error` at `:653`, `:666`, `:751`.
+
+**NOT on SSE.** `libsync.Progress` (`internal/libsync/importer.go:100-111`) carries `InstanceID`,
+`Phase`, `ItemsRead`, `Applied`, `Total` — counts only, no error field. `reference/security.md` §5's
+requirement that nothing unredacted precede an SSE payload is **not** violated. LS-160 is the reason:
+the terminal frame was specified with no cause field at all.
+
+**NOT in `sync_report`, with one caveat worth stating so a checker does not think this wrong.** The
+three `RecordSyncReport` details are `json.Marshal` of structured maps built from projected fields
+(`internal/libsync/importer.go:242`, `:276`; `internal/store/catalogue.go:379`). The third does embed
+an error string — `catalogue.go:378`, `Reason: bindErr.Error()` — but `bindErr` is gated to
+`errors.Is(err, sqlite3.CONSTRAINT)` by `isSkippableBindError` (`catalogue.go:410-412`), so it is a
+**local SQLite constraint error**, never a Kavita response body. The negative holds for Kavita text
+specifically, not because the column is structurally incapable of carrying an error string.
+
+**NOT in `audit_log`.** `internal/httpapi/audit.go:36` puts metadata through `redactText`, and
+`cmd/usarr` writes no audit rows at all.
+
+**The browser path IS redacted at the boundary** — `internal/httpapi/services.go:546-547` on the test
+result, `json.go:187-188` on the error body — **with one caveat**: `redactText`
+(`internal/httpapi/redact.go:105-112`) early-returns the string **unchanged** when it contains
+neither `http://` nor `https://`. It finds URLs and hands them to `ssrf.RedactRawURL`; a bare secret
+that is not inside a URL passes through untouched.
+
+### Severity: latent for credentials, not live
+
+**Four facts, each verified, keep this closed today:**
+
+1. **Kavita auth is header-only.** `client.go:29` — `authHeader = "x-api-key"`, the one mechanism.
+2. **The single `?apiKey=` endpoint has zero non-test callers.** `PluginVersion` is referenced only
+   from `client_test.go`, `contract_test.go`, `vcr_test.go` and its own definition
+   (`grep -rn 'PluginVersion' --include=*.go`). Its own doc comment states the discipline:
+   *"Nothing calls this automatically. It is opt-in"* (`client.go:448`).
+3. **A 401 is never parsed.** `errors.go:138-143` short-circuits before any decode, so the empty
+   ASP.NET 401 body cannot reach the body sniff.
+4. **UsArr's `problemDetails` has no `instance` member.** `errors.go:122-128` declares `Type`,
+   `Title`, `Status`, `Detail`, `Errors` — ASP.NET's `instance`, which carries the request path and
+   would therefore carry a path-borne credential, is never decoded.
+
+⚠️ **One relayed sub-claim did not survive verification and is recorded as inference, not fact.**
+*"401/403 bodies are empty so they never reach the body parser"* holds for **401 by code**
+(fact 3 above) and **not** for 403: `parseErrorBody` short-circuits on 401 only, so a 403 body **is**
+sniffed and `e.Err = ErrForbidden` is set afterwards at `:185-186`. That a Kavita 403 body is empty
+is standard ASP.NET `AuthorizationMiddleware` behaviour and is **inference** — it was not verified
+against Kavita's source, which is not vendored here. `internal/kavita/doc.go:61` and
+`resources.go:113` document that a non-admin key *gets* a 403; neither documents its body.
+
+**Two named routes would make it live, and neither is hypothetical:**
+
+- **Someone wires `PluginVersion`.** Its documented purpose is *"the case where `ServerInfo` returned
+  `ErrForbidden` and the operator still wants a version"* (`client.go:449`) — and that call site
+  already exists, unwired, at `cmd/usarr/services.go:757-759`, where a failing `ServerInfo` is logged
+  and the version left unknown. Both ends of the wire are written; only the wire is missing. The Auth
+  Key would then be in the request URL, and `*url.Error` prints the full URL.
+- **Kavita running in Development mode**, where ASP.NET's developer exception page puts the exception
+  message and stack into the response body.
+
+**A compounding weakness makes shape-based redaction no backstop for the first route.** A Kavita
+Auth Key is GUID-shaped (`internal/kavita/vcr_test.go:57-59`, itself marked as inference from
+Kavita's docs, *"not read from the generator"*). `ssrf.looksLikeCredential`
+(`internal/ssrf/redact.go:185-210`) returns **false on any separator at all** — `:197-200`, *"a
+hyphen, an underscore, a percent escape, a space"* — and segments are split on `.` only
+(`:162-163`), so a GUID's hyphens survive into the part being judged and veto it. A GUID key
+appearing as a **path segment** can therefore never be caught by shape.
+`reference/security.md:412-419` already concedes exactly this for `/api/Opds/{apiKey}/…`:
+*"matched only if the key happens to fit the heuristic's shape, and that must not be relied on."*
+
+### Live today, at lower severity: host filesystem paths
+
+A Kavita 5xx body reaching `cmd/usarr/import.go:164` / `:264` / `services.go:759` and
+`service_instance.last_error` is not hypothetical — it needs no wiring change, only a Kavita-side
+failure. **What such a body contains is inference**: Kavita's Production exception-body shape was
+**not** verified against Kavita's source, which is not vendored in this repo. If it carries paths,
+the disclosure is the operator's directory layout, mount points and often their username.
+
+🚩 **The same value class is refused, by name, on the DTO path in the same package.**
+`internal/kavita/redact.go:42-46` excludes `FolderPath` and `LowestFolderPath` from `SeriesView`
+because they are *"HOST FILESYSTEM PATHS on the Kavita box… They disclose the operator's directory
+layout, mount points and often their username."* The allowlist closes the front door while the error
+path leaves the side door open — one package, one value class, two answers.
+
+### No guard would catch a regression
+
+`assertNoCredential` (`internal/kavita/vcr_test.go:181-186`) is the package's leak guard. Its four
+call sites cover `BaseURL()` (`client_test.go:86`), `RedactURL` of the `PluginVersion` URL (`:178`),
+a transport error (`:276`), and the cassette **request** fields — URL, `X-Api-Key` header, form,
+body (`vcr_test.go:210-213`). **Not one covers a response body or `parseErrorBody`'s output.** A
+change that widened what reaches `e.Message` would pass the suite green.
+
+### The fix, in priority order — NOT applied
+
+1. **Stop writing `last_error` raw** (`cmd/usarr/services.go:653`, `:666`, `:751`). Highest priority
+   because a stored value is **retroactive**: it survives in every `VACUUM INTO` backup taken before
+   the fix, exactly as `release_candidate.info_url` did. Redacting on read-out at
+   `httpapi/services.go:722` does not reach the bytes on disk. This step is not Kavita-specific —
+   `:666` is the Prowlarr path.
+2. **Redact in `parseErrorBody`**, covering the `problemDetails` branch (`errors.go:152-164`) as well
+   as the four `truncate` sites. **Per the repo's own one-implementation rule** —
+   `internal/httpapi/redact.go:22-24`, *"there is deliberately no second implementation here, because
+   two deny-lists drift and the one that drifts is the one that leaks"* — the move is to **lift
+   `httpapi.redactText` into `internal/ssrf`** and have both `httpapi` and `kavita` call it. Writing
+   a second copy in `kavita` is the failure mode that rule exists to prevent. This is the step that
+   makes the fix a cross-package change and the reason it is scheduled rather than rushed.
+3. **Redact the three `cmd/usarr` log sites** — better still, install a redacting `slog.Handler` in
+   `cmd/usarr/main.go:244-247`. That would make `reference/security.md` §5's *"This is a middleware,
+   not a convention"* true for `cmd/usarr` for the first time; today it is true for `internal/httpapi`
+   by 38 hand-written calls and for `cmd/usarr` not at all.
+4. **Add a guard over `parseErrorBody`'s output and fire it deliberately** — a test that feeds a
+   `problemDetails` body carrying the fixture Auth Key through `parseErrorBody` and asserts on
+   `err.Error()`, confirmed to fail before the fix lands. Per `CLAUDE.md`, a guard that has never been
+   triggered is indistinguishable from no guard.
+
+**Ordering constraint.** All four must land **before** anyone wires `PluginVersion` or adds a second
+Kavita endpoint that takes a credential in the query string or path. That ordering is the whole
+difference between latent and breached, and step 4 is what stops the ordering from depending on
+somebody remembering it.
+
+### No ADR
+
+Nothing here closes off an alternative. Steps 1 and 3 apply rules `reference/security.md` §5 and
+`cmd/usarr/services.go:783-795` already state; step 2's placement is dictated by the existing
+one-implementation rule at `httpapi/redact.go:22-24` rather than chosen against a live alternative.
+When step 2 is taken, the lift itself may warrant a note if it changes `internal/ssrf`'s public
+surface — that is a decision for the thread that takes it, not for this entry.
+
+### A pointer added to `reference/security.md` §5, and why
+
+`reference/security.md:397-403` already **states the requirement**: the redaction middleware *"must
+also run over upstream response bodies before they are logged, stored in `sync_report`, shown in the
+Services column or put in a support bundle"*. It states it as a requirement with no note that the
+one upstream client which parses response bodies does not meet it — so the threat-model document
+currently reads as though this were covered. A reader checking §5 against the tree would have to
+find `parseErrorBody` themselves. Three lines were added there pointing at this entry. Nothing else
+in that document changed, and no requirement was rewritten: the requirement was already right, only
+its status was missing.
+
+### Bounded, honestly
+
+This entry is prose about code it did not change. `make check` on a documentation commit attests that
+the tree still builds and that no credential-shaped literal was added; it cannot attest that any
+claim above is correct. The re-reading is what stands behind them — including the 403 sub-claim and
+the Kavita 5xx body shape, both of which are marked inference above precisely because re-reading
+could not settle them from this repo.

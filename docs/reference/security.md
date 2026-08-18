@@ -401,6 +401,12 @@ silently change which resource a redirect resolves to. The tracker-specific name
 >    response bodies before they are logged, stored in `sync_report`, shown in the Services column or
 >    put in a support bundle**, keyed on the field names a provider declares as secret. This is the
 >    same class as `Field.privacy` and must not be left to the request path alone.
+>
+>    ⚠️ **Stated as a requirement here, and NOT met by the one upstream client that parses
+>    response bodies.** `internal/kavita`'s `parseErrorBody` puts Kavita body text into the error
+>    message with no redaction on any branch, and it reaches three `cmd/usarr` log lines and
+>    `service_instance.last_error` unredacted. Latent rather than breached today; the two routes
+>    that would make it live, and the unapplied fix, are in `REVIEW-LOG.md` LS-170.
 > 2. **Secrets in a URL *path segment*.** **Kavita carries its API key in the path**, not the query
 >    string: `/api/Opds/{apiKey}/…`, and the same for its KOReader routes. A query-parameter
 >    deny-list catches nothing, and the key then lands in proxy logs, browser history and
