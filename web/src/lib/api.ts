@@ -1283,6 +1283,65 @@ export async function deleteService(id: number): Promise<void> {
 }
 
 /**
+ * The 202 body of POST /api/v1/services/{id}/sync, and the whole of it.
+ *
+ * FOUR FIELDS, AND THERE IS NO FIFTH TO ADD. internal/httpapi/imports.go
+ * allowlists them one at a time off a `service_instance` row that also holds an
+ * encrypted full-admin credential, a KEK id, a TLS pin and a base URL. None of
+ * those crosses the wire, so none is declared here.
+ *
+ * THERE IS NO PROGRESS FIELD AND THERE WILL NOT BE ONE. Nothing has been read
+ * when the server writes this, so a count, a percentage or an estimate would be
+ * invented (http-api.md §4.2). Progress, where a caller wants it, is the
+ * `import.progress` frame on GET /api/events, which carries real counts because
+ * the importer publishes it as batches commit.
+ */
+export interface ImportStarted {
+	/** Always `started`. The only value a 202 carries. */
+	status: string;
+	instanceId: number;
+	kind: string;
+	name: string;
+}
+
+/**
+ * POST /api/v1/services/{id}/sync — re-run the catalogue import for ONE
+ * instance. §17.3's *Run full sync now*, and http-api.md §4 is its contract.
+ *
+ * ⚠️ 202 MEANS STARTED, NEVER IMPORTED (§4.3). The import outlives the response
+ * by minutes and this endpoint never learns how it ended, so a caller that
+ * renders the resolved promise as "done" is wrong on every failure. The only
+ * positive evidence an import COMPLETED is `last_full_sync_at` on GET
+ * /api/v1/services/health moving, because that field is written on success
+ * alone.
+ *
+ * ⚠️ AND BRANCH ON `ApiError.code`, NEVER ON THE STATUS. Three different 409s
+ * arrive here — `import_in_progress`, `not_a_catalogue_source` and
+ * `service_disabled` — and their fixes are opposite: wait, press this on a
+ * different service, and turn this one on. A caller switching on `409` alone
+ * would have to guess which of the three sentences to show.
+ *
+ * Every refusal is decided before anything upstream is touched, so a non-2xx
+ * means no import started FOR THIS CALL. That is not the same as "nothing is
+ * running": `import_in_progress` means another one is, and says so in its code.
+ *
+ * It goes through sendJson like the five other writes on that screen, so it
+ * carries the double-submit CSRF token and meets the five-minute sudo window in
+ * the same way (§17.3.3). A `403 sudo_required` is the caller's to retry.
+ */
+export async function syncService(id: number): Promise<ImportStarted> {
+	const url = `${SERVICES_URL}/${encodeURIComponent(String(id))}/sync`;
+	const payload = await postJson(url, {});
+	if (!isRecord(payload)) throw new ApiError('the sync was started but said nothing', 202, url);
+	return {
+		status: str(payload.status) ?? 'started',
+		instanceId: num(payload.instance_id) ?? id,
+		kind: str(payload.kind) ?? '',
+		name: str(payload.name) ?? ''
+	};
+}
+
+/**
  * Start a search. This returns as soon as the fan-out has been handed off — it
  * carries NO releases, by design (internal/httpapi/search.go): every result
  * arrives on the SSE stream as each indexer answers.

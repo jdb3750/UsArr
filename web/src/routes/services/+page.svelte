@@ -59,6 +59,7 @@
 		fetchServicesHealth,
 		listServices,
 		requiresCredentialReentry,
+		syncService,
 		testNewService,
 		testService,
 		updateService,
@@ -69,7 +70,7 @@
 	} from '$lib/api';
 	import Icon from '$lib/Icon.svelte';
 	import List from '$lib/List.svelte';
-	import { SvelteSet } from 'svelte/reactivity';
+	import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 	import { NOTHING, type ListColumn } from '$lib/list';
 	import { session } from '$lib/session.svelte';
 	import {
@@ -83,9 +84,16 @@
 		problemCell,
 		rollup,
 		rollupCount,
+		canRunFullSync,
 		stampOf,
 		stateLabel,
+		syncButtonBlocked,
+		syncButtonLabel,
 		syncCell,
+		syncRefusal,
+		syncStarted,
+		type SyncNote,
+		type SyncPhase,
 		testOutcome,
 		testTitle,
 		testTone,
@@ -237,6 +245,27 @@
 	// ── removal ─────────────────────────────────────────────────────────────
 
 	let removing = $state<ServiceRow | undefined>(undefined);
+
+	// ── Run full sync now (§17.3, http-api.md §4) ────────────────────────────
+	//
+	// TWO PIECES OF STATE, AND THEY ARE NOT THE SAME FACT. `syncing` is a
+	// request in flight from THIS tab; `syncNotes` is what the server last said
+	// about a row. Collapsing them would make `Starting` and `Import already
+	// running` the same word, and they are opposite claims: the first is UsArr
+	// waiting on its own server, the second is the server reporting that another
+	// import owns this instance.
+	//
+	// ⚠️ NEITHER ONE IS A COMPLETION FLAG. Nothing on this screen can know an
+	// import finished from a response, because 202 is written before anything is
+	// read (§4.3). The `Last successful sync` column is the only completion
+	// evidence there is, and it comes from a different endpoint.
+	let syncing = $state<number | undefined>(undefined);
+	const syncNotes = new SvelteMap<number, SyncNote>();
+
+	function syncPhase(id: number): SyncPhase {
+		if (syncing === id) return 'starting';
+		return syncNotes.get(id)?.phase ?? 'idle';
+	}
 
 	/** Rows whose identity changed. Loud on purpose: this one blocks (§17.7). */
 	const reidentRows = $derived(rows.filter((r) => r.health.state === 'needs re-identification'));
@@ -644,6 +673,54 @@
 			loadError = describe(error);
 		} finally {
 			busyRow = undefined;
+		}
+	}
+
+	/**
+	 * §17.3's *Run full sync now*, per instance.
+	 *
+	 * THE OUTCOME IS RENDERED INSIDE THE CLOSURE, not in a catch around
+	 * `guarded`, and that is load-bearing. `guarded` re-runs this exact closure
+	 * after a sudo confirmation (§17.3.3), and `submitSudo` calls it directly
+	 * rather than through `guarded` — so an outcome handled outside would render
+	 * on the first press and be swallowed on the retry, which is the press that
+	 * actually starts the import.
+	 *
+	 * ⚠️ ONLY THE 403 IS RE-THROWN. `guarded` exists to tell the three 403s
+	 * apart, and everything else this endpoint answers is already a sentence
+	 * `syncRefusal` can write, on the body's `error` code and never on the
+	 * status.
+	 */
+	async function runFullSync(row: ServiceRow) {
+		const id = row.health.id;
+		const attempt = async () => {
+			syncing = id;
+			syncNotes.delete(id);
+			try {
+				const started = await syncService(id);
+				const note = syncStarted(started);
+				syncNotes.set(id, note);
+				announcement = `${note.title}. ${note.consequence}`;
+				// Re-read so `Last successful sync` is current from the moment the
+				// press lands. It will NOT have moved yet, and that is the honest
+				// picture: the import has started and has finished nothing.
+				await load();
+			} catch (error) {
+				if (error instanceof ApiError && error.status === 403) throw error;
+				if (!(error instanceof ApiError)) throw error;
+				const note = syncRefusal(error.status, error.code, error.detail, error.action);
+				syncNotes.set(id, note);
+				announcement = `${row.health.name}: ${note.title}.`;
+			} finally {
+				syncing = undefined;
+			}
+		};
+		try {
+			await guarded(attempt, `POST /api/v1/services/${String(id)}/sync`);
+		} catch (error) {
+			loadError = describe(error);
+		} finally {
+			syncing = undefined;
 		}
 	}
 
@@ -1156,6 +1233,38 @@
 			<button type="button" class="btn" onclick={() => void openForm(row)}>Edit</button>
 			<button type="button" class="btn" onclick={() => void runRowTest(row)}>Test connection</button
 			>
+			<!--
+				§17.3's RUN FULL SYNC NOW, and it is here rather than in the Action
+				column on purpose. That column holds the ONE button the server named
+				as this row's fix (`health.action`), sized to a measured 248px
+				reserve; a re-import is the owner asking for work, not the server
+				naming a repair, and a second permanent control in that cell would
+				push past the reserve ADR-0029 makes every row resolve
+				independently. The expander is where this screen already keeps the
+				row actions that are always available.
+
+				⚠️ WHETHER IT RENDERS AT ALL IS DECIDED ON `role`, exactly as the
+				sync and Items cells decide, and never on the two freshness fields:
+				a Prowlarr reports null / 0 exactly like a catalogue source that has
+				never imported. `not_a_catalogue_source` exists on the wire because
+				an indexer cannot do this at all.
+			-->
+			{#if canRunFullSync(h)}
+				{@const phase = syncPhase(h.id)}
+				<button
+					type="button"
+					class="btn"
+					aria-disabled={syncButtonBlocked(phase) ? 'true' : undefined}
+					aria-describedby={syncNotes.has(h.id) ? `svc-sync-${String(h.id)}` : undefined}
+					onclick={() => {
+						if (!syncButtonBlocked(phase)) void runFullSync(row);
+					}}
+				>
+					{syncButtonLabel(phase)}
+				</button>
+			{:else}
+				<span class="muted">{NOTHING.inapplicable}: an indexer has no catalogue to import.</span>
+			{/if}
 			{#if h.enabled}
 				<button type="button" class="btn" onclick={() => void setEnabled(row, false)}>
 					Turn it off
@@ -1163,6 +1272,44 @@
 			{/if}
 			<button type="button" class="btn" onclick={() => (removing = row)}>Remove</button>
 		</div>
+		<!--
+			WHAT THE SERVER SAID ABOUT THE LAST PRESS.
+
+			⚠️ `started` IS THE STRONGEST WORD ANY BRANCH HERE MAY USE. There is no
+			progress bar and no completion tick, because the 202 carries neither a
+			count nor an outcome: the import has read nothing when the response is
+			written (http-api.md §4.2). What completion looks like is the row's own
+			`Last successful sync` column moving, and it is named in the copy for
+			exactly that reason.
+
+			The title and the consequence are UsArr's words; `message` and `action`
+			are the server's, carried through untouched under §17.3's verbatim rule.
+
+			IT IS NOT A LIVE REGION. §9.4 allows the screen ONE region at ONE
+			politeness, and that is the polite `role="status"` at the foot of this
+			file, which `runFullSync` writes the same sentence into. A second one
+			here would read every outcome to a screen-reader user twice. What the
+			banner IS to assistive tech is the button's description, through the
+			`aria-describedby` above.
+		-->
+		{#if syncNotes.get(h.id)}
+			{@const note = syncNotes.get(h.id)!}
+			<div
+				class={`banner sync-note ${note.tone === 'err' ? 'banner--err' : note.tone === 'warn' ? 'banner--warn' : ''}`}
+				id={`svc-sync-${String(h.id)}`}
+			>
+				<Icon name={note.tone === 'err' ? 'x-circle' : note.tone === 'warn' ? 'alert' : 'check'} />
+				<div class="banner__body">
+					<div class="banner__title">{note.title}</div>
+					{#if note.message}<p class="verbatim">{note.message}</p>{/if}
+					<p class="banner__text">{note.consequence}</p>
+					{#if note.action}<p class="cell-sub">{note.action}.</p>{/if}
+				</div>
+				<div class="banner__actions">
+					<button type="button" class="btn" onclick={() => syncNotes.delete(h.id)}>Dismiss</button>
+				</div>
+			</div>
+		{/if}
 	</div>
 {/snippet}
 
@@ -1581,6 +1728,13 @@
 		flex-wrap: wrap;
 		padding-top: var(--space-3);
 		border-top: 1px solid var(--border);
+	}
+
+	/* The outcome banner sits inside the expander, so it drops the page gutter
+	 * `.banner` carries for a full-width one. */
+	.sync-note {
+		margin-left: 0;
+		margin-right: 0;
 	}
 
 	/* The blocked reason takes its own line at the end of the footer rather than

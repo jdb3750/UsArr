@@ -724,3 +724,186 @@ export function rollupCount(entries: readonly { tone: Tone }[]): string {
 	if (warnings > 0) parts.push(warnings === 1 ? '1 warning' : `${warnings} warnings`);
 	return parts.join(', ');
 }
+
+// ── Run full sync now (ARCHITECTURE §17.3, http-api.md §4) ─────────────────
+//
+// The vocabulary for the per-instance catalogue re-import. It is here rather
+// than inside a `{#if}` in the template for the reason the header of this file
+// gives: the rules below are contract, not taste, and a rule that lives only in
+// a template is a rule nothing can test.
+
+/**
+ * Where one row's re-import press has got to.
+ *
+ * ⚠️ THERE IS NO `done`, AND THAT IS THE POINT. The endpoint answers 202 and
+ * never learns how the import ended (http-api.md §4.3), so no phase reachable
+ * from a response may claim completion. `started` is the strongest word the
+ * wire supports. Completion is observed elsewhere entirely: `last_full_sync_at`
+ * moving in the `Last successful sync` column, which is written on success
+ * alone.
+ */
+export type SyncPhase = 'idle' | 'starting' | 'started' | 'running' | 'refused' | 'failed';
+
+/**
+ * What the screen says after a press, as data.
+ *
+ * `title` and `consequence` are UsArr's own words; `message` and `action` are
+ * the SERVER's, carried through untouched. The split is §17.3's verbatim rule:
+ * the upstream's text is never paraphrased and UsArr's own explanation is never
+ * dressed up as something the server said.
+ */
+export interface SyncNote {
+	phase: SyncPhase;
+	tone: Tone;
+	/** UsArr's plain-language headline. */
+	title: string;
+	/** The server's own `message`, or '' when there was no server message. */
+	message: string;
+	/** The server's own `action`, or '' when it named none. */
+	action: string;
+	/** What this press did, and did not do, to the catalogue. */
+	consequence: string;
+}
+
+/**
+ * Whether this instance can be asked to re-import at all.
+ *
+ * DECIDED ON `role`, EXACTLY AS `syncCell` AND `itemsCell` ALREADY DECIDE. An
+ * indexer has no library to read, which is why the wire has a
+ * `not_a_catalogue_source` code at all (internal/httpapi/imports.go:89). The
+ * two freshness fields cannot answer this — a Prowlarr reports `null` / `0`
+ * exactly like a catalogue source that has never synced — so `role` is the only
+ * field that separates them (http-api.md §3.2).
+ *
+ * A DISABLED CATALOGUE SOURCE STILL RETURNS TRUE, deliberately. `enabled` is a
+ * flag the user can flip from this same screen, and the server answers a
+ * disabled instance with `service_disabled` and the action that fixes it. A
+ * button hidden on that row would leave the user with no sentence at all.
+ */
+export function canRunFullSync(health: ServiceHealth): boolean {
+	return !isIndexer(health);
+}
+
+/**
+ * The 202. `started`, and never a word stronger.
+ *
+ * ⚠️ NO PROGRESS, NO PERCENTAGE, NO COMPLETION. The response carries none of
+ * the three because nothing has been read when the server writes it, so a
+ * progress bar here would be an animation over an invented number. The
+ * consequence line says the two true things instead: what to watch for, and
+ * that a repeat press is how "is it still running" is asked.
+ */
+export function syncStarted(started: { name: string }): SyncNote {
+	return {
+		phase: 'started',
+		tone: 'ok',
+		title: started.name === '' ? 'A full re-import has started' : `${started.name} is re-importing`,
+		message: '',
+		action: '',
+		consequence:
+			'Nothing has been read yet, so there is no progress to show. It is finished when Last successful sync moves, and that column moves on success alone.'
+	};
+}
+
+/**
+ * The sentence §4.4 exists to make sayable, and it is said on every non-2xx
+ * except `import_in_progress`. A refusal is decided synchronously, so it is a
+ * statement about the catalogue and not merely about the request.
+ */
+const NO_IMPORT_STARTED = 'No import started for this press, so the catalogue is untouched.';
+
+/**
+ * Every refusal, told apart on `ApiError.code` and NEVER on the status.
+ *
+ * ⚠️ THE THREE 409s HAVE OPPOSITE FIXES: wait, press this on a different
+ * service, and turn this service on. A branch on `409` would have to guess
+ * which of the three sentences to show, and would show the wrong one two times
+ * in three (http-api.md §4.4).
+ *
+ * ⚠️ `import_in_progress` IS NOT A FAILURE and is not toned as one. The work
+ * the caller asked for is in flight; the honest word is "already running". It
+ * is the state the button is unavailable against, which is why it gets its own
+ * phase rather than joining `refused`.
+ *
+ * Every other code means NO IMPORT STARTED FOR THIS PRESS, because the kind
+ * check, the enabled check and the in-progress claim all complete before
+ * anything upstream is touched. Only the 500 is a fault; a 409 or a 501 is the
+ * server declining, correctly, to do something it cannot do.
+ */
+export function syncRefusal(
+	status: number,
+	code: string,
+	message: string,
+	action: string
+): SyncNote {
+	const base = { message, action };
+	switch (code) {
+		case 'import_in_progress':
+			return {
+				...base,
+				phase: 'running',
+				tone: 'warn',
+				title: 'An import is already running',
+				consequence:
+					'This press started nothing and disturbed nothing. The import that was already running carries on.'
+			};
+		case 'not_a_catalogue_source':
+			return {
+				...base,
+				phase: 'refused',
+				tone: 'warn',
+				title: 'This service has no catalogue to import',
+				consequence: NO_IMPORT_STARTED
+			};
+		case 'service_disabled':
+			return {
+				...base,
+				phase: 'refused',
+				tone: 'warn',
+				title: 'This service is turned off',
+				consequence: NO_IMPORT_STARTED
+			};
+		case 'not_found':
+			return {
+				...base,
+				phase: 'refused',
+				tone: 'warn',
+				title: 'This service is no longer there',
+				consequence: `${NO_IMPORT_STARTED} Reload the page to see what is configured now.`
+			};
+		case 'not_configured':
+			return {
+				...base,
+				phase: 'refused',
+				tone: 'warn',
+				title: 'This build has no catalogue importer wired in',
+				consequence: NO_IMPORT_STARTED
+			};
+		default:
+			// The fault branch, and the only one §10's verbatim rule is about: a
+			// stored credential that will not open, or anything else the server
+			// could not classify. Its own words are rendered, redacted upstream.
+			return {
+				...base,
+				phase: 'failed',
+				tone: 'err',
+				title: 'The import could not be started',
+				consequence:
+					status === 0
+						? `${NO_IMPORT_STARTED} UsArr could not reach its own server.`
+						: NO_IMPORT_STARTED
+			};
+	}
+}
+
+/** The button's label for each phase. `Starting` is the only in-flight word. */
+export function syncButtonLabel(phase: SyncPhase): string {
+	if (phase === 'starting') return 'Starting';
+	if (phase === 'running') return 'Import already running';
+	return 'Run full sync now';
+}
+
+/** Whether the button may be pressed. §9.3: rendered `aria-disabled`, never `disabled`. */
+export function syncButtonBlocked(phase: SyncPhase): boolean {
+	return phase === 'starting' || phase === 'running';
+}

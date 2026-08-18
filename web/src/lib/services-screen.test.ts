@@ -21,7 +21,12 @@ import {
 	testOutcome,
 	testTitle,
 	testTone,
+	canRunFullSync,
+	syncButtonBlocked,
+	syncButtonLabel,
 	syncCell,
+	syncRefusal,
+	syncStarted,
 	type ServiceRow
 } from './services';
 import type { ServiceHealth } from './api';
@@ -534,5 +539,139 @@ describe('the roll-up states a problem once and links to the row', () => {
 
 	it('leaves a healthy install with nothing to say', () => {
 		expect(rollup([row()], NOW)).toEqual([]);
+	});
+});
+
+/**
+ * RUN FULL SYNC NOW — http-api.md §4, and the three things a client gets wrong.
+ *
+ *  1. It renders 202 as "imported". The response is written before anything has
+ *     been read, so `started` is the strongest word available and completion is
+ *     observed on a different endpoint entirely.
+ *  2. It switches on the status code. Three separate 409s arrive here with
+ *     opposite fixes, so a status branch shows the wrong sentence two times in
+ *     three.
+ *  3. It decides "can this service sync" from the freshness fields. A Prowlarr
+ *     reports null / 0 exactly like a catalogue source that has never imported,
+ *     and only `role` separates them.
+ */
+describe('the re-import control is offered on `role`, never on the freshness pair', () => {
+	it('offers it on a catalogue source that has never synced', () => {
+		expect(canRunFullSync(health({ kind: 'kavita', role: 'library' }))).toBe(true);
+	});
+
+	it('refuses it for an indexer whose two fields look identical to that', () => {
+		const indexer = health({ kind: 'prowlarr', role: 'indexer' });
+		const unsynced = health({ kind: 'kavita', role: 'library' });
+		expect(indexer.lastFullSyncAt).toBe(unsynced.lastFullSyncAt);
+		expect(indexer.workCount).toBe(unsynced.workCount);
+		expect(canRunFullSync(indexer)).toBe(false);
+		expect(canRunFullSync(unsynced)).toBe(true);
+	});
+
+	it('still offers it on a DISABLED catalogue source, so the server can say why', () => {
+		expect(canRunFullSync(health({ kind: 'kavita', role: 'library', enabled: false }))).toBe(true);
+	});
+});
+
+describe('202 is `started`, and no branch may say anything stronger', () => {
+	it('names the instance and says what completion actually looks like', () => {
+		const note = syncStarted({ name: 'Kavita' });
+		expect(note.phase).toBe('started');
+		expect(note.tone).toBe('ok');
+		expect(note.title).toBe('Kavita is re-importing');
+		expect(note.consequence).toContain('Last successful sync');
+	});
+
+	it('claims no progress and no completion anywhere in its copy', () => {
+		const words = Object.values(syncStarted({ name: 'Kavita' }))
+			.join(' ')
+			.toLowerCase();
+		for (const banned of ['imported', 'complete', 'finished importing', '%', 'progress bar']) {
+			expect(words).not.toContain(banned);
+		}
+	});
+
+	it('falls back to a nameless headline rather than rendering an empty name', () => {
+		expect(syncStarted({ name: '' }).title).toBe('A full re-import has started');
+	});
+});
+
+describe('the three 409s are told apart on `error`, and only one is not a refusal', () => {
+	const conflict = (code: string) =>
+		syncRefusal(409, code, 'the server said this', 'the server said that');
+
+	it('reads import_in_progress as ALREADY RUNNING, not as a failure', () => {
+		const note = conflict('import_in_progress');
+		expect(note.phase).toBe('running');
+		expect(note.tone).not.toBe('err');
+		expect(note.consequence).toContain('disturbed nothing');
+		// The one code that must NOT claim the catalogue was left alone by
+		// everything: another import is writing to it right now.
+		expect(note.consequence).not.toContain('untouched');
+	});
+
+	it('reads not_a_catalogue_source as a refusal that started nothing', () => {
+		const note = conflict('not_a_catalogue_source');
+		expect(note.phase).toBe('refused');
+		expect(note.consequence).toContain('No import started');
+	});
+
+	it('reads service_disabled as its own sentence, not as the other two', () => {
+		const disabled = conflict('service_disabled');
+		expect(disabled.title).not.toBe(conflict('not_a_catalogue_source').title);
+		expect(disabled.title).not.toBe(conflict('import_in_progress').title);
+	});
+
+	it('gives all three the same status and three different renderings', () => {
+		const titles = ['import_in_progress', 'not_a_catalogue_source', 'service_disabled'].map(
+			(c) => conflict(c).title
+		);
+		expect(new Set(titles).size).toBe(3);
+	});
+
+	it('carries the server`s own message and action through untouched', () => {
+		const note = conflict('service_disabled');
+		expect(note.message).toBe('the server said this');
+		expect(note.action).toBe('the server said that');
+	});
+});
+
+describe('404, 501 and 500 are separated: only the last one is a fault', () => {
+	it('treats a 404 and a 501 as refusals rather than as errors', () => {
+		expect(syncRefusal(404, 'not_found', 'gone', '').tone).not.toBe('err');
+		expect(syncRefusal(501, 'not_configured', 'no importer', '').tone).not.toBe('err');
+	});
+
+	it('treats a 500 as the fault it is, and still says nothing started', () => {
+		const note = syncRefusal(500, 'internal', 'the credential would not open', 'Test connection');
+		expect(note.phase).toBe('failed');
+		expect(note.tone).toBe('err');
+		expect(note.message).toBe('the credential would not open');
+		expect(note.consequence).toContain('No import started');
+	});
+
+	it('falls into the fault branch for a code it has never seen', () => {
+		expect(syncRefusal(418, 'brand_new_code', 'x', '').phase).toBe('failed');
+	});
+});
+
+describe('the button says which of the two waits it is in', () => {
+	it('separates UsArr waiting on its own server from another import owning the row', () => {
+		expect(syncButtonLabel('starting')).toBe('Starting');
+		expect(syncButtonLabel('running')).toBe('Import already running');
+		expect(syncButtonLabel('starting')).not.toBe(syncButtonLabel('running'));
+	});
+
+	it('returns to the plain label after every settled outcome', () => {
+		for (const phase of ['idle', 'started', 'refused', 'failed'] as const) {
+			expect(syncButtonLabel(phase)).toBe('Run full sync now');
+			expect(syncButtonBlocked(phase)).toBe(false);
+		}
+	});
+
+	it('is unavailable while starting and while another import is running', () => {
+		expect(syncButtonBlocked('starting')).toBe(true);
+		expect(syncButtonBlocked('running')).toBe(true);
 	});
 });
