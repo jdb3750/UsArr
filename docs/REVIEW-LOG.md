@@ -12782,3 +12782,128 @@ tells them apart.
   moving a subtype row and is a separate question; the divergence is noted at the function.
 * **No `alt_titles` change**, no `search_trgm` change, and no migration. `search_fts.people` has
   existed since migration 0005 and was reserved for exactly this.
+
+---
+
+# SETTLE — a health-row wait that watched one store and asserted on another
+
+Reviewed: `cmd/usarr/kavita_e2e_test.go`, `TestAddingAKavitaInstance`. Relayed as "waits on a
+different condition from the one it asserts", with one observed failure under sibling `go test -race`
+load and a pass when run alone under the same shuffle seed. **The diagnosis held**, and the mechanism
+is more specific than "a race": the row it polls is assembled from **two stores that settle at
+different times**, and the predicate watched only the fast one.
+
+## SETTLE-1 The premise, verified before changing anything
+
+`GET /api/v1/services/health` renders each row in `httpapi.(*Server).healthRow`, which draws from two
+places. `Stale` and `AppVersion` come from the in-memory probe snapshot:
+
+```go
+if s.cfg.Probes != nil {
+    if snap, ok := s.cfg.Probes.Snapshot(si.ID); ok {
+        row.Stale = false
+        row.AppVersion = snap.AppVersion
+```
+
+`State` does not. It is derived at the end of the same function from the **`service_instances` row**
+that `ListServiceInstances` read — `healthState(si, row)` reaches `stateHealthy` only via
+`row.LastOKAt != nil || strings.EqualFold(si.HealthState, "healthy")`, and falls through to
+`stateUnknown` otherwise.
+
+The two stores are written in sequence, not together. `cmd/usarr`'s `(*registry).recordProbe`:
+
+```go
+g.probeMu.Lock()
+g.probes[instanceID] = health
+g.probeMu.Unlock()
+...
+if err := g.st.UpdateServiceInstanceHealth(ctx, instanceID, state, breaker, failures, lastOK, health.Error); err != nil {
+```
+
+The snapshot lands first; the SQLite write — on the single-writer connection — lands after. Between
+them the endpoint honestly renders a fresh `app_version` on a row whose `health_state` is still the
+insert-time `"unknown"` and whose `last_ok_at` is still NULL. That is a real state the system passes
+through, not a phantom.
+
+The test broke into exactly that window, because it waited on the snapshot half and asserted on the
+database half:
+
+```go
+if !row.Stale && row.AppVersion != "" {
+    break
+}
+```
+
+then asserted `row.State != "healthy"` a few lines later, on the row it had already captured. The
+loop never re-reads after breaking, so a partially-settled row is the one that reaches the
+assertions. **Flaky by construction, not by luck** — the window is entered whenever a poll lands
+inside a SQLite write.
+
+## SETTLE-2 Reproduced before fixing, and the failure is the predicted one
+
+The repo's standing rule is that a fix is not accepted until it has been run. A binary built with
+`go test -race -c ./cmd/usarr/` (go1.25.13) was looped while three concurrent
+`go test -race -count=1 ./internal/store/... ./internal/httpapi/... ./internal/db/...` loops
+saturated the box's 4 cores and contended the writer.
+
+**Pre-fix: 4 failures in 200 iterations (2.0%).** An earlier, more lightly loaded run of the same
+harness gave 2 in 60. Every failure carried the identical signature, which is the diagnosis stated
+back verbatim:
+
+```
+kavita_e2e_test.go: services screen: Kavita state=unknown stale=false app_version=0.9.0.20 problem=""
+kavita_e2e_test.go: state = "unknown" problem = ""; a working Kavita must not read as broken
+```
+
+`stale=false` and `app_version=0.9.0.20` are the predicate being satisfied; `state=unknown` is the
+database half that had not landed yet. `problem=""` rules out the alternative reading that the probe
+had failed.
+
+## SETTLE-3 The fix: widen the predicate, not the timeout
+
+The predicate now covers **every field the assertions read**:
+
+```go
+if !row.Stale && row.State == "healthy" && row.AppVersion != "" {
+    break
+}
+```
+
+No sleep was added, no timeout widened, and no assertion relaxed — those would have hidden the window
+rather than removed it. The exact-value checks stay where they belong: the predicate waits for the
+row to *settle*, and the assertions still pin what it settled to (`app_version == "0.9.0.20"`,
+`state == "healthy"`, `!stale`).
+
+**Post-fix: 0 failures in 200 iterations** under the same command and a comparable load level
+(25m32s of user time against the pre-fix run's 25m07s, both over ~8-9 minutes wall).
+
+## SETTLE-4 The guard was fired deliberately
+
+Per `DEVELOPMENT.md` §11 rule 3, the widened predicate was checked for the failure nobody runs: does
+it still fail when the state is *genuinely* wrong, rather than spinning or going green? `recordProbe`
+was temporarily edited to write `state := "degraded"`. The test failed in 6.16s with the real value
+named — `state = "degraded" problem = ""` — then the edit was reverted. So the loop's worst case on a
+true regression is the full 5s of polling followed by an accurate message, which the pre-fix predicate
+also incurred (a failed probe leaves `AppVersion` empty), and the assertion still catches it.
+
+## SETTLE-5 The other wait loops were checked; this is the only instance
+
+The distinguishing defect is not "waits on X, asserts on Y" in general — it is a predicate reading
+one store while an assertion reads another that settles later. Every polling loop in `cmd/` and
+`internal/` tests was read against that:
+
+* `cmd/usarr/e2e_test.go` (the Prowlarr services-screen loop) waits on `!row.Stale &&
+  len(row.BlockedIndexers) > 0` and asserts `Stale`, `Warnings`, `BlockedIndexers`. **Not the same
+  defect:** all four are snapshot fields, published by the single `g.probes[instanceID] = health`
+  assignment under `probeMu`. It logs `State` but never asserts on it.
+* `cmd/usarr/indexers_e2e_test.go` waits on `len(got.Indexers) > 0` and asserts `Status` and
+  `Instances[0].FetchedAt`. **Not the same defect:** these are the pair the consistency audit already
+  fixed — `store.ListIndexers` reads the stamp and the rows under one `db.ReadTx`, so they cannot
+  disagree.
+* `cmd/usarr/import_e2e_test.go`'s `waitForImport` and `cmd/usarr/maintenance_test.go`'s sweeper loop
+  each poll the one column they then rely on.
+
+**Nothing was changed in production code.** The two-store split in `recordProbe` is deliberate — the
+snapshot is the render path, the columns exist so a restart does not blank the screen — and the
+convergence window is a property of the design, not a bug. The defect was in the test's assumption
+that one store's arrival implied the other's.

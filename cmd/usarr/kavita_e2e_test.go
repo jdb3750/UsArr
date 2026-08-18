@@ -118,6 +118,17 @@ func TestAddingAKavitaInstance(t *testing.T) {
 	// The screen renders from the LAST PROBE and never from an upstream call, so
 	// the test asks for one and waits. A successful connection test asks for one
 	// out of band.
+	//
+	// The predicate WAITS ON EVERY FIELD THE ASSERTIONS BELOW READ, and State is
+	// the one that makes that necessary rather than tidy. A health row is
+	// assembled from TWO stores that settle at different times: Stale and
+	// AppVersion come from registry.probes, the in-memory snapshot, while State
+	// is derived from the service_instances row. recordProbe writes the snapshot
+	// under probeMu and only THEN issues UpdateServiceInstanceHealth, so between
+	// those two writes the screen honestly renders a fresh version on a row whose
+	// health_state is still the insert-time "unknown". Waiting on the snapshot
+	// half and asserting on the database half broke into that window at ~2% under
+	// concurrent -race load: `state=unknown stale=false app_version=0.9.0.20`.
 	var row serviceHealthBody
 	for range 100 {
 		var health servicesHealthBody
@@ -126,7 +137,7 @@ func TestAddingAKavitaInstance(t *testing.T) {
 			t.Fatalf("expected one service row, got %d", len(health.Services))
 		}
 		row = health.Services[0]
-		if !row.Stale && row.AppVersion != "" {
+		if !row.Stale && row.State == "healthy" && row.AppVersion != "" {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
