@@ -809,9 +809,14 @@ describe('§17.8s row states, now that health supplies the half libraries never 
 				key: 'connected-empty',
 				word: 'Connected and empty',
 				tone: 'none',
-				detail: 'Kavita Manga reports no items'
+				detail: 'its last import finished'
 			}
 		]);
+		// ⚠️ IT MUST NOT BORROW THE OTHER SCREEN'S NUMBER. `work_count` is per
+		// SERVICE INSTANCE and `item_count` is per LIBRARY (REVIEW-LOG LS-115), so
+		// a line saying the source "reports no items" would be false the moment an
+		// instance feeds a second library. The detail states the evidence instead.
+		expect(marks[0].detail).not.toContain('items');
 	});
 
 	it('keeps the bare No items answer for a zero count nothing has explained', () => {
