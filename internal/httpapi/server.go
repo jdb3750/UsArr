@@ -84,6 +84,11 @@ type Config struct {
 	Logger    *slog.Logger
 	Now       func() time.Time
 	EventsBuf int
+
+	// Imports re-runs a catalogue import on demand. Nil is honest rather than
+	// fatal: the sync endpoint answers not_configured, which is a truthful
+	// thing to say about a build with no importer wired in.
+	Imports CatalogueImports
 }
 
 // Server is the HTTP surface. One per process.
@@ -252,6 +257,13 @@ func (s *Server) routes(mux *http.ServeMux) {
 	mux.Handle("PATCH /api/v1/services/{id}", s.csrfProtected(s.authenticated(s.sudo(s.wrap(s.handleUpdateService)))))
 	mux.Handle("DELETE /api/v1/services/{id}", s.csrfProtected(s.authenticated(s.sudo(s.wrap(s.handleDeleteService)))))
 	mux.Handle("POST /api/v1/services/{id}/test", s.csrfProtected(s.authenticated(s.sudo(s.wrap(s.handleTestService)))))
+	// "Run full sync now" (§17.3). Gated exactly like its five neighbours —
+	// CSRF, a session, and the sudo window — because it is the sixth way this
+	// screen changes something, and a write on this screen that skipped sudo
+	// would be the odd one out rather than the reasonable exception. It returns
+	// 202 without waiting for the import (principle 1); see imports.go for what
+	// a caller may and may not conclude from that.
+	mux.Handle("POST /api/v1/services/{id}/sync", s.csrfProtected(s.authenticated(s.sudo(s.wrap(s.handleSyncService)))))
 
 	// ── Library ─────────────────────────────────────────────────────────────
 	//

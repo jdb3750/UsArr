@@ -55,6 +55,15 @@ const (
 	CodeCredentialReentryRequired ErrorCode = "credential_reentry_required" //nolint:gosec // G101: an error code, not a secret
 	CodeInvalidURLBase            ErrorCode = "invalid_url_base"
 	CodeNotConfigured             ErrorCode = "not_configured"
+	// CodeImportInProgress refuses a SECOND catalogue import for an instance
+	// that already has one running. It is not a failure of the request: the
+	// work the caller asked for is in flight, and the honest word for that is
+	// "already running", never a false success.
+	CodeImportInProgress ErrorCode = "import_in_progress"
+	// CodeNotCatalogueSource answers a sync aimed at a service that has no
+	// library to read — a Prowlarr is an indexer (ADR-0041). Distinct from
+	// import_in_progress because the fixes are opposite.
+	CodeNotCatalogueSource ErrorCode = "not_a_catalogue_source"
 	// CodeServiceDisabled answers a request that NAMED a service the user has
 	// turned off. It is distinct from not_configured (nothing is set up) and
 	// from no_indexer_service (nothing enabled to fall back to): here the
@@ -100,11 +109,13 @@ var errorCodes = map[ErrorCode]struct{}{
 	CodeGrabOutcomeUnknown:        {},
 	CodeInstanceMismatch:          {},
 	CodeInternal:                  {},
+	CodeImportInProgress:          {},
 	CodeInvalidURLBase:            {},
 	CodeNoDownloadClient:          {},
 	CodeNoIndexerService:          {},
 	CodeNoIndexers:                {},
 	CodeNoLongerOffered:           {},
+	CodeNotCatalogueSource:        {},
 	CodeNotConfigured:             {},
 	CodeNotFound:                  {},
 	CodeSearchFailed:              {},

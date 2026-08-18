@@ -558,6 +558,13 @@ func TestTheBootstrapImportRunsOnceAndThenStopsAskingAgain(t *testing.T) {
 
 	// A fresh process would come up, connect, and reach exactly this call. It
 	// must decline, because the instance has a completed full sync.
+	//
+	// ⚠️ THIS IS NOT "AN IMPORT CAN ONLY EVER HAPPEN ONCE", and it never was.
+	// What is gated is the ON-CONNECT trigger: a restart must not silently
+	// re-read the whole library. An import ASKED FOR is a different thing and
+	// runs however often it is asked — see TestACompletedImportCanBeRunAgain…
+	// in import_rerun_test.go, which drives exactly this instance state and
+	// requires the opposite outcome.
 	env.app.registry.bootstrapImport(t.Context(), created.ID)
 	if after := countCalls(); after != before {
 		t.Errorf("the series list was read %d times after a second connect, want %d — "+

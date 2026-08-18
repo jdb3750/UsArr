@@ -45,8 +45,9 @@ type fakeKavita struct {
 	// metadata is what GET /api/Series/metadata?seriesId=N answers, keyed by
 	// series id. A series with no entry gets an EMPTY SeriesMetadataDto rather
 	// than a 404, which is what a real Kavita returns for a series nobody has
-	// filled in — the ordinary case on a fresh instance. Written only during
-	// setup, before the server can be reached.
+	// filled in — the ordinary case on a fresh instance. Written during setup,
+	// or later through setMetadata — which takes mu, as the handler's read does
+	// — so a re-import test can change what the upstream says between two runs.
 	metadata map[int]map[string]any
 
 	mu sync.Mutex
@@ -59,6 +60,12 @@ type fakeKavita struct {
 	// paths records every path served, so a test can prove which endpoints the
 	// connection test actually called.
 	paths []string
+
+	// hold, when non-nil, parks every POST /api/Series/all-v2 until it is
+	// closed. It is what makes an import OBSERVABLY IN FLIGHT: without it a
+	// fixture import finishes in microseconds and "a second import while the
+	// first is running" is a state no test can be standing in.
+	hold chan struct{}
 
 	srv *httptest.Server
 }
@@ -104,6 +111,11 @@ func newFakeKavita(t *testing.T, authKey string) *fakeKavita {
 	}))
 
 	mux.HandleFunc("POST /api/Series/all-v2", k.authed(func(w http.ResponseWriter, r *http.Request) {
+		// Parked before a byte is written, and AFTER k.record has run, so a
+		// test can see that the request arrived while it is still stuck here.
+		if h := k.currentHold(); h != nil {
+			<-h
+		}
 		// A JSON ARRAY, never `null`. An empty `series` slice would encode as
 		// `null` and the streaming decoder would reject the body as "expected a
 		// JSON array" — a fixture failure that reads exactly like a client bug.
@@ -124,7 +136,7 @@ func newFakeKavita(t *testing.T, authKey string) *fakeKavita {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		md := k.metadata[id]
+		md := k.seriesMetadata(id)
 		if md == nil {
 			// An empty object, NOT a 404 and NOT `null`: a real Kavita returns a
 			// SeriesMetadataDto with every array empty for a series nobody has
@@ -141,6 +153,65 @@ func newFakeKavita(t *testing.T, authKey string) *fakeKavita {
 }
 
 func (k *fakeKavita) URL() string { return k.srv.URL }
+
+// holdSeriesList parks the next and every subsequent series-list read.
+//
+// The release is registered as cleanup as well, and that is not belt-and-braces:
+// httptest.Server.Close blocks on outstanding handlers, so a test that fails
+// while a reader is parked would hang at teardown instead of reporting its
+// failure. A firing test that cannot report is not a test.
+func (k *fakeKavita) holdSeriesList() {
+	k.t.Cleanup(k.releaseSeriesList)
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.hold = make(chan struct{})
+}
+
+// releaseSeriesList lets every parked reader through and stops parking new ones.
+func (k *fakeKavita) releaseSeriesList() {
+	k.mu.Lock()
+	h := k.hold
+	k.hold = nil
+	k.mu.Unlock()
+	if h != nil {
+		close(h)
+	}
+}
+
+func (k *fakeKavita) currentHold() chan struct{} {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.hold
+}
+
+// setMetadata replaces the metadata table WHILE THE SERVER IS RUNNING, under
+// the same mutex the handler reads it through. The field's own comment says it
+// is written only during setup; a test that re-imports has to change what the
+// upstream says between two imports, which is the whole point of re-importing.
+func (k *fakeKavita) setMetadata(md map[int]map[string]any) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.metadata = md
+}
+
+func (k *fakeKavita) seriesMetadata(id int) map[string]any {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.metadata[id]
+}
+
+// countPath is how many times one upstream path has been served.
+func (k *fakeKavita) countPath(path string) int {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	n := 0
+	for _, p := range k.paths {
+		if p == path {
+			n++
+		}
+	}
+	return n
+}
 
 func (k *fakeKavita) record(r *http.Request) {
 	k.mu.Lock()

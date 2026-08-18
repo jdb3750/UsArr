@@ -1,5 +1,17 @@
 /**
- * THE LIBRARIES SCREEN, CLIENT SIDE — `GET /api/v1/libraries`.
+ * THE LIBRARIES SCREEN, CLIENT SIDE — `GET /api/v1/libraries`, JOINED TO
+ * `GET /api/v1/services/health`.
+ *
+ * TWO READS, BECAUSE §17.8's ROW VIEW ASKS FOR A FACT NEITHER ONE HOLDS ALONE.
+ * The row view is *"name · kind · item count · source chips with per-source
+ * health · … · state"*, and per-source health is not in `library`,
+ * `library_source` or `library_member`: the one column in reach that speaks to
+ * it is `missing_since`, which nothing writes. The measurement is on the health
+ * endpoint, keyed by service instance, and §4 below carries the proof that the
+ * two keys are the same column of the same table rather than the assertion.
+ * BOTH ARE TIER 0 LOCAL READS, so the join blocks nothing upstream and neither
+ * read blocks the other's render: libraries alone still draws the table, and
+ * health alone draws nothing here at all.
  *
  * ARCHITECTURE.md §17.8's row view, and the wire contract is
  * `docs/reference/http-api.md` §2 rather than this file: a doc comment is not
@@ -24,7 +36,11 @@
  *     the column both CLEAR it, so no code path sets a non-NULL value. ABSENCE
  *     IS THEREFORE "UNKNOWN", NEVER "HEALTHY", and `libraryStates` below emits
  *     nothing positive from it. A screen that rendered "all sources present"
- *     would be reporting the writer's silence as an observation.
+ *     would be reporting the writer's silence as an observation. ⚠️ THE HEALTH
+ *     JOIN DOES NOT CHANGE THIS. It measures a SERVICE, and this column is about
+ *     a CONTAINER the service reports: a Kavita in perfect health can stop
+ *     serving a library, so a `connected` verdict is not evidence about
+ *     `missing_since` and the two render as the separate facts they are.
  *   · `items[].orphaned_at` — no writer and no reader in non-test Go. A library
  *     with no sources is still visible as `sources: []`, which is an observation
  *     rather than an inference, so the state renders from the array and the
@@ -48,7 +64,8 @@
  * response, which is a different endpoint that does not exist yet either.
  */
 
-import { ApiError, getJson } from './api';
+import { ApiError, getJson, type ServiceHealth } from './api';
+import { applicationName, isIndexer } from './services';
 
 /** The endpoint, as `internal/httpapi/server.go` routes it. */
 export const LIBRARIES_URL = '/api/v1/libraries';
@@ -311,22 +328,221 @@ export function itemCountText(library: Library): string {
 	return COUNT.format(library.itemCount);
 }
 
-/* ── 4. the source chips ──────────────────────────────────────────────────── */
+/* ── 4. the health join ───────────────────────────────────────────────────── */
 
-/** One rendered chip. `missing` is the ONLY health signal, and it is one-way. */
+/**
+ * THE OTHER READ, AND THE KEY WAS CHECKED RATHER THAN ASSUMED.
+ *
+ * `GET /api/v1/libraries` carries no health at all: it reads `library`,
+ * `library_source` and `library_member`, and the only column in reach that
+ * speaks to a source's condition is `missing_since`, which nothing writes.
+ * `GET /api/v1/services/health` carries the measurement, keyed by service
+ * instance, and both are Tier 0 local reads, so joining them blocks nothing
+ * upstream (principle 1).
+ *
+ * THE KEY IS `service_instance.id`, ON BOTH SIDES, AND HERE IS THE PROOF RATHER
+ * THAN THE ASSERTION:
+ *
+ *   · `sources[].service_instance_id` is `library_source.service_instance_id`,
+ *     declared `INTEGER NOT NULL REFERENCES service_instance(id) ON DELETE
+ *     CASCADE` (internal/db/migrations/00005_library_sync.sql:637) and read
+ *     through `JOIN service_instance si ON si.id = ls.service_instance_id`
+ *     (internal/store/libraries.go:344).
+ *   · `services[].id` is `serviceHealthResponse.ID`, assigned `si.ID` in
+ *     `healthRow` (internal/httpapi/services.go:714) off the row
+ *     `ListServiceInstances` scans from `service_instance`'s own `id` column
+ *     (internal/store/serviceinstance.go:68).
+ *
+ * Same table, same primary key, so the two join. ⚠️ THEY ARE STILL TWO READS AT
+ * TWO MOMENTS, and both directions of disagreement are real rather than
+ * theoretical: the source read filters `si.deleted_at IS NULL` and applies the
+ * caller's scope, so an instance that is soft-deleted or scoped away between the
+ * two requests can be named by one and absent from the other. Every function
+ * below is written against a join that can miss in either direction, and neither
+ * miss is ever read as health.
+ */
+export type HealthRead =
+	{ k: 'unread' } | { k: 'read'; byInstance: ReadonlyMap<number, ServiceHealth> };
+
+/**
+ * Health has not answered, or answered with a failure.
+ *
+ * ⚠️ IT IS NOT "NOTHING IS WRONG". Every health-derived rendering below is
+ * suppressed on this value rather than defaulted, so the screen says the same
+ * things it said before the join existed, plus one sentence above the table
+ * saying that health is what is missing.
+ */
+export const HEALTH_UNREAD: HealthRead = { k: 'unread' };
+
+/** The health rows, indexed by the id both wires share. */
+export function healthRead(rows: readonly ServiceHealth[]): HealthRead {
+	const byInstance = new Map<number, ServiceHealth>();
+	for (const row of rows) byInstance.set(row.id, row);
+	return { k: 'read', byInstance };
+}
+
+/**
+ * What the health read says about ONE source's instance.
+ *
+ * `connected` is the only affirmative member and it is the only one that
+ * requires a measurement: `state === 'healthy'` AND `stale === false`, which
+ * together mean a probe ran and passed. `stale` outranks `healthy` for the
+ * reason the Services screen states at `stateLabel` — the server answers
+ * `healthy` on a stored `last_ok_at` alone, so an instance that answered once
+ * when it was added arrives as `healthy`, `stale: true`, and that is a fact
+ * about the past.
+ *
+ * The two silences are kept apart on purpose, because they have different
+ * causes and different fixes: `unlisted` is a source naming an instance the
+ * health read does not mention, `unchecked` is an instance it mentions and has
+ * not measured.
+ */
+export type SourceState =
+	'connected' | 'degraded' | 'down' | 'reidentify' | 'off' | 'unchecked' | 'unlisted' | 'unread';
+
+export interface SourceVerdict {
+	state: SourceState;
+	/** The word the chip prints beside the name. '' only while health is unread. */
+	word: string;
+	tone: LibraryTone;
+}
+
+/**
+ * ONE INSTANCE'S CONDITION, IN THIS SCREEN'S WORDS.
+ *
+ * ⚠️ THE PRECEDENCE IS THE SERVICES SCREEN'S, ARM FOR ARM — re-identification,
+ * then turned off, then the breaker, then down, then degraded, then stale, then
+ * healthy — and `services.test.ts`'s neighbour test holds the two together: this
+ * function answers `connected` exactly where `stateLabel` answers tone `ok`. Two
+ * screens rendering the same instance from the same row must not disagree about
+ * it, and a second implementation of a precedence is the ordinary way they come
+ * to.
+ *
+ * The words are not `stateLabel`'s, and that is deliberate: this is a chip
+ * beside a library, not the column a user scans for what is broken, so it says
+ * the short form and links to the row that says the long one.
+ */
+export function sourceVerdict(source: LibrarySource, read: HealthRead): SourceVerdict {
+	if (read.k === 'unread') return { state: 'unread', word: '', tone: 'none' };
+
+	const h = read.byInstance.get(source.serviceInstanceId);
+	// ABSENT IS NOT HEALTHY. The health read did not mention this instance, so
+	// nothing is known about it and the chip says exactly that.
+	if (h === undefined) return { state: 'unlisted', word: 'not listed', tone: 'none' };
+
+	if (h.state === 'needs re-identification') {
+		return {
+			state: 'reidentify',
+			word: `may be a different ${applicationName(h.kind)}`,
+			tone: 'err'
+		};
+	}
+	if (!h.enabled) return { state: 'off', word: 'turned off', tone: 'none' };
+	// An open breaker and a `down` state are one answer here: UsArr is not
+	// getting through. The Services row keeps the distinction between the two,
+	// which is what the chip links to.
+	if (h.breakerState.toLowerCase() === 'open' || h.state === 'down') {
+		return { state: 'down', word: 'not answering', tone: 'err' };
+	}
+	if (h.state === 'degraded') return { state: 'degraded', word: 'failing', tone: 'warn' };
+	if (h.stale) return { state: 'unchecked', word: 'not checked', tone: 'none' };
+	if (h.state === 'healthy') return { state: 'connected', word: 'connected', tone: 'none' };
+	// `unknown` with a probe behind it: the probe ran and could not classify the
+	// instance. An honest "not checked" still beats a claim.
+	return { state: 'unchecked', word: 'not checked', tone: 'none' };
+}
+
+/**
+ * Whether this instance's catalogue counts may be read at all.
+ *
+ * An indexer contributes no works and syncs no catalogue, so its `null` / `0`
+ * pair is `Not applicable` rather than `never synced` (http-api.md §3.2). No
+ * v0.1 source is an indexer — §17.8 proposes no library for Prowlarr — and the
+ * guard is here so that the day one is, the row does not accuse it of never
+ * having imported a catalogue it does not have.
+ */
+function catalogueHealth(source: LibrarySource, read: HealthRead): ServiceHealth | undefined {
+	if (read.k === 'unread') return undefined;
+	const h = read.byInstance.get(source.serviceInstanceId);
+	if (h === undefined || isIndexer(h)) return undefined;
+	return h;
+}
+
+/**
+ * THE REVERSE DIRECTION OF THE SAME DISAGREEMENT: a health row no library names.
+ *
+ * It is not a library, so it is not a row on this screen and nothing here
+ * invents one. It IS worth one sentence above the table, because on the shipped
+ * binary a library appears when a connected service finishes its first import,
+ * so a catalogue service feeding nothing is the answer to "why is this screen
+ * empty". Indexers are excluded by construction rather than by wording: §17.8
+ * proposes no library for Prowlarr, so a Prowlarr feeding none is not news.
+ */
+export function unboundServices(libraries: readonly Library[], read: HealthRead): ServiceHealth[] {
+	if (read.k === 'unread') return [];
+	const bound = new Set<number>();
+	for (const library of libraries) {
+		for (const source of library.sources) bound.add(source.serviceInstanceId);
+	}
+	const out: ServiceHealth[] = [];
+	for (const h of read.byInstance.values()) {
+		if (!bound.has(h.id) && !isIndexer(h)) out.push(h);
+	}
+	return out;
+}
+
+/**
+ * The two sentences that sit above the table, both of them §9.1's rule that a
+ * fact identical on every row is stated once and its column dropped.
+ *
+ * The unread arm is the important one: it is what keeps the table honest when
+ * health fails and libraries succeeds. The table still draws, every row still
+ * renders from the replica, and no chip says `connected`, so the sentence has to
+ * say which of those three is the reason.
+ */
+export function healthNote(read: HealthRead): string {
+	if (read.k === 'unread') {
+		return 'Service health could not be read, so no source below says whether it is connected. The libraries themselves come from UsArr’s own database and are complete.';
+	}
+	return 'Each source carries what the Services screen last measured about it. A source that read does not mention says so, rather than being counted as connected.';
+}
+
+/** `''` when every service feeds a library, which is the ordinary case. */
+export function unboundNote(services: readonly ServiceHealth[]): string {
+	if (services.length === 0) return '';
+	if (services.length === 1) return `${services[0].name} feeds no library yet.`;
+	return `${services.length} services feed no library yet.`;
+}
+
+/* ── 5. the source chips ──────────────────────────────────────────────────── */
+
+/** One rendered chip: the instance, and what health last said about it. */
 export interface SourceChip {
 	key: string;
 	/** The instance's name, or the schema's fallback when the row carries none. */
 	label: string;
 	/** The full text for the `title` companion to `.trunc` (§9.1 tier 1). */
 	title: string;
+	/**
+	 * WHAT THE CHIP PRINTS BESIDE THE NAME, WHICH IS NOT ALWAYS THE VERDICT'S
+	 * WORD. The chip has one colour and must not disagree with its own text: a
+	 * source whose container stopped being reported is amber on `missing` alone,
+	 * so an amber chip reading `connected` would paint one fact and name another.
+	 * The rule is that the word matches the colour — the verdict wins whenever it
+	 * has something alarming to say, and `missing` supplies the word when it does
+	 * not. Both facts always survive on `title`.
+	 */
+	word: string;
 	/** The Services row this chip links to. */
 	serviceInstanceId: number;
 	/**
-	 * ⚠️ TRUE MEANS `missing_since` WAS SET. FALSE MEANS NOBODY HAS SAID. It is
-	 * never rendered as a positive health claim; see `libraryStates`.
+	 * ⚠️ TRUE MEANS `missing_since` WAS SET. FALSE MEANS NOBODY HAS SAID. It is a
+	 * fact about the CONTAINER, not about the service, and it is independent of
+	 * `verdict`: an upstream in perfect health can stop reporting a library.
 	 */
 	missing: boolean;
+	/** What health said about this source's instance. */
+	verdict: SourceVerdict;
 }
 
 /**
@@ -339,13 +555,32 @@ export interface SourceChip {
  */
 const UNNAMED_SOURCE = 'Unnamed service';
 
-function chipTitle(source: LibrarySource, label: string): string {
+/** The container's own name, and now the health word, folded into `title`. */
+function chipTitle(source: LibrarySource, label: string, verdict: SourceVerdict): string {
 	// §17.8's *"upstream's own name beneath it, greyed and non-editable"*, folded
 	// into the row's `title` because the row view has no second line for it. The
 	// container ref is NOT appended: it is a Kavita library id in v0.1, machine
 	// data with no meaning to a reader, and §9.1 keeps machine strings out of a
 	// cell's identity text.
-	return source.containerName === undefined ? label : `${label} · ${source.containerName}`;
+	const parts = [label];
+	if (source.containerName !== undefined) parts.push(source.containerName);
+	if (verdict.word !== '') parts.push(verdict.word);
+	if (source.missingSince !== undefined) parts.push('no longer reported');
+	return parts.join(' · ');
+}
+
+/**
+ * Worst first, so the cap below never hides the source worth acting on.
+ *
+ * A rank rather than a sort key on the tone alone, because `unlisted`, `off` and
+ * `unchecked` share `none` with `connected` and are not the same news: a silence
+ * a user might act on outranks a measurement that passed.
+ */
+function chipRank(chip: SourceChip): number {
+	if (chip.verdict.tone === 'err') return 0;
+	if (chip.verdict.tone === 'warn' || chip.missing) return 1;
+	if (chip.verdict.state === 'connected' || chip.verdict.state === 'unread') return 3;
+	return 2;
 }
 
 /**
@@ -354,40 +589,56 @@ function chipTitle(source: LibrarySource, label: string): string {
  * §9.1 caps a cell that renders one chip per related object at three plus
  * `+N more`; the live case §9.1 names is one Audiobookshelf feeding fifteen
  * libraries, and the reverse — one library over many instances — is §17.8's own
- * two-Radarr example. A source carrying `missing_since` is hoisted in front of
- * the cap, because a cell that hides the one broken source behind `+2 more` has
- * dropped the only fact on the row worth acting on.
+ * two-Radarr example. A source in trouble is hoisted in front of the cap,
+ * because a cell that hides the one broken source behind `+2 more` has dropped
+ * the only fact on the row worth acting on.
  */
 export function sourceChips(
 	library: Library,
+	read: HealthRead,
 	max = 3
 ): { shown: SourceChip[]; more: number; total: number } {
 	const chips = library.sources.map((source): SourceChip => {
 		const label = source.serviceName === '' ? UNNAMED_SOURCE : source.serviceName;
+		const verdict = sourceVerdict(source, read);
+		const missing = source.missingSince !== undefined;
 		return {
 			key: String(source.id),
 			label,
-			title: chipTitle(source, label),
+			word: missing && verdict.tone === 'none' ? 'no longer reported' : verdict.word,
+			title: chipTitle(source, label, verdict),
 			serviceInstanceId: source.serviceInstanceId,
-			missing: source.missingSince !== undefined
+			missing,
+			verdict
 		};
 	});
 	// A stable partition rather than a sort: the server's order is preserved
-	// inside each half, so the cell does not reshuffle between renders.
-	const ordered = [...chips.filter((c) => c.missing), ...chips.filter((c) => !c.missing)];
+	// inside each rank, so the cell does not reshuffle between renders.
+	const ordered = [0, 1, 2, 3].flatMap((rank) => chips.filter((c) => chipRank(c) === rank));
 	if (ordered.length <= max) return { shown: ordered, more: 0, total: ordered.length };
 	return { shown: ordered.slice(0, max), more: ordered.length - max, total: ordered.length };
 }
 
-/* ── 5. the State column ──────────────────────────────────────────────────── */
+/* ── 6. the State column ──────────────────────────────────────────────────── */
 
-/** The status roles `app.css` exposes as `.st--warn` and `.st--none`.
+/** The status roles `app.css` exposes as `.st--err`, `.st--warn` and `.st--none`.
  *
- * ⚠️ THERE IS NO `ok` ARM AND THERE CANNOT BE ONE. `.st--ok` is a claim that
- * something was measured and passed, and nothing on this wire measures a
- * library: `missing_since` has no writer, so its absence is silence. A green
- * tick here would be the writer's silence rendered as an observation. */
-export type LibraryTone = 'warn' | 'none';
+ * ⚠️ THERE IS STILL NO `ok` ARM, AND THE HEALTH JOIN DID NOT EARN ONE. `.st--ok`
+ * on this screen would be a claim that THIS LIBRARY was measured and passed, and
+ * what the join measures is a SERVICE: a healthy Kavita says nothing about
+ * whether this library's membership is current, and the two columns that would
+ * say so — `missing_since` and `orphaned_at` — still have no writer anywhere in
+ * the tree (http-api.md §2.4). A green tick would also fire on nearly every row,
+ * which is §17.4 rule 5 twice over.
+ *
+ * ⚠️ `err` IS NEW AND IS NOT A WEAKENING OF THAT. It arrived with the join,
+ * because the join brought states that ARE errors — an instance that is not
+ * answering, or whose identity is in doubt — and `.st--err` is the role the
+ * Services screen already paints those with. Painting the same instance amber on
+ * one screen and red on the other would be two screens disagreeing about one
+ * row. The invariant that survives is the one that was always the point: nothing
+ * on this screen renders a positive health claim. */
+export type LibraryTone = 'err' | 'warn' | 'none';
 
 /** One state mark on a row. A row can carry several; none of them is positive. */
 export interface LibraryStateMark {
@@ -396,9 +647,17 @@ export interface LibraryStateMark {
 	 * applies here too: the schema's vocabulary does not belong in this cell. */
 	word: string;
 	tone: LibraryTone;
+	/** The qualifier under the word, or '' when the word says everything. §17.8
+	 * asks the degraded state to NAME the source, and this is where the name
+	 * goes when there is exactly one to name. */
+	detail?: string;
 	/** An RFC 3339 stamp that qualifies the word, when the wire carried one.
 	 * The screen formats it; this module does not own a clock. */
 	at?: string;
+}
+
+function plural(n: number, one: string, many: string): string {
+	return n === 1 ? one : `${n} ${many}`;
 }
 
 /**
@@ -406,23 +665,47 @@ export interface LibraryStateMark {
  *
  * §17.8 names eight per-library states — importing, one source degraded, all
  * sources down, sources healthy with zero items, orphaned, no sink, needs
- * re-identification, and no change feed. **Four of those are claims about a
- * service's health, which is not on this wire at all**: this endpoint reads
- * `library`, `library_source` and `library_member`, and the only column in reach
- * that speaks to health is `missing_since`, which nothing sets. So this function
- * emits the states that ARE observable and stays silent on the rest, rather than
- * deriving a health word from a field that has no writer.
+ * re-identification, and no change feed. FIVE OF THOSE ARE NOW OBSERVABLE,
+ * because the health read supplies the half `GET /api/v1/libraries` never
+ * carried, and the other three are still not, for reasons that are about the
+ * wire rather than about this function:
  *
- * ⚠️ AND IT NEVER EMITS A POSITIVE ONE. A row with nothing to say returns `[]`,
- * which the screen renders as §9.1's `—`. The tempting bug is the tick: with
- * `missing_since` absent on every source of every row today, an `ok` arm would
- * fire on every library in the product and read as "checked, and fine" while
- * nothing has ever checked anything.
+ *   · NO SINK is a screen-level fact, not a row-level one: no service v0.1
+ *     connects can be a request destination at all, so §17.8 drops the column
+ *     and the screen says so once in its own copy. Nothing for a mark to do.
+ *   · NO CHANGE FEED needs the sync CHANNEL, and no endpoint publishes one. The
+ *     health row says WHEN a full import last completed, never by which channel
+ *     (`$lib/services`, `describeSync`). §17.8 also measures that no v0.1 source
+ *     is in this state.
+ *   · IMPORTING needs an import IN FLIGHT, and NEITHER OF THIS SCREEN'S TWO
+ *     READS CARRIES ONE. Both are point-in-time SQLite reads: the health row
+ *     says when an import last COMPLETED, and no field on either wire says one
+ *     is running. ⚠️ THAT IS A STATEMENT ABOUT THESE TWO ENDPOINTS AND NOT ABOUT
+ *     THE PRODUCT, and the difference is new as of `POST
+ *     /api/v1/services/{id}/sync` (internal/httpapi/imports.go): the in-flight
+ *     fact now exists in two places this screen does not look — a 409
+ *     `import_in_progress` on that endpoint, which is a WRITE and cannot be on a
+ *     render path, and the `import.progress` frame on `GET /api/events`
+ *     (internal/httpapi/events.go), which is a live subscription this screen
+ *     does not hold. Whether the Libraries screen should hold one is a design
+ *     question rather than a join, so nothing here guesses at it.
+ *
+ *     What the two reads DO carry is the aftermath — `last_full_sync_at: null`
+ *     with `work_count > 0`, which http-api.md §3.2 names "a partial import's
+ *     rows stand" — and the mark below is named after THAT, an import that did
+ *     not finish, rather than borrowed from §17.8's word for a live one. An
+ *     unfinished import and a running one are not the same claim, and the same
+ *     pair is left behind by an import that failed.
+ *
+ * ⚠️ AND IT STILL NEVER EMITS A POSITIVE ONE. A row with nothing to say returns
+ * `[]`, which the screen renders as §9.1's `—`. The tempting bug is the tick:
+ * health measures a service, this column describes a library, and the columns
+ * that would let a library be pronounced fine have no writer.
  *
  * The array is ordered worst-first, so a truncating cell keeps the actionable
  * mark. Nothing is dropped: a row can carry several and all of them render.
  */
-export function libraryStates(library: Library): LibraryStateMark[] {
+export function libraryStates(library: Library, read: HealthRead): LibraryStateMark[] {
 	const marks: LibraryStateMark[] = [];
 
 	if (library.sources.length === 0) {
@@ -435,47 +718,200 @@ export function libraryStates(library: Library): LibraryStateMark[] {
 		const mark: LibraryStateMark = { key: 'no-sources', word: 'No sources', tone: 'warn' };
 		if (library.orphanedAt !== undefined) mark.at = library.orphanedAt;
 		marks.push(mark);
-	} else {
-		const missing = library.sources.filter((s) => s.missingSince !== undefined);
-		if (missing.length > 0) {
-			// The earliest stamp, because it answers "since when has this been
-			// wrong", which is the question a stale replica raises. §9.1 bans a
-			// parenthesised plural where the count is known, and it is known here.
-			const at = missing
-				.map((s) => s.missingSince ?? '')
-				.reduce((earliest, next) => (next < earliest ? next : earliest));
+		return withVisibility(library, marks);
+	}
+
+	const verdicts = library.sources.map((source) => ({
+		source,
+		verdict: sourceVerdict(source, read)
+	}));
+	const withState = (state: SourceState) => verdicts.filter((v) => v.verdict.state === state);
+	const nameOf = (rows: { source: LibrarySource }[]): string | undefined =>
+		rows.length === 1 && rows[0].source.serviceName !== '' ? rows[0].source.serviceName : undefined;
+
+	// ── the health-derived arms, all of them silent while health is unread ──
+	const reidentify = withState('reidentify');
+	if (reidentify.length > 0) {
+		// §17.8's *needs re-identification*: *"blocking banner, membership
+		// recompute paused, because membership derived from an untrustworthy id
+		// space is worse than stale membership"*. The detail is `sync is paused`
+		// verbatim from `$lib/services`, so both screens say one thing about it.
+		const app = applicationName(read.k === 'read' ? kindOf(reidentify[0].source, read) : '');
+		marks.push({
+			key: 'reidentify',
+			word:
+				reidentify.length === 1
+					? `A source may be a different ${app}`
+					: `${reidentify.length} sources may be different services`,
+			tone: 'err',
+			detail: 'sync is paused'
+		});
+	}
+
+	const down = withState('down');
+	if (down.length > 0 && down.length === verdicts.length) {
+		// §17.8's *all sources down*, which the section calls *"the replica
+		// principle's demo"*: every source is unreachable and the row, the counts
+		// and the whole table are still here.
+		marks.push({
+			key: 'all-down',
+			word: 'No source is answering',
+			tone: 'err',
+			detail: 'this list still renders from the replica'
+		});
+	} else if (down.length > 0) {
+		marks.push({
+			key: 'source-down',
+			word: plural(down.length, 'A source is not answering', 'sources are not answering'),
+			tone: 'err',
+			...detailOf(nameOf(down))
+		});
+	}
+
+	const degraded = withState('degraded');
+	if (degraded.length > 0) {
+		// §17.8's *one source degraded*, whose own instruction is that the banner
+		// NAMES it and *"the grid does not grey out"*. The name is the detail when
+		// there is one source to name; the chip in the Sources cell names it in
+		// every case and links to the Services row.
+		marks.push({
+			key: 'source-degraded',
+			word: plural(
+				degraded.length,
+				'A source is failing some attempts',
+				'sources are failing some attempts'
+			),
+			tone: 'warn',
+			...detailOf(nameOf(degraded))
+		});
+	}
+
+	const missing = verdicts.filter((v) => v.source.missingSince !== undefined);
+	if (missing.length > 0) {
+		// The earliest stamp, because it answers "since when has this been
+		// wrong", which is the question a stale replica raises. §9.1 bans a
+		// parenthesised plural where the count is known, and it is known here.
+		const at = missing
+			.map((v) => v.source.missingSince ?? '')
+			.reduce((earliest, next) => (next < earliest ? next : earliest));
+		marks.push({
+			key: 'source-missing',
+			word: plural(missing.length, 'A source is missing', 'sources are missing'),
+			tone: 'warn',
+			at
+		});
+	}
+
+	const unlisted = withState('unlisted');
+	if (unlisted.length > 0) {
+		// THE JOIN MISSED, AND THAT IS ITS OWN FACT RATHER THAN A HEALTH VERDICT.
+		// The library names an instance the health read does not mention, which
+		// the two statements make reachable: the source read filters
+		// `si.deleted_at IS NULL` and both reads apply the caller's scope, so an
+		// instance deleted or scoped away between the two requests lands here.
+		// Grey, because nothing is broken: nothing was measured.
+		marks.push({
+			key: 'source-unlisted',
+			// `Services` is the screen's own name, which is where the answer is.
+			// The longer form `A source is not in the services list` wrapped the
+			// cell to a second line at every width measured.
+			word: plural(unlisted.length, 'A source is not in Services', 'sources are not in Services'),
+			tone: 'none',
+			...detailOf(nameOf(unlisted))
+		});
+	}
+
+	// ── the catalogue-freshness arms, read as http-api.md §3.2's PAIR ──
+	const catalogue = verdicts
+		.map((v) => catalogueHealth(v.source, read))
+		.filter((h): h is ServiceHealth => h !== undefined);
+	const neverSynced = catalogue.filter((h) => h.lastFullSyncAt === null && h.workCount === 0);
+	const partial = catalogue.filter((h) => h.lastFullSyncAt === null && h.workCount > 0);
+	const connected = verdicts.filter((v) => v.verdict.state === 'connected');
+
+	if (neverSynced.length > 0) {
+		// `null` + `0` is http-api.md §3.2's *never synced*, and it is the
+		// sentence §17.8 insists is DIFFERENT from "connected and reports 0
+		// films". A library whose source has never finished an import is empty
+		// because nothing has run, not because the upstream is empty.
+		marks.push({
+			key: 'never-synced',
+			word: plural(neverSynced.length, 'A source has never synced', 'sources have never synced'),
+			tone: 'none',
+			...detailOf(neverSynced.length === 1 ? neverSynced[0].name : undefined)
+		});
+	} else if (partial.length > 0) {
+		// `null` + `>0`. NOT §17.8's *importing*: nothing on either wire reports an
+		// import in flight, and this pair is equally the aftermath of one that
+		// failed. The word says what was measured, which is that no import has
+		// completed here and rows landed anyway.
+		marks.push({
+			key: 'partial-import',
+			// `An import`, not `A source's import`: measured in Chromium at 1280px,
+			// the longer form wrapped the State cell to a second line and took the
+			// row from 47px to 63px, for a word the chip beside it already attaches
+			// to a source.
+			word: plural(partial.length, 'An import did not finish', 'imports did not finish'),
+			tone: 'none',
+			// Measured at 1280px: the fuller form `some items landed, so this count
+			// may be short` rendered 211.66px wide in a 211.66px content box, which
+			// is a wrap on the very next character of any longer name or any
+			// narrower window. This one is 23 characters and has the margin.
+			detail: 'this count may be short'
+		});
+	} else if (library.itemCount === 0) {
+		if (connected.length === verdicts.length) {
+			// §17.8's *sources healthy, zero items*, and the join is what makes it
+			// sayable: *"Radarr is connected and reports 0 films"* needs `connected`,
+			// which is exactly what `GET /api/v1/libraries` never measured. Every
+			// source is measured healthy AND every one has completed an import, so
+			// the emptiness is the upstream's answer rather than UsArr's silence.
 			marks.push({
-				key: 'source-missing',
-				word:
-					missing.length === 1 ? 'A source is missing' : `${missing.length} sources are missing`,
-				tone: 'warn',
-				at
+				key: 'connected-empty',
+				word: 'Connected and empty',
+				tone: 'none',
+				detail:
+					verdicts.length === 1 && verdicts[0].source.serviceName !== ''
+						? `${verdicts[0].source.serviceName} reports no items`
+						: 'the sources report no items'
 			});
-		}
-		if (library.itemCount === 0) {
-			// §17.8's *"sources healthy, zero items"*, with the half this wire
-			// cannot support left off. The section's own example sentence is
-			// *"Radarr is connected and reports 0 films"*, and `connected` is
-			// exactly the word nothing here has measured, so the mark says only
-			// what the count says.
+		} else {
+			// The pre-join answer, and it survives for exactly the case it was
+			// written for: the count is zero and nothing has measured why.
 			marks.push({ key: 'no-items', word: 'No items', tone: 'none' });
 		}
 	}
 
-	// §17.8's detail view groups both of these under *Visibility*. They are read
-	// from their own columns and are independent of each other, so both can
-	// render on one row. Grey is the right role: neither is broken, and painting
-	// a deliberate setting a warning colour makes the two states that ARE broken
-	// harder to find (app.css, `.st--none`).
+	return withVisibility(library, marks);
+}
+
+/** The instance kind health reported, for a sentence that names the application. */
+function kindOf(source: LibrarySource, read: HealthRead): string {
+	if (read.k === 'unread') return source.serviceKind;
+	return read.byInstance.get(source.serviceInstanceId)?.kind ?? source.serviceKind;
+}
+
+/** A detail slot that stays OFF the object when there is nothing to put in it. */
+function detailOf(name: string | undefined): { detail?: string } {
+	return name === undefined ? {} : { detail: name };
+}
+
+/**
+ * §17.8's detail view groups both of these under *Visibility*. They are read
+ * from their own columns and are independent of each other, so both can render
+ * on one row. Grey is the right role: neither is broken, and painting a
+ * deliberate setting a warning colour makes the states that ARE broken harder to
+ * find (app.css, `.st--none`).
+ */
+function withVisibility(library: Library, marks: LibraryStateMark[]): LibraryStateMark[] {
 	if (!library.enabled) marks.push({ key: 'disabled', word: 'Turned off', tone: 'none' });
 	if (!library.includeInSearch) {
 		marks.push({ key: 'not-in-search', word: 'Not in search', tone: 'none' });
 	}
-
 	return marks;
 }
 
-/* ── 6. the three ways this screen has nothing to show ────────────────────── */
+/* ── 7. the three ways this screen has nothing to show ────────────────────── */
 
 /**
  * A FAILED READ, AN ENDED SESSION AND AN EMPTY INSTALL ARE THREE DIFFERENT

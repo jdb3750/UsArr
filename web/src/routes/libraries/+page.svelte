@@ -1,7 +1,8 @@
 <script lang="ts">
 	/**
 	 * LIBRARIES — the row view. ARCHITECTURE.md §17.8, over
-	 * `GET /api/v1/libraries` (`docs/reference/http-api.md` §2).
+	 * `GET /api/v1/libraries` (`docs/reference/http-api.md` §2) joined to
+	 * `GET /api/v1/services/health` (§3).
 	 *
 	 * §17.8 splits this screen from Services in one sentence: *"Services answers
 	 * 'is the pipe up, and how do I fix it?'. Libraries answers 'what is in it,
@@ -41,25 +42,45 @@
 	 * `describeFailure` in `$lib/libraries` owns the first two so a node-run test
 	 * can pin them; a rule that lives inside an `{#if}` here is untestable.
 	 *
-	 * ⚠️ NOTHING ON THIS SCREEN CLAIMS A SOURCE IS HEALTHY. `missing_since` has no
-	 * writer anywhere in the tree (`http-api.md` §2.4), so its absence is silence
-	 * and not a pass. There is no green tick in the State column and no `.st--ok`
-	 * anywhere below; see `libraryStates` for the argument.
+	 * TWO READS, AND NEITHER BLOCKS THE OTHER. `Promise.allSettled` rather than a
+	 * sequential await or a `Promise.all`: the libraries read owns the table and
+	 * the health read owns one word on each chip, so a health failure must cost
+	 * the word and not the table. The failure banner is driven by the LIBRARIES
+	 * read alone; a failed health read renders the table exactly as it rendered
+	 * before this join existed, plus one sentence above it saying so.
+	 *
+	 * ⚠️ NOTHING ON THIS SCREEN CLAIMS A LIBRARY IS HEALTHY, AND THE JOIN DID NOT
+	 * CHANGE THAT. The health read measures a SERVICE; this screen describes a
+	 * LIBRARY, and the two columns that would let a library be pronounced fine —
+	 * `missing_since` and `orphaned_at` — still have no writer anywhere in the
+	 * tree (`http-api.md` §2.4). So there is no green tick in the State column and
+	 * no `.st--ok` anywhere below. What DID arrive with the join is `.st--err`,
+	 * for the states that are errors on the Services screen too; see
+	 * `libraryStates` for both halves of the argument.
 	 */
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
 	import Icon from '$lib/Icon.svelte';
 	import List from '$lib/List.svelte';
 	import { NOTHING, type ListColumn } from '$lib/list';
+	import { fetchServicesHealth } from '$lib/api';
 	import {
+		HEALTH_UNREAD,
 		describeFailure,
 		fetchLibraries,
+		healthNote,
+		healthRead,
 		itemCountText,
 		kindLabel,
 		libraryStates,
 		sourceChips,
+		unboundNote,
+		unboundServices,
+		type HealthRead,
 		type LibrariesFailure,
-		type Library
+		type SourceChip,
+		type Library,
+		type LibraryTone
 	} from '$lib/libraries';
 	// One §9.1 timestamp formatter in the product, and it lives beside the screen
 	// that needed it first. Duplicating it here would be a second implementation
@@ -97,8 +118,36 @@
 		{ id: 'state', header: 'State', width: 'minmax(0, 1.3fr)' }
 	];
 
+	/**
+	 * One glyph per tone, and the same three the Services screen maps for the same
+	 * three roles. There is no `ok` entry because `LibraryTone` has no `ok`
+	 * member, which is the invariant rather than an omission: see `libraryStates`.
+	 */
+	const ICON_FOR: Record<LibraryTone, 'alert' | 'x-circle' | 'dash-circle'> = {
+		err: 'x-circle',
+		warn: 'alert',
+		none: 'dash-circle'
+	};
+
 	const SERVICES = resolve('/services');
 	const LOGIN = resolve('/login');
+
+	/**
+	 * The chip's classes as ONE string, for two reasons that both matter.
+	 *
+	 * `missing_since` and the health verdict are separate facts about separate
+	 * things — a container the upstream stopped reporting, and the service that
+	 * reports it — and a chip has one colour, so the precedence between them is a
+	 * decision rather than a default: the error role wins, then the warning role,
+	 * and `missing` reaches the warning role on its own. Written out, it is also
+	 * three attributes rather than five on the anchor, which keeps the
+	 * `eslint-disable-next-line` above it adjacent to the `href` it covers.
+	 */
+	function chipClass(chip: SourceChip): string {
+		if (chip.verdict.tone === 'err') return 'chip chip--err';
+		if (chip.verdict.tone === 'warn' || chip.missing) return 'chip chip--pending';
+		return 'chip';
+	}
 
 	/**
 	 * The Services row that owns one source, as a path plus a fragment.
@@ -120,22 +169,37 @@
 	}
 
 	let libraries = $state<Library[]>([]);
+	let health = $state<HealthRead>(HEALTH_UNREAD);
 	let loaded = $state(false);
 	let failure = $state<LibrariesFailure | undefined>(undefined);
 
 	/** Re-read on a timer so a relative time stays true rather than freezing. */
 	let now = $state(new Date());
 
+	/**
+	 * BOTH READS, SETTLED INDEPENDENTLY.
+	 *
+	 * `allSettled` is the whole point: `Promise.all` would reject the pair on a
+	 * health failure and leave the table undrawn over a read that succeeded, and
+	 * awaiting them in sequence would put the second read's latency in front of
+	 * the first read's render. Each result lands in its own piece of state, and
+	 * only the libraries result can produce the failure banner.
+	 */
 	async function load() {
-		try {
-			libraries = await fetchLibraries();
+		const [list, rows] = await Promise.allSettled([fetchLibraries(), fetchServicesHealth()]);
+		if (list.status === 'fulfilled') {
+			libraries = list.value;
 			failure = undefined;
-		} catch (error) {
+		} else {
 			libraries = [];
-			failure = describeFailure(error);
-		} finally {
-			loaded = true;
+			failure = describeFailure(list.reason);
 		}
+		// A failed health read is NOT an error state for this screen. It costs the
+		// per-source word and nothing else, and the note above the table says which
+		// of the two reads is missing rather than leaving a bare chip to be read as
+		// a pass.
+		health = rows.status === 'fulfilled' ? healthRead(rows.value.services) : HEALTH_UNREAD;
+		loaded = true;
 	}
 
 	onMount(() => {
@@ -151,6 +215,8 @@
 
 	const count = $derived(libraries.length);
 	const showTable = $derived(loaded && failure === undefined);
+	/** The reverse direction of the join: a health row no library names. */
+	const unbound = $derived(unboundNote(unboundServices(libraries, health)));
 </script>
 
 <svelte:head><title>Libraries · UsArr</title></svelte:head>
@@ -248,10 +314,26 @@
 			No request destination can be set yet: no connected service accepts requests. Indexer search
 			still works, and the grab ends in your download client.
 		</p>
-		<p class="toolbar__note toolbar__label">
-			Per-source health is not reported yet, so a source with no warning beside it has not been
-			checked.
-		</p>
+		<!--
+			GATED ON THERE BEING A ROW, because it is §9.1's "a fact identical on
+			every row is stated once above the table" and with no rows it is a fact
+			about nothing. The unbound sentence below is NOT gated: on an empty
+			install it is the most useful line on the screen.
+		-->
+		{#if count > 0}
+			<p class="toolbar__note toolbar__label">{healthNote(health)}</p>
+		{/if}
+		{#if unbound}
+			<!--
+				THE JOIN'S OTHER DIRECTION, AND IT IS A SENTENCE RATHER THAN A ROW. A
+				service is not a library, so nothing invents a row for it; but on the
+				shipped binary a library appears when a connected service finishes its
+				first import, which makes a catalogue service feeding nothing the
+				answer to "why is this screen empty". Indexers are left out by
+				`unboundServices` itself: §17.8 proposes no library for Prowlarr.
+			-->
+			<p class="toolbar__note toolbar__label">{unbound}</p>
+		{/if}
 	</div>
 
 	<List
@@ -303,7 +385,7 @@
 	{:else if column.id === 'items'}
 		{itemCountText(library)}
 	{:else if column.id === 'sources'}
-		{@const chips = sourceChips(library)}
+		{@const chips = sourceChips(library, health)}
 		{#if chips.total === 0}
 			<span class="muted">{NOTHING.empty}</span>
 		{:else}
@@ -316,9 +398,21 @@
 						labelled as an operation. The Services screen anchors by id.
 					-->
 					{@const href = servicesAnchor(chip.serviceInstanceId)}
+					<!--
+						THE HEALTH WORD IS IN THE CHIP, NOT IN THE COLOUR. app.css states
+						the rule at `.st`: icon, text and colour together, never colour
+						alone. So a chip that is amber or red says WHY in its own text,
+						and a chip with nothing wrong still carries its word — because if
+						a bare chip meant `connected`, an instance the health read never
+						mentioned would be indistinguishable from one it measured and
+						passed. Absence has to look like absence.
+					-->
 					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- see servicesAnchor -->
-					<a class="chip" class:chip--pending={chip.missing} {href} title={chip.title}>
+					<a class={chipClass(chip)} {href} title={chip.title}>
 						<span class="trunc">{chip.label}</span>
+						{#if chip.word}
+							<span class="chip__state">· {chip.word}</span>
+						{/if}
 					</a>
 				{/each}
 				{#if chips.more > 0}
@@ -327,15 +421,18 @@
 			</div>
 		{/if}
 	{:else if column.id === 'state'}
-		{@const marks = libraryStates(library)}
+		{@const marks = libraryStates(library, health)}
 		{#if marks.length === 0}
 			<span class="muted">{NOTHING.empty}</span>
 		{:else}
 			{#each marks as mark (mark.key)}
 				<div class="statemark">
 					<span class={`st st--${mark.tone}`}>
-						<Icon name={mark.tone === 'warn' ? 'alert' : 'dash-circle'} size="sm" />{mark.word}
+						<Icon name={ICON_FOR[mark.tone]} size="sm" />{mark.word}
 					</span>
+					{#if mark.detail}
+						<span class="cell-sub">{mark.detail}</span>
+					{/if}
 					{#if mark.at}
 						<span class="cell-sub">{stampOf(mark.at, now)}</span>
 					{/if}
@@ -365,6 +462,15 @@
 	.cell-chips :global(.chip) {
 		max-width: 100%;
 		min-width: 0;
+	}
+
+	/* The health word never shrinks, so the truncation lands on the instance name
+	 * instead. A chip reading `Kavita M… · not answering` still says the thing the
+	 * user has to act on; one reading `Kavita Manga · not answ…` says the thing
+	 * they already knew. It takes the chip's own colour rather than a muted grey:
+	 * the colour and the word are one signal and must not be split across two. */
+	.cell-chips :global(.chip__state) {
+		flex: 0 0 auto;
 	}
 
 	/* Muted body text outside a table and outside an empty state, at the same
