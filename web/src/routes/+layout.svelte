@@ -40,11 +40,12 @@
 	// paint on an SPA whose served document has an empty body.
 	import '$lib/prefs.svelte';
 	import { onMount, tick } from 'svelte';
-	import { afterNavigate, goto } from '$app/navigation';
+	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
 	import { ApiError, logout, onUnauthorized } from '$lib/api';
 	import { session } from '$lib/session.svelte';
+	import { createScrollMemory, forwardScrollKey, type ScrollMemory } from '$lib/shellscroll';
 
 	let { children } = $props();
 
@@ -66,6 +67,16 @@
 	let headingEl = $state<HTMLHeadingElement | null>(null);
 	let toggleEl = $state<HTMLButtonElement | null>(null);
 	let navEl = $state<HTMLElement | null>(null);
+	/**
+	 * The application's scroll container and the box inside it whose height
+	 * changes as a screen's data arrives. Both belong to `$lib/shellscroll`, one
+	 * as the thing that scrolls and one as the signal that there is finally
+	 * something to scroll. Plain `let`, not `$state`: nothing rendered reads
+	 * them, so making them reactive would only cost an invalidation.
+	 */
+	let mainEl: HTMLElement | null = null;
+	let mainInnerEl: HTMLElement | null = null;
+	let scrollMemory: ScrollMemory | null = null;
 
 	const loginPath = resolve('/login');
 	const onLoginRoute = $derived(page.url.pathname === loginPath);
@@ -164,11 +175,34 @@
 			}
 		})();
 
+		// Constructed here rather than at module scope: it reads history.state and
+		// sessionStorage, neither of which exists until the browser does.
+		scrollMemory = createScrollMemory(
+			() => mainEl,
+			() => mainInnerEl
+		);
+
 		return () => {
 			onUnauthorized(undefined);
 			mq.removeEventListener('change', sync);
+			scrollMemory?.dispose();
+			scrollMemory = null;
 		};
 	});
+
+	/**
+	 * SCROLL RESTORATION BELONGS TO THE REGION THAT SCROLLS ($lib/shellscroll).
+	 *
+	 * SvelteKit remembers a position per history entry and restores it with
+	 * `scrollTo` on the window; the window is no longer the scroller, so every
+	 * back-navigation landed at the top of the screen. The record is kept for
+	 * `.main` instead, against the same history index SvelteKit keys its own by.
+	 *
+	 * `beforeNavigate` is the last moment the outgoing entry's offset is still
+	 * readable, and `afterNavigate` is the first moment the incoming screen
+	 * exists to be scrolled.
+	 */
+	beforeNavigate(() => scrollMemory?.remember());
 
 	/**
 	 * FOCUS FOLLOWS NAVIGATION (DESIGN-DIRECTION §11).
@@ -200,10 +234,19 @@
 	 */
 	afterNavigate(async (nav) => {
 		if (narrow) drawerOpen = false;
-		if (nav.type === 'enter' || !arrived) return;
+		const movesFocus = nav.type !== 'enter' && arrived;
 		await tick();
-		headingEl?.focus();
-		announcement = title;
+		if (movesFocus) {
+			// `preventScroll` because the offset is decided one line below and not
+			// by a side effect of focusing. The h1 is a 1px clipped box at the very
+			// top of the region, so focusing it scrolls the region to the top — on a
+			// forward navigation that is the right answer by luck, and on a back
+			// navigation it is exactly the wrong one, undoing the restore. Focus
+			// still lands on the heading; only its scrolling is declined.
+			headingEl?.focus({ preventScroll: true });
+			announcement = title;
+		}
+		scrollMemory?.settle(nav.type === 'popstate');
 	});
 
 	/**
@@ -233,11 +276,28 @@
 	 * opens, and the toggle is deliberately OUTSIDE the inert region so it can
 	 * still close it — did nothing at all. A modal's dismiss key belongs to the
 	 * modal, not to one subtree of it.
+	 *
+	 * IT ALSO CARRIES THE SCROLL KEYS, and that is the second half of moving the
+	 * shell's scroll off the document ($lib/shellscroll). The browser gives a
+	 * scroll key to the nearest scrollable ancestor of the FOCUSED element, and
+	 * on the first paint the focused element is `<body>`, which no longer has
+	 * one — so PageDown, the arrows, Home, End and Space did nothing until the
+	 * first click, Tab or navigation. This supplies the ancestor the body lost,
+	 * and does it WITHOUT MOVING FOCUS: the skip link stays the first tab stop.
+	 *
+	 * `forwardScrollKey` declines the moment focus is on anything real, so this
+	 * is inert for the whole rest of the session; and it is not reached at all
+	 * while the drawer is open, since the region behind a modal layer is inert
+	 * and scrolling it would be scrolling something the user cannot see into.
 	 */
 	function onWindowKeydown(event: KeyboardEvent) {
-		if (!isDrawer || event.key !== 'Escape') return;
-		event.preventDefault();
-		closeDrawer();
+		if (isDrawer) {
+			if (event.key !== 'Escape') return;
+			event.preventDefault();
+			closeDrawer();
+			return;
+		}
+		if (mainEl) forwardScrollKey(event, mainEl);
 	}
 
 	/**
@@ -368,7 +428,7 @@
 		</nav>
 	{/if}
 
-	<main class="main" id="usarr-main" tabindex="-1" inert={isDrawer}>
+	<main class="main" id="usarr-main" tabindex="-1" inert={isDrawer} bind:this={mainEl}>
 		<h1 class="sr pagetitle" bind:this={headingEl} tabindex="-1">{title}</h1>
 
 		<!--
@@ -379,7 +439,7 @@
 			measurement. The h1 stays outside this box because
 			`.main:has(> .pagetitle:focus)` reads it as a direct child of .main.
 		-->
-		<div class="main__inner">
+		<div class="main__inner" bind:this={mainInnerEl}>
 			{#if unreachable}
 				<div class="section">
 					<div class="banner banner--err" role="alert">
