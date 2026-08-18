@@ -748,9 +748,30 @@ export function rollupCount(entries: readonly { tone: Tone }[]): string {
  * frame: an import that fails returns before the publish and simply stops
  * sending, so a quiet stream, a dropped socket and a count that reached a total
  * all mean UNKNOWN and none of them may reach this phase.
+ *
+ * ⚠️ `not_started` AND `stopped` ARE OPPOSITE CLAIMS ABOUT THE CATALOGUE, and
+ * they are spelled apart on purpose. `not_started` is the 500 refusal: the
+ * press was declined synchronously, nothing upstream was touched, and its own
+ * `consequence` says so verbatim. `stopped` is http-api.md §5.5's terminal
+ * stream frame: the import DID start, DID run, and stopped partway, and the
+ * batches it committed STAND (§5.5.4). §5.5.2 is the section that refuses to
+ * let one word carry both, and `not_started` is the replacement it names.
+ *
+ * ⚠️ `stopped` IS NOT A VERDICT OF FAILURE. The frame carries no cause field
+ * and §5.5.5 says it never will carry upstream text, so it genuinely cannot
+ * tell a broken upstream from a clean shutdown. It is toned `warn` rather than
+ * `err` for exactly that reason: `err` would assert a fault on every
+ * cancellation.
+ *
+ * ⚠️ AND `stopped` IS TERMINAL FOR ONE RUN ONLY. The frame carries
+ * `instance_id` and NO run id (§5.5.3), so a later non-terminal frame for that
+ * instance is a SECOND RUN starting, not the stop being retracted. That falls
+ * out of where this phase is computed rather than needing a rule: it is derived
+ * on read from the press note plus the LAST frame, never stored back, so the
+ * next `containers` or `items` frame simply re-derives as progress.
  */
 export type SyncPhase =
-	'idle' | 'starting' | 'started' | 'running' | 'refused' | 'failed' | 'finished';
+	'idle' | 'starting' | 'started' | 'running' | 'refused' | 'not_started' | 'stopped' | 'finished';
 
 /**
  * What the screen says after a press, as data.
@@ -835,6 +856,44 @@ export const NOTHING_READ_YET = `Nothing has been read yet, so there is no progr
 const NO_IMPORT_STARTED = 'No import started for this press, so the catalogue is untouched.';
 
 /**
+ * What a stream stop says about the catalogue, and it is the NEGATION of
+ * `NO_IMPORT_STARTED` above.
+ *
+ * ⚠️ NEVER REUSE THE REFUSAL'S SENTENCE HERE. `http-api.md` §5.5.4 names this
+ * exactly: "the catalogue is untouched" is FALSE after a stop, because
+ * `streamAndApply` commits per batch and every error path returns after the
+ * commits that already happened. A stopped import leaves a partially updated
+ * catalogue, which is §3.2's real `last_full_sync_at: null` with
+ * `work_count > 0` row rather than a contradiction to smooth over.
+ */
+const STOPPED_ROWS_STAND = 'Applied rows were committed rather than rolled back.';
+
+/**
+ * ⚠️ THE FRAME DOES NOT SAY WHY, AND THIS CLIENT MUST NOT GUESS. §5.5.5 ships
+ * one phase value and ZERO new fields, deliberately, so there is nowhere for
+ * upstream text to land. §5.5.5.1 pins the only shape a cause could ever take
+ * if one is added later — a `reason` string from a closed set, each member
+ * mapped to a UsArr-authored sentence — and until such a field exists the
+ * client says the import stopped and says nothing about why. Inventing a cause
+ * from the last phase seen, or from the counters, is how a disk error gets
+ * reported to a user as a broken API key.
+ */
+const STOPPED_WITHOUT_A_CAUSE =
+	'The catalogue is not known to be complete, and this frame does not say why the import stopped.';
+
+/**
+ * ⚠️ THE STREAM IS THE FAST NOTICE, NOT THE RECORD. §5.5.3: `Hub.Publish` never
+ * blocks and drops a subscriber whose queue is full, so this frame is losable.
+ * `last_full_sync_at` is written after `rep.Completed = true` and on success
+ * alone (§5.5.4), which is what keeps §3's column the authority on whether an
+ * import succeeded. So this sentence points AT the column rather than reporting
+ * a value for it: the absence of a stop is not evidence of success, and its
+ * presence does not override the health read.
+ */
+const SYNC_COLUMN_ON_A_STOP =
+	'Last successful sync does not move on a stop, so that column stays the record of the last import that did succeed.';
+
+/**
  * Every refusal, told apart on `ApiError.code` and NEVER on the status.
  *
  * ⚠️ THE THREE 409s HAVE OPPOSITE FIXES: wait, press this on a different
@@ -907,7 +966,7 @@ export function syncRefusal(
 			// could not classify. Its own words are rendered, redacted upstream.
 			return {
 				...base,
-				phase: 'failed',
+				phase: 'not_started',
 				tone: 'err',
 				title: 'The import could not be started',
 				consequence:
@@ -968,12 +1027,21 @@ function progressCounts(progress: ImportProgress): string {
  * count as a stalled import. So the counts are withdrawn and the sentence says
  * the stream is gone, rather than freezing a number nobody can date.
  *
- * ⚠️ REFUSAL THREE: ONLY `done` ENDS IT. Not the last batch, not silence, not
- * `applied` reaching `total`. See SyncPhase.
+ * ⚠️ REFUSAL THREE: ONLY A TERMINAL FRAME ENDS IT. Not the last batch, not
+ * silence, not `applied` reaching `total`. There are exactly two, they say
+ * OPPOSITE things, and neither may be inferred: `done` is success and `stopped`
+ * (http-api.md §5.5) is a stop with no cause attached. See SyncPhase.
  *
- * A `done` frame OUTLIVES a disconnection, and that is not an inconsistency
+ * A terminal frame OUTLIVES a disconnection, and that is not an inconsistency
  * with refusal two: it is an event that was observed rather than a count that
  * has to be current, so it stays said whatever the socket does afterwards.
+ *
+ * ⚠️ AND NEITHER TERMINAL FRAME IS FINAL FOR THE INSTANCE, only for the run.
+ * The frame has no run id (§5.5.3), so a later non-terminal frame for the same
+ * `instance_id` is a second run starting. This function reads the LAST frame
+ * against the press note every time and stores nothing back, so that second run
+ * simply renders as progress again, and the stop it replaces was never
+ * retracted — it belonged to a run that had already ended.
  *
  * Only a note that is WAITING on an import is folded into. A refusal, a fault
  * and a press still in flight are all statements about the request, and frames
@@ -1009,6 +1077,37 @@ export function syncNoteWithProgress(
 		};
 	}
 
+	// ⚠️ BEFORE THE `!connected` ARM, EXACTLY AS `done` IS, AND FOR THE SAME
+	// REASON. §5.5.3: silence, a socket drop, a reconnect and a `stream.missed`
+	// CANNOT downgrade a `stopped` this client has already seen, because silence
+	// is UNKNOWN (§5.1) and unknown never overwrites a fact. A stop is an event
+	// that was observed, not a count that has to be current, so refusal two's
+	// withdrawal of the numbers does not apply to it.
+	if (progress.phase === 'stopped') {
+		const read = progress.itemsRead.toLocaleString('en-GB');
+		const applied = progress.applied.toLocaleString('en-GB');
+		return {
+			...note,
+			phase: 'stopped',
+			// `warn`, NOT `err`. See SyncPhase: with no cause field the frame
+			// cannot tell a broken upstream from a clean shutdown, and `err`
+			// would assert a fault on every cancellation.
+			tone: 'warn',
+			title: 'The import stopped before it finished',
+			// Dropped for the same reason `done` drops them, and it is not
+			// §17.3's verbatim rule being bent: the refusal this note may have
+			// come from is `import_in_progress`, whose message and action tell
+			// the user to wait for a run that has now stopped.
+			message: '',
+			action: '',
+			// §5.5.4's three jobs, in order: say it stopped (the title), say how
+			// much stands (`applied`), and say the catalogue is not known to be
+			// complete. Never "imported", never a tick, and never a count
+			// presented as a result.
+			consequence: `It read ${read} items and applied ${applied}. ${STOPPED_ROWS_STAND} ${STOPPED_WITHOUT_A_CAUSE} ${SYNC_COLUMN_ON_A_STOP}`
+		};
+	}
+
 	if (!connected) {
 		return {
 			...note,
@@ -1019,7 +1118,13 @@ export function syncNoteWithProgress(
 	return { ...note, consequence: `${progressCounts(progress)} ${WATCH_THE_SYNC_COLUMN}` };
 }
 
-/** The button's label for each phase. `Starting` is the only in-flight word. */
+/**
+ * The button's label for each phase. `Starting` is the only in-flight word.
+ *
+ * `stopped` is a SETTLED phase and takes the plain label, exactly as
+ * `not_started` and `finished` do: the run it describes is over, so pressing
+ * again is the correct next move and the button must not be held shut.
+ */
 export function syncButtonLabel(phase: SyncPhase): string {
 	if (phase === 'starting') return 'Starting';
 	if (phase === 'running') return 'Import already running';

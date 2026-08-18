@@ -646,14 +646,14 @@ describe('404, 501 and 500 are separated: only the last one is a fault', () => {
 
 	it('treats a 500 as the fault it is, and still says nothing started', () => {
 		const note = syncRefusal(500, 'internal', 'the credential would not open', 'Test connection');
-		expect(note.phase).toBe('failed');
+		expect(note.phase).toBe('not_started');
 		expect(note.tone).toBe('err');
 		expect(note.message).toBe('the credential would not open');
 		expect(note.consequence).toContain('No import started');
 	});
 
 	it('falls into the fault branch for a code it has never seen', () => {
-		expect(syncRefusal(418, 'brand_new_code', 'x', '').phase).toBe('failed');
+		expect(syncRefusal(418, 'brand_new_code', 'x', '').phase).toBe('not_started');
 	});
 });
 
@@ -665,7 +665,7 @@ describe('the button says which of the two waits it is in', () => {
 	});
 
 	it('returns to the plain label after every settled outcome', () => {
-		for (const phase of ['idle', 'started', 'refused', 'failed'] as const) {
+		for (const phase of ['idle', 'started', 'refused', 'not_started', 'stopped'] as const) {
 			expect(syncButtonLabel(phase)).toBe('Run full sync now');
 			expect(syncButtonBlocked(phase)).toBe(false);
 		}
@@ -869,5 +869,197 @@ describe('the import stream folded onto the note', () => {
 		);
 		expect(note.consequence).toContain('Read 3 so far, and applied 2.');
 		expect(note.phase).toBe('started');
+	});
+});
+
+/**
+ * http-api.md §5.5's terminal stream frame, and the four properties that make
+ * it different from every other frame this client handles.
+ *
+ * ⚠️ NOTHING EMITS IT YET. §5.5's own 🚩 says so, and §5.1's shipped behaviour
+ * — a failed import publishes nothing at all — still holds beside it. So the
+ * first thing pinned here is that a `stopped` which never arrives changes
+ * nothing, which is what makes this arm safe to land ahead of its producer.
+ */
+describe('the terminal `stopped` frame, §5.5', () => {
+	const frame = (over: Partial<ImportProgress> = {}): ImportProgress => ({
+		instanceId: 4,
+		phase: 'stopped',
+		itemsRead: 41,
+		applied: 40,
+		...over
+	});
+	const started = () => syncStarted({ name: 'Kavita' });
+
+	it('says the import stopped, and how much of it stands', () => {
+		const note = syncNoteWithProgress(started(), frame(), true);
+		expect(note.phase).toBe('stopped');
+		expect(note.title).toBe('The import stopped before it finished');
+		expect(note.consequence).toContain('It read 41 items and applied 40.');
+		expect(note.consequence).toContain('committed rather than rolled back');
+	});
+
+	/**
+	 * §5.5.4, as copy. It has three jobs and dropping any one of them is
+	 * misreporting: say it stopped, say how much stands, and say the catalogue
+	 * is not known to be complete. Never "imported", never a tick, never a
+	 * count presented as a result.
+	 */
+	it('reads as neither a success nor a confirmed failure', () => {
+		const note = syncNoteWithProgress(started(), frame(), true);
+		const words = `${note.title} ${note.consequence}`.toLowerCase();
+		// "stopped before it finished" is honest and stays; what may not appear
+		// is any claim that it DID finish, import, or complete.
+		for (const banned of ['imported', 'has finished', 'is complete', 'succeeded', '%']) {
+			expect(words).not.toContain(banned);
+		}
+		expect(note.title).not.toBe('The import has finished');
+		expect(note.consequence).toContain('not known to be complete');
+		// `warn`, not `err`: with no cause the frame cannot assert a fault.
+		expect(note.tone).toBe('warn');
+		expect(note.tone).not.toBe('ok');
+	});
+
+	/**
+	 * §5.5.2, which is the whole reason `failed` was renamed. The refusal's
+	 * sentence is the exact negation of this frame's meaning: a stop means the
+	 * import DID start and DID run, and §5.5.4's committed batches STAND.
+	 */
+	it('never reuses the refusal`s "the catalogue is untouched" sentence', () => {
+		const stopped = syncNoteWithProgress(started(), frame(), true);
+		const notStarted = syncRefusal(500, 'internal', 'the credential would not open', 'Test');
+		expect(stopped.consequence).not.toContain('untouched');
+		expect(stopped.consequence).not.toContain('No import started');
+		expect(notStarted.consequence).toContain('No import started');
+		// One word may not carry both claims, so the two phases differ too.
+		expect(stopped.phase).not.toBe(notStarted.phase);
+		expect(notStarted.phase).toBe('not_started');
+		expect(stopped.title).not.toBe(notStarted.title);
+	});
+
+	/**
+	 * §5.5.5. One phase value, zero new fields, and no `reason` anywhere. The
+	 * client renders nothing about why, because there is nothing to render and
+	 * inventing one from the counters is how a disk error is reported as a
+	 * broken API key.
+	 */
+	it('says nothing at all about why, and carries no upstream text', () => {
+		const running = syncRefusal(409, 'import_in_progress', 'already running', 'Wait for it');
+		const note = syncNoteWithProgress(running, frame(), true);
+		// The server`s own words are dropped, exactly as `done` drops them: an
+		// instruction to wait for a run that has stopped is not current.
+		expect(note.message).toBe('');
+		expect(note.action).toBe('');
+		const words = `${note.title} ${note.consequence}`.toLowerCase();
+		for (const guess of ['api key', 'unreachable', 'refused', 'timed out', 'credential']) {
+			expect(words).not.toContain(guess);
+		}
+		expect(note.consequence).toContain('does not say why');
+	});
+
+	/**
+	 * §5.5.4 and §5.5.3 together. `last_full_sync_at` is written after
+	 * `rep.Completed = true` and on success alone, and the frame is losable
+	 * (`Hub.Publish` drops a full subscriber), so §3's column stays the
+	 * authority. The copy points AT the column rather than reporting a value.
+	 */
+	it('leaves the health column as the authority rather than reporting it', () => {
+		const note = syncNoteWithProgress(started(), frame(), true);
+		expect(note.consequence).toContain('Last successful sync does not move on a stop');
+		// Never a claim about what the column now READS, which is the health
+		// read`s answer and not this frame`s.
+		expect(note.consequence).not.toContain('has moved');
+		expect(note.consequence).not.toContain('is empty');
+	});
+
+	it('reports a stop that read nothing without pretending it read something', () => {
+		const note = syncNoteWithProgress(started(), frame({ itemsRead: 0, applied: 0 }), true);
+		expect(note.phase).toBe('stopped');
+		expect(note.title).toBe('The import stopped before it finished');
+		expect(note.consequence).toContain('It read 0 items and applied 0.');
+		expect(note.consequence).toContain('not known to be complete');
+	});
+
+	/**
+	 * §5.5.3's first ⚠️. Silence, a drop, a reconnect and a `stream.missed`
+	 * cannot downgrade a stop this client has already seen: silence is UNKNOWN
+	 * (§5.1) and unknown never overwrites a fact. So the branch sits ABOVE the
+	 * `!connected` arm, exactly as `done` does.
+	 */
+	it('keeps a stop that was observed, whatever the socket does afterwards', () => {
+		const dropped = syncNoteWithProgress(started(), frame(), false);
+		expect(dropped.phase).toBe('stopped');
+		expect(dropped.title).toBe('The import stopped before it finished');
+		// And it does NOT fall into the disconnected sentence.
+		expect(dropped.consequence).not.toContain('not connected');
+		expect(dropped.consequence).toContain('It read 41 items and applied 40.');
+	});
+
+	/**
+	 * §5.5.3's second ⚠️, AND THE ONE PROPERTY A CLIENT IS MOST LIKELY TO GET
+	 * WRONG. The frame carries `instance_id` and NO run id, unlike `search.*`
+	 * with its `search_id`. So a later non-terminal frame for that instance is
+	 * a SECOND RUN starting, never a retraction of the first stop.
+	 *
+	 * Derived the way the screen derives it: `syncNotes` keeps what the server
+	 * answered the press with, the stream contributes the LAST frame only, and
+	 * the sentence is recomputed from both on every read.
+	 */
+	it('reads a later `items` frame as a new run, not as the stop being undone', () => {
+		const press = started();
+		const screen = (last: ImportProgress) => syncNoteWithProgress(press, last, true);
+
+		const stopped = screen(frame({ itemsRead: 41, applied: 40 }));
+		expect(stopped.phase).toBe('stopped');
+
+		// A second run begins. Its counters start over, and 3 is BELOW the 41
+		// the stop reported, which is exactly what a retraction-shaped
+		// implementation (keeping the highest count, or latching terminal) would
+		// hide.
+		const again = screen(frame({ phase: 'items', itemsRead: 3, applied: 2 }));
+		expect(again.phase).toBe('started');
+		expect(again.title).toBe('Kavita is re-importing');
+		expect(again.consequence).toContain('Read 3 items so far, and applied 2 of them.');
+		expect(again.consequence).not.toContain('stopped');
+		expect(again.consequence).not.toContain('41');
+		// The button follows the phase back to in-progress wording`s absence:
+		// `started` was never a blocked phase, and neither is `stopped`.
+		expect(syncButtonBlocked(stopped.phase)).toBe(false);
+		expect(syncButtonBlocked(again.phase)).toBe(false);
+
+		// And a `containers` frame does the same, which is the bootstrap path.
+		const bootstrap = screen(frame({ phase: 'containers', itemsRead: 0, applied: 0 }));
+		expect(bootstrap.phase).toBe('started');
+		expect(bootstrap.consequence).toContain('Reading the list of libraries');
+	});
+
+	it('releases the button, because the run it describes is over', () => {
+		const note = syncNoteWithProgress(started(), frame(), true);
+		expect(syncButtonBlocked(note.phase)).toBe(false);
+		expect(syncButtonLabel(note.phase)).toBe('Run full sync now');
+	});
+
+	it('leaves a refusal and a fault alone, exactly as `done` is left', () => {
+		for (const refused of [
+			syncRefusal(409, 'service_disabled', 'off', 'Enable the service'),
+			syncRefusal(500, 'internal', 'the credential would not open', 'Test connection')
+		]) {
+			expect(syncNoteWithProgress(refused, frame(), true)).toEqual(refused);
+		}
+	});
+
+	/**
+	 * §5.5 is a contract for a producer that does not exist. The arm has to be
+	 * a no-op until one lands, and that is not an assumption: it is the same
+	 * "no frame, no change" refusal the rest of this file pins, restated for
+	 * the phase that will never arrive on today's server.
+	 */
+	it('changes nothing at all while no producer emits the frame', () => {
+		const before = started();
+		expect(syncNoteWithProgress(before, undefined, true)).toEqual(before);
+		expect(syncNoteWithProgress(before, undefined, false)).toEqual(before);
+		// And a healthy run still ends the one way it always did.
+		const done = syncNoteWithProgress(before, frame({ phase: 'done' }), true);
+		expect(done.phase).toBe('finished');
 	});
 });
