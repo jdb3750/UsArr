@@ -99,6 +99,7 @@ because no ADR ever decided it. Annotating leaves that failure mode nowhere to h
 | [0045](#adr-0045) | The three unslotted commitments land in **v0.2**: Sonarr and Radarr, the minimal write path, and the minimal match-correction UI | **Accepted** — **owner-delegated 2026-08-17** (*"whatever you think is best"*); **closes the open questions [ADR-0042](#adr-0042) and [ADR-0043](#adr-0043) each raised and refused**; **amends** ARCHITECTURE §16 (§16.0, §16.1, and the v0.1, **v0.2** and v0.3 entries) and **amends [ADR-0042](#adr-0042)** and **[ADR-0043](#adr-0043)** at their no-milestone clauses; **assigns milestones and nothing else** — no scope moves, no design reopens, no ADR is reversed; for the two \*Arr items this **writes down a dependency v0.2 already had** (§8.3's `Add` capability filter), for the correction UI it is **by elimination** and the cost is recorded rather than argued away; raises one open question it does not close (whether v0.2 should be split) |
 | [0046](#adr-0046) | Kavita's contract tests pin **TWO** specs: the release the owner runs is the **floor**, `develop` is the **ceiling** | **Accepted** — 2026-08-17; **implements a policy `api/specs/SOURCES.md` already stated and the tree had not acted on** (*"a green contract test here is evidence about `develop`"*); **changes what a green means, not what the code does** — no adapter field, request or migration changes; **renames** `api/specs/kavita.json` → `kavita-develop.json` and **adds** `kavita-v0.9.0.2.json`; every spec-reading test runs against **both**, named per file, with enum coverage **equal** to the ceiling and a **superset** of the floor; `ceilingOnlyProperties` machine-checks the five modelled properties that **decode to nothing on the owner's server**; the `cbr` external_id is **unreachable** on the stable line and now says so; raises three open questions it does not close (Prowlarr has the same gap, `'cbr'` is an unenumerated `external_id.source`, and the floor's re-pin cadence) — **question 2 settled 2026-08-17** by the rename to `comicbookroundup` (`LS-73`); ⚠️ **amended 2026-08-17** — the decision stands unchanged **for Kavita**, but it is **not a template**: it rests on the unstated assumption that **upstream regenerates its spec per release**, which Prowlarr does not — its `openapi.json` is the **same git blob** at tag `v2.5.2.5491` and at `develop`, so open question 1's *"the same shape of gap"* is wrong about the shape and the two-spec structure there would manufacture the false green this ADR abolishes. The remedy is chosen **per upstream** and is [ADR-0047](#adr-0047); and where a spec self-reports a placeholder `info.version`, identity is by **blob SHA** |
 | [0047](#adr-0047) | Prowlarr pins **ONE** spec — floor and ceiling are the same git blob — guarded by an offline blob-identity pin in `check` plus a network drift check outside it | **Accepted** — 2026-08-17; **is the per-upstream remedy [ADR-0046](#adr-0046)'s 2026-08-17 amendment (`LS-53`, `cf5fab5`) points at**, and **answers [ADR-0046](#adr-0046)'s open question 1** (*"`prowlarr.json` has the same shape of gap"*) by **correcting its premise** — measured independently by both threads, `src/Prowlarr.Api.V1/openapi.json` is the **same blob `134d31d7…`** at `v2.5.2.5491` and `develop`, not *"develop, a minor version ahead"*; **the two-spec split is vacuous here, not impossible** — nothing stops two byte-identical copies being vendored, and the second would prove exactly what the first already proves (the Context paragraph's wording, which this row previously overstated); **changes what a green means, not what the code does** — no adapter field, request or migration changes, no file added or renamed; the one file is stale (last regenerated **2025-06-07**, 33 releases ago) and describes **neither ref reliably**; `TestVendoredSpecIsThePinnedBlob` pins the blob **offline, in `check`**, `TestSpecDriftRefsStillShareThePinnedBlob` catches upstream regenerating **on the network, in `make spec-drift`, never in `check`**, and `knownSpecDivergences` machine-checks the `Limit`/`Offset` `int?` gap (PR #2654, `v2.3.6.5351`) as **still live**; `info.version` **`1.0.0`** is Swashbuckle's placeholder and is pinned to by nothing; leaves [ADR-0035](#adr-0035), [ADR-0041](#adr-0041) and [ADR-0046](#adr-0046) untouched; the floor `v2.5.2.5491` is **owner-confirmed 2026-08-17**; raises two open questions it does not close (the floor drifts when the owner's auto-updating box does, and `make spec-drift` is unautomated) |
+| [0048](#adr-0048) | A library **proposal** is not a row in `library`; a row is created only on Accept | **Accepted** — 2026-08-17; **refines [ADR-0026](#adr-0026)** (its binding model, four verbs, single-kind rule and four tables are untouched — what is decided is *when a `library` row comes into existence*, which ADR-0026 did not say); **applies [ADR-0004](#adr-0004)** rather than excepting it — the connect probe is a **setup** action, not a render path; **answers the open decision `web/src/routes/libraries/+page.svelte` records at `78660a4`**, which named three candidates and picked none — this takes the first, *a proposal stops being a row until it is accepted*, and **rejects the other two in writing**; **closes off a third `managed_by` state and any `proposed` flag on `library`**; **costs no migration, no data change and no new state** — ⚠️ **and not for the reason it first appears**: `managed_by` **cannot** express "proposed" and never could, which is a fact *for* this decision rather than against it, because after it the unaccepted state has no persistent representation to record; existing `managed_by = 'auto'` rows are **declared** accepted on upgrade rather than read as accepted, since the column cannot tell an accepted library from one the user has never been shown; states plainly that **it describes unbuilt behaviour on two counts** — `'user'` has never been written by any code path, so §17.8's one-way door is specified and unimplemented, and today's import **creates rows unconditionally**, so implementing Accept **removes** creation from the import path rather than adding a screen to it; **that removal is not done here** — it belongs to the library thread that builds §17.8 |
 
 ---
 
@@ -5828,3 +5829,306 @@ tell its reader which of three different things to do.
 2. **`make spec-drift` is unautomated.** It is a target a person or an agent must type; this repo has
    no CI to run it on a schedule, and SOURCES.md says as much. The seam is a build tag and a target,
    which is all a future CI would need.
+
+---
+
+<a id="adr-0048"></a>
+## ADR-0048 — A library proposal is not a row in `library`; a row is created only on Accept
+
+**Status:** Accepted · 2026-08-17 · **Refines [ADR-0026](#adr-0026)** — its binding model, its
+single-kind rule, its four verbs and its four tables are untouched; what is decided here is *when a
+`library` row comes into existence*, which ADR-0026 did not say · **Applies [ADR-0004](#adr-0004)
+rather than excepting it** — the connect probe is a setup action, not a render path · **Answers an
+open decision the tree already records** in `web/src/routes/libraries/+page.svelte` (`78660a4`),
+which named three candidates and deliberately picked none · **Closes off a third `managed_by` state,
+and any `proposed` flag on `library`** · **Costs no migration, no data change and no new state** ·
+**Describes behaviour that is not built**, on two counts named in the Decision, and it says so rather
+than implying it · **Removes nothing from the import path here** — that removal belongs to the
+library thread that builds §17.8.
+
+### Context
+
+**`ARCHITECTURE.md` §17.8 specifies a proposal step and does not say where a proposal lives.** On a
+successful connect and capability probe, UsArr *proposes* libraries as one pre-checked Accept step,
+one per container the connected service itself reports, each editable inline, with a stated
+case-insensitive whitespace-trimmed merge key and a one-way door on editing. §17.8 says all of that
+about the user's experience and nothing about storage, and the gap is the kind that gets filled by
+whoever implements it first.
+
+**It was already filled, silently, and the tree has since said so.** `web/src/routes/libraries/+page.svelte`
+carried a comment reasoning that the schema was ready for the Accept step; another thread corrected
+it at **`78660a4`** — comment-only, 25 insertions, 5 deletions — and the corrected text is the
+starting point for this ADR rather than a footnote to it. Three findings, in its words:
+
+1. **The column cannot express what the flow needs.** `managed_by` has *"exactly TWO values, and
+   NEITHER means 'proposed'"*, so *"a library the user accepted and one they have never been shown
+   are therefore the same row, indistinguishable."*
+2. **The row already exists at proposal time, which inverts the screen's safety.** *"If a proposal is
+   already a row, then Accept is a no-op and Decline is a DELETE — backwards from what a pre-checked
+   confirmation screen implies, where saying no is supposed to be the cheap direction."*
+3. **It is an open decision with three candidates and no pick** — *"a proposal stops being a row
+   until it is accepted; or a third `managed_by` state; or §17.8 is renamed to a review of what has
+   already been created"* — and *"until one is picked, the Accept step is not buildable on this
+   schema."*
+
+**This ADR takes the first and rejects the other two.** Finding 2 is the sharpest argument for it and
+it was measured rather than reasoned: a confirmation screen whose *No* is the destructive direction is
+not a confirmation screen.
+
+#### The precedent: `library` already holds one row that is not a library
+
+Migration `00005_library_sync.sql` seeds a reserved row at `id = 0`, `Unfiled`
+(`internal/db/migrations/00005_library_sync.sql:597-598`). Its own comment states what it is for and
+what it is not: it is the landing place the membership derivation needs so that a work bound to no
+other library still matches a scope, and it is *"never listed on the Libraries screen, never offered
+in the scope chip, never proposed"* (same file, comment block at lines 579-596). It is protected by a
+`BEFORE DELETE` trigger (lines 625-632), which exists because *"reserved" was previously a comment and
+nothing else*.
+
+**And the way the codebase keeps it out of user-facing results is a hand-written identity comparison,
+not a predicate meaning "not a real library".** `internal/store/catalogue.go` declares
+`UnfiledLibraryID int64 = 0` (line 41) and excludes it in Go, inside the scan loop:
+
+```go
+if r.id != UnfiledLibraryID {
+	out.joinable[libraryNameKey(name)] = r
+}
+```
+
+— `internal/store/catalogue.go:546`, in `userLibraries`, the name-collision lookup the binding uses to
+decide whether to join an existing library or create a new one. The same constant is used in the
+other direction at line 1163, where `rebuildSearchDoc` files a stranded document *into* library 0.
+
+⚠️ **An earlier draft of this ADR put that exclusion in the SQL, and it is not there.** It cited
+`SELECT id, name, kind FROM library WHERE user_id = ? AND id <> ?` at `:395`, in a function called
+`userLibrariesByNameKey`. **The query, the line and the function name are all stale**: the statement
+is now `SELECT id, name, slug, kind FROM library WHERE user_id = ?` (`:532`) with no exclusion in it
+at all, and the reserved row is dropped afterwards, in Go. The correction **strengthens** the
+argument rather than weakening it, on two counts. First, an exclusion that is an `if` inside a scan
+loop is even less likely to be inherited by the next author's query than one written into a `WHERE`
+clause, because it is not in the query to copy. Second, the one site shows the reserved row costs
+**two** decisions rather than one: `out.names` deliberately KEEPS `Unfiled`, so no new library can
+take the name, while `out.joinable` drops it, so no proposal can join it. A second not-really-a-library
+class would have to answer both questions, and nothing in the schema asks either.
+
+⚠️ **The exact size of that precedent is stated rather than inflated, because it is smaller than the
+argument wants it to be and saying so is the point.** On the tree read there is **exactly one**
+exclusion of library 0 in non-test Go — line 546 — plus one in `internal/store/catalogue_test.go:437`,
+two in `internal/libsync/importer_test.go:358` and `:380`, and two end-to-end in
+`cmd/usarr/import_e2e_test.go:190` (which excludes it *and* filters `managed_by = 'auto'`) and `:193`.
+**There is only one because there is almost nothing that reads the table** — see the Decision's second
+unbuilt fact. The claim that a second not-really-a-library class would cost a second hand-written
+exclusion **at every future read site** is therefore *inference*, not measurement: it is the pattern
+the one existing site demonstrates, applied to sites that do not exist yet. What is measured is the
+pattern, and the pattern is exclusion by identity comparison.
+
+**The failure mode is silent, which is what makes the inference worth acting on.** Search scope is
+`search_doc_library` membership (§7 invariant 5, quoted in the migration's comment above the reserved
+row); an availability rollup is §6.3's. Neither has a natural place to learn about a second excluded
+class. A proposal nobody accepted appearing in a search scope or a rollup does not throw, does not log
+and does not render an error: it renders a number that is wrong.
+
+### Decision
+
+> **A library proposal lives in the connect probe's response. It is never persisted. A `library` row
+> is created only when the user accepts one.**
+
+Five clauses, each with what it rests on:
+
+1. **The proposal set is a value computed by the probe, not a table.** It is a function of two inputs
+   — what the connected instance reports as its containers, and what is already bound in
+   `library_source` for that user — recomputed on every probe. There is nothing to migrate, nothing
+   to garbage-collect and nothing that can be stale, because a proposal that is a function of its
+   inputs is current by construction. **A persisted proposal has the opposite property**: rename or
+   delete an upstream library between proposal and acceptance and the stored row now describes
+   something that is not there, with no event to tell it. *(Inference from the two inputs. UsArr has
+   no container-level change feed from Kavita: `ARCHITECTURE.md` §7.1a and [ADR-0035](#adr-0035) §2a
+   establish a usable item delta and no changed-since endpoint, and neither covers a library being
+   renamed out from under a stored proposal.)*
+
+2. **This makes Decline the cheap direction again.** With no row until Accept, declining a proposal
+   writes nothing and accepting it writes once — which is the order a pre-checked confirmation screen
+   implies. It is the direct answer to the inversion `78660a4` recorded, and it is the clause that
+   makes §17.8's Accept step buildable at all.
+
+3. **`managed_by` keeps exactly two states, and no `proposed` flag is added. ⚠️ Not because the
+   column can record an acceptance — it cannot, and this ADR must not be read as claiming it can.**
+   The column is
+   `TEXT NOT NULL DEFAULT 'auto' CHECK (managed_by IN ('auto','user'))`
+   (`internal/db/migrations/00005_library_sync.sql:565`), and its comment on the three lines below
+   defines *"'auto' = created by the proposal flow and still tracking its source; 'user' = the user
+   edited it, so the proposal flow never rewrites it again."* Both halves describe a library that
+   exists. **Neither distinguishes an accepted library from one the user has never been shown**,
+   exactly as `78660a4` found. **What clause 1 changes is that the distinction stops needing to be
+   recorded:** once no row exists before Accept, every row is an accepted row by construction, and a
+   column that cannot express "proposed" is not being asked to. The schema is adequate because the
+   state was removed, not because the state was already covered.
+
+4. **Existing `managed_by = 'auto'` rows are DECLARED accepted on upgrade.** This is a decision, not
+   a reading — the column cannot tell the applying agent which they are, per clause 3. It is the
+   right decision because it matches the only history those rows can have: the sole Go writer is one
+   `INSERT` with the literal `'auto'` (`internal/store/catalogue.go:487-489`), there is no
+   `UPDATE library` anywhere in non-test Go, so no row has ever left the state it was inserted in, and
+   every one of them was created by the binding on a first connect — the proposal flow's own path.
+   **No migration file, no `UPDATE`, no backfill.** The honest cost is stated rather than hidden: an
+   install that auto-created a library the owner would have declined keeps it, and the remedy is the
+   Libraries screen's own delete once §17.8 ships.
+
+5. **The connect probe may call upstream, and that is not an exception to replica-not-proxy. This is
+   stated here so nobody flags it later.** `CLAUDE.md` principle 1 and `ARCHITECTURE.md` §2 bind
+   *"every user-facing read"* and *"no browser request ever awaits an outbound call"*;
+   [ADR-0004](#adr-0004) enforces it as *"the `api` package imports `store`, never `provider`"*. **A
+   connect probe is not a read of the library; it is the act of configuring one**, and §17.8 already
+   draws this line for the neighbouring case in its own words: the Requests panel's quality profile,
+   root folder and tags are fetched live *"when the panel opens — a settings screen may block on an
+   upstream call, a render path may not"*. The proposal is the same shape. It needs no argument to
+   survive review, and it gets none here beyond naming the rule it is already inside.
+
+#### Two facts about what is not built, stated plainly
+
+**Neither is implied, softened or left to be inferred, because this ADR specifies a flow whose two
+halves are in opposite states: one is unwritten, the other is written and wrong for this design.**
+
+**Fact 1 — `managed_by = 'user'` has never been written by any code path, so §17.8's one-way door is
+specified and unimplemented.** §17.8 states it as permanent helper text: *"Editing any proposal marks
+that library user-managed. After that, a later connect can only offer to add sources. It can never
+reshape the library."* **Nothing implements it.** Measured by grep over the tree: `library.managed_by`
+has **one** writer in Go — the `INSERT` at `internal/store/catalogue.go:487-489`, writing the literal
+`'auto'` — and **zero** readers in non-test Go. The only other writer of the column anywhere is the
+seed `INSERT` for library 0 at `00005_library_sync.sql:597`, also `'auto'`. The only readers are two
+tests (`internal/db/migrate_test.go:909`, asserting library 0 is `'auto'`, and
+`cmd/usarr/import_e2e_test.go:190`, counting `'auto'` rows). **No code path has ever written
+`'user'`** — that, and not a count of occurrences, is the claim this argument needs. ⚠️ **An earlier
+draft of this ADR said `'user'` "appears in the tree in exactly one place: the `CHECK` constraint
+that permits it", and that was false.** The literal also appears in the migration's own adjoining
+comment (`00005_library_sync.sql:567`) and twice in the generated schema mirror
+(`internal/db/testdata/schema.sql:373` and `:375`), besides `docs/reference/schema.md:1458,1460` and
+the `+page.svelte` comment block. None of those is a writer, which is why the corrected claim is about
+writes rather than about occurrences. The door is a design commitment with no hinge.
+
+**Fact 2 — the import creates rows unconditionally and silently, so Accept is a removal, and the
+removal is not done here.** The path is: a Kavita client stack is built for an instance →
+`bootstrapImport` fires once, gated on `last_full_sync_at` being unset (`cmd/usarr/services.go:219-221`,
+`cmd/usarr/import.go:102-111`) → `FullImport` → `store.BindContainers` → `bindOneContainer`, which
+joins an existing library on the name key or **creates one** (`internal/store/catalogue.go:488`).
+There is no prompt, no confirmation and no screen; `internal/libsync`'s report counts
+`LibrariesCreated` and `LibrariesJoined` into a log line. **So Accept is not a new screen bolted onto
+an existing flow — it is the removal of creation from `bindOneContainer`'s reach on the bootstrap
+path**, a change to code that works today. ⚠️ **This ADR does not make that change and does not
+schedule it.** It belongs to the library thread that builds §17.8, together with the first open
+question below; what this ADR fixes is which of `78660a4`'s three candidates that thread implements.
+
+### The deciding question
+
+**Which class of row can be added to `library` without a reader having to know about it?** Every
+answer to *"should a proposal be a row"* reduces to that, because the cost of a not-really-a-library
+row is not paid at insert. It is paid at every future `SELECT` by an author who did not write the
+insert, and library 0 is the tree's own demonstration of what that costs: a reserved row, a comment
+saying it is reserved, a trigger added later because *the comment was not enough*, and an identity
+comparison every new read site has to remember. **One such class is a documented cost. Two is a
+convention, and a convention nobody wrote down is how a proposal ends up in an availability rollup.**
+
+### Alternatives considered
+
+**(a) A third `managed_by` state — `'proposed'`.** This is `78660a4`'s second candidate. Rejected, and
+it is the strongest of the alternatives because it is *cheap and honest about the lifecycle*. The
+state machine `proposed → auto → user` is exactly the sequence §17.8 describes, in the column §17.8's
+own comment was written for; a proposal is genuinely a stage in a library's life rather than a
+different kind of object, and modelling a lifecycle as a state on the row is ordinary. It would also
+give a half-finished connect a durable place to sit: a user who closes the tab mid-wizard could come
+back to the same proposals. **What defeats it is that the state is not free where the rows are read,
+and the column is not where the reads are.** `library` is filtered on `user_id`, `kind`, `enabled` and
+`include_in_search`, and the last two are `INTEGER NOT NULL DEFAULT 1`
+(`00005_library_sync.sql:552-553`), under `ux_library_slug`, `ux_library_name` and
+`ix_library_kind … WHERE enabled = 1` (`:576-578`). A `'proposed'` row satisfies `enabled = 1` and
+`include_in_search = 1` on its defaults and sits in `ix_library_kind` like any other, so **every read
+that does not name `managed_by` sees it** — and no read names `managed_by`, because there are zero
+readers. The second cost is the unique indexes: `ux_library_name` and `ux_library_slug` are per user
+over all rows, so **a proposal would reserve a name before the user accepted it**, which breaks
+§17.8's stated merge behaviour — typing an existing name into a proposal is specified to *join* that
+library, and it cannot join a name its own unaccepted row is holding. Third, it does not fix the
+inversion: Decline still deletes a row. None of these says the state machine is wrong; all three say
+the row is the wrong place to keep it.
+
+**(b) A `proposed` boolean, or a nullable `accepted_at`, on `library`.** Rejected on everything in
+(a), and worse on the one axis where (a) was better: a boolean carries no lifecycle, so the
+`managed_by` question returns the moment a proposal is edited. It also needs a migration, which (a)
+and the chosen answer do not.
+
+**(c) A separate `library_proposal` table.** Rejected. It keeps `library` clean, which is the real
+objection to (a) and (b), and it would be right if proposals had to survive a restart. **They do not,
+and paying a migration, a table, a cleanup rule and a staleness problem for data whose whole content
+is recomputable from the probe is buying durability for something that is worth less when it is
+durable** — a stored proposal can describe a container the upstream has since renamed or deleted; a
+recomputed one cannot. `CLAUDE.md`'s *"cut before you add"* arrives at the same place from the other
+direction: this adds a table and removes nothing.
+
+**(d) Rename §17.8's step to a review of what has already been created.** This is `78660a4`'s third
+candidate, and it deserves better than the summary dismissal it could get, because **it is the only
+alternative that describes what the code does today and it costs nothing to build.** Its argument is
+real: the first import already produces a catalogue without the user finding a button, which
+`cmd/usarr/import.go`'s own comment names as the point of the on-connect trigger; a review screen is
+honest about that, needs no removal from a working path, and keeps a first connect useful even if the
+user never opens Libraries. **It is rejected on two grounds.** First, it does not repair the
+inversion — it *ratifies* it. Every row on that screen exists already, so the only actions available
+are keep and delete, and a user who wanted none of them has to delete each one; §17.8's pre-checked
+Accept, whose whole safety property is that saying no is free, would be a screen that cannot be
+implemented as specified and would have to be re-specified around the storage rather than the other
+way round. Second, it writes before consent as a matter of design rather than as an accident, and the
+rows it writes are indistinguishable from accepted ones forever, per clause 3 — so the product would
+have no way, at any later date, to tell a library the user chose from one that appeared. **This
+alternative is the one to revisit if clause 1 turns out to be expensive to build**, and revisiting it
+means re-specifying §17.8's step, not just renaming it.
+
+**(e) Leave it unspecified and let the implementation choose.** Rejected — it is what the tree already
+did, and the result is Fact 2 plus a comment block that had to be corrected. The import creates rows
+because nothing said it should not, and the cost of reversing that is now a change to a working path
+rather than a line in a spec.
+
+### Consequences
+
+* **`library` keeps exactly one class of row that is not a library.** The identity comparison at
+  `internal/store/catalogue.go:546` stays the only exclusion of its kind, and the next read site has
+  one thing to remember rather than two.
+* **§17.8's Accept step becomes buildable**, which `78660a4` recorded that it was not. That comment
+  block is corrected in the same commit as this ADR, because leaving it would put both claims on
+  `main` at once — it was a correct record of an open decision as of its date, and the decision
+  closing is what changes.
+* **No migration, no data change, no new state** — but see clause 3: the reason is that the state was
+  removed from the design, not that the column already covered it. The `CHECK` and its comment are
+  unchanged, and a merged migration is never edited anyway (`CLAUDE.md`, Conventions).
+* **Implementing Accept is a subtraction from a working path, and it is the harder half.** Removing
+  unconditional creation from the bootstrap import means a first connect no longer produces a
+  catalogue on its own — the behaviour `cmd/usarr/import.go` describes as the point of the on-connect
+  trigger: *"the user adds a Kavita, and a catalogue appears without them having to find a button"*.
+  **That trade is named here and not decided here.** It is the library thread's, at §17.8 build time.
+* **A proposal cannot be resumed across a restart**, by construction. Closing the wizard discards the
+  proposal set and the next probe recomputes it. The loss is real and small: the recomputed set is the
+  same set unless the upstream changed, in which case the recomputed one is correct and the resumed
+  one would have been wrong.
+* **§17.8's one-way door remains unimplemented and is now recorded as such** rather than reading as a
+  description of behaviour. The §17.8 rewrite in this same commit carries that statement in the
+  section itself.
+* **This ADR does not settle LS-06.** `internal/store/catalogue.go`'s `BindContainers` comment states
+  that its `container_kind = 'remote_library'` decision *"IS OWED AN ADR AND DOES NOT HAVE ONE"*
+  (`:307-314`, recorded as `LS-06` in [`REVIEW-LOG.md`](./REVIEW-LOG.md)). That is a different
+  decision — *which container a source binds to* — and it stays owed.
+
+### 🚩 Open questions this ADR raises and does not answer
+
+1. **Whether the first import runs before Accept or after it.** Clause 1 makes creation conditional;
+   what replaces the bootstrap's current behaviour is not decided here and belongs to the library
+   thread. Two shapes are live — probe, propose, accept, then import; or import into a holding state
+   and confirm afterwards — and the second reintroduces exactly the row-that-is-not-yet-a-library this
+   ADR rejects, so it is not free. It needs the owner.
+2. **What the probe proposes on an install that already has bound libraries.** §17.8's rule is that a
+   later connect *"can only offer to add sources"* for a user-managed library, but every existing row
+   is `'auto'` and no code has ever read the column to tell the two apart. The rule is well-specified
+   and has never been exercised.
+3. **Whether a declined container should be remembered.** `BindContainers` skips a container whose
+   kind UsArr has no `work.kind` for and returns it to the caller to report — the rule is stated at
+   `internal/store/catalogue.go:315-317` and executed at `:344-346` (`if c.Kind == "" { continue }`),
+   with the downstream skip recorded at `:640`; §17.8 requires it be *declined with a reason* rather
+   than silently dropped, in a `Decision` column. If a decline is not persisted either, it is
+   recomputed on every probe and the user re-declines it every connect. That is a proposal-lifetime
+   question this ADR's answer makes sharper without answering.

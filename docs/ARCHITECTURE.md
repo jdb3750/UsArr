@@ -3972,6 +3972,63 @@ where it occurs. They are kept rather than cut
 because the mechanism is the same one and the findings behind it were expensive; they are marked
 because a screen that draws a library v0.1 cannot have is the "invented status" failure.
 
+⚠️ **What of this exists in the tree today: the binding, and nothing else. Read this before reading
+the specification below as a description of behaviour.** The warning above is about *milestone
+scope*, which is a different question from *what is built*, and the two have been read as one here
+before. Measured against `web/src/routes`, `internal/` and `internal/db/migrations` rather than
+asserted:
+
+- **Libraries come into existence, on a first successful connect to a Kavita, with no screen
+  involved.** Building a Kavita client stack fires `bootstrapImport` once per instance per database,
+  gated on `last_full_sync_at` being unset (`cmd/usarr/services.go`, `cmd/usarr/import.go`); that runs
+  the full import, which calls `store.BindContainers` → `bindOneContainer`, which joins an existing
+  library on the name key or creates one (`internal/store/catalogue.go`). **The Accept step below does
+  not gate it, because the Accept step does not exist.** Rows appear; nothing asked.
+- **That is the only trigger.** `FullImport` is a Go method with no HTTP route and no CLI subcommand —
+  `internal/httpapi/server.go`'s route table registers nothing that reaches it — so on the shipped
+  binary an import happens on a first connect and on no other occasion. There is no "sync now".
+- **The request destination has never been written by anything.** All four columns —
+  `sink_service_instance_id`, `sink_quality_profile_id`, `sink_root_folder_path`, `sink_tag_ids`
+  (migration `00005_library_sync.sql`) — appear in the schema, in `internal/db/testdata/schema.sql`
+  and **in no code: no Go, no TypeScript, no Svelte.** ⚠️ **The qualified form is the true one.** An
+  earlier draft said `and nowhere else in the tree`, which is overstated — the columns are also
+  described in `docs/reference/schema.md`, and discussed in `docs/ARCHITECTURE.md`, `docs/FUTURE.md`
+  and `docs/REVIEW-LOG.md`. Those are documentation, not wiring, so they do not weaken the point;
+  the unqualified claim was simply wrong and the qualified one says what was actually measured. This
+  is consistent with the
+  `Request destination` rule at the end of this section, which withholds the column in v0.1; it is
+  recorded here because `specified and deferred` and `specified and never wired` are different
+  claims and only the second is true of the storage. (Backticks rather than the italic-quoted form,
+  on the same ground this section states below for a retired string: a phrase that is not shipping
+  copy must not be quoted as shipping copy, because `docs/design/check.mjs` reads every
+  italic-quoted span in §17 as a specified UI string and checks it as one.)
+- **There is no read path at all.** No store method lists libraries for display; the only `SELECT`
+  over the table in non-test Go is the binding's own name-collision lookup. No endpoint in
+  `internal/httpapi/server.go`'s route table serves one — `GET /api/v1/library/recent` is Home's
+  Block C over a different corpus (§17.2, ADR-0028), not this section's binding. There is no wire
+  type. **So every row the binding writes is invisible in the product**, and the screen this section
+  specifies is unbuilt end to end rather than partially built.
+- **The one-way door below is specified and unimplemented.** `library.managed_by` is
+  `CHECK (managed_by IN ('auto','user'))` and **`'user'` has never been written by any code path**:
+  the column has exactly one writer in Go, an `INSERT` with the literal `'auto'`, no `UPDATE library`
+  statement exists in non-test Go, and the column has zero non-test readers. ⚠️ **The claim is about
+  writes, not about occurrences** — an earlier draft said `'user'` occurred in the tree in exactly
+  one place, the `CHECK` that permits it, and that is false: it also occurs in the migration's own
+  adjoining comment and twice in the generated schema mirror `internal/db/testdata/schema.sql`,
+  besides `docs/reference/`. None of those is a writer, which is why "never written" is the claim that
+  carries the point and a count of occurrences is not. Nothing marks a library user-managed and
+  nothing consults the mark.
+
+**And the Accept step is a removal, not an addition.** Because the import already creates rows
+unconditionally, implementing Accept means taking creation out of the bootstrap path — a change to
+code that works today, with an upgrade story owed to installs that have already auto-created
+libraries. **[ADR-0048](./DECISIONS.md#adr-0048) decides the storage question that blocked it**: a
+proposal is not a row in `library` and is never persisted, a row is created only on Accept, and
+existing auto-created rows are declared accepted on upgrade. That ADR does **not** perform the
+removal or schedule it; it belongs to the thread that builds this screen. ⚠️ **Until then, every
+sentence below describing what a user sees, edits, accepts or declines is a specification of intent.
+None of it is a report of behaviour.**
+
 **The definition of a library is shipping copy under the page title, not a note.** One sentence —
 *"A library is a name you own over containers your services already computed: a whole instance, a
 root folder, an upstream library id, or an \*Arr tag."* — because this is the newest concept in the
@@ -3984,7 +4041,10 @@ and a Services row lists the libraries it feeds and warns before removal — *"R
 libraries. Removing it will leave Movies and Kids films with no source."* **No credential field ever
 appears on this screen**; API keys live only behind Services plus sudo mode (§12.1).
 
-**Nothing about libraries is asked before a service exists.** The §17.7 wizard is unchanged; on a
+**Nothing about libraries is asked before a service exists.** ⚠️ **Nothing about libraries is asked at
+all yet: on the shipped binary a successful connect creates the libraries outright.** See the
+build-status block above; the paragraph below is the design that replaces that, and
+[ADR-0048](./DECISIONS.md#adr-0048) is what makes it implementable. The §17.7 wizard is unchanged; on a
 successful connect and capability probe UsArr **proposes** libraries as one pre-checked "Accept" step,
 each editable inline — **one proposal per container the connected service itself reports**: one per
 upstream library for a media server (Kavita, Navidrome, Audiobookshelf, Komga, Jellyfin), one `movie`
@@ -4008,6 +4068,11 @@ not restate it** (ADR-0035). Two proposals are decisions rather than defaults:
   user-managed. After that, a later connect can only offer to add sources. It can never reshape the
   library."* is a permanent decision delivered as helper text beside the Accept button, with no
   indicator of which rows have crossed it. Each edited row carries the mark, in the row.
+  ⚠️ **The door has no hinge: nothing writes the mark and nothing reads it.** `library.managed_by`
+  permits `'user'` and no code path has ever written it — see the build-status block above for the
+  measurement. The rule is well-specified and has never been exercised, which also means the
+  behaviour it governs, what a *later* connect may offer against an already-bound library, is
+  untested design rather than observed behaviour.
   🔍 The wording is three plain sentences because §13 bans the mid-sentence em-dash beat in UI
   microcopy, and the earlier form was a 22-word sentence built on one, ending
   `… can only offer to add sources — never reshape it`. The meaning is unchanged; only the beat is
@@ -4036,9 +4101,15 @@ not restate it** (ADR-0035). Two proposals are decisions rather than defaults:
   **`v0.7.11`** (`caf2ba08`, 2023-12-03), so it has shipped in every release for about 2.7 years.
   UsArr's own client was correct throughout — `internal/kavita` declares all six and
   `internal/kavita/contract_test.go` asserts them against the vendored spec — so **the document was
-  the only defect**. `internal/libsync/kavita.go` records the contradiction and deliberately declines
-  to pick a side, since resolving it needed a network fact that pass could not verify (REVIEW-LOG
-  LS-04); it is picked here.
+  the only defect**. ⚠️ **An earlier draft said `internal/libsync/kavita.go` "records the
+  contradiction and deliberately declines to pick a side". That is stale.** The file now records
+  LS-04 as **settled** — its comment opens `✅ LS-04 IS SETTLED, AND NOTHING DISAGREES ANY MORE. THE
+  ENUM HAS SIX MEMBERS AND Image = 3 IS ONE OF THEM` — and it credits **this section's own
+  2026-08-17 amendment** for settling it: `The vendored spec and ARCHITECTURE.md §17.8 now say the
+  same thing: §17.8 carried a withdrawal of the Image example, and its 2026-08-17 amendment withdraws
+  the withdrawal on the same measurement this mapping was built on.` So the direction of the credit
+  runs the other way from the retired sentence: the tree is not waiting on this section to pick a
+  side, it has already recorded that this section picked one.
   🚩 **The root cause is the part worth keeping, and the rule goes in the correction: any Kavita
   re-check must read a TAG or `develop`, never `main`.** Kavita's `main` is frozen at the v0.7.8
   release commit — `97950804`, dated **2023-09-03**, subject `v0.7.8 - New Filtering System (#2260)`
@@ -4144,7 +4215,10 @@ like data and carry none, which is the failure rule 5 names.
 **In v0.1 the column is absent and the screen says so once, in its own copy** — principle 3's honest
 degradation, which is to say what is missing and why rather than render an empty grid:
 *"No request destination can be set yet: no connected service accepts requests. Indexer search still
-works, and the grab ends in your download client."* ⚠️ **This is sequencing, not a cut.** The column,
+works, and the grab ends in your download client."* ⚠️ **And the storage matches: the four `sink_*`
+columns are written by nothing in the tree.** The deferral is therefore complete rather than
+cosmetic, which is worth stating because a column that exists in the schema reads as half-built
+otherwise. ⚠️ **This is sequencing, not a cut.** The column,
 its per-row exceptions and the Ebooks row's Readarr note — a real, dated, specific fact a user cannot
 infer — all return unchanged with the first service that can be a destination, and §16 owns when that
 is. **The detail view's `Requests` panel is unaffected**, because it is one field on one library
