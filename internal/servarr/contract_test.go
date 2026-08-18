@@ -504,9 +504,16 @@ func TestKnownSpecDivergencesStillHold(t *testing.T) {
 				t.Fatalf("encoding a search with no %s: %v", d.param, err)
 			}
 			if v.Has(d.param) {
-				t.Errorf("SearchRequest.Values() emits %s=%q on a search that never set %s. "+
-					"Omitting a parameter and sending its zero value are DIFFERENT THINGS here — that "+
-					"is the entire point of upstream's %s. %s.\n"+
+				// The order here is load-bearing. This prints the OBSERVED value,
+				// which need not be zero, so the general rule has to come first;
+				// leading with the zero-value story explained a case the reader
+				// may not be looking at, right under a line showing a different
+				// one.
+				t.Errorf("SearchRequest.Values() emits %s=%q on a search that never set %s.\n"+
+					"Whatever that value is, EMITTING IT AT ALL is the defect: omitting a parameter and "+
+					"sending one the caller never chose are DIFFERENT THINGS here, which is the entire "+
+					"point of upstream's %s.\n"+
+					"And the zero value is the one that bites — %s.\n"+
 					"Only send %s when the caller asked for it.",
 					d.param, v.Get(d.param), d.goField, d.since, d.consequence, d.param)
 			}

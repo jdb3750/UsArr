@@ -4,6 +4,39 @@
 # `linters.default` replaces v1's enable-all/disable-all.
 # Source of truth for this list: docs/DEVELOPMENT.md §9.
 version: "2"
+
+# BUILD TAGS THE LINTER MUST SEE. golangci-lint analyses ONE build context, and
+# by default that context has no tags — so every file behind a `//go:build` tag
+# is not merely unlinted, it is never opened. That is not a weaker check on those
+# files; it is no check at all, and it is silent: the run prints `0 issues` and
+# exits 0 exactly as it would over a clean file.
+#
+# Measured on 2026-08-18, matched pair, same package, same statement
+# (`os.Setenv(...)` with the error dropped): planted in
+# internal/servarr/specdrift_upstream_test.go (`//go:build upstream`) golangci-lint
+# reported `0 issues`, exit 0; planted in an untagged _test.go beside it, exit 1
+# with the errcheck finding. One defect, two verdicts, decided by a build tag.
+#
+# The Makefile's `build-tagged` target is NOT this. It runs `go build -tags=bench`
+# and `go vet -tags=upstream`, which type-check the hidden files — that closes the
+# COMPILE hole (a deliberate type error used to pass the whole gate) and closes
+# nothing else. errcheck, bodyclose, noctx, gosec and the rest live here, and
+# type-checking a file is not linting it.
+#
+# errcheck-class defects are the point: the *Arr API keys this repo handles are
+# full-admin credentials, and CLAUDE.md's rule is that unchecked errors are how
+# credential-handling bugs hide. Leaving one file structurally exempt from the
+# linter that catches them is the wrong file to leave exempt.
+#
+# KEEP THIS LIST IN STEP WITH THE TREE. `grep -rn "go:build" --include="*.go" .`
+# names every tag in the repo; each one absent from this list is a file the gate
+# does not lint. `bench` (internal/db/spike) is knowingly still absent — it is a
+# measurement spike that ships nothing, and adding it is a separate change with
+# its own findings to triage.
+run:
+  build-tags:
+    - upstream
+
 linters:
   default: standard
   enable:

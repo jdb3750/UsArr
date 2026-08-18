@@ -12559,7 +12559,7 @@ verified free (`grep -c adr-0047 docs/DECISIONS.md` → 0 before the write).
 
 **What this entry is.** The task was to build the honest remedy for Prowlarr's spec-skew after
 [ADR-0046](./DECISIONS.md#adr-0046) left it as an open question — and to do it *without* copying
-Kavita's floor/ceiling split, which turns out to be impossible here. A previous run wrote the code,
+Kavita's floor/ceiling split, which turns out to be vacuous here — the two specs would be byte-identical copies of one blob, so the second proves nothing the first does not. A previous run wrote the code,
 the Makefile target and the three docs edits but died before the ADR and this log entry. This entry
 records the salvage, the independent re-verification of every Prowlarr claim, and each new guard fired
 deliberately against the reason it exists.
@@ -12605,7 +12605,7 @@ would let a GitHub outage redden an unrelated commit. So the guard is split, fol
 |---|---|---|---|---|
 | `TestVendoredSpecIsThePinnedBlob` | `internal/servarr/contract_test.go` | **yes** | no | the vendored bytes changing under the suite |
 | `TestKnownSpecDivergencesStillHold` | `internal/servarr/contract_test.go` | **yes** | no | the `Limit`/`Offset` `int?` gap silently closing (spec regenerated) or UsArr's pointers being "corrected" to match the stale spec |
-| `TestUpstreamRefsStillShareThePinnedBlob` | `internal/servarr/specdrift_upstream_test.go` (`//go:build upstream`) | **no** — `make spec-drift`, opt-in on `USARR_SPEC_DRIFT=1` | **yes** | the day either ref stops carrying the pinned blob |
+| `TestSpecDriftRefsStillShareThePinnedBlob` | `internal/servarr/specdrift_upstream_test.go` (`//go:build upstream`) | **no** — `make spec-drift`, opt-in on `USARR_SPEC_DRIFT=1` | **yes** | the day either ref stops carrying the pinned blob |
 
 `build-tagged` gained `go vet -tags=upstream ./...`, because `go build` does not compile `_test.go`
 files and the `upstream` test is one — so the gate can *type-check* the network test without being
@@ -12630,7 +12630,7 @@ verbatim output is in the thread; the summary:
   laid out all three of *their Prowlarr is too old / our expectation is too new / the document is
   simply stale*, each with a different fix.
 * **Drift check** — ran `make spec-drift` with `vendoredSpecBlob` set to a wrong value:
-  `TestUpstreamRefsStillShareThePinnedBlob` failed against the network naming its three readings
+  `TestSpecDriftRefsStillShareThePinnedBlob` failed against the network naming its three readings
   (local mistake first, upstream regenerated, one ref moved) and stating a failure there is news, not
   a gate.
 * **Opt-in refusal** — `make spec-drift` without `USARR_SPEC_DRIFT=1` refused with the pointer to §7.2,
@@ -13066,6 +13066,142 @@ that one store's arrival implied the other's.
 
 ---
 
+# EXPL-03 — Two gate guards that could pass green having checked nothing
+
+**Prefix note.** `EXPL-` is this thread's prefix, already carrying [`EXPL-01`](#expl-01) and
+[`EXPL-02`](#expl-02); this is `EXPL-03`. It is the same thread's own work coming back for review:
+both findings are against the spec-skew guard [`EXPL-02`](#expl-02) landed, and both were raised by a
+read-only adversarial reviewer at `a39ac02`, graded **Medium**. Each was re-verified here against the
+tree before anything was changed — a finding taken on the reviewer's word is a finding that has been
+believed, not confirmed.
+
+Both are the same defect wearing two costumes, and it is [`DEVELOPMENT.md` §11 rule
+4](./DEVELOPMENT.md#11-onboarding-an-ai-agent)'s: **"found nothing" and "looked at nothing" must never
+share an exit code.** One is a test selector that can match zero tests and exit 0; the other is a
+linter that never opens a file and reports `0 issues`. Neither had a live defect behind it today.
+That is the point at which they are cheapest to fix and the only point at which nobody is under
+pressure to argue them away.
+
+## EXPL3.1 — Applied (Medium): `make spec-drift` could pass green having run no drift check
+
+**The finding.** The target selected tests with `-run Upstream ./internal/...` and asserted no floor.
+`go test -run <re>` that matches nothing exits 0, so renaming the sole drift test produced exit 0
+*plus* the target's reassuring `a failure here is NEWS` epilogue, over zero drift checks.
+
+**Verified before fixing, and it was already biting.** `Upstream` is an ordinary English word and
+`-run` is an unanchored regex. `grep -rn "func Test.*Upstream"` returns **six** tests, of which
+**one** is the drift test; the other five are
+`TestPolicyRefusalIsNotUpstreamFlakiness` and `TestBreakerOpenIsNotEvidenceAboutTheUpstream`
+(`internal/kavita`), `TestGrabMapsUpstreamNoDownloadClientError` and
+`TestUpstreamMessageQuotesTheServiceAndNotItsStackTrace` (`internal/releases`), and
+`TestIdentityHashIgnoresUpstreamFieldOrder` (`internal/store`). Run on 2026-08-18, the baseline
+printed a bare `ok` — **without** the `[no tests to run]` suffix every other package carried — for
+`internal/kavita`, `internal/releases` and `internal/store`. Three packages read as drift-checked
+while holding no `upstream`-tagged test at all. **The output was not merely silent about its coverage;
+it actively overstated it.**
+
+**The fix, both halves together.** The selector is now the reserved `^TestSpecDrift` prefix
+(`SPEC_DRIFT_RUN`), which no unrelated test may take, and the sole drift test was renamed
+`TestUpstreamRefsStillShareThePinnedBlob` → `TestSpecDriftRefsStillShareThePinnedBlob` to claim it.
+The run is then **counted**: `-v` emits one top-level `--- PASS:`/`--- FAIL:` line per test that
+actually executed, and fewer than `SPEC_DRIFT_FLOOR` (1) fails the target with a four-cause
+diagnosis. Counting `PASS|FAIL` rather than `=== RUN` is deliberate — **a `--- SKIP:` drift check
+looked at nothing too**, and must not satisfy a floor. The floor is a floor, not an equality, so it
+never fights a test being added; adding one means taking the prefix and raising the floor, and that
+contract is stated in three places (the test's own doc comment, the `Makefile`, `api/specs/SOURCES.md`).
+
+**Fired, both branches, before it was trusted.**
+
+* **Rename.** `TestSpecDriftRefsStillShareThePinnedBlob` → `TestRenamedAwayFromTheReservedPrefix`.
+  Every one of the twelve packages then printed `ok … [no tests to run]` — the misleading bare `ok`
+  is gone as well — and the target exited **1** with
+  `spec-drift: FAILED — 0 drift check(s) ran, floor is 1.`, `THIS IS NOT 'THE SPECS ARE FINE'`, and
+  the four causes (renamed / deleted or lost its build tag / skipped / floor raised for a test never
+  added). **The `a failure here is NEWS` epilogue did not print**, which was half the original
+  complaint. Restored.
+* **Skip.** A temporary `t.Skip` at the top of the restored test: `--- SKIP:` in the output, and the
+  target still exited **1** with the same message and `0 drift check(s) ran`. Restored.
+* **Happy path.** `spec-drift: OK — 1 drift check(s) actually ran and passed (floor 1).`, exit 0,
+  both refs logged at blob `134d31d7df5e80714c454a6224e7449df512c55e`.
+
+## EXPL3.2 — Applied (Medium): the `upstream`-tagged file was invisible to the gate's linter
+
+**The finding.** `.golangci.yml` set no build tags. golangci-lint analyses **one** build context, and
+without tags that context excludes every file behind a `//go:build` line — not linting it weakly,
+**never opening it**. The silence is total in a second way the compile hole was not: a linter that
+never parses a file prints `0 issues` and exits 0 exactly as it does over a clean one.
+
+**Verified by reproducing the reviewer's matched pair, not by reading the config.** Same package,
+same statement — `os.Setenv("USARR_PLANTED_PROBE", "1")` with the error dropped, an errcheck-class
+defect — planted twice. With `/root/go/bin/golangci-lint` 2.12.2 and an isolated cache:
+
+| Where the identical defect was planted | Result |
+|---|---|
+| `internal/servarr/specdrift_upstream_test.go` (`//go:build upstream`) | **`0 issues`, exit 0** |
+| an untagged `_test.go` beside it | **exit 1**, `Error return value of os.Setenv is not checked (errcheck)` |
+
+One defect, two verdicts, decided by a build tag. `_test.go` files are excluded from **gosec** only,
+so errcheck was live on both — the tag is the whole difference.
+
+**Why this file and this class.** There is no live defect there today. But CLAUDE.md's rule is that
+*unchecked errors are how credential-handling bugs hide*, the one self-reported defect in
+[`EXPL-02`](#expl-02)'s salvage was errcheck-class, and this is the single file in the repo where
+that class is structurally undetectable. That is the wrong file to leave exempt.
+
+**The fix.** `run.build-tags: [upstream]` in `.golangci.yml`, with the measurement and a standing rule
+to keep the list in step with `grep -rn "go:build" --include="*.go" .` inline. **Re-fired the same
+matched pair afterwards:** both planted defects reported, exit 1; and with the untagged probe removed,
+the tagged file alone still failed the run — so the tagged file is genuinely linted rather than merely
+accompanied. Both probes removed; a full `golangci-lint run` over the tree with the new tag is
+`0 issues.`
+
+**A comment that claimed more than it had.** The `Makefile`'s `build-tagged` block explained
+`go vet -tags=upstream` as closing the hole `go build` leaves — true, and it reads as though the job
+were finished. It closed the **compile** hole and only that; **type-checking a file is not linting
+it.** Amended in place, and `DEVELOPMENT.md` §9's config summary now carries `run.build-tags` and the
+matched-pair measurement, because that section is the config's stated source of truth.
+
+## EXPL3.3 — Applied: three Low findings, all taken
+
+* **The divergence check's case (c) explained a case other than the one it printed.**
+  `TestKnownSpecDivergencesStillHold`'s wire-behaviour failure printed the **observed** value —
+  `limit="50"`, say — and then explained the **zero** case, so on any non-zero value the paragraph
+  under the number was about something else. Reordered: the general rule (*emitting it at all is the
+  defect*) now comes first and the zero-value consequence follows, labelled as the zero case. Fired
+  by pointing `Limit` at a non-zero `int32` (50) — `Values()` rejects a zero one outright — and the
+  message then reads correctly against the value it printed.
+* **The drift failure printed twice.** `t.Errorf` sat inside the per-ref loop, so each diverging ref
+  got the whole fourteen-line explanation — and the ordinary way for the premise to die is upstream
+  regenerating the file, which moves **both** refs at once, making two identical walls of text the
+  *common* case rather than the odd one. Mismatches are now collected and reported once, with a line
+  per diverging ref; reading (c) reads better for it, since "only one ref moved" needs both refs in
+  hand to be answerable. Fired against a deliberately wrong pin: one block, `on 2 of 2 refs`, both
+  listed.
+* **"Impossible" overstated the two-spec finding.** Two byte-identical files *can* be vendored; the
+  split is **vacuous**, not impossible — the second copy proves exactly what the first proves, at
+  145 KB and a second file to keep in step. [ADR-0047](./DECISIONS.md#adr-0047)'s Context paragraph
+  already put it precisely (*"produce a green that proves exactly what one copy already proves"*); the
+  overstatement was in prose derived from the commit message. Corrected in the ADR's **Why ADR-0046's pattern does not port**
+  paragraph, in its **index row** in `DECISIONS.md`, and in [`EXPL-02`](#expl-02)'s own opening
+  paragraph above.
+
+## EXPL3.4 — What this pass did NOT do
+
+* **No production-code change.** Everything touched is a test file, the `Makefile`, `.golangci.yml`
+  or a document. No adapter field, request, migration or `web/` change.
+* **No new network call in `make check`.** `spec-drift` stays opt-in behind its build tag and its own
+  target; the gate's two-call contract and `check-offline` are untouched.
+* **`bench` is knowingly still absent from `run.build-tags`.** `internal/db/spike` has the same lint
+  hole. It is a measurement spike that ships nothing, adding it would surface its own findings to
+  triage, and doing that here would be a second change riding on this one. **Raised, not fixed** — the
+  standing rule now written into `.golangci.yml` and `DEVELOPMENT.md` §9 names it explicitly so it
+  cannot be mistaken for an oversight.
+* **`make spec-drift` is still unautomated**, exactly as [ADR-0047](./DECISIONS.md#adr-0047)'s open
+  question 2 says. A floor assertion makes the target honest when someone types it; it does not make
+  anyone type it. There is no CI in this repo.
+
+---
+
 # PINSRC-01 — where a version number comes from: a banner that could not tell a held pin from a moved one, and a report that asked `$PATH` instead of the banner
 
 **Date:** 2026-08-18. **Tree:** detached `git worktree` off `origin/main` at `e4780f9`.
@@ -13117,14 +13253,21 @@ and 8** — every one of which still resolves to the rule it resolved to before,
 renumbered. Counted with `git grep -c '§11 rule' <rev> -- .` summed over its files, and
 `git grep -ho '§11 rule [0-9]' <rev> -- . | sort -u`.
 
-⚠️ **The figure above was re-derived at the end, and it had already gone stale once.** It was first
-taken at 40 immediately after the `DEVELOPMENT.md` edit, and by the time this entry was written the
-tree held **46** — the six added being this entry's own citations, which introduce `§11 rule 2` to
-the cited set. Nothing was wrong with the first number when it was formed; the artefact moved under
-it, which is §11 rule 8 catching the entry that was being written about §11's own reporting rules.
-Both figures are given rather than one silently corrected: **40 across 11 files at `e4780f9`** is the
-count that had to keep resolving, **46 at the tree that ships** is what a re-run of the same command
-returns now.
+⚠️ **That figure went stale twice while this entry was being written, which is §11 rule 8 catching
+the entry written about §11's own reporting rules.** It was first taken at **40** immediately after
+the `DEVELOPMENT.md` edit; this entry's own citations then moved it, introducing `§11 rule 2` to the
+cited set; and two upstream merges moved it again — `bafeb9b`, then `3a2457c`, whose `EXPL-03` cites
+rule 4 repeatedly. Nothing was wrong with any of the numbers when they were formed. Both ends are
+given rather than one silently corrected: **40 matching lines across 11 tracked files at
+`e4780f9`** is the set that had to keep resolving, and **52 across 13 tracked files** is the same
+command on the tree this commit ships.
+
+🚩 **And the last re-count was wrong on its first attempt, from a contaminated instrument.**
+`git ls-files -z | xargs -0 grep -c` run during an unresolved merge lists `docs/REVIEW-LOG.md`
+**three times** — index stages 1, 2 and 3 — so its 38 was summed thrice and the total came out
+**128** across "15" files. The command was right, the tree it was pointed at was mid-merge: §11
+rule 5, arriving inside the fix for rule 8. Counted again after resolution, from unique tracked
+paths.
 
 ## PINSRC-2 The banner read the same whether the pin held or was overridden
 

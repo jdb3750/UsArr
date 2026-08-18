@@ -487,16 +487,76 @@ test-integration: ## Tests behind the `integration` tag. Needs a live stack. NEV
 # The offline half of the same guard IS in the gate:
 # TestVendoredSpecIsThePinnedBlob hashes the vendored bytes against a pinned git
 # blob name, which is deterministic and needs nothing. See ADR-0047.
+#
+# WHY THERE IS A FLOOR ASSERTION, and it is the whole reason this target is more
+# than one line. `go test -run <re>` that matches nothing exits 0. So the target
+# as first written — `-run Upstream ./internal/...` — could report success having
+# executed zero drift checks, and would have printed its reassuring "a failure
+# here is NEWS" epilogue while doing it. Renaming the one drift test was enough
+# to produce that. DEVELOPMENT.md §11 rule 4: "found nothing" and "looked at
+# nothing" must never share an exit code.
+#
+# It was not hypothetical, either. `Upstream` is an ordinary English word and
+# `-run` is an unanchored regex, so it also swept in FIVE unrelated tests whose
+# names merely contain it — TestPolicyRefusalIsNotUpstreamFlakiness and
+# TestBreakerOpenIsNotEvidenceAboutTheUpstream (internal/kavita),
+# TestGrabMapsUpstreamNoDownloadClientError and
+# TestUpstreamMessageQuotesTheServiceAndNotItsStackTrace (internal/releases),
+# TestIdentityHashIgnoresUpstreamFieldOrder (internal/store). Measured
+# 2026-08-18: those three packages printed a bare `ok` — no "[no tests to run]"
+# suffix — and so read as drift-checked while holding no upstream-tagged test at
+# all. The output was actively misleading about its own coverage.
+#
+# Both halves are closed the same way. The selector is now the reserved
+# `^TestSpecDrift` prefix, which no unrelated test may take, and the run is
+# counted: `-v` prints one top-level `--- PASS:`/`--- FAIL:` line per test that
+# actually EXECUTED, and fewer than SPEC_DRIFT_FLOOR of them fails the target
+# loudly and says why. Counting PASS|FAIL rather than "=== RUN" is deliberate —
+# a `--- SKIP:` drift check looked at nothing too, and must not satisfy a floor.
+#
+# ADDING A DRIFT TEST: name it TestSpecDrift…, and raise SPEC_DRIFT_FLOOR here.
+# The floor is a floor, not an equality, so it never fights a test being added.
+SPEC_DRIFT_FLOOR ?= 1
+SPEC_DRIFT_RUN   ?= ^TestSpecDrift
+
 .PHONY: spec-drift
 spec-drift: export CGO_ENABLED := 1
 spec-drift: ## Tests behind the `upstream` tag: are the vendored specs still what upstream serves? NEEDS NETWORK. Never in CI.
 	@test "$${USARR_SPEC_DRIFT:-}" = "1" || { \
 		echo "refusing: set USARR_SPEC_DRIFT=1 — this target talks to github.com"; \
 		echo "see docs/DEVELOPMENT.md §7.2"; exit 1; }
-	$(GO) test -tags=upstream $(GOTESTFLAGS) -run Upstream ./internal/...
-	@echo ""
-	@echo "a failure here is NEWS, not a broken build: it means upstream moved. Read the message,"
-	@echo "re-vendor deliberately, and revisit the ADR whose premise just changed."
+	@set +e; \
+	out="$$(mktemp)"; \
+	$(GO) test -tags=upstream $(GOTESTFLAGS) -v -run '$(SPEC_DRIFT_RUN)' ./internal/... 2>&1 | tee "$$out"; \
+	rc=$${PIPESTATUS[0]}; \
+	ran="$$(grep -cE '^--- (PASS|FAIL): TestSpecDrift' "$$out")"; \
+	rm -f "$$out"; \
+	echo ""; \
+	if [ "$$ran" -lt "$(SPEC_DRIFT_FLOOR)" ]; then \
+		echo "spec-drift: FAILED — $$ran drift check(s) ran, floor is $(SPEC_DRIFT_FLOOR)."; \
+		echo ""; \
+		echo "THIS IS NOT 'THE SPECS ARE FINE'. It is 'nothing was checked', and the two must"; \
+		echo "never share an exit code (docs/DEVELOPMENT.md §11 rule 4). \`go test -run\` that"; \
+		echo "matches nothing exits 0, so without this assertion the target would have printed"; \
+		echo "a clean bill of health over zero drift checks."; \
+		echo ""; \
+		echo "Likely causes, in the order worth checking:"; \
+		echo "  (a) THE DRIFT TEST WAS RENAMED out of the reserved \`TestSpecDrift\` prefix that"; \
+		echo "      SPEC_DRIFT_RUN ('$(SPEC_DRIFT_RUN)') selects on. Rename it back, or change both together."; \
+		echo "  (b) IT WAS DELETED, or its file lost its \`//go:build upstream\` line."; \
+		echo "  (c) IT SKIPPED — a --- SKIP: does not count, because a skipped check looked at"; \
+		echo "      nothing. Read the output above for the skip reason."; \
+		echo "  (d) SPEC_DRIFT_FLOOR was raised for a test that was never added."; \
+		exit 1; \
+	fi; \
+	if [ "$$rc" -ne 0 ]; then \
+		echo "spec-drift: $$ran drift check(s) ran; the run FAILED (go test exit $$rc)."; \
+		echo ""; \
+		echo "a failure here is NEWS, not a broken build: it means upstream moved. Read the message,"; \
+		echo "re-vendor deliberately, and revisit the ADR whose premise just changed."; \
+		exit "$$rc"; \
+	fi; \
+	echo "spec-drift: OK — $$ran drift check(s) actually ran and passed (floor $(SPEC_DRIFT_FLOOR))."
 
 .PHONY: bench
 bench: ## Wall-clock performance harness. A RELEASE gate on named hardware, never a merge gate.
@@ -620,6 +680,17 @@ fmt-check: web-deps ## Verify formatting without modifying files (used by `make 
 # test files, so it is what closes it. The gate must be able to compile
 # `make spec-drift`'s tests without being allowed to RUN them (they need the
 # network); vet gives precisely that.
+#
+# THIS TARGET CLOSES THE COMPILE HOLE AND ONLY THE COMPILE HOLE. Type-checking a
+# file is not linting it, and this paragraph used to read as though the vet pass
+# had finished the job. It had not: `.golangci.yml` set no build tags, so
+# errcheck, bodyclose, noctx, gosec and the rest never opened the `upstream` file
+# either — and unlike the compile hole, that one was silent in a second way,
+# because a linter that never parses a file reports `0 issues` exactly as it does
+# over a clean one. Measured 2026-08-18 with a matched pair: the same dropped
+# `os.Setenv` error gave `0 issues` in the tagged file and exit 1 in an untagged
+# file beside it. The fix is `run.build-tags` in `.golangci.yml`, which carries
+# the reasoning and the standing rule to keep that list in step with the tree.
 .PHONY: build-tagged
 build-tagged: ## Compile packages hidden behind build tags (`bench`: internal/db/spike; `upstream`: the spec-drift tests)
 	@n=$$($(GO) list -tags=bench ./... | wc -l); \

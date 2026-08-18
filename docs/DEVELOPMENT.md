@@ -786,6 +786,8 @@ summary; the file itself is the source of truth:
 
 ```yaml
 version: "2"
+run:
+  build-tags: [upstream]    # a file behind a build tag is NEVER OPENED without this
 linters:
   default: standard
   enable:
@@ -815,6 +817,20 @@ formatters:
 
 `noctx` and `bodyclose` are not stylistic here. UsArr fans out to a dozen services; a request without
 a timeout or a body that is never closed becomes a hung dashboard.
+
+**The `run.build-tags` list is load-bearing too, and for a reason that is easy to miss.**
+golangci-lint analyses one build context, and without tags that context excludes every file behind a
+`//go:build` line — not linting them weakly, never opening them. The silence is total: the run prints
+`0 issues` and exits 0 exactly as it would over a clean file. Measured 2026-08-18 with a matched
+pair, same package and same statement (`os.Setenv(…)` with the error dropped): planted in
+`internal/servarr/specdrift_upstream_test.go` (`//go:build upstream`) golangci-lint reported
+`0 issues`, exit 0; planted in an untagged `_test.go` beside it, exit 1 with the errcheck finding.
+One defect, two verdicts, decided by a build tag. **`make build-tagged` is not this** — its
+`go build -tags=bench` and `go vet -tags=upstream` type-check the hidden files, which closes the
+*compile* hole and nothing else. **Keep the list in step with the tree:**
+`grep -rn "go:build" --include="*.go" .` names every tag in the repo, and each one absent from
+`run.build-tags` is a file the gate does not lint. `bench` (`internal/db/spike`) is knowingly still
+absent.
 
 **The `issues:` block is load-bearing.** golangci-lint defaults to `max-same-issues: 3` and
 `max-issues-per-linter: 50`, and it drops the remainder *silently* — no "N more" line, nothing in the
@@ -1052,6 +1068,19 @@ zero `.go` files; `vuln` refuses to pass when `go list` yields zero packages. Bo
 have exited 0 while scanning nothing, which is the most convincing green there is. If you can state
 roughly how much a check ought to see, encode that — "found nothing" and "looked at nothing" must
 never produce the same exit code.
+
+**`make spec-drift` is the third, and it is here because it shipped without the floor and the rule
+caught it.** `go test -run <re>` that matches nothing exits 0, so the target's original
+`-run Upstream ./internal/...` would have reported success — with a reassuring *"a failure here is
+NEWS"* epilogue — over zero drift checks, and renaming the one drift test was enough to produce
+that. Worse, `Upstream` is an ordinary English word and `-run` is an unanchored regex: it also
+matched five unrelated tests in `internal/kavita`, `internal/releases` and `internal/store`, so
+those three packages printed a bare `ok` and read as drift-checked while holding no upstream-tagged
+test at all. **The output was misleading about its own coverage, which is the failure this rule
+names, dressed as extra reassurance rather than as silence.** Both halves are closed together: the
+selector is the reserved `^TestSpecDrift` prefix, and the target counts the top-level
+`--- PASS:`/`--- FAIL:` lines that prefix actually produced and fails below `SPEC_DRIFT_FLOOR`.
+A `--- SKIP:` deliberately does not count — a skipped check looked at nothing too.
 
 **5. Name the surface, not just the value.** Rule 2 names the *instrument*; this names what the
 instrument was pointed at, and it is the half that has been broken three times here — each time by
