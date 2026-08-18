@@ -17,7 +17,7 @@ This file records the instruction text only. The design detail lives in `CLAUDE.
 
 | Version | Date | State | Size (characters) |
 | --- | --- | --- | --- |
-| v1.6 | 2026-08-18 | **Proposed — supersedes v1.5, not yet applied** | 7729 (7739 bytes) |
+| v1.6 | 2026-08-18 | **Applied to project settings** — 2026-08-18 | 7729 (7739 bytes) |
 | v1.5 | 2026-08-17 | Applied 2026-08-17 05:05 UTC, superseded by v1.6 | 8112 (8124 bytes) |
 | v1.4 | 2026-08-17 | Applied 2026-08-17 04:52 UTC, superseded by v1.5 the same day | 8108 |
 | v1.3 | 2026-08-16 | Applied 2026-08-16 16:34 UTC, superseded by v1.4 | 7838 |
@@ -25,11 +25,23 @@ This file records the instruction text only. The design detail lives in `CLAUDE.
 | v1.1 | 2026-08-16 | Superseded by v1.2, never applied | 7022 |
 | v1.0 | 2026-08-16 | Superseded by v1.2 — applied 2026-08-16, replaced the same day | 3847 |
 
-## v1.6 — proposed
+## v1.6 — as applied
 
-Proposed 2026-08-18, superseding v1.5. **Not applied yet** — until the coordinator or Joe applies
-this block by hand, v1.5 below is still the text in the settings field. 7729 characters, md5
+The text applied verbatim to the Project's settings on 2026-08-18, replacing v1.5. **This is the
+live settings text.** The apply happened at approximately 04:40 UTC; the exact minute is not pinned,
+so treat the time as approximate and the date as firm. 7729 characters, md5
 `8ab3304a1ee48975480062d418e6f932` over its 7739 bytes.
+
+The verification chain, as it actually ran. **Before the apply**, an independent worker cloned the
+repo at `7218d07`, extracted this fenced block, and matched all three gates against it: **7729
+characters** via `python3 len()`, **7739 bytes**, and md5 **`8ab3304a1ee48975480062d418e6f932`**,
+each measured over the block including its trailing newline. **After the apply**, the settings
+read-back was checked by boundary and absence rather than by re-measuring: it begins "You are
+working on UsArr: a fast, self-hosted, unified hub and gateway…" and ends "…the catalogue never
+greys out.", and both sentences v1.6 excises from v1.5 — the §17.1 concrete constraints and the
+scope/status preamble — are confirmed absent. **A character count could not be run against the
+stored value**, so the count is carried by the pre-apply gates alone; the post-apply check confirms
+the two boundaries and the two deletions, and nothing more.
 
 ````
 You are working on UsArr: a fast, self-hosted, unified hub and gateway over the media-acquisition ecosystem, running on a single self-hoster's own server. It aggregates the *Arrs (Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian) and media backends (Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita) into one local library you can browse, search and request from, and it exposes protocol surfaces (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend individually. It is meant to coexist with the rest of the ecosystem, not replace it. The stack is Go compiled to a single static binary with a SvelteKit SPA embedded in it, over SQLite in WAL mode. Do not state a Go minimum from memory: the go directive in go.mod is authoritative, 1.25.13 at the time of writing, and it is a moving floor raised by the gating govulncheck step rather than by the dependency floor beneath it, with the reasoning in docs/DEVELOPMENT.md. Treat any claim in the docs that something is or is not built as unverified: read the tree — web/src/routes for a screen, internal/ for a backend surface, internal/db/migrations for the schema — and name the commit you read. Do not write a fresher one; write the pointer. A milestone label is scope, not status.
@@ -61,9 +73,9 @@ On interface design, read section 17 of ARCHITECTURE.md before touching a screen
 
 ## v1.5 — superseded
 
-The text applied verbatim to the Project's settings at 05:05 UTC on 2026-08-17, replacing v1.4.
-It was superseded by v1.6 above, which has not been applied, so this remains the live settings
-text until that apply happens. It was verified byte-identical to this block by checksum on both
+The text applied verbatim to the Project's settings at 05:05 UTC on 2026-08-17, replacing v1.4. It
+was superseded by v1.6 above, which was applied on 2026-08-18, so this is **no longer** the live
+settings text. It was verified byte-identical to this block by checksum on both
 sides of the apply: 8124 bytes (8112 characters), md5 `77f2d90247d00395dea77e94076bc84e`,
 measured on the extract before applying and on the settings read-back afterwards.
 
@@ -261,7 +273,7 @@ On interface design: utilitarian over stylish. The bar is tried-and-true, easy t
 
 ## Changelog
 
-### v1.6 — 2026-08-18 (proposed)
+### v1.6 — 2026-08-18 (applied 2026-08-18)
 
 **This is a unit correction, not a content change.** The owner stated that the settings field holds
 8000 **characters**. Every version to date was sized against an assumed 8192-**byte** limit, and the
@@ -298,6 +310,9 @@ does not rescue anything.
 - **A drift check over 281 commits and ADRs 0039-0048 found no claim in v1.5 wrong.** All ten ADRs
   were scope-only, which is exactly what deferring to §16 is for: the instruction text does not move
   when scope does, because it never enumerated scope in the first place.
+- **This record was updated in the same pass as the apply, not afterwards.** v1.5's record lagged
+  its apply by eleven hours, and that entry's own closing line called for the fix to be exactly
+  this: the record has to be updated as part of the apply. This is that.
 
 ### v1.5 — 2026-08-17 (applied 05:05 UTC)
 
