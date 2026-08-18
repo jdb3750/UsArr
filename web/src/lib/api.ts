@@ -784,9 +784,24 @@ export async function checkReady(): Promise<void> {
  * it and keeps its own types, its own URL and its own parsing next to the
  * endpoint they describe. It is GET-only by construction; every write still
  * goes through `sendJson`, which is what carries the CSRF token.
+ *
+ * `signal` IS FOR A READ THAT CAN BE SUPERSEDED WHILE IT IS STILL IN FLIGHT,
+ * which as-you-type filtering makes ordinary: every keystroke starts a read the
+ * next keystroke makes pointless, and without a signal the browser holds all of
+ * them open against its per-host connection limit until each one answers. It is
+ * optional because every other caller here is a read nobody wants to cancel.
+ *
+ * ⚠️ AN ABORT ARRIVES AT THE CALLER AS AN `ApiError` WITH STATUS 0, not as a
+ * distinct type: `fetch` rejects with an `AbortError` and the `catch` above
+ * cannot tell that apart from a dead backend without inspecting the cause, so
+ * it wraps both. A caller that cancels therefore has to recognise its own
+ * cancellation from the state it kept — `$lib/livesearch` does it with the
+ * sequence number it already holds — and must not render the wrapped error as a
+ * failure. `sendJson` has taken a signal on the same terms since it was
+ * written.
  */
-export async function getJson(url: string): Promise<unknown> {
-	return requestJson(url);
+export async function getJson(url: string, signal?: AbortSignal): Promise<unknown> {
+	return requestJson(url, signal ? { signal } : undefined);
 }
 
 // ── auth ────────────────────────────────────────────────────────────────────

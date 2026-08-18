@@ -161,7 +161,9 @@
 		type AttentionRow,
 		type HomeMode
 	} from '$lib/home';
+	import { LIVE_SEARCH_LIMIT, LiveSearch, type LiveRegion } from '$lib/livesearch';
 	import { formatWhen, KNOWLEDGE_STOPS_NOTE, requestsSearchHref } from '$lib/requests';
+	import { atCapacity, fetchSearch } from '$lib/search';
 	import { firstLine, rollupCount } from '$lib/services';
 
 	/**
@@ -318,17 +320,45 @@
 	let loadError = $state('');
 
 	/**
-	 * WHAT THE USER TYPES, AND IT NEVER LEAVES THIS SCREEN AS A QUERY. Home does
-	 * not search: it navigates. `submit()` hands the string to Search through
-	 * `?q=`, which is the parameter that screen's `onMount` already reads.
+	 * WHAT THE USER TYPES. It does two things now, and it did one before.
 	 *
-	 * ⚠️ THE DESTINATION USED TO BE REQUESTS, and the owner moved it: *"the
-	 * search on home should be searching your own library"*. The parameter is
-	 * unchanged, because both screens read `?q=` off `page.url` in `onMount` and
-	 * run themselves from it, which is why this is a destination swap and not a
-	 * mechanism swap.
+	 * ⚠️ THIS BLOCK SAID *"IT NEVER LEAVES THIS SCREEN AS A QUERY. Home does not
+	 * search: it navigates"*, AND THAT IS NO LONGER TRUE. The owner asked for
+	 * the other half: *"i feel like the search should be realtime on the
+	 * homepage. like filter real time type shit"*, with Navidrome's instant
+	 * filtering as the reference. So every keystroke now goes to `live.type()`
+	 * as well, which filters your own library into the region below the box.
+	 *
+	 * THE NAVIGATION IS UNCHANGED AND IS STILL THE POINT. Enter and the button
+	 * still hand the string to `routes/search` through `?q=`, which is where the
+	 * complete result list lives: §6.5 gives that endpoint no second page, the
+	 * Search screen asks for the documented maximum of 100, and this region asks
+	 * for ten. Home did not become the Search screen; it got the first ten rows
+	 * of it without a navigation.
 	 */
 	let query = $state('');
+
+	/**
+	 * THE LIVE REGION'S STATE, AND EVERY DECISION BEHIND IT IS IN `$lib/livesearch`.
+	 *
+	 * What is here is two `$state` slots and a callback that fills them. What is
+	 * NOT here, deliberately, is the debounce, the sequence guard, the abort, the
+	 * floor below which nothing is sent and the delay before a screen reader is
+	 * told anything: `vitest.config.ts` is `environment: 'node'` with no Svelte
+	 * plugin, so a race guard living in this file would be a race guard no test
+	 * could resolve two answers out of order against. `livesearch.test.ts` does
+	 * exactly that, and fires with the guard removed.
+	 */
+	let liveRegion = $state<LiveRegion>({ k: 'dormant' });
+	let liveAnnouncement = $state('');
+
+	const live = new LiveSearch({
+		search: (text, signal) => fetchSearch(text, LIVE_SEARCH_LIMIT, signal),
+		onchange: (region, announcement) => {
+			liveRegion = region;
+			liveAnnouncement = announcement;
+		}
+	});
 
 	/**
 	 * Recent grabs. `grabsLoaded` is separate from `grabs.length` on purpose —
@@ -525,7 +555,13 @@
 			now = new Date();
 			void load();
 		}, 60_000);
-		return () => clearInterval(timer);
+		// `live.dispose()` cancels the pending debounce and aborts whatever read
+		// is in flight, so a keystroke made on the way out cannot resolve into a
+		// component that has gone.
+		return () => {
+			clearInterval(timer);
+			live.dispose();
+		};
 	});
 </script>
 
@@ -744,6 +780,21 @@
 				Requests keeps the releases.
 			-->
 			<label class="sr" for="home-query">Search terms</label>
+			<!--
+				⚠️ `oninput` READS `event.currentTarget.value` AND NOT `query`. Both
+				are on this element, and the order Svelte applies the binding in
+				relative to a handler on the same event is not something a component
+				should depend on; the event's own target is the value that provoked
+				the event by definition. `bind:value` stays because `searchHref` and
+				the submit path are built from it.
+
+				NOTHING HERE TOUCHES A KEY. There is no `onkeydown`, no
+				`preventDefault` and no key filtering on this field, so every
+				keystroke, every IME composition and every paste reaches the input
+				unmodified and the only thing that happens on top is a read. Escape,
+				the type="search" clear control and select-all-delete all arrive as an
+				`input` event with an empty value, which is the `dormant` plan.
+			-->
 			<input
 				id="home-query"
 				name="q"
@@ -753,10 +804,130 @@
 				placeholder="A title, or a name credited on one"
 				aria-describedby="home-search-note"
 				bind:value={query}
+				oninput={(event) => live.type(event.currentTarget.value)}
 			/>
 			<button type="submit" class="btn btn--primary" formaction={searchHref}>Search</button>
 		</form>
 		<p class="note" id="home-search-note">{HOME_SEARCH_SCOPE_NOTE}</p>
+
+		<!--
+			THE RESULTS, INLINE AND SIMPLY THERE.
+
+			⚠️ NO OVERLAY, NO DROPDOWN, NO ANIMATION. This is not a combobox and it
+			is not a floating panel over the page: it is rows in the document flow,
+			directly under the field, pushing Block C down as it grows. A floating
+			list would need a shadow, a stacking context, an outside-click dismissal
+			and a keyboard contract this screen has no use for, and §1.5 rules out
+			the shadow on its own. Navidrome is the bar and Navidrome simply shows
+			the list.
+
+			⚠️ AND NOTHING IS DRAWN WHILE A READ IS IN FLIGHT. §7.2 Tier 0 is "show
+			nothing at all. No skeleton, no spinner, no fade-in" for a read out of
+			local SQLite, and between two keystrokes this region is already showing
+			a true answer to the previous one. Swapping that for an indicator would
+			replace something true with something that only says wait, and drawing a
+			`nothing matched` line under a half-typed word would say something false.
+			The empty arm below is only ever reached from an answer the server gave
+			for the text that is in the box.
+
+			THE ROWS ARE BLOCK C's ROWS, THE SAME COLUMNS AND THE SAME SNIPPET.
+			`docs/reference/http-api.md` §6.2 fixes the two wire shapes as identical
+			key for key, "deliberately, so one row component renders both Home's
+			recently-added table and a search result", and `$lib/search` types
+			`SearchItem` as an alias of `RecentItem` rather than re-declaring it. A
+			second column set here would be two layouts computed for one row, which
+			is the drift ADR-0029 exists to prevent.
+		-->
+		{#if liveRegion.k !== 'dormant'}
+			<div class="liveresults">
+				{#if liveRegion.k === 'floor'}
+					<!--
+						ONE CHARACTER, AND NOTHING WAS ASKED. `internal/store/searchquery.go`
+						drops a one-character final token from the keyword leg and keeps
+						every token under three characters off the trigram leg, so no leg
+						can run and §6.6 says the answer is 200 with no items. This line
+						says the input is short; it does not say the library is empty,
+						because nothing has been asked that could have found out.
+					-->
+					<p class="note livenote">One letter is too short to match. Two is enough to start.</p>
+				{:else if liveRegion.k === 'error'}
+					<!--
+						NO `role="alert"`. An assertive role fires on every keystroke while
+						a backend is down, which interrupts the person typing over and over.
+						The polite region at the foot of this section carries it once, after
+						they stop.
+					-->
+					<div class="banner banner--err">
+						<Icon name="x-circle" />
+						<div class="banner__body">
+							<div class="banner__title">Your library could not be searched</div>
+							<div class="banner__text">
+								This is a read of UsArr’s own database, so it failing is not a service being slow.
+								Your library is not known to be empty; it is unknown.
+							</div>
+							<p class="verbatim">{liveRegion.message}</p>
+							{#if liveRegion.action}<p class="banner__text">{liveRegion.action}</p>{/if}
+						</div>
+					</div>
+				{:else if liveRegion.k === 'nothing'}
+					<!--
+						THE SERVER ANSWERED AND HAD NOTHING, for the text in the box. One
+						line, no box and no illustration: it is replaced by the next
+						keystroke, and a block that big flashing on and off under a typing
+						hand is the noise this whole region is written against. The full
+						zero-results state, with the note about what the matching does and
+						the exit to the indexers, is on the Search screen, where the query
+						is finished.
+					-->
+					<p class="note livenote">Nothing in your library matches “{liveRegion.query}”.</p>
+				{:else}
+					<List
+						label="Library search results"
+						columns={RECENT_COLUMNS}
+						rows={liveRegion.results.items}
+						key={(item: RecentItem) => String(item.id)}
+						total={liveRegion.results.items.length}
+						rowIntrinsic={ROW_INTRINSIC_RECENT}
+						stack="two-line"
+						cell={recentCell}
+					/>
+					{#if atCapacity(liveRegion.results)}
+						<!--
+							§17.4 rule 3's finding from Baymard: silent truncation is what
+							makes a user believe they have seen everything. The number is the
+							ECHOED limit and never the one that was sent, because §6.3 clamps
+							silently and only the echoed value describes the answer in hand.
+							It claims no total, because nothing on the wire carries one.
+						-->
+						<p class="note livenote">
+							The first {liveRegion.results.limit} matches are here. Press Search for the rest.
+						</p>
+					{/if}
+				{/if}
+			</div>
+		{/if}
+
+		<!--
+			WHAT A SCREEN READER IS TOLD, AND IT IS TOLD IT LATE AND POLITELY.
+
+			`polite` queues behind whatever is being read rather than cutting into
+			it, which is the only acceptable setting for a region that changes under
+			a typing hand. `aria-atomic` makes the sentence read as a sentence
+			instead of as a changed word.
+
+			⚠️ THE COUNT IS NOT PUBLISHED ON EVERY KEYSTROKE, and politeness alone
+			would not prevent that: it decides when each update is spoken, not
+			whether it is queued, so a per-keystroke region reads out every
+			intermediate count once the user stops. `$lib/livesearch` holds the text
+			back until the user has been still for `ANNOUNCE_SETTLE_MS` and withdraws
+			it the moment they type again, so one pause produces one sentence.
+
+			IT IS NEVER FOCUSED AND NOTHING IN THIS REGION EVER TAKES FOCUS. No
+			element here calls `focus()`, the rows come after the field in document
+			order so Tab reaches them only when the user asks, and the region is a
+			`<p>` rather than anything focusable.
+		-->
+		<p class="sr" aria-live="polite" aria-atomic="true">{liveAnnouncement}</p>
 	</section>
 {/if}
 
@@ -1405,6 +1576,36 @@
 		flex: 1 1 24rem;
 		max-width: 42rem;
 		min-width: 0;
+	}
+
+	/*
+	 * THE AS-YOU-TYPE RESULTS — SPACING, AND NOTHING ELSE.
+	 *
+	 * No border, no background step, no shadow, no radius and no position. It
+	 * is rows in the document flow directly under the field, which is what makes
+	 * it an inline list rather than the floating dropdown §1.5 rules out; a
+	 * panel here would need a stacking context and an outside-click contract to
+	 * go with it, and would buy the user nothing the flow does not already give.
+	 *
+	 * ⚠️ AND THERE IS NO `transition`, NO `animation` AND NO `@keyframes` ON
+	 * ANYTHING IN HERE. The list changes under a typing hand several times a
+	 * second, so any entrance is either invisible or a stutter, and §7.2 Tier 0
+	 * bans the fade-in by name. What replaces one answer with the next is the
+	 * next answer.
+	 *
+	 * `--space-4` matches the gap between the scope note and Block C's own
+	 * table, so the region sits at the same distance from the control above it
+	 * as every other table on this screen.
+	 */
+	.liveresults {
+		margin-top: var(--space-4);
+	}
+
+	/* A line under the box, on `.note`'s muted small type. `.note` supplies the
+	 * colour, the size and the measure; this only lifts it off the field, which
+	 * is placement and therefore not `.note`'s to own. */
+	.livenote {
+		margin-top: var(--space-3);
 	}
 
 	/* The note sits between the section head and the table, so it needs the gap

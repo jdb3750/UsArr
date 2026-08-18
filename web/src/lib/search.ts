@@ -165,10 +165,22 @@ export function searchRequestUrl(query: string, limit = SEARCH_LIMIT): string {
 	return `${LIBRARY_SEARCH_URL}?${params.toString()}`;
 }
 
-/** One search. A local SQLite read behind the endpoint: it makes no upstream
- * call and is never on a path that waits for a service. */
-export async function fetchSearch(query: string, limit = SEARCH_LIMIT): Promise<SearchResults> {
-	return toSearchResults(await getJson(searchRequestUrl(query, limit)), query, limit);
+/**
+ * One search. A local SQLite read behind the endpoint: it makes no upstream
+ * call and is never on a path that waits for a service.
+ *
+ * `signal` is the as-you-type path's, and it is passed rather than owned:
+ * `$lib/livesearch` decides when a read has been superseded, this function only
+ * carries the decision to `fetch`. An aborted read rejects with `$lib/api`'s
+ * `ApiError` at status 0 — see `getJson` — so a caller that cancels has to know
+ * it cancelled and must not draw that as a failure.
+ */
+export async function fetchSearch(
+	query: string,
+	limit = SEARCH_LIMIT,
+	signal?: AbortSignal
+): Promise<SearchResults> {
+	return toSearchResults(await getJson(searchRequestUrl(query, limit), signal), query, limit);
 }
 
 /**
