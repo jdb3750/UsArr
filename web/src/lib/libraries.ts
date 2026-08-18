@@ -870,10 +870,17 @@ export function libraryStates(library: Library, read: HealthRead): LibraryStateM
 				key: 'connected-empty',
 				word: 'Connected and empty',
 				tone: 'none',
-				detail:
-					verdicts.length === 1 && verdicts[0].source.serviceName !== ''
-						? `${verdicts[0].source.serviceName} reports no items`
-						: 'the sources report no items'
+				// ⚠️ THE DETAIL STATES THE EVIDENCE, NOT A SECOND COUNT, and the
+				// distinction is the one REVIEW-LOG LS-115 insists on. `item_count`
+				// is `library_member` rows PER LIBRARY; `work_count` is distinct
+				// works PER SERVICE INSTANCE, and an instance can contribute plenty
+				// of works while contributing nothing to THIS library. An earlier
+				// draft read `Kavita Manga reports no items`, which reads as the
+				// second number and would be false in exactly that case. What the
+				// join actually measured is that the source is connected and its
+				// last import completed, so that is what the line says; the count
+				// itself is in the Items column, where it belongs.
+				detail: verdicts.length === 1 ? 'its last import finished' : 'their last imports finished'
 			});
 		} else {
 			// The pre-join answer, and it survives for exactly the case it was
