@@ -13642,3 +13642,198 @@ rather than a replication of it.** This diff touches only `docs/`, so there was 
 stale issue to be attributed to; a clean lint here is consistent with the poisoning being real and
 equally consistent with it being absent. The isolation was applied because it is cheap and the
 finding is credible, not because this run tested it.
+---
+
+# VN9-08 — two drafts applied against a tree that had moved: five citations dead, one falsified by its own rule
+
+**Date:** 2026-08-18. **Prefix:** `VN9-`, continuing from
+[`VN9-07`](#vn9-07--the-classifier-hold-cleared-on-a-retry-and-three-adr-0041-stalenesses-landed-behind-it),
+which was the highest `VN9-` **entry** on `main` when this was written. Appended, never renumbered.
+
+Two finished drafts had been sitting in a scratchpad while `origin/main` advanced past twenty
+commits. Each carried its own apply-time citation checklist, written by the drafting thread against
+`a39ac02` and explicitly expecting to drift again. It did. This entry records which rows moved, and
+the one row that failed on a measurement rather than a line number.
+
+## VN9.38 The ADR number, and why reading twice is not paranoia
+
+The draft's banner reserved nothing and said so: *"an ADR number is a shared counter that cannot be
+allocated safely by reading"*. Its own body predicted **0047**; its checklist, written later, found
+0047 already taken by *Prowlarr pins ONE spec* and predicted **0048** while warning that 0048 was not
+reserved either. Re-read at apply time: the highest `## ADR-` heading on `main` is **ADR-0047**
+(`docs/DECISIONS.md:5695`), so **0048 was still free and is the number used**. Three occurrences were
+substituted — the index row, the body anchor and heading, and the `+page.svelte` comment — plus two
+`ADR-XXXX` links and one `#adr-xxxx` anchor in the §17.8 replacement. Nothing was renumbered.
+
+## VN9.39 §17.8 was the one thing that had NOT moved, and the md5 is why that is known
+
+The §17.8 draft's checklist put its own replacement range and hash in the "must be retaken" bucket.
+Retaken: §17.8 runs **3956–4184**, exactly the drafted range, **229 lines**, md5
+**`a8da3ace309d3802f41011f4cb6f192f`** — an exact match against the value recorded when the draft was
+cut. It is also still the last section in the file, so replacing through end-of-file preserved no
+following heading, as the draft assumed.
+
+⚠️ **The match is the finding, not the absence of one.** Had it differed, another thread had edited
+the section under the draft and pasting over it would have discarded their work silently — a
+destructive failure with no error and no conflict marker. The check cost one `md5sum`. This is the
+same shape as `VN9-06`'s rule about naming the surface: a range located by remembered line number is
+a guess, and a range confirmed by hash is a measurement.
+
+## VN9.40 Five Go citations were dead, and one of them was dead in a way a line number cannot express
+
+Rows 4, 5, 6 and 7 of the ADR draft's checklist had already drifted once between drafting and the
+checklist; every one of them had drifted **again**:
+
+| Cited in the draft | Checklist's re-verified value | Actual value on `main` |
+| --- | --- | --- |
+| `catalogue.go:373-375` — the library `INSERT` | 383-385 | **487-489** |
+| `catalogue.go:395` — the library-0 exclusion | 406 | **546** (and see below) |
+| `catalogue.go:811` — `rebuildSearchDoc` | 1032 | **1163** |
+| `catalogue.go:281-285, 292-294` — declined containers | 292-294 + 511-514 | **315-317** (rule), **344-346** (code), **`:640`** (downstream skip) |
+| `UnfiledLibraryID int64 = 0` | 38 | **41** |
+
+**Row 5 is the one that mattered, because repointing it would have been wrong.** The draft quoted a
+SQL predicate:
+
+```
+`SELECT id, name, kind FROM library WHERE user_id = ? AND id <> ?`, userID, UnfiledLibraryID
+```
+
+and attributed it to `userLibrariesByNameKey`. **The function, the query and the exclusion are all
+gone.** The function is now `userLibraries`; its statement is
+`SELECT id, name, slug, kind FROM library WHERE user_id = ?` (`:532`) with **no exclusion in it at
+all**; and library 0 is dropped afterwards, in Go, by `if r.id != UnfiledLibraryID` at `:546`. A
+mechanical repoint from `:395` to `:546` would have left a verbatim code block in the ADR quoting a
+string that exists nowhere in the tree — a fabricated citation wearing a correct line number.
+
+The passage was rewritten instead, and the correction was recorded in the ADR rather than laundered,
+per this repo's house style for falsified reasoning. **It strengthens the argument.** The ADR's claim
+is that a not-really-a-library row costs a hand-written exclusion at every read site; an exclusion
+that is an `if` inside a scan loop is *less* inheritable by the next author's query than one written
+into a `WHERE` clause, because there is nothing in the query to copy. The same site also shows the
+reserved row costs **two** decisions rather than one — `out.names` keeps `Unfiled` so no new library
+can take the name, `out.joinable` drops it so no proposal can join it — which is a second measured
+instance of the cost the ADR is arguing about.
+
+⚠️ **The exclusion inventory was re-counted rather than carried.** One site in non-test Go (`:546`),
+plus `internal/store/catalogue_test.go:437`, `internal/libsync/importer_test.go:358` and `:380`, and
+`cmd/usarr/import_e2e_test.go:190` and `:193`. The draft listed three test sites; there are five.
+
+Two further citations were quietly wrong and are corrected: the bootstrap gate is
+`cmd/usarr/services.go:219-221`, not `:218-221`, and alternative (a)'s claim about `enabled` and
+`include_in_search` defaults pointed at `00005_library_sync.sql:565-576`, which contains neither
+column — they are at **`:552-553`**, and the three indexes the same sentence names are at
+**`:576-578`**.
+
+## VN9.41 What had NOT drifted
+
+The migration is a merged migration, and `CLAUDE.md` forbids editing one, so its line numbers were
+the draft's safest citations and all of them held: `:565` (the `CHECK`), `:567` (its comment),
+`:579-596` (the reserved-row comment), `:597-598` (the library-0 seed), `:625-632` (the `BEFORE
+DELETE` trigger). So did `internal/db/migrate_test.go:909`, `cmd/usarr/import_e2e_test.go:190`,
+`internal/db/testdata/schema.sql:373` and `:375`, and `docs/reference/schema.md:1458,1460`.
+
+Both drafts' "already fixed, do not restore" rows were confirmed rather than trusted. `'user'` is
+still written by **no** code path — the only Go writer of `managed_by` is the `'auto'` `INSERT`, and
+the only `UPDATE` in non-test Go is `UPDATE library_source` (`catalogue.go:432`), not `UPDATE
+library`. The four `sink_*` columns still appear in **no** Go, TypeScript or Svelte. And
+`internal/libsync/kavita.go:92` still opens `✅ LS-04 IS SETTLED`, so the §17.8 paragraph crediting
+this section for settling it is current, not stale.
+
+## VN9.42 The one row that failed on a measurement: the draft broke its own rule four times
+
+⚠️ **This is the finding worth the entry.** The §17.8 draft's header argued at length that it added
+**no** new `*"…"*` span, because `docs/design/check.mjs` reads every italic-quoted span in §17 as a
+specified UI string and checks it as shipping copy at any length. Its checklist row 8 said the whole
+no-new-copy-span argument rested on the corpus count being unchanged and instructed the applying
+agent to **measure it, not infer it**. The replacement text even states the rule inline, twice — a
+phrase that is not shipping copy must not be quoted as shipping copy.
+
+**Measured after applying: the corpus went from 58 spans to 62.** The draft added four, all of them
+quotations of things that are not shipping copy — two retired draft sentences (`and nowhere else in
+the tree`; the `'user'` occurrence claim) and two quotations of a **Go source comment**
+(`internal/libsync/kavita.go`'s LS-04 settlement and its credit sentence).
+
+`make design` **passed anyway**, at exit 0, because the floor is 45 and all 62 strings were clean of
+banned words, `!` and em dashes. **A green was not evidence here.** The defect is not a violation;
+it is four developer-prose strings being enrolled in a shipping-copy corpus, where the next author to
+add an em dash to a quoted Go comment fails a gate for a reason that reads as nonsense.
+
+Fixed before the commit: all four converted to backticks, which both sweeps are blind to and which is
+the form §17 already uses for its retired `… can only offer to add sources — never reshape it`
+string. Re-measured: **58 spans, and the corpus is identical to `main`'s in content as well as
+count**, which is what the draft claimed and could not have known.
+
+🚩 **The general form, because it will recur: a draft that states a rule about a mechanical checker
+is not evidence that it obeyed it.** The rule was stated correctly, in the same block that broke it,
+by an author who understood the mechanism well enough to write the parenthetical explaining it. Only
+the count caught it. That is `DEVELOPMENT.md` §11's *report what you measured* applied to a document's
+claim about itself.
+
+## VN9.43 The inseparable pair
+
+`web/src/routes/libraries/+page.svelte`'s comment framed this exact question as **open with three
+candidates** and said *"until one is picked, the Accept step is not buildable on this schema"*. The
+ADR picks one. Landing either alone puts both claims on `main` on the same day, and the ADR cites
+that comment as its own starting point, so the contradiction would sit between two paragraphs that
+reference each other.
+
+The comment's current text was verified byte-identical to the draft's quoted `78660a4` text before
+anything was written over it — `git diff 78660a4 origin/main -- <path>` empty, and the block
+re-measured at lines **30-55** — so it had **not** already been swept by another thread. Lines 1-29
+are untouched. The two findings that thread measured (the column cannot express `proposed`; the row
+exists at proposal time, which inverts the screen's safety) are **kept verbatim** and are the ADR's
+Context. Only the final paragraph, the one declaring the question open, is replaced. It is a status
+sweep of another thread's file, not a rewrite of their argument, and the commit message says so.
+
+Because a `.svelte` file is in the diff, this commit is **not** docs-only and `make check` was
+required rather than `make design` alone — which is precisely the trap that splitting the pair would
+have sprung.
+
+## VN9.44 What this pass did NOT do
+
+- **The ADR's own Part 3 follow-up was not folded in.** A `why` comment at
+  `internal/store/catalogue.go:488` noting that the row it writes is an *accepted* proposal under
+  clause 4 would be legible at the site. It is genuinely separable — nothing in the ADR contradicts
+  the tree if it never lands — and it is Go, so it carries its own gate. Raised, not done.
+- **LS-06 stays owed.** `catalogue.go:307-314` still records that its
+  `container_kind = 'remote_library'` decision is owed an ADR and does not have one. That is a
+  different decision and this ADR says so explicitly rather than appearing to cover it.
+- **Nothing in the import path was changed.** The ADR names the removal of unconditional creation
+  from `bindOneContainer`'s reach as the harder half of building §17.8 and deliberately does not
+  schedule it. `make check` green here attests that no behaviour moved, which is the intent.
+- **The three open questions the ADR raises were not answered**, including whether the first import
+  runs before Accept or after it, which needs the owner.
+
+## VN9.45 Gate
+
+Both gates were run on the final tree, with the review log in it.
+
+`make design` — **exit 0**, ending `all design checks pass`. Corpus: **6978** user-visible strings
+over both installs (floor 6750) and **58** ARCHITECTURE §17 shipping-copy strings (floor 45),
+the latter identical in count and content to `main`'s per VN9.42. Violations: **0**. All four
+recorded `S17_EMDASH_ALLOWED` exemptions still matched, so the exemption-size check did not fire.
+
+`make check` — **exit 0**, ending `check: OK`. Per `VN9-06`'s finding it was run with **both**
+`GOCACHE` and `GOLANGCI_LINT_CACHE` isolated under the scratchpad, and **neither shared cache was
+cleaned**, since other agents may be mid-run. 13 Go packages passed, 489 frontend tests across 13
+files, govulncheck v1.7.0 found no called vulnerabilities, and `pnpm audit` found none.
+
+⚠️ **Nothing was red in either gate, so nothing was judged phantom, and the standing framing for
+that judgement has been corrected under this thread.** `VN9-07` and its predecessors ran the two
+caches isolated on the theory that stale lint findings replay through the Go **build** cache. **That
+half is now withdrawn at the source**: the measured pair does not reproduce, and the mechanism is
+falsified — with `-trimpath` off, Go hashes the absolute package directory into the action ID, so
+separate worktrees structurally cannot share compile-cache entries. What survives is narrower and
+weaker: isolating `GOLANGCI_LINT_CACHE` does genuinely isolate, and there remains **one incident
+where an empty lint cache still reported stale paths, which is unexplained rather than diagnosed**.
+
+Both caches were still isolated here, because it is free hygiene and costs nothing. **What changed is
+how a failure would have been read.** The earlier standing instruction — that a Go finding making no
+sense for the diff is "the known poisoning" and should not be chased — was too strong, and it points
+the risk the wrong way: a real failure dismissed as phantom is far worse than a phantom investigated.
+The rule this entry records for its successors is that **any `make check` finding is real by
+default**, investigated and reported verbatim, and the gate is never called passed while something is
+red; "cache poisoning" is not an available explanation unless it can be demonstrated on the tree in
+hand, and **"unexplained" is the honest word otherwise**. None of that was exercised on this run,
+which is a fact about the run and not evidence about the mechanism.

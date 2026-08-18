@@ -45,13 +45,30 @@
 	 * is a DELETE — backwards from what a pre-checked confirmation screen
 	 * implies, where saying no is supposed to be the cheap direction.
 	 *
-	 * THIS IS AN OPEN DECISION, NOT A BUG TO FIX HERE. Design wants it made
-	 * before anyone builds the wizard, and the three candidates are: a proposal
-	 * stops being a row until it is accepted; or a third `managed_by` state; or
-	 * §17.8 is renamed to a review of what has already been created. Until one is
-	 * picked, the Accept step is not buildable on this schema. The wizard step is
-	 * still unbuilt rather than contradicted — but it is unbuilt on a column that
-	 * cannot yet express what it needs.
+	 * ✅ THAT DECISION IS NOW TAKEN — SEE ADR-0048. This block used to end by
+	 * naming three candidates and picking none. It no longer does, because the
+	 * ADR picked one: A LIBRARY PROPOSAL IS NOT A ROW IN `library`. The proposal
+	 * set is a value computed by the connect probe from what the instance reports
+	 * and what `library_source` already binds; it is never persisted; and a
+	 * `library` row is created only when the user accepts one. The other two
+	 * candidates are rejected in writing there — a third `managed_by` state
+	 * (a `'proposed'` row still satisfies `enabled = 1` and `include_in_search = 1`
+	 * on its defaults, so every read that does not name `managed_by` sees it, and
+	 * none of them names it; and it would reserve a name in `ux_library_name`
+	 * before acceptance, breaking §17.8's specified join-on-existing-name), and
+	 * renaming §17.8's step to a review of what already exists (which ratifies the
+	 * inversion instead of repairing it).
+	 *
+	 * SO THE COLUMN IS NOT ASKED TO EXPRESS "proposed" ANY MORE — the state was
+	 * removed from the design rather than covered by the schema. `managed_by`
+	 * keeps its two values, and no migration follows from the ADR.
+	 *
+	 * WHAT IS STILL UNBUILT IS UNCHANGED BY ANY OF THIS, and is the reason this
+	 * screen is a placeholder: Accept is a SUBTRACTION from a working path, not a
+	 * screen bolted onto one. Today's import creates rows unconditionally on a
+	 * first connect, so building §17.8 means removing creation from
+	 * `bindOneContainer`'s reach on the bootstrap path. The ADR names that trade
+	 * and deliberately does not schedule it; it belongs to whoever builds §17.8.
 	 */
 	import { resolve } from '$app/paths';
 </script>
