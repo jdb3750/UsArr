@@ -127,6 +127,60 @@ const health = (i) => ({
 const ROWS = 24;
 const many = (f) => Array.from({ length: ROWS }, (_, i) => f(i));
 
+/* ── THE VACUITY LEDGER ──────────────────────────────────────────────────────
+ *
+ * WHY A PROBE WITH NO ASSERTIONS NEEDS ONE ANYWAY. Everything below prints
+ * numbers that a human reads as evidence, and the two ways this run can produce
+ * numbers that mean nothing are both silent by construction:
+ *
+ *   · THE CATCH-ALL STUB. Every `/api/**` path no rule below matches is
+ *     fulfilled with `{}`, which the SPA renders as an EMPTY screen rather than
+ *     as an error. Several waits here are on selectors that exist in the
+ *     populated state and in the empty one alike, so the probe sails past them
+ *     and measures the geometry of a screen with nothing on it. A rule that
+ *     stops matching — a route renamed, a version segment bumped — turns a real
+ *     measurement into that, and nothing said so.
+ *
+ *   · "DID NOT SCROLL" ON A REGION THAT COULD NOT SCROLL. `delta: 0` is the
+ *     headline reading of the whole keyboard section, and it is only evidence
+ *     when the region had somewhere to go. On a short page it is an artefact,
+ *     and it is INDISTINGUISHABLE in the output from the fact it is meant to
+ *     record. The text-field block already says in its own comment that its
+ *     viewport was chosen "so 'did not scroll' is a fact rather than an
+ *     artefact of a short page" — nothing checked that it was.
+ *
+ * So this stays a probe: no framework, no expectations, no per-reading pass or
+ * fail. It gains one floor, which is that a run whose numbers are vacuous SAYS
+ * SO, in a block of its own and in the exit code, instead of printing the same
+ * shape of JSON as a run that measured something.
+ *
+ * WHAT THE FIRST ARMED RUN FOUND, both of which had been printing silently:
+ *
+ *   · `/api/v1/libraries` had no stub, so all six `/libraries` measurements ran
+ *     against the catch-all. A rule is added above and the count is now zero.
+ *     ⚠️ IT CHANGED NONE OF THE NUMBERS — the two runs are identical row for
+ *     row, because the shell chrome at that route does not depend on the
+ *     response. The floor found a HOLE, and then showed it had been harmless;
+ *     that is the floor working, not a bug being fixed, and it should not be
+ *     written up as one.
+ *
+ *   · EVERY HORIZONTAL READING IN THIS FILE IS VACUOUS, and still is. `.main`
+ *     has no horizontal overflow at any viewport measured here, so `room` is 0
+ *     for both x cases in all four blocks and `ArrowLeft`'s declared start of
+ *     600px never took — the run reports `from: 0`, because `scrollLeft = 600`
+ *     on a region 0px wider than its client box does nothing. The x rows have
+ *     therefore never been evidence that the shell forwards or ignores those
+ *     keys; they are evidence of nothing, and shellscroll.test.ts is where that
+ *     behaviour is actually asserted. Fixing it means giving the region real
+ *     horizontal overflow to press against, which is a change to the keyboard
+ *     section rather than to this floor. UNTIL THEN THIS PROBE EXITS 1 ON EVERY
+ *     RUN, deliberately, and the exit code is not to be silenced to make that
+ *     go away — the readings are vacuous, and the run should keep saying so. */
+const unmatched = new Map();
+const vacuous = [];
+/** Which block is measuring right now, so a vacuous reading can be placed. */
+let context = 'startup';
+
 /* Order matters: /services/health has to be matched before /services. */
 const STUBS = [
 	[/\/api\/v1\/auth\/session$/, (u) => session(u)],
@@ -136,6 +190,13 @@ const STUBS = [
 	],
 	[/\/api\/v1\/services/, () => ({ services: many(svc) })],
 	[/\/api\/v1\/indexers/, () => ({ indexers: [] })],
+	/* FOUND BY THE LEDGER BELOW, on its first armed run: `/libraries` is in
+	   ROUTES and had no rule, so all six of its geometry measurements were taken
+	   against the catch-all's `{}`. The key is `items` and it is `[]` on an
+	   empty install — internal/httpapi/libraries.go's `librariesResponse` says
+	   in as many words that an ABSENT key must not be confusable with a failure,
+	   which is precisely what `{}` was handing the screen. */
+	[/\/api\/v1\/libraries/, () => ({ items: [] })],
 	[/\/api\/v1\/grabs\/recent/, () => ({ grabs: [] })],
 	[/\/api\/health\/ready/, () => ({ status: 'ok' })]
 ];
@@ -153,6 +214,17 @@ async function newPage(username, width, height) {
 					contentType: 'application/json',
 					body: JSON.stringify(body(username))
 				});
+		}
+		/* STILL FULFILLED, because failing the request would change what is being
+		   measured rather than reveal it — the shell renders an error state with
+		   a different geometry. It is RECORDED instead, so the empty screen it
+		   produces is attributable at the bottom of the run. */
+		const path = new URL(url).pathname;
+		const seen = unmatched.get(path);
+		if (seen === undefined) unmatched.set(path, { count: 1, contexts: [context] });
+		else {
+			seen.count++;
+			if (!seen.contexts.includes(context)) seen.contexts.push(context);
 		}
 		return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
 	});
@@ -326,12 +398,14 @@ for (const [label, username] of [
 ]) {
 	for (const w of [...WIDE, ...NARROW]) {
 		const narrow = w <= 900;
+		context = `geometry ${label} ${w}px`;
 		const page = await newPage(username, w, 800);
 		for (const route of ROUTES) {
 			// Narrow widths only get the full route sweep at 560 and 320; the rest
 			// is a width sweep on Home, which is where the bar is busiest.
 			if (narrow && ![560, 320].includes(w) && route !== '/') continue;
 			if (!narrow && ![1280].includes(w) && route !== '/') continue;
+			context = `geometry ${label} ${w}px ${route}`;
 			const m = await measure(page, route, w, 800, { openDrawer: narrow });
 			out.push({ nameLen: label, w, route, ...m });
 		}
@@ -414,6 +488,7 @@ const readState = `(() => {
     top: main.scrollTop,
     left: main.scrollLeft,
     maxTop: main.scrollHeight - main.clientHeight,
+    maxLeft: main.scrollWidth - main.clientWidth,
     clientH: main.clientHeight,
     sidebarTop: sidebar ? sidebar.scrollTop : null,
     windowY: window.scrollY,
@@ -466,16 +541,33 @@ async function pressFrom(page, c) {
 	await page.waitForTimeout(80);
 	await settled(page, axisExpr);
 	const after = await page.evaluate(readState);
-	return {
+	const onX = c.axis === 'x';
+	const delta = onX ? after.left - before.left : after.top - before.top;
+	/* THE EXTENT THE READING IS ONLY MEANINGFUL AGAINST. Read on the same axis
+	   the key was pressed on, and read AFTER the press: a region that gained
+	   room mid-measurement is still a region that had room. */
+	const room = onX ? after.maxLeft : after.maxTop;
+	const reading = {
 		axis: c.axis ?? 'y',
-		from: c.axis === 'x' ? before.left : before.top,
-		to: c.axis === 'x' ? after.left : after.top,
-		delta: c.axis === 'x' ? after.left - before.left : after.top - before.top,
+		from: onX ? before.left : before.top,
+		to: onX ? after.left : after.top,
+		delta,
+		/* Published on every reading, not only the vacuous ones, so a reader can
+		   see what `delta` was measured against without leaving the JSON. */
+		room,
 		focusBefore: before.focus,
 		focusAfter: after.focus,
 		windowY: after.windowY,
 		keys: after.keys
 	};
+	/* ⚠️ THE ONE FLOOR: a zero delta on a region with nowhere to go is NOT the
+	   observation "the key did not scroll". It is the absence of an
+	   observation, and it must not be read as the former. */
+	if (delta === 0 && room === 0) {
+		reading.vacuous = true;
+		vacuous.push({ context, key: c.name, axis: c.axis ?? 'y' });
+	}
+	return reading;
 }
 
 /* ── WHAT THE PLATFORM ITSELF DOES ───────────────────────────────────────────
@@ -532,6 +624,7 @@ const kb = await (async () => {
 
 	/* THE HEADLINE: a page that has just painted, focus untouched, one key. */
 	{
+		context = 'keyboard/headline /services 1280x800';
 		const page = await newPage(SHORT_USER, 1280, 800);
 		await page.goto(BASE + '/services');
 		await settle(page, '.tbl tbody tr');
@@ -547,6 +640,7 @@ const kb = await (async () => {
 	/* THE SWEEP, on one page that is never clicked, so focus stays on <body>
 	 * for the whole run and every row below is a body-focus measurement. */
 	{
+		context = 'keyboard/sweepFromBody /services 1280x800';
 		const page = await newPage(SHORT_USER, 1280, 800);
 		await page.goto(BASE + '/services');
 		await settle(page, '.tbl tbody tr');
@@ -583,6 +677,7 @@ const kb = await (async () => {
 	 * handler must be inert — no scroll and, more importantly, no preventDefault,
 	 * since swallowing a key something else would have handled is the worse bug. */
 	{
+		context = 'keyboard/focusReal /services 1280x800';
 		const page = await newPage(SHORT_USER, 1280, 800);
 		await page.goto(BASE + '/services');
 		await settle(page, '.tbl tbody tr');
@@ -622,6 +717,7 @@ const kb = await (async () => {
 	/* A TEXT FIELD, at a viewport short enough that the region really can scroll,
 	 * so "did not scroll" is a fact rather than an artefact of a short page. */
 	{
+		context = 'keyboard/textField /requests 1280x400';
 		const page = await newPage(SHORT_USER, 1280, 400);
 		await page.goto(BASE + '/requests');
 		await settle(page, '#req-query');
@@ -655,6 +751,7 @@ const kb = await (async () => {
  * its own record, every back-navigation landed silently at the top. Measured as
  * a user would do it: scroll, navigate, go back, go forward. */
 const restoration = await (async () => {
+	context = 'restoration /services -> /requests 1280x400';
 	const page = await newPage(SHORT_USER, 1280, 400);
 	const top = () => page.evaluate(() => document.querySelector('.main').scrollTop);
 	const setTop = (v) =>
@@ -696,6 +793,39 @@ const restoration = await (async () => {
 	};
 })();
 
-console.log(JSON.stringify({ geometry: out, keyboard: kb, restoration }, null, 1));
+/* ── THE FLOOR, ANNOUNCED ────────────────────────────────────────────────────
+ * Printed LAST and on stderr, so it survives the JSON being piped into a file
+ * or a diff, which is how these numbers are usually read. */
+const unmatchedPaths = [...unmatched.entries()]
+	.map(([path, v]) => ({ path, ...v }))
+	.sort((a, b) => b.count - a.count);
+const report = { vacuousReadings: vacuous, unmatchedApiPaths: unmatchedPaths };
+
+console.log(JSON.stringify({ geometry: out, keyboard: kb, restoration, floor: report }, null, 1));
+
+if (vacuous.length > 0 || unmatchedPaths.length > 0) {
+	console.error('\n=== THIS RUN IS PARTLY VACUOUS — THE NUMBERS ABOVE ARE NOT ALL EVIDENCE ===');
+	for (const u of unmatchedPaths) {
+		console.error(
+			`  unmatched  ${u.path}  fulfilled {} x${u.count}  [${u.contexts.join(', ')}]\n` +
+				'             the SPA rendered this as an EMPTY screen, not as an error'
+		);
+	}
+	for (const v of vacuous) {
+		console.error(
+			`  vacuous    ${v.context} / ${v.key} (${v.axis}): delta 0 on a region with 0 room to move\n` +
+				'             this is NOT "the key did not scroll" — nothing was observed'
+		);
+	}
+	console.error(
+		`  ${unmatchedPaths.length} unmatched path(s), ${vacuous.length} vacuous reading(s).\n` +
+			'  Add the missing stub, or use a viewport where the region really scrolls,\n' +
+			'  then re-run. Exit code 1.\n'
+	);
+	process.exitCode = 1;
+} else {
+	console.error('\nfloor: every reading had room to move, and every /api path was stubbed.\n');
+}
+
 await browser.close();
 server.close();

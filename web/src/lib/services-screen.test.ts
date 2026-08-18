@@ -561,6 +561,29 @@ describe('the re-import control is offered on `role`, never on the freshness pai
 		expect(canRunFullSync(health({ kind: 'kavita', role: 'library' }))).toBe(true);
 	});
 
+	/* THE ALREADY-SYNCED POPULATION, which is every install after its first
+	   import and which the three cases around this one do not reach: all of
+	   them construct the default row, whose freshness pair is `null` / `0`. An
+	   implementation that read `lastFullSyncAt === null` — "offer it only until
+	   the first import lands" — would satisfy every one of them and would hide
+	   the button on exactly the installs that press it. This case is the one
+	   that fails when that happens. */
+	it('offers it on a catalogue source that HAS synced, with rows already imported', () => {
+		const synced = health({
+			kind: 'kavita',
+			role: 'library',
+			lastFullSyncAt: '2026-08-16T09:00:00Z',
+			workCount: 4821
+		});
+		// Stated as the contrast, not just as a true assertion: this row differs
+		// from the never-synced one in both freshness fields and in neither of
+		// the fields `canRunFullSync` is allowed to read.
+		const unsynced = health({ kind: 'kavita', role: 'library' });
+		expect(synced.lastFullSyncAt).not.toBe(unsynced.lastFullSyncAt);
+		expect(synced.workCount).not.toBe(unsynced.workCount);
+		expect(canRunFullSync(synced)).toBe(true);
+	});
+
 	it('refuses it for an indexer whose two fields look identical to that', () => {
 		const indexer = health({ kind: 'prowlarr', role: 'indexer' });
 		const unsynced = health({ kind: 'kavita', role: 'library' });
