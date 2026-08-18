@@ -797,6 +797,70 @@ describe('the import stream folded onto the note', () => {
 		}
 	});
 
+	/**
+	 * http-api.md §5.4, pinned with the numbers that make it fail.
+	 *
+	 * In the credits phase the two fields are in DIFFERENT UNITS: `applied`
+	 * counts credit ROWS and `total` counts credit REQUESTS, i.e. items. One
+	 * item can carry several credits, so `applied` can exceed `total` and their
+	 * ratio is not a fraction of anything. These are the recorded numbers from
+	 * `__fixtures__/sse-frames.json` — a real run of two series where one had
+	 * three credited people and the other had none.
+	 *
+	 * The earlier denominator test uses 118 against 400, which would pass just
+	 * as happily against code that divided one by the other. This one would not.
+	 */
+	it('pairs the denominator with the items read, never with the credits written', () => {
+		const note = syncNoteWithProgress(
+			started(),
+			frame({ phase: 'credits', itemsRead: 2, applied: 3, total: 2 }),
+			true
+		);
+		expect(note.consequence).toContain('2 of 2 items read');
+		expect(note.consequence).toContain('3 credits written');
+		// The two ways a fraction would show itself, and a percentage of 150%.
+		expect(note.consequence).not.toContain('3 of 2');
+		expect(note.consequence).not.toContain('3/2');
+		expect(note.consequence).not.toContain('%');
+		// And a count above its total is still no kind of ending.
+		expect(note.phase).toBe('started');
+	});
+
+	/**
+	 * http-api.md §5.2, pinned as a SEQUENCE rather than as one frame.
+	 *
+	 * `credits` is skipped whole for a source that reports none or is not a
+	 * CreditSource (internal/libsync/importer.go:415-418), so THREE frames is a
+	 * complete healthy run. The risk this covers is a client that treats the
+	 * four phases as an ordered scale and waits for a fourth.
+	 *
+	 * Derived the way the screen derives it: `syncNotes` keeps what the server
+	 * answered the press with, the stream contributes the LAST frame only, and
+	 * the sentence is recomputed from both on every read.
+	 */
+	it('finishes a run that skipped the credits phase entirely', () => {
+		const press = started();
+		const screen = (last: ImportProgress) => syncNoteWithProgress(press, last, true);
+
+		const containers = screen(frame({ phase: 'containers' }));
+		expect(containers.phase).toBe('started');
+		expect(containers.consequence).toContain('Reading the list of libraries');
+
+		const items = screen(frame({ phase: 'items', itemsRead: 2, applied: 2 }));
+		expect(items.phase).toBe('started');
+		expect(items.consequence).toContain('Read 2 items so far, and applied 2 of them.');
+
+		// No credits frame. The next thing the server sends is the terminal one.
+		const done = screen(frame({ phase: 'done', itemsRead: 2, applied: 2 }));
+		expect(done.phase).toBe('finished');
+		expect(done.title).toBe('The import has finished');
+		expect(done.consequence).toContain('It read 2 items and applied 2.');
+		expect(done.consequence).toContain('Last successful sync has moved');
+		// Nothing is still pending: the button is released and says so.
+		expect(syncButtonBlocked(done.phase)).toBe(false);
+		expect(syncButtonLabel(done.phase)).toBe('Run full sync now');
+	});
+
 	it('renders a phase it has never heard of as counts, rather than dropping it', () => {
 		const note = syncNoteWithProgress(
 			started(),
