@@ -67,13 +67,24 @@
        full  Sonarr, Radarr, Prowlarr, Navidrome, Audiobookshelf and Kavita.
              All six media types have a catalogue source. This is the DEFAULT,
              because six populated types is what the layout has to survive.
-       v01   Sonarr, Radarr and Prowlarr, which is every service v0.1
-             connects. Movies and TV have a source; music, audiobooks, ebooks
-             and comics do not, and each says which service will populate it.
+       v01   Kavita and Prowlarr, which is every service v0.1 connects
+             (ADR-0041, ARCHITECTURE 16.1). Ebooks and comics have a source;
+             movies, TV, music and audiobooks do not, and each says which
+             service will populate it and when -- Radarr and Sonarr at v0.2
+             (ADR-0045), Navidrome and Audiobookshelf after v0.1.
+
+     The two installs also demonstrate the OPPOSITE identity tiers, and that is
+     the sharpest thing the switcher shows. v0.1's one source is a free Kavita,
+     which returns null aniListId, malId and comicVineId, so "matched by title"
+     is the ordinary case there rather than an exception. The *Arrs that carry
+     TMDB and TVDB ids are on the full stack and arrive in v0.2.
 
      The v0.1 numbers are DERIVED from the full-stack ones by removing what
      the absent services contributed -- they are not a second invented data
-     set, so the two installs reconcile against each other row by row.
+     set, so the two installs reconcile against each other row by row. Ebooks
+     is the row where that is arithmetic rather than presence: the library is
+     bound to Audiobookshelf and Kavita on the full stack, so 2,266 books
+     becomes Kavita's 424 here rather than disappearing.
 
      `full` is deliberately NOT persisted. The default view has to be the full
      stack on every load, and a switcher that remembers "v0.1" from a previous
@@ -235,11 +246,12 @@
     var topScope = document.querySelector('[data-slot="topscope"]');
     var scopeLive = document.querySelector('[data-slot="scope-live"]');
 
-    /* The library list is install-scoped: the v0.1 install has two libraries,
-       not eight, because the six the media servers supply do not exist on it.
+    /* The library list is install-scoped: the v0.1 install has four libraries,
+       not eight, because the four bound only to Sonarr, Radarr, Navidrome and
+       Audiobookshelf do not exist on it.
        Every count the chip states is therefore computed over the boxes this
        install actually has, never over the markup's total -- otherwise the
-       chip would read "All libraries (8)" over an install with two. */
+       chip would read "All libraries (8)" over an install with four. */
     /* The test is [data-inst][hidden] and not a bare [hidden], because the
        popover these boxes live in is itself [hidden] whenever it is closed --
        which is nearly always. A bare test read every library as absent on load
@@ -798,18 +810,26 @@
          table was updated and this was not, so the same screen stated two
          different comics servers depending on whether you read a row or
          grabbed one.
-       · every sentence here names a service. On the v0.1 install Navidrome,
-         Audiobookshelf and Kavita are not connected, so "Audiobookshelf
-         watches /media/books and will show it once the file is there" is this
-         mockup asserting a service the selected install does not have -- the
-         precise failure the two-install switcher exists to expose.
+       · every sentence here names a service. On the v0.1 install Sonarr,
+         Radarr, Navidrome and Audiobookshelf are not connected, so "Radarr did
+         not request this release" is this mockup asserting a service the
+         selected install does not have -- the precise failure the two-install
+         switcher exists to expose.
 
-     `both` is not laziness: Radarr and Sonarr are connected on either install,
-     so those two sentences genuinely do not move, and writing them twice would
-     invite them to drift apart. */
+     `both` is not laziness, and it moved. It used to cover movie and series on
+     the ground that "Radarr and Sonarr are connected on either install", which
+     ADR-0041 falsified; those two fork now. What genuinely does not move is
+     comic, because Kavita is connected on BOTH installs and the sentence about
+     it is the same one either way. */
   var SINK_NOTE = {
-    movie: { both: 'UsArr does not import downloads. Radarr did not request this release, so Radarr will not import it either — the file stays in your download client until you move it into /media/movies yourself.' },
-    series: { both: 'UsArr does not import downloads. Sonarr did not request this release, so Sonarr will not import it either — the file stays in your download client until you move it into /media/tv yourself.' },
+    movie: {
+      full: 'UsArr does not import downloads. Radarr did not request this release, so Radarr will not import it either — the file stays in your download client until you move it into /media/movies yourself.',
+      v01: 'UsArr does not import downloads, and no connected service catalogues films. Radarr would import only the releases it asked for itself, and it arrives in v0.2; the file stays in your download client either way.'
+    },
+    series: {
+      full: 'UsArr does not import downloads. Sonarr did not request this release, so Sonarr will not import it either — the file stays in your download client until you move it into /media/tv yourself.',
+      v01: 'UsArr does not import downloads, and no connected service catalogues series. Sonarr would import only the releases it asked for itself, and it arrives in v0.2; the file stays in your download client either way.'
+    },
     music: {
       full: 'UsArr does not import downloads, and no connected service accepts a music request. Navidrome shows what is already inside the folder it scans, so the file stays in your download client until you move it there.',
       v01: 'UsArr does not import downloads, and no connected service accepts a music request. A music server would show the file once it were inside the folder it scans; this install has none yet, so the file stays in your download client.'
@@ -820,12 +840,9 @@
     },
     ebook: {
       full: 'UsArr does not import downloads, and Readarr — the *Arr that used to own books — was archived on 27 Jun 2025. Audiobookshelf watches /media/books and will show it once the file is there.',
-      v01: 'UsArr does not import downloads, and Readarr — the *Arr that used to own books — was archived on 27 Jun 2025. No connected service catalogues ebooks either, so the file stays in your download client and no library row appears for it.'
+      v01: 'UsArr does not import downloads, and Readarr — the *Arr that used to own books — was archived on 27 Jun 2025. Kavita catalogues ebooks here and scans /books, so it will show the file once it is there and not before.'
     },
-    comic: {
-      full: 'UsArr does not import downloads, and no connected service accepts a comic request. Kavita shows what is already inside the folder it scans, so the file stays in your download client until you move it there.',
-      v01: 'UsArr does not import downloads, and no connected service accepts a comic request. A comics server would show the file once it were inside the folder it scans; this install has none yet, so the file stays in your download client.'
-    }
+    comic: { both: 'UsArr does not import downloads, and no connected service accepts a comic request. Kavita shows what is already inside the folder it scans, so the file stays in your download client until you move it there.' }
   };
 
   function grabbedNote(row) {

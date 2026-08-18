@@ -1207,8 +1207,18 @@ if (!Number.isFinite(COMPACT_ROW_H) || COMPACT_ROW_H <= 0) {
  * table costs nothing and misreports nothing: this check asserts a min, a
  * median and a max against a band, none of which a duplicate moves. The floors
  * are restated against the new figures anyway, because a floor left at 180 over
- * a population of 274 is a floor that cannot fail. */
-const ROW_FLOOR = { home: 240, services: 190, libraries: 24, search: 60, requests: 145 };
+ * a population of 274 is a floor that cannot fail.
+ *
+ * SERVICES FELL 221 -> 170 on 18 Aug 2026, and the floor is restated rather
+ * than the drawing padded. ADR-0041 made Kavita v0.1's one catalogue source, so
+ * the v0.1 health table went from five *Arr rows to two -- Kavita and Prowlarr,
+ * which is every service that milestone connects. Three fewer rows, each with
+ * its expander, measured across every state, install and panel pass, is the
+ * whole of the 51. This is a smaller drawing, not a check that stopped
+ * matching, and the floor is set at the same ~85% of the live population every
+ * other screen's is. If it falls again, ask what left the table before lowering
+ * it further. */
+const ROW_FLOOR = { home: 240, services: 145, libraries: 24, search: 60, requests: 145 };
 
 for (const density of DENSITIES) {
   await page.evaluate((d) => { document.documentElement.setAttribute('data-density', d); }, density);
