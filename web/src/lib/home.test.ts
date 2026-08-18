@@ -245,16 +245,39 @@ describe('hasIndexer', () => {
 	});
 });
 
+/**
+ * ⚠️ THESE TWO ASSERTIONS ARE THE INVERSE OF WHAT THEY USED TO BE, AND THEY WERE
+ * INVERTED RATHER THAN RELAXED. They read `toMatch(/indexers/i)`,
+ * `toMatch(/Requests/)` and `toMatch(/not your own library/i)` against a note
+ * that said *"This searches releases on your indexers, not your own library."*
+ * The owner moved Home's box onto the local corpus, so every one of those
+ * assertions now pins the string to a claim the product does not make. The
+ * SHAPE of the guard is what survives and is what mattered: the note must name
+ * a corpus and must name the corpus it is NOT, because a box labelled only
+ * `Search` is the §8.3 merge arrived at by omission, and which side of the merge
+ * the box sits on does not change that.
+ */
 describe('HOME_SEARCH_SCOPE_NOTE', () => {
-	it('names what is searched and where the results are', () => {
-		expect(HOME_SEARCH_SCOPE_NOTE).toMatch(/indexers/i);
-		expect(HOME_SEARCH_SCOPE_NOTE).toMatch(/Requests/);
+	it('names the corpus it searches', () => {
+		expect(HOME_SEARCH_SCOPE_NOTE).toMatch(/library/i);
+		expect(HOME_SEARCH_SCOPE_NOTE).toMatch(/your services/i);
 	});
 
-	it('says explicitly that it is not your own library', () => {
-		// The whole point of the string. A box that only says "Search" is the
-		// merge §8.3 forbids, arrived at by omission.
-		expect(HOME_SEARCH_SCOPE_NOTE).toMatch(/not your own library/i);
+	it('says explicitly that it is not your indexers', () => {
+		expect(HOME_SEARCH_SCOPE_NOTE).toMatch(/not your indexers/i);
+	});
+
+	it('does not send the user to Requests, which §17.4 rule 6 already does later', () => {
+		// A third mention of release search on the screen the owner has just said
+		// carries too many searches. `routes/search` carries the exit instead.
+		expect(HOME_SEARCH_SCOPE_NOTE).not.toMatch(/Requests/);
+	});
+
+	it('enumerates no media type, on §17.4 rule 7 reasoning', () => {
+		// The corpus is whatever the connected services supply, so any fixed list
+		// is a promise this install may not keep.
+		for (const type of ['film', 'movie', 'episode', 'album', 'book', 'comic'])
+			expect(HOME_SEARCH_SCOPE_NOTE.toLowerCase()).not.toContain(type);
 	});
 });
 

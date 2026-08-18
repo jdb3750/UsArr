@@ -155,7 +155,6 @@
 	} from '$lib/library';
 	import {
 		attention,
-		hasIndexer,
 		headline,
 		homeMode,
 		HOME_SEARCH_SCOPE_NOTE,
@@ -311,17 +310,23 @@
 
 	const servicesPath = resolve('/services');
 	const requestsPath = resolve('/requests');
+	const searchPath = resolve('/search');
 
 	let mode = $state<HomeMode | undefined>(undefined);
 	let services = $state(0);
-	let indexers = $state(false);
 	let rows = $state<AttentionRow[]>([]);
 	let loadError = $state('');
 
 	/**
 	 * WHAT THE USER TYPES, AND IT NEVER LEAVES THIS SCREEN AS A QUERY. Home does
-	 * not search: it navigates. `submit()` hands the string to Requests through
+	 * not search: it navigates. `submit()` hands the string to Search through
 	 * `?q=`, which is the parameter that screen's `onMount` already reads.
+	 *
+	 * ⚠️ THE DESTINATION USED TO BE REQUESTS, and the owner moved it: *"the
+	 * search on home should be searching your own library"*. The parameter is
+	 * unchanged, because both screens read `?q=` off `page.url` in `onMount` and
+	 * run themselves from it, which is why this is a destination swap and not a
+	 * mechanism swap.
 	 */
 	let query = $state('');
 
@@ -379,11 +384,20 @@
 
 	/**
 	 * The href the submit button would follow with scripting off, and the one
-	 * `submit()` navigates to with it on. Built from `resolve('/requests')` plus
+	 * `submit()` navigates to with it on. Built from `resolve('/search')` plus
 	 * the one parameter that makes the link work — §17.4's mechanism, through
 	 * `$lib/requests`' `requestsSearchHref` rather than a second copy of it.
+	 *
+	 * ⚠️ THE HELPER'S NAME SAYS `requests` AND THE BASE PASSED TO IT IS `/search`,
+	 * WHICH IS DELIBERATE AND IS NOT A MISTAKE TO TIDY. What it builds is the
+	 * `?q=` contract — trim, encode, and a BARE path for an empty query so the
+	 * destination shows its idle state instead of echoing a search for nothing —
+	 * and that contract is one contract with two readers: `routes/requests` and
+	 * `routes/search` both parse `?q=` in `onMount` the same way. Its name
+	 * records where it was first needed, not where it may be used, and renaming
+	 * it would touch three call sites and a test file to say nothing new.
 	 */
-	const searchHref = $derived(requestsSearchHref(requestsPath, query));
+	const searchHref = $derived(requestsSearchHref(searchPath, query));
 
 	const recentMore = $derived(hasMore(recent));
 
@@ -392,7 +406,6 @@
 			const health = await fetchServicesHealth();
 			mode = homeMode(health);
 			services = health.services.length;
-			indexers = hasIndexer(health);
 			rows = attention(health.services, now);
 			loadError = '';
 		} catch (error) {
@@ -494,10 +507,10 @@
 	 *
 	 * ⚠️ THE NATIVE SUBMIT IS PREVENTED ONLY BECAUSE THE `<a>` BESIDE IT IS
 	 * REAL. The button's own `formaction` is the same href, so a build with
-	 * scripting off still reaches Requests with the query on it; this handler
+	 * scripting off still reaches Search with the query on it; this handler
 	 * replaces a full page load with a client navigation and nothing else. An
-	 * empty query goes to `/requests` bare, which is what the `Search indexers`
-	 * button on this screen has always done.
+	 * empty query goes to `/search` bare, which lands on that screen's idle
+	 * state rather than on a search for nothing.
 	 */
 	function submit(event: SubmitEvent) {
 		event.preventDefault();
@@ -617,19 +630,45 @@
 	DESIGN-DIRECTION §8.3 holds library search and release search apart —
 	"Merging them is how a 0 ms local query ends up waiting on a 30 s indexer" —
 	so nothing here fans out to an indexer, opens an SSE stream or renders a
-	result. Submitting navigates to Requests carrying `?q=`, which is the
-	mechanism §17.4 already fixes for the `Search indexers →` action on a result
-	row. Home stays a local read and Requests stays the one release-search
-	surface in UsArr.
+	result. Submitting navigates carrying `?q=`, which is the mechanism §17.4
+	already fixes for the `Search indexers →` action on a result row.
 
-	IT SAYS WHAT IT SEARCHES, in the note under it, because an unlabelled input
-	on a home screen reads as a search of your own library by default — and on
-	this install a search of your own library is the one thing that cannot work.
+	⚠️ IT USED TO NAVIGATE TO REQUESTS, AND THE OWNER MOVED IT: *"the search on
+	home should be searching your own library. this is actually what i was
+	talking about when i said we have a lot of search functions"*. So the
+	destination is `/search` and the corpus is the local one. §8.3 is not bent by
+	that; it is satisfied more directly than before. The rule §8.3 states is that
+	the two searches stay APART, and Home now holds exactly one of them — the 0 ms
+	local one — while Requests stays the one release-search surface in UsArr. The
+	old wiring kept Home a local read only by deferring the question one
+	navigation; this one answers it locally at both ends.
 
-	DRAWN OFF `hasIndexer`, NOT OFF THE MODE. See $lib/home: the precondition is
-	that something can answer the query, which is true in `library` mode too and
-	false on a fresh install. A box with nothing behind it is invented status
-	wearing a control.
+	IT SAYS WHAT IT SEARCHES, in the note under it, and the reason INVERTED with
+	the destination rather than going away. ⚠️ THE REASON USED TO READ "an
+	unlabelled input on a home screen reads as a search of your own library by
+	default — and on this install a search of your own library is the one thing
+	that cannot work". Both halves are dead. The second half died at `04a28a4`,
+	which gave `/api/v1/search` to the local corpus (`internal/httpapi/
+	server.go:300` routes it to `handleLibrarySearch`, against `:291`, which
+	routes the fan-out to `handleSearch` on `/api/v1/releases/search`) and at
+	`cbf82bc`, which shipped the screen over it. The first half stopped being an
+	argument for the note the moment the box became the thing the user was
+	assuming it was. WHAT REPLACES IT is the owner's own second sentence: there
+	are several searches in this product, and the one defect a user cannot
+	recover from is not knowing which one they are typing into. The note names
+	the corpus for that reason now, not to correct an assumption.
+
+	DRAWN OFF THE MODE, NOT OFF `hasIndexer`, AND THAT SWAPPED WITH THE
+	DESTINATION TOO. ⚠️ IT USED TO BE `hasIndexer` — at least one configured
+	service is an indexer — which was the right precondition for a box that
+	reached indexers and is the WRONG one for a box that reads a catalogue, in
+	both directions: a Prowlarr-only install would draw a library search over a
+	library that cannot exist, and a Sonarr-only install would refuse to draw one
+	over a catalogue that does. The precondition is unchanged in principle —
+	something can answer the query — so it is now `mode === 'library'`, which is
+	the same gate Block C uses for the same reason and is $lib/home's own test for
+	whether a library-bearing service is configured at all. A box with nothing
+	behind it is invented status wearing a control.
 
 	NOT A HERO, and §1.5's table is the checklist it is written against: no
 	oversized centred input, no illustration, no "Get started", no stat banner.
@@ -637,10 +676,10 @@
 	button — and, since the owner asked for it, a wordmark left-pinned above the
 	pair.
 -->
-{#if indexers}
+{#if mode === 'library'}
 	<section class="section" id="home-search">
 		<div class="section__head">
-			<h2>Search your indexers</h2>
+			<h2>Search your library</h2>
 		</div>
 		<!--
 			THE WORDMARK. The owner asked for a Google-shaped Home — the product name
@@ -686,27 +725,36 @@
 				A LABEL, NOT A PLACEHOLDER-AS-LABEL: the placeholder is gone the moment
 				the field is typed into, and it is the only other string here.
 
-				⚠️ IT DELIBERATELY DOES NOT REPEAT THE HEADING. `Search your indexers`
+				⚠️ IT DELIBERATELY DOES NOT REPEAT THE HEADING. `Search your library`
 				is two elements away in the accessibility tree, and naming the field
-				with it too makes a screen reader announce the same four words twice in
-				a row — heading, then edit field — which is noise rather than context.
+				with it too makes a screen reader announce the same words twice in a
+				row — heading, then edit field — which is noise rather than context.
 				The heading supplies the scope for anyone navigating by heading; the
 				label supplies what goes IN the box, which is the thing the heading
-				does not say. Requests draws the same distinction with `Search terms`.
+				does not say.
+
+				⚠️ AND IT IS THE SEARCH SCREEN'S OWN LABEL AND PLACEHOLDER, WORD FOR
+				WORD, which is the point rather than a coincidence. This box submits
+				INTO `routes/search`; two forms that are one form across a navigation
+				may not describe their input differently, or the user learns that the
+				second field wants something else. ⚠️ THEY USED TO READ `Release name`
+				and `Release name, or part of one`, which named the corpus this box no
+				longer has: a release is a file on an indexer, and nothing in a
+				replicated catalogue is one. Requests keeps that vocabulary, because
+				Requests keeps the releases.
 			-->
-			<label class="sr" for="home-query">Release name</label>
+			<label class="sr" for="home-query">Search terms</label>
 			<input
 				id="home-query"
 				name="q"
 				type="search"
 				class="searchfield homesearch__input"
 				autocomplete="off"
-				placeholder="Release name, or part of one"
+				placeholder="A title, or a name credited on one"
 				aria-describedby="home-search-note"
 				bind:value={query}
 			/>
-			<button type="submit" class="btn btn--primary" formaction={searchHref}>Search indexers</button
-			>
+			<button type="submit" class="btn btn--primary" formaction={searchHref}>Search</button>
 		</form>
 		<p class="note" id="home-search-note">{HOME_SEARCH_SCOPE_NOTE}</p>
 	</section>
@@ -1143,24 +1191,29 @@
 				today is search your indexers and send grabs to your download client.
 			</p>
 			<!--
-				⚠️ THE `Search indexers` BUTTON THAT STOOD HERE IS GONE, AND IT WAS
-				REPLACED RATHER THAN DELETED. It navigated to Requests with no query;
-				the search section above navigates to the same screen WITH one, from
-				the same content edge, under a heading that says what it searches. Two
-				controls to the same place, one of which is strictly weaker, is the
-				second copy of the fix §17.3 bans. `Open Services` stays: it is the
-				route to the thing the paragraph below is about, and it is the only
-				action left on this block.
+				⚠️ `Search indexers` IS BACK, AND THE TWO ⚠️ NOTES THIS REPLACES BOTH
+				RESTED ON THE SEARCH BOX ABOVE BEING ON THIS SCREEN IN THIS MODE.
+				They read: that the button was "replaced rather than deleted" because
+				"the search section above navigates to the same screen WITH one", and
+				that `Open Services` lost `btn--primary` because "the screen now has a
+				primary action — `Search indexers`, on the form above". Both premises
+				died with one line: that box is now gated on `mode === 'library'`, so
+				in THIS mode it is not drawn at all, and it no longer goes to Requests
+				in any mode. The argument was sound and its subject left.
 
-				⚠️ AND IT LOSES `btn--primary`, WHICH IS A HIERARCHY FIX RATHER THAN A
-				DEMOTION. It carried the accent while it was the second of two buttons
-				on an otherwise empty screen. The screen now has a primary action —
-				`Search indexers`, on the form above — and §3.3a gives that accent to
-				ONE control: two filled buttons on one screen point at two different
-				things and so point at neither, and the one they would fight over here
-				is the box the user came to type in.
+				So the restored control is the one the argument was made against: a
+				link to Requests with no query. It is not a duplicate — there is
+				nothing on this screen for it to duplicate — and it is not a second
+				search box, which §8.3 would refuse. It is the route to the one thing
+				§8.5 says this mode can do, on the screen whose whole text says so.
+
+				`btn--primary` follows it, and `Open Services` gives it back for the
+				reason it took it: §3.3a gives the accent to ONE control, and between
+				a route to the capability and a route to the settings for it, the
+				capability is what the user came for.
 			-->
 			<div class="empty__actions">
+				<a class="btn btn--primary" href={requestsPath}>Search indexers</a>
 				<a class="btn" href={servicesPath}>Open Services</a>
 			</div>
 			<!--

@@ -239,7 +239,23 @@ export interface IndexerProblem {
 	error: string;
 }
 
-/** What GET /api/v1/search answers with — 202, before any indexer has been asked. */
+/**
+ * What `GET /api/v1/releases/search` answers with — 202, before any indexer has
+ * been asked.
+ *
+ * ⚠️ THIS LINE USED TO READ `GET /api/v1/search`, AND THAT PATH NOW NAMES A
+ * DIFFERENT ENDPOINT ENTIRELY. `4a51bd4` moved the Prowlarr release fan-out to
+ * `/api/v1/releases/search`, and `04a28a4` gave the vacated `/api/v1/search` to
+ * the search over your own replicated library (`docs/reference/http-api.md`
+ * §6). The routing is the proof and it is one file:
+ * `internal/httpapi/server.go:291` sends `GET /api/v1/releases/search` to
+ * `handleSearch`, and `internal/httpapi/server.go:300` sends `GET
+ * /api/v1/search` to `handleLibrarySearch`. The library handler answers 200
+ * with results off the local corpus and never produces this shape — there is no
+ * indexer in it to have asked — so a reader who followed the old path would
+ * have gone looking for this type in a handler that cannot return it. Same
+ * correction as `$lib/indexercatalog` and `$lib/indexerscope.svelte` carry.
+ */
 export interface SearchAccepted {
 	searchId: string;
 	instanceId?: number;
