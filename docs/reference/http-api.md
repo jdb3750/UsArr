@@ -112,9 +112,9 @@ integer"`, of a value that plainly is one. `recentWorksLimit` parses at 64 bits 
 | `items[].title` | yes | |
 | `items[].year` | **no** | Absent, not `0`, when the catalogue has no year. A rendered `0` is a claim about a release date. |
 | `items[].added_at` | **no** | RFC 3339 UTC. Absent when the upstream reported no creation date — a state Kavita reaches. **An absent value sorts LAST, never first.** |
-| `items[].have_count` | yes | Denormalised rollups. The numerator and the gap behind §17.2's `have / total · N missing` grammar. |
+| `items[].have_count` | yes | Denormalised rollups. The numerator and the gap behind §17.2's `have / total · N missing` grammar. ⚠️ **`0` is also the column default, so a `0` here is not evidence on its own** — §1.4.1. |
 | `items[].want_count` | yes | |
-| `items[].availability` | **no** | The polymorphic blob — see §1.4. |
+| `items[].availability` | **no** | The polymorphic blob — see §1.4. **Absent means *not counted*, never *none held*** — §1.4.1. |
 | `limit` | yes | **Authoritative** (§1.2). |
 | `next_cursor` | **no** | Absent when this page is the last one; its absence is the "Load more" button's off switch. Absent rather than empty, because `""` reads as a cursor whose value is unknown. |
 
@@ -137,8 +137,9 @@ The blob is `reference/schema.md` §1's polymorphic rollup, **forwarded verbatim
 series is empty. §6.3's render rule (`have == total && total > 0` → ✓) must never fire on the first.
 
 🚩 **The key is absent when a work has no blob, and that is a legitimate state rather than a
-failure.** A renderer treats absence as absence: it shows what it knows (`have_count`) and **does
-not invent a denominator** out of `have_count + want_count`.
+failure.** A renderer treats absence as absence and **does not invent a denominator** out of
+`have_count + want_count`. ⚠️ Nor does it fall back to `have_count` as the thing it "knows" —
+§1.4.1 says what absence actually means, and a bare `have_count` is not it.
 
 **A corrupt blob is also absent from the wire — but it is no longer silent.** Four cases are dropped
 rather than forwarded, because this response is marshalled whole and one bad blob would otherwise
@@ -146,7 +147,7 @@ fail the entire block for the sake of its decoration:
 
 | Stored value | Wire | Log |
 | --- | --- | --- |
-| SQL `NULL` | absent | **none** — this is not a fault, and a warning per honestly-empty work would make the log worthless |
+| SQL `NULL` | absent | **none** — this is not a fault, and a warning per uncounted work would make the log worthless |
 | not JSON, or JSON that is not an object | absent | `WARN work.availability will not decode …` with `work_id` |
 | an object with no `"k"` | absent | `WARN work.availability has no "k" discriminator …` with `work_id` |
 | an object whose `"k"` is none of the three above | absent | `WARN work.availability has an unrecognised "k" discriminator …` with `work_id` and `k` |
@@ -160,6 +161,36 @@ same binary and ship in the same commit, so there is no version skew to be forwa
 Adding a shape is therefore an edit in **both** `reference/schema.md` §1 and
 `httpapi.availabilityKinds`; `TestAvailabilityKindsMatchSchemaMd` reads this repo's own schema
 document and fails if the two disagree, so it cannot be done in one place only.
+
+#### 1.4.1 Absence means NOT COUNTED — it does not mean the user holds nothing
+
+**The absence of `availability` means no count has ever been computed for that work.** It is not a
+statement about the user's library, and it is emphatically not a zero.
+
+🚩 **A consumer must not render an absent blob as `0`, as "none", or as any glyph, bar or accessible
+name that asserts emptiness.** The honest rendering is **"not counted yet"**, or whatever that
+screen's vocabulary calls the same thing. A crossed circle reading *none held* on a series the user
+demonstrably has on disk is the failure this paragraph exists to prevent.
+
+⚠️ **`have_count: 0` is not evidence of anything on its own.** `have_count` is sent
+unconditionally and its column is `NOT NULL DEFAULT 0` (`reference/schema.md` §1), so a work nobody
+has ever counted and a work genuinely holding nothing carry the same number. It is only meaningful
+**alongside a present blob** — which is also where a truthful zero lives: §6.3's render rule
+(`have == 0` → ✗) fires on a *present* blob and on nothing else.
+
+**Why this is durable rather than a description of today's tree.** The counts and the blob are
+written by **one** recompute, not two: a child write sets `work.rollup_dirty` on the ancestor in the
+same transaction and the 250 ms flush re-aggregates that dirty set once, rewriting the blob whole
+(ARCHITECTURE §6.3, [`sync.md`](./sync.md) *"Rollup flush"*, and `reference/schema.md` §1 — *"the
+blob is opaque to the flush, which recomputes and rewrites it whole"*). There is one dirty bit and
+there is no second one, so **there is no specified path that moves `have_count` without also writing
+the blob**; a non-zero count under an absent key is not a state the mechanism can reach. Where the
+rollup has nothing to aggregate it withholds the blob deliberately instead of publishing a
+manufactured zero, which arrives at the same signal from the other direction.
+
+**So absence self-corrects, and a client written to this rule needs no second edit.** The first flush
+that has anything to count publishes the key — including when the honest answer is `have: 0` — and
+the row moves from *not counted* to counted with no wire change behind it.
 
 ### 1.5 Paging
 
@@ -769,19 +800,31 @@ column"*. **A progress phase is a State, not a Problem** — a machine value a c
 exactly the class §17.3 assigns to UsArr's own vocabulary. The frame was never covered by the
 verbatim rule.
 
-**And free text here would additionally break two rules that are not §17.3's.**
+**And free text here would additionally break rules that are not §17.3's.**
 
 1. **`reference/security.md` §5 forbids it.** Its deny-list redacts *"BEFORE any log line, audit row,
    error message, **SSE payload** or support bundle is produced"*. This frame is an SSE payload by
    construction.
-2. **The redactor that would have to clear it does not cover this case, in the exact package v0.1's
-   only catalogue source uses.** security.md §5 flags upstream **response bodies** as gap 1, and it is
-   open: `internal/kavita/errors.go:167`, `:174`, `:177`, `:179` assign the upstream body to
-   `APIError.Message` through `truncate` alone — **no redactor** — and `Error()` (`:95-113`) prints
-   it. Transport errors *are* redacted (`internal/kavita/client.go:374`, `:386` via `redactErr`),
-   which is what makes the body path easy to believe covered. Gap 2 compounds it: Kavita carries its
-   key in a **path segment** (`/api/Opds/{apiKey}/…`), and §5 says the shipped shape heuristic matches
-   that only by luck and *"must not be relied on"*. A cause fed from `err.Error()` inherits both.
+2. **The redactor half of this argument has since closed; the other half has not, and it is
+   sufficient on its own.** ⚠️ **This item used to read that `internal/kavita`'s `parseErrorBody`
+   assigned the upstream body to `APIError.Message` through `truncate` alone, with no redactor, and
+   that security.md §5's gap 1 was open. That is stale.** It closed in **LS-170** (`cdeb2f2`, on
+   `main`): `redactText` was lifted to `ssrf.RedactText` with a one-line shim keeping the existing
+   call sites byte-identical (`internal/httpapi/redact.go:102`); **every** branch of `parseErrorBody`
+   now redacts and then bounds, through `clean` = `truncate(ssrf.RedactText(…))`
+   (`internal/kavita/errors.go:218`, whose header states there is deliberately no branch that skips
+   it); `service_instance.last_error` is redacted **before** the row is written rather than on
+   read-out (`cmd/usarr/services.go:653-656`, `:670`, `:756`); and **both** of `cmd/usarr`'s slog
+   handlers, text and JSON, are wrapped in a redacting `slog.Handler` (`cmd/usarr/main.go:247`,
+   `:249`, `cmd/usarr/logredact.go`). security.md §5 marks gap 1 **met**.
+
+   **The conclusion is unchanged, and the reason it is unchanged is worth stating.** Gap 2 is
+   untouched: Kavita carries its key in a **path segment** (`/api/Opds/{apiKey}/…`), `internal/ssrf`'s
+   path-segment redaction is a *shape* heuristic that §5 says matches that key only by luck and
+   *"must not be relied on"*, so a cause fed from `err.Error()` still inherits it. And the
+   load-bearing argument was never the redactor's coverage: **the absence of a field is a stronger
+   guarantee than a rule about its contents.** A redactor that covers every path today is a property
+   of today's code; no field is a property of the wire.
 
 ⚠️ **And the guard that looks like a bound is not one.** `cmd/usarr/import_e2e_test.go:519` sweeps the
 whole stream dump, but `assertNoSecret` (`cmd/usarr/e2e_test.go:581-593`) is `strings.Contains`
@@ -798,9 +841,9 @@ text.
 **process log** (`FullImport` logs every failure with the instance id); **`sync_report`** rows for the
 per-container detail recorded before the stop; and the **Services health row** — its `Problem` column
 and §4.4's `500 internal` `message`, which is where §17.3's verbatim contract actually lives. Those
-surfaces are governed by security.md §5's redaction requirement, and gap 1 above is open on them too;
-closing it is that section's work, and this frame is deliberately not a fourth place to have to close
-it.
+surfaces are governed by security.md §5's redaction requirement, and gap 1 above is now **closed** on
+them (LS-170); keeping it closed is that section's work, and this frame is deliberately not a fourth
+place that would have to be kept closed.
 
 ##### 5.5.5.1 If a cause is ever added, it is THIS shape and no other
 
@@ -914,6 +957,15 @@ publishing it would also freeze §6.6's ranking, which is expected to change.
 recently-added table and a search result. Same omission rules: `year` and `added_at` are **absent**
 rather than `0`/`null` when unknown, and `availability` follows §1.4 exactly — absent when there is
 no blob, absent *and logged* when the stored blob is unusable.
+
+🚩 **§1.4.1 applies here in full, and it is the rule most easily lost in a results table.** An absent
+`availability` means **no count has been computed**, never that the user holds nothing, so a result
+row must not carry an emptiness glyph or an accessible name like *none held* on the strength of a
+missing key; *"not counted yet"* is the honest cell. `have_count` is sent unconditionally and
+defaults to `0` in the schema, so **`have_count: 0` alone is not evidence** — it means something only
+beside a present blob. This is not a property of the current tree: the counts and the blob are one
+recompute over one dirty bit, so no specified writer can move the count while leaving the key
+absent.
 
 `media_type` is **omitted** for a work whose `kind` §17.2's enum has no row for. Today that is
 `game` alone, and nothing writes a game work. It is omitted rather than invented because

@@ -16880,3 +16880,163 @@ choose one option over another — and it is deliberately *not* given an ADR num
 close the alternative off: it defers it, `libraries.go:257-259` already names itself as the place the
 decision to change it goes, and the seam that would carry it is untouched in both keys. An ADR here
 would overstate the finality of a "not in this slice".
+
+---
+
+## LS-220 — the premise behind "absent `availability` means not counted" was tested before it was written down, and it holds for a structural reason
+
+**What was asked, and what was actually checked.** The proposal was to document, on
+`GET /api/v1/library/recent` and `GET /api/v1/search`, that the **absence** of the `availability`
+key means *no count has ever been computed* rather than *the user holds nothing*. That is only worth
+writing if it stays true after the volume walk and the rollup land — a contract that is true today by
+accident is worse than no contract, because a consumer builds on it and a future writer has never
+been told. So the sub-claim was the thing tested: **no row can carry a non-zero `have_count` while
+its `availability` is NULL.**
+
+**Verdict: it holds, and it holds because of the mechanism rather than because of the empty tree.**
+
+**Step 1 — nothing writes either column.** `grep` over non-test Go for `have_count`, `want_count` and
+`availability` returns **reads only**: the two `SELECT` lists (`internal/store/recent.go:258`,
+`internal/store/searchlibrary.go:457`), the two scan targets (`recent.go:358`,
+`searchlibrary.go:580`) and the two wire structs. No `INSERT`, no `UPDATE`, no `ON CONFLICT … SET`
+touching any of the three. This confirms `LS-210` rather than adding to it, and on its own it proves
+only that the premise is *vacuously* true — which is exactly the state that makes documenting it
+risky.
+
+**Step 2 — the wire and the Go types do NOT bind them, and that was checked rather than hoped.** The
+three are independent columns and independent struct fields, and only one of them is optional:
+
+| Where | Shape |
+|---|---|
+| `internal/httpapi/library.go:102-103` | `HaveCount int64 \`json:"have_count"\`` · `WantCount int64 \`json:"want_count"\`` — **no `omitempty`**, so both are unconditional |
+| `internal/httpapi/library.go:123` | `Availability json.RawMessage \`json:"availability,omitempty"\`` |
+| `internal/httpapi/librarysearch.go:94-95`, `:101` | byte-for-byte the same three tags |
+| `internal/db/migrations/00005_library_sync.sql:293-294`, `:298` | `have_count INTEGER NOT NULL DEFAULT 0` · `want_count` likewise · `availability TEXT` (nullable) |
+
+So **nothing in the type system or the schema stops a writer setting one without the other.** If the
+argument stopped here the premise would be an accident and the contract would be enshrining one.
+
+**Step 3 — the specified mechanism is what makes them inseparable, and it is specified in three
+places that agree.** The rollup is one recompute over one dirty set, not two writers:
+
+* **ARCHITECTURE §6.3** — *"a child write marks its ancestor dirty in the same transaction, and
+  ancestors are re-aggregated once per 250 ms flush batch"*, with *"Never re-aggregate per child
+  write"* immediately after. A child write therefore **never** touches `have_count` directly; it sets
+  a flag.
+* **`docs/reference/sync.md`** (*Rollup flush*) repeats it operationally: *"Child writes set
+  `work.rollup_dirty = 1` on the ancestor in the same transaction; a flush every 250 ms re-aggregates
+  the dirty set once."*
+* **`internal/db/migrations/00005_library_sync.sql:292-298`** ships the columns in one block under one
+  comment — *"Denormalised rollups. Recomputed per dirty-mark flush batch, NOT per child write"* —
+  with `rollup_dirty INTEGER NOT NULL DEFAULT 0, -- set by a child write; cleared by the flush`
+  sitting between the counts and the blob.
+
+🔥 **The load-bearing observation: there is exactly ONE dirty bit, and there is no second one.** No
+`availability_dirty`, no separate queue, and one partial index (`ix_work_dirty`) that is the flush's
+entire work list. A flush picks up a work, re-aggregates it and clears the bit — there is no
+specified path that recomputes the count and declines to rewrite the blob, because the blob is not
+separately schedulable. `reference/schema.md` §1 states the write half explicitly: *"the blob is
+opaque to the flush, **which recomputes and rewrites it whole**."*
+
+**Step 4 — a truthful zero has an in-blob representation, so absence is not needed for it and is free
+to mean something else.** §6.3's render rule is `have == 0` → ✗, which presupposes a **present** blob
+carrying `have: 0`; `schema.md` §1's `k:"count"` shape exists precisely so that a medium with no
+honest denominator can still be written (`total: null`, `total_source: null`). There is no medium for
+which the flush has a shape gap and would have to leave NULL. The vocabulary already assigns
+"nothing held" to a present blob, which is what leaves absence available to mean "not computed"
+without overloading it.
+
+**Step 5 — `LS-211.2`'s rule 2 reinforces this from the other direction rather than undermining it.**
+That entry requires the rollup to **refuse** a `k:"count"` blob for a work with no file rows, leaving
+the column NULL. Read carelessly that looks like a second meaning for absence; read properly it is
+the same one. A work with no child rows is indistinguishable from a work whose children have not been
+walked *yet* — `LS-211.2` says so in as many words (*"the steady state during every subsequent
+sync"*) — and a rollup that withholds the blob there is declining to compute, not reporting a zero.
+Its `have_count` in that case is `0` as well, so the sub-claim survives it untouched.
+
+**Conclusion.** Non-zero `have_count` under an absent `availability` is not a state the specified
+mechanism can produce. The contract is therefore a statement about the design, not about the current
+emptiness of the tree, and a future writer that broke it would be departing from §6.3's flush rather
+than merely surprising a consumer.
+
+### LS-220.1 — `service_item_link.has_file` was considered as an alternative signal and rejected on two independent grounds
+
+Worth recording because it is the obvious candidate and it is written today, so someone will reach
+for it again. `internal/libsync/kavita.go:294` sets `HasFile: dto.Pages > 0` and
+`internal/store/catalogue.go:822,830` persists it; nothing reads it.
+
+1. **It is on the wrong table, and deliberately unreachable from these two endpoints.** It lives on
+   `service_item_link`, and both reads refuse that join on purpose: `availabilityFor`'s header calls
+   naming the instance *"the one thing this response refuses to publish"*, and `http-api.md` §1.3
+   states *"Nothing service-side is on the wire and nothing can be."* Using it would mean adding the
+   join the endpoints exist without.
+2. **It could not carry the meaning anyway.** It is `INTEGER NOT NULL DEFAULT 0`
+   (`00005_library_sync.sql:340`), so it has the identical never-observed-vs-genuinely-zero collapse
+   that `LS-210` found in `have_count`, and its semantics are *"this upstream item has a file"*, not
+   *"a count has been computed for this work"*.
+
+**So the absent key is the only honest signal available**, which is the second reason to write down
+what it means rather than to add a new one.
+
+### LS-220.2 — what was written, and where
+
+`docs/reference/http-api.md` only; no Go, no `web/`, no schema change.
+
+* **§1.4.1**, a new subsection at the end of §1.4: absence means not counted; a consumer must not
+  render it as `0`, "none", or any emptiness glyph or accessible name; `have_count: 0` is not
+  evidence on its own because the column is `NOT NULL DEFAULT 0`; and the durability argument above
+  in three sentences, ending on the fact that absence **self-corrects** — the first flush with
+  anything to count publishes the key, so a client written to this rule needs no second edit when
+  the rollup lands.
+* **§1.3's field table**, two rows annotated so the rule is visible at the point of first contact
+  rather than only in the prose below it.
+* **§1.4's existing 🚩 paragraph**, qualified. It read *"it shows what it knows (`have_count`)"*,
+  which is precisely `LS-210`'s bug written as advice; it now points at §1.4.1 and says a bare
+  `have_count` is not knowledge. The four-case table's `NULL` row said *"a warning per
+  honestly-empty work"*; **"honestly-empty" is the assertion this contract forbids**, so it now reads
+  *"per uncounted work"* — same rationale, no claim about the library.
+* **§6.2**, the search response, where the rule is restated in one marked paragraph because a results
+  table is where it is most easily lost, and §6.2 already delegates its omission rules to §1.4.
+
+**No ADR.** Nothing here closes off an alternative — it writes down a consequence of ARCHITECTURE
+§6.3 that a consumer could not otherwise see. If the counts are ever made nullable, or an explicit
+`counted_at` is added, that is a wire change and it gets its own entry; this contract does not
+foreclose either.
+
+---
+
+## LS-221 — a documented security gap that had closed, corrected in place without touching the decision it supports
+
+**The stale passage.** `docs/reference/http-api.md` §5.5.5 item 2 (the `stopped` SSE frame's *"there
+is NO reason field"* argument) described `internal/kavita`'s response-body redaction gap as **open**,
+citing `errors.go` assigning the upstream body to `APIError.Message` *"through `truncate` alone —
+**no redactor**"*. It has been closed since **LS-170** (`cdeb2f2`, an ancestor of `main` —
+`git merge-base --is-ancestor` confirmed rather than assumed).
+
+**Verified in the tree at `origin/main` before the prose was changed, all four parts, none taken on
+report:**
+
+| Claimed | Found |
+|---|---|
+| `redactText` lifted to `ssrf.RedactText`, call sites byte-identical | `internal/ssrf/redact.go:358` is the implementation; `internal/httpapi/redact.go:102` is `func redactText(s string) string { return ssrf.RedactText(s) }` — a one-line shim, so `internal/httpapi`'s call sites are unchanged |
+| every `parseErrorBody` branch redacts and bounds | `internal/kavita/errors.go:218` — `clean(s) = truncate(ssrf.RedactText(s))`; applied on the `problemDetails` title/detail path, on **both** validation fields, on the `{` fallback, on the bare-JSON-string path and its fallback, and on `default`. The two branches that assign no upstream text are the empty body and the 401, whose message is a UsArr-authored literal |
+| `last_error` redacted before the row is written | `cmd/usarr/services.go:653-656` (*"Redact BEFORE the value reaches the row"*), `:670`, `:756` |
+| both slog handlers wrapped | `cmd/usarr/main.go:247` and `:249` wrap `slog.NewTextHandler` **and** `slog.NewJSONHandler` in `newRedactHandler` (`cmd/usarr/logredact.go:31`), which redacts the message, string- and error-valued attributes, and recurses into groups |
+
+`docs/reference/security.md` §5 gap 1 was **already** marked *"✅ Met, as of LS-170"*; only
+`http-api.md` had gone stale, which is the ordinary failure mode of an argument that cites another
+document's open gap as one of its supports.
+
+**The correction keeps the conclusion, and says why the conclusion did not depend on the correction.**
+The frame still carries **no cause field**. Two of its three supports are untouched: gap 2 — Kavita's
+key in a **path segment** (`/api/Opds/{apiKey}/…`), where `internal/ssrf`'s `redactPathSegments` is a
+*shape* heuristic that security.md §5 says matches that key only by luck and *"must not be relied
+on"* — and the primary argument, that **the absence of a field is a stronger guarantee than a rule
+about its contents**. So item 2 is now a status note plus the surviving half, and the lead-in that
+promised *"two rules"* was reworded to stop over-claiming. The *"where the operator sees the real
+error instead"* paragraph, which also called gap 1 open, was corrected to match.
+
+⚠️ **What was deliberately NOT changed.** §5.5.5.1's deferred `reason` shape, the `assertNoSecret`
+guard critique (still accurate — it is `strings.Contains` against secrets the test was told about),
+and the decision itself. A closed redaction gap is a reason to update prose, not a reason to reopen a
+wire decision that rested mainly on something else.
