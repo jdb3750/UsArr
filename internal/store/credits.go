@@ -82,6 +82,29 @@ type CreditSet struct {
 	RemoteKind string
 	RemoteID   string
 	Credits    []Credit
+
+	// Year is work.year, as the SAME per-item metadata read that produced
+	// Credits reported it. INVALID means "this source has no year for this
+	// item", and it is written as SQL NULL — never as 0, which the Home
+	// screen's Year column would render as a real year.
+	//
+	// IT RIDES ON A TYPE CALLED CreditSet ON PURPOSE, and the alternative was
+	// weighed rather than skipped. Phase B is not "the credit pass", it is ONE
+	// METADATA READ PER IMPORTED ITEM whose first payload happened to be
+	// credits (internal/libsync/importer.go's streamAndApplyCredits says so in
+	// its first line). The year arrives in the same response, on the same round
+	// trip, for the same item. A second pass to carry it would be a second GET
+	// per series for a field already in hand; a field on CatalogueItem would be
+	// a field the item stream cannot fill, because Kavita's series list carries
+	// no release year at all. So the set is what phase B learned, and the name
+	// is the historical half of it.
+	//
+	// ⚠️ NULL IS WRITTEN AS WELL AS A VALUE. An upstream that DROPS a year must
+	// not leave the old one standing forever — the same rule work_alt_title and
+	// the credits themselves are replaced wholesale under. On a work two remote
+	// items resolved onto, that is last-writer-wins, exactly as the credits are
+	// (docs/DECISIONS.md, ADR-0044).
+	Year sql.NullInt64
 }
 
 // CreditResult is what one ApplyCredits call did.
@@ -115,6 +138,15 @@ type CreditResult struct {
 	// inferred from FTS row counts — search_fts is contentless and its rows are
 	// replaced in place, so no count outside this struct can see the difference.
 	DocsRebuilt int
+
+	// YearsWritten counts works whose work.year this call actually CHANGED. It
+	// is not the number of sets carrying a year: the update is guarded by
+	// `year IS NOT ?`, so a re-import that reports the same year again touches
+	// no row and bumps no updated_at, and on a steady-state re-import this is
+	// 0 while CreditsWritten is not — the same gap, for the same reason, that
+	// DocsRebuilt reports. A NULL that replaces a value counts too: erasing a
+	// year the upstream no longer reports is a change.
+	YearsWritten int
 }
 
 func (r *CreditResult) add(o CreditResult) {
@@ -124,6 +156,7 @@ func (r *CreditResult) add(o CreditResult) {
 	r.ItemsUnresolved += o.ItemsUnresolved
 	r.CreditsRejected += o.CreditsRejected
 	r.DocsRebuilt += o.DocsRebuilt
+	r.YearsWritten += o.YearsWritten
 }
 
 // Add merges another result into r, so an importer can accumulate across
@@ -193,6 +226,35 @@ func applyOneCreditSet(
 	}
 	if err != nil {
 		return res, fmt.Errorf("look up link: %w", err)
+	}
+
+	// ── 1b. work.year, from the same metadata read. Numbered 1b rather than 2
+	// because the three steps below are one algorithm about credits and this is
+	// not part of it — it depends only on step 1's workID, and every comment
+	// from here down that says "step 2" or "step 4" means the credit steps.
+	//
+	// `year IS NOT ?` — not `year <> ?` — is what makes this a no-op on a
+	// re-import that reports the same year. SQLite's IS/IS NOT compare NULLs as
+	// values, so `NULL IS NOT NULL` is false and an item that has never had a
+	// year does not get its updated_at bumped once per import forever, while
+	// `NULL <> NULL` is NULL and the row would be skipped in the one case that
+	// must NOT be skipped: writing the first real year onto a NULL. Both
+	// directions are executed by TestACreditPassWritesTheYearAndRewritesIt.
+	{
+		r, err := tx.ExecContext(ctx, `
+			UPDATE work SET year = ?, updated_at = ?
+			 WHERE id = ? AND year IS NOT ?`,
+			set.Year, FormatTime(now), workID, set.Year)
+		if err != nil {
+			return res, fmt.Errorf("set year on work %d: %w", workID, err)
+		}
+		n, err := r.RowsAffected()
+		if err != nil {
+			return res, fmt.Errorf("set year on work %d: %w", workID, err)
+		}
+		if n > 0 {
+			res.YearsWritten++
+		}
 	}
 
 	// ── 2. The document's `people` column BEFORE the rewrite, so step 4 can tell

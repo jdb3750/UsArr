@@ -1344,6 +1344,75 @@ func (s *Store) LastFullSyncAt(ctx context.Context, instanceID int64) (sql.NullS
 	return at, nil
 }
 
+// WorkCountsByInstance reports, per service instance, HOW MANY DISTINCT WORKS
+// THAT INSTANCE CONTRIBUTES to the local catalogue.
+//
+// # What it counts, precisely, because the name has to be defensible
+//
+// It counts `work` rows, DISTINCT, reachable from a live `service_item_link` on
+// the instance. Three narrowings are load-bearing and each rules out a number
+// that would be a different claim:
+//
+//   - DISTINCT work_id, not a link count. §6.4 tier 1 merges two remote items
+//     that share a strong external id onto ONE work, so counting links would
+//     report a library as larger than it is — and the same instance can hold
+//     two `service_item_link` rows pointing at one work.
+//   - `l.deleted_at IS NULL`. A link inside its 7-day tombstone window is an
+//     item the upstream no longer reports.
+//   - `w.deleted_at IS NULL`. Same window, on the work.
+//
+// It is NOT a media-file count and NOT an edition count: nothing on the
+// Services screen claims to know how many files an upstream holds, and this
+// number must not be read as one. It is also not a per-LIBRARY number — a
+// user-defined library binds containers across instances (§17.8), so a count
+// per library is a different query with a different reader.
+//
+// Person works are outside it by construction rather than by a filter: the
+// credit pass creates a 'person' work with no `service_item_link` at all, so no
+// instance contributes one.
+//
+// # Zero versus absent
+//
+// AN INSTANCE WITH NO ROWS IS ABSENT FROM THE MAP, not present with 0, and the
+// caller decides what that means for it. `0` from this function would be the
+// answer for an instance that has never synced, for one that synced an empty
+// library, and for a Prowlarr that has no catalogue at all — three different
+// facts. The one that separates the first two is `last_full_sync_at`, which is
+// on the instance row and not here.
+//
+// # Scope
+//
+// It AGGREGATES ACROSS INSTANCES, which is exactly the read store.go's rule
+// says must carry one: without the predicate, a caller who can see one instance
+// would learn how many works every other instance holds, which is an existence
+// oracle over the whole configured stack.
+func (s *Store) WorkCountsByInstance(ctx context.Context, scope Scope) (map[int64]int64, error) {
+	pred, args := scope.instancePredicate("l.service_instance_id")
+	rows, err := s.db.Read().QueryContext(ctx, `
+		SELECT l.service_instance_id, COUNT(DISTINCT l.work_id)
+		  FROM service_item_link l
+		  JOIN work w ON w.id = l.work_id
+		 WHERE l.deleted_at IS NULL AND w.deleted_at IS NULL AND `+pred+`
+		 GROUP BY l.service_instance_id`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("count works per service_instance: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	out := make(map[int64]int64)
+	for rows.Next() {
+		var id, n int64
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, fmt.Errorf("count works per service_instance: scan: %w", err)
+		}
+		out[id] = n
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("count works per service_instance: %w", err)
+	}
+	return out, nil
+}
+
 // Analyze refreshes SQLite's planner statistics after a bulk import
 // (reference/sync.md §6 rule 5: "SQLite's planner is materially better with
 // stats for the multi-index intersections tag filtering depends on").

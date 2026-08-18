@@ -187,3 +187,79 @@ every page but the first, silently.
 | `400` | `bad_request` | `limit` is negative or not a whole number (§1.2); or `cursor` is not a token this endpoint issued. Both carry an `action`. |
 | `401` | `unauthorized` | no session. |
 | `500` | `internal` | the local read failed. |
+
+---
+
+## 2 · `GET /api/v1/services/health` — the two catalogue-freshness fields
+
+**This section documents `last_full_sync_at` and `work_count` and nothing else on the endpoint.**
+The rest of the row's contract has not been settled here; read `internal/httpapi/services.go`'s
+`serviceHealthResponse` for it. The two fields below are what the Services screen's
+`Last successful sync` and `Items` columns render, and both were hardcoded client-side before they
+existed on the wire.
+
+Like every read on this screen it is served **entirely from SQLite** (principle 1): no \*Arr call,
+no probe issued on the request path. Requires an authenticated session.
+
+### 2.1 The two fields
+
+```jsonc
+{
+  "services": [
+    {
+      // …the rest of the health row…
+      "last_full_sync_at": "2026-08-16T12:00:00Z",
+      "work_count": 3
+    }
+  ]
+}
+```
+
+| Field | Always present? | Type | Meaning |
+| --- | --- | --- | --- |
+| `services[].last_full_sync_at` | **yes**, as a value or as an explicit `null` | RFC 3339 UTC, or `null` | When this instance last **completed** a full catalogue import. `null` means **never**. |
+| `services[].work_count` | **yes** | integer | How many **distinct works** this instance contributes to the local catalogue. |
+
+### 2.2 `null` and `0` are different facts, and neither is omitted
+
+🚩 **Read the pair, never either half alone.** A single number cannot carry the distinction the
+screen needs, because `0` is the answer for a service that has never run *and* for one that ran and
+found an empty library:
+
+| `last_full_sync_at` | `work_count` | What it means |
+| --- | --- | --- |
+| `null` | `0` | **Never synced.** No full import has completed. |
+| a timestamp | `0` | **Synced, and found nothing.** The upstream really is empty. |
+| a timestamp | `> 0` | The ordinary case. |
+| `null` | `> 0` | **A partial import's rows stand.** Batches committed before the import failed; the set is not known to be complete. |
+
+**Neither field carries `omitempty`, deliberately.** `"last_full_sync_at": null` is a *positive*
+statement — "this instance has never completed a full import". An absent key would be
+indistinguishable from a server build that does not send the field at all, which is the ambiguity
+this endpoint exists to remove.
+
+**`work_count` is never nulled out to match the timestamp.** The fourth row above is why: a partial
+import leaves its committed batches behind (see `internal/libsync`'s `FullImport`), and hiding those
+rows would replace one wrong answer with another. `work_count` is always a real count.
+
+⚠️ **A service with no catalogue at all reports `null` / `0` too** — a Prowlarr has no library to
+sync. The field that separates *that* from an unsynced Kavita is `role`, which is already on the
+row: `role: "indexer"` means the two columns are **not applicable**, not empty.
+
+### 2.3 What `work_count` counts, exactly
+
+Distinct `work` rows reachable from this instance's **live** item links. Three narrowings, each
+ruling out a number that would be a different claim:
+
+* **Distinct works, not links.** §6.4 tier 1 merges two remote items that share a strong external id
+  onto one work, so a link count reports a library as larger than it is.
+* **Live links only.** A link inside its 7-day tombstone window is an item the upstream no longer
+  reports.
+* **Live works only.** Same window, on the work.
+
+It is **not** a media-file count and **not** an edition count — nothing on this screen claims to know
+how many files an upstream holds. It is also **not** per-library: a user-defined library binds
+containers across instances (§17.8), so a per-library number is a different query.
+
+Credited people are outside it by construction rather than by a filter: the credit pass creates a
+`work` of kind `person` with no `service_item_link` at all, so no instance contributes one.

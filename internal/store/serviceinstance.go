@@ -51,6 +51,16 @@ type ServiceInstance struct {
 	// replica does not have.
 	IndexersFetchedAt sql.NullString
 
+	// LastFullSyncAt is when this instance last COMPLETED a full catalogue
+	// import (migration 0005). INVALID means NEVER, and it is a different fact
+	// from "synced, and the library was empty" — the Services screen says a
+	// different sentence for each, exactly as it does for IndexersFetchedAt.
+	//
+	// It is written ON SUCCESS ONLY, by StampFullSync, so it never claims a
+	// freshness the replica does not have: a partial import leaves its
+	// committed batches standing and this column untouched.
+	LastFullSyncAt sql.NullString
+
 	DeletedAt sql.NullString
 }
 
@@ -58,7 +68,7 @@ const serviceInstanceColumns = `
   id, kind, role, name, base_url, url_base, api_key_enc, kek_id,
   api_version, verify_tls, tls_spki_pin, enabled, priority, managed_by,
   health_state, breaker_state, breaker_until, consecutive_failures,
-  last_ok_at, last_error, indexers_fetched_at, deleted_at`
+  last_ok_at, last_error, indexers_fetched_at, last_full_sync_at, deleted_at`
 
 func scanServiceInstance(sc interface{ Scan(...any) error }) (ServiceInstance, error) {
 	var si ServiceInstance
@@ -67,7 +77,7 @@ func scanServiceInstance(sc interface{ Scan(...any) error }) (ServiceInstance, e
 		&si.ID, &si.Kind, &si.Role, &si.Name, &si.BaseURL, &si.URLBase, &si.APIKeyEnc, &si.KEKID,
 		&apiVersion, &si.VerifyTLS, &si.TLSSPKIPin, &si.Enabled, &si.Priority, &si.ManagedBy,
 		&si.HealthState, &si.BreakerState, &si.BreakerUntil, &si.ConsecutiveFailures,
-		&si.LastOKAt, &si.LastError, &si.IndexersFetchedAt, &si.DeletedAt,
+		&si.LastOKAt, &si.LastError, &si.IndexersFetchedAt, &si.LastFullSyncAt, &si.DeletedAt,
 	)
 	if err != nil {
 		return ServiceInstance{}, err

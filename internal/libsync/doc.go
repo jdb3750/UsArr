@@ -33,10 +33,12 @@
 //
 // §7.2 splits a full import into phase A (id, title, year, external ids, poster
 // URL — enough to render a grid) and phase B (overview, file details, media
-// info). THIS IS PHASE A, and phase B is empty for Kavita's series list rather
-// than deferred: POST /api/Series/all-v2 returns no overview, no release year
-// and no per-file facts at all, so there is nothing in that response left to
-// backfill. What phase B would fetch for Kavita is the per-series volume and
+// info). THE ITEM STREAM IS PHASE A, and for Kavita it CANNOT complete phase A
+// alone: POST /api/Series/all-v2 returns no overview and no release year, so
+// `year` — a phase-A field — has to come from the per-series metadata read that
+// runs after the stream closes. That read is what credits.go performs, and it
+// carries `releaseYear` back with the credits rather than paying a second GET
+// for it. What is still NOT fetched for Kavita is the per-series volume and
 // chapter walk — one call per series, the shape §7.2 budgets for Sonarr's
 // episodes — and that is where work_comic_issue and media_file get their rows.
 // Neither is written here, and neither is faked: see kavita.go.

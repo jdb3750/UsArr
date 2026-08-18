@@ -14722,3 +14722,155 @@ relates the design system's tokens to the prototype's locals in either direction
 is unguarded by construction, and a future divergence between them is a reading job. What was
 verified by reading: every one of the 22 `--toolbar-h` occurrences under `docs/design/mockups/`, and
 the five `app.css` comments that mention the token by name to explain its absence.
+
+---
+
+# Live-import findings — `work.year` was never written, and the Services sync columns were constants
+
+Both were found by an import against a **real Kavita**, not by reading. That is the whole reason
+they are one entry: neither is a design flaw, both are a field that existed at one end of a pipe and
+at no other point along it, and only a screen rendered from real data shows that.
+
+## LS-110 — `work.year` had a column, a read path and an index, and no writer
+
+**Severity: high.** Home's `Year` column could only ever render `—`. `work.year` is written by
+nothing: `internal/libsync/kavita.go`'s `mapSeries` left it NULL with a comment saying so
+(*"SeriesDto carries no release year — the year lives on SeriesMetadataDto, which is a per-series
+call this commit does not make"*), and that call **had since been made** — the credit pass
+(ADR-0044) fetches `GET /api/Series/metadata` for every imported series and the response carries
+`releaseYear`. The field was read into the DTO and dropped on the floor. `LS-18` had named it as
+owed to *"the phase-B metadata backfill"*, which is a pass that does not exist and did not need to:
+the round trip was already being paid.
+
+**Applied.** `store.CreditSet` grew a `Year sql.NullInt64` and `applyOneCreditSet` writes it. The
+name `CreditSet` is now half a lie and that is the cheaper of the two available lies: phase B is one
+metadata read per item whose **first** payload was credits (`streamAndApplyCredits` says so in its
+own first line), so the alternative was a second GET per series for a field already in the response,
+or a field on `CatalogueItem` that the item stream cannot fill.
+
+**What was checked before writing, rather than assumed.** That `work.year` and Kavita's
+`releaseYear` are the same notion is not obvious — `work_comic.volume_year` exists and is a
+different thing. `ARCHITECTURE.md` §6.4 amendment 3 settles it by naming the two values as the ONE
+value a cross-source match compares: *"strip a trailing parenthesised 4-digit year from a Komga
+series title into `year` … or Saga (2012) never matches Kavita's Saga + releaseYear 2012"*. Had they
+differed the change would have stopped there.
+
+## LS-111 — Kavita's `releaseYear` is `0` far more often than it is absent, and `0` renders as a year
+
+**Severity: high**, and it is the half of `LS-110` that a straight cast would have got wrong. `0`
+is **Kavita's own sentinel** for "no year", verified against Kavita's source rather than inferred:
+
+| Claim | Primary source (`Kareadita/Kavita`, `develop` at `9c3e540`) |
+| --- | --- |
+| The validity floor is `>= 1000` | `Kavita.Common/Helpers/NumberHelper.cs:7` — `IsValidYear(int number) => number is >= 1000` |
+| The scanner yields `0`, not "absent", for a series with no usable date | `Kavita.Services/Extensions/ChapterListExtensions.cs:51-54` — `MinimumReleaseYear` is `…Where(NumberHelper.IsValidYear).DefaultIfEmpty().Min()`; `Kavita.Services/Scanner/ProcessSeries.cs:380-382` assigns it |
+| The edit dialog refuses anything below the floor | `Kavita.Services/SeriesService.cs:102` |
+| Kavita itself reads `0` back as "unset" | `Kavita.Services/StatisticService.cs:111` (`.Where(sm => sm.ReleaseYear != 0)`) · `Kavita.Services/ReadingLists/CblExportService.cs:166` (`ReleaseYear is > 0 ? …`) |
+
+**Applied.** `releaseYearOf` mirrors Kavita's predicate exactly rather than picking a band of its
+own, so the two cannot disagree about what a year is. **There is deliberately no upper bound**:
+Kavita's writers have none (the field is a bare `int32` in both vendored specs, with no `maximum`),
+so an upper bound would be UsArr inventing a rule its only source does not enforce and silently
+dropping a year an operator typed on purpose. A wrong-but-plausible year is a **data** problem the
+operator can see and fix upstream; `0` is a **sentinel** problem they cannot see at all, because it
+renders as a claim nobody made. Only the second is UsArr's.
+
+## LS-112 — the year had to survive a re-import, which is where an insert-only fix fails
+
+**Severity: medium.** The write is `UPDATE work SET year = ?, updated_at = ? WHERE id = ? AND year
+IS NOT ?`, and three properties of that one statement are each guarded by execution:
+
+* `IS NOT`, **not** `<>`. SQLite's `IS`/`IS NOT` compare NULLs as values, so `NULL <> NULL` is NULL
+  and the row would be skipped in the one case that must not be — writing the first real year onto a
+  NULL. Fired: swapping the operator turns every first write into a no-op.
+* **NULL is written as well as a value.** An operator who deletes a bad year in Kavita must not keep
+  seeing it in UsArr forever — the rule `work_alt_title` and the credits themselves are already
+  replaced wholesale under. Fired: wrapping the value in `COALESCE(?, year)` leaves the stale year
+  standing and nothing else fails.
+* **An unchanged re-import touches no row.** The guard is what stops a second FTS-era cost — one
+  `work` rewrite per item per import forever — and it is asserted through `updated_at` rather than
+  only through the new `CreditResult.YearsWritten`, so a counter that lied would still go red.
+
+**The read path needed nothing**, which was checked rather than assumed: `store.RecentWork.Year`
+already exists and is scanned, and `internal/httpapi/library.go:89` already renders it as
+`year *int64` with `omitempty` and a comment saying `0` must not be sent. That is why the sentinel
+had to be caught at the **write**: a `0` in the column is `Valid`, and the wire-level guard would
+have shipped it.
+
+## LS-113 — the Services screen's sync columns were client-side constants over data that existed
+
+**Severity: high.** `Last successful sync: Never` and `Items: —` were returned by
+`web/src/lib/services.ts`'s `syncCell` and `itemsCell` as literals, after a perfect import.
+`service_instance.last_full_sync_at` was written on every successful import (`StampFullSync`, called
+from `FullImport` step 4) and read by exactly one caller — the bootstrap gate — and was **not on the
+`ServiceInstance` struct at all**, so no HTTP handler could have rendered it if it wanted to.
+
+**Applied, backend only.** `ServiceInstance` grew `LastFullSyncAt`, the health row grew
+`last_full_sync_at` and `work_count`, and `store.WorkCountsByInstance` is one grouped, scoped read
+rather than N+1 on a render path. The `LastFullSyncAt` doc comment had already anticipated this
+split — *"the Services screen's read of this same column is a different function and takes a
+Scope"* — and that function now exists.
+
+**Two fields, allowlisted one at a time.** `serviceHealthResponse` is built from a row that also
+holds an encrypted full-admin credential, so the shape is pinned whole by
+`TestServicesHealthKeysAreTheAllowlist`; a field added later by widening the row rather than naming
+a column fails there first.
+
+## LS-114 — `null` and `0` are different facts, and one number cannot carry both
+
+**Severity: medium**, and it is what makes `LS-113` worth shipping rather than a cosmetic fix.
+"Never synced" and "synced, and the library was empty" are both `0` items. The pair is the answer,
+and it is documented as a pair in `docs/reference/http-api.md` §2:
+
+| `last_full_sync_at` | `work_count` | |
+| --- | --- | --- |
+| `null` | `0` | never synced |
+| a timestamp | `0` | synced, found nothing |
+| `null` | `> 0` | a **partial** import's committed batches stand |
+
+**Neither field carries `omitempty`**, deliberately: `"last_full_sync_at": null` is a positive
+statement, where an absent key is indistinguishable from a build that does not send the field.
+Fired — adding `omitempty` makes the never-synced row lose the key entirely.
+
+**`work_count` is not nulled out to match the timestamp**, which was the tempting symmetry. The
+third row above is why: a partial import leaves its committed batches behind by design, and hiding
+those rows would replace one wrong answer with another.
+
+## LS-115 — what `work_count` counts, and the three numbers it is not
+
+**Severity: low, but the name is a claim.** It is `COUNT(DISTINCT work_id)` over live links joined
+to live works. Not a link count — §6.4 tier 1 merges two remote items onto one work, and a link
+count reports a library as larger than it is (fired: `COUNT(*)` reads 4 where 3 is true). Not a
+media-file count and not an edition count. Not per-library, because a library binds containers
+across instances (§17.8). Credited people are outside it **by construction** rather than by a
+filter, since the credit pass writes a `person` work with no `service_item_link`.
+
+It aggregates across instances, so it takes a `Scope` — without the predicate a user who can see one
+service learns every other service's catalogue size. Fired both ways: an empty scope must return
+nothing, not everything.
+
+## What was deliberately left for the frontend thread
+
+**`web/src/lib/services.ts` was not touched**, per the split. Two functions there still return
+constants and both now have data behind them:
+
+* `syncCell()` (`services.ts:324`) returns `nothing('Never')` unconditionally for a catalogue
+  source. It should read `row.health.last_full_sync_at` — `null` keeps `Never`, a timestamp renders
+  the existing `describeSync`-style clock plus a relative line.
+* `itemsCell()` (`services.ts:337`) returns `nothing(NOTHING.empty)` unconditionally. It should read
+  `row.health.work_count`. Its doc comment already says *"how many works this instance
+  contributes"*, which is exactly what the wire now carries.
+
+`web/src/lib/api.ts`'s `ServiceHealth` interface needs the two fields added; JSON they do not
+declare is dropped silently, so nothing breaks until they are.
+
+⚠️ **One existing test asserts the hardcoded behaviour as correct and must be REVERSED, not
+deleted**: `web/src/lib/services-screen.test.ts:182` —
+`expect(syncCell(row({ kind: 'sonarr', role: 'catalogue' })).text).toBe('Never')`. It is not wrong
+today (the function has no data to read), which is precisely why it will pass straight through a
+frontend change that forgets to wire the field. It should become a case over the field's two states.
+It was left standing here because reversing it without the rendering change would go red on a tree
+whose backend half is correct.
+
+**No ADR is proposed.** Neither change closes off an alternative: `work.year`'s source can still be
+displaced by a metadata provider later, and the two health fields are additive.

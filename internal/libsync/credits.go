@@ -2,6 +2,7 @@ package libsync
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strconv"
@@ -169,8 +170,10 @@ var kavitaCreditRoles = []creditRole{
 		// schema — work_comic.publisher, a TEXT column migration 0006 created
 		// and nothing writes — and this pass deliberately does not write it:
 		// that column belongs to the phase-B metadata backfill that also owns
-		// SeriesMetadataDto's summary and releaseYear, which is a different
-		// change. Recorded in docs/REVIEW-LOG.md as LS-18.
+		// SeriesMetadataDto's summary, which is a different change. Recorded in
+		// docs/REVIEW-LOG.md as LS-18. (`releaseYear` was named here too and is
+		// no longer owed: it lands on work.year via releaseYearOf below —
+		// REVIEW-LOG.md LS-110.)
 		name:   "publishers",
 		people: func(m kavita.SeriesMetadataDto) []kavita.PersonDto { return m.Publishers },
 	},
@@ -247,6 +250,56 @@ func creditsFromMetadata(md kavita.SeriesMetadataDto, kind string) []store.Credi
 	return out
 }
 
+// kavitaMinValidYear is Kavita's OWN validity floor for a year, copied rather
+// than invented: `NumberHelper.IsValidYear(int number) => number is >= 1000;`
+// (Kavita.Common/Helpers/NumberHelper.cs:7, `develop` at 9c3e540).
+//
+// UsArr adopts that predicate exactly instead of picking its own band, because
+// the two must not be able to disagree about what a year is. Kavita applies it
+// in both of the places that can write the field:
+//
+//   - the SCANNER — `series.Metadata.ReleaseYear = chapters.MinimumReleaseYear()`
+//     (Kavita.Services/Scanner/ProcessSeries.cs:380-382), and MinimumReleaseYear
+//     is `chapters.Select(v => v.ReleaseDate.Year).Where(NumberHelper.IsValidYear)
+//     .DefaultIfEmpty().Min()` (Kavita.Services/Extensions/ChapterListExtensions.cs:51-54)
+//     — so a series whose chapters carry no usable date yields DefaultIfEmpty()'s **0**;
+//   - the EDIT-SERIES dialog — `if (NumberHelper.IsValidYear(...))`
+//     (Kavita.Services/SeriesService.cs:102), which refuses a value below the
+//     floor and leaves the stored one alone.
+//
+// So 0 IS KAVITA'S OWN SENTINEL FOR "no year", not a year, and Kavita reads it
+// back as one everywhere it renders the field: `.Where(sm => sm.ReleaseYear != 0)`
+// (Kavita.Services/StatisticService.cs:111) and
+// `item.Series.Metadata?.ReleaseYear is > 0 ? …`
+// (Kavita.Services/ReadingLists/CblExportService.cs:166).
+//
+// THERE IS DELIBERATELY NO UPPER BOUND, and that is a decision rather than an
+// omission. Kavita's own writers have none — the field is a bare int32 in the
+// vendored spec, with no `maximum` — so an upper bound here would be UsArr
+// inventing a rule its only source does not enforce, and it would silently drop
+// a year an operator typed on purpose. A wrong-but-plausible year is a DATA
+// problem the operator can see and fix upstream; 0 is a SENTINEL problem the
+// operator cannot see at all, because it renders as a year that was never
+// claimed. Only the second is UsArr's to fix. REVIEW-LOG.md LS-111.
+const kavitaMinValidYear = 1000
+
+// releaseYearOf projects SeriesMetadataDto.releaseYear onto work.year.
+//
+// work.year and Kavita's releaseYear ARE the same notion, which was checked
+// before this was written rather than assumed: ARCHITECTURE.md §6.4 amendment 3
+// names these two values as the ONE value a cross-source match compares —
+// "strip a trailing parenthesised 4-digit year from a Komga series title into
+// `year` … or Saga (2012) never matches Kavita's Saga + releaseYear 2012".
+// Kavita computes it as the earliest VALID release year across the series'
+// chapters (ProcessSeries.cs:382 above), i.e. the year the series started,
+// which is what work.year on a 'comic' or 'book' series row holds.
+func releaseYearOf(md kavita.SeriesMetadataDto) sql.NullInt64 {
+	if md.ReleaseYear < kavitaMinValidYear {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: int64(md.ReleaseYear), Valid: true}
+}
+
 // StreamCredits fetches each requested series' metadata and hands its credits to
 // fn.
 //
@@ -298,6 +351,8 @@ func (s *KavitaSource) StreamCredits(
 		n++
 		if err := fn(store.CreditSet{
 			RemoteKind: r.RemoteKind, RemoteID: r.RemoteID, Credits: credits,
+			// The same response, on the same round trip. See releaseYearOf.
+			Year: releaseYearOf(md),
 		}); err != nil {
 			return n, err
 		}
