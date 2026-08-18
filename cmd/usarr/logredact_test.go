@@ -5,9 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
+	"os"
 	"strings"
 	"testing"
+
+	"github.com/jdb3750/UsArr/internal/config"
 )
 
 const (
@@ -100,4 +104,98 @@ func TestRedactHandlerPassesEnabledThrough(t *testing.T) {
 	if !h.Enabled(context.Background(), slog.LevelError) {
 		t.Error("Enabled refused a level the inner handler allows")
 	}
+}
+
+// TestNewLoggerWrapsTheHandler is the guard for LS-170 step 3's WIRING.
+//
+// The tests above prove redactHandler redacts; none of them proves the process
+// logger is built with one. Unwrapping either branch of newLogger back to a bare
+// slog.NewTextHandler / NewJSONHandler left this package green, which is the
+// "indistinguishable from no guard" case CLAUDE.md names. So this drives
+// newLogger itself, on a real config, over BOTH format branches — the two are
+// separate `return` statements and an unwrapped one is exactly the mistake that
+// hides behind the other's coverage.
+//
+// os.Stdout is swapped for a pipe because newLogger writes there by
+// construction: it is the process logger, and taking a writer argument purely to
+// make it testable would move the wiring under test out of production code.
+func TestNewLoggerWrapsTheHandler(t *testing.T) {
+	for _, tc := range []struct {
+		format string
+		// wantJSON is what the branch is supposed to select, so a test that
+		// passes because both branches collapsed onto one handler still fails.
+		wantJSON bool
+	}{
+		{format: "text", wantJSON: false},
+		{format: "json", wantJSON: true},
+		// auto with a pipe on stdout is not a terminal, so it must resolve to JSON.
+		{format: "auto", wantJSON: true},
+	} {
+		t.Run(tc.format, func(t *testing.T) {
+			cfg, err := config.Load(config.Options{
+				Args:    []string{"--config-dir", t.TempDir()},
+				Env:     map[string]string{"USARR_LOG_FORMAT": tc.format},
+				Version: "0.0.0-test",
+			})
+			if err != nil {
+				t.Fatalf("config: %v", err)
+			}
+			if cfg.LogFormat != tc.format {
+				t.Fatalf("config did not take the format: %q", cfg.LogFormat)
+			}
+
+			out := captureStdout(t, func() {
+				// The shape every upstream failure in this package takes.
+				newLogger(cfg).Error("upstream unreachable",
+					"instance_id", 3,
+					"err", errors.New(`Get "`+leakURL+`": connection refused`))
+			})
+
+			if strings.Contains(out, leakKey) {
+				t.Fatalf("newLogger built an UNWRAPPED handler: the key reached stdout: %s", out)
+			}
+			// Not vacuous: the line was written, and it is still diagnostic.
+			for _, want := range []string{"upstream unreachable", "connection refused", "prowlarr:9696", "REDACTED"} {
+				if !strings.Contains(out, want) {
+					t.Errorf("%q missing from the log line: %s", want, out)
+				}
+			}
+			gotJSON := json.Unmarshal([]byte(out), &map[string]any{}) == nil
+			if gotJSON != tc.wantJSON {
+				t.Errorf("format %q produced json=%v, want json=%v: %s", tc.format, gotJSON, tc.wantJSON, out)
+			}
+			t.Logf("%s: %s", tc.format, strings.TrimSpace(out))
+		})
+	}
+}
+
+// captureStdout runs fn with os.Stdout replaced by a pipe and returns what was
+// written. newLogger captures os.Stdout at call time, so fn must build the
+// logger, not just use one.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	saved := os.Stdout
+	os.Stdout = w
+	defer func() { os.Stdout = saved }()
+
+	done := make(chan string, 1)
+	go func() {
+		var b bytes.Buffer
+		_, _ = io.Copy(&b, r)
+		done <- b.String()
+	}()
+
+	fn()
+	if err := w.Close(); err != nil {
+		t.Fatalf("closing the pipe: %v", err)
+	}
+	out := <-done
+	if err := r.Close(); err != nil {
+		t.Fatalf("closing the pipe: %v", err)
+	}
+	return out
 }

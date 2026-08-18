@@ -51,6 +51,15 @@ type fakeProwlarr struct {
 	// blockedIndexerID, when non-zero, is reported by /api/v1/indexerstatus.
 	blockedIndexerID int32
 
+	// statusFailure, when non-empty, is served as the *Arr error envelope of a
+	// 500 from GET /api/v1/system/status instead of the healthy SystemResource.
+	// It exists because an *Arr's error MESSAGE is upstream free text that
+	// routinely quotes the URL the *Arr itself failed on — passkey and all —
+	// and internal/servarr's parseErrorBody copies that message into APIError
+	// verbatim. That is the string the health prober has to redact before it
+	// reaches service_instance.last_error.
+	statusFailure string
+
 	// searchDelay is held before every GET /api/v1/search answers. UsArr times
 	// each leg with a wall clock and reports whole milliseconds, so a test that
 	// needs a non-zero duration on the wire has to spend one.
@@ -93,6 +102,17 @@ func newFakeProwlarrAt(t *testing.T, apiKey, urlBase string) *fakeProwlarr {
 		writeJSONTest(w, map[string]any{"current": "v1", "deprecated": []string{}})
 	})
 	handle("GET /api/v1/system/status", f.authed(func(w http.ResponseWriter, _ *http.Request) {
+		f.mu.Lock()
+		failure := f.statusFailure
+		f.mu.Unlock()
+		if failure != "" {
+			// Headers before the status line: writeJSONTest sets them after
+			// WriteHeader, where net/http discards them.
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{"message": failure, "description": ""})
+			return
+		}
 		writeJSONTest(w, map[string]any{
 			"appName": "Prowlarr", "instanceName": "Prowlarr", "version": "2.1.3.5150",
 			"isProduction": true, "isDocker": true, "branch": "master",
@@ -517,6 +537,15 @@ func (f *fakeProwlarr) categoriesSeen() [][]string {
 	out := make([][]string, len(f.searchCategories))
 	copy(out, f.searchCategories)
 	return out
+}
+
+// failStatusWith makes GET /api/v1/system/status answer 500 with message as the
+// *Arr error envelope's `message`, so the health prober takes its failure path
+// against a real HTTP response rather than a hand-built error value.
+func (f *fakeProwlarr) failStatusWith(message string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.statusFailure = message
 }
 
 func (f *fakeProwlarr) blockIndexer(id int32) {

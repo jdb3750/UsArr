@@ -15897,6 +15897,32 @@ segment*, which shape-based redaction cannot catch) is untouched and still stand
 LS-160's contract is unchanged either way. The owning thread should correct the gap-1 half of the
 argument and leave the conclusion where it is unless it argues otherwise separately.
 
+**Two of the four steps shipped with no guard at all, and that is now closed.** A verification pass
+over `cdeb2f2` found that steps 1 and 3 had no test that fails when the fix is reverted — which per
+`CLAUDE.md` makes them indistinguishable from no guard. Reverting all three of step 1's
+`ssrf.RedactText(err.Error())` assignments in `cmd/usarr/services.go` back to `err.Error()` left
+`go test ./cmd/usarr/` green (no test in the package referenced `health.Error`, `last_error` or
+`LastError`); so did unwrapping **both** of step 3's handlers in `cmd/usarr/main.go` back to a bare
+`slog.NewTextHandler` / `NewJSONHandler`, because `logredact_test.go` built its own
+`slog.New(newRedactHandler(...))` and never called `newLogger`. Steps 2 and 2b+4 were guarded from the
+start, as the paragraph above records.
+
+Two tests were added, and both were **fired, not asserted**:
+
+- `TestProbeErrorIsRedactedBeforeItIsStored` (`cmd/usarr/probe_redact_test.go`) drives the real
+  `registry.probe` over real HTTP against the Prowlarr double, which now has a
+  `failStatusWith` mode: `GET /api/v1/system/status` answers 500 with an *Arr error envelope whose
+  `message` quotes an indexer URL carrying the fixture passkey — upstream free text, which
+  `internal/servarr`'s `parseErrorBody` copies through verbatim by design. With step 1 reverted it
+  failed three ways: `health.Error` unredacted, the snapshot leaking the passkey, and
+  `service_instance.last_error` leaking it on disk. It fires on the `SystemStatus` branch; the
+  `entry()` and `probeKavita` siblings are the same one-line rule, and the Kavita one is defence in
+  depth behind `internal/kavita`'s own `clean()`.
+- `TestNewLoggerWrapsTheHandler` (`cmd/usarr/logredact_test.go`) builds the logger through the real
+  `newLogger` on a real `config.Load`, over **both** format branches plus `auto`, with `os.Stdout`
+  swapped for a pipe. With the wrapping removed all three subtests failed, each quoting the fixture
+  key out of its own branch's output.
+
 **No ADR, as this entry predicted.** The lift is now an exported `ssrf.RedactText` where before it was
 an unexported `httpapi.redactText`, which does widen `internal/ssrf`'s public surface — but it closes
 off no alternative. The placement was dictated by the pre-existing one-implementation rule at
