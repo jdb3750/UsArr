@@ -685,6 +685,15 @@ sentence with real counts rather than a bar.
 | `credits` | credit sets read | **credit rows written** | credit *requests*, i.e. **items** |
 | `done` | catalogue items read, final | catalogue items applied, final | absent |
 
+**`items_read` is a RUNNING count in every streaming phase, not a figure settled when the phase
+ends.** It is incremented per item handed over, so a frame published part-way through a phase
+reports what has been read *at that moment* and the value climbs across a phase's frames. ⚠️ It did
+not always: the counters were assigned from each stream's return value alone, which made every frame
+but a phase's last one say `items_read: 0` while `applied` climbed past it — a running import
+rendered as a stalled one (`REVIEW-LOG.md` LS-250). A client may rely on the value being
+non-decreasing within a run; it may **not** rely on how many frames a phase sends, which is
+`min(BatchRows, BatchWindow)` and therefore wall-clock dependent.
+
 ⚠️ **In the `credits` phase, `applied` and `total` are in different units**, so `applied / total` is
 not a fraction of anything. One item can carry several credits: the recorded frame above is a real
 run of two series where one had three credited people and the other had none, giving `applied: 3`

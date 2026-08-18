@@ -587,3 +587,141 @@ func TestFullImportSurvivesAContainerThatCannotBeBound(t *testing.T) {
 func sqlQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
+
+// everyPhaseSource is a Source that also implements CreditSource and
+// FileSource, so ONE import exercises all three streaming phases. Each item
+// carries one credit and one file, so `applied` climbs in every phase and a
+// frame that reports 0 read against a non-zero applied is visibly a lie rather
+// than an ambiguity.
+type everyPhaseSource struct {
+	fakeSource
+}
+
+func (e *everyPhaseSource) StreamCredits(
+	_ context.Context, reqs []CreditRequest, fn func(store.CreditSet) error,
+) (int, error) {
+	n := 0
+	for _, r := range reqs {
+		n++
+		if err := fn(store.CreditSet{
+			RemoteKind: r.RemoteKind, RemoteID: r.RemoteID,
+			Credits: []store.Credit{{
+				Role: "writer", Name: "Ann Author", NormalizedName: "ann author",
+			}},
+		}); err != nil {
+			return n, err
+		}
+	}
+	return n, nil
+}
+
+func (e *everyPhaseSource) StreamFiles(
+	_ context.Context, reqs []FileRequest, fn func(store.FileSet) error,
+) (int, error) {
+	n := 0
+	for _, r := range reqs {
+		n++
+		if err := fn(store.FileSet{
+			RemoteKind: r.RemoteKind, RemoteID: r.RemoteID,
+			Files: []store.MediaFileRow{{
+				Path:         "test:file:" + r.RemoteID,
+				RemoteFileID: r.RemoteID,
+				SizeBytes:    1,
+				DateAdded:    testNow,
+			}},
+		}); err != nil {
+			return n, err
+		}
+	}
+	return n, nil
+}
+
+// TestProgressFramesCarryTheReadCountAsItClimbs is the anti-stall assertion.
+//
+// The read counters used to be assigned from each stream's RETURN VALUE and
+// nowhere else, so every frame published from inside a stream carried
+// `items_read: 0` while `applied` climbed past it, and the true number appeared
+// only in the frame the tail flush publishes after the stream has closed. The
+// Services screen renders that as an import stuck at zero for its whole run.
+//
+// ⚠️ IT ASSERTS PROPERTIES, NEVER A SEQUENCE OF VALUES, and that is deliberate:
+// the batcher flushes on min(BatchRows, BatchWindow), so HOW MANY frames a phase
+// publishes — and therefore which counts land in them — is wall-clock dependent
+// and would be flaky asserted exactly. Only the ROW bound is load-bearing here:
+// 250 items at BatchRows 100 is at least three flushes however the clock falls,
+// so "there is a frame before the last one" holds under any timing. What is
+// asserted of those frames is monotonicity, non-zero-ness and the final total —
+// all three true of every legal interleaving.
+func TestProgressFramesCarryTheReadCountAsItClimbs(t *testing.T) {
+	s := newTestStore(t)
+	inst := fixtureInstance(t, s)
+
+	const items = 250
+	src := &everyPhaseSource{fakeSource: fakeSource{
+		containers: []store.CatalogueContainer{{RemoteID: "1", Name: "Manga", Kind: "comic"}},
+		items:      genItems(items, "1", "comic"),
+	}}
+	im := newImporter(t, s, src)
+	im.BatchRows = 100
+
+	var frames []Progress
+	im.Progress = func(p Progress) { frames = append(frames, p) }
+
+	rep, err := im.FullImport(t.Context(), inst)
+	if err != nil {
+		t.Fatalf("FullImport: %v", err)
+	}
+	if rep.ItemsRead != items || rep.CreditItemsRead != items || rep.FileItemsRead != items {
+		t.Fatalf("read counts = %d items / %d credits / %d files, want %d each",
+			rep.ItemsRead, rep.CreditItemsRead, rep.FileItemsRead, items)
+	}
+
+	for _, phase := range []string{"items", "credits", "files"} {
+		var got []Progress
+		for _, f := range frames {
+			if f.Phase == phase {
+				got = append(got, f)
+			}
+		}
+		// The row bound alone guarantees this: 250 items, 100 rows a batch.
+		if len(got) < 2 {
+			t.Fatalf("%s published %d frame(s); with 250 items at BatchRows 100 the ROW bound "+
+				"forces at least three flushes, so this test cannot see a mid-stream frame", phase, len(got))
+		}
+
+		prev := 0
+		for i, f := range got {
+			if f.ItemsRead < prev {
+				t.Errorf("%s frame %d went BACKWARDS: items_read %d after %d", phase, i, f.ItemsRead, prev)
+			}
+			prev = f.ItemsRead
+		}
+
+		// Every frame but the last is a mid-stream frame, and a mid-stream
+		// frame that says nothing has been read is the defect.
+		for i, f := range got[:len(got)-1] {
+			if f.ItemsRead == 0 {
+				t.Errorf("mid-stream %s frame %d reports items_read = 0 while applied = %d: "+
+					"the counter is not climbing as the stream is consumed, and the banner reads "+
+					"as a stalled import", phase, i, f.Applied)
+			}
+		}
+
+		if last := got[len(got)-1]; last.ItemsRead != items {
+			t.Errorf("the final %s frame reports items_read = %d, want %d", phase, last.ItemsRead, items)
+		}
+	}
+
+	// The items pass reads before it applies, so `applied` can never overtake
+	// `items_read` — the exact inversion the old assign-at-end produced.
+	for _, f := range frames {
+		if f.Phase == "items" && f.Applied > f.ItemsRead {
+			t.Errorf("an items frame claims %d applied out of %d read", f.Applied, f.ItemsRead)
+		}
+	}
+
+	if len(frames) == 0 || frames[len(frames)-1].Phase != "done" ||
+		frames[len(frames)-1].ItemsRead != items {
+		t.Errorf("last frame = %+v, want the done frame with items_read = %d", frames[len(frames)-1], items)
+	}
+}

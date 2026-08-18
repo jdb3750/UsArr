@@ -17247,3 +17247,95 @@ background goroutine nobody asked for.
 the refusal rule was decided by `LS-211.2` before this code existed, the membership question was
 decided by `LS-213`, and the §1.4.1 amendment adds a cause of absence without changing what absence
 obliges a consumer to do. Nothing here closes off an alternative that was open.
+
+---
+
+## LS-250 — every progress frame but a phase's last one reported zero items read, which renders a running import as a stalled one
+
+**Reported second-hand, verified in the tree before a line was changed, and the tree said something
+slightly different from the report.** The claim was *"the importer assigns read counters after each
+stream finishes rather than during it"*, for the items, credits and files phases. All three
+assignments are exactly that:
+
+```go
+read, streamErr := im.Source.StreamItems(ctx, func(it store.CatalogueItem) error { … })
+rep.ItemsRead = read          // ← the ONLY write, after the stream has closed
+```
+
+with `rep.CreditItemsRead = read` and `rep.FileItemsRead = read` the same shape in the two passes
+after it. Each phase's `flush` publishes `ItemsRead: rep.…ItemsRead` **from inside the stream
+callback**, so the value it read was the zero value for the whole stream. The tail flush is the one
+that runs *after* the assignment, which is why the true number appears in a phase's last frame and
+nowhere before it — the "0 for the whole phase, then a jump" the reporter saw.
+
+**A frame like that is false rather than merely coarse**, and the guard's own output is the proof:
+`items_read = 0 while applied = 100` is a frame claiming a hundred items were written out of none
+read. `http-api.md` §5.4 already says `items_read` counts *"catalogue items read from the source"*,
+so no documented promise had to move — the code was not keeping the one that was written down.
+
+**The fix is one increment per phase, in the stream callback**, and the assign-at-end **stays**:
+
+```go
+rep.ItemsRead++            // in the callback: makes the intermediate frames truthful
+…
+rep.ItemsRead = read       // at the end: still the adapter's own partial-delivery count
+```
+
+The two numbers legitimately differ, which is why the second line is not deleted for the first.
+`KavitaSource.StreamItems` returns what `StreamSeries` handed **it**, and that count includes series
+in a declined library that are skipped before `fn` is ever called. `Report.ItemsRead` is documented
+as *"what the adapter handed over … how far the READ got"*, and that stays the adapter's number; the
+running counter exists to make a mid-run frame truthful, not to redefine the field.
+
+**No field was added, renamed or removed.** The frame is the same struct with the same five keys;
+`web/src/lib/__fixtures__/sse-frames.json` is unchanged, and it would be even if regenerated — its
+recorded run is two series, one batch per phase, so every one of its frames is a tail flush already.
+What did change is a promise now worth making, added to §5.4: `items_read` is a **running** count,
+non-decreasing within a run.
+
+### The assertion is a property, because a sequence would be flaky
+
+`TestProgressFramesCarryTheReadCountAsItClimbs` (`internal/libsync/importer_test.go`) runs one import
+of 250 items at `BatchRows = 100` through a source that implements all three phases, and asserts
+**nothing about how many frames arrive or which values land in them**. The batcher flushes on
+`min(BatchRows, BatchWindow)`, so frame counts are wall-clock dependent and an expected sequence
+would be flaky by construction — the more so since the importer's injectable clock is frozen in these
+tests, which makes the row bound the only one that fires *today* and would make any timing-derived
+expectation a hostage to that detail.
+
+What is asserted is true of **every** legal interleaving:
+
+1. each phase publishes **at least two** frames — guaranteed by the ROW bound alone, since 250 items
+   at 100 rows a batch is three flushes however the clock falls, and a faster clock only adds more;
+2. `items_read` is **monotonically non-decreasing** across a phase's frames;
+3. every frame **but the last** — i.e. every mid-stream frame — carries a **non-zero** `items_read`;
+4. the last frame of each phase, and the `done` frame, carry the **true total**;
+5. no `items` frame reports `applied > items_read`, the inversion the defect produced.
+
+### The guard was fired
+
+Reverting the three increments (restoring the assign-at-end, byte-identical to the behaviour before
+this change) fails it on all three phases:
+
+```
+--- FAIL: TestProgressFramesCarryTheReadCountAsItClimbs (0.43s)
+    importer_test.go:704: mid-stream items frame 0 reports items_read = 0 while applied = 100: the counter is not climbing as the stream is consumed, and the banner reads as a stalled import
+    importer_test.go:704: mid-stream items frame 1 reports items_read = 0 while applied = 200: the counter is not climbing as the stream is consumed, and the banner reads as a stalled import
+    importer_test.go:704: mid-stream credits frame 0 reports items_read = 0 while applied = 100: the counter is not climbing as the stream is consumed, and the banner reads as a stalled import
+    importer_test.go:704: mid-stream credits frame 1 reports items_read = 0 while applied = 200: the counter is not climbing as the stream is consumed, and the banner reads as a stalled import
+    importer_test.go:704: mid-stream files frame 0 reports items_read = 0 while applied = 100: the counter is not climbing as the stream is consumed, and the banner reads as a stalled import
+    importer_test.go:704: mid-stream files frame 1 reports items_read = 0 while applied = 200: the counter is not climbing as the stream is consumed, and the banner reads as a stalled import
+    importer_test.go:719: an items frame claims 100 applied out of 0 read
+    importer_test.go:719: an items frame claims 200 applied out of 0 read
+```
+
+**No existing assertion had to be reversed**, and that was checked rather than assumed: every test
+that touches these counts reads the **Report** (`rep.ItemsRead != 150` on a truncated stream) or a
+**terminal** frame (`cmd/usarr/import_e2e_test.go`'s `done` frame at 5/5), and both are values this
+change leaves identical. Nothing anywhere asserted that a mid-stream frame reads zero — the
+behaviour was never pinned, which is why it survived.
+
+⚠️ **Out of scope and left alone: `http-api.md` §5.2 and §5.3 still describe FOUR phases and do not
+know about `files`**, and the line numbers they cite for the publish sites (`importer.go:213`, `:370`,
+`:443`) have been stale since well before this change. The `files` phase landed without them; fixing
+that is a documentation pass on §5, not a rider on a two-word bug.
