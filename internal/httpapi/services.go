@@ -627,7 +627,7 @@ type serviceHealthResponse struct {
 	// LastFullSyncAt and WorkCount are the two catalogue-freshness facts the
 	// Services screen's `Last successful sync` and `Items` columns render.
 	// Their wire contract — including the null/zero table a consumer has to
-	// read as a PAIR — is docs/reference/http-api.md §2. Both
+	// read as a PAIR — is docs/reference/http-api.md §3. Both
 	// are ADDED FIELDS ON AN ALLOWLIST, chosen one at a time: this struct is
 	// built from a row that also holds an encrypted full-admin credential, and
 	// nothing here is ever derived by widening the row.

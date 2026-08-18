@@ -261,6 +261,12 @@ func (s *Server) routes(mux *http.ServeMux) {
 	// upstream. See library.go.
 	mux.Handle("GET /api/v1/library/recent", s.authenticated(s.wrap(s.handleRecentWorks)))
 
+	// §17.8's Libraries screen, row view: the user-defined libraries, each with
+	// the containers a service already named. Two SQLite reads and no upstream
+	// call — it is not the connect probe, and ADR-0048 puts the proposal set
+	// there rather than in the table this serves. See libraries.go.
+	mux.Handle("GET /api/v1/libraries", s.authenticated(s.wrap(s.handleListLibraries)))
+
 	// ── Search and grab ─────────────────────────────────────────────────────
 	//
 	// /indexers serves the REQUESTS screen's indexer and category picker

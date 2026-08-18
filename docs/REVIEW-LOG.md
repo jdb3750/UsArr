@@ -14723,6 +14723,8 @@ is unguarded by construction, and a future divergence between them is a reading 
 verified by reading: every one of the 22 `--toolbar-h` occurrences under `docs/design/mockups/`, and
 the five `app.css` comments that mention the token by name to explain its absence.
 
+---
+
 # VN9-11 — the mockups' README argued from the identity tiers the two installs no longer hold
 
 **Date:** 2026-08-18. **Prefix:** `VN9-`, continuing from
@@ -14839,6 +14841,92 @@ against `1 error, 1 warning`), both Block C tables counted by `<tr>` (26 against
 groups on the full stack summing to 31 against v0.1's two summing to 6, both `Show all` rows, both
 drilldown breadcrumbs (three levels against two), and both identity panels (1,703 / 563 against
 0 / 424). The one figure that could **not** be found on a screen is recorded in the README as such.
+
+---
+
+# §17.8's read path — the premises a brief carried, measured against the tree
+
+**2026-08-18**, branch `libraries-read-20260818-020400`, cut from `origin/main` at `e0dca7b`. Ids
+`LS-120`–`LS-129`; `LS-124`–`LS-129` are unused and stay unused.
+
+**The subject:** building §17.8's Libraries read — `store.ListLibraries`, `GET /api/v1/libraries` —
+and the four findings below are premises the task carried that the tree does not support. Each was
+measured before any code was written, on the ground that a read built to satisfy a false premise is
+harder to unpick than one that never had it.
+
+## LS.120 The findings
+
+* **`LS-120` — "the decision *a proposal is not a row* still has no ADR". NOW FALSE, and it was
+  false before the brief was written.** [ADR-0048](./DECISIONS.md#adr-0048) landed at `b8c9f71`
+  (merged `b2a5702`), titled *"A library proposal is not a row in `library`; a row is created only
+  on Accept"*, and it decides exactly that: *"A library proposal lives in the connect probe's
+  response. It is never persisted. A `library` row is created only when the user accepts one."* The
+  premise was measured at `9033bcb`, which predates it. **No ADR was written for this**, per the
+  brief's own instruction not to write one for something already decided. Recorded because a
+  second-hand note elsewhere still carries the stale version.
+
+* **`LS-121` — "`library_source.missing_since` is written by the bind path". NOW FALSE, inverted.**
+  The bind path is the only thing that touches the column and it only ever **clears** it:
+  `internal/store/catalogue.go`'s `insertLibrarySource` writes `missing_since = NULL` in its
+  `ON CONFLICT` clause, and the rebind at the same file's container-is-back branch writes
+  `missing_since = NULL, container_identity = ?`. **No code path anywhere sets a non-NULL value**,
+  so the "source has gone missing" state is specified, storable, cleared on rebind, and unreachable.
+  The field is carried on the new read anyway — it is the seam the sweep lands on — and it is
+  documented as unreachable at three sites (`store.LibrarySource.MissingSince`,
+  `httpapi.librarySourceResponse.MissingSince`, `reference/http-api.md` §2.4) so that a screen
+  showing no missing sources is not read as evidence that none are missing.
+
+* **`LS-122` — a consuming thread's requirement that the response *"let the screen distinguish a
+  library the user has never been shown from one they have acted on"*. DISSOLVED, not implemented.**
+  The requirement rests on `78660a4`'s reading — that a row exists from the moment it is proposed,
+  making Accept a no-op and Decline a delete — which is the reading ADR-0048 records **and
+  rejects**. Its clause 3: *"once no row exists before Accept, every row is an accepted row by
+  construction, and a column that cannot express 'proposed' is not being asked to."* So there is no
+  state for a wire field to carry, and inventing one would have re-created the third `managed_by`
+  value ADR-0048 closed off. ⚠️ **The honest half is recorded with it**: ADR-0048 does not perform
+  the removal, §17.8 still measures that *"Libraries come into existence, on a first successful
+  connect to a Kavita, with no screen involved"*, and clause 4 covers exactly that by **declaring**
+  existing `'auto'` rows accepted. Either way the field would be a constant. `managed_by` is off the
+  wire on the separate ground that `'user'` has never been written, so the column is `'auto'` on
+  every row — §17.4 rule 5 applied to a wire field.
+
+* **`LS-123` — "add an item count if `library_member` supports it cheaply". MEASURED, and it is
+  cheaper than the brief allowed for.** `library_member` leads **both** its keys with `library_id` —
+  the WITHOUT ROWID primary key and `ux_libmem_identity` — so a per-library count is a range seek
+  either way. Measured on the real schema, SQLite 3.53.4:
+  `SEARCH m USING COVERING INDEX ux_libmem_identity (library_id=?)`. No new index, no new migration.
+  The grain is stated rather than assumed: it counts **member rows**, which are edition-grained, and
+  that equals distinct works only because the sole writer files everything under the
+  `edition_id = 0` sentinel. `COUNT(DISTINCT work_id)` was rejected — the key's second column is
+  `sort_title`, so a distinct pass cannot be served by the key order and buys a temp b-tree for a
+  difference that does not exist yet.
+
+## LS.120 What was left out on purpose
+
+**Which media types a source supplies** was requested as *"only if nearly free"*. It is not: the
+answer is not on `library_source` and computing it means an aggregate over `library_member` →
+`work.kind` → `edition.format` per source, a join across the catalogue this read otherwise never
+makes. Left out and said so, in `internal/store/libraries.go` and in `reference/http-api.md` §2.4.
+`library.formats` **is** carried, because it is a column on a row already being read — zero joins —
+and `(kind, formats)` is §17.2's media-type pair.
+
+## LS.120 The Unfiled decision
+
+Excluded, and excluded **in the SQL**. Migration `00005_library_sync.sql`'s own comment on the
+reserved row: *"Never listed on the Libraries screen, never offered in the scope chip, never
+proposed."* This read is the Libraries screen. It is in the `WHERE` clause rather than in the scan
+loop on ADR-0048's own reading of the existing site — an exclusion that is *"an `if` inside a scan
+loop is even less likely to be inherited by the next author's query than one written into a `WHERE`
+clause, because it is not in the query to copy"* — so the next read of this table can copy the
+statement and get the exclusion with it. A belt is kept in the scan loop as an **error**, not a
+dropped row, and firing the SQL exclusion alone proved the belt catches it first; both had to be
+removed together before the endpoint-level assertion fired.
+
+## LS.120 The gate
+
+`make check` was run at the merged head. Binaries, versions and the sha are in the handover rather
+than here, per `DEVELOPMENT.md` §11 rule 5 — a green that names neither its tool nor its tree is a
+rumour.
 
 ---
 
@@ -14965,6 +15053,11 @@ filter, since the credit pass writes a `person` work with no `service_item_link`
 It aggregates across instances, so it takes a `Scope` — without the predicate a user who can see one
 service learns every other service's catalogue size. Fired both ways: an empty scope must return
 nothing, not everything.
+
+⚠️ **It is not `LS-123`'s number and the two must not be conflated.** That one counts `library_member`
+rows **per library**, which are edition-grained; this one counts distinct `work` rows **per service
+instance**. They are equal today only by coincidence — one writer, one `edition_id = 0` sentinel, one
+catalogue source — and the coincidence is not a property either query may be read as asserting.
 
 ## What was deliberately left for the frontend thread
 
