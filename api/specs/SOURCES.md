@@ -167,7 +167,7 @@ redden somebody's unrelated commit, so the guard is split:
 | Guard | Where | Network | Catches |
 | --- | --- | --- | --- |
 | `TestVendoredSpecIsThePinnedBlob` | `internal/servarr`, **in `make check`** | no | the vendored file changing under the suite — a re-vendor, a hand-edit, a bad merge |
-| `TestUpstreamRefsStillShareThePinnedBlob` | `//go:build upstream`, **`make spec-drift`** | **yes** | the day upstream regenerates and the one-file premise dies |
+| `TestSpecDriftRefsStillShareThePinnedBlob` | `//go:build upstream`, **`make spec-drift`** | **yes** | the day upstream regenerates and the one-file premise dies |
 
 `make spec-drift` refuses without `USARR_SPEC_DRIFT=1`, exactly as `make test-integration` refuses
 without `USARR_INTEGRATION=1`. **A failure there is news, not a broken build.** It resolves both refs
@@ -177,6 +177,12 @@ with a blobless fetch, so it costs trees and no file contents:
 git ls-remote https://github.com/Prowlarr/Prowlarr develop refs/tags/v2.5.2.5491
 USARR_SPEC_DRIFT=1 make spec-drift
 ```
+
+The target also asserts a **floor** on how many drift checks actually ran, because `go test -run`
+that matches nothing exits 0 and a green over zero checks is not a clean bill of health. Drift tests
+therefore take the reserved `TestSpecDrift` prefix, which is a contract with the `Makefile`'s
+`SPEC_DRIFT_RUN`; **adding one means raising `SPEC_DRIFT_FLOOR` alongside it.** See
+`docs/DEVELOPMENT.md` §11 rule 4.
 
 **Record the Prowlarr version on every cassette.** A wire capture from 2.5.2 and one from 2.6.2 are
 different evidence and must not be indistinguishable in the fixtures directory. There is no excuse
