@@ -156,7 +156,9 @@ function bucketOf(key: string, label: string, value: unknown): AvailabilityBucke
  * NULL **and** when the stored text is not valid JSON — it drops the second
  * case rather than forwarding it, because one malformed historical blob would
  * otherwise fail the whole response. So a row with no rollup is ordinary, and
- * `haveCell` below has a rendering for it that cannot invent a denominator.
+ * `haveCell` below renders it as `uncounted`: no denominator, and no count
+ * either, because http-api.md §1.4.1 makes absence a statement about the
+ * ROLLUP rather than about the library.
  *
  * An UNRECOGNISED `k` also lands here. schema.md makes `k` required on every
  * non-null blob precisely so a v0.1 writer stays forward-compatible; a fourth
@@ -203,6 +205,12 @@ export function toAvailability(value: unknown): Availability | undefined {
  * WHAT ONE FRACTION RENDERS AS. ARCHITECTURE.md §6.3, verbatim: *"Render
  * `have == total && total > 0` → ✓; `have == 0` → ✗; otherwise the fraction."*
  *
+ * ⚠️ EVERY ARM HERE IS ABOUT A PRESENT BLOB. This function is never the answer
+ * for a work whose `availability` key was absent — that is `uncounted`, and
+ * `haveCell` decides it before reaching here. Calling this with an absent blob's
+ * `have_count` is the bug http-api.md §1.4.1 exists to prevent: it returns
+ * `none` on the `0` every uncounted row carries by column default.
+ *
  * The fourth arm is this module's, and it exists because §6.3's three do not
  * cover the shape schema.md added under `k: "count"`: `have` with a `total` of
  * `null`. It is NOT a fraction — there is no denominator — and it is NOT
@@ -213,12 +221,30 @@ export function toAvailability(value: unknown): Availability | undefined {
 export type AvailabilityMark =
 	/** `have == total && total > 0`. The muted ✓ in neutral text (§17.2). */
 	| { k: 'complete' }
-	/** `have == 0`. Nothing of this is held. */
+	/**
+	 * `have == 0` ON A PRESENT BLOB, and on nothing else. This is the truthful
+	 * zero: something counted this work and the answer was none of it.
+	 * http-api.md §1.4.1 puts §6.3's `have == 0` → ✗ on a present blob
+	 * *"and on nothing else"*, which is what keeps it apart from `uncounted`.
+	 */
 	| { k: 'none' }
 	/** An honest denominator and a gap. */
 	| { k: 'fraction'; have: number; total: number }
 	/** A count with no honest denominator. Never a tick. */
-	| { k: 'partial'; have: number };
+	| { k: 'partial'; have: number }
+	/**
+	 * ⚠️ NO COUNT HAS EVER BEEN COMPUTED FOR THIS WORK. The `availability` key
+	 * was absent from the wire, which `docs/reference/http-api.md` §1.4.1 defines
+	 * as *"no count has ever been computed for that work"* — not a zero, and not a
+	 * statement about the library.
+	 *
+	 * ⚠️ `availabilityMark` CANNOT RETURN IT, DELIBERATELY. The fact that decides
+	 * this state is the PRESENCE of the blob, not a number, so it is decided at
+	 * `haveCell` where presence is known and no sentinel has to travel through
+	 * `have` or `total`. `have_count` is sent unconditionally and its column is
+	 * `NOT NULL DEFAULT 0`, so a `0` in it is not evidence of anything on its own.
+	 */
+	| { k: 'uncounted' };
 
 export function availabilityMark(have: number, total: number | null): AvailabilityMark {
 	// The tick is tested FIRST and its `total > 0` clause is tested against a
@@ -273,7 +299,8 @@ export interface RecentItem {
 	haveCount: number;
 	wantCount: number;
 	/** Absent where the column is NULL or its text would not parse. See
-	 * `toAvailability`, and note that absence is ordinary rather than an error. */
+	 * `toAvailability`, and note that absence is ordinary rather than an error:
+	 * http-api.md §1.4.1 makes it *"not counted"*, never *"none held"*. */
 	availability?: Availability;
 }
 
@@ -337,13 +364,30 @@ export interface HaveCellModel {
  * a complete row rendered as a muted ✓ and an incomplete row carrying its gap
  * figure in the warn role.
  *
- * ⚠️ A ROW WITH NO AVAILABILITY BLOB NEVER GETS A TICK, AND THE TEMPTING BUG IS
- * WORTH NAMING. `have_count` and `want_count` are always on the wire, so
- * `total = have + want` looks like a free denominator — and on every row whose
- * `want_count` is 0 it would render ✓, i.e. "you have all of it", from two
- * numbers that never said so. `want_count` is what is WANTED and absent, not
- * what exists. So a blob-less row prints its count and its gap and claims
- * nothing about completeness.
+ * ⚠️ A ROW WITH NO AVAILABILITY BLOB IS `uncounted`, AND IT CLAIMS NOTHING —
+ * NEITHER A TICK NOR A CROSS. `docs/reference/http-api.md` §1.4.1: the absence
+ * of `availability` *"means no count has ever been computed for that work"*, and
+ * a consumer *"must not render an absent blob as `0`, as \"none\", or as any
+ * glyph, bar or accessible name that asserts emptiness"*. Both temptations are
+ * worth naming, because this cell fell for the second one:
+ *
+ *   the invented denominator  `have_count` and `want_count` are always on the
+ *     wire, so `total = have + want` looks free — and on every row whose
+ *     `want_count` is 0 it renders ✓, "you have all of it", out of two numbers
+ *     that never said so. `want_count` is what is WANTED and absent, not what
+ *     exists.
+ *   the invented zero  passing `have_count` to `availabilityMark` looked like
+ *     "show what it knows", and `have_count` is `NOT NULL DEFAULT 0`, so every
+ *     work nobody has counted arrived at `have === 0` → ✗ *none held* — a claim
+ *     about a library the reader has never measured.
+ *
+ * ⚠️ AND IT SELF-CORRECTS WITH NO SECOND EDIT WHEN THE ROLLUP SHIPS. A truthful
+ * zero arrives as a PRESENT blob carrying `have: 0`, which is `k: 'count'` below
+ * and reaches `availabilityMark` as it always did, so the same code then renders
+ * a real ✗. Absence keeps meaning "not counted" after the rollup lands, because
+ * the counts and the blob are one recompute over one dirty bit (`work.
+ * rollup_dirty`, ARCHITECTURE §6.3): there is no specified writer that moves
+ * `have_count` while leaving the key absent.
  */
 export function haveCell(item: RecentItem, max = 3): HaveCellModel {
 	const missing = item.wantCount > 0 ? `${item.wantCount} missing` : '';
@@ -351,14 +395,10 @@ export function haveCell(item: RecentItem, max = 3): HaveCellModel {
 
 	if (availability === undefined) {
 		return {
-			lines: [
-				{
-					key: 'have',
-					label: '',
-					// `null`, deliberately: see the header. There is no denominator.
-					mark: availabilityMark(item.haveCount, null)
-				}
-			],
+			// ⚠️ NOT `availabilityMark(item.haveCount, …)`. Presence of the blob is
+			// the whole of the question here, so no count is consulted at all: see
+			// the header, and `AvailabilityMark`'s `uncounted` arm.
+			lines: [{ key: 'have', label: '', mark: { k: 'uncounted' } }],
 			more: 0,
 			missing,
 			gaps: ''
