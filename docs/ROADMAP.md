@@ -12,7 +12,7 @@
 > **No dates and no estimates appear here, ever**, at the owner's standing instruction. Where a line
 > is inference rather than something read off §16, an ADR or the tree, it is marked 🔍.
 
-**Last re-derived against:** `origin/main` `222248c` (2026-08-18).
+**Last re-derived against:** `origin/main` `0c89420` (2026-08-18).
 
 ---
 
@@ -43,13 +43,25 @@ Ordered roughly by what the rest depends on, not by size.
       *Done when:* `grep -rn 'missing_since\|orphaned_at' --include=*.go internal/` shows a statement
       that **sets** a non-NULL value. Today every one clears it.
 
-- [ ] **Search over your own library — the SCREEN.** The read path landed: `GET /api/v1/search`
-      answers a flat ranked list off the local corpus, contract in
-      [`reference/http-api.md`](./reference/http-api.md) §6. `GET /api/v1/releases/search` is the
-      Prowlarr indexer fan-out, a different thing over a different corpus. Still absent: the screen,
-      §4's grouped card (nothing reads `work_relation` yet), and the tier-1 client prefix index.
+- [x] **Search over your own library — the read path AND the SCREEN.** Both landed 2026-08-18.
+      `GET /api/v1/search` answers a flat ranked list off the local corpus at `04a28a4` — the handler
+      is `internal/httpapi/librarysearch.go:125` `handleLibrarySearch`, which calls
+      `store.SearchLibrary` (`internal/store/searchlibrary.go:490`) and reaches `search_fts` through
+      `keywordLeg` (`:204`, `WHERE search_fts MATCH ?`) plus a trigram leg — two SQLite statements, no
+      \*Arr call, no provider, no image fetch. Contract in
+      [`reference/http-api.md`](./reference/http-api.md) §6. The screen landed at `cbf82bc` (merged
+      `5035f4c`) and Home's search box was moved off Requests onto it at `23369ee` (merged
+      `0c89420`). `GET /api/v1/releases/search` is the Prowlarr indexer fan-out, moved there at
+      `4a51bd4` — a different thing over a different corpus, and the Search screen does not call it.
       *Authority:* §8.2, §17.4, §4.5, §16 v0.1 entry.
-      *Done when:* `web/src/routes/search/+page.svelte` stops being the gap notice it is now.
+      *Was done when:* `web/src/routes/search/+page.svelte` stopped being the gap notice — it is now a
+      551-line screen whose only read is `$lib/search.fetchSearch` over `LIBRARY_SEARCH_URL =
+      '/api/v1/search'` (`web/src/lib/search.ts:44`), registered at
+      `internal/httpapi/server.go:300`.
+      *This box does NOT cover, and neither ships:* §4's grouped card — `grep -rn work_relation
+      --include=*.go internal/` finds comments only, no reader of the edges — and the tier-1 client
+      prefix index. Both are named in `librarysearch.go`'s and the screen's headers rather than
+      quietly omitted.
 
 - [ ] **Home Block A — the media-type summary.** Blocks B and C are drawn; A is not.
       *Authority:* §17.2 as amended by [ADR-0028](./DECISIONS.md#adr-0028), §16 v0.1 entry.
