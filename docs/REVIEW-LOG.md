@@ -15232,3 +15232,76 @@ What the consumer needs, in the order it is needed:
 * Branch on `error`, not on the status: `import_in_progress` is **already running**, not a failure,
   and is the state to disable the button against.
 * A `409` and a `500` both mean no import started for that press — but only the `500` is a fault.
+
+## LS-140 — §17.3 maps *degraded, partial data* to a string the health read never emits
+
+**Recorded, not fixed. No Go and no `web/` behaviour was changed by this finding.**
+
+`docs/ARCHITECTURE.md` §17.3 (the *"The actions are the point"* paragraph, ending
+*"degraded, partial data* → Run full sync now") promises that a degraded row's one named fix is
+**Run full sync now**. Measured against the tree, nothing ever names it:
+
+* `healthAction` (`internal/httpapi/services.go`) is the only writer of `health.action`, and its
+  whole range is `Re-link this instance`, `Update API key`, `Review the TLS fingerprint`,
+  `Test connection`, `Enable this service`, and `""`. Its `stateDegraded` arm returns
+  **`Test connection`**. The literal `Run full sync now` does not occur anywhere in `internal/`
+  outside comments that cite §17.3 by name.
+* `actionFor` (`web/src/routes/services/+page.svelte`) branches on that string for three of those
+  names and falls through to a generic arm that opens the row expander. There is no arm binding
+  `Run full sync now` to `runFullSync`, so even if the server started naming it, the Action column
+  button would open the expander rather than start an import.
+
+**Why this is not a defect today.** The control is not reachable *through* that string in the first
+place. `Run full sync now` lives in every row's expander, gated on `role` alone
+(`canRunFullSync`, `web/src/lib/services.ts`; the button and its `⚠️ WHETHER IT RENDERS AT ALL IS
+DECIDED ON role` comment in `+page.svelte`), so every catalogue source — degraded, healthy, down or
+disabled — already offers it, and the expander comment states that placing it in the Action column
+was rejected on the 248px reserve ADR-0029 depends on. The gap is therefore a documentation claim
+with no user-visible consequence: a degraded row's Action button says *Test connection*, which is a
+true and useful fix for the state, and the import the section promises is one expander away.
+
+**The two ways it could be closed**, neither taken here:
+
+1. **The health read starts naming the state** — `healthAction`'s `stateDegraded` arm returns
+   `Run full sync now`, and `actionFor` gains the arm that binds it to `runFullSync`. This makes
+   §17.3 true as written, and costs the Action column's reserve on exactly the rows that already
+   carry the longest label, which is the measurement V-01 in this log was raised about.
+2. **§17.3 stops promising a string nothing emits** — the action map says of a degraded row what the
+   server actually says (*Test connection*), and names the expander as where a re-import lives.
+
+**Recommended: (2), as a recommendation and not an action.** The placement decision was already
+taken deliberately and is documented at the control itself — a re-import is the owner asking for
+work, not the server naming a repair — so (1) would re-open a settled design call in order to
+satisfy a sentence, and would spend the row reserve to do it. (2) makes the document match a
+shipped, reasoned design. It is a §17.3 edit rather than a §17.8 one, so it is left for whoever
+holds §17.3 rather than folded in here.
+
+## LS-141 — two §17 claims that had gone false, both applied
+
+**LS-141a — §17.2 said `work.kind` had eleven members. It has twelve.** The authority is the
+`CHECK` in `internal/db/migrations/00005_library_sync.sql`, counted from the artefact rather than
+from the sentence: `movie, series, season, episode, artist, album, track, book, comic, comic_issue,
+person, game`. §6 already lists all twelve, and §17.2's own warning block elsewhere calls it *"the
+full twelve-member `CHECK`"*, so the count was stale rather than a deliberate exclusion — nothing in
+the sentence's context excludes `person` or `game`, and both are counted as top-level works by §4.5
+and §8.1's corpus rules. **Applied:** the number, and nothing else. The point the sentence makes —
+that `work.kind` is not the navigation enum — is unchanged and was never wrong.
+
+**LS-141b — §17.3.3's sudo-banner body asserted a form that does not exist on every path.** The copy
+read *"Nothing is wrong and nothing was lost: the change you made is still in the form."* Six
+endpoints are gated (§17.3.3), and one of them, `POST /api/v1/services/{id}/sync`, is reached from a
+button in the row expander with **no form at all**: `runFullSync` hands its closure to the same
+`guarded` helper as the form writes (`web/src/routes/services/+page.svelte`), so one banner with one
+string serves both, and on that path the string was simply untrue. `confirmRemove` is the same shape.
+
+**Applied, in both places the string lives** — the shipping copy in
+`web/src/routes/services/+page.svelte`'s `authNotice` snippet, and §17.3.3's `Body` row, which
+quotes it. It now reads *"Changing anything on this screen needs a password confirmation from the
+last five minutes, and this session's has expired. Nothing is wrong and nothing was lost: what you
+asked for is held, and confirming runs it."* Two changes, both for truth on the no-form path: the
+opening clause said *"Changing a service credential"*, which a sync press does not do, and now says
+what §17.3.3's own prose says of the six endpoints — *"every way this screen changes anything"*; and
+the reassurance now promises what the banner actually delivers on every path, which is the pending
+write being held and re-run on success (§17.3.3's `On success` row), rather than a form's contents.
+No second banner, no restructuring: it is the same snippet, the same `pending` closure, and the same
+retry. §13's ban on the mid-sentence em-dash beat is respected — the new copy has none.

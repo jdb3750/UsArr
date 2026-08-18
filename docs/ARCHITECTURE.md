@@ -2993,7 +2993,7 @@ Concretely, this constrains implementation:
 | **Library** | a user-defined grouping (§6.5), configured separately from services | **scope**: a multi-select chip above the nav, reflected in the URL | **unbounded — and therefore never a nav list** |
 
 **"Media type" is not `work.kind`, and the mapping has to be written down or the sidebar cannot be
-built.** `work.kind` has eleven members; the navigation enum has six; and for two of the six the
+built.** `work.kind` has twelve members; the navigation enum has six; and for two of the six the
 media type is a `(kind, formats)` **pair**, because §6.1 deliberately makes an audiobook an `edition`
 of a `book` work rather than a kind of its own. The enum, in full:
 
@@ -3382,7 +3382,7 @@ title is UsArr's words, there is no verbatim block, and the raw code appears onl
 | | |
 |---|---|
 | Title | *"Confirm your password to change a service"* |
-| Body | *"Changing a service credential needs a password confirmation from the last five minutes, and this session's has expired. Nothing is wrong and nothing was lost: the change you made is still in the form."* |
+| Body | *"Changing anything on this screen needs a password confirmation from the last five minutes, and this session's has expired. Nothing is wrong and nothing was lost: what you asked for is held, and confirming runs it."* — it must be true on the paths with **no form**: the *Run full sync now* press has nothing typed to preserve, and the old copy's *"the change you made is still in the form"* asserted something untrue there |
 | Control | One password field and `Confirm`. Focus moves to the field |
 | On success | **The pending write is retried automatically.** Making the user find and press the original button again is the failure mode this state exists to avoid |
 | On failure | *"That password does not match"* inline, and the prompt stays open |
@@ -4261,6 +4261,24 @@ being on 3b and Prowlarr carrying no catalogue. The reason previously read `whos
 *Arrs on channel 3`, which [ADR-0041](./DECISIONS.md#adr-0041) replaced. It must be a named state
 rather than an absent delta time, because "no number" and "a number from four hours ago" read
 identically otherwise).
+
+**The *importing* state does not subscribe to `GET /api/events`, and that is a decision rather than
+an omission.** Nothing blocks it technically: an SSE subscription is not a synchronous upstream call
+on a render path, so principle 1 is not in play, and the server already publishes `import.progress`
+as each batch commits, with a terminal `done` frame — `internal/libsync/importer.go` and
+`cmd/usarr/import.go` publish it, `internal/httpapi/server.go` routes the stream. It is not wired
+because **an import is a service-level event, and its home is §17.3**; a live indicator on a second
+screen creates two places that can disagree about one fact. And the two failure modes are not
+symmetric. What this screen derives today from its two point-in-time reads degrades to a **true**
+statement — *"An import did not finish"*, *"this count may be short"* (`web/src/lib/libraries.ts`) —
+where a dropped or missed event degrades to a **false** one: a row asserting an import is running
+after it finished, or finished while it runs. **Reopen when the Services screen's own subscription
+lands and the event plumbing sits in a shared store**, because that is the point at which the cost
+argument changes: one subscription already held, read by a second screen, rather than a second
+subscription built for this one. Reopen on that measurement, not on preference. 🔍 **Whether the
+*importing* state belongs on this screen at all, in principle, is a design-taste question and is not
+settled here** — this paragraph settles only that it is not wired now, and flags the other question
+for a design ask.
 
 **Overrides must be listable in one place** — what was excluded, re-linked or overridden, by whom,
 when and why, each revertible in one click — or they become invisible magic nobody can undo.
