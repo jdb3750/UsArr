@@ -459,6 +459,13 @@
 			because `total: null` is not `total: 0` and the tick must never fire on
 			the first. Chroma marks what is wrong rather than what is fine (§9.5), so
 			the complete tick is muted and the gap figure carries the warn role.
+
+			⚠️ A ROW NOTHING HAS COUNTED CARRIES NO GLYPH, per `http-api.md` §1.4.1,
+			which calls this out for a results table by name: an absent
+			`availability` means no count has been computed, "so a result row must
+			not carry an emptiness glyph or an accessible name like *none held* on
+			the strength of a missing key". The cross is for a PRESENT blob carrying
+			`have: 0`.
 		-->
 		{@const have = haveCell(item)}
 		{#each have.lines as line (line.key)}
@@ -474,8 +481,10 @@
 					>
 				{:else if line.mark.k === 'fraction'}
 					<span class="num">{line.mark.have} / {line.mark.total}</span>
-				{:else}
+				{:else if line.mark.k === 'partial'}
 					<span class="num">{line.mark.have}</span>
+				{:else}
+					<span class="muted">Not counted yet</span>
 				{/if}
 			</div>
 		{/each}

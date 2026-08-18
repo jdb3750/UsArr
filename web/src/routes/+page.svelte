@@ -1086,6 +1086,14 @@
 			complete tick is muted and the gap figure is the one thing here carrying
 			the warn role. Every glyph has a word beside it in the accessibility
 			tree, because §11 forbids a status glyph with an empty accessible name.
+
+			⚠️ A ROW NOTHING HAS COUNTED CARRIES NO GLYPH AT ALL, AND THAT IS THE
+			RULE RATHER THAN A LAYOUT CHOICE. `http-api.md` §1.4.1: an absent
+			`availability` means no count has ever been computed, so a consumer
+			"must not render an absent blob as `0`, as "none", or as any glyph, bar
+			or accessible name that asserts emptiness". The cross belongs to a
+			PRESENT blob carrying `have: 0`, which is a measured nothing; this one is
+			words, because there is no glyph for "not yet asked".
 		-->
 		{@const have = haveCell(item)}
 		{#each have.lines as line (line.key)}
@@ -1101,8 +1109,10 @@
 					>
 				{:else if line.mark.k === 'fraction'}
 					<span class="num">{line.mark.have} / {line.mark.total}</span>
-				{:else}
+				{:else if line.mark.k === 'partial'}
 					<span class="num">{line.mark.have}</span>
+				{:else}
+					<span class="muted">Not counted yet</span>
 				{/if}
 			</div>
 		{/each}
