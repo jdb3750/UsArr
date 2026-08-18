@@ -981,14 +981,25 @@ export function syncRefusal(
  * The count sentence for one live frame, and nothing beyond what the frame said.
  *
  * ⚠️ `total` IS A DENOMINATOR ONLY WHERE IT EXISTS. It is `omitempty` on the
- * wire and the credits pass is the only publisher that sets one, so the item
- * phase renders a bare count. Rendering `of 0` there, or dividing by it for a
- * percentage, would turn "the source named no total" into "the source said
- * zero", which are opposite claims about how much is left.
+ * wire and only the credits and files passes set one
+ * (`internal/libsync/importer.go:531` and `:611`), so the item phase renders a
+ * bare count. Rendering `of 0` there, or dividing by it for a percentage, would
+ * turn "the source named no total" into "the source said zero", which are
+ * opposite claims about how much is left.
+ *
+ * ⚠️ AND IN BOTH OF THOSE PHASES `applied` IS IN A DIFFERENT UNIT FROM `total`,
+ * so neither one may be paired with the other. `credits` reads items and writes
+ * credit rows; `files` reads items and writes file rows, and one item carries
+ * as many files as it has. Both sentences therefore pair the denominator with
+ * the items read and leave the write count standing on its own, which is
+ * http-api.md §5.4's rule and is why neither reads as a fraction.
  *
  * ⚠️ AND NO BRANCH HERE SAYS ANYTHING ABOUT THE END. A phase name this client
  * has not heard of still has meaningful counts, so it renders them and declines
- * to name the phase, rather than being dropped or guessed at.
+ * to name the phase, rather than being dropped or guessed at. That default arm
+ * is for a STRANGER, and a phase that has landed upstream is no longer one —
+ * `files` took it for as long as it went unnamed here, which api.test.ts's
+ * phase-set pin exists to catch.
  */
 function progressCounts(progress: ImportProgress): string {
 	const read = progress.itemsRead.toLocaleString('en-GB');
@@ -1005,6 +1016,10 @@ function progressCounts(progress: ImportProgress): string {
 			return total === ''
 				? `Adding credits: ${read} items read, ${applied} credits written.`
 				: `Adding credits: ${read} of ${total} items read, ${applied} credits written.`;
+		case 'files':
+			return total === ''
+				? `Recording files: ${read} items read, ${applied} files recorded.`
+				: `Recording files: ${read} of ${total} items read, ${applied} files recorded.`;
 		default:
 			return `Read ${read} so far, and applied ${applied}.`;
 	}

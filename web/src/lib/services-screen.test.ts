@@ -850,6 +850,106 @@ describe('the import stream folded onto the note', () => {
 	});
 
 	/**
+	 * THE FILES PHASE, whose fields do NOT mean what the same fields mean in
+	 * `items`, measured at the publish site rather than assumed from the names.
+	 *
+	 * `internal/libsync/importer.go:608-612` publishes, per committed batch:
+	 *
+	 *   items_read  rep.FileItemsRead  — items the walk got volumes for (:623)
+	 *   applied     rep.Files.FilesWritten — file ROWS inserted or updated,
+	 *               which store/files.go:104 is explicit is a count of work
+	 *               done and NOT a count of new files
+	 *   total       len(reqs)          — the items being walked, one request
+	 *               each
+	 *
+	 * So it is the credits case exactly: `applied` and `total` are in different
+	 * units, one item carries as many files as it has, and `applied / total` is
+	 * a fraction of nothing. The denominator pairs with the items read.
+	 */
+	it('gives the files phase a sentence of its own, rather than the stranger fallback', () => {
+		const note = syncNoteWithProgress(
+			started(),
+			frame({ phase: 'files', itemsRead: 40, applied: 1180, total: 400 }),
+			true
+		);
+		expect(note.consequence, 'the files phase is not taking its own arm').toContain(
+			'Recording files: 40 of 400 items read, 1,180 files recorded.'
+		);
+		// The default arm's exact words, which `files` must no longer reach.
+		expect(
+			note.consequence,
+			'the files phase fell through to the unnamed default arm'
+		).not.toContain('Read 40 so far, and applied 1,180.');
+		// It is progress, not an ending, and not a claim about the library.
+		expect(note.phase).toBe('started');
+		expect(note.consequence).not.toContain('missing');
+		expect(note.consequence).not.toContain('complete');
+	});
+
+	/**
+	 * The files twin of the credits fraction pin, with numbers that only pass
+	 * against code that keeps the two units apart: one item, one credit-free
+	 * series, three files under it.
+	 */
+	it('pairs the files denominator with the items read, never with the files recorded', () => {
+		const note = syncNoteWithProgress(
+			started(),
+			frame({ phase: 'files', itemsRead: 2, applied: 3, total: 2 }),
+			true
+		);
+		expect(note.consequence).toContain('2 of 2 items read');
+		expect(note.consequence).toContain('3 files recorded');
+		expect(note.consequence).not.toContain('3 of 2');
+		expect(note.consequence).not.toContain('3/2');
+		expect(note.consequence).not.toContain('%');
+		expect(note.phase).toBe('started');
+	});
+
+	/**
+	 * `total` is `omitempty`, so a bare count is the shape a client has to hold
+	 * whatever the current publisher happens to send. Never ` of 0`, which
+	 * would read the absent total as a source that reported zero.
+	 */
+	it('renders the files phase without a denominator the frame did not carry', () => {
+		const note = syncNoteWithProgress(
+			started(),
+			frame({ phase: 'files', itemsRead: 40, applied: 1180 }),
+			true
+		);
+		expect(note.consequence).toContain('Recording files: 40 items read, 1,180 files recorded.');
+		expect(note.consequence).not.toContain(' of 0');
+	});
+
+	/**
+	 * All five phases in the order a full run sends them, read as a sequence
+	 * because the sentence has to sit beside its neighbours without the line
+	 * changing shape under the reader.
+	 */
+	it('walks containers, items, credits, files and the terminal frame in order', () => {
+		const press = started();
+		const screen = (last: ImportProgress) => syncNoteWithProgress(press, last, true);
+
+		expect(screen(frame({ phase: 'containers' })).consequence).toContain(
+			'Reading the list of libraries. Nothing has been applied yet.'
+		);
+		expect(screen(frame({ phase: 'items', itemsRead: 400, applied: 400 })).consequence).toContain(
+			'Read 400 items so far, and applied 400 of them.'
+		);
+		expect(
+			screen(frame({ phase: 'credits', itemsRead: 400, applied: 118, total: 400 })).consequence
+		).toContain('Adding credits: 400 of 400 items read, 118 credits written.');
+		expect(
+			screen(frame({ phase: 'files', itemsRead: 400, applied: 1180, total: 400 })).consequence
+		).toContain('Recording files: 400 of 400 items read, 1,180 files recorded.');
+
+		// Only the terminal frame ends it, and the files counts do not survive
+		// into it: `done` reports the catalogue pass, which is a different count.
+		const done = screen(frame({ phase: 'done', itemsRead: 400, applied: 400 }));
+		expect(done.phase).toBe('finished');
+		expect(done.consequence).toContain('It read 400 items and applied 400.');
+	});
+
+	/**
 	 * http-api.md §5.2, pinned as a SEQUENCE rather than as one frame.
 	 *
 	 * `credits` is skipped whole for a source that reports none or is not a
