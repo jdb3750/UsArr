@@ -1217,7 +1217,7 @@ Mechanics in full: [`reference/sync.md`](./reference/sync.md).
 |---|---|---|---|---|
 | 1 | Full import | minutes | Bootstrap, disaster recovery | **v0.1** |
 | 3 | Delta poll (`/history/since`) | 30–120 s | **Library-bearing acquisition apps only** — Sonarr, Radarr | **with the first \*Arr adapter** |
-| **3b** | **Ordered page-walk delta** | **5–15 min** | **The catalogue sources — Navidrome, Audiobookshelf, Kavita, Komga. None has a changed-since endpoint** | **v0.1, built, for Kavita**; the other three with their own milestones (§16.1) |
+| **3b** | **Ordered page-walk delta** | **5–15 min** | **The catalogue sources — Navidrome, Audiobookshelf, Kavita, Komga. None has a changed-since endpoint** | **v0.1 scope, for Kavita** — what is actually built is read off `internal/libsync/doc.go`, not asserted here (this column is scope); the other three with their own milestones (§16.1) |
 | 4 | Reconciliation sweep | 6–24 h | Silent drift, out-of-band edits, deletions | **v0.1** |
 | 2 | SignalR stream | < 1 s | Live changes while connected | later |
 | 4b | Webhook receiver | < 1 s | Push from services with no SignalR | later |
@@ -2861,11 +2861,25 @@ holds **two hand-written \*Arr adapters** (`/api/v3` for both — Sonarr 4 and R
 and **one correction screen**. That is **substantially bigger than the v0.2 that named none of them**
 — it is now the third-largest milestone in this plan, behind v0.1 and v1.0 and ahead of v0.3 — and
 **most of that size was already true and merely unwritten**, since the two \*Arr items are v0.2's own
-prerequisites. **The ordering inside the milestone follows from that**: the adapters and the write
-path come before the request flow that routes through them; the correction UI is independent and
-comes first or last as convenient. **If this milestone has to be split later, the seam is that
-sentence** — the adapters plus the write path are one shippable thing, and the request model on top
-of them is another.
+prerequisites. **The ordering inside the milestone is fixed, and it is a sequencing call decided on
+which parts can be proven against real data** ([ADR-0045](./DECISIONS.md#adr-0045), amended
+2026-08-18). **The order is: (1) the minimal match-correction UI first**, because it is gated on
+nothing — it depends on nothing else in v0.2 and nothing in v0.2 depends on it, as this entry's third
+bullet above records — so it is the part that can land first and does; **(2) the Navidrome adapter
+next**, since it is already #1 in §16.1's catalogue sequence, that sequence interleaves with v0.2, and
+the owner runs Navidrome so it is provable against real data at once; **(3) Sonarr and Radarr with the
+write path last**, because the owner runs neither \*Arr — so there is no real \*Arr data to prove them
+against yet — and this project's rule is *"one source, proven on real data, before a second adapter"*
+(`CLAUDE.md`; §16.0). **The one hard dependency is inside (3):** the adapters and the write path come
+before the request flow that routes through them (§8.3's `Add`), so ordering the \*Arrs last orders
+that request flow last with them; between (1), (2) and (3) there is no build-chain dependency and the
+order is a provability choice, not a forced one. ⚠️ **This passage read *"the correction UI is
+independent and comes first or last as convenient"***, leaving the order loose; the owner delegated
+the sequencing call and stated no preference (*"i genuinely dont care which milestone they go to. you
+can decide whats best"*, 2026-08-18), and the PM took it under that delegation — a delegation, not an
+approval, so the order is not owner-endorsed. **If this milestone has to be split later, the seam is
+still the (3)-internal boundary** — the adapters plus the write path are one shippable thing, and the
+request model on top of them is another.
 
 **v0.3 — "Cross-media" — Train Dreams works end to end.** Ship `wikidata-edges.db` from the committed
 SPARQL script. Tiers 0–2 only; nothing below 0.85; no review inbox. Grouped result cards derived at
