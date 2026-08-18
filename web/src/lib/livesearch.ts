@@ -82,6 +82,16 @@ import { atCapacity, isCurrent, type SearchResults } from './search';
  *   any of them at 120 ms/char (100 wpm)   4 to 5    keystrokes coalesce
  *   pasted, or typed inside one window     1         one timer, one read
  *
+ * ⚠️ THE 120 ms ROW IS THE ONE TO DISTRUST, and it is left standing rather than
+ * silently corrected. Driven from fake timers at a PERFECTLY UNIFORM 120 ms
+ * cadence the answer is **1 read, not 4 to 5**, and it has to be: a
+ * trailing-edge timer restarts on every keystroke, so any uniform interval
+ * below 160 ms fires exactly once, at the end. 4 to 5 is therefore reachable
+ * only from a hand-typed run whose gaps sometimes exceed 160 ms, which is what
+ * a real 100 wpm burst looks like — but the row does not say so, and nothing
+ * here can reproduce it. Treat it as a jittered observation, not a cadence.
+ * Rows 1, 2 and 4 reproduce exactly (7, 9, 1). See `REVIEW-LOG.md` WEB-02.
+ *
  * Nine local reads at the endpoint's budgeted p50 of 15 ms is about 135 ms of
  * SQLite work spread over the two seconds the query took to type, on a machine
  * whose *Arrs are doing considerably more than that. The read counts above are
@@ -258,10 +268,33 @@ export interface LiveSearchDeps {
  * ⚠️ AN ABORTED READ REJECTS, AND THAT REJECTION IS NOT A FAILURE TO DRAW.
  * `$lib/api`'s `getJson` wraps an `AbortError` into an `ApiError` at status 0
  * because `fetch` gives it no way to tell that from an unreachable backend. The
- * sequence check catches it first — an aborted read is by construction not the
- * newest — so the `catch` arm below returns before it can paint. The signal is
- * consulted as well, so the reason a rejection is dropped is recorded rather
- * than incidental.
+ * sequence check catches it — an aborted read is by construction not the newest
+ * — so the `catch` arm below returns before it can paint.
+ *
+ * ⚠️ THE ABORT FLAG IS DELIBERATELY NOT CONSULTED WHEN DECIDING WHETHER TO
+ * PAINT, AND REMOVING IT FROM THAT DECISION IS A STRENGTHENING. The two lines
+ * used to read `if (seq !== this.#seq || controller.signal.aborted) return;`,
+ * which looks like two guards and is one guard and its shadow: for EVERY read,
+ * `seq !== this.#seq` implies `controller.signal.aborted`, because `#run` and
+ * `#retire` are the only things that bump `#seq` and both abort `#inflight` in
+ * the same synchronous step, and `#inflight` only ever holds the newest
+ * controller. So the flag was true in exactly the cases the sequence number
+ * already answered, and never in any other.
+ *
+ * Measured rather than argued: on the shipped file at `917ddda`, deleting
+ * `seq !== this.#seq` left the whole 693-test web suite green, and deleting
+ * `|| controller.signal.aborted` left the whole 693-test web suite green. Each
+ * leg was covered only by the other, so the pair could be drilled only as a pair and neither
+ * half was provable. ⚠️ THE ORDER OF THE TWO TERMS WAS NEVER THE PROBLEM —
+ * `||` already evaluated the sequence number first. Shadowing here is
+ * implication, not evaluation order, and reordering would have changed
+ * nothing.
+ *
+ * The abort keeps its real job, which is cancelling network work, and that job
+ * is observable on its own: `aborts the superseded read` and `dispose cancels
+ * the timer and aborts what is in flight` fail when the `abort()` calls go,
+ * while the ordering tests stay green. One guard per decision, one test per
+ * guard.
  */
 export class LiveSearch {
 	readonly #deps: LiveSearchDeps;
@@ -352,17 +385,26 @@ export class LiveSearch {
 
 		try {
 			const answer = await this.#deps.search(query, controller.signal);
-			// The sequence check is first and is sufficient. `isCurrent` is the
-			// server's own echo (§6.2 echoes `query` "so a client can tell a stale
-			// response from a current one when the user is typing fast") and is
-			// kept as a second, independent read of the same question.
-			if (seq !== this.#seq || controller.signal.aborted) return;
+			// ⚠️ THE SEQUENCE NUMBER IS THE WHOLE OF THE ORDERING GUARANTEE, AND IT
+			// IS ALONE ON THIS LINE ON PURPOSE. `controller.signal.aborted` used to
+			// sit beside it and had to be removed to make this line provable; see
+			// the class note above for the measurement. `isCurrent` stays, because
+			// it is NOT a proxy for this check — it is the server's own echo (§6.2
+			// echoes `query` "so a client can tell a stale response from a current
+			// one when the user is typing fast"), it catches a different failure
+			// (an answer to text nobody typed), and it misses the one this line
+			// exists for: two reads of the SAME text, where both answers echo
+			// correctly and only one of them is current.
+			if (seq !== this.#seq) return;
 			if (!isCurrent(answer, query)) return;
 			this.#settle(
 				answer.items.length === 0 ? { k: 'nothing', query } : { k: 'results', results: answer }
 			);
 		} catch (error) {
-			if (seq !== this.#seq || controller.signal.aborted) return;
+			// The same line, and here it is the ONLY guard: there is no echo to
+			// check on a rejection, so an aborted read's `ApiError` at status 0
+			// would paint as a backend outage if this returned nothing.
+			if (seq !== this.#seq) return;
 			this.#settle(
 				error instanceof ApiError
 					? { k: 'error', message: error.detail, action: error.action }

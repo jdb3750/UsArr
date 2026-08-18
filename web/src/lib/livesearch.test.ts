@@ -14,15 +14,30 @@ import type { SearchItem, SearchResults } from './search';
 /**
  * FILTER-AS-YOU-TYPE, AND ABOVE ALL THE RACE.
  *
- * The test this file exists for is `renders the newest answer when an older
- * one resolves last`. Everything else here is a boundary; that one is the
- * defect the feature would otherwise ship with, because it cannot be found by
- * using the app — it needs the older read to be SLOWER than the newer one,
- * which on a healthy local endpoint almost never happens and on a loaded box
- * happens all day. So the two answers are resolved by hand, in the wrong order,
- * and `fires when the sequence guard is removed` re-runs the same scenario
- * against a copy of the controller that has no guard, to prove the assertion
- * is capable of failing.
+ * The tests this file exists for are `renders the newest answer when an older
+ * one resolves last`, `discards a stale answer even when the two queries are
+ * identical` and `an aborted read rejecting is not drawn as a failure`.
+ * Everything else here is a boundary; those three are the defect the feature
+ * would otherwise ship with, because it cannot be found by using the app — it
+ * needs the older read to be SLOWER than the newer one, which on a healthy
+ * local endpoint almost never happens and on a loaded box happens all day. So
+ * the two answers are resolved by hand, in the wrong order.
+ *
+ * ⚠️ THOSE THREE DRILL `LiveSearch.#run`'s `seq !== this.#seq` LINE AND NOTHING
+ * ELSE DOES, and until the commit that added this note it was not true of them.
+ * The shipped guard read `if (seq !== this.#seq || controller.signal.aborted)`,
+ * and deleting either term left the whole 693-test web suite green, because a
+ * superseded read is always BOTH stale and aborted, so each term covered for
+ * the other. The
+ * flag is gone from that decision now, so the three tests above fail when the
+ * sequence line is deleted and `aborts the superseded read` / `dispose cancels
+ * the timer and aborts what is in flight` fail when the `abort()` calls are.
+ * Neither drill disturbs the other, which is the point.
+ *
+ * ⚠️ `isCurrent` IS NOT A THIRD ORDERING GUARD, and it reads like one. It
+ * compares an answer against the query THAT READ ASKED, not against what is in
+ * the box, so it is true of every stale answer a well-behaved server sends. It
+ * catches a server echoing text nobody typed and nothing else.
  */
 
 function item(id: number, title: string): SearchItem {
@@ -128,6 +143,13 @@ describe('$lib/livesearch — the race', () => {
 		// The same scenario against a controller whose guard is gone, so the
 		// assertion above is known to be capable of failing. This is the shape
 		// `LiveSearch.#run` would have without its `seq !== this.#seq` line.
+		//
+		// ⚠️ A COPY IS NOT A DRILL, and this test is kept as an illustration
+		// rather than as evidence. It stayed green for the whole period in which
+		// deleting the real `seq !== this.#seq` line changed nothing observable,
+		// because a hand-written analogue proves the SCENARIO can go wrong, never
+		// that the SHIPPED line is what stops it. Only removing the shipped line
+		// proves that.
 		let region: LiveRegion = { k: 'dormant' };
 		const pending: Pending[] = [];
 		const search = (query: string) =>
@@ -151,9 +173,11 @@ describe('$lib/livesearch — the race', () => {
 
 	it('discards a stale answer even when the two queries are identical', async () => {
 		// The echoed `query` cannot separate these two: both answers are
-		// `isCurrent`. Only the sequence number can. Typing forward and then
-		// deleting back is how two reads of one text are reached, since a
-		// keystroke that leaves the trimmed query unchanged is not re-asked.
+		// `isCurrent`, and would be even if the texts differed, since `isCurrent`
+		// is checked against the query its OWN read asked for. Only the sequence
+		// number can. Typing forward and then deleting back is how two reads of
+		// one text are reached, since a keystroke that leaves the trimmed query
+		// unchanged is not re-asked.
 		const { live, pending } = harness();
 
 		live.type('dune');

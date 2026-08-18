@@ -16243,3 +16243,175 @@ the only path `SearchLibrary` uses — and it fires: `rerank did not diversify: 
 absent from the top 10`. This is the fourth time in this area a guard has been green while the thing
 it protects was disconnected (LS-01 records three), and the pattern is always the same: the test
 calls the helper, production calls something else.
+
+---
+
+## WEB-02 — the as-you-type guard pair that could only be drilled as a pair, and two measured claims behind it
+
+**Three findings, all applied,** against `917ddda` *(feat(web): Home filters your library as you
+type)*, merged at `93f6b1d`. The code half is `7523498`. **Read it with `WEB-01`**, which is the
+same defect in the same half of the tree — there a guard that skipped silently, here a guard whose
+deletion changed nothing — and with `LS-199`, whose rule this is a fourth instance of: *a guard that
+is green while the thing it protects is disconnected*.
+
+⚠️ **On the id.** `WEB-02` is the next free id in the `WEB-` series, verified against
+`git grep -nE '\bWEB-[0-9]+\b' origin/main -- docs/`, which returns `WEB-01` and nothing else. It
+was chosen over `LS-200` **deliberately, to avoid a collision rather than to avoid a duplicate**:
+`LS-` is the hot running series, its batches open a fresh decade each time, and a concurrent thread
+appending at EOF would reach for `LS-200` before it reached back into a cold topical prefix. A
+collision on `WEB-02` is possible but unlikely; a collision on `LS-200` was likely. The series fits
+on merit too — `WEB-01` is a frontend-gate guard that could not fire.
+
+### WEB-02.1 — the 160 ms debounce is derived, and three of its four measured rows reproduce
+
+**Finding, applied as a correction in place.** `LIVE_DEBOUNCE_MS` is chosen, not inherited, and the
+derivation is the interesting part: the constant is placed **under** the median typist's
+inter-keystroke interval so the list keeps moving *while* the user types — a trailing-edge debounce
+at 250 ms never fires at all during continuous typing at 40 to 60 wpm (200 to 300 ms per character),
+which is filter-on-pause wearing the name of filter-as-you-type — and **above** a fast burst
+(100+ wpm is 60 to 120 ms per character) so a burst coalesces instead of costing ten reads.
+
+The cost was counted rather than waved at. Re-measured for this entry by driving `LiveSearch` from
+`vitest` fake timers, which is a deterministic cadence and says so:
+
+| Input | Cadence | Reads | Why not ten |
+| --- | --- | --- | --- |
+| `the wire i` | 200 ms/char | **7** | 1 below the floor, 2 space keys leave the trimmed query unchanged |
+| `frieren` | 200 ms/char | **6** | 1 below the floor |
+| a ten-character single word | 200 ms/char | **9** | 1 below the floor |
+| any of them, whole string inside one window | — | **1** | one timer, one read |
+
+⚠️ **The fourth row of the constant's own note does NOT reproduce, and it is left standing with a
+warning rather than silently corrected.** It claims *"any of them at 120 ms/char (100 wpm) — 4 to 5
+reads"*. At a **perfectly uniform** 120 ms cadence the answer is **1**, and it has to be: a
+trailing-edge timer restarts on every keystroke, so any uniform interval below 160 ms fires exactly
+once, at the end. 4 to 5 is reachable only from a hand-typed run whose gaps sometimes exceed 160 ms
+— which is what a real 100 wpm burst looks like — but the row does not say so, and nothing in the
+tree can reproduce it. The note now carries that distinction at its site, because **the row is
+probably a true observation filed under a false label**, and deleting it would lose a real
+measurement while keeping it unmarked would keep a number nobody can re-derive.
+
+⚠️ **The "≈135 ms of SQLite work" figure is arithmetic, not a run.** It is nine reads multiplied by
+`docs/reference/http-api.md` §6's *budgeted* p50 of 15 ms for `GET /api/v1/search`. Nothing has
+timed nine live reads on reference hardware, and no such run is claimed. The read counts above are
+measured; that figure is a budget multiplied by a count, and the file marks it so.
+
+### WEB-02.2 — a keystroke that does not change the *trimmed* query is not re-asked, which is every space bar
+
+**Finding, applied — and it was found by the probe rather than by reasoning.** Before the guard
+existed, a measured ten-character run of `the wire i` fired **9** reads. **Two of those nine were
+the two space keys**, each spending a round trip to be told exactly what was already painted:
+`livePlan` trims, so `the ` and `the` are one query, and the server would have answered the second
+identically to the first.
+
+`LiveSearch` now records the text of the most recently *started* read in `#asked` and declines a
+keystroke that does not change it. The three exceptions are all deliberate and all pinned by tests:
+
+- **an error is re-asked**, because what is on screen there is not an answer (`#region.k !== 'error'`);
+- **`#retire` clears `#asked`**, so emptying the box and retyping the same text asks again — the
+  region was torn down, so the previous answer is no longer on screen to be preserved;
+- **the floor is a token, not a string**, so `a b` is still sent (`internal/store/searchquery.go`
+  step 4 only ever drops the *last* token, so `"a"` reaches the keyword leg).
+
+That is a 22% cut in reads on the measured input for four lines of code, and the general shape is
+worth keeping: **a debounce coalesces keystrokes in time, and does nothing at all about keystrokes
+that are semantically identical.** The two are different economies and need different guards.
+
+### WEB-02.3 — two guards in one expression can only be drilled as a pair, and the second one's removal proves nothing
+
+**Finding, applied. This is the transferable half of the entry.**
+
+`LiveSearch.#run` decided whether an answer may paint with
+
+```ts
+if (seq !== this.#seq || controller.signal.aborted) return;
+```
+
+in both the resolve arm and the reject arm, and the file's own note called these *"two guards, and
+they do different jobs"*. They do different jobs in the *design*. In that *expression* they are one
+guard and its shadow.
+
+**Measured, not argued.** On `917ddda`, at full-suite scope:
+
+| Break | Result |
+| --- | --- |
+| delete `seq !== this.#seq`, keep the flag | `Test Files  16 passed (16)` / `Tests  693 passed (693)` |
+| delete `\|\| controller.signal.aborted`, keep the sequence check | `Test Files  16 passed (16)` / `Tests  693 passed (693)` |
+
+**Each leg was covered only by the other**, so removing either one changed nothing observable and
+neither half was provable. That is the vacuity shape this repo keeps closing, arrived at from a new
+direction: not a test that calls the wrong function, but two correct guards in one boolean.
+
+⚠️ **The suggested fix — evaluate the sequence number before the abort flag — was a no-op, and the
+reason generalises.** `||` already evaluated it first. **Shadowing here is implication, not
+evaluation order.** For *every* read, `seq !== this.#seq` **implies** `controller.signal.aborted`,
+because `#run` and `#retire` are the only things that bump `#seq`, both abort `#inflight` in the
+same synchronous step, and `#inflight` only ever holds the newest controller. A term that is true in
+exactly the cases another term already answered contributes nothing at any position in the
+expression, and no amount of reordering makes it contribute.
+
+**What was done instead: the paint decision guards on the sequence number alone, in both arms.**
+That is a **strengthening rather than a weakening of the pair**, and the distinction matters because
+the brief forbade the weakening. Nothing was removed from the *guarantee* — the flag could never be
+true where the sequence number let a read through. What was removed is a redundant read of the same
+fact, from the one decision it made unprovable. **The abort keeps its real job**, which was always
+cancelling network work rather than ordering: it frees a connection against the browser's per-host
+limit and stops the server finishing a query nobody will look at, and both are observable on their
+own.
+
+**The three drills, run against the full 693-test suite, verbatim.** Each failure is isolated; no
+drill disturbs the other's tests.
+
+| Break | Verbatim |
+| --- | --- |
+| **sequence check removed, abort intact** | `× renders the newest answer when an older one resolves last` · `× discards a stale answer even when the two queries are identical` · `× an aborted read rejecting is not drawn as a failure` · `Tests  3 failed \| 690 passed (693)` |
+| **abort removed, sequence check intact** | `× aborts the superseded read` · `× dispose cancels the timer and aborts what is in flight` · `Tests  2 failed \| 691 passed (693)` — **the three ordering tests above all pass** |
+| **both removed** | all five of the above · `Tests  5 failed \| 688 passed (693)` |
+
+The crux failure prints the defect itself rather than a boolean — an answer to a query the user has
+since typed past, painted over the current one:
+
+```
+FAIL  src/lib/livesearch.test.ts > $lib/livesearch — the race > discards a stale answer even when the two queries are identical
+AssertionError: expected { k: 'results', results: { …(4) } } to deeply equal { k: 'results', results: { …(4) } }
+-         "title": "Dune",
+-         "title": "Dune Messiah",
++         "title": "stale",
+```
+
+**Two further claims the drills falsified, both corrected at their sites.**
+
+- **`isCurrent` is not a third ordering guard, and it reads like one.** The old note kept it *"as a
+  second, independent read of the same question"*. It is not: it compares an answer against the
+  query **that read itself asked for**, not against what is in the box, so it is true of every stale
+  answer a well-behaved server sends. It catches a server echoing text nobody typed, and nothing
+  else. This is why removing the sequence check fails the *different*-text ordering test too, which
+  a reading of the code would predict it survives.
+- **`fires when the sequence guard is removed` is an illustration, not evidence.** It re-runs the
+  race against a hand-written copy of the controller with no guard. It stayed green for the entire
+  period in which deleting the *real* line changed nothing — because **a copy proves the scenario
+  can go wrong, never that the shipped line is what stops it.** Kept, with that written on it.
+
+### The gate
+
+`CI=true make check` green in an isolated worktree with `GOCACHE` and `GOLANGCI_LINT_CACHE` of its
+own, plus `pnpm lint`, `pnpm check`, `pnpm build` and `pnpm exec prettier --check .`.
+
+⚠️ **State what that green is worth for a mixed change, at the size `MEAS-02` states it.** The code
+half is genuinely covered: `web/src/lib/livesearch.test.ts` exercises every line changed, and the
+three drills above are the evidence that its assertions can fail. **The docs half — this entry — is
+read by exactly one gate check, `secrets` (gitleaks), and all that green attests is that no string
+here is credential-shaped.** Nothing in `make check` reads prose for truth. Every factual claim above
+was checked by hand against the tree it describes, and the two that could not be reproduced are
+marked as such rather than repeated.
+
+### Bounded, honestly
+
+**No ADR.** This closes off no alternative: it removes a redundant term and corrects four claims. The
+design decisions it describes — the sequence number as the ordering authority, the abort as a
+work-saving measure, the debounce constant — were all made at `917ddda` and are unchanged.
+
+**Not fixed, and named rather than left:** the 120 ms row is flagged, not re-measured. Doing it
+properly needs a hand-typed run in a browser with the inter-keystroke gaps recorded, which is a
+measurement task and not this one. The row now says it cannot be reproduced from a uniform cadence,
+which is enough for the next reader not to trust it.
