@@ -1638,9 +1638,11 @@ Sonarr, Radarr or media server to get a library."*
   > whole of this screen on every install, whether or not a Sonarr and a Radarr are configured — it
   > is not a fallback for the Prowlarr-only case"*, and `web/src/routes/requests/+page.svelte` reads
   > no mode at all. **What this mode changes is the route in, not the screen.** `0c89420` made
-  > `Search indexers → /requests` the primary action of Home's Search-and-Grab block
-  > (`web/src/routes/+page.svelte:1216`), because Home's own search box — the local one — is drawn
-  > only for `mode === 'library'`. **Neither clause is about `/search`**, which is search over your
+  > `Search indexers → /requests` the primary action of Home's Search-and-Grab block — the
+  > `{#if mode === 'search-and-grab'}` block in `web/src/routes/+page.svelte`, named rather than
+  > cited by line because that file moves under other threads and the line drifted within the hour
+  > this was written — because Home's own search box, the local one, is drawn only for
+  > `mode === 'library'`. **Neither clause is about `/search`**, which is search over your
   > own library (§17.4) and is never a release search: DESIGN-DIRECTION §8.3 holds the two apart, and
   > merging them *"is how a 0 ms local query ends up waiting on a 30 s indexer"*.
 
