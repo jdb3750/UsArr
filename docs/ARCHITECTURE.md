@@ -4002,12 +4002,15 @@ asserted:
   on the same ground this section states below for a retired string: a phrase that is not shipping
   copy must not be quoted as shipping copy, because `docs/design/check.mjs` reads every
   italic-quoted span in §17 as a specified UI string and checks it as one.)
-- **There is no read path at all.** No store method lists libraries for display; the only `SELECT`
-  over the table in non-test Go is the binding's own name-collision lookup. No endpoint in
-  `internal/httpapi/server.go`'s route table serves one — `GET /api/v1/library/recent` is Home's
-  Block C over a different corpus (§17.2, ADR-0028), not this section's binding. There is no wire
-  type. **So every row the binding writes is invisible in the product**, and the screen this section
-  specifies is unbuilt end to end rather than partially built.
+- **The read path exists; the screen does not.** ⚠️ This bullet used to read *"There is no read path
+  at all … So every row the binding writes is invisible in the product"*, and that is now false in
+  its first half and true in its second. **Read it off the tree rather than off this line**:
+  `internal/store/libraries.go` is the store read and `internal/httpapi/libraries.go` is the wire
+  type and the handler, routed in `internal/httpapi/server.go`'s table; the contract is
+  `reference/http-api.md` §2. What that read does NOT include is stated at its own declaration,
+  field by field, rather than here. `web/src/routes` is authoritative for whether anything renders
+  it, and `GET /api/v1/library/recent` remains Home's Block C over a different corpus (§17.2,
+  ADR-0028) rather than this section's binding.
 - **The one-way door below is specified and unimplemented.** `library.managed_by` is
   `CHECK (managed_by IN ('auto','user'))` and **`'user'` has never been written by any code path**:
   the column has exactly one writer in Go, an `INSERT` with the literal `'auto'`, no `UPDATE library`

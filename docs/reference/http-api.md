@@ -187,3 +187,182 @@ every page but the first, silently.
 | `400` | `bad_request` | `limit` is negative or not a whole number (§1.2); or `cursor` is not a token this endpoint issued. Both carry an `action`. |
 | `401` | `unauthorized` | no session. |
 | `500` | `internal` | the local read failed. |
+
+---
+
+## 2 · `GET /api/v1/libraries` — the Libraries screen, row view
+
+The user-defined libraries, each with the upstream containers a service already named
+(ARCHITECTURE §17.8). §17.8 splits this screen from Services in one sentence — *"Services answers
+'is the pipe up, and how do I fix it?'. Libraries answers 'what is in it, what is it called, and
+where do requests go?'"* — and this endpoint answers the first two thirds. The third is §2.4.
+
+It is a local read (principle 1) — two SQLite statements, no \*Arr call, no metadata provider, no
+capability probe. **In particular it is not the connect probe.**
+[ADR-0048](../DECISIONS.md#adr-0048) puts the *proposal* set in the probe's response and never in a
+table, so this endpoint serves accepted libraries only; see §2.5. Requires an authenticated session;
+without one it is `401 unauthorized`.
+
+### 2.1 Query parameters
+
+**None, and there is no paging.** A user's libraries are a set they created by hand — §17.8's
+reference install has seven — and the row view is a reorderable list, which a keyset window cannot
+express. There is nothing to clamp, so unlike §1 there is no `400` path at all.
+
+### 2.2 Response
+
+```jsonc
+{
+  "items": [
+    {
+      "id": 2,
+      "name": "Ebooks",
+      "slug": "ebooks",
+      "kind": "book",
+      "formats": ["ebook"],
+      "sort_order": 5,
+      "enabled": true,
+      "include_in_search": false,
+      "item_count": 3,
+      "sources": [
+        {
+          "id": 2,
+          "service_instance_id": 1,
+          "service_name": "Kavita Manga",
+          "service_kind": "kavita",
+          "container_kind": "remote_library",
+          "container_ref": "12",
+          "container_name": "Books",
+          "is_metadata_authority": true,
+          "missing_since": "2026-08-17T09:30:00Z"
+        },
+        {
+          // The SAME shape with the optional keys absent. A healthy source has
+          // no `missing_since`; this is not an error.
+          "id": 3,
+          "service_instance_id": 2,
+          "service_name": "Kavita Books",
+          "service_kind": "kavita",
+          "container_kind": "remote_library",
+          "container_ref": "21",
+          "container_name": "More Books",
+          "is_metadata_authority": false
+        }
+      ]
+    },
+    {
+      // §6.5 rule 5's retained orphan: no sources left, never auto-deleted,
+      // shown with its reason. `sources` is `[]` and never absent.
+      "id": 3,
+      "name": "Loose Ends",
+      "slug": "loose-ends",
+      "kind": "book",
+      "sort_order": 20,
+      "enabled": true,
+      "include_in_search": true,
+      "item_count": 0,
+      "orphaned_at": "2026-08-17T08:00:00Z",
+      "sources": []
+    }
+  ]
+}
+```
+
+`items` is ordered by `sort_order`, ties broken by `name`. `items` is always present and is `[]` on
+an empty install — §17.8's screen has a zero state, and an absent key would be indistinguishable
+from a failure.
+
+| Field | Always present? | Meaning |
+| --- | --- | --- |
+| `items[].id` | yes | `library.id`. **Never `0`** — see §2.3. |
+| `items[].name` | yes | The user-owned name. §17.8's merge key on it is case-insensitive and whitespace-trimmed, per user. |
+| `items[].slug` | yes | The URL identity: the chip is `?lib=ebooks`. ⚠️ **Do not render it as a path.** §17.8: *"The row's identifier is not rendered as a path … Drop the slash and the mono face"* — a self-hoster who reads `/movies` under a library concludes UsArr scans `/movies`, on the screen whose banner says it never reads a filesystem. |
+| `items[].kind` | yes | `library.kind` verbatim — the schema's word, one of `movie`, `series`, `artist`, `album`, `book`, `comic`, `game`. ⚠️ **Not §1's `media_type`.** That enum has six members and answers *"what is this work"*; this one has seven and answers *"what is this library of"*. §17.8 requires the **label** to be the product's vocabulary — `Movies · TV · Music · Books · Comics` — so the mapping is the renderer's. |
+| `items[].formats` | **no** | A JSON array over `edition.format`, forwarded verbatim. `(kind, formats)` is §17.2's media-type **pair**: the Ebooks/Audiobooks split is `["ebook"]` and `["audiobook"]` over one `book` kind. Absent means **any format**, which is every row today — see §2.4. A stored value that is not a JSON array of strings is dropped and logged with the `library_id`. |
+| `items[].sort_order` | yes | The reorder handle's value. Served rather than left implicit in the array order, so a client that re-sorts locally can still send back a correct reorder. |
+| `items[].enabled` | yes | |
+| `items[].include_in_search` | yes | Independent of `enabled`; both are read from their own column. |
+| `items[].item_count` | yes | `library_member` rows in this library **that the caller's access scope admits**. Edition-grained by the table's key; equal to a count of distinct works today, because the only writer files every work under the `edition_id = 0` "whole work" sentinel. |
+| `items[].orphaned_at` | **no** | RFC 3339 UTC. §6.5 rule 5's retained-with-a-reason state, set when the last source goes away. ⚠️ **Nothing writes it** — see §2.4. |
+| `items[].sources` | yes | Possibly `[]`. Never absent: an absent key reads as *"unknown"*, and *"this library has no sources"* is precisely what §17.8's orphaned state renders. |
+| `sources[].id` | yes | `library_source.id`. |
+| `sources[].service_instance_id` | yes | What §17.8's cross-link needs: *"a degraded source on a library row links to that instance's Services row"*. |
+| `sources[].service_name` | yes | The chip's label, and the string §17.8's warning copy uses (*"Radarr feeds 2 libraries"*). |
+| `sources[].service_kind` | yes | The icon. |
+| `sources[].container_kind` | yes | One of `instance`, `root_folder`, `remote_library`, `tag`, `series_type`. In v0.1 always `remote_library`. |
+| `sources[].container_ref` | yes | The container the **upstream itself** reported, verbatim. A Kavita library id in v0.1. |
+| `sources[].container_name` | **no** | The container's own name as the upstream reported it at bind time — §17.8's *"upstream's own name beneath it, greyed and non-editable"*. Absent, not `""`, when unrecorded. |
+| `sources[].is_metadata_authority` | yes | §17.8 suppresses the *control* below two sources; the fact still travels. |
+| `sources[].missing_since` | **no** | RFC 3339 UTC. §17.8's per-source health: the upstream stopped reporting this container. ⚠️ **Nothing sets it** — see §2.4. |
+
+**Nothing service-side beyond a name and a kind is on the wire, and nothing can be.** This is the
+only user-facing read in the product that joins a list to `service_instance`, the row carrying
+`api_key_enc` — a full-admin \*Arr credential — and `base_url`, an internal host the user typed.
+Exactly two of that table's columns are read and exactly two reach the browser. §17.8 states the rule
+for the whole screen: *"No credential field ever appears on this screen"*; §12.1 keeps API keys
+behind Services plus sudo, and an instance's address is §17.3's to render.
+
+### 2.3 The reserved `Unfiled` library is never here
+
+Migration `00005_library_sync.sql` seeds `library.id = 0`, `Unfiled`, as the landing place the
+membership derivation needs so that a work belonging to no other library still matches a scope. Its
+own comment says what it is not: **"Never listed on the Libraries screen, never offered in the scope
+chip, never proposed."** This endpoint is the Libraries screen, so the row is excluded in the SQL,
+unconditionally, with no parameter that can include it. A client never has to filter for it and must
+not treat `id = 0` as a library.
+
+### 2.4 Three fields describe states nothing in the tree can currently reach
+
+Stated here rather than left to be inferred, because a screen that renders none of them is reporting
+the **writer's** silence and not the upstream's:
+
+| Field | Status |
+| --- | --- |
+| `sources[].missing_since` | The two statements in non-test Go that touch the column both **clear** it; no code path sets a non-NULL value. So *"no source is missing"* is not a positive health check. |
+| `items[].orphaned_at` | No writer and no reader in non-test Go. |
+| `items[].formats` | No writer: `library.formats` is NULL on every row, so the Ebooks/Audiobooks split it exists for is not reachable in v0.1 (§17.8 marks that split *"from the milestone Audiobookshelf lands in, not v0.1"*). |
+
+**And the request destination is absent from this response entirely.** §17.8: *"The `Request
+destination` column does not render in v0.1, and it returns with the first service that can be a
+destination"*, because no service v0.1 connects can be a library's request sink at all. The four
+`sink_*` columns are written by nothing in the tree, so serving four nulls per row would make a
+complete deferral look like a half-built one. ⚠️ **This is sequencing, not a cut.**
+
+**What is deliberately not computed: which media types a source supplies.** It is not a property of
+`library_source`; answering it means an aggregate over `library_member` → `work.kind` →
+`edition.format` per source — a join across the catalogue that this read otherwise never makes, for
+a number the library's own `(kind, formats)` pair already bounds. It is left out.
+
+### 2.5 There is no "proposed" state, and there is nothing for one to carry
+
+A client cannot ask this endpoint to distinguish a library the user has never been shown from one
+they accepted, and the reason is that [ADR-0048](../DECISIONS.md#adr-0048) removed the state rather
+than this endpoint declining to serve it:
+
+> **A library proposal lives in the connect probe's response. It is never persisted. A `library` row
+> is created only when the user accepts one.**
+
+— from which *"once no row exists before Accept, every row is an accepted row by construction, and a
+column that cannot express 'proposed' is not being asked to."* `library.managed_by` is therefore not
+on this wire either: ADR-0048 Fact 1 and §17.8 both measure that its second value `'user'` **has
+never been written by any code path**, so the column is `'auto'` on every row and §17.4 rule 5 — *a
+column whose value is identical for every row is not data* — applies to a wire field as much as to a
+table cell.
+
+⚠️ **ADR-0048 is equally explicit that the removal it implies is not built.** §17.8: *"Libraries
+come into existence, on a first successful connect to a Kavita, with no screen involved … The Accept
+step below does not gate it, because the Accept step does not exist."* ADR-0048 clause 4 answers
+exactly that case — existing `managed_by = 'auto'` rows are **declared** accepted on upgrade, with no
+migration and no backfill — so the invariant holds by declaration today and by construction once
+Accept lands. Either way the field would be a constant.
+
+### 2.6 Errors
+
+| Status | `error` | When |
+| --- | --- | --- |
+| `401` | `unauthorized` | no session. |
+| `500` | `internal` | the local read failed. |
+
+There is no `400`: the endpoint takes no input. A caller whose access scope admits no service
+instances receives `200 OK` with `{"items": []}` — the scope **fails closed**, so an empty visible
+set means no libraries rather than every library.
