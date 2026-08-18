@@ -14723,6 +14723,123 @@ is unguarded by construction, and a future divergence between them is a reading 
 verified by reading: every one of the 22 `--toolbar-h` occurrences under `docs/design/mockups/`, and
 the five `app.css` comments that mention the token by name to explain its absence.
 
+# VN9-11 — the mockups' README argued from the identity tiers the two installs no longer hold
+
+**Date:** 2026-08-18. **Prefix:** `VN9-`, continuing from
+[`VN9-10`](#vn9-10----toolbar-h-retired-from-the-design-system-and-the-mockups-fixed-track-defect-was-already-fixed),
+which was the highest `VN9-` **entry** on `main` when this was written, re-read immediately before
+writing rather than remembered. Appended, never renumbered.
+
+## What was wrong
+
+[`VN9-09`](#vn9-09--the-two-install-mockup-drew-v01-as-sonarr-and-radarr-adr-0041-makes-it-kavita-and-the-argument-inverted-with-the-rows)
+re-cut the drawing and left the **prose about the drawing** for this pass, by instruction. Every
+figure in `docs/design/mockups/README.md`'s two-install table was a pre-ADR-0041 figure, its
+derived-figures section derived numbers that no screen carries any more, and its *"What each install
+is for"* passage argued from the **opposite pair of identity tiers** from the ones the two installs now
+hold. `DESIGN-DIRECTION.md` carried the same staleness in two places.
+
+## What was applied
+
+**`docs/design/mockups/README.md`, four regions, every figure re-read off the screen that draws it
+rather than copied from the survey — which predates the rewrite and predicted some of these numbers
+wrongly.**
+
+- **The two-install table.** v0.1's column is now Kavita and Prowlarr; **2** service rows, **4**
+  libraries, `All libraries (4)`, Block B **2 items**, Block C **7 rows across 2 types**, search
+  **6 results in 2 groups**. Three of those contradict the survey's own prediction, which is why
+  they were counted from the markup: it expected **2** libraries (the fix drew four, because Manga
+  and the orphaned Ongoing comics survive into v0.1), **3** Block B items, and **5** search results.
+- **The switcher label and the notice strings**, quoted to match `index.html` exactly:
+  `v0.1: Kavita, Prowlarr`, and *"Drawn over the two services v0.1 connects"*.
+- **The milestone argument behind the labels was re-derived, not re-pointed.** It rested on
+  ADR-0035's amendment — *"v0.1 ships no catalogue source at all"* — which ADR-0041 falsified. The
+  two labels are now argued as **asymmetric on purpose**: v0.1's names its services outright because
+  §16 pins both (ADR-0041 for Kavita, ADR-0045 for the two \*Arrs at v0.2), and the full stack's
+  cannot name a version because §16.1 sequences Navidrome, Audiobookshelf and Komga after v0.1
+  without fixing which release each lands in. The full stack's label survives unchanged; only its
+  reason did.
+- **The derived-figures section.** `Ebooks 2,266 → 424` is named as the **one** row that differs by
+  arithmetic rather than by presence. `Search falls 31 → 6` is re-derived: four absent groups remove
+  15, and the surviving Ebooks group falls 14 → 4 because it is drawn over both of that library's
+  sources on the full stack and over Kavita's half alone on v0.1, which takes ten more.
+- ⚠️ **One derived figure is stated as underivable from the drawing, rather than invented.** The old
+  bullet read *"Comics issues 7,891 = Kavita 7,204 + Ongoing comics 687"*. 7,891 and 7,204 are both
+  on screen; **687 appears nowhere in the mockups** and the README now says so, with the reason an
+  orphaned library reports works and not issues.
+- ⚠️ **The `Search falls 31 → 5` linked-work bullet was the old section's flagship, and the
+  phenomenon it drew is gone rather than moved.** It argued that deleting the Ebooks group moves
+  `Dune` into Movies. On a Kavita v0.1 all three of that work's editions live in services the
+  install does not have, so the work is absent, not relocated. The bullet now says that, because the
+  loss of a demonstration is a fact about the mockup and hiding it would be the same error the old
+  bullet made.
+- **"What each install is for" was rewritten as an argument.** Six of its ten claims changed hands
+  or died. Full-stack-only now: the two-instance library with one source degraded, the
+  metadata-authority radio as a real choice, and a **mixed** identity panel (1,703 on an external id
+  against 563 by title). v0.1-only now: four sourceless types at once, an identity panel where
+  **everything** is matched by title (0 against 424), a two-row health table, a search where nothing
+  truncates, and a two-level drilldown. Two claims moved to **both** installs — Kavita `Manga` at
+  zero items while healthy, and the orphaned `Ongoing comics` — because v0.1's source is the one
+  that owns them.
+- ⚠️ **Two claims are recorded as dead rather than quietly dropped.** *"`matched by title` … which
+  §17.3 marks as unreachable in v0.1"* is a straight polarity reversal: §17.3 now says the opposite
+  in as many words. *"A scope chip at the two-library minimum"* rested on v0.1 having exactly two
+  libraries and it has four, so that minimum is drawn on neither install.
+
+**`docs/design/DESIGN-DIRECTION.md`, two places.** Line 234's §16 row read *"v0.1 connects three
+services: Sonarr, Radarr and Prowlarr"* and *"v0.1 has no catalogue source for music, audiobooks,
+ebooks or comics"* — both inverted. It now reads two services, Kavita and Prowlarr, with the four
+sourceless types being movies, TV, music and audiobooks, and it carries the superseded sentence
+under a ⚠️ so the change is visible rather than silent. §9.6 quoted the switcher label verbatim as
+`v0.1: Sonarr, Radarr, Prowlarr`; that quote is now what `index.html` actually renders.
+
+## What was rebutted, corrected or left
+
+⚠️ **The instruction said survey items 74, 75 and 76 were already done in `2895961` and should be
+verified rather than redone. Two of the three were.** `2895961` landed §8.4's ⚠️ block (item 75) and
+rule 13's exemplar (item 76). **Item 74 is line 234 itself**, which was still stale — the same
+instruction separately asked for it, so the two halves of that sentence disagreed and the tree
+settled it.
+
+**Item 77 (§9.6) was not on the instruction's list and was applied anyway**, because it quotes the
+switcher label verbatim and leaving it would have made `DESIGN-DIRECTION.md` contradict its own line
+234 two thousand lines apart. Two sentences changed; §9.6's argument about why *"a later milestone"*
+beats a version number is untouched and still correct.
+
+**Survey item 70's remaining sites were mostly left, deliberately, and are named here so the next
+pass does not have to find them.** Two were fixed because they directly contradicted passages this
+pass rewrote: `README.md`'s row-band note said the two-catalogue-source edit screen was **v0.1's**
+(it is the full stack's since the identity tiers swapped), and the deferred-work table said Kavita's
+*"milestone is stated as after v0.1, never as v0.2"* and that its absence is drawn on the v0.1
+install (it is v0.1's own source, configured on both installs, and the annex row beside Lidarr and
+LazyLibrarian is Komga). **Three are left**, all of them ADR-0028/SW-15 residue rather than
+ADR-0041's: the Libraries section's *"four of the six media types have no request destination"* and
+the matching findings-table row, which the drawing has since taken to **all eight** rows reading
+`None`; and the `31 result rows` phrasing in the Search → Requests row, which is still the full
+stack's own figure and still true.
+
+## The gate, and what it cannot see
+
+`make design` — **exit 0**, ending `all design checks pass`. Measured on this tree: 9 source files
+in the static sweep; `prototype.html` 744,520 chars against the 400,000 floor; 110 screen × state ×
+install × panel combinations clean of overflow at each of five viewports; **0 copy violations** over
+6,932 user-visible strings.
+
+**That green is worth almost nothing here, and saying so is the point.** `check.mjs` reads
+`tokens.css`, `usarr.css`, `fonts.css`, `usarr.js` and the five screen HTML files, and renders
+`prototype.html`. **It opens neither `README.md` nor `DESIGN-DIRECTION.md`** — verified by reading
+its `SOURCES` array and every `readFileSync` call. This commit changes only those two files, so the
+gate could not have failed on it and did not test it. `make check` does not read them either.
+
+**What was verified by reading, screen by screen, since nothing mechanical can.** Every figure now
+in the README was counted or read out of the markup that draws it: the two service tables (8 rows
+against 2), the four v0.1 library rows and the eight full-stack ones, both scope popovers, both
+Block A tables, both Block B tables (4 items against 2, matching Services' `1 error, 3 warnings`
+against `1 error, 1 warning`), both Block C tables counted by `<tr>` (26 against 7), all six search
+groups on the full stack summing to 31 against v0.1's two summing to 6, both `Show all` rows, both
+drilldown breadcrumbs (three levels against two), and both identity panels (1,703 / 563 against
+0 / 424). The one figure that could **not** be found on a screen is recorded in the README as such.
+
 ---
 
 # Live-import findings — `work.year` was never written, and the Services sync columns were constants
