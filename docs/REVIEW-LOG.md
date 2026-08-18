@@ -13926,8 +13926,11 @@ github.com.
   question 2 says, and exactly as [`EXPL-03`](#expl-03) already noted. Four honest readings make the
   target truthful when someone types it; they do not make anyone type it. There is no CI.
 * **The gate was taken with both caches isolated** — `GOLANGCI_LINT_CACHE` *and* `GOCACHE`, each a
-  fresh scratchpad directory, per the residual [`EXPL-03`](#expl-03) recorded. Neither shared cache
-  was cleaned and no worktree was removed.
+  fresh scratchpad directory, per the residual [`PINSRC-3`](#pinsrc-3) recorded. ⚠️ That residual's
+  inference has since been withdrawn in [`BTAG-04`](#btag-04), which could not reproduce the pair and
+  found the mechanism contradicted by `cmd/go`'s own hashing of the package directory — so isolating
+  both caches is hygiene here, not a fix for a diagnosed fault. Neither shared cache was cleaned and
+  no worktree was removed.
 
 ---
 
