@@ -408,8 +408,23 @@
 	--row-pad-x: var(--space-5); /* 12px — NOT --space-6; measured */
 }
 
+/* ⚠️ THERE IS NO `--toolbar-h`, AND ITS ABSENCE IS THE DESIGN, so nobody adds
+ * it back as an obvious omission. It was 40px here and 68px below 560px, and it
+ * had two jobs: a minimum height for the two bars, and the sticky or fixed
+ * offset for everything that had to sit under the shell's top bar. The second
+ * job is what made it a liability. The 68px was hand-fitted to a two-line bar
+ * whose content measured 67px — one pixel of slack — and it went wrong the
+ * moment the bar took a third line. Measured at 200px with a long username: the
+ * bar's real bottom was 97px while the drawer still started at 68, so the bar's
+ * last line painted over the drawer's first 29px and the drawer hung 29px past
+ * the bottom of the viewport.
+ *
+ * Nothing reads the bar's height any more. `.app` is a viewport-height grid
+ * whose SECOND ROW is the only thing that scrolls, so everything that used to
+ * be offset by a number now simply sits in the row below the bar (see §2.2).
+ * Do not reintroduce this token, or a replacement for it, to fix an offset: an
+ * offset that has to know the bar's height IS the bug, not the missing number. */
 :root {
-	--toolbar-h: 40px; /* page toolbar and sticky table header    */
 	--nav-item-h: 32px; /* sidebar entry (DESIGN-DIRECTION §5.3)   */
 
 	--control-h-sm: 28px; /* compact button                          */
@@ -810,19 +825,48 @@ textarea {
 
 /* sidebar · toolbar · content. Nothing else (DESIGN-DIRECTION §8.3). Full
  * viewport width: a centred max-width column is a document layout. */
+/* ⚠️ THE SHELL FILLS THE VIEWPORT AND THE PAGE SCROLLS INSIDE IT. That single
+ * decision is what removes every offset in this file, so it is worth stating
+ * plainly rather than leaving to be reconstructed from four rules.
+ *
+ * The document used to scroll, which forced the top bar to be `position:
+ * sticky` and therefore forced everything below it — the sidebar, the drawer,
+ * the drawer's scrim, the sticky table header — to be pushed clear of it by a
+ * NUMBER, because a sticky or fixed offset is measured against the viewport and
+ * has no way to ask "how tall is the bar?". That number was `--toolbar-h`, it
+ * was hand-fitted, and a bar that wrapped to a line more than it was fitted for
+ * put its last line straight over whatever the number had positioned (measured:
+ * 29px over the drawer at 200px wide with a long username).
+ *
+ * Now the grid is exactly the viewport tall, row one is the bar at its natural
+ * height and row two is everything else. Nothing overlays anything, so nothing
+ * needs an offset:
+ *
+ *   · the bar is a plain grid item, not sticky, and stays put because the
+ *     shell does not scroll;
+ *   · the sidebar fills its own cell — no `top`, no `calc(100vh - …)`;
+ *   · the drawer and its scrim are grid items in the `main` area (§2.7), so
+ *     they start exactly where the bar ends by construction;
+ *   · `.main` is the scroll container, so a sticky table header pins at its
+ *     `top: 0` — which IS the underside of the bar.
+ *
+ * `auto`, not `minmax(…)`: with no minimum to hold, the row is simply as tall
+ * as the bar. `dvh` after `vh` so a mobile browser's retracting URL bar cannot
+ * leave the shell taller than the visible viewport; the `vh` line is the
+ * fallback for anything that does not know `dvh`, and the build drops it
+ * whenever the browserslist targets all do — checked in the emitted CSS, where
+ * only `height:100dvh` survives today. Keep both lines anyway: widening the
+ * targets is a config change, and a fallback that is not written cannot be
+ * re-synthesised by the minifier. */
 .app {
 	display: grid;
 	grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
-	/* minmax rather than a fixed track: the top bar wraps below 560px, and a
-	 * fixed row lets its later lines render UNDER the page instead of pushing it
-	 * down. --toolbar-h stays the MINIMUM and the sticky offset; the row grows
-	 * with what is actually in the bar. The mockup hit this first and fixed it
-	 * the same way (docs/design/mockups/usarr.css). */
-	grid-template-rows: minmax(var(--toolbar-h), auto) minmax(0, 1fr);
+	grid-template-rows: auto minmax(0, 1fr);
 	grid-template-areas:
 		'topbar topbar'
 		'sidebar main';
-	min-height: 100vh;
+	height: 100vh;
+	height: 100dvh;
 }
 
 .app[data-sidebar='collapsed'] {
@@ -833,17 +877,24 @@ textarea {
 	display: none;
 }
 
+/* No `position: sticky` and no `min-height`. The shell does not scroll, so the
+ * bar cannot scroll away and has nothing to stick to; and its height is now the
+ * height of what is in it plus this padding, rather than a floor it had to be
+ * measured against. `--space-3` on the block axis reads 6px above and below the
+ * 28px compact controls the bar holds, which is the same 40px the floor used to
+ * assert — but derived from the content instead of asserted over it, so a bar
+ * that gains a taller control gets taller instead of overflowing.
+ *
+ * `z-index` stays: the drawer in §2.7 is a sibling grid item that paints over
+ * the page, and the bar has to keep its own layer above the row below it. */
 .topbar {
 	grid-area: topbar;
 	display: flex;
 	align-items: center;
 	gap: var(--space-4);
-	padding: 0 var(--space-5) 0 var(--space-4);
-	min-height: var(--toolbar-h);
+	padding: var(--space-3) var(--space-5) var(--space-3) var(--space-4);
 	background: var(--bg-raised);
 	border-bottom: 1px solid var(--border);
-	position: sticky;
-	top: 0;
 	z-index: var(--z-overlay);
 }
 
@@ -876,29 +927,37 @@ textarea {
 	flex: 1 1 auto;
 }
 
+/* `min-width: 0` is what lets the username inside actually truncate. A flex
+ * item's automatic minimum size is its content, so without this the group
+ * refuses to shrink below the full name and pushes the document sideways
+ * instead — measured at 175px of horizontal overflow on a 200px viewport. */
 .topbar__right {
 	display: flex;
 	align-items: center;
 	gap: var(--space-3);
+	min-width: 0;
 }
 
-/* Sidebar */
+/* Sidebar. No `position: sticky`, no `top`, and no height calculation: it is a
+ * grid item in the row under the bar, and a grid item stretches to its row by
+ * default, so it fills exactly the space the bar leaves — whatever height the
+ * bar happens to be. That is the same outcome `height: calc(100vh -
+ * var(--toolbar-h))` was buying, obtained without knowing the number.
+ *
+ * The panel's tint therefore still reaches the bottom of the column, which was
+ * the original reason that calc existed: with only a `max-height` it collapsed
+ * to the nav items and stopped 258px down a 900px column.
+ *
+ * `min-height: 0` is not decoration. A grid item's automatic minimum size is
+ * its content, so a nav list longer than the row would stretch the row rather
+ * than scroll inside it, and `overflow-y: auto` would never engage. */
 .sidebar {
 	grid-area: sidebar;
 	background: var(--bg-raised);
 	border-right: 1px solid var(--border);
 	padding: var(--space-4) 0;
 	overflow-y: auto;
-	position: sticky;
-	top: var(--toolbar-h);
-	align-self: start;
-	/* `height`, not `max-height`. A sticky grid item has to keep `align-self:
-	 * start` — stretching it to the row makes it as tall as the content and it
-	 * stops sticking — and with only a max-height it collapses to the nav items
-	 * inside it, so the panel's tint stopped 258px down a 900px column and the
-	 * column read as unfinished below it. Filling the viewport under the toolbar
-	 * is the same measurement the drawer already uses at 900px and below. */
-	height: calc(100vh - var(--toolbar-h));
+	min-height: 0;
 }
 
 .nav__group + .nav__group {
@@ -969,14 +1028,61 @@ textarea {
 }
 
 /* Main */
-/* The top padding is on .main rather than on .pagehead. In the mockup the
- * pagehead carries the page title and supplies the offset under the toolbar;
- * here the title lives in the toolbar itself (DESIGN-DIRECTION §8.3), so the
- * pagehead is not always present and the region has to carry it. Same measured
- * offset, one fewer required element. */
+/* ⚠️ THIS IS THE SCROLL CONTAINER FOR THE WHOLE APPLICATION, and that is what
+ * lets every offset in this file go away (§2.2). The document does not scroll;
+ * this region does.
+ *
+ * `min-height: 0` is the half people forget — a grid item's automatic minimum
+ * size is its content, so without it the row would grow to the page's full
+ * height, the shell would exceed the viewport, and `overflow-y: auto` would
+ * never engage.
+ *
+ * ⚠️ `position: relative` IS LOAD-BEARING AND IS NOT COSMETIC. It makes this box
+ * the containing block for its absolutely positioned descendants, and without
+ * it a scrolling main region does not actually contain the page.
+ *
+ * The mechanism is the one already written up at `.sr` further up this file: an
+ * absolutely positioned box with `top: auto` is laid out at its STATIC
+ * position, and a box is only clipped by an ancestor that is its containing
+ * block. Every screen puts `.sr` boxes inside main — the focusable h1, the
+ * per-screen live regions — so with no positioned ancestor their containing
+ * block was the INITIAL one, they contributed to the ROOT's scrollable overflow
+ * from wherever in the scrolled content they happened to sit, and the viewport
+ * became scrollable behind a shell that is exactly one viewport tall.
+ *
+ * Measured on /services at 1280x800 over 24 rows: `documentElement.scrollHeight`
+ * 1452 against a clientHeight of 800, traced to a single 1px `.sr` div sitting
+ * at y=1451, and one real wheel gesture over the top bar scrolled the entire
+ * shell 559px off the screen. With this line: scrollHeight 800, and the wheel
+ * moves nothing. `contain: paint` fixes it identically and claims more than is
+ * true — it would also capture any future `position: fixed` descendant — so the
+ * narrower statement is the one that ships. */
 .main {
 	grid-area: main;
+	position: relative;
 	min-width: 0;
+	min-height: 0;
+	overflow-y: auto;
+}
+
+/* ⚠️ THE REGION'S PADDING IS ON THIS BOX AND NOT ON `.main`, AND THAT IS A
+ * CONSEQUENCE OF `.main` BEING THE SCROLLPORT rather than tidiness.
+ *
+ * A sticky element pins inside its scroll container's padding, not against its
+ * border box. So with `padding-top: var(--space-5)` on `.main`, the sticky
+ * table header pinned twelve pixels BELOW the underside of the top bar and
+ * rows scrolled visibly through the strip between them — measured on /services
+ * at 1280x800: header pinned at y=53 against a bar ending at y=41. Moving the
+ * same padding one box inward puts the scrollport's edge back on the bar's
+ * underside, and the header pins flush against it with `top: 0`.
+ *
+ * The offset itself is unchanged and so is the reason it lives in the shell:
+ * the mockup's pagehead carries it, the page title lives in the top bar here
+ * (DESIGN-DIRECTION §8.3), so there is no pagehead on every screen to carry it.
+ *
+ * The visually-hidden h1 stays OUTSIDE this box, as a direct child of `.main`,
+ * because `.main:has(> .pagetitle:focus)` below reads it as one. */
+.main__inner {
 	padding: var(--space-5) 0 var(--space-9);
 }
 
@@ -1290,13 +1396,19 @@ select[multiple] {
 	accent-color: var(--fg);
 }
 
-/* The per-page toolbar, distinct from the shell's top bar. */
+/* The per-page toolbar, distinct from the shell's top bar.
+ *
+ * No `min-height`. It wraps, so a floor could only ever be wrong in one of two
+ * directions — too low to matter once the bar holds a control, or high enough
+ * to add dead space to a bar that holds only a label — and nothing measures
+ * this bar's height any more, so there is nothing for a floor to protect. The
+ * padding below sizes it from its contents: 6px above and below whatever it
+ * holds, which is 44px around the 32px controls it usually holds. */
 .toolbar {
 	display: flex;
 	align-items: center;
 	flex-wrap: wrap;
 	gap: var(--space-3) var(--space-4);
-	min-height: var(--toolbar-h);
 	padding: var(--space-3) var(--space-6);
 	background: var(--bg-raised);
 	border-top: 1px solid var(--border);
@@ -1907,11 +2019,17 @@ select[multiple] {
 /* The sticky box is the thead, not the header row: with `thead { display:
  * block }` the row's containing block is the thead, which is exactly one row
  * tall, so the row could not move at all. The thead's containing block is the
- * table, which is the full list. The offset is the toolbar height because the
- * viewport's top forty pixels are already occupied by the sticky .topbar. */
+ * table, which is the full list.
+ *
+ * `top: 0`, and the zero is structural rather than a value that happens to
+ * work. A sticky offset is measured against the nearest SCROLLPORT, and the
+ * scrollport is now `.main` (§2.2) rather than the viewport — so zero already
+ * means "the underside of the top bar". It used to mean the top of the screen,
+ * which is why this had to carry the bar's height as a number and why it went
+ * wrong whenever the bar was taller than the number said. */
 .tbl thead {
 	position: sticky;
-	top: var(--toolbar-h);
+	top: 0;
 	z-index: 10;
 	background: var(--bg-raised);
 	border-bottom: 1px solid var(--border-strong);
@@ -2335,22 +2453,38 @@ select[multiple] {
 		display: none;
 	}
 
+	/* ⚠️ A GRID ITEM, NOT `position: fixed`, AND THAT IS THE FIX. Fixed
+	 * positioning is measured against the viewport, so the drawer had to be
+	 * pushed clear of the top bar by a number — and when the bar wrapped to a
+	 * third line the number was 29px short: the bar painted over the drawer's
+	 * first 29px and the drawer hung 29px below the bottom of the screen
+	 * (measured, 200px wide, long username).
+	 *
+	 * Placed in the `main` area instead, it starts where the bar ends and ends
+	 * where the viewport does, by construction, at any bar height. It still
+	 * OVERLAYS the page rather than taking a column from it — grid areas may
+	 * overlap, and `z-index` lifts it above `.main`, which shares the area —
+	 * so it is still the modal drawer the comment above describes.
+	 *
+	 * `justify-self: start` keeps it its own width rather than stretching
+	 * across the area; the block axis is left to stretch, which is what fills
+	 * the column. */
 	.app[data-sidebar='open'] .sidebar {
 		display: block;
-		position: fixed;
-		top: var(--toolbar-h);
-		left: 0;
+		grid-area: main;
+		justify-self: start;
 		width: var(--sidebar-w);
 		max-width: 80vw;
-		height: calc(100vh - var(--toolbar-h));
+		min-height: 0;
 		z-index: var(--z-top);
 		box-shadow: var(--shadow-overlay);
 	}
 
+	/* Same move, same reason: the scrim covered `inset: var(--toolbar-h) 0 0 0`,
+	 * which is the `main` area spelled as a number. Now it is the `main` area. */
 	.app[data-sidebar='open'] .scrim {
 		display: block;
-		position: fixed;
-		inset: var(--toolbar-h) 0 0 0;
+		grid-area: main;
 		z-index: var(--z-overlay);
 		background: var(--scrim);
 	}
@@ -2603,10 +2737,10 @@ select[multiple] {
 }
 
 @media (max-width: 560px) {
-	:root {
-		--toolbar-h: 68px;
-	}
-
+	/* The bar is allowed to wrap here and nothing has to be told how tall it
+	 * became — which is why the `--toolbar-h: 68px` override that used to open
+	 * this block is gone rather than retuned. See the note at the top of the
+	 * file: a bar whose height is published is a bar somebody has to re-measure. */
 	.topbar {
 		flex-wrap: wrap;
 		align-items: center;

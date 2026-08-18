@@ -310,8 +310,22 @@
 
 		{#if session.authenticated}
 			<div class="topbar__right" inert={isDrawer}>
+				<!--
+					THE USERNAME IS A LABEL, NOT CONTENT, so it truncates with an
+					ellipsis and carries the whole string as a tooltip. It does not
+					wrap: a name long enough to wrap grows the bar by a whole line, and
+					before this it did not even do that — `.topbar` only wraps below
+					560px, so a long name pushed the document sideways instead
+					(measured: 175px of horizontal overflow on a 200px viewport).
+
+					`.trunc` plus `title` is the pattern already in the tree for exactly
+					this — release titles, indexer names, service addresses — rather
+					than a second way of saying the same thing.
+				-->
 				{#if session.current.username}
-					<span class="topbar__user">{session.current.username}</span>
+					<span class="topbar__user trunc" title={session.current.username}
+						>{session.current.username}</span
+					>
 				{/if}
 				<button type="button" class="btn btn--sm" onclick={signOut} disabled={signingOut}>
 					{signingOut ? 'Signing out' : 'Sign out'}
@@ -357,29 +371,41 @@
 	<main class="main" id="usarr-main" tabindex="-1" inert={isDrawer}>
 		<h1 class="sr pagetitle" bind:this={headingEl} tabindex="-1">{title}</h1>
 
-		{#if unreachable}
-			<div class="section">
-				<div class="banner banner--err" role="alert">
-					<div class="banner__body">
-						<div class="banner__title">UsArr cannot reach its own backend</div>
-						<div class="banner__text">
-							<code class="mono">/api/v1/auth/session</code> did not answer, so the shell cannot tell
-							whether you are signed in. This page is served from the embedded build and loads without
-							the API; nothing else works until the backend answers.
+		<!--
+			.main is the application's scroll container, and a sticky element pins
+			inside its scroll container's PADDING rather than against its border
+			box — so the region's padding lives one box in, on .main__inner, and the
+			sticky table header pins flush under the top bar. app.css carries the
+			measurement. The h1 stays outside this box because
+			`.main:has(> .pagetitle:focus)` reads it as a direct child of .main.
+		-->
+		<div class="main__inner">
+			{#if unreachable}
+				<div class="section">
+					<div class="banner banner--err" role="alert">
+						<div class="banner__body">
+							<div class="banner__title">UsArr cannot reach its own backend</div>
+							<div class="banner__text">
+								<code class="mono">/api/v1/auth/session</code> did not answer, so the shell cannot tell
+								whether you are signed in. This page is served from the embedded build and loads without
+								the API; nothing else works until the backend answers.
+							</div>
+							<p class="verbatim shell-verbatim">{unreachable}</p>
 						</div>
-						<p class="verbatim shell-verbatim">{unreachable}</p>
 					</div>
 				</div>
-			</div>
-		{:else if !session.loaded}
-			<div class="section"><p class="empty">Checking your session.</p></div>
-		{:else if !session.authenticated && !onLoginRoute}
-			<div class="section"><p class="empty">Not signed in. Taking you to the sign-in page.</p></div>
-		{:else}
-			<div class:transitional-scope={transitional}>
-				{@render children()}
-			</div>
-		{/if}
+			{:else if !session.loaded}
+				<div class="section"><p class="empty">Checking your session.</p></div>
+			{:else if !session.authenticated && !onLoginRoute}
+				<div class="section">
+					<p class="empty">Not signed in. Taking you to the sign-in page.</p>
+				</div>
+			{:else}
+				<div class:transitional-scope={transitional}>
+					{@render children()}
+				</div>
+			{/if}
+		</div>
 	</main>
 </div>
 
@@ -394,11 +420,13 @@
 	 * Shell-only rules. Anything with a design-system name lives in app.css;
 	 * what is here belongs to this component and to nothing else.
 	 */
+	/* Colour and size only. The nowrap, the overflow and the ellipsis all come
+	 * from `.trunc` in app.css, so the truncation here is the same truncation
+	 * every other label in the application gets rather than a local copy of it. */
 	.topbar__user {
 		color: var(--fg-muted);
 		font-size: var(--text-sm);
 		line-height: var(--leading-sm);
-		white-space: nowrap;
 	}
 
 	.shell-verbatim {
