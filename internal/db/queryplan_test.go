@@ -693,6 +693,16 @@ func TestLibraryScopedKeysetIsASeek(t *testing.T) {
 // ranking positions. §7 invariant 6 has been corrected to the two measured
 // plans; this test asserts the substance in both directions so it cannot
 // silently regress to a scan whichever way a future query is written.
+//
+// ⚠️ THIS TEST PINS THE INDEX PROPERTY, NOT THE SHIPPED READ. The statement
+// GET /api/v1/search actually issues is rendered by store.searchLibrarySQL and
+// EXPLAINed through that function by internal/store's TestSearchLibraryPlanIsSeeks
+// — which is the assertion to change if the read changes, and which pins things
+// this file cannot see (that neither fts5 leg sorts, and that exactly two temp
+// B-trees remain). It cannot live here: internal/store imports internal/db, so
+// this package cannot call searchLibrarySQL without an import cycle. That is the
+// same split the "recently added" case above documents for recentWorksSQL, and
+// the shapes below stay because they are the bare property of the schema.
 func TestScopedSearchIsASeekNotAScan(t *testing.T) {
 	ctx := t.Context()
 	d := openTestDB(t)

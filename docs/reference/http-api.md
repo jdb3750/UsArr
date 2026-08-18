@@ -849,3 +849,176 @@ answered each:
   the upstream 500's own body as the needle. It also pins the two negatives: a **successful** run
   publishes no `stopped` frame, before or after its `done`, and a second run supersedes an earlier
   `stopped` with ordinary phases (§5.5.3).
+
+---
+
+## 6 · `GET /api/v1/search` — search over your own library
+
+Ranked full-text search across the works UsArr has replicated, as **one flat list** (ARCHITECTURE
+§8.2, §17.4, and [`search.md`](./search.md) §3–§4 for the algorithm).
+
+It is a local read (principle 1) — two SQLite statements, no \*Arr call, no metadata provider, no
+image fetch. ARCHITECTURE §2073 budgets this path at **p50 < 15 ms, p99 < 50 ms**, which is why the
+Prowlarr indexer fan-out no longer answers here: that one cannot meet the budget by construction
+(§8.4) and now lives at `GET /api/v1/releases/search`. **The two are different questions over
+different corpora.** This one searches what you *have* and answers in its body; that one asks
+indexers what *exists* and answers `202` with results on the SSE stream.
+
+Requires an authenticated session; without one it is `401 unauthorized`.
+
+### 6.1 Query parameters
+
+| Parameter | Type | Default | Behaviour |
+| --- | --- | --- | --- |
+| `q` | string | *required* | The search text. Empty or whitespace-only is `400 bad_request`. |
+| `limit` | integer | `25` | The number of results **requested**. A clamp, not a validated range — see §6.3. Maximum `100`. |
+
+**`q` is the only spelling.** `query=` is *not* accepted here, even though `GET
+/api/v1/releases/search` accepts both; two spellings of one parameter is a contract a client has to
+guess at.
+
+**There is no `?lib=` scope chip and no per-type filter.** The scope this applies is the caller's
+*access* scope, derived from the session, and a query parameter cannot widen it. A user-chosen
+*narrowing* is a later commit.
+
+**There is no cursor and no second page** — see §6.5.
+
+### 6.2 Response
+
+```jsonc
+{
+  "query": "frieren",          // the text the server actually searched, echoed back
+  "limit": 25,                 // the cap the SERVER applied — authoritative, see §6.3
+  "truncated": false,          // the 12-token cap fired; see §6.4
+  "items": [
+    {
+      "id": 41,                // work.id — the id an item route takes
+      "kind": "comic",         // work.kind verbatim: the schema's word
+      "media_type": "comics",  // §17.2's six-value navigation enum: the user's word
+      "title": "Frieren: Beyond Journey's End",
+      "year": 2021,            // omitted when the column is NULL
+      "added_at": "2026-08-16T12:00:00Z",  // omitted when the upstream reported no date
+      "have_count": 43,
+      "want_count": 17,
+      "availability": {"k": "count", "have": 43, "total": null}
+    }
+  ]
+}
+```
+
+**`items` is ordered by relevance and the ORDER IS THE CONTRACT.** No score is published. The score
+is normalised per query, so a client comparing one across two queries would be comparing nothing;
+publishing it would also freeze §6.6's ranking, which is expected to change.
+
+**The item keys are §1.3's item keys**, deliberately, so one row component renders both Home's
+recently-added table and a search result. Same omission rules: `year` and `added_at` are **absent**
+rather than `0`/`null` when unknown, and `availability` follows §1.4 exactly — absent when there is
+no blob, absent *and logged* when the stored blob is unusable.
+
+`media_type` is **omitted** for a work whose `kind` §17.2's enum has no row for. Today that is
+`game` alone, and nothing writes a game work. It is omitted rather than invented because
+[`search.md`](./search.md) §2 puts the corpus refusal at the *writer*, and a second allowlist in
+the read would be a second vocabulary free to drift from the first.
+
+**Nothing service-side is on this response.** No instance is named, no `remote_path` is read. Which
+Kavita a series came from is not something a search result publishes.
+
+### 6.3 `limit` is a clamp, and the echoed `limit` is authoritative
+
+Identical in rule to §1.2, with this endpoint's bounds:
+
+| Sent | Served |
+| --- | --- |
+| absent, empty, or `0` | `25` — "`0`" is spelled the same as "unspecified" on purpose |
+| `1` … `100` | as asked |
+| `> 100` (including `2147483648` and larger) | `100`, silently, and echoed back in `limit` |
+| negative, or not an integer | `400 bad_request`, with an `action` |
+
+A client reads the page size off the response, never off what it sent.
+
+### 6.4 `truncated` means the query was cut, not the results
+
+`true` says [`search.md`](./search.md) §3's **twelve-token cap** fired: the query had more than
+twelve whitespace-separated tokens and the search answered a *prefix* of what was typed. §3 requires
+a UI note for it, which is why the flag is on the wire rather than only in the log. It says nothing
+about how many results came back.
+
+### 6.5 There is no second page, and that is structural
+
+The store fuses at most **200 candidates** and re-ranks *the whole of that set* in Go, so the
+ordering is a property of the set rather than of any column. There is no keyset position a cursor
+could name, and an offset would re-run the entire retrieval to throw the head away. **A caller asks
+for up to 100 results and that is every result this endpoint has.** Deeper results are a narrower
+query, or the external search engine [`FUTURE.md`](../FUTURE.md) defers.
+
+### 6.6 What the ranking does — and, explicitly, what it does not do today
+
+Stated in full because a consumer cannot see the code, and because inferring capability from silence
+is how a screen ends up promising a feature the server does not have.
+
+**It does do:**
+
+* **Two retrieval engines, fused.** A `unicode61` full-text leg that folds diacritics (so `amelie`
+  finds `Amélie`) and a `trigram` substring leg that does not. Their disagreement is deliberate: the
+  fused answer is the union, which is better than either alone.
+* **Titles, alternate titles, original titles, credited people and the overview** are all searched.
+  A search for a creator's **name** returns the **work** — "Susanna Clarke" finds *Piranesi*. Titles
+  are weighted far above people, and people far above the overview.
+* **Reciprocal Rank Fusion** at k = 60, then a Go re-rank on Jaro-Winkler similarity against the
+  normalised title (prefix-weighted, because people get the beginning of a title right) with a mild
+  recency tiebreak.
+* **Media-type diversity injection.** If the top 10 would otherwise be swept by one medium, the
+  best-scoring result of each absent media type is promoted into it — `search.md` §4's answer to the
+  case where a film's richer text buries the novella of the same name.
+* **Scope, enforced server-side, in the index join.** Results are limited to libraries the caller
+  can see *and* to instances the caller can see. A caller who can see nothing gets nothing, never
+  everything.
+* **Honour `library.enabled` and `library.include_in_search`.** A library with either flag off is
+  not searched. Works filed under the reserved *Unfiled* library **are** searched — they are not a
+  chip, but they are not invisible either.
+* **Exclude soft-deleted works.** A work inside the tombstone window is not a result.
+
+**It does NOT do:**
+
+* **No grouping.** A film and its novelisation come back as two rows. `search.md` §4's grouped card
+  — one card, per-medium availability — is derived from `work_relation` edges and nothing reads
+  those edges yet. A client must not assume one row per title.
+* **No "not in your library" section.** This endpoint only ever returns things UsArr has. Finding
+  things you do *not* have is `GET /api/v1/releases/search`, over a different corpus, on the SSE
+  stream.
+* **No popularity signal.** `search.md` §4 lists one; the column is hardcoded to `0` for every row
+  by the catalogue writer, because no source this project reads reports popularity. A fabricated
+  ranking signal is worse than an absent one.
+* **No `title_idf` penalty.** §4 lists one — the thing that would stop short common titles ("It",
+  "Her", "Us") swamping a query. The column is hardcoded to `0`: it is a *corpus statistic*, and
+  nothing computes one. **Short generic titles will over-rank, and there is nothing on the wire to
+  compensate with.**
+* **No `in_library` boost.** §4 calls it the single most user-satisfying signal. It is `1` for every
+  row and cannot be otherwise, because the corpus holds only what the replica has. It becomes real
+  the day the corpus also holds things you do not own.
+* **No typo tolerance beyond the trigram leg.** `spellfix1` is deferred ([`FUTURE.md`](../FUTURE.md)).
+  A single-character transposition often survives; a misspelled first syllable often does not.
+* **No `overview` tuning.** The column is weighted lowest, and the weight is *reasoned rather than
+  measured*: `work.overview` is empty for everything the one shipped catalogue adapter writes, so
+  there is no real data to tune it against.
+* **No search below the top level.** Seasons, episodes, tracks, comic issues and people are not in
+  the corpus at all (`search.md` §2). A query for an episode title returns nothing, not a bad match.
+
+**Queries shorter than three characters use only the full-text leg**, because SQLite's trigram
+tokenizer indexes nothing shorter. A query that is a single one-character token matches nothing at
+all — both legs decline it — and answers `200` with an empty `items`.
+
+**Every metacharacter is safe.** `Fallout: New Vegas`, `AC/DC`, `Schindler's List`, `say "hello"`,
+`*`, `AND`, `NEAR` and a bare `"` are all searched literally. They are not operators and they are
+not errors.
+
+### 6.7 Errors
+
+| Status | `error` | When |
+| --- | --- | --- |
+| `400` | `bad_request` | `q` is absent, empty or whitespace-only; or `limit` is negative or not a whole number (§6.3). Both carry an `action`. |
+| `401` | `unauthorized` | no session. |
+| `500` | `internal` | the local read failed. **No user input can cause this** — every token is escaped before it reaches FTS5 — so a `500` here is a server bug, never something the caller should retry with different text. |
+
+There is **no `404`** and no empty-result error. A query that matches nothing is `200` with
+`"items": []`, which is a fact about the library and not a failure.

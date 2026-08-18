@@ -15941,3 +15941,305 @@ real: a dropped subscriber, an unwired hub, and a dead server all still produce 
 changed is that a stopped run is now *usually* distinguishable from a running one instead of
 *never*. No ADR: LS-160 already recorded the decision this implements, and this entry closes off no
 alternative it left open.
+
+---
+
+## LS-190 — `search.md` §3's worked-example table contradicts its own Notes column, and the Notes win
+
+**Finding, applied.** §3's worked-example table has seven rows. One of them, `train dr`, prints
+`q_raw` as *(skipped)* while the **Notes cell on that same row** says the opposite: *"Longest token
+5 ≥ 3 → trigram runs on `"train dr"`; shown skipped only if every token < 3"*.
+
+The two readings produce different behaviour on a large class of real queries — every partially-typed
+multi-word title, which is the commonest thing a search box ever sees. Under the cell, `train dr`
+runs on one leg; under the note, on two.
+
+**The note is the rule and the cell is wrong**, and the reason is mechanical rather than editorial:
+the floor exists because SQLite's trigram tokenizer indexes nothing shorter than three characters.
+That is a property of the tokens the leg will *match against*, so the question the floor answers is
+"is there any token this tokenizer can index" — i.e. the **longest** token — not "is the last token
+short". A rule keyed on the last token would skip the trigram leg for `frieren b` while running it
+for `b frieren`, which is not a distinction anything in the design supports.
+
+`buildFTSQueries` implements the note. `TestFTSQueriesWorkedExamples` runs all seven rows with that
+one row's `q_raw` set to `"train dr"`, and both the test and the function carry a ⚠️ naming the
+discrepancy, so the next reader comparing code against the document does not file it as a bug.
+
+**§3's table is left as it is.** It is a reference document owned by another thread and the fix is
+one cell; a second author silently editing an example table is worse than a contradiction that is
+recorded and resolved in code. This entry is the record.
+
+---
+
+## LS-191 — Jaro-Winkler is NOT the primary re-rank signal, and §4 says it should be
+
+**Finding, applied as a deliberate departure.** `search.md` §4's re-rank table marks **Jaro-Winkler
+on `norm_title`** as *"primary"*. The implementation weights fused retrieval above it — 0.55 to
+0.35 — and this entry is why, because a departure from a spec that is not written down is a
+divergence rather than a decision.
+
+**Jaro-Winkler sees `norm_title` and nothing else.** That was a complete view of the evidence when
+§4 was written. It is not any more: LS-100 added the **`people`** column to `search_fts` after §4,
+so that a search for a creator's name returns the work — "Susanna Clarke" → *Piranesi*. `alt_titles`
+and `original_title` are likewise retrievable and likewise invisible to Jaro-Winkler.
+
+Making Jaro-Winkler primary therefore has a specific, predictable consequence: **every hit retrieved
+through a column that is not the title gets buried.** "Susanna Clarke" scores JW ≈ 0 against
+"Piranesi", so under a primary Jaro-Winkler the correct answer loses to any title that merely looks
+vaguely like the typed string. That would break, at the ranking layer, the exact query §4's own
+corpus section (§2) records as having been *settled* by the `people` column.
+
+**RRF leads because it is the only signal that knows about the other four columns at all.**
+Jaro-Winkler then discriminates among what retrieval found, which is the job §4 wanted it for.
+Recency is a 0.10 tiebreak, as §4 says.
+
+**The three numbers are chosen, not tuned**, and the code says so. There is no relevance-judgement
+set and no query log in this project, so describing them as tuned would be invented status. What
+they encode is an ordering of confidence — retrieval evidence, then string shape, then recency —
+and that ordering is the claim being made.
+
+**No ADR.** This closes off no alternative: the weights are three named constants beside the
+argument, and the day a judgement set exists they are the first thing to move.
+
+---
+
+## LS-192 — three of §4's five ranking signals are constants, and the code refuses to pretend otherwise
+
+**Finding, applied.** `search.md` §4 tabulates five re-rank signals. **Three are constant on every
+row the tree can actually produce**, and it is `catalogue.go`'s `writeSearchDoc` that makes them so:
+
+| §4 signal | State | Why |
+| --- | --- | --- |
+| Jaro-Winkler on `norm_title` | **varies** | implemented |
+| Recency of `added_at` | **varies** | implemented |
+| `popularity` prior | hardcoded `0` | `writeSearchDoc` inserts `0`; its own comment says *"Kavita reports neither, and a fabricated ranking signal is worse than an absent one"* |
+| `title_idf` penalty | hardcoded `0` | same insert; and it is a **corpus statistic** — only a pass over the whole corpus can compute one, and nothing does |
+| `in_library` boost | hardcoded `1` | it cannot be otherwise: `search_doc` exists only for works the replica **has** |
+
+**Implementing all five would have been easy and dishonest.** A term multiplied by a column that is
+`0` everywhere compiles, runs, and contributes nothing — and leaves behind code that reads as though
+five signals work. That is "no invented status" expressed in Go rather than in prose.
+
+So the re-rank implements two, the weight block names all five with the state of each, and
+`http-api.md` §6.6 says the same thing to a consumer who cannot see the code — including the
+user-visible consequence the missing `title_idf` has: **short generic titles will over-rank, and
+there is nothing on the wire to compensate with.**
+
+`TestTheThreeDeadSignalsAreStillDead` asserts the three columns are still constant. It **fails when
+they stop being** — which is the moment to add the missing term, in the same commit as the writer
+that started computing it.
+
+---
+
+## LS-193 — the shipped-statement plan guard could not go where it was asked to go
+
+**Finding, applied differently than requested.** The instruction for this commit was to extend
+`internal/db/queryplan_test.go`'s `TestScopedSearchIsASeekNotAScan` to `EXPLAIN` **the statement
+that actually ships**, rendered from a function the way `recentWorksSQL` is.
+
+**It cannot be done in that file.** `internal/store` imports `internal/db`, so `internal/db` cannot
+call `store.searchLibrarySQL` without an import cycle. This is not a new constraint and the repo had
+already resolved it once: the *"recently added"* case in that same file carries a note saying it
+pins the **index**, not the shipped read, and points at `internal/store`'s own guard for the latter.
+
+The same split is used here. `internal/db`'s test keeps its hand-written shapes and gains a ⚠️
+pointing at `internal/store`'s `TestSearchLibraryPlanIsSeeks`, which renders the statement through
+`searchLibrarySQL` and asserts four things the `db`-side test structurally cannot see:
+
+1. the permission filter is a covering seek **on every leg** — `SEARCH sdl EXISTS USING COVERING
+   INDEX ix_sdl_doc (doc_rowid=? AND library_id=?)`, counted against `len(legs)` rather than merely
+   present;
+2. **neither FTS leg sorts** — see LS-194;
+3. hydration reaches `search_doc` and `work` by `INTEGER PRIMARY KEY`;
+4. **exactly two** temp B-trees remain, asserted as *expected* rather than forbidden.
+
+Point 4 is the one worth defending. The fusion `GROUP BY` and the `ORDER BY` on the computed `rrf`
+both sort, both over at most 400 rows, and **neither can be indexed** — `rrf` is computed. A guard
+that forbade every temp B-tree would be asserting something untrue and would fail on the first
+correct change; a guard that ignored them would not notice the query changing shape. Pinning the
+count does both jobs.
+
+---
+
+## LS-194 — `rank MATCH 'bm25(…)'` instead of `ORDER BY bm25(tbl, …)`: measured, not assumed
+
+**Finding, applied.** `search.md` §4 writes each retrieval leg as `ROW_NUMBER() OVER (ORDER BY
+bm25(search_fts))`. Written literally, that costs a full sort of the match set on every search.
+Measured on this schema, SQLite 3.53.4, by `EXPLAIN QUERY PLAN` on the rendered statement:
+
+```
+ORDER BY bm25(search_fts, 10, 6, 4, 2, 0.5)
+  →  SCAN f VIRTUAL TABLE INDEX 0:M5
+     USE TEMP B-TREE FOR ORDER BY
+
+rank MATCH 'bm25(10, 6, 4, 2, 0.5)' … ORDER BY rank
+  →  SCAN f VIRTUAL TABLE INDEX 32:rM5
+```
+
+The first materialises and sorts **every row the MATCH found** before `LIMIT 200` can cut it — and
+§3 step 3's `OR` operator exists precisely to make that set large. The second pushes the ordering
+into the virtual table, which ranks internally and streams; the `r` in `32:rM5` is fts5 reporting
+that it, not SQLite, produced the order.
+
+Same order, same rows, same weights. On a p50 < 15 ms budget it is the difference between sorting
+the match set and sorting nothing, so the `rank MATCH` form ships and the plan guard pins the
+`32:r` marker on **both** legs. Breaking it back to `ORDER BY bm25(…)` was executed deliberately:
+the guard names the regression and prints the third temp B-tree it introduces.
+
+**The weights are formatted into the SQL rather than bound**, and that is forced rather than lazy:
+fts5 parses the rank string itself, so a bound parameter inside it is text fts5 never sees. They are
+compile-time float constants; the MATCH argument, which *is* user-supplied, is bound **and**
+`ftsQuote`d.
+
+---
+
+## LS-195 — the fusion is `UNION ALL` + `GROUP BY`, not §4's `FULL OUTER JOIN`, because §8.2 forbids two-leg SQL
+
+**Finding, applied.** §4 writes the fusion as `FROM kw FULL OUTER JOIN tg USING (rowid)` with
+`COALESCE(1.0/(60+kw.rnk),0) + COALESCE(1.0/(60+tg.rnk),0)`. The arithmetic is identical to
+`SUM(1.0/(60+rnk))` over the union of the two legs — but the *shape* hardcodes **exactly two legs**
+into the SQL.
+
+ARCHITECTURE §8.2 requires a retrieval seam in which ranking never learns which engine produced a
+candidate, and CLAUDE.md names that seam as one of the ones that is cheap now and expensive to
+retrofit. Under §4's literal form, a third leg needs a second `FULL OUTER JOIN` and a third
+`COALESCE` term — a rewrite, not an append. Under `UNION ALL` + `GROUP BY`, the legs are a Go slice
+and the SQL is generated by iterating it.
+
+**The seam ships; nothing speculative sits on it.** There are exactly two legs today, both fts5.
+`retrievalLeg.name` exists for the plan guard and for error messages and is never an input to
+fusion or ranking; `searchCandidate`, the only type that crosses from fusion into the re-rank,
+carries a hit, a float and a string and **has nowhere to put a leg**.
+`TestRankingIsBlindToProvenance` holds that structurally, because the behaviour cannot be observed
+from outside — a ranker that secretly used provenance would still produce *some* order.
+
+---
+
+## LS-196 — the Unfiled trap: deriving the searchable set from the chip-offerable set would have deleted every unfiled work from search
+
+**Finding, applied — this is the one that would have shipped silently.**
+
+Two facts in migration 0005 point in opposite directions, and both are correct:
+
+* `library.id = 0` (*Unfiled*) exists so that §7 invariant 5 holds — every `search_doc` row is
+  visible through at least one library — and its own ⚠️ says a row visible through none *"disappears
+  from search for every user including the owner"*.
+* The same row is *"never listed on the Libraries screen, never offered in the scope chip, never
+  proposed"*, and `listLibrariesSQL` excludes it **in the WHERE clause** for exactly that reason,
+  with a comment explaining that the exclusion belongs in the SQL so the next author copying the
+  statement inherits it.
+
+The obvious implementation of a scoped search reuses that statement, or its list of ids. Doing so
+excludes library 0 from **search**, at which point every unfiled document becomes unfindable — no
+error, no empty state, no log line, just works that are not there. It is the precise failure the
+Unfiled row was created to prevent, reintroduced through the query instead of through the data, and
+it would pass every existing test.
+
+**Resolution:** the searchable-library list is derived from the `library` table filtered on
+`enabled = 1 AND include_in_search = 1`, and **not** on `id <> 0`. The exclusion belongs to the
+Libraries screen, which renders libraries; it does not belong to search, which searches documents.
+The reasoning is written at the query site, at length, because the next author will meet the same
+temptation.
+
+**The user filter is `Scope.userPredicate`, not `user_id = ?`.** Library 0 carries `user_id = 0`,
+the system sentinel, and `userPredicate` renders `user_id IN (0, :uid)`. A plain equality would have
+excluded library 0 from every search **the day the owner account stopped being user 0** — the same
+disappearance by a slower route.
+
+`TestUnfiledIsSearchableAndIsNotAChip` fires on both halves. Introducing the `id <> 0` exclusion was
+executed deliberately; the test reports `an UNFILED document was not found: hits = []` and names the
+cause in its own failure message.
+
+---
+
+## LS-197 — `library.enabled` and `library.include_in_search` had no reader at all, and this is it
+
+**Finding, applied.** Both columns have existed since migration 0005, both are selected and served
+by `GET /api/v1/libraries`, and **nothing anywhere filtered on either.** `include_in_search` has no
+other possible reader — the column names this query.
+
+They are honoured here. `TestSearchHonoursEnabledAndIncludeInSearch` breaks each in turn.
+
+**Whether this conflicts with LS-196 was checked rather than assumed**, because if it did, the
+correct move was to stop and re-decide rather than pick one. It does not: migration 0005 seeds the
+reserved row as `VALUES (0, 0, 'Unfiled', 'unfiled', 'movie', 'auto', 1, 1)` — **both flags 1** — so
+filtering on them keeps Unfiled in. The two would only collide if an operator could turn Unfiled
+off, and no path offers that: the row is not on the Libraries screen, so there is no toggle.
+
+A third subtest asserts the seed's flags directly and **fails loudly with instructions to
+re-decide** if they ever stop being `1`, so the compatibility is pinned rather than remembered.
+
+---
+
+## LS-198 — this query is the first in `internal/store` to carry BOTH scoping mechanisms
+
+**Finding, recorded.** Every other scoped read in the package needs one of two predicates. This one
+needs both, and they answer different questions:
+
+* **Library visibility** — the `search_doc_library` semi-join, inside each retrieval leg. §8.2 and
+  schema.md §7 require permission filtering to happen *in the index join*, because a post-filter
+  breaks keyset page sizes and leaks existence through result counts and ranking positions.
+  It answers *"may this caller see this **document**"*.
+* **Instance visibility** — `Scope.workVisibilityPredicate` on the hydration join. `store.go` rule 2:
+  a result computed across instances the caller cannot see is an existence oracle. It answers
+  *"may this caller see this **work**"*.
+
+A library can be a **subset** of an instance ([ADR-0026](./DECISIONS.md#adr-0026)) and an instance
+can hold works in no library at all, so **neither predicate implies the other** and dropping either
+opens a different hole. Under v0.1's owner scope the instance half renders `1=1` and costs nothing,
+which is what makes it cheap to keep correct now rather than retrofitting it under a multi-user
+schema.
+
+It is a **semi-join** (`EXISTS`) rather than a join, and that is not style: a document filed in
+three visible libraries would otherwise appear three times inside a leg, inflating `ROW_NUMBER()`
+and handing one rowid three different ranks to fuse.
+
+Both halves were broken deliberately and both guards fired — the library half at `1=1` instead of
+`1=0` (fails open), the instance half by replacing the predicate with `1=1` (the empty-visible-set
+branch stops rendering `1=0`).
+
+---
+
+## LS-199 — a guard that could not fire, why it could not, and the one that replaced it
+
+**Finding, applied — and the most useful thing in this batch.**
+
+Migration 0005 and LS-01/G3 both state that `search_doc.rowid` is THE allocator for `search_fts` and
+`search_trgm`, that RRF fuses on it, and that *"one missed explicit rowid silently fuses unrelated
+documents and produces plausible-looking wrong results"*. Following this repo's rule, the guard was
+fired by making that exact break: dropping `rowid` from `writeSearchDoc`'s `INSERT INTO search_trgm`.
+
+**Nothing failed.** Not the new reader-side assertion, and — checked next — **not a single existing
+catalogue-side test either**, including the ones whose comments are about this precise class of bug.
+
+Probed rather than guessed at. fts5 allocates an implicit rowid as `max(rowid) + 1` of the rows
+present, which is the same rule an `INTEGER PRIMARY KEY` follows:
+
+```
+after 3 implicit inserts:                             [1 2 3]
+after deleting rowid 3 and inserting one implicitly:  [1 2 3]
+```
+
+`writeSearchDoc` deletes from all three tables **by the same ids** and inserts into all three in one
+transaction, so the three tables are in permanent lockstep and the implicit allocator produces
+**byte-identical ids** to the explicit one. Under the current writer the break is a genuine no-op.
+
+**So that non-firing is CORRECT, not absorbed** — but the conclusion matters more than the
+classification. The explicit rowid is still right and still load-bearing: it is a *guarantee*, and
+it stops being merely decorative the moment the writer stops being in perfect lockstep — a partial
+rewrite path, a batch that inserts several `search_doc` rows before their FTS rows, or a third
+retrieval leg with its own allocation. **The claim in the migration comment is conditional, and
+nothing in the tree currently tests the condition.**
+
+The guard that *can* fire simulates the real failure — a leg allocating its own ids — by writing
+`docID + 1000` into `search_trgm`. `TestRRFFusesOnRowidAndTheRowidsAgree` then reports
+`search_trgm holds 3 rowid(s) that are not search_doc rowids. RRF fuses on rowid, so these fuse
+UNRELATED documents.` **The rule for anyone adding a fourth leg is in that test's doc comment:**
+add its rowid assertion, because an engine that allocates its own ids fuses garbage on day one.
+
+**One further non-firing, ABSORBED and fixed.** The diversity-injection test exercised `diversify()`
+directly, so deleting the call from `rerank` left it green. A subtest now goes through `rerank` —
+the only path `SearchLibrary` uses — and it fires: `rerank did not diversify: the only ebook is
+absent from the top 10`. This is the fourth time in this area a guard has been green while the thing
+it protects was disconnected (LS-01 records three), and the pattern is always the same: the test
+calls the helper, production calls something else.

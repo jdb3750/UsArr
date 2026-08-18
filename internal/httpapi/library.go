@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -298,11 +299,11 @@ var availabilityKinds = map[string]bool{
 // The log line carries the WORK ID, which is what makes the row findable:
 // `SELECT availability FROM work WHERE id = ?`. It does not carry the blob —
 // that text came out of the database and may be arbitrarily long.
-func (s *Server) availabilityFor(w store.RecentWork) json.RawMessage {
-	if !w.Availability.Valid {
+func (s *Server) availabilityFor(workID int64, blob sql.NullString) json.RawMessage {
+	if !blob.Valid {
 		return nil
 	}
-	raw := w.Availability.String
+	raw := blob.String
 
 	// One pass, not two: unmarshalling into this probe validates the whole
 	// document exactly as json.Valid did AND yields the discriminator, so
@@ -312,17 +313,17 @@ func (s *Server) availabilityFor(w store.RecentWork) json.RawMessage {
 	}
 	if err := json.Unmarshal([]byte(raw), &probe); err != nil {
 		s.log.Warn("work.availability will not decode and was dropped from the response",
-			"work_id", w.ID, "err", redactText(err.Error()))
+			"work_id", workID, "err", redactText(err.Error()))
 		return nil
 	}
 	if probe.K == "" {
 		s.log.Warn(`work.availability has no "k" discriminator and was dropped from the response`,
-			"work_id", w.ID)
+			"work_id", workID)
 		return nil
 	}
 	if !availabilityKinds[probe.K] {
 		s.log.Warn(`work.availability has an unrecognised "k" discriminator and was dropped from the response`,
-			"work_id", w.ID, "k", redactText(probe.K))
+			"work_id", workID, "k", redactText(probe.K))
 		return nil
 	}
 	return json.RawMessage(raw)
@@ -352,6 +353,6 @@ func (s *Server) toRecentWorkResponse(w store.RecentWork) recentWorkResponse {
 			out.AddedAt = &at
 		}
 	}
-	out.Availability = s.availabilityFor(w)
+	out.Availability = s.availabilityFor(w.ID, w.Availability)
 	return out
 }
