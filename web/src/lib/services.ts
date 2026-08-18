@@ -399,11 +399,14 @@ export function syncCell(row: ServiceRow, now: Date): Cell {
  * The `Items` cell: how many DISTINCT WORKS this instance contributes.
  *
  * ⚠️ NOT the Libraries screen's per-library `item_count`, and the copy must
- * never imply otherwise. This number is per SERVICE INSTANCE; a user-defined
- * library binds containers across instances (§17.8), so a per-library figure is
- * a different query against a different grouping. The two agree today only
- * because the tree holds one instance and one library, which is a coincidence
- * of the fixture rather than a relationship (docs/REVIEW-LOG.md).
+ * never imply otherwise. REVIEW-LOG LS-115 states the separation: that number
+ * counts `library_member` rows PER LIBRARY and is EDITION-grained, this one
+ * counts distinct `work` rows PER SERVICE INSTANCE. A user-defined library
+ * binds containers across instances (§17.8), so neither grouping nor grain
+ * lines up. The two are equal today only by coincidence — one writer, one
+ * catalogue source, one `edition_id = 0` sentinel — and LS-115 is explicit that
+ * the coincidence is not something either query may be read as asserting. So
+ * `Items` here says what it counts and never borrows the other screen's word.
  *
  * FOUR ANSWERS:
  *
