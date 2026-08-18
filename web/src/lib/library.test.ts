@@ -317,9 +317,74 @@ describe('the Have cell', () => {
 		const item = toRecentItem(wireRow({ have_count: 43, want_count: 0 })) as RecentItem;
 		expect(item.availability).toBeUndefined();
 		const cell = haveCell(item);
-		expect(cell.lines[0].mark).toEqual({ k: 'partial', have: 43 });
+		expect(cell.lines[0].mark).toEqual({ k: 'uncounted' });
 		expect(cell.lines[0].mark.k).not.toBe('complete');
 		expect(cell.missing).toBe('');
+	});
+
+	/**
+	 * ⚠️ THE INVENTED-ZERO BUG, PINNED — AND IT SHIPPED. Every row in the owner's
+	 * library rendered ✗ *none held*, because the absent-blob branch handed
+	 * `have_count` to `availabilityMark` and `have_count` is `NOT NULL DEFAULT 0`,
+	 * so a work nobody has counted arrived at `have === 0` → `none`.
+	 *
+	 * `docs/reference/http-api.md` §1.4.1 is the contract: the absence of
+	 * `availability` *"means no count has ever been computed for that work"*, and
+	 * a consumer *"must not render an absent blob as `0`, as \"none\", or as any
+	 * glyph, bar or accessible name that asserts emptiness"*.
+	 */
+	it('says NOT COUNTED for an absent blob, never none, at any have_count', () => {
+		for (const haveCount of [0, 1, 43, 9999]) {
+			const item = toRecentItem(wireRow({ have_count: haveCount })) as RecentItem;
+			expect(item.availability).toBeUndefined();
+			const cell = haveCell(item);
+			expect(cell.lines).toEqual([{ key: 'have', label: '', mark: { k: 'uncounted' } }]);
+			expect(cell.lines[0].mark.k).not.toBe('none');
+			expect(cell.lines[0].mark.k).not.toBe('complete');
+		}
+	});
+
+	/**
+	 * ⚠️ THE SELF-CORRECTION, PROVEN RATHER THAN ASSERTED. §1.4.1: *"the first
+	 * flush that has anything to count publishes the key — including when the
+	 * honest answer is `have: 0` — and the row moves from *not counted* to counted
+	 * with no wire change behind it"*. So the SAME code must render a real ✗ the
+	 * day the rollup ships, with no second edit: the two rows below differ only in
+	 * whether the key is on the wire, and they must not render the same mark.
+	 */
+	it('renders a PRESENT blob carrying have 0 as a real none, not as uncounted', () => {
+		const counted = toRecentItem(
+			wireRow({
+				have_count: 0,
+				want_count: 0,
+				availability: { k: 'count', have: 0, total: null, total_source: null, missing: [] }
+			})
+		) as RecentItem;
+		expect(counted.availability).toBeDefined();
+		expect(haveCell(counted).lines[0].mark).toEqual({ k: 'none' });
+
+		const uncounted = toRecentItem(wireRow({ have_count: 0, want_count: 0 })) as RecentItem;
+		expect(haveCell(uncounted).lines[0].mark).toEqual({ k: 'uncounted' });
+
+		// The same `have_count: 0` on both. It is the KEY that separates them, and
+		// §1.4.1 says so: `have_count: 0` "is not evidence of anything on its own".
+		expect(counted.haveCount).toBe(uncounted.haveCount);
+		expect(haveCell(counted).lines[0].mark).not.toEqual(haveCell(uncounted).lines[0].mark);
+	});
+
+	/**
+	 * A present blob with a real partial count is untouched by any of this: it
+	 * has been counted, and what it renders is what it always rendered.
+	 */
+	it('leaves a present partial count exactly as it was', () => {
+		const item = toRecentItem(
+			wireRow({
+				media_type: 'tv',
+				kind: 'series',
+				availability: { k: 'tier', '1080p': { have: 250, total: 300 } }
+			})
+		) as RecentItem;
+		expect(haveCell(item).lines[0].mark).toEqual({ k: 'fraction', have: 250, total: 300 });
 	});
 });
 

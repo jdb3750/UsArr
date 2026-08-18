@@ -829,6 +829,34 @@ export function libraryStates(library: Library, read: HealthRead): LibraryStateM
 	const partial = catalogue.filter((h) => h.lastFullSyncAt === null && h.workCount > 0);
 	const connected = verdicts.filter((v) => v.verdict.state === 'connected');
 
+	// ⚠️ THE THREE ARMS BELOW ARE ONE `else if` CHAIN, AND THE ORDER IS A DECISION
+	// RATHER THAN THE SHAPE THE EDITS LEFT BEHIND. Both catalogue-freshness arms sit
+	// AHEAD of `itemCount === 0`, so a library whose count is zero and one of whose
+	// sources has never synced — or left a partial import behind — says only why the
+	// catalogue is unfinished. Neither `Connected and empty` nor `No items` renders
+	// beside it.
+	//
+	// That looks like this function's worst-first rule and is NOT it. The health arms
+	// above accumulate because *nothing is dropped*: a source that is not answering
+	// and a zero count are two facts, and neither explains the other. Here one DOES
+	// explain the other, and the suppressed line is not merely lower down the cell,
+	// it is FALSE. Measured by making the arm independent: two sources, zero items,
+	// the second never synced then renders `A source has never synced` AND
+	// `Connected and empty · their last imports finished` on one row. `connected`
+	// only asks `state === 'healthy'` (`sourceVerdict`), so every source can be
+	// connected while one of them has never imported anything — §17.8's *sources
+	// healthy, zero items* is a CLAIM, and this chain is what stops it being made
+	// when no import has run.
+	//
+	// WHAT IT COSTS: on that row, the item-count mark. Nowhere else — a non-zero
+	// count reaches this arm with nothing to say anyway — and the count itself is
+	// never at stake, since the Items column carries it in every case.
+	//
+	// ⚠️ IF THIS ORDER LOOKS WRONG, MOVE IT DELIBERATELY AND WITH A TEST, rather
+	// than reordering the chain to see what still passes. The zero-item half is
+	// pinned as an exact array by *tells NEVER SYNCED apart from connected and
+	// empty* (libraries.test.ts); a reorder reintroduces the contradiction there,
+	// and loosening that assertion to make it green removes the only guard.
 	if (neverSynced.length > 0) {
 		// `null` + `0` is http-api.md §3.2's *never synced*, and it is the
 		// sentence §17.8 insists is DIFFERENT from "connected and reports 0
