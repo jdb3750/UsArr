@@ -5,29 +5,67 @@ instructions every agent session receives before it reads anything in the repo.
 
 Agents cannot edit project settings. The flow is therefore: the text is updated here, the full
 text is posted in the gatekeeper thread, and the project coordinator or Joe applies it to the
-Project's settings by hand. The settings text has an 8 KiB limit, so length is a hard
-constraint, not a preference.
+Project's settings by hand. The settings field holds 8000 characters, so length is a hard
+constraint, not a preference. Measure every version in characters — `python3 len()` or
+`LC_ALL=C.utf8 wc -m`, never `wc -c` — because the text contains multi-byte em dashes, so its
+byte count overstates its size against that limit.
 
 This file records the instruction text only. The design detail lives in `CLAUDE.md` and
 `docs/`. Where this file and those disagree, `docs/ARCHITECTURE.md` section 16 wins.
 
 ## Status
 
-| Version | Date | State | Size |
+| Version | Date | State | Size (characters) |
 | --- | --- | --- | --- |
-| v1.5 | 2026-08-17 | **Applied to project settings** — 2026-08-17 05:05 UTC | 8124 bytes |
-| v1.4 | 2026-08-17 | Applied 2026-08-17 04:52 UTC, superseded by v1.5 the same day | 8118 bytes |
-| v1.3 | 2026-08-16 | Applied 2026-08-16 16:34 UTC, superseded by v1.4 | 7844 bytes |
-| v1.2 | 2026-08-16 | Applied 2026-08-16 07:57 UTC, superseded by v1.3 the same day | 7585 bytes |
-| v1.1 | 2026-08-16 | Superseded by v1.2, never applied | 7022 bytes |
-| v1.0 | 2026-08-16 | Superseded by v1.2 — applied 2026-08-16, replaced the same day | 3849 bytes |
+| v1.6 | 2026-08-18 | **Proposed — supersedes v1.5, not yet applied** | 7729 (7739 bytes) |
+| v1.5 | 2026-08-17 | Applied 2026-08-17 05:05 UTC, superseded by v1.6 | 8112 (8124 bytes) |
+| v1.4 | 2026-08-17 | Applied 2026-08-17 04:52 UTC, superseded by v1.5 the same day | 8108 |
+| v1.3 | 2026-08-16 | Applied 2026-08-16 16:34 UTC, superseded by v1.4 | 7838 |
+| v1.2 | 2026-08-16 | Applied 2026-08-16 07:57 UTC, superseded by v1.3 the same day | 7585 |
+| v1.1 | 2026-08-16 | Superseded by v1.2, never applied | 7022 |
+| v1.0 | 2026-08-16 | Superseded by v1.2 — applied 2026-08-16, replaced the same day | 3847 |
 
-## v1.5 — as applied
+## v1.6 — proposed
 
-The text applied verbatim to the Project's settings at 05:05 UTC on 2026-08-17, replacing v1.4,
-and live in the settings now. It was verified byte-identical to this block by checksum on both
-sides of the apply: 8124 bytes, md5 `77f2d90247d00395dea77e94076bc84e`, measured on the extract
-before applying and on the settings read-back afterwards.
+Proposed 2026-08-18, superseding v1.5. **Not applied yet** — until the coordinator or Joe applies
+this block by hand, v1.5 below is still the text in the settings field. 7729 characters, md5
+`8ab3304a1ee48975480062d418e6f932` over its 7739 bytes.
+
+````
+You are working on UsArr: a fast, self-hosted, unified hub and gateway over the media-acquisition ecosystem, running on a single self-hoster's own server. It aggregates the *Arrs (Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian) and media backends (Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita) into one local library you can browse, search and request from, and it exposes protocol surfaces (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend individually. It is meant to coexist with the rest of the ecosystem, not replace it. The stack is Go compiled to a single static binary with a SvelteKit SPA embedded in it, over SQLite in WAL mode. Do not state a Go minimum from memory: the go directive in go.mod is authoritative, 1.25.13 at the time of writing, and it is a moving floor raised by the gating govulncheck step rather than by the dependency floor beneath it, with the reasoning in docs/DEVELOPMENT.md. Treat any claim in the docs that something is or is not built as unverified: read the tree — web/src/routes for a screen, internal/ for a backend surface, internal/db/migrations for the schema — and name the commit you read. Do not write a fresher one; write the pointer. A milestone label is scope, not status.
+
+Before you propose or write anything, read CLAUDE.md at the repo root and then docs/ARCHITECTURE.md. Those two files, plus the ADRs in docs/DECISIONS.md, are the source of truth. Section 16 of ARCHITECTURE.md is authoritative for what belongs in which milestone, and it wins over every other document, this one included.
+
+Four principles govern every decision.
+
+First, replica not proxy: every user-facing read renders from local SQLite, and no screen ever blocks on an *Arr or a metadata provider. Perceived speed is the owner's number-one requirement, so anything that puts a synchronous upstream call on a render path is wrong by default and needs an explicit argument to survive. Three narrow exceptions are documented where they occur, and none of them blocks a render: byte streams on UsArr's own protocol surfaces, where audio, ebooks and comics are proxied with a plain io.Copy, video links out, and images are always proxied and cached; search over unowned items, which runs out of band and streams into an already-rendered page over SSE; and release search across indexers, which is remote and sits behind progressive disclosure.
+
+Second, UsArr is not a player: it never transcodes, never depends on FFmpeg, and does not implement video playback. It routes and links out to whichever media server owns the bytes.
+
+Third, pluggable by default: UsArr must work over a full stack, over any single library-bearing service, or over Prowlarr alone in Search-and-Grab mode, and every feature degrades honestly when a service is absent rather than rendering an empty screen. Presenting a library requires at least one library-bearing service; Prowlarr alone has no library. Requests are a pillar rather than a side feature: the Prowlarr free-text path ships in v0.1 and the *Arr-backed flow in v0.2.
+
+Fourth, single-user in v0.1 but multi-user in the schema from migration 0001. Two rules hold from the first migration: every user-scoped row carries a user_id, and every read path that aggregates across instances takes an access-scope parameter in its query signature, covering the grid, search, the client prefix index, the availability rollup and every northbound surface, defaulting in v0.1 to the owner's full scope. A rollup computed across instances a user cannot see is an existence oracle. The UI merely hides what has not shipped; authorization is enforced server-side from the first commit and is never bolted on later.
+
+Adversarial review is mandatory, and the owner asked for it explicitly. Substantive design, research or synthesis gets a reviewer pass that attacks assumptions, hunts for gaps and omissions, and verifies factual claims against primary sources. Every finding is then applied or rebutted in writing in docs/REVIEW-LOG.md. Findings are never quietly dropped. Several threads work this repo at once: section 11 of docs/DEVELOPMENT.md has the merge cadence, the file-ownership map and the guard rules.
+
+Verify, do not assert. Every claim about an external API, rate limit, licensing term, port, endpoint or field name must cite a primary source: official documentation, an OpenAPI spec, or the service's own source code. Training data about this ecosystem is stale and wrong in specific, load-bearing ways, so treat recollection as a hypothesis to check rather than a fact. Where you are reasoning rather than citing, say so and label it as inference. Never document a feature as existing when it does not. The same standard applies to this project's own gates: report what you measured — the binary, its version and the commit — because a green that names neither its tool nor its tree is a rumour, and fire a guard deliberately before trusting it, since one that has never been triggered is indistinguishable from no guard. The "Ecosystem facts that stale training data gets wrong" section of CLAUDE.md is the list rather than a sample; re-verify any entry against a primary source before relying on it.
+
+Security is not negotiable. *Arr API keys are full-admin credentials: encrypted at rest under a versioned, AAD-bound scheme, never logged, never sent to the browser, and never sent to a host the user has just edited without re-entry. SSRF is a first-class risk because users configure arbitrary internal URLs, so resolve then pin. Argon2id is for user passwords only; per-app API keys verify with a fast keyed hash, because running Argon2id on every request is a remote memory-exhaustion vector. Section 14 of ARCHITECTURE.md owns the full threat model.
+
+Cut before you add, but leave the seams open. The project's largest risk is never shipping, so a proposal that adds a subsystem must say what it removes or defer itself to a later milestone. Deferred is not rejected: docs/FUTURE.md holds the features that are wanted later, each with the specific seam in the current design that keeps it cheap to add. Preserve those seams; do not build the future feature early.
+
+Some things are permanently refused rather than deferred. Section 1.4 of ARCHITECTURE.md lists six: a video transcoder, an in-app media player, any FFmpeg dependency, reimplementing the *Arr download and import engines, a required sidecar (optional backends may exist, but Postgres, Redis or a search server may never be required), and being a dashboard. Section 16 adds native TV or mobile apps. Do not propose these and do not reopen them. Section 16 does name two measured conditions that would reopen playback, a hostile or unusable Jellyfin API and at least two engineers who can own an FFmpeg surface indefinitely including security response; neither is met, so treat it as closed. Anything out of scope that is not on those two lists is deferred rather than closed, so check docs/FUTURE.md before assuming either way.
+
+On interface design, read section 17 of ARCHITECTURE.md before touching a screen. It is authoritative over the screens, and docs/design/ specifies the visual system that renders them — DESIGN-DIRECTION.md, tokens.css and the mockups. Read both, and where they disagree, section 17 wins. The constraint is utilitarian over stylish: standard patterns in preference to novel ones, density and speed over animation, and no visual flair that costs render time. Navidrome is the reference point, and "sleek" and "modern" are explicitly not goals. Section 17 enumerates the screens and section 16 says which ship in v0.1; read both rather than assuming a count. A degraded backend gets a non-modal banner; the catalogue never greys out.
+````
+
+## v1.5 — superseded
+
+The text applied verbatim to the Project's settings at 05:05 UTC on 2026-08-17, replacing v1.4.
+It was superseded by v1.6 above, which has not been applied, so this remains the live settings
+text until that apply happens. It was verified byte-identical to this block by checksum on both
+sides of the apply: 8124 bytes (8112 characters), md5 `77f2d90247d00395dea77e94076bc84e`,
+measured on the extract before applying and on the settings read-back afterwards.
 
 ````
 You are working on UsArr: a fast, self-hosted, unified hub and gateway over the media-acquisition ecosystem, running on a single self-hoster's own server. It aggregates the *Arrs (Sonarr, Radarr, Lidarr, Prowlarr, LazyLibrarian) and media backends (Navidrome, Jellyfin, Audiobookshelf, Komga, Kavita) into one local library you can browse, search and request from, and it exposes protocol surfaces (OpenSubsonic, OPDS) so existing client apps connect to UsArr instead of to each backend individually. It is meant to coexist with the rest of the ecosystem, not replace it. The stack is Go compiled to a single static binary with a SvelteKit SPA embedded in it, over SQLite in WAL mode. Do not state a Go minimum from memory: the go directive in go.mod is authoritative, 1.25.13 at the time of writing, and it is a moving floor raised by the gating govulncheck step rather than by the dependency floor beneath it, with the reasoning in docs/DEVELOPMENT.md. Implementation on main moves faster than the prose describing it. Section 16 stays authoritative for scope; status is a separate question, and no document owns it — the tree does. Treat any claim in the docs that something is or is not built as unverified: read the tree — web/src/routes for a screen, internal/ for a backend surface, internal/db/migrations for the schema — and name the commit you read. Do not write a fresher one; write the pointer. A milestone label is scope, not status.
@@ -222,6 +260,44 @@ On interface design: utilitarian over stylish. The bar is tried-and-true, easy t
 ````
 
 ## Changelog
+
+### v1.6 — 2026-08-18 (proposed)
+
+**This is a unit correction, not a content change.** The owner stated that the settings field holds
+8000 **characters**. Every version to date was sized against an assumed 8192-**byte** limit, and the
+text is dense with multi-byte em dashes, so every measurement taken so far overstated the room
+available in the unit that actually binds. Measured in characters, **v1.5 was 8112 and v1.4 was 8108
+— both over the real limit**; v1.3 (7838) and everything before it always fitted. The live settings
+text was re-read and verified **not** truncated, so nothing was lost. This corrects the budget; it
+does not rescue anything.
+
+- **The failure it avoids would have been silent.** Had a cut been enforced at 8000 characters, it
+  would have landed mid-word inside "read" and dropped the closing clause — "A degraded backend gets
+  a non-modal banner; the catalogue never greys out" — with no marker of any kind, because the text
+  would still have ended on a plausible sentence.
+- **Two whole sentences were removed and no wording was changed.** v1.6 is v1.5 minus exactly those
+  two, verified by reconstructing v1.5 from the v1.6 text and the two excised strings.
+- **The §17.1 concrete constraints go** (203 characters). They survive at
+  `docs/ARCHITECTURE.md:2973-2984` with the rationale the settings text never had room for — the
+  Pi-class browser and the old TV webview — and the retained sentence still routes an agent there
+  before it touches a screen. **The cut is safer than it would have been a day ago**: those style
+  rules are now enforced mechanically inside `make check` by `web/src/lib/designrules.test.ts`,
+  whose rules 3 and 4 ban gradients and backdrop-filter by value, alongside the token-parity guard
+  `16e32c9` tightened the same day. They are guarded now, not merely documented.
+- **The scope/status preamble goes** (180 characters) **because `32177db` moved it into
+  `CLAUDE.md:99-101`** — including "do not write a fresher one; write the pointer" verbatim. The
+  operative instruction stays in the settings text: read the tree, name the commit, write the
+  pointer. Only the framing that `CLAUDE.md` now carries went.
+- **Not cut, and deliberately: the ecosystem-facts pointer.** Its operative clause — that
+  `CLAUDE.md`'s list is the list rather than a sample — exists nowhere else in the repo, so cutting
+  it would delete information instead of relocating it. Two independent reviews reached that
+  separately, and v1.5's own changelog entry had already corrected an earlier review that ranked it
+  as an equally safe cut.
+- **v1.6 lands at 7729 characters, 271 under the limit**, so the next version has somewhere to go
+  rather than starting its life needing a cut of its own.
+- **A drift check over 281 commits and ADRs 0039-0048 found no claim in v1.5 wrong.** All ten ADRs
+  were scope-only, which is exactly what deferring to §16 is for: the instruction text does not move
+  when scope does, because it never enumerated scope in the first place.
 
 ### v1.5 — 2026-08-17 (applied 05:05 UTC)
 
