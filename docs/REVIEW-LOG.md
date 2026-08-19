@@ -100,7 +100,7 @@ count. Both are dispositioned in §3.
 | **W-01** | **New credential leak, high.** The redaction deny-list covered provider and OpenSubsonic parameter names but no private-tracker passkey names. `ReleaseResource.infoUrl` is indexer-supplied and is surfaced to the browser as `info_url`, so a private tracker's passkey shipped straight to the client | **Applied.** `passkey`, `torrent_pass`, `torrentpass`, `rsskey`, `authkey`, `apipasskey`, `cookie` added to `ssrf.credentialParams` — the single deny-list, extended rather than duplicated — along with `auth_token`, `secret`, `secret_key`. `ARCHITECTURE.md` §14.5 item 5 and `security.md` §5 updated together with it, and the stale "these are NOT covered" comment at `httpapi.redactURLField` corrected. New `TestPrivateTrackerPasskeysAreRedacted` covers all seven names through **both** entry points (`RedactURL` and `stripCredentials`) plus case-insensitivity. A leaked passkey means account termination on a private tracker, since it is what the tracker attributes traffic by |
 | **W-02** | The session cookie sets `Secure` only when the request is HTTPS, while the docs say always | **Applied as the code's behaviour, recorded here.** `CONFIGURATION.md` §0 makes plain HTTP on a LAN a supported v0.1 deployment, and an unconditionally-`Secure` cookie is silently discarded by the browser over plain HTTP — which makes login impossible on exactly that supported deployment. Conditional `Secure` is the correct behaviour; the documents overstated it |
 | **W-03** | `/api/v1/services` returns `has_credential: true` rather than a masked key | **Applied as the code's behaviour, recorded here.** Masking would require decrypting a full-admin credential on a render path, which violates principle 1 and puts the plaintext key in process memory to produce four asterisks. A boolean carries the same information to the UI at none of the cost |
-| **B-01** | ADR-0024 §6's `paths.relative: false` bullet is wrong | **Correction recorded here rather than applied**, because ADR-0024 lives on branch `claude/hearth-thread-vn9w7u`. SvelteKit skips the relative-path rewrite for the SPA fallback document — `@sveltejs/kit/src/runtime/server/page/render.js:120-122`, `if (paths.relative) { if (!state.prerendering?.fallback) {` — verified by building both ways and diffing the output. The setting is belt-and-braces, not load-bearing, and the ADR should not present it as the thing that makes root-absolute `/_app/…` paths work |
+| **B-01** | ADR-0024 §6's `paths.relative: false` bullet is wrong | **Correction recorded here rather than applied**, because ADR-0024 lives on branch `claude/hearth-thread-vn9w7u`. SvelteKit skips the relative-path rewrite for the SPA fallback document — `@sveltejs/kit/src/runtime/server/page/render.js:120-122`, `if (paths.relative) { if (!state.prerendering?.fallback) {` — verified by building both ways and diffing the output. The setting is belt-and-braces, not load-bearing, and the ADR should not present it as the thing that makes root-absolute `/_app/…` paths work 🔻 **Mis-citation, 2026-08-19 — original text stands; the ADR this row is actually about is recorded so the next reader is not chasing it:** the Item column's *"ADR-0024 §6's `paths.relative: false` bullet"* and the Disposition's *"because ADR-0024 lives on branch `claude/hearth-thread-vn9w7u`"* both mean **ADR-0025**. [ADR-0024](./DECISIONS.md#adr-0024) is the AGPL-3.0 licence decision and has **no numbered sections at all** — Context, Decision, Consequences, Alternative rejected — so there was never an `ADR-0024 §6` to be wrong; the bullet is decision point **6. Serving, per ADR-0003's embedding story** of [ADR-0025](./DECISIONS.md#adr-0025), and `claude/hearth-thread-vn9w7u` is the branch whose `a7b1e11` renumbered the styling ADR out of 0024 after this row's line had already been cut. **LS-380** owns the cause, the four `web/` sites that carried the same error and the one in §5 below. Nothing else about this row is re-verified here — its finding, evidence, severity and status are unchanged, and the Counts tables above are not amended. |
 | **B-02** | The `//go:embed all:` trap is real | **Reproduced and guarded.** Dropping the `all:` prefix makes `_app` vanish from the embedded FS with **no error at any stage** — it compiles, it runs, and the page renders blank. Confirmed by execution: `TestEmbeddedFSCarriesAppDir` fails with `_app is missing from the embedded FS`. That test is the only tripwire, which is why WEB-01 mattered enough to fix rather than note |
 | **B-03** | `//go:embed` cannot reach outside its own package directory, so `internal/web` embeds a mirror at `internal/web/spa` synced from `web/build` by `web/scripts/sync-embed.mjs`. `make clean` removed `web/build` but not the mirror | **Applied.** A stale mirror meant `make clean && make build` would ship whatever was embedded before — a silent wrong-artifact bug. `clean` now clears the mirror while preserving `.gitkeep`, which is what keeps `//go:embed` compiling in a tree where the frontend has never been built. Verified by execution |
 | **B-04** | `pnpm.overrides` pins `cookie ^0.7.2` | **Recorded here, because JSON takes no comments and this is the only place the reason can live.** `@sveltejs/kit@2.70.2` declares `cookie: ^0.6.0`, which carries GHSA-pxg6-pf52-xh8x and made `pnpm audit` — and therefore `make vuln`, and therefore `make check` — exit 1. Remove the override when Kit's own floor moves past 0.7 |
@@ -276,6 +276,7 @@ clean.
 - **Left for the owner:** `CLAUDE.md`'s *Go 1.24+* stack line → 1.25.13+ (§2.2). ADR-0024 §6's
   `paths.relative` bullet, which lives on another branch (B-01).
   ✅ **The first half is closed, 2026-08-19** — the stack line was corrected to **1.25.13+** by [`86337a7`](https://github.com/jdb3750/UsArr/commit/86337a7) and reads that way on `main`; see §2.2's appended note. The ADR-0024 §6 half is **not** re-verdicted here, because this pass did not measure it. **The bullet stands as the round's record**; this line is the flip beside it.
+  🔻 **Mis-citation, 2026-08-19 — original text stands; the ADR this bullet is actually about is recorded so the next reader is not chasing it:** *"ADR-0024 §6's `paths.relative` bullet"* means **ADR-0025 §6's**. [ADR-0024](./DECISIONS.md#adr-0024) is the AGPL-3.0 licence decision and carries no numbered sections, so there was never an `ADR-0024 §6`; it is decision point **6. Serving, per ADR-0003's embedding story** of [ADR-0025](./DECISIONS.md#adr-0025), which is still unamended on that bullet. The half this line leaves open, its refusal to re-verdict and its *"stands as the round's record"* re-confirmation are all unchanged, and the Counts tables above are not amended. **LS-380** owns the cause and the four `web/` sites that carried the same error.
 
 ---
 
@@ -22499,3 +22500,184 @@ added"* and **nothing whatever** about whether any sentence above is true.
 📌 **The one arm that could have had an opinion is the round-trip test, and it has one only in the
 negative**: `00008` is unmodified, so `internal/db/testdata/schema.sql` is unmodified, so
 `TestMigrationRoundTrip` passes for exactly the reason this entry exists.
+
+## LS-380 — four SPA build-config sites cited `ADR-0024 §6`, an ADR with no numbered sections; the cause is a renumber neither citing tree could see
+
+**`LS-380`, allocated by the coordinator, and re-checked rather than taken on report.** The clear
+result this lane was handed was measured at `213750b`, which predates `8b29bb6`'s annotation of 28
+rows, so it was re-run at this entry's own tip: at **`cf3957f`**, `grep -rn 'LS-380' .` returns
+nothing anywhere in the tree and `LS-379` is the high-water. Nothing here touches the `SD-`, `DS-` or
+`RK-` series, and no ADR or migration number is allocated by this lane. ⚠️ **`docs/DECISIONS.md` is
+not edited by this entry** — another lane holds that file, and the one correction this entry
+identifies inside it is routed rather than done.
+
+### What was wrong, and what closed it
+
+Four sites cited **ADR-0024 §6** where **ADR-0025 §6** was meant: `web/svelte.config.js` at `:9`,
+`:22` and `:38`, and `web/src/routes/+layout.ts:2`. Closed at content commit
+[`ce17389`](https://github.com/jdb3750/UsArr/commit/ce17389), *"docs: point the SPA build-config
+citations at ADR-0025 §6, not ADR-0024"*, 2026-08-19 — two files, **4 insertions, 4 deletions**,
+comment text only, no executable line touched. `grep -rn "ADR-0024" web/` returns nothing afterwards;
+a second lane confirmed that independently, and it was **re-run here at `cf3957f`** rather than
+carried over on report.
+
+⚠️ **What makes it a finding and not a typo is that there was no §6 to be wrong.**
+[ADR-0024](./DECISIONS.md#adr-0024) is the AGPL-3.0 licence decision and has **no numbered sections
+at all** — its whole structure is `### Context`, `### Decision`, `### Consequences`,
+`### Alternative rejected`, and its Decision is a two-sentence blockquote naming the FSF text, with
+no enumerated points beneath it. The bullet all four sites meant is decision point **6. Serving, per
+ADR-0003's embedding story** of [ADR-0025](./DECISIONS.md#adr-0025), whose four traps are `all:` on
+the embed directive, `precompress` needing a handler that honours it, `paths.base` being baked in,
+and the `paths.relative` inference. 📌 **So the citation did not resolve somewhere wrong; it resolved
+nowhere**, which is the class that does not announce itself — a reader who follows it lands on an ADR
+about a software licence, concludes they have misread the reference, and moves on without reporting
+anything.
+
+### 🔍 The cause is a renumber, and the topology is the evidence
+
+Measured with `git log -S` and `git merge-base --is-ancestor` at `cf3957f`, not inferred from the
+commit messages:
+
+| When (UTC) | Commit | What it did |
+|---|---|---|
+| 2026-08-16 04:11 | `a062497` | *"docs: design direction, design tokens and ADR-0024 (styling stack)"* — the styling and typography ADR is **authored as ADR-0024**, on a branch |
+| 2026-08-16 05:55 | `719c602` | *"docs: license the project AGPL-3.0"* — **`main` lands its own ADR-0024**, the licence decision |
+| 2026-08-16 06:02 | `a7b1e11` | *"docs: merge origin/main and renumber the styling ADR to ADR-0025"* — the collision is resolved, correctly and explicitly: *"main wins on the number because it is the published one"* |
+| 2026-08-16 06:35 | `a279517` | *"feat: land the v0.1 core packages and embedded web shell"* — the web shell lands carrying `ADR-0024 §6` three times in `svelte.config.js`, once in `+layout.ts`, and a fifth bare `ADR-0024` in `app.css` |
+| 2026-08-16 07:33 | `1c162db` | *"fix: complete the round-2 adversarial-review pass"* — **B-01** is written into this file, citing `ADR-0024 §6` twice |
+
+✅ **`a7b1e11` did its own sweep and enumerated it**, which is why this is not a case of a careless
+renumber: its message lists the index table, the anchor id, `ARCHITECTURE.md` §17, `REVIEW-LOG.md`,
+`DESIGN-DIRECTION.md` and `tokens.css`, and it deliberately **left `README.md`, `CLAUDE.md` and
+`SETUP-CHECKLIST.md` alone** *"because they mean 0024"* — the distinction the whole defect turns on,
+drawn correctly. Its `docs/REVIEW-LOG.md` half repointed five sites (the `D-30`, `D-32` and OQ-7 rows,
+the tokens sentence and the cold-boot row). **Nothing under `web/` is in its diffstat.**
+
+🚩 **And it could not have been.** `a7b1e11` is **not an ancestor of `a279517`** and **not an ancestor
+of `1c162db`** — the shell and the review pass were on a line that did not carry the renumber.
+Stronger, and this is the part that settles it: at `a279517`'s own tree the styling ADR **is not in
+`docs/DECISIONS.md` at any number** (`grep -c "Styling and typography"` returns `0`), while `719c602`
+**is** an ancestor of it. So the shell's author cited a document their own tree did not contain, using
+the number it carried on the branch where it did exist — a number that in their tree already meant the
+licence. B-01's author was in the same position and said so in the row itself: *"because ADR-0024
+lives on branch `claude/hearth-thread-vn9w7u`"*, which is precisely the branch `a7b1e11` sits on.
+
+📌 **`DEVELOPMENT.md` §11 has the bullet for this, and this is that bullet from the other side.** It
+governs the **allocator** — *"ADR and migration numbers are allocated by the coordinator at dispatch,
+never discovered by reading the highest number in a merged file … the number that invalidates it may
+be sitting on a branch the reader cannot see"* — and the allocation here was handled correctly. What
+has no rule is the **citer**. A renumber sweep can only reach the trees it can see, and every branch
+already in flight against the old number re-introduces it for free after the sweep has run and been
+declared complete. **The sweep is not the last chance to catch this; it is the first.**
+
+### ⚠️ The fifth site closed by accident, and calling it a partial sweep would credit a pass that never ran
+
+`web/src/app.css` carried the same mis-citation at `a279517`, in its opening comment: *"This is NOT
+the design system. ADR-0024 chooses Tailwind v4 with its default theme deleted, Bits UI, Tabler icons
+and self-hosted IBM Plex"* — ADR-0025's decision, restated accurately, under ADR-0024's number. It is
+not in the file now, and it is worth being exact about why, because this lane was briefed that the
+site had been *fixed* and the tree says otherwise. ⚠️ **It was not corrected — it was deleted.**
+[`b6a6d37`](https://github.com/jdb3750/UsArr/commit/b6a6d37) (2026-08-16), *"feat: port the design
+system into the app and build the real shell"*, replaced that file's entire *"scaffolding only"*
+header with the two-layer TOKENS and COMPONENTS header as part of a 2,036-line rewrite of `app.css`,
+and the sentence carrying the citation **stopped existing**; the replacement header names no ADR at
+that position. `git log -S "ADR-0024" -- web/src/app.css` returns exactly two commits, `a279517` which
+added it and `b6a6d37` which removed it, and no commit in between.
+
+🚩 **The consequence for how the residue reads is not cosmetic.** *"One instance corrected, four
+left"* describes a sweep that ran and missed; **no sweep of `web/` ever ran, partially or otherwise.**
+The count fell from five to four as collateral of an unrelated rewrite and then sat at four for three
+days, from 2026-08-16 to `ce17389` on 2026-08-19. Recording it the other way would send the next
+reader looking for the pass that skipped four sites, and there is no such pass to find.
+
+### The part worth keeping: correcting a pointer can wake a dead instruction
+
+Three of the four sites were descriptive. **`web/svelte.config.js:38` was not** — it read *"but it is
+NOT load-bearing. ADR-0024 §6 should be corrected."* That is an instruction to go and change a section
+of an ADR that has no sections, so nobody could act on it and nobody did. ✅ **Repointing it at
+ADR-0025 §6 made it actionable**, which is a change in kind rather than in spelling, so whether it is
+still worth doing was checked **before** the citation landed rather than after. Three ways, each read
+in `docs/DECISIONS.md` rather than taken on report:
+
+1. **ADR-0025 §6's fourth trap still carries the claim verbatim and unamended** — *"🔍 `paths.relative`
+   defaults to `true` and likely breaks assets under a deep-route SPA fallback … This is inference
+   from the documented semantics, not a cited statement — it must be tested empirically before the
+   build config is frozen."* It has been tested, and B-01 is the test.
+2. **ADR-0025's own `### ⚠️ Amendment, 2026-08-16` does not reach it.** That amendment retires
+   Tailwind and states which points it replaces: *"Decision points **1** and **5** above are replaced
+   by this; **2** (Bits UI), **3** (Tabler) and **4** (IBM Plex) are untouched, and **6** (serving)
+   was always about `embed.FS` rather than about the CSS engine."* Point 6 is explicitly carried
+   forward, so the amendment is not a route by which the bullet has already been dealt with.
+3. **This file already records the correction as owed and re-confirms it.** B-01's disposition is
+   *"Correction recorded here rather than applied"*, and §5's *Left for the owner* bullet was
+   re-confirmed on 2026-08-19 as *"The bullet stands as the round's record"*. Both are recorded above,
+   in the two rows this entry also annotates.
+
+⏭️ **Correcting ADR-0025 §6 itself is deliberately NOT done here.** It is a different job, in a file
+this lane does not hold, and it is a change to an accepted ADR rather than to a citation — so it takes
+the ADR-annotation shape (`DEVELOPMENT.md` §11: *dated records are annotated, design documents are
+corrected in place*, and an ADR body is annotated), decided by whoever owns `DECISIONS.md`. **Routed,
+not assumed done.**
+
+📌 **The general rule this entry exists for.** A citation fix is not automatically a no-op edit. Where
+the citation sits inside an **instruction**, repointing it converts an unfollowable sentence into a
+followable one, and the fix inherits responsibility for whether the instruction is still wanted. So a
+citation fix has to ask what the corrected pointer now demands, and record the answer either way. **A
+repointed citation that silently demands work nobody has scheduled is worse than the dangling one it
+replaced**, because the dangling one was at least visibly broken.
+
+### The two sites in this file, corrected the way this file corrects citations
+
+`docs/REVIEW-LOG.md` carried *"ADR-0024 §6's `paths.relative` bullet"* in two places — the **B-01**
+row in §1.5 *Raised outside the review*, and the *Left for the owner* bullet in §5 *What changed, in
+one list*. Both are annotated in place and **neither is rewritten**.
+
+✅ **The precedent matched is the citation one, not the claim one, and the two differ in this file.**
+For a **claim** that has gone false, the shape is a strike with the correction beside it — ADR-0027's
+*"~~showing only types that have content~~"*, ADR-0039's struck ground — or an amended-disposition
+table (§6.1, §7.1, §M5.4), whose closing line is *"No existing entry's id, text or severity changed"*.
+For a **citation**, the shape is an in-cell `🔻` annotation that leaves the original standing
+untouched: *"🔻 **Cite drift, 2026-08-19 — original text stands; current sites recorded so the next
+reader is not chasing them:** … Nothing else about this row is re-verified here, its status is
+unchanged, and the Counts tables above are not amended."*, used 43 times across this file. **The
+citation shape is the one used here**, per the instruction to prefer it where the two diverge, and it
+is also the one `DEVELOPMENT.md` §11 requires on its own terms: *"A citation inside a dated record is
+history, not staleness … Correct such a record the way that file already does it: amend underneath,
+with the new date and the new tree, leaving the original standing."* Both sites are dated records of
+round 2, and B-01's finding, evidence, severity and disposition are all correct — **only the pointer
+was ever wrong**, which is exactly the case the citation shape is for. Striking accurate text to
+repair a section number would destroy the record to fix a footnote.
+
+ℹ️ **The B-01 row carries the error twice, not once, and the annotation says so.** Besides the Item
+column's *"ADR-0024 §6's `paths.relative: false` bullet"*, the Disposition opens *"because ADR-0024
+lives on branch `claude/hearth-thread-vn9w7u`"* — the styling ADR again, under the pre-renumber
+number. It is the same defect in the same row and is named in the one annotation rather than given a
+second marker.
+
+⏭️ **The Counts tables are not touched**, in either round and anywhere else. No finding was opened,
+closed, re-severitied or re-dispositioned by this entry: two pointers were annotated and one new
+section was appended.
+
+### What a green gate is worth on this entry
+
+`make check` was run green on the tree carrying this change, and **the honest reading is that it
+attests almost nothing about it.** The diff is a single Markdown file under `docs/`, and `make check`
+reaches `docs/` through **`gitleaks` alone** — `fmt-check`'s prettier half runs `--dir web`, so no
+Markdown outside `web/` is formatter-gated, and no lint, compile or test arm opens a `.md` file.
+`gofumpt`, `golangci-lint`, `build-tagged`, `modverify`, the Go and web suites and `govulncheck` all
+measured Go and Svelte trees that appending a section to this file does not alter. What the green
+means is roughly *"no credential-shaped string was added to the prose"*, and **nothing whatever about
+whether any sentence above is true**.
+
+🔍 **The verification is therefore manual, and is listed so it can be repeated at any tip:**
+`grep -rn 'LS-380' .` and `grep -rn 'ADR-0024' web/` for the two emptiness claims;
+`git show --stat ce17389` for the 2-file, 4-insertion, 4-deletion shape;
+`sed -n '1,45p' web/svelte.config.js` and `sed -n '1,6p' web/src/routes/+layout.ts` for the corrected
+sites; `git log -1 --format=%B a7b1e11` for the renumber and the sweep it declares;
+`git merge-base --is-ancestor a7b1e11 a279517` and `… a7b1e11 1c162db` for the topology, both of which
+must report **not** an ancestor for this entry to hold;
+`git show a279517:docs/DECISIONS.md | grep -c 'Styling and typography'` for the `0`;
+`git log -S 'ADR-0024' -- web/src/app.css` for the two-commit history of the fifth site; and
+**ADR-0024, ADR-0025 §6 and ADR-0025's 2026-08-16 amendment read in `docs/DECISIONS.md`** rather than
+taken on report. ⚠️ **The commit shas above are dated to `cf3957f` and are content shas, never
+merges.**
