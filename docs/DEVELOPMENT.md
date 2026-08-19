@@ -1247,6 +1247,18 @@ prose is true, current, or even well formed. Quote it at that size. The measured
 fired in both directions, is in `docs/REVIEW-LOG.md` under *"What a `make check` green on a
 docs-only commit does and does not attest"*.
 
+**A count a gate prints is a fact about how it was counted, not a statement of coverage.**
+
+* **`lint-go`'s banner counts different packages than the linter opens.** The recipe derives it from
+  `@n=$$($(GO) list ./... | wc -l);` — untagged — while `golangci-lint run` reads `.golangci.yml`,
+  whose `run.build-tags` is `[upstream, bench]`. Measured on `a2cbee3`: `go list ./...` gives **13**
+  packages, `go list -tags upstream,bench ./...` gives **14**, and diffing the two lists puts the
+  whole delta on one package, `internal/db/spike`. So the banner under-reports, and it is doing
+  rule 4's job — refusing to pass while it sees nothing — rather than describing the run. **A
+  package count cannot distinguish a package that was opened from one that was skipped**, which is
+  the same shape as a check whose success condition is an absence: both report the same number
+  whether the work happened or not. Quote it as a floor guard, never as the scope of a lint run.
+
 ### Consistency is a property of the read, not only of the write
 
 **A writer's transaction guarantees only what a reader takes in one statement, or in one
