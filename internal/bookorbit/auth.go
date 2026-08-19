@@ -12,8 +12,12 @@ import (
 // ─── The credential, and the two different things called "token" ─────────────
 //
 // THE STORED SECRET is the raw MAGIC-LINK TOKEN. A superuser mints it with
-// POST /api/v1/auth/magic-links for a SHARED account; only sha256(raw) is kept
-// on BookOrbit's side (MagicLinkService.createToken). It is long-lived,
+// POST /api/v1/auth/magic-links for a SHARED account. ⚠️ This used to say only
+// sha256(raw) is kept on BookOrbit's side, which ADR-0060 falsified at 73b7877:
+// `magic_access_tokens` carries `raw_token` in PLAINTEXT beside `token_hash`,
+// and any superuser can read every row's raw value back over
+// GET /api/v1/auth/magic-links. Login is hash-based, so the plaintext column is
+// not load-bearing — it exists so the link can be shown again. It is long-lived,
 // reusable, optionally non-expiring, capped at 25 per user, and it mints
 // unlimited access tokens for that account — a §14 credential in full. It is
 // encrypted at rest under the existing versioned, AAD-bound envelope

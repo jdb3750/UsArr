@@ -927,7 +927,13 @@ func bookOrbitTestAction(err error) string {
 		// fix upstream rather than in anything the user can retype here.
 		return "Check this account in BookOrbit: it demands a password change, which a shared magic-link account cannot require — the fix is on the BookOrbit side, not the stored token"
 	case errors.Is(err, bookorbit.ErrUnauthorized):
-		return "Mint a new magic-link token: this one is unknown, revoked, deactivated or expired"
+		// NOT "mint a new one", which is what this said until ADR-0060 measured
+		// BookOrbit at 73b7877: `magic_access_tokens.raw_token` is plaintext
+		// beside the hash, and MagicLinkRepository.findAll returns every row's
+		// rawToken to any superuser. The token IS re-readable, so comparing it is
+		// both possible and strictly more informative than rotating — a rotation
+		// throws away the only evidence of what was actually wrong.
+		return "Compare the stored token against BookOrbit's own list (Settings → Magic Links, superuser only): this one is unknown, revoked, deactivated or expired"
 	case errors.Is(err, bookorbit.ErrForbidden):
 		return "Use a magic-link token whose account is active and shared-provisioned"
 	case errors.Is(err, bookorbit.ErrThrottled):

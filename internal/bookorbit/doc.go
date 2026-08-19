@@ -38,8 +38,11 @@
 //  2. The superuser mints a magic link — POST /api/v1/auth/magic-links.
 //     MagicLinkService.createToken refuses a non-superuser actor, refuses a
 //     target whose provisioningMethod is not 'shared', caps active tokens at 25
-//     per user, and returns the RAW token exactly once; only sha256(raw) is
-//     stored.
+//     per user, and returns the RAW token in the create response. ⚠️ It is NOT
+//     shown only once: `magic_access_tokens.raw_token` holds it in plaintext and
+//     GET /api/v1/auth/magic-links hands every row's rawToken back to any
+//     superuser (ADR-0060, measured at 73b7877). Login still authenticates on
+//     sha256(raw).
 //  3. The human pastes that raw token into UsArr's BookOrbit service form.
 //
 // USE, on every UsArr process:

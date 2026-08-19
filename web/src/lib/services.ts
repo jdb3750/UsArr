@@ -646,10 +646,26 @@ export function likelyCauses(message: string, kind: string): string[] {
 	if (AUTH_STATUS.test(text) || /unauthorized|forbidden|api key/.test(text)) {
 		if (kind.trim().toLowerCase() === 'bookorbit') {
 			// BookOrbit's credential is a magic-link token, not a key on a
-			// settings page, and it cannot be looked up again — BookOrbit returns
-			// the raw value once and stores only its hash. Sending a user to
-			// `Settings, General, API Key` would send them somewhere that does not
-			// exist, looking for something that no longer does.
+			// settings page, so sending a user to `Settings, General, API Key`
+			// would send them somewhere that does not exist.
+			//
+			// ⚠️ These bullets used to say the token could not be re-read anywhere
+			// and to mint a new one. ADR-0060 measured the opposite at
+			// bookorbit/bookorbit 73b7877: `magic_access_tokens` stores `raw_token`
+			// in plaintext beside `token_hash`, and `MagicLinkRepository.findAll`
+			// returns `rawToken` for every row to any superuser behind
+			// GET /api/v1/auth/magic-links. So the honest advice is COMPARE, not
+			// rotate — minting a replacement destroys the evidence of what went
+			// wrong and, when the real fault was a mis-paste, changes nothing.
+			//
+			// The first bullet also names the mis-paste, because BookOrbit's copy
+			// button yields `<origin>/magic?token=<raw>` (getMagicUrl in
+			// client/src/features/settings/MagicLinksSettings.vue) and a pasted URL
+			// 401s exactly like a revoked token. serviceCredential
+			// (internal/httpapi/services.go) now refuses that shape before it is
+			// sent, so a URL should no longer reach this panel — the bullet keeps
+			// the clause for the credential that was stored before that guard
+			// landed.
 			//
 			// The two bullets are the two failures that reach here, in that order:
 			// the mint 401, and the 401/403 on the app-info read behind it. The
@@ -665,7 +681,7 @@ export function likelyCauses(message: string, kind: string): string[] {
 			// no shared account carries isDefaultPassword, so the state cannot be
 			// reached that way. See internal/bookorbit's ErrPasswordChangeRequired.
 			return [
-				`The magic-link token is revoked, expired or deactivated. It cannot be re-read anywhere: mint a new one.`,
+				`The magic-link token is revoked, expired, deactivated — or it is not the token you think it is. A BookOrbit superuser can list every magic link back, raw value included, and compare it character for character against what is stored here before minting anything new.`,
 				`BookOrbit has flagged the account behind the link for a password change, so every guarded route refuses it. Logging in still works, and re-pasting the link will not help: the account state is fixed in BookOrbit.`
 			];
 		}

@@ -1556,8 +1556,9 @@
 					<span class="mono">kavita</span>, whose paths carry no version segment at all and whose
 					credential is an Auth Key from User Settings → Manage Auth Keys, and
 					<span class="mono">bookorbit</span>, whose credential is not a key at all: it is a
-					magic-link token a superuser mints against a shared account, shown once and never readable
-					again.
+					magic-link token a superuser mints against a shared account —
+					<strong>64 lowercase hex characters</strong>, and a superuser can list them all back
+					later, raw value included.
 				</span>
 			</div>
 
@@ -1635,15 +1636,31 @@
 					autocomplete="off"
 					placeholder={reentry
 						? 'Re-enter the API key'
-						: editing === 'add'
-							? "Paste the key from the application's General settings"
-							: 'Leave blank to keep the stored key'}
+						: editing !== 'add'
+							? 'Leave blank to keep the stored key'
+							: fKind === 'bookorbit'
+								? 'Paste the magic-link token — the 64 hex characters only'
+								: "Paste the key from the application's General settings"}
 					aria-invalid={reentry ? 'true' : undefined}
 					aria-describedby="f-apikey-help"
 				/>
 				<span class="field__help" id="f-apikey-help">
 					Stored encrypted and never sent back to the browser. An *Arr API key is a full-admin
 					credential.
+					<!--
+						The shape warning is BookOrbit's alone because the trap is
+						BookOrbit's alone: its Magic Links settings screen copies
+						`<origin>/magic?token=<raw>`, so the button the user is told to
+						press yields a URL while the login route accepts only the token
+						inside it. A pasted URL is a valid string that 401s exactly like a
+						revoked token, which is why this is named here rather than left to
+						the failure panel to explain afterwards.
+					-->
+					{#if fKind === 'bookorbit'}
+						BookOrbit's own <em>copy</em> button gives you the whole magic-link URL. Paste only the
+						part after <span class="mono">token=</span> — 64 lowercase hex characters, with no scheme,
+						host or path.
+					{/if}
 				</span>
 				{#if escapeArmed}
 					<span class="field__err" role="alert">
