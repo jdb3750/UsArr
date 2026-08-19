@@ -71,10 +71,20 @@ func runKeyRotate(ctx context.Context, cfg *config.Config, log *slog.Logger, bui
 			"To rotate an environment-supplied key: unset USARR_SECRET_KEY and let the key file take over, "+
 			"or replace the value yourself and follow docs/CONFIGURATION.md §3.5", cfg.SecretKeyPath())
 	case cfg.SecretKeyFile != "":
-		return fmt.Errorf("USARR_SECRET_KEY_FILE is set (%s), so the master key lives in a file UsArr does not "+
+		// NAME THE SETTING THE VALUE ACTUALLY CAME FROM. The path has a flag
+		// twin and an environment twin that resolve into one field, and this
+		// message used to hardcode the variable — so an operator who passed
+		// --secret-key-file was told to go and unset a variable they had never
+		// set, while holding an install that would not rotate. The remedy is
+		// the same either way; the thing to change is not.
+		source := "USARR_SECRET_KEY_FILE is set"
+		if cfg.SecretKeyFileFromFlag {
+			source = "--secret-key-file was passed"
+		}
+		return fmt.Errorf("%s (%s), so the master key lives in a file UsArr does not "+
 			"own and `key rotate` cannot manage it. It can only rotate %s. "+
 			"To rotate a file supplied that way, replace its contents yourself and follow "+
-			"docs/CONFIGURATION.md §3.5", cfg.SecretKeyFile, cfg.SecretKeyPath())
+			"docs/CONFIGURATION.md §3.5", source, cfg.SecretKeyFile, cfg.SecretKeyPath())
 	}
 
 	// An empty config directory has no key to rotate, and buildApp below would

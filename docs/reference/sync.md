@@ -317,7 +317,7 @@ unmeasured** — run `make bench-rss` there and add a row.
 |---|---|
 | `VACUUM INTO` (nightly backup) and `ANALYZE` take their own locks | Run them from the writer, serialised with the queue |
 | WAL checkpoint starvation by a long-lived reader (an SSE handler holding a snapshot) — `wal_autocheckpoint` silently fails, the WAL grows unbounded, an explicit `wal_checkpoint(TRUNCATE)` returns `SQLITE_BUSY` | A checkpoint-starvation metric and a bounded read-transaction lifetime; never hold a read txn across an SSE send |
-| A second process: `usarr key rotate`, `usarr keygen`, a user running `sqlite3`, two containers on one volume | A single-instance lock file, checked at startup, naming the holder |
+| A second process: `usarr key rotate`, a user running `sqlite3`, two containers on one volume | A single-instance lock file, checked at startup, naming the holder |
 | `cache.db` `ATTACH`ed inside a write transaction | **Never `ATTACH` `cache.db` inside a write transaction.** It is a separate connection. |
 
 **Rule 2 — `BEGIN IMMEDIATE` on every write transaction.** `busy_timeout` does not rescue a

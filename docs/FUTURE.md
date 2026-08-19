@@ -1,6 +1,6 @@
 # UsArr — Deferred features and the seams that keep them cheap
 
-**Status:** none of this is in a roadmap milestone. **Nothing here is a rejection.**
+**Status:** none of this is in a roadmap milestone. **Nothing here is a rejection unless its heading says so.** An entry whose heading reads *Declined* was decided against and is recorded here anyway, because the reasoning is worth as much as a deferral's and losing it invites the proposal back.
 
 This document exists because the alternative — deleting an idea from the design because it is not in
 v0.1 — loses the reasoning along with the scope, and because building the base *without* knowing
@@ -1063,3 +1063,52 @@ and it stays a bad swap after a limiter exists.
 checklist in `reference/security.md` §7 names login rate limiting as required in that mode), or
 multi-user landing in v1.0, which turns "the owner locked themselves out" from an annoyance into a
 support path that needs designing.
+
+---
+
+## 23. `usarr keygen` — **Declined**, 2026-08-19
+
+**Declined by the PM on 2026-08-19.** Not deferred: there is no trigger below, because reopening this
+is the PM's call and nothing measurable makes it worth revisiting.
+
+**What it would have been.** A `usarr keygen` subcommand printing a fresh base64 master key, so an
+operator putting the key in a secrets manager rather than on the config volume could generate one
+with the binary instead of with `openssl`.
+
+**It is genuinely unbuilt, and that is not the problem.** `cmd/usarr` has no keygen path and the
+parser accepts exactly one positional form (`key rotate`, `internal/config/flags.go`); the
+`README`/§16 roadmap carries no item for it. Nothing in the tree is half-done or waiting.
+
+**Why declined.**
+
+1. **The first run already generates the key.** `docs/CONFIGURATION.md` §3.2: there is no shipped
+   default, `.env.example` carries no uncommented key line, and leaving the variable unset is the
+   correct configuration — the startup ladder generates a real key with real entropy. So `keygen`
+   is a **convenience for one path** (key-goes-in-a-secrets-manager) and never an obligation. The
+   install that skips it is not broken; it is the normal install.
+2. **`openssl rand -base64 32` already covers that one path**, on every host that can run UsArr, and
+   `CONFIGURATION.md` §3.3 has always given it as the primary form.
+3. **The seam is deliberate and is the project's own rule working**, not an omission to be tidied
+   away. `internal/config/flags.go:42-45` spells out why the subcommand is two words: *"`key` is a
+   noun with more verbs coming (§3.4 pairs rotate with keygen), and a flat `rotate` would have to be
+   renamed the moment a second one lands."* That is `CLAUDE.md`'s **the seam ships, the feature does
+   not** in one comment. Declining `keygen` costs nothing precisely because the naming decision it
+   would have forced was already taken, and taking it early is what made the decline cheap.
+
+**What the decline does NOT touch.** `usarr key rotate` is built and stays built
+(`cmd/usarr/keyrotate.go`), and the seam above stays exactly as it is — a future second verb, if the
+PM ever wants one, still lands as `usarr key <verb>` without renaming anything. The decline is about
+*this* verb, not about the shape that would hold one.
+
+**Documentation that pointed at it.** `docs/CONFIGURATION.md` §3.3 advertised `usarr keygen` as
+*"proposed CLI, v0.1"* — a feature on no milestone, described as proposed for a milestone. It now
+points here instead. `docs/reference/security.md` §1.5 already said flatly that `usarr keygen` is not
+implemented, which was true then and stays true.
+
+A third pointer surfaced after this section was written and is recorded here so the sweep is not
+re-done from scratch: `docs/reference/sync.md` §6 listed `usarr keygen` among the second processes
+that could contend for the single-instance lock. **It has been dropped from that row rather than
+annotated** — the row's value is that every process it names is one that can actually start, and a
+command that will never run inflates the hazard while teaching the reader nothing. Three real
+contenders remain there, including `usarr key rotate`, which is the near-identical example the
+deleted one was standing beside.

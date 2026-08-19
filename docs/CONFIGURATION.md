@@ -303,15 +303,22 @@ is strictly better than any value a human copies out of a README.
 Only needed if you want the key in a secrets manager rather than on the config volume.
 
 ```bash
-openssl rand -base64 32          # or: usarr keygen   (proposed CLI, v0.1)
+openssl rand -base64 32
 ```
+
+⚠️ **This line used to read `# or: usarr keygen (proposed CLI, v0.1)`.** There is no `usarr keygen`
+and there will not be one: it was **declined by the PM on 2026-08-19** and the reasoning is in
+`docs/FUTURE.md` §23. The first-run path generates the key by itself (§3.2), so this section is only
+for the secrets-manager case, and `openssl` is the whole answer to it.
 
 ### 3.4 Rotating — two-phase and resumable
 
 **`usarr key rotate` is implemented.** It rotates `$USARR_CONFIG_DIR/keys/secret.key` and nothing
-else: a key supplied through `USARR_SECRET_KEY` or `USARR_SECRET_KEY_FILE` lives somewhere UsArr does
-not own, so the command **refuses and names the variable**. Replace such a key yourself and follow
-§3.5.
+else: a key supplied through `USARR_SECRET_KEY`, `USARR_SECRET_KEY_FILE` or `--secret-key-file` lives
+somewhere UsArr does not own, so the command **refuses and names the setting the value actually came
+from** — the flag when the flag was passed, the variable when it was not, because the two resolve
+into one field and a refusal that guessed would send you to change a setting you never touched.
+Replace such a key yourself and follow §3.5.
 
 ```
 $ usarr key rotate --config-dir /config      # or: usarr --config-dir /config key rotate

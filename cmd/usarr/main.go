@@ -88,6 +88,14 @@ func main() {
 func run() error {
 	cfg, err := config.LoadOS(version)
 	switch {
+	case errors.Is(err, config.ErrHelpRequested):
+		// stdout and exit 0, for the same reason --version does it below: -h is
+		// a question, and answering it is not a failure. It used to arrive here
+		// as an ordinary parse error, so `usarr --help` printed
+		// `usarr: parse flags: flag: help requested` to stderr and exited 1 —
+		// the first command a new operator runs, reporting that it broke.
+		config.WriteUsage(os.Stdout)
+		return nil
 	case errors.Is(err, config.ErrVersionRequested):
 		// stdout, not stderr, and exit 0: this is the answer to a question, so
 		// it has to be pipeable into grep by deploy/status.sh.
