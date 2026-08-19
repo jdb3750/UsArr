@@ -686,7 +686,7 @@ holds every wrapped DEK, every password hash and the full audit log.
 ### 6.2 Taking one on demand
 
 ```bash
-usarr backup                    # or: docker exec <container> usarr backup
+$ usarr backup --config-dir /config      # or: usarr --config-dir /config backup
 ```
 
 Safe while UsArr is running. It writes a **pair** into `$USARR_CONFIG_DIR/backups/`, both `0600`:
@@ -709,8 +709,11 @@ credentials cannot be recovered from that snapshot.
 
 ```bash
 # Correct: atomic and consistent while UsArr is running.
-sqlite3 /config/usarr.db "VACUUM INTO '/config/backups/usarr-$(date -u +%FT%TZ).db'"
-cp /config/kek.salt "/config/backups/usarr-$(date -u +%FT%TZ).kek.salt"   # ← do not skip this
+# ONE stamp for both files — two `$(date)` calls a second apart produce a pair
+# that does not look like one, which is how the wrong salt gets restored later.
+stamp=$(date -u +%FT%TZ)
+sqlite3 /config/usarr.db "VACUUM INTO '/config/backups/usarr-$stamp.db'"
+cp /config/kek.salt "/config/backups/usarr-$stamp.kek.salt"   # ← do not skip this
 # Also correct: stop UsArr, then copy the .db AND -wal AND -shm together.
 ```
 
