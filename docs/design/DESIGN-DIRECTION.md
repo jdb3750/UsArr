@@ -2411,7 +2411,18 @@ exactly three view modes across their whole application; Navidrome offers two.
 | 2 | **`ItemGrid`** | every type's cover view | One card, `aspect ∈ {2:3, 1:1, 16:9}`, chosen from the image's real ratio. `variant="strip"` is a **modifier** adding `overflow-x`, not a second component |
 | 3 | **`SectionHeader`** | Home blocks, search groups, type screens | Name · count · "see all" |
 | 4 | **`LevelBar`** | TV, music, comics, multi-book series | **The one genuine per-type addition** — below |
-| 5 | **`ScopeChip`** | the library selector | §8.1 |
+| 5 | **`ScopeChip`** | the library selector | §8.1. ⚠️ **Specified and not built** — see the note directly below |
+
+> ⚠️ **`ScopeChip` is specified and UNBUILT, recorded 2026-08-19. It is deferred, not cut, and it
+> stays in the minimum set** — this table is what someone reads to decide what to build next, so an
+> unmarked entry reads as buildable. **What blocks it is the wire, not effort**, and the
+> precondition is one line: `GET /api/v1/library/recent` and `GET /api/v1/search` would both have to
+> accept `lib`, and the wire would need a spelling for *"no libraries selected"* — today an absent
+> `lib` means everything and an empty one is a `400`, so §8.1's third grammar and §10's `scope-empty`
+> cannot be expressed at all. **The measurement is written up in [`ROADMAP.md`](../ROADMAP.md) §2,
+> under *"The `?lib=` chip"*,** over the wire facts at
+> [`reference/http-api.md`](../reference/http-api.md) §1.1, §6.1 and §7.3. It is pointed at rather
+> than restated here, because a second copy of a measurement is the copy that goes stale.
 
 Aspect assignment is **data, not code**: portrait 2:3 for films, series, ebooks, audiobooks and comic
 series; square 1:1 for albums and artists; 16:9 for episodes. Cross-checked against §9.2's fixed width
