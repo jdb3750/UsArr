@@ -298,12 +298,30 @@ var ErrRemoteIDNotABookID = errors.New("imagepipeline: remote id is not a BookOr
 //
 // ⚠️ STATED BECAUSE THE OPPOSITE WAS NEARLY WRITTEN HERE. ARCHITECTURE.md §4.4
 // describes a min(NumCPU, 4) semaphore, and it is PROSE: it is about image
-// TRANSCODING rather than fetching, and no such semaphore is implemented
-// anywhere — the tree's only one is the Argon2id gate, whose own comment says
-// §4.4 "is a design statement for a pipeline that is not built yet". A comment
-// here claiming fetches are bounded by it would be documenting a guard that does
-// not exist, which is the exact defect this package was written to stop
-// repeating.
+// TRANSCODING rather than fetching, and nothing implements it. No fetch of this
+// package's is bounded by anything, and a comment here claiming otherwise would
+// be documenting a guard that does not exist — the exact defect this package was
+// written to stop repeating.
+//
+// 🚩 THIS PARAGRAPH USED TO ADD "the tree's only one is the Argon2id gate", AND
+// THAT WAS FALSE ON THE DAY IT WAS WRITTEN. internal/releases/search.go bounds
+// its indexer fan-out with `sem := make(chan struct{}, s.cfg.Concurrency)` and
+// releases.DefaultConcurrency is 6; it was already there three days before this
+// comment, and the paragraph three below this one names a THIRD, libsync's
+// coverGate — so the claim contradicted its own doc comment as well as the tree.
+//
+// AND THE CORRECTION STRENGTHENS THE POINT RATHER THAN WEAKENING IT. What
+// search.go bounds is concurrent NETWORK LEGS, which is what Poster is: it is
+// the closest PRECEDENT for a fetch bound in this repository, not a
+// counter-example to needing one. The honest statement is that the tree already
+// had a bound of exactly this kind and THIS PACKAGE STILL DOES NOT BUILD ONE —
+// which is a sharper thing to say than "there are no semaphores", and it is the
+// thing the caller actually needs to know.
+//
+// The Argon2id gate is still worth reading before writing one, for its sizing
+// note rather than for being unique: internal/crypto/password.go works out its
+// permit count in memory terms and says why §4.4 "is a design statement for a
+// pipeline that is not built yet".
 //
 // So: Poster is ONE fetch, synchronous, and holds no lock and no pool. Calling
 // it in a loop is serial by construction; calling it from N goroutines opens N
