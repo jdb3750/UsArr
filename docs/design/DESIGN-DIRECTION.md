@@ -2842,8 +2842,14 @@ the feature does not.** These are layout obligations, not v0.1 work.
   types and zero sidebar rows.
 - **The cross-media review inbox** (FUTURE §5) is *"a whole second surface"* — a confirm / reject /
   not-sure queue over the 0.55–0.85 confidence band with `evidence` rendered so a human can judge.
-  It is explicitly deferred and explicitly not a v1 screen. The design seam is that
-  `work_relation` already carries `confidence` and `evidence`.
+  It is explicitly deferred and explicitly not a v1 screen. The design seam is that `work_relation`
+  **is designed to carry** `confidence` and `evidence` — the design of record is
+  [`reference/schema.md`](../reference/schema.md) §11 *Cross-media edges · **v0.3***. ⚠️ **The table
+  is deferred to v0.3 and no shipped migration creates it** — `internal/db/migrations` names it only
+  in 00005's and 00006's deferred lists, and `TestDeferredTablesAreAbsent`
+  (`internal/db/migrate_test.go`) fails if one does. The seam is a designed shape to build to, which
+  is exactly what makes the inbox cheap to add later; it is not a column pair already sitting in the
+  schema waiting.
 - **Multi-user** (v1.0) unlocks user management, roles and per-user grants. §17.1 and ADR-0019 make
   this a UI unlock, not a migration — which only holds if v0.1 never hard-codes "there is one
   user" into a layout.
