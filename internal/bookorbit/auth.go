@@ -17,7 +17,14 @@ import (
 // `magic_access_tokens` carries `raw_token` in PLAINTEXT beside `token_hash`,
 // and any superuser can read every row's raw value back over
 // GET /api/v1/auth/magic-links. Login is hash-based, so the plaintext column is
-// not load-bearing — it exists so the link can be shown again. It is long-lived,
+// not load-bearing — it exists so the link can be shown again. ⚠️ THAT IS A
+// MEASUREMENT AT 73b7877d2fede2221b0ca360af9bfced7c3797f3 (re-read 2026-08-19),
+// NOT A PROMISE, and what would falsify it is one commit: dropping `rawToken`
+// from `MagicLinkRepository.findAll`'s select while keeping it in the create
+// response would restore the show-once story this paragraph exists to correct,
+// and would take the "compare it, do not rotate it" advice in
+// httpapi.credentialAction, likelyCauses and bookOrbitTestAction down with it.
+// It is long-lived,
 // reusable, optionally non-expiring, capped at 25 per user, and it mints
 // unlimited access tokens for that account — a §14 credential in full. It is
 // encrypted at rest under the existing versioned, AAD-bound envelope

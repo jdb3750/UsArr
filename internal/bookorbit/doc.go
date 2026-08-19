@@ -41,9 +41,17 @@
 //     per user, and returns the RAW token in the create response. ⚠️ It is NOT
 //     shown only once: `magic_access_tokens.raw_token` holds it in plaintext and
 //     GET /api/v1/auth/magic-links hands every row's rawToken back to any
-//     superuser (ADR-0060, measured at 73b7877). Login still authenticates on
-//     sha256(raw).
-//  3. The human pastes that raw token into UsArr's BookOrbit service form.
+//     superuser (ADR-0060, measured at 73b7877, re-read 2026-08-19). Login still
+//     authenticates on sha256(raw). ⚠️ A BookOrbit that drops `rawToken` from
+//     that list route while keeping it in the create response makes this
+//     paragraph — and every "you can read it back and compare it" string that
+//     leans on it — wrong again; the create-response half would survive.
+//  3. The human pastes that link, or the raw token inside it, into UsArr's
+//     BookOrbit service form. The settings screen offers only the link
+//     (`getMagicUrl` builds `<origin>/magic?token=<raw>` and the table never
+//     renders the raw value), so the link is the ordinary case: httpapi's
+//     serviceCredential does the same reduction BookOrbit's own /magic route
+//     does and stores only the token (ADR-0067).
 //
 // USE, on every UsArr process:
 //

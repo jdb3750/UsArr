@@ -933,6 +933,13 @@ func bookOrbitTestAction(err error) string {
 		// rawToken to any superuser. The token IS re-readable, so comparing it is
 		// both possible and strictly more informative than rotating — a rotation
 		// throws away the only evidence of what was actually wrong.
+		//
+		// ⚠️ WHAT WOULD MAKE THIS STRING WRONG: BookOrbit dropping `rawToken`
+		// from that list route while keeping it in the create response. The
+		// screen this sends the operator to would then show a label and no
+		// token, and there would be nothing left to compare. The behaviour is
+		// measured at 73b7877d2fede2221b0ca360af9bfced7c3797f3 (re-read
+		// 2026-08-19), not promised anywhere by upstream.
 		return "Compare the stored token against BookOrbit's own list (Settings → Magic Links, superuser only): this one is unknown, revoked, deactivated or expired"
 	case errors.Is(err, bookorbit.ErrForbidden):
 		return "Use a magic-link token whose account is active and shared-provisioned"
