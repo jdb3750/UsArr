@@ -7120,7 +7120,7 @@ an \*Arr API key. **Closes in the adapter thread, before the first credential is
 later pass.
 
 ✅ **Discharged 2026-08-19 by [ADR-0058](#adr-0058).** `internal/bookorbit/scope.go` (landed at
-`568ddbc`) enumerates BookOrbit's 23-member permission vocabulary against §14 and computes the
+`c324cbf`) enumerates BookOrbit's 23-member permission vocabulary against §14 and computes the
 verdict on every credential mint at **zero extra cost**, because the login response already carries
 `permissions`, `isSuperuser` and `provisioningMethod`. **This is a note and not an amendment:
 nothing in the paragraph above is falsified.** The gate named a thing that had to happen before a
@@ -7529,7 +7529,7 @@ protects and watching it go red.
 <a id="adr-0057"></a>
 ## ADR-0057 — The circuit breaker is one package with an injected open sentinel, not a copy per client
 
-**Status:** Accepted · **2026-08-19** · Landed with the BookOrbit adapter's slice 0 at `568ddbc` ·
+**Status:** Accepted · **2026-08-19** · Landed with the BookOrbit adapter's slice 0 at `c324cbf` ·
 **Executes a standing instruction the tree already carried**, in `internal/kavita/breaker.go`, at
 exactly the condition that instruction named · **Closes off each client keeping its own copy of the
 state machine** · **Adds no dependency, no migration, no configuration key and no behaviour change**
@@ -7605,7 +7605,9 @@ whether the trigger has fired and whether the lift is taken now or one commit la
 ### Consequences
 
 - **The measured ledger is a deduplication, not a net line saving, and this ADR states the numbers
-  rather than the headline.** `568ddbc` deletes **347** lines: **177** from
+  rather than the headline.** The numbers below are `c324cbf`'s, slice 0's content commit,
+  measured with `git show --numstat c324cbf` and not with the merge `568ddbc` that carried it.
+  `c324cbf` deletes **347** lines: **177** from
   `internal/kavita/breaker.go`, **169** from `internal/servarr/breaker.go` — that is the duplicated
   state machine, twice — and **one** from `internal/kavita/client_test.go`. The two client files go
   from **202** and **192** lines to **52** and **49**: 394 lines of duplicated state machine become
@@ -7624,7 +7626,8 @@ whether the trigger has fired and whether the lift is taken now or one commit la
   against `servarr.ErrBreakerOpen` in that package is in `grab_outcome_test.go`. The sentinel
   argument still holds on `internal/libsync`, which does match in production. Neither package appears
   in the commit's diff. Verified against the tree:
-  `568ddbc` touches five Go files outside `internal/bookorbit`, all of them in
+  `git show --numstat c324cbf` — slice 0's content commit, not the merge `568ddbc` that carried
+  it — shows five Go files touched outside `internal/bookorbit`, all of them in
   `internal/breaker`, `internal/kavita` or `internal/servarr`.
 - **The only test change outside the new package is one line.** `internal/kavita/client_test.go`'s
   `TestBreakerDefaultsMatchTheArchitectureNumbers` calls `BreakerConfig{}.WithDefaults()` where it
@@ -7662,7 +7665,7 @@ the one line above.
 <a id="adr-0058"></a>
 ## ADR-0058 — UsArr grades the scope a stored service credential actually carries, and reports rather than refuses
 
-**Status:** Accepted · **2026-08-19** · Landed with the BookOrbit adapter's slice 0 at `568ddbc` ·
+**Status:** Accepted · **2026-08-19** · Landed with the BookOrbit adapter's slice 0 at `c324cbf` ·
 **Discharges [ADR-0052](#adr-0052)'s §14 credential-scope gate** — ⚠️ **a discharge is not an
 amendment**: ADR-0052 gains a dated inline note pointing here, **nothing in its text is struck**,
 and none of the three amendment marks is owed · **Closes off assuming a service account is minimal

@@ -21604,7 +21604,7 @@ could not reach.
 deliberate — `LS-375` is the high-water on `main` and the next lane starts at `LS-378` — so **nobody
 renumbers these to close it**. Nothing in this batch touches the `SD-`, `DS-` or `RK-` series.
 
-`568ddbc` — the BookOrbit adapter's slice 0 — took two decisions that close off alternatives and
+`c324cbf` — the BookOrbit adapter's slice 0 — took two decisions that close off alternatives and
 wrote neither of them into `DECISIONS.md`. Both are now recorded, as
 [ADR-0057](./DECISIONS.md#adr-0057) and [ADR-0058](./DECISIONS.md#adr-0058), at `24c4a4d`.
 
@@ -21637,6 +21637,8 @@ first is not, in the form it was given.
 
 📌 **Dated note, 2026-08-19 — the sha in the sentence above is the merge; the content commit is [`c324cbf`](https://github.com/jdb3750/UsArr/commit/c324cbf).** The sentence and the table stand as written; what is corrected is only where to run the measurement. `568ddbc` is *"Merge remote-tracking branch 'origin/main' into worktree-agent-ad1278a29632c4c71"*, and its own `--numstat` is seventeen files of library-screen, search and docs work containing **no breaker file at all**. The five rows above are `c324cbf`'s — *"feat(bookorbit): slice 0 — the client and the credential path"*, `568ddbc`'s first parent — and `git show --numstat c324cbf` reproduces all five exactly, re-measured here rather than inferred. ⚠️ **[ADR-0057](./DECISIONS.md#adr-0057) carries the same misattribution**, in its index row's *"neither appears in `568ddbc`'s diff at all"*; it is **recorded here and not corrected there**, because `DECISIONS.md` is not this lane's file to edit. ✅ **The claim itself is unaffected either way**: `internal/releases` and `internal/libsync` appear in the diff of neither commit.
 
+📌 **Dated note, 2026-08-19 — the *"recorded here and not corrected there"* sentence above is discharged.** ADR-0057's index row was corrected in `DECISIONS.md` at [`67964ad`](https://github.com/jdb3750/UsArr/commit/67964ad), and a later sweep repaired the remaining `568ddbc` citations in both files. **The note above is not edited**: it records what this lane decided at the moment it decided it, and a decision another lane has since carried out is still the decision that was taken.
+
 **347 is the commit's whole deletion count, not a net figure**, and it is not all state machine:
 346 lines come from the two copied breakers and the 347th is the single test line in
 `client_test.go`. The two client files go from **202** and **192** lines to **52** and **49** — so
@@ -21650,8 +21652,9 @@ claimed a line saving, and the ADR does not claim one on its behalf.
 that gets quoted forward out of a commit message into a design document, where nobody re-derives it.
 It is *true of the diff* and false as a description of the change.
 
-**Claim 2, the untouched consumers: confirmed, and by the stronger evidence.** `568ddbc` touches
-**five** Go files outside `internal/bookorbit`, all in `internal/breaker`, `internal/kavita` or
+**Claim 2, the untouched consumers: confirmed, and by the stronger evidence.** Measured on
+`c324cbf` — slice 0's content commit, not the merge `568ddbc` that carried it — `git show --numstat
+c324cbf` shows **five** Go files touched outside `internal/bookorbit`, all in `internal/breaker`, `internal/kavita` or
 `internal/servarr`; `internal/releases` and `internal/libsync` appear nowhere in the diff, and
 `internal/servarr/breaker_test.go` — five tests, including the jitter bound and the independence
 check — was not touched either and passes unchanged against the shared implementation. The one test
