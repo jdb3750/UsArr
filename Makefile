@@ -848,12 +848,15 @@ fmt-check: web-deps ## Verify formatting without modifying files (used by `make 
 
 # ─── Build-tagged packages, which `go build ./...` does not see ──────────────
 #
-# internal/db/spike is behind `//go:build bench`, so `go list ./...` returns 11
-# packages and never mentions it: a deliberate type error in that package passed
-# the ENTIRE gate — fmt-check, lint, test, vuln, all green. Measured, then
-# fixed here. gofumpt does see the files (it parses without resolving build
-# tags), which is exactly why the hole was invisible: the formatter reported the
-# package as checked while no compiler had ever looked at it.
+# internal/db/spike is behind `//go:build bench`, so `go list ./...` does not
+# mention it AT ALL. No package count is quoted here: a count in a comment rots
+# the next time a package is added, and the count this line used to carry had
+# already gone stale. The consequence is what matters — a deliberate type error
+# in that package passed the ENTIRE gate: fmt-check, lint, test, vuln, all
+# green. Measured, then fixed here. gofumpt does see the files (it parses
+# without resolving build tags), which is exactly why the hole was invisible:
+# the formatter reported the package as checked while no compiler had ever
+# looked at it.
 #
 # `go build` rather than `go vet` or `go test`: the spike has no tests, and a
 # build with the tag on is the smallest thing that makes a type error fail. It
