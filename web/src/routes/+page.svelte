@@ -137,6 +137,7 @@
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { ApiError, fetchRecentGrabs, fetchServicesHealth, type RecentGrab } from '$lib/api';
+	import HaveCell from '$lib/HaveCell.svelte';
 	import Icon from '$lib/Icon.svelte';
 	import List from '$lib/List.svelte';
 	import RecentGrabs from '$lib/RecentGrabs.svelte';
@@ -147,7 +148,6 @@
 		EMPTY_RECENT_FEED,
 		fetchRecentPage,
 		hasMore,
-		haveCell,
 		mediaTypeLabel,
 		nextRequest,
 		type RecentFeed,
@@ -1072,65 +1072,14 @@
 		{/if}
 	{:else if column.id === 'have'}
 		<!--
-			§17.2's `have / total · N missing`, rendered through §6.3's rule and
-			schema.md's polymorphic blob. `$lib/library.haveCell` owns every decision
-			in here; this renders what it is handed.
-
-			⚠️ THE TICK IS THE ONE THING THIS CELL MAY NOT GET WRONG. schema.md is
-			explicit that `total: null` is not `total: 0` and that §6.3's tick "must
-			never fire" on the first, so the mark arrives as a discriminated union
-			with a fourth state for a count with no honest denominator, and this
-			markup cannot reconstruct a comparison of its own.
-
-			CHROMA MARKS WHAT IS WRONG, NOT WHAT IS FINE (§9.5), which is why the
-			complete tick is muted and the gap figure is the one thing here carrying
-			the warn role. Every glyph has a word beside it in the accessibility
-			tree, because §11 forbids a status glyph with an empty accessible name.
-
-			⚠️ A ROW NOTHING HAS COUNTED CARRIES NO GLYPH AT ALL, AND THAT IS THE
-			RULE RATHER THAN A LAYOUT CHOICE. `http-api.md` §1.4.1: an absent
-			`availability` means no count has ever been computed, so a consumer
-			"must not render an absent blob as `0`, as "none", or as any glyph, bar
-			or accessible name that asserts emptiness". The cross belongs to a
-			PRESENT blob carrying `have: 0`, which is a measured nothing; this one is
-			words, because there is no glyph for "not yet asked".
+			§17.2's Have column, and every decision in it belongs to
+			`$lib/library.haveCell` and to `$lib/HaveCell.svelte` — the tick that must
+			never fire on `total: null`, the gap figure that carries §9.5's warn role,
+			and the row nothing has counted, which carries no glyph at all. Search
+			renders the SAME component: the two screens drew this cell from two copies
+			of one chain, and the copies had already come apart in their styling.
 		-->
-		{@const have = haveCell(item)}
-		{#each have.lines as line (line.key)}
-			<div class="availline">
-				{#if line.label}
-					<span class="availlabel trunc" title={line.label}>{line.label}</span>
-				{/if}
-				{#if line.mark.k === 'complete'}
-					<span class="muted"><Icon name="check" size="sm" /><span class="sr">complete</span></span>
-				{:else if line.mark.k === 'none'}
-					<span class="muted"
-						><Icon name="x-circle" size="sm" /><span class="sr">none held</span></span
-					>
-				{:else if line.mark.k === 'fraction'}
-					<span class="num">{line.mark.have} / {line.mark.total}</span>
-				{:else if line.mark.k === 'partial'}
-					<span class="num">{line.mark.have}</span>
-				{:else}
-					<span class="muted">Not counted yet</span>
-				{/if}
-			</div>
-		{/each}
-		{#if have.more > 0}
-			<!-- §9.1 caps a cell that renders one line per related object at three
-			     plus a count of the rest. A dual-Radarr work has two tiers; a
-			     well-catalogued album can have many editions. -->
-			<div class="cell-sub">+{have.more} more</div>
-		{/if}
-		{#if have.missing}
-			<div class="cell-sub availgap">{have.missing}</div>
-		{/if}
-		{#if have.gaps}
-			<!-- The contiguity list, which is the number that is always honest: it
-			     is computed locally from the issue numbers rather than taken from an
-			     upstream's declared total. -->
-			<div class="cell-sub trunc" title={have.gaps}>Gaps at {have.gaps}</div>
-		{/if}
+		<HaveCell {item} />
 	{:else if column.id === 'added'}
 		<!--
 			⚠️ AN UNDATED ROW IS REAL AND RENDERS AS UNDATED. Kavita reaches that
@@ -1649,37 +1598,5 @@
 		margin: 0 var(--space-6) var(--space-7);
 		border: 0;
 		border-top: 1px solid var(--border);
-	}
-
-	/*
-	 * BLOCK C's Have CELL. A tier- or edition-keyed rollup renders one line per
-	 * bucket, so the label and its mark share a line and the lines stack.
-	 *
-	 * No width is declared on either part. The COLUMN's track is declared (see
-	 * RECENT_COLUMNS) and that is where ADR-0029's alignment requirement lives;
-	 * inside the cell, a label that outgrows its share wraps, which is §9.1's
-	 * own answer to overflow and is what the column comment means by letting the
-	 * cell wrap rather than giving the track an unbounded maximum.
-	 */
-	.availline {
-		display: flex;
-		align-items: baseline;
-		gap: var(--space-2);
-		min-width: 0;
-	}
-
-	.availlabel {
-		color: var(--fg-muted);
-	}
-
-	/*
-	 * §9.5, and §17.2 states it for this exact column: chroma marks what is
-	 * wrong, not what is fine. So the gap figure is the one thing in this cell
-	 * that carries a hue, and the complete tick above is muted rather than
-	 * green. The word is present whatever the colour does, which is §9.5's
-	 * ordering (icon, text, colour) applied to a cell that has no icon.
-	 */
-	.availgap {
-		color: var(--status-warn);
 	}
 </style>

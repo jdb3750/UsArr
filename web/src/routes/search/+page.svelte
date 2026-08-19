@@ -71,10 +71,11 @@
 	import { replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
+	import HaveCell from '$lib/HaveCell.svelte';
 	import Icon from '$lib/Icon.svelte';
 	import List from '$lib/List.svelte';
 	import { ApiError } from '$lib/api';
-	import { haveCell, mediaTypeLabel } from '$lib/library';
+	import { mediaTypeLabel } from '$lib/library';
 	import { NOTHING, type ListColumn } from '$lib/list';
 	import { formatWhen } from '$lib/requests';
 	import {
@@ -453,50 +454,14 @@
 		{/if}
 	{:else if column.id === 'have'}
 		<!--
-			§17.2's `have / total · N missing`, through §6.3's rule and schema.md's
-			polymorphic blob. `$lib/library.haveCell` owns every decision; this
-			renders what it is handed and reconstructs no comparison of its own,
-			because `total: null` is not `total: 0` and the tick must never fire on
-			the first. Chroma marks what is wrong rather than what is fine (§9.5), so
-			the complete tick is muted and the gap figure carries the warn role.
-
-			⚠️ A ROW NOTHING HAS COUNTED CARRIES NO GLYPH, per `http-api.md` §1.4.1,
-			which calls this out for a results table by name: an absent
-			`availability` means no count has been computed, "so a result row must
-			not carry an emptiness glyph or an accessible name like *none held* on
-			the strength of a missing key". The cross is for a PRESENT blob carrying
-			`have: 0`.
+			§17.2's Have column, rendered by the same component Home's Block C uses.
+			Every decision in it is `$lib/library.haveCell`'s and
+			`$lib/HaveCell.svelte`'s, including the one `http-api.md` §1.4.1 states for
+			a results table by name: an absent `availability` means no count has been
+			computed, so a result row must carry no emptiness glyph and no accessible
+			name like *none held* on the strength of a missing key.
 		-->
-		{@const have = haveCell(item)}
-		{#each have.lines as line (line.key)}
-			<div class="availline">
-				{#if line.label}
-					<span class="availlabel trunc" title={line.label}>{line.label}</span>
-				{/if}
-				{#if line.mark.k === 'complete'}
-					<span class="muted"><Icon name="check" size="sm" /><span class="sr">complete</span></span>
-				{:else if line.mark.k === 'none'}
-					<span class="muted"
-						><Icon name="x-circle" size="sm" /><span class="sr">none held</span></span
-					>
-				{:else if line.mark.k === 'fraction'}
-					<span class="num">{line.mark.have} / {line.mark.total}</span>
-				{:else if line.mark.k === 'partial'}
-					<span class="num">{line.mark.have}</span>
-				{:else}
-					<span class="muted">Not counted yet</span>
-				{/if}
-			</div>
-		{/each}
-		{#if have.more > 0}
-			<div class="cell-sub">+{have.more} more</div>
-		{/if}
-		{#if have.missing}
-			<div class="cell-sub availgap">{have.missing}</div>
-		{/if}
-		{#if have.gaps}
-			<div class="cell-sub trunc" title={have.gaps}>Gaps at {have.gaps}</div>
-		{/if}
+		<HaveCell {item} />
 	{:else if column.id === 'added'}
 		<!-- An undated row is real and renders as undated: Kavita reaches that
 		     state with one absent `created` field. Absolute and relative together

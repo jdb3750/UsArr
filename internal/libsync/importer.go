@@ -141,8 +141,14 @@ func (r Report) Duration() time.Duration {
 type Progress struct {
 	InstanceID int64  `json:"instance_id"`
 	Phase      string `json:"phase"` // containers | items | credits | files | done
-	ItemsRead  int    `json:"items_read"`
-	Applied    int    `json:"applied"`
+
+	// ItemsRead is a RUNNING count, incremented per hand-over as the stream is
+	// consumed rather than settled when it closes. A mid-run frame is therefore
+	// a truthful "this far so far"; it was not always, and the three streaming
+	// phases each carry the counter that makes it so.
+	ItemsRead int `json:"items_read"`
+
+	Applied int `json:"applied"`
 
 	// Total is the upstream's own total when it reported one, and 0 when it did
 	// not. Kavita's `Pagination` header is middleware and is not in the OpenAPI
@@ -456,6 +462,12 @@ func (im *Importer) streamAndApply(
 	}
 
 	read, streamErr := im.Source.StreamItems(ctx, func(it store.CatalogueItem) error {
+		// COUNTED HERE, ONE PER HAND-OVER, and that is the whole point: the
+		// flush above publishes rep.ItemsRead, so a counter assigned only after
+		// the stream closes makes every frame but the last say "0 items read"
+		// while `applied` climbs past it. That frame is not merely imprecise,
+		// it is false, and it renders as a stalled import that is running fine.
+		rep.ItemsRead++
 		batch = append(batch, it)
 		if len(batch) >= rows || im.now().Sub(batchStarted) >= window {
 			return flush()
@@ -465,6 +477,13 @@ func (im *Importer) streamAndApply(
 	// read is reported whether or not the stream failed: it is the adapter's
 	// partial-delivery contract, and a report that hid it would say "0 items"
 	// about an import that wrote 40,000.
+	//
+	// It still OVERWRITES the running count above rather than being dropped for
+	// it, because the two legitimately differ: KavitaSource.StreamItems returns
+	// what StreamSeries handed IT, which counts series in a declined library
+	// that never reach fn at all. The adapter's number stays the Report's
+	// documented meaning — "how far the READ got" — and the running count exists
+	// to make the intermediate frames truthful, not to redefine the field.
 	rep.ItemsRead = read
 	if streamErr != nil {
 		// The tail is deliberately NOT flushed on a failed stream. A partial
@@ -534,12 +553,15 @@ func (im *Importer) streamAndApplyCredits(
 	}
 
 	read, streamErr := src.StreamCredits(ctx, reqs, func(set store.CreditSet) error {
+		// Counted per hand-over so the credits frames climb; see the item pass.
+		rep.CreditItemsRead++
 		batch = append(batch, set)
 		if len(batch) >= rows || im.now().Sub(batchStarted) >= window {
 			return flush()
 		}
 		return nil
 	})
+	// The adapter's own count wins at the end, on the item pass's terms.
 	rep.CreditItemsRead = read
 	if streamErr != nil {
 		// Same rule as the item pass: the tail of a failed read is not
@@ -614,12 +636,15 @@ func (im *Importer) streamAndApplyFiles(
 	}
 
 	read, streamErr := src.StreamFiles(ctx, reqs, func(set store.FileSet) error {
+		// Counted per hand-over so the files frames climb; see the item pass.
+		rep.FileItemsRead++
 		batch = append(batch, set)
 		if len(batch) >= rows || im.now().Sub(batchStarted) >= window {
 			return flush()
 		}
 		return nil
 	})
+	// The adapter's own count wins at the end, on the item pass's terms.
 	rep.FileItemsRead = read
 	if streamErr != nil {
 		return fmt.Errorf("full import of service_instance %d: walk files (delivered %d): %w",
