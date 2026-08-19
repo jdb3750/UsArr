@@ -19413,6 +19413,19 @@ collision, and the `ssrf.RedactText` quotation — which is verbatim against `in
 not a paraphrase — are all still accurate. §1.4.1's *"not counted yet"* rendering, which §3.4 calls
 its missing half, is also unchanged.
 
+🔻 **Corrected 2026-08-19 — the parenthetical is stale: `sync_report` has THREE readers now, not one.**
+The claim was true when this row was written (`7fd8cc0`, 04:23) and did not survive the same day.
+What reads the table today: `store.FileWalkFailuresByInstance` (`internal/store/catalogue.go`), whose
+own comment calls it *"sync_report's FIRST READER"* — first, and no longer only;
+`attachLibraryCompleteness` via `libraryCompletenessSQL`, which landed at `1bc400a` (11:00) and folds
+the `content_completeness` kind onto the Libraries screen; and `attachLibrarySkips` via
+`librarySkipsSQL`, which landed at `42246c0` (14:43) and folds `items_skipped` the same way. **The
+narrower claim this parenthetical was standing in for still holds:** `FileWalkFailuresByInstance`
+remains the only reader of the **`file_walk_failed` kind**, which is what §3.4's *"this field is that
+table's only reader"* line is actually about — the two later readers select different `kind` values
+through `containerReportSQL` and never touch it. **Named by anchor and not by line**, on the rule this
+same row states two paragraphs above. The original sentence is left intact as history.
+
 ## SD-03 — `work_relation` "already carries" columns in a table no migration creates. **Applied in `FUTURE.md`; the `CLAUDE.md` half is split.**
 
 **An instance of `SD-01`, and a sharper one than any row of `SD-02`.** `SD-02`'s twenty-one rows are

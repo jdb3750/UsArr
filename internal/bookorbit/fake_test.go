@@ -124,6 +124,23 @@ type fake struct {
 
 	// booksHandler replaces the paging behaviour wholesale.
 	booksHandler http.HandlerFunc
+
+	// covers is what GET /api/v1/books/{id}/cover answers, keyed by book id. A
+	// book that is NOT in the map answers 404 with BookController.getCover's own
+	// NotFoundException message, which is what a book with no cover file does
+	// upstream (book.controller.ts:344) — so "absent from the map" and "has no
+	// cover" are the same thing here on purpose.
+	covers map[int64]fakeCover
+
+	// coverHandler replaces the cover route wholesale.
+	coverHandler http.HandlerFunc
+}
+
+// fakeCover is one stored cover: the bytes and the Content-Type BookOrbit would
+// derive from the file's extension (imageContentTypeFromPath).
+type fakeCover struct {
+	contentType string
+	body        []byte
 }
 
 func newFake(t *testing.T) *fake {
@@ -181,6 +198,14 @@ func newFake(t *testing.T) *fake {
 			return
 		}
 		f.defaultBooks(w, r)
+	}))
+
+	mux.HandleFunc("GET "+apiPrefix+"/books/{id}/cover", f.record(func(w http.ResponseWriter, r *http.Request) {
+		if f.coverHandler != nil {
+			f.coverHandler(w, r)
+			return
+		}
+		f.defaultCover(w, r)
 	}))
 
 	mux.HandleFunc("/", f.record(func(w http.ResponseWriter, r *http.Request) {
@@ -285,6 +310,36 @@ func (f *fake) defaultBooks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": items, "total": len(all), "page": q.Pagination.Page, "size": q.Pagination.Size,
 	})
+}
+
+// defaultCover is GET /api/v1/books/{id}/cover.
+//
+// The 404 path is transcribed rather than invented: getCoverPath returns null
+// for a book whose cover directory holds no usable file, and the controller
+// throws NotFoundException(`No cover for book ${id}`) on that null. THERE IS NO
+// PLACEHOLDER ARM UPSTREAM AND THERE IS NONE HERE — a fake that answered 200
+// with a grey rectangle would let a caller that cannot tell a placeholder from a
+// cover pass.
+func (f *fake) defaultCover(w http.ResponseWriter, r *http.Request) {
+	if !f.bearerOK(r) {
+		nestErrorText(w, r, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		nestErrorText(w, r, http.StatusBadRequest, "Validation failed (numeric string is expected)")
+		return
+	}
+	cov, ok := f.covers[id]
+	if !ok {
+		nestErrorText(w, r, http.StatusNotFound, fmt.Sprintf("No cover for book %d", id))
+		return
+	}
+	w.Header().Set("Content-Type", cov.contentType)
+	w.Header().Set("Cache-Control", "private, max-age=86400")
+	w.Header().Set("ETag", `"1755500000000"`)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(cov.body)
 }
 
 // fakeCard builds one BookCard. Field names are packages/types/src/book.ts's.

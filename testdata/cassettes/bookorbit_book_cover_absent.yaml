@@ -1,0 +1,112 @@
+---
+# SYNTHETIC — hand-authored from bookorbit/bookorbit@73b7877d
+# (auth.controller.ts's @Post('magic-links/login') and
+# AuthService.issueTokensForUser, book.controller.ts's BookController.getCover
+# :335-344, book.service.ts's BookService.getCoverPath :1253-1271,
+# common/book-cover-storage.ts's findPreferredBookCoverFileName,
+# common/filters/http-exception.filter.ts's envelope). NOT a wire capture, and no
+# live BookOrbit was contacted — ADR-0052 records that this project has never
+# probed one, and inventing a capture would be worse than saying so.
+#
+# ⚠️ THIS IS THE ANSWER TO THE QUESTION docs/REVIEW-LOG.md's LS-260 LEFT OPEN,
+# re-asked against BookOrbit instead of the sunset Kavita: a book with no cover
+# answers 404, NOT a 200 carrying a placeholder image. getCoverPath returns null
+# when the cover directory is missing or holds no custom, extracted or legacy
+# cover file, and the controller's entire no-cover path is
+# `if (!coverPath) throw new NotFoundException(\`No cover for book ${id}\`)`
+# (book.controller.ts:344). There is no default asset and no generated tint
+# anywhere in that handler.
+#
+# WHY THAT MATTERS ENOUGH FOR ITS OWN FIXTURE: a 200 placeholder would be cached
+# by the caller as a real cover, with nothing in the response to tell it apart,
+# and the caller cannot un-learn that. A 404 is cached as ABSENT and a transport
+# failure is retried — which is why Client.Cover returns this status with a NIL
+# ERROR rather than collapsing it into ErrNotFound.
+#
+# 🔍 THE SOURCE SAYS WHAT THE HANDLER DOES; ONLY A LIVE INSTANCE SAYS WHAT A
+# DEPLOYMENT IN FRONT OF IT DOES. A reverse proxy with its own error page is the
+# failure mode neither this fixture nor the read behind it can see.
+#
+# Note also that a 404 is OVERLOADED upstream: a nonexistent book id and a book
+# the credential's content filters hide both throw the same NotFoundException
+# from verifyBookAccess (book.service.ts:489-498). All three are "do not ask
+# again", but none of them is evidence about a FILE. cover.go says so at the call
+# site.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        host: bookorbit.test:3000
+        headers:
+            Accept:
+                - application/json
+            Content-Type:
+                - application/json
+        url: http://bookorbit.test:3000/api/v1/auth/magic-links/login
+        method: POST
+        body: '{"token":"<redacted>"}'
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            {
+              "accessToken": "<redacted>",
+              "user": {
+                "id": 7,
+                "username": "usarr",
+                "name": "UsArr service account",
+                "email": null,
+                "active": true,
+                "isSuperuser": false,
+                "isDefaultPassword": false,
+                "settings": {},
+                "avatarUrl": null,
+                "provisioningMethod": "shared",
+                "permissions": []
+              }
+            }
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: bookorbit.test:3000
+        headers:
+            Accept:
+                - image/*
+            Authorization:
+                - <redacted>
+        url: http://bookorbit.test:3000/api/v1/books/404/cover
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 404 Not Found
+        code: 404
+        duration: 2ms
+        body: |-
+            {
+              "statusCode": 404,
+              "message": "No cover for book 404",
+              "path": "/api/v1/books/404/cover",
+              "timestamp": "2026-08-19T00:00:00.000Z",
+              "requestId": "req-1"
+            }
