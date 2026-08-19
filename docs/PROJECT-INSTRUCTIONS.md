@@ -554,3 +554,52 @@ What does not: cosmetic documentation edits.
 
 The invariant: `CLAUDE.md`, this file, and the applied settings text must never contradict each
 other.
+
+## Candidates for a future version — NOT applied
+
+**Nothing in this section is applied, and nothing in it is authoritative.** These are drafted
+changes queued for the next version of the instructions text; the live settings text is v1.6 above
+and stays v1.6 until somebody applies a successor. Agents cannot apply a version — only Joe or the
+project coordinator can, by pasting the full text into the Project's settings by hand, exactly as
+"How this file is maintained" describes. Until that happens, a candidate here binds no session and
+overrides nothing: where a candidate and the applied text disagree, the applied text wins.
+
+This section deliberately has **no fenced verbatim block and no row in the Status table**. Those two
+things mark a version that exists as a single applied artefact with a checksum over it; a candidate
+is neither, and giving it either would be the one way to mistake it for one. It gets a fenced block
+on the day it becomes a version, and not before. Each candidate carries its own character count and
+the total it would project against the 8000-character limit, because a candidate that has not been
+measured is a wish rather than a proposal.
+
+### Candidate 1 — quote the gate's `tool:` banner, never a bare `--version`
+
+**Where it goes.** Appended to the gates sentence in the "Verify, do not assert" paragraph,
+immediately after "…is indistinguishable from no guard."
+
+> Take a tool's version from the gate's own "tool:" banner, never from a bare --version — the binary on PATH is not the pinned gate binary.
+
+**138 characters**, counting the single space that joins it to the sentence before it; 137 without.
+Appended to v1.6 as it stands, the text projects to **7867 of 8000**, inside the 271 characters v1.6
+left spare, so this candidate displaces nothing and needs no cut to accompany it.
+
+**The failure it closes, twice observed.** Agents report gate tool versions from a bare
+`golangci-lint --version`, which resolves off `$PATH` — `/usr/local/bin/golangci-lint`, **2.5.0** on
+this container — rather than the pinned binary the gate actually runs, `$(GOBIN_DIR)/golangci-lint`
+at the `GOLANGCI_VERSION ?= v2.12.2` of `Makefile:135`. A sound green was reported as broken on
+2026-08-18 on that mismatch alone, and the same misreading recurred on 2026-08-19.
+
+**The banner exists, so the rule points at something real.** `require_tool` (`Makefile:299`) tests
+the absolute path, asserts the pin, and only then prints the line that names both:
+
+> `Makefile:320` — `echo "tool: $(1) — version $(2), $(call pin_note,$(4),version)"; \`
+
+`lint-go` calls it at `Makefile:785` as
+`$(call require_tool,$(GOLANGCI_LINT),$(GOLANGCI_WANT),,$(GOLANGCI_PINVARS))`, and every other
+pinned step calls it the same way. The banner also carries `pin_note` (`Makefile:268`), which says
+whether the pin held or was overridden on the command line — a bare `--version` cannot report that
+either, which is the second reason to quote the banner rather than re-derive the number.
+
+**Why it belongs in the settings text rather than only in `docs/DEVELOPMENT.md`.** The instructions
+text already carries the rule this is the missing half of — report the binary, its version and the
+commit, because a green that names neither its tool nor its tree is a rumour. An agent that obeys
+that sentence and then runs a bare `--version` has satisfied it in form and broken it in substance.
