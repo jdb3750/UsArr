@@ -59,6 +59,11 @@ documentation-only passes before it**.
   `seedLibraryCorpus` (`internal/httpapi/library_test.go`) and
   `TestBrowseEndpointScopesByLibrarySlug` (`internal/httpapi/library_browse_test.go`).
 - **`REVIEW-LOG.md`:** LS-260's closure section and the cassette-scrubber entry (LS-340…LS-345).
+**THREE COMMITS LANDED MID-PASS and the baseline is deliberately NOT advanced past what was read.**
+`adf8960`, `a6bf6c1` and `cad0563` touch `docs/DEVELOPMENT.md`, `docs/design/DESIGN-DIRECTION.md` and
+one blockquote in `docs/DECISIONS.md` — **no Go, no migration, no `web/src/`** — so the checks above
+are not stale by them. `cad0563` was read directly, because it marks ADR-0052's mockup re-draw
+discharged and §3's new deferred row turns on exactly what that mark does and does not cover.
 **NOT fired, and therefore inherited:** **no schema check and no migration read** — nothing below
 that rests on `internal/db/migrations` was re-derived by this pass — **no `make check` line citation
 was swept**, and **every §2 box this pass does not name is inherited, not re-fired.**
