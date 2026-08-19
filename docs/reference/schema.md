@@ -1370,7 +1370,9 @@ decided in ADR-0050 and argued at length in `00008_image_asset_format.sql`'s hea
   variation (PNG for logos) stays expressible, because `role` is a column on the same row;
   per-**width** variation is foreclosed, and reopening it costs an ADR amendment plus a second
   column. ⚠️ Nothing enforces this yet — there is no pipeline — so it is discharged by definition,
-  and the first writer is the code that owes it.
+  and the first writer is the code that owes it. **[FUTURE.md](../FUTURE.md) §21 states that debt as
+  a debt**: what breaks if it is violated, and the two options open to the code that first stores a
+  rendition. Read it before writing the fetch path.
 
 - **It is a lowercase codec token, not a media type** — `jpeg`, not `image/jpeg`, and not the `jpg`
   file suffix. `Content-Type` is derived from it by the `/img` surface; the reverse is parsing, and
