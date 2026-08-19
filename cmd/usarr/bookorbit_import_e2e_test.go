@@ -49,10 +49,40 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 			boBook(102, "The Making", map[string]any{
 				"subtitle": "The Making of the Atomic Bomb",
 			}),
-			// 🚩 A COMIC. It must be READ, SKIPPED and COUNTED — never written
-			// as a 'book' work, and never silently dropped.
-			boBook(103, "Saga, Vol. 1", map[string]any{
+			// 🚩 A COMIC WITH NO SERIES — ADR-0068 decision 2's residue. It is
+			// read, mapped as a `comic_issue` under a SYNTHESIZED single-issue
+			// series named for the book, and flagged is_oneshot. It is never
+			// written as a 'book' work, never silently dropped, and never
+			// promoted to a 'comic' work in its own right.
+			boBook(103, "The Sandman: Endless Nights", map[string]any{
 				"files": []map[string]any{boFile(1031, "cbz", "primary")},
+			}),
+			// 🚩 TWO COMICS OF ONE SERIES, one of which is ALSO in a second
+			// series. Two issues under one parent is the smallest shape that can
+			// tell ADR-0068's accepted implementation from the per-row one it
+			// refused, and the extra membership is decision 3's "recorded, not
+			// resolved".
+			boBook(105, "Saga, Vol. 1", map[string]any{
+				"files":       []map[string]any{boFile(1051, "cbz", "primary")},
+				"seriesId":    5,
+				"seriesName":  "Saga",
+				"seriesIndex": 1,
+				"seriesMemberships": []map[string]any{
+					{"seriesId": 5, "seriesName": "Saga", "seriesIndex": 1,
+						"displayOrder": 0, "expectedBookCount": 11},
+				},
+			}),
+			boBook(106, "Saga, Vol. 2", map[string]any{
+				"files":       []map[string]any{boFile(1061, "cbz", "primary")},
+				"seriesId":    5,
+				"seriesName":  "Saga",
+				"seriesIndex": 2,
+				"seriesMemberships": []map[string]any{
+					{"seriesId": 5, "seriesName": "Saga", "seriesIndex": 2,
+						"displayOrder": 0, "expectedBookCount": 11},
+					{"seriesId": 9, "seriesName": "Image Firsts", "seriesIndex": nil,
+						"displayOrder": 1, "expectedBookCount": nil},
+				},
 			}),
 			// A book whose file has no format at all. BookOrbit's own
 			// getBookMediaKind calls that "unknown"; it is counted separately
@@ -98,41 +128,115 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 
 	// ── the containers ──────────────────────────────────────────────────────
 	//
-	// Two BookOrbit libraries, two UsArr libraries, both of kind 'book'. The
-	// kind is a constant here and that is a fact about BookOrbit rather than a
-	// shortcut: `libraries` has no type, kind or mediaType column of any sort,
-	// so there is nothing to derive one from at the container grain.
-	if n := countIn(t, env, `SELECT COUNT(*) FROM library WHERE id <> 0 AND managed_by = 'auto'`); n != 2 {
-		t.Errorf("auto libraries = %d, want 2", n)
+	// Two BookOrbit libraries and THREE UsArr libraries. BookOrbit supplies no
+	// container-level kind at all — `libraries` has no type, kind or mediaType
+	// column — so every container BINDS as 'book', and library 1 turns out to
+	// hold comics as well. ADR-0066 decision 5, activated by ADR-0068: a MIXED
+	// container "becomes a `book` library and a `comic` library over the same
+	// `library_source` container ref".
+	//
+	// ⚠️ THE COMIC LIBRARY IS MINTED LAZILY, on the first comic the walk actually
+	// reaches, and library 2 proves it: it holds only an audiobook and gets NO
+	// comic sibling. A comic library minted at bind time for every container
+	// would be a permanently empty row on the Libraries screen — principle 3's
+	// "empty screen that looks broken" — and decision 5's word is MIXED.
+	if n := countIn(t, env, `SELECT COUNT(*) FROM library WHERE id <> 0 AND managed_by = 'auto'`); n != 3 {
+		t.Errorf("auto libraries = %d, want 3", n)
 	}
 	if n := countIn(t, env, `SELECT COUNT(*) FROM library WHERE kind = 'book' AND id <> 0`); n != 2 {
 		t.Errorf("book libraries = %d, want 2", n)
 	}
-	if n := countIn(t, env, `SELECT COUNT(*) FROM library_source WHERE container_kind = 'remote_library'`); n != 2 {
-		t.Errorf("library_source rows = %d, want 2", n)
+	if n := countIn(t, env, `SELECT COUNT(*) FROM library WHERE kind = 'comic' AND id <> 0`); n != 1 {
+		t.Errorf("comic libraries = %d, want 1 — library 1 is mixed and library 2 is not", n)
+	}
+	if n := countIn(t, env, `SELECT COUNT(*) FROM library_source WHERE container_kind = 'remote_library'`); n != 3 {
+		t.Errorf("library_source rows = %d, want 3", n)
+	}
+	if n := countIn(t, env, `SELECT COUNT(*) FROM library_source ls JOIN library l ON l.id = ls.library_id
+	                          WHERE ls.container_ref = '1'`); n != 2 {
+		t.Errorf("library_source rows over container '1' = %d, want 2 — decision 5's two "+
+			"libraries stand over the SAME container ref, which needs no migration because "+
+			"library_source's uniqueness is (library_id, service_instance_id, "+
+			"container_kind, container_ref)", n)
 	}
 
-	// ── the items: five books read, THREE written ───────────────────────────
+	// ── the items: seven books read, SIX written ────────────────────────────
 	//
-	// The pair is what proves anything. A build that wrote every book would give
-	// 5; a build that dropped the audiobook would give 2; a build that mapped
-	// the comic into the book cascade would give 4 and be unrecoverable.
-	if n := countIn(t, env, `SELECT COUNT(*) FROM work WHERE kind <> 'person'`); n != 3 {
-		t.Errorf("catalogue work rows = %d, want 3 — two ebooks and one audiobook; "+
-			"the comic and the unclassified file are read and skipped", n)
-	}
+	// Three prose books, three comics as ISSUES, and the unclassifiable file
+	// skipped. The pair is what proves anything: a build that wrote every book
+	// would give 7 and would have written a work for a file BookOrbit itself
+	// cannot classify; a build that dropped the audiobook would give 5; a build
+	// that mapped a comic into the BOOK cascade would give 6 book works and be
+	// unrecoverable, because §6.4's cascade makes a wrong work.kind at ingest
+	// permanently unmergeable.
 	if n := countIn(t, env, `SELECT COUNT(*) FROM work WHERE kind = 'book'`); n != 3 {
-		t.Errorf("book works = %d, want 3", n)
+		t.Errorf("book works = %d, want 3 — two ebooks and one audiobook, and NOT a comic", n)
 	}
-	if n := countIn(t, env, `SELECT COUNT(*) FROM work WHERE kind = 'comic'`); n != 0 {
-		t.Errorf("comic works = %d, want 0 — this slice writes no comics at all", n)
+	issues := countIn(t, env, `SELECT COUNT(*) FROM work WHERE kind = 'comic_issue'`)
+	series := countIn(t, env, `SELECT COUNT(*) FROM work WHERE kind = 'comic'`)
+	if issues != 3 {
+		t.Errorf("comic_issue works = %d, want 3 — one one-shot and two Saga volumes", issues)
 	}
-	if n := countIn(t, env, `SELECT COUNT(*) FROM service_item_link WHERE remote_kind = 'book'`); n != 3 {
-		t.Errorf("service_item_link rows = %d, want 3 — one per MAPPED book", n)
+	// ⚠️ ADR-0068's SECOND DONE-CHECK, STATED AS A FAILURE CONDITION RATHER THAN
+	// AS A NUMBER TO LOOK AT. "If the series count EQUALS the issue count, the
+	// per-row implementation shipped and this check MUST FAIL … it is the only
+	// outcome here that is worse than not shipping."
+	if series == issues {
+		t.Fatalf("series works = issue works = %d — one 'comic' work per comic FILE is the "+
+			"alternative ADR-0066 pre-emptively refused, and it flattens ARCHITECTURE §13's "+
+			"thirty-to-one ratio to one-to-one", series)
+	}
+	if series != 2 {
+		t.Errorf("comic works = %d, want 2 — the synthesized one-shot series and Saga", series)
+	}
+	// ADR-0068's FIRST done-check: zero rows with parent_work_id IS NULL.
+	if n := countIn(t, env,
+		`SELECT COUNT(*) FROM work WHERE kind = 'comic_issue' AND parent_work_id IS NULL`); n != 0 {
+		t.Errorf("parentless comic_issue rows = %d, want 0 — a parentless issue is not a "+
+			"degraded comic, it is a row no shipped read can see", n)
+	}
+	// The one-shot's flag is WRITTEN, not left to the column's DEFAULT 0.
+	if n := countIn(t, env, `SELECT COUNT(*) FROM work_comic_issue WHERE is_oneshot = 1`); n != 1 {
+		t.Errorf("is_oneshot rows = %d, want 1 — only the comic with no series is a one-shot", n)
+	}
+	if n := countIn(t, env, `SELECT COUNT(*) FROM work_comic_issue WHERE number_sort IS NOT NULL`); n != 2 {
+		t.Errorf("issues carrying a number_sort = %d, want 2 — the two Saga volumes report a "+
+			"seriesIndex and the one-shot does not", n)
+	}
+	// The comic side is filed and indexed AT THE SERIES, never at the issue.
+	if n := countIn(t, env, `SELECT COUNT(*) FROM search_doc WHERE kind = 'comic_issue'`); n != 0 {
+		t.Errorf("comic_issue search_doc rows = %d, want 0 — writeSearchDoc RETURNS AN ERROR "+
+			"on this kind, so a build that routed an issue through the top-level path would "+
+			"have failed this import outright", n)
+	}
+	if n := countIn(t, env, `SELECT COUNT(*) FROM search_doc WHERE kind = 'comic'`); n != 2 {
+		t.Errorf("comic search_doc rows = %d, want 2", n)
+	}
+	if n := countIn(t, env, `SELECT COUNT(*) FROM library_member lm JOIN work w ON w.id = lm.work_id
+	                          WHERE w.kind = 'comic_issue'`); n != 0 {
+		t.Errorf("comic_issue library_member rows = %d, want 0", n)
+	}
+	// NO SERIES WORK IS EVER MINTED INTO NO LIBRARY AT ALL, and it is the COMIC
+	// library it lands in rather than the book one it was walked from.
+	if n := countIn(t, env, `SELECT COUNT(*) FROM library_member lm
+	                           JOIN work w ON w.id = lm.work_id
+	                           JOIN library l ON l.id = lm.library_id
+	                          WHERE w.kind = 'comic' AND l.kind = 'comic'`); n != 2 {
+		t.Errorf("comic series filed into a comic library = %d, want 2", n)
+	}
+	if n := countIn(t, env, `SELECT COUNT(*) FROM service_item_link WHERE remote_kind = 'book'`); n != 6 {
+		t.Errorf("service_item_link rows = %d, want 6 — one per MAPPED book, comics "+
+			"included: remote_kind is the UPSTREAM's noun and a .cbz is a `books` row to "+
+			"BookOrbit", n)
+	}
+	// ONE series link per SERIES, not per issue: the parent is resolved through
+	// the link the first issue wrote.
+	if n := countIn(t, env, `SELECT COUNT(*) FROM service_item_link WHERE remote_kind = 'series'`); n != 2 {
+		t.Errorf("series links = %d, want 2", n)
 	}
 	if n := countIn(t, env,
-		`SELECT COUNT(*) FROM service_item_link WHERE remote_id = '103' OR remote_id = '104'`); n != 0 {
-		t.Errorf("the skipped books left %d links behind; a skip must leave no row at all", n)
+		`SELECT COUNT(*) FROM service_item_link WHERE remote_id = '104'`); n != 0 {
+		t.Errorf("the skipped book left %d links behind; a skip must leave no row at all", n)
 	}
 
 	// The audiobook is a 'book' work whose remote_subtype carries the upstream's
@@ -293,8 +397,17 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 
 	// has_file comes from books.status, which is a first-class three-valued
 	// state upstream. Only 'present' is a file.
-	if n := countIn(t, env, `SELECT COUNT(*) FROM service_item_link WHERE has_file = 1`); n != 3 {
-		t.Errorf("links with has_file = %d, want 3 — every mapped book here is 'present'", n)
+	//
+	// ⚠️ SIX, NOT SEVEN. Every mapped BOOK is 'present', comics included; the two
+	// SERIES links carry has_file = 0, because a series has no bytes of its own —
+	// §6.3's availability for a series comes from the rollup over its children,
+	// never from a flag copied off one issue.
+	if n := countIn(t, env, `SELECT COUNT(*) FROM service_item_link WHERE has_file = 1`); n != 6 {
+		t.Errorf("links with has_file = %d, want 6 — every mapped book here is 'present'", n)
+	}
+	if n := countIn(t, env,
+		`SELECT COUNT(*) FROM service_item_link WHERE remote_kind = 'series' AND has_file = 1`); n != 0 {
+		t.Errorf("series links claiming a file = %d, want 0", n)
 	}
 
 	// ── identity ────────────────────────────────────────────────────────────
@@ -350,8 +463,16 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 	if err := json.Unmarshal([]byte(detail), &note); err != nil {
 		t.Fatalf("decode the items_skipped detail %q: %v", detail, err)
 	}
-	if note.SkippedComics != 1 || note.SkippedUnknown != 1 {
-		t.Errorf("skip tally = %+v, want 1 comic and 1 unknown", note)
+	// ⚠️ ADR-0068's FOURTH DONE-CHECK: the latest items_skipped row's Comics field
+	// reads 0. The field is KEPT rather than removed — every row written before
+	// that ADR carries a `skipped_comics` key and store.SkipNote's JSON contract
+	// is explicit that dropping one "silently orphans that half of the history" —
+	// so the assertion is on the VALUE.
+	if note.SkippedComics != 0 {
+		t.Errorf("skip tally = %+v, want 0 comics: comics are imported as issues now", note)
+	}
+	if note.SkippedUnknown != 1 {
+		t.Errorf("skip tally = %+v, want 1 unknown — the file with no format", note)
 	}
 	if note.Name != "Fiction" || note.Reason == "" {
 		t.Errorf("the note names no library or gives no reason: %+v", note)
@@ -440,10 +561,20 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 		} `json:"items"`
 	}
 	env.do(t, "GET", "/api/v1/libraries", nil, &libs)
-	if len(libs.Items) != 2 {
-		t.Fatalf("GET /api/v1/libraries returned %d rows, want the 2 the import created: %+v",
+	if len(libs.Items) != 3 {
+		t.Fatalf("GET /api/v1/libraries returned %d rows, want the 3 the import created: %+v",
 			len(libs.Items), libs.Items)
 	}
+	// ⚠️ THE COMIC LIBRARY'S NAME IS "Fiction (2)", AND THAT IS THE SHIPPED
+	// DISAMBIGUATION RATHER THAN A NAME THIS SLICE CHOSE. bindOneContainer's step
+	// 3 walks `name (n)` until BOTH ux_library_name and ux_library_slug are free;
+	// the comic sibling cannot JOIN the book library of the same name because
+	// step 2 requires the kinds to agree, so it lands on the next free name. It
+	// is asserted rather than left implicit BECAUSE IT IS UNSATISFYING: neither
+	// ADR-0066 decision 5 nor ADR-0068 rules on what a sibling library is called,
+	// so nothing here invents a convention, and this assertion is where a reader
+	// who wants one will find the current answer.
+	// (byName below is built from these rows; the assertion is with the others.)
 	byName := map[string]string{}
 	for _, l := range libs.Items {
 		if l.Skipped == nil {
@@ -452,14 +583,15 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 		}
 		byName[l.Name] = l.Skipped.State
 		if l.Skipped.State == "left_out" {
-			if l.Skipped.Items != 2 {
-				t.Errorf("%s reports %d items left out on the wire, want 2 (1 comic + 1 "+
-					"unknown)", l.Name, l.Skipped.Items)
+			if l.Skipped.Items != 1 {
+				t.Errorf("%s reports %d items left out on the wire, want 1 — the "+
+					"unclassifiable file, and NOT the comic, which is imported now",
+					l.Name, l.Skipped.Items)
 			}
 			if l.Skipped.Reason == "" {
 				t.Errorf("%s says items were left out and does not say why", l.Name)
 			}
-		} else if l.Skipped.Items != 0 || l.Skipped.Reason != "" {
+		} else if l.Skipped.Items != 0 || l.Skipped.Reason != "" { //nolint:revive // mirrors the state above
 			t.Errorf("%s serves a count or a reason under state %q: %+v",
 				l.Name, l.Skipped.State, l.Skipped)
 		}
@@ -468,14 +600,104 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 		t.Errorf("Fiction's skip state on the wire = %q, want left_out — the comic it "+
 			"skipped is invisible to anyone without database access", byName["Fiction"])
 	}
+	if _, ok := byName["Fiction (2)"]; !ok {
+		t.Errorf("no 'Fiction (2)' library; the comic sibling takes the next free name under "+
+			"the existing disambiguation. Rows: %v", byName)
+	}
+	// ⚠️ THE COMIC LIBRARY REPORTS THE SAME SKIP AS ITS BOOK SIBLING, AND THAT IS
+	// RECORDED HERE RATHER THAN FIXED. §17.8's read joins `library` →
+	// `library_source` → `sync_report` on the CONTAINER REF, and a skip is a fact
+	// about the container: one unclassifiable file was left out of BookOrbit
+	// library 1, and both UsArr libraries standing over library 1 say so. It is
+	// not wrong, but it is the first place ADR-0066 decision 5's two-libraries-
+	// one-container shape shows through to a screen, and NEITHER ADR RULES ON IT
+	// — deciding which of two sibling libraries owns a container's skip is a
+	// design question, not an implementation detail, so nothing here decides it.
+	if byName["Fiction (2)"] != "left_out" {
+		t.Errorf("the comic library's skip state = %q; it stands over the same container as "+
+			"Fiction and the skip rows are filed under the CONTAINER, so it reads the same "+
+			"row", byName["Fiction (2)"])
+	}
 	if byName["Audio"] != "none" {
 		t.Errorf("Audio's skip state on the wire = %q, want `none`: it was observed by "+
 			"the same import and left nothing out, which is a MEASURED negative and must "+
 			"not look like the absence that means nobody counted. Every row: %v",
 			byName["Audio"], byName)
 	}
-	t.Logf("bookorbit import: 5 books read, 3 mapped, 1 comic and 1 unknown skipped; "+
-		"note = %s; wire states = %v", detail, byName)
+	// ── ADR-0068 DECISION 4: BOTH RESIDUE DEFAULTS EMIT A sync_report ROW ────
+	//
+	// "The synthesized-series case and the extra-membership case each write one,
+	// so the FIRST REAL IMPORT against the owner's library measures how often
+	// each occurs. Sizing comes from instrumentation, not from estimates, and
+	// NOT FROM ASKING THE OWNER TO RUN SQL." The rows need no migration:
+	// sync_report.kind deliberately carries no CHECK.
+	assertResidueRow(t, env, "comic_series_synthesized", "1", 1, 1, 1)
+	assertResidueRow(t, env, "comic_series_memberships_declined", "1", 1, 1, 1)
+	// ⚠️ AND A ZERO ROW FOR THE CONTAINER THAT HAD NO COMICS AT ALL, on
+	// ADR-0063's rule: "none" and "nobody looked" must not render identically, or
+	// the measurement decision 4 asks for measures nothing.
+	assertResidueRow(t, env, "comic_series_synthesized", "2", 0, 0, 0)
+	assertResidueRow(t, env, "comic_series_memberships_declined", "2", 0, 0, 0)
+
+	t.Logf("bookorbit import: 7 books read, 6 mapped (3 prose, 3 comic issues under 2 "+
+		"series), 1 unknown skipped; note = %s; wire states = %v", detail, byName)
+}
+
+// assertResidueRow reads one ADR-0068 decision 4 row and checks its three counts.
+func assertResidueRow(
+	t *testing.T, env *testEnv, kind, ref string, synthesized, multi, declined int,
+) {
+	t.Helper()
+	var detail string
+	if err := env.app.store.DB().Read().QueryRowContext(t.Context(), `
+		SELECT detail FROM sync_report
+		 WHERE kind = ? AND remote_kind = 'library' AND remote_id = ?`, kind, ref).Scan(&detail); err != nil {
+		t.Fatalf("no %s row for library %s: %v", kind, ref, err)
+	}
+	var note struct {
+		Name              string `json:"name"`
+		SynthesizedSeries int    `json:"synthesized_series"`
+		MultiSeries       int    `json:"multi_series_books"`
+		Declined          int    `json:"declined_memberships"`
+		Effect            string `json:"effect"`
+		DoesNotCover      string `json:"does_not_cover"`
+		Sample            []struct {
+			BookID    int64   `json:"book_id"`
+			SeriesIDs []int64 `json:"series_ids"`
+		} `json:"sample"`
+	}
+	if err := json.Unmarshal([]byte(detail), &note); err != nil {
+		t.Fatalf("decode %s detail %q: %v", kind, detail, err)
+	}
+	if note.SynthesizedSeries != synthesized || note.MultiSeries != multi || note.Declined != declined {
+		t.Errorf("%s/%s = %+v, want synthesized=%d multi=%d declined=%d",
+			kind, ref, note, synthesized, multi, declined)
+	}
+	// The scope travels on EVERY row, zero or not, on store.SkipNote's rule: a
+	// number with no scope invites a reading it does not support.
+	if note.DoesNotCover == "" {
+		t.Errorf("%s/%s carries no scope", kind, ref)
+	}
+	// ⚠️ NO EFFECT SENTENCE ON A ZERO ROW: it would assert a cause for a
+	// non-event, which is exactly what recordSkippedItems already refuses.
+	if synthesized+multi == 0 && note.Effect != "" {
+		t.Errorf("%s/%s explains a residue that did not happen: %q", kind, ref, note.Effect)
+	}
+	if kind == "comic_series_memberships_declined" && declined > 0 {
+		if len(note.Sample) != 1 {
+			t.Fatalf("%s/%s sample = %+v, want one entry", kind, ref, note.Sample)
+		}
+		// ⚠️ IDS ONLY, NEVER NAMES. reference/security.md §5 keeps upstream
+		// response bodies out of this column, and a series NAME is one.
+		if strings.Contains(detail, "Image Firsts") || strings.Contains(detail, "Saga") {
+			t.Errorf("%s/%s carries an upstream series NAME: %s", kind, ref, detail)
+		}
+		if note.Sample[0].BookID != 106 || len(note.Sample[0].SeriesIDs) != 1 ||
+			note.Sample[0].SeriesIDs[0] != 9 {
+			t.Errorf("%s/%s sample = %+v, want book 106 declining series 9 — the PRIMARY "+
+				"series 5 is not declined, it is the parent", kind, ref, note.Sample[0])
+		}
+	}
 }
 
 // TestABookOrbitWalkAsksForBooksPerLibraryAndNeverCollapsesSeries pins the two

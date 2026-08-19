@@ -14,8 +14,8 @@ import (
 	"github.com/jdb3750/UsArr/internal/store"
 )
 
-// The BookOrbit catalogue adapter — PROSE ONLY, END TO END, with its credits,
-// its files and its year.
+// The BookOrbit catalogue adapter — prose end to end with its credits, its files
+// and its year, and comics as ISSUES UNDER SERIES.
 //
 // ADR-0052 makes BookOrbit v0.1's catalogue source. This file is the second half
 // of slice 1 (internal/bookorbit/catalogue.go is the first): it turns two
@@ -27,7 +27,11 @@ import (
 //
 // DOES: list the libraries the credential can see, walk each one's books page by
 // page, and write ONE work of kind 'book' per PROSE book — an ebook or an
-// audiobook, which are one kind differing only in edition.format (ADR-0031).
+// audiobook, which are one kind differing only in edition.format (ADR-0031) —
+// plus ONE work of kind 'comic_issue' per COMIC book, under a 'comic' series
+// work (ADR-0068). A BookOrbit comic is one file, so it is an issue; the series
+// is either the one BookCard.seriesId names or one synthesized for a comic that
+// has none. See mapComic.
 // The three passes are here and the second and third cost NO extra HTTP:
 // StreamItems (this file), StreamCredits (bookorbitcredits.go) and StreamFiles
 // (bookorbitfiles.go), the latter two served from cards this walk kept.
@@ -46,16 +50,27 @@ import (
 //     store.CreditSet has carried Year since Kavita's. No field was added to
 //     CatalogueItem and no read was added anywhere.
 //
+// ⚠️ THIS LIST'S THIRD ENTRY WAS *"COMICS. A comic-format book is SKIPPED AND
+// COUNTED, never guessed at. The unit-of-work question for comics is open —
+// BookOrbit's series have no library and a book can belong to several of them, so
+// the series work a comic would hang under has no container to bind to"*.
+// ADR-0068 answers both halves and the entry is discharged rather than waived.
+// The container question is answered on UsArr's side (ADR-0066 decision 5: the
+// `comic` library is minted over the same `library_source` container ref), and
+// the several-series question is answered by binding on BookOrbit's own
+// maintained primary and RECORDING the rest. The §6.4 caution that made the
+// entry right stands: that is why the parent binding rests on a measurement of
+// BookOrbit's source rather than on the shape of its JSON.
+//
 // STILL DOES NOT:
 //
-//  1. COMICS. A comic-format book is SKIPPED AND COUNTED, never guessed at. The
-//     unit-of-work question for comics is open — BookOrbit's series have no
-//     library and a book can belong to several of them, so the series work a
-//     comic would hang under has no container to bind to — and a wrong
-//     work.kind is written once at ingest and can never be merged away (§6.4's
-//     cascade). Counting is the whole of the honesty here: a skipped item that
-//     vanishes silently looks exactly like one that was never there. See
-//     Skipped.
+//  1. CREDITS, FILES OR COVERS FOR A COMIC. A comic gets no card kept, so all
+//     three later passes miss it and none of them issues a request for it. That
+//     is ADR-0068's own budget — "the allowlist widens by four fields, and that is
+//     the acquisition cost in full … Zero extra HTTP" — and the cover pass is the
+//     one that makes it load-bearing rather than tidy: it issues one HTTP request
+//     per item it is handed, and ARCHITECTURE §13 sizes the comic side at ~90,000
+//     issues.
 //  2. CHANNEL 3b AND CHANNEL 4. No delta walk, no reconciliation sweep, and no
 //     per-book detail read. And STILL no migration: every column the three
 //     passes write already exists in 00005_library_sync.sql and
@@ -118,6 +133,14 @@ type BookOrbitReader interface {
 // asks is "how many of my books did UsArr not take", which a count answers.
 type SkipTally struct {
 	// Comics is books whose primary file is cbz, cbr, cb7 or cbx.
+	//
+	// ⚠️ ITS EXPECTED VALUE IS NOW 0, AND THE FIELD IS KEPT DELIBERATELY.
+	// ADR-0068 imports comics, so nothing increments this any more; the ADR's own
+	// consequences say the field stays and reading 0 is the fourth of its four
+	// done-checks. Removing it would erase the history: rows written by every
+	// import before that ADR carry a `skipped_comics` key, and store.SkipNote's
+	// JSON contract is explicit that renaming or dropping one "silently orphans
+	// that half of the history".
 	Comics int
 
 	// Unknown is books BookOrbit itself classifies as media kind "unknown" —
@@ -137,6 +160,71 @@ type ContainerSkips struct {
 	RemoteID string
 	Name     string
 	SkipTally
+}
+
+// ComicResidue is what one container's comics fell back on, by residue case.
+//
+// ⚠️ IT EXISTS SO THE FIRST REAL IMPORT MEASURES THE TWO DEFAULTS ADR-0068
+// DECISION 4 NAMES, rather than so anyone estimates them. Both cases are legal,
+// both are silent, and neither is visible on any screen — which is precisely the
+// shape a count has to carry, on the argument ADR-0063 already made for the skip
+// tally: an unmeasured fallback is indistinguishable from one that never fired.
+//
+// IT IS COUNTS PLUS A BOUNDED SAMPLE, not a list. A 20,000-comic library whose
+// operator never matched a series would put 20,000 entries in one sync_report
+// row; the cover pass already refused that shape in terms — "a row each would be
+// tens of thousands of rows carrying the same sentence. The counts are what an
+// operator needs, and they fit in one row".
+type ComicResidue struct {
+	// SynthesizedSeries is comics whose card reported NO series at all, each of
+	// which was ingested as an issue under a series synthesized for it, with
+	// work_comic_issue.is_oneshot written to 1 (ADR-0068 decision 2).
+	SynthesizedSeries int
+
+	// MultiSeries is comics that belong to MORE THAN ONE series upstream, and
+	// ExtraMemberships is how many memberships beyond the primary those carried
+	// in total. The parent binding used the scalar seriesId and nothing else;
+	// these are what was DECLINED, not what was resolved (ADR-0068 decision 3).
+	MultiSeries      int
+	ExtraMemberships int
+
+	// Sample is up to comicResidueSampleCap of the declined memberships, as
+	// NUMERIC IDS ONLY.
+	//
+	// ⚠️ NO UPSTREAM TEXT. reference/security.md §5 keeps upstream response
+	// bodies out of sync_report.detail, and store.SkipNote states the rule for
+	// this column in terms — "EVERY STRING IN IT IS USARR'S OWN PROSE". A series
+	// NAME is upstream text; a series id is a number, so the sample carries ids
+	// and the operator joins them upstream if he wants names.
+	Sample []DeclinedMembership
+}
+
+// DeclinedMembership is one series a comic belongs to that UsArr did not bind
+// it to.
+type DeclinedMembership struct {
+	// BookID is the BookOrbit book id, and SeriesIDs are the series ids beyond
+	// the primary. The primary is deliberately absent: it is not declined, it is
+	// the parent.
+	BookID    int64   `json:"book_id"`
+	SeriesIDs []int64 `json:"series_ids"`
+}
+
+// comicResidueSampleCap bounds ComicResidue.Sample.
+//
+// It is small on purpose. The sample answers "what does one of these actually
+// look like" for an operator who has only sync_report in front of him; the
+// COUNTS answer "how often", which is the question ADR-0068 decision 4 asks. A
+// bigger cap would trade an unbounded row for a marginally better anecdote.
+const comicResidueSampleCap = 25
+
+// Total is every comic in this container that took a residue default.
+func (r ComicResidue) Total() int { return r.SynthesizedSeries + r.MultiSeries }
+
+// ContainerComics names one container's residue.
+type ContainerComics struct {
+	RemoteID string
+	Name     string
+	ComicResidue
 }
 
 // BookOrbitSource adapts one BookOrbit instance to Source.
@@ -164,6 +252,12 @@ type BookOrbitSource struct {
 
 	// skips is the per-container tally, keyed by the container's remote id.
 	skips map[string]*SkipTally
+
+	// residue is the per-container comic residue, keyed the same way and
+	// populated by the same rule: an entry exists exactly for a container the
+	// walk REACHED (see Skipped, and ADR-0063 for why absence must mean "not
+	// looked" rather than "nothing found").
+	residue map[string]*ComicResidue
 
 	// completeness is the per-container content-filter verdict, keyed by the
 	// container's remote id and written once by checkCompleteness.
@@ -195,9 +289,14 @@ type BookOrbitSource struct {
 	// too large for this is the map itself: it is written in exactly one place
 	// and read in exactly two.
 	//
-	// ⚠️ A COMIC AND AN UNKNOWN GET NO ENTRY. They are skipped by StreamItems,
-	// so no work exists for their credits to hang on and the importer never asks
-	// for them; keeping their cards would be a buffer that only ever grew.
+	// ⚠️ A COMIC AND AN UNKNOWN GET NO ENTRY, AND THE TWO NOW HAVE DIFFERENT
+	// REASONS. An unknown is skipped by StreamItems, so no work exists for its
+	// credits to hang on. A COMIC IS IMPORTED and does have a work — it is left
+	// out on ADR-0068's budget instead: the three passes this map feeds are
+	// driven by `imported`, the cover pass among them issues one HTTP request per
+	// item, and the ADR's acquisition cost is "Zero extra HTTP". The importer
+	// drops child items from `imported` to match, so a comic reaches none of the
+	// three and this map is never asked for one.
 	cards map[string]bookOrbitCard
 
 	// gateOnce makes the §14 consultation happen exactly once per source,
@@ -233,9 +332,10 @@ type bookOrbitCard struct {
 // NewBookOrbitSource wraps a client.
 func NewBookOrbitSource(c BookOrbitReader) *BookOrbitSource {
 	return &BookOrbitSource{
-		Client: c,
-		skips:  map[string]*SkipTally{},
-		cards:  map[string]bookOrbitCard{},
+		Client:  c,
+		skips:   map[string]*SkipTally{},
+		residue: map[string]*ComicResidue{},
+		cards:   map[string]bookOrbitCard{},
 	}
 }
 
@@ -323,12 +423,22 @@ func (s *BookOrbitSource) gate(ctx context.Context) error {
 // keeps is the OWNERSHIP of the decision; what changes is that the input is now
 // the source's own per-BOOK format fact rather than a declared container type.
 //
-// The consequence is stated rather than hidden: a BookOrbit library holding both
-// prose and comics binds to ONE UsArr library of kind 'book', and its comics are
-// skipped and counted (see Skipped). §17.8's "one library per upstream
-// container" is honoured; what is not honoured is the assumption that a
-// container holds one kind. Splitting one container into two libraries is a
-// deviation from §17.8 that needs an ADR, and it is comics' slice to ask for.
+// ⚠️ THIS COMMENT'S SECOND HALF READ *"a BookOrbit library holding both prose
+// and comics binds to ONE UsArr library of kind 'book', and its comics are
+// skipped and counted … Splitting one container into two libraries is a deviation
+// from §17.8 that needs an ADR, and it is comics' slice to ask for"*. THE ADR WAS
+// ASKED FOR AND GRANTED: ADR-0066 decision 5 rules the split and ADR-0068
+// activates it. A mixed container now binds to a 'book' library HERE and a
+// 'comic' library minted lazily over the same container ref by
+// store.parentBinding, on the first comic the walk actually reaches — lazily,
+// because this constant runs before any book has been read and a comic library
+// minted for a prose-only container would be an empty row on the Libraries
+// screen for ever.
+//
+// What is unchanged is what this constant IS: BookOrbit supplies no
+// container-level kind, so 'book' is the kind every container this adapter BINDS
+// is given, and the comic side is derived per book from the source's own format
+// fact.
 const bookKind = "book"
 
 // bookRemoteKind is service_item_link.remote_kind for every row this adapter
@@ -344,6 +454,29 @@ const bookKind = "book"
 // they would produce an import whose second and third passes silently found
 // nothing.
 const bookRemoteKind = "book"
+
+// The two work.kind values the comic path writes, and the remote_kind the
+// series is linked under.
+//
+// ⚠️ 'comic' IS THE SERIES AND 'comic_issue' IS THE ISSUE (ADR-0030, and
+// migration 00005's own CHECK comment: "'comic' is the SERIES, 'comic_issue' the
+// issue or chapter"). A BookOrbit comic is ONE FILE — MediaKindComic is "one of
+// cbz, cbr, cb7, cbx" — so it is an ISSUE, and ADR-0068 mints it under a series
+// work rather than as one. Getting these two the wrong way round writes a wrong
+// work.kind at ingest, which §6.4's cascade makes permanently unmergeable.
+const (
+	comicSeriesKind = "comic"
+	comicIssueKind  = "comic_issue"
+
+	// comicSeriesRemoteKind is service_item_link.remote_kind for the SERIES row.
+	//
+	// It is 'series' — BookOrbit's own noun for the table (`series`), the route
+	// (/series) and the DTO — on bookRemoteKind's rule, and it is a DIFFERENT
+	// remote_kind from the issue's so that ux_sil's key cannot collide: a
+	// BookOrbit book id and a BookOrbit series id are two independent serials
+	// that will overlap constantly.
+	comicSeriesRemoteKind = "series"
+)
 
 // Containers reads GET /api/v1/libraries and gives each one the 'book' kind.
 //
@@ -445,12 +578,21 @@ func (s *BookOrbitSource) StreamItems(ctx context.Context, fn func(store.Catalog
 	for _, l := range libs {
 		ref := containerRef(l.ID)
 		tally := s.tallyFor(ref)
+		residue := s.residueFor(ref)
 
 		page, err := s.Client.StreamBooks(ctx, l.ID, func(b bookorbit.Book) error {
 			switch b.MediaKind() {
 			case bookorbit.MediaKindComic:
-				tally.Comics++
-				return nil
+				// ⚠️ NO keepCard, AND THAT IS ADR-0068'S OWN BUDGET RATHER THAN AN
+				// OMISSION. The three passes that read the card map — credits,
+				// files and covers — are fed from `imported`, and the cover pass
+				// issues ONE HTTP REQUEST PER ITEM it is given. ADR-0068 states
+				// the acquisition cost in full — "the allowlist widens by four
+				// fields, and that is the acquisition cost in full … Zero extra
+				// HTTP" — so a per-issue cover fetch is outside what it
+				// authorises. The importer drops child items from `imported` for
+				// the same sentence; see streamAndApply.
+				return fn(mapComic(b, ref, residue))
 			case bookorbit.MediaKindEbook, bookorbit.MediaKindAudiobook:
 				// KEPT BEFORE IT IS HANDED OVER, not after. fn may return an
 				// error that ends the stream, and a book the importer HAS
@@ -469,6 +611,18 @@ func (s *BookOrbitSource) StreamItems(ctx context.Context, fn func(store.Catalog
 			return read, fmt.Errorf("bookorbit: walk library %q (%s) after %d books: %w",
 				l.Name, ref, page.Count, err)
 		}
+		if residue.Total() > 0 {
+			// The residue's operator-facing half, on the skip line's terms: a
+			// number nobody can see is the same as no number. The durable half is
+			// the sync_report row cmd/usarr writes from Comics().
+			s.log().Info("bookorbit: comics ingested on a residue default",
+				"library_id", ref, "library", l.Name,
+				"synthesized_series", residue.SynthesizedSeries,
+				"multi_series_books", residue.MultiSeries,
+				"declined_memberships", residue.ExtraMemberships,
+				"effect", "a synthesized series is one issue with is_oneshot=1; a declined "+
+					"membership is recorded and never resolved (ADR-0068)")
+		}
 		if tally.Total() > 0 {
 			// LOGGED PER CONTAINER, as it finishes, and not only summed at the
 			// end: a walk that dies on library three must still have said what
@@ -484,7 +638,8 @@ func (s *BookOrbitSource) StreamItems(ctx context.Context, fn func(store.Catalog
 			s.log().Info("bookorbit: books read but not mapped",
 				"library_id", ref, "library", l.Name,
 				"read", page.Count, "skipped_comics", tally.Comics, "skipped_unknown", tally.Unknown,
-				"reason", "slice 1 maps prose only; a comic-format book has no settled unit of work")
+				"reason", "a book BookOrbit itself classifies as media kind 'unknown' has no "+
+					"format to map from")
 		}
 	}
 	return read, nil
@@ -527,6 +682,20 @@ func (s *BookOrbitSource) card(remoteKind, remoteID string) (bookOrbitCard, bool
 	defer s.mu.Unlock()
 	c, ok := s.cards[remoteID]
 	return c, ok
+}
+
+func (s *BookOrbitSource) residueFor(ref string) *ComicResidue {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.residue == nil {
+		s.residue = map[string]*ComicResidue{}
+	}
+	r, ok := s.residue[ref]
+	if !ok {
+		r = &ComicResidue{}
+		s.residue[ref] = r
+	}
+	return r
 }
 
 func (s *BookOrbitSource) tallyFor(ref string) *SkipTally {
@@ -593,6 +762,40 @@ func (s *BookOrbitSource) Skipped() []ContainerSkips {
 	out := make([]ContainerSkips, 0, len(s.skips))
 	for ref, t := range s.skips {
 		out = append(out, ContainerSkips{RemoteID: ref, Name: byRef[ref], SkipTally: *t})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].RemoteID < out[j].RemoteID })
+	return out
+}
+
+// Comics reports, per container the walk reached, which residue defaults its
+// comics took.
+//
+// ⚠️ ONE ENTRY PER CONTAINER THE WALK REACHED, ZERO OR NOT, on Skipped()'s rule
+// and for its reason (ADR-0063): "nothing was left out" and "nothing looked" are
+// different facts and an absent row renders them identically. A container of
+// pure prose therefore reports a clean zero, which is what makes a LATER zero
+// readable as "no comic took a default" rather than as "the walk never got
+// there".
+//
+// It is the only place these numbers exist in this process; cmd/usarr writes
+// them into sync_report, which is ADR-0068 decision 4 — "the first real import
+// against the owner's library measures how often each occurs. Sizing comes from
+// instrumentation, not from estimates, and not from asking the owner to run
+// SQL".
+//
+// Sorted by container id so two runs over the same instance produce the same
+// order.
+func (s *BookOrbitSource) Comics() []ContainerComics {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	byRef := map[string]string{}
+	for _, l := range s.containers {
+		byRef[containerRef(l.ID)] = l.Name
+	}
+	out := make([]ContainerComics, 0, len(s.residue))
+	for ref, r := range s.residue {
+		out = append(out, ContainerComics{RemoteID: ref, Name: byRef[ref], ComicResidue: *r})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].RemoteID < out[j].RemoteID })
 	return out
@@ -673,6 +876,204 @@ func mapBook(b bookorbit.Book, containerID string) store.CatalogueItem {
 
 	it.ExternalIDs = bookOrbitExternalIDs(b)
 	return it
+}
+
+// mapComic projects one comic-format BookCard onto the schema, as an ISSUE under
+// a SERIES.
+//
+// # The parent, and why it is never null
+//
+// ADR-0068 decision 1: every imported comic file becomes a `comic_issue` work and
+// every one of them is minted under a `comic` parent. A parentless issue is not a
+// degraded comic — it is a row NO SHIPPED READ CAN SEE: `recentWorkKinds`,
+// `browseKinds` and `corpusExcludedKinds` all exclude the kind, and the third
+// does not merely exclude it, `writeSearchDoc` RETURNS AN ERROR on it. That is
+// the whole argument against orphan issues, and the store routes children around
+// the top-level path rather than relaxing the guard.
+//
+// # The binding is the scalar seriesId, and that was MEASURED
+//
+// ADR-0068 decision 3. `BookCard.seriesId` is BookOrbit's own maintained PRIMARY
+// — a real scalar column that `series-membership.service.ts` keeps equal to the
+// `displayOrder = 0` membership on every membership write — so binding on the
+// scalar and binding on `memberships[displayOrder = 0]` are THE SAME BINDING by
+// construction. That is why this function never has to look inside
+// SeriesMemberships to find a parent, and therefore why recording the remainder
+// can never quietly become resolving it.
+//
+// # Two residue defaults, both counted
+//
+//  1. NO SERIES → a SYNTHESIZED single-issue series named for the book, with
+//     is_oneshot written to 1. The comic is never dropped and is never promoted
+//     to a `comic` work in its own right — that second one is the per-row shape
+//     ADR-0066 pre-emptively refused, and it would make /library/comics mean two
+//     different things depending on upstream metadata quality.
+//  2. SEVERAL SERIES → the primary binds and the rest are RECORDED. No second
+//     parent, no second membership, no work_relation edge. The tier that would
+//     adjudicate them is v0.3 and this must not build toward it.
+func mapComic(b bookorbit.Book, containerID string, residue *ComicResidue) store.CatalogueItem {
+	title := strings.TrimSpace(b.Title)
+
+	it := store.CatalogueItem{
+		RemoteID: strconv.FormatInt(b.ID, 10),
+
+		// STILL bookRemoteKind. remote_kind is "the upstream's OWN noun for the
+		// row", and upstream this is a row in `books` served by /books as a
+		// BookCard — a .cbz is a book to BookOrbit. It is UsArr that calls it an
+		// issue. Spelling it 'comic_issue' here would put UsArr's vocabulary in
+		// the column that holds the upstream's, and would split one BookOrbit
+		// book across two ux_sil keys the day its format changed.
+		RemoteKind: bookRemoteKind,
+
+		ContainerID: containerID,
+		Kind:        comicIssueKind,
+
+		Title:           title,
+		SortTitle:       title,
+		NormalizedTitle: NormalizeTitle(title),
+		NormVersion:     NormVersion,
+
+		RemoteSubtype: primaryFormat(b),
+
+		AddedAt:         b.AddedAt,
+		RemoteUpdatedAt: b.UpdatedAt,
+		HasFile:         b.Status == bookStatusPresent,
+	}
+
+	if b.PageCount > 0 {
+		it.PageCount = sql.NullInt64{Int64: b.PageCount, Valid: true}
+	}
+
+	// number_sort ONLY, and number_text DELIBERATELY LEFT NULL. Migration 00006
+	// models the pair as Komga does — "a string plus a float sort key" — because
+	// real issue numbers are '1.MU', 'Annual 1', '1A'. BookOrbit has no such
+	// token: `BookCard.seriesIndex` is `number | null` and there is no text form
+	// anywhere on the card. Rendering the float back into a string would be
+	// UsArr inventing an upstream's token, which §6.5 rule 3 forbids, so the
+	// column that has no source stays NULL until a source reports one.
+	if b.SeriesIndex != nil {
+		it.NumberSort = sql.NullFloat64{Float64: *b.SeriesIndex, Valid: true}
+	}
+
+	if b.SeriesID > 0 {
+		it.Parent = comicSeriesParent(b.SeriesID, b.SeriesName)
+	} else {
+		it.IsOneshot = true
+		it.Parent = synthesizedComicSeriesParent(b.ID, title)
+		residue.SynthesizedSeries++
+	}
+
+	// THE DECLINED MEMBERSHIPS. They are counted and sampled and then dropped:
+	// nothing downstream of here can reach them, which is what makes "recorded,
+	// not resolved" structural rather than a promise.
+	if extra := declinedSeriesIDs(b); len(extra) > 0 {
+		residue.MultiSeries++
+		residue.ExtraMemberships += len(extra)
+		if len(residue.Sample) < comicResidueSampleCap {
+			residue.Sample = append(residue.Sample,
+				DeclinedMembership{BookID: b.ID, SeriesIDs: extra})
+		}
+	}
+
+	if sub := strings.TrimSpace(b.Subtitle); sub != "" && sub != title {
+		it.AltTitles = append(it.AltTitles, store.AltTitle{
+			Title: sub, Normalized: NormalizeTitle(sub), Kind: "alias",
+		})
+	}
+
+	// ⚠️ NO EXTERNAL IDS, and the reason is a GRAIN mismatch rather than an
+	// oversight. The one identifier bookOrbitExternalIDs writes is
+	// `hardcover_book`, and §6.4 amendment 4 elects it work-strong AT THE BOOK
+	// grain. Writing it against a comic_issue would let ux_extid_work_strong
+	// resolve a prose work and an issue onto each other across kinds — which
+	// tier 1's `AND w.kind = ?` exists to prevent — and writing it against the
+	// SERIES would claim a whole series is one Hardcover book. comicvineId is on
+	// BookOrbit's metadata table and would be the right source at this grain; it
+	// is not on BookCard (see bookOrbitExternalIDs), and it is an ISSUE id in
+	// BookOrbit's own mapper, so it is not a series id either.
+
+	return it
+}
+
+// comicSeriesParent is the parent for a comic that HAS an upstream series.
+func comicSeriesParent(seriesID int64, seriesName string) *store.CatalogueParent {
+	name := strings.TrimSpace(seriesName)
+	if name == "" {
+		// A series that exists and has no name. `work.title` is NOT NULL, and
+		// this is bindOneContainer's own fallback shape — `"Library " +
+		// c.RemoteID` for a container with a blank name — rather than a new
+		// convention. The alternative, naming the series after one of its
+		// issues, is worse: it would make the series row assert a title no
+		// upstream ever gave it.
+		name = "Series " + strconv.FormatInt(seriesID, 10)
+	}
+	return &store.CatalogueParent{
+		RemoteKind:      comicSeriesRemoteKind,
+		RemoteID:        strconv.FormatInt(seriesID, 10),
+		Kind:            comicSeriesKind,
+		Title:           name,
+		SortTitle:       name,
+		NormalizedTitle: NormalizeTitle(name),
+		NormVersion:     NormVersion,
+	}
+}
+
+// synthesizedComicSeriesParent is the parent for a comic that has NO upstream
+// series — ADR-0068 decision 2's single-issue series.
+//
+// ⚠️ THE REMOTE ID MUST BE DETERMINISTIC AND MUST NOT COLLIDE WITH A REAL SERIES
+// ID. It is derived from the BOOK id under a prefix no BookOrbit series id can
+// take, so a re-import resolves the same series work through the same
+// service_item_link rather than minting a second one every time it runs — which
+// would double /library/comics on every import.
+func synthesizedComicSeriesParent(bookID int64, title string) *store.CatalogueParent {
+	return &store.CatalogueParent{
+		RemoteKind: comicSeriesRemoteKind,
+		RemoteID:   oneshotSeriesRef(bookID),
+		Kind:       comicSeriesKind,
+		// NAMED FOR THE BOOK, which is the one honest name available: the series
+		// has exactly one issue and no upstream identity of its own.
+		Title:           title,
+		SortTitle:       title,
+		NormalizedTitle: NormalizeTitle(title),
+		NormVersion:     NormVersion,
+		Synthesized:     true,
+	}
+}
+
+// oneshotSeriesRef is the synthesized series' remote id.
+//
+// The prefix is what keeps it out of BookOrbit's own id space: `series.id` is a
+// positive integer serial, so no upstream series can ever be spelled
+// "oneshot:12".
+func oneshotSeriesRef(bookID int64) string {
+	return "oneshot:" + strconv.FormatInt(bookID, 10)
+}
+
+// declinedSeriesIDs is every series this book belongs to EXCEPT the primary.
+//
+// It is the whole of "record what you declined to act on" (ADR-0063's precedent,
+// applied by ADR-0068 decision 3) and it returns ids rather than memberships
+// because the record lands in sync_report.detail, where upstream TEXT may not go
+// (reference/security.md §5).
+//
+// ⚠️ IT FILTERS ON THE SERIES ID, NOT ON displayOrder. The two agree by
+// construction — BookOrbit keeps the scalar equal to the displayOrder 0 entry —
+// and filtering on the id is correct even if a future BookOrbit reorders the
+// list, because the id is what the parent was actually bound to. A book with no
+// primary at all (the synthesized case) declines EVERY membership it has, which
+// is the honest reading: none of them was acted on.
+func declinedSeriesIDs(b bookorbit.Book) []int64 {
+	var out []int64
+	seen := map[int64]bool{}
+	for _, m := range b.SeriesMemberships {
+		if m.SeriesID == b.SeriesID || seen[m.SeriesID] {
+			continue
+		}
+		seen[m.SeriesID] = true
+		out = append(out, m.SeriesID)
+	}
+	return out
 }
 
 // bookStatusPresent is the one member of books_status_chk that means the bytes

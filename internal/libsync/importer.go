@@ -527,7 +527,26 @@ func (im *Importer) streamAndApply(
 		rep.Batches++
 		// AFTER the commit, never before: these are the items whose links now
 		// exist.
+		//
+		// ⚠️ A CHILD ITEM IS NOT CARRIED FORWARD, and the cover pass is why it is
+		// a rule here rather than a filter in one adapter. Everything downstream
+		// of this slice is per-item: phase D issues ONE HTTP REQUEST PER ENTRY,
+		// and ARCHITECTURE §13 sizes the child side of the catalogue at ~90,000
+		// `comic_issue` rows behind ~3,000 series. ADR-0068 states its whole
+		// acquisition cost as "Zero extra HTTP", so admitting children here would
+		// spend, on the ADR's own numbers, ninety thousand requests it did not
+		// authorise. It also keeps this slice — "THE ONE UNBOUNDED ALLOCATION IN
+		// THE IMPORT", budgeted above against the number of TOP-LEVEL works — at
+		// the size that budget was written for.
+		//
+		// The three passes lose nothing they could have used: each resolves
+		// through an adapter-side map keyed on the upstream id, and no adapter
+		// keeps an entry for a child. When one wants to, this is the line that
+		// changes, and the budget above is the argument it has to answer.
 		for _, it := range batch {
+			if it.Parent != nil {
+				continue
+			}
 			imported = append(imported, ImportedItem{
 				RemoteKind: it.RemoteKind, RemoteID: it.RemoteID, Kind: it.Kind,
 				RemoteSubtype: it.RemoteSubtype,

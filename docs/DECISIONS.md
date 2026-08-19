@@ -9709,7 +9709,15 @@ waiting for.** That ADR closed with *"The kind stays `book` until comics have a 
 two-library split rather than reopening it, and ADR-0066 stands unreworded ·
 **[ADR-0030](#adr-0030)'s model is APPLIED, NOT AMENDED** — `comic` is the series, `comic_issue` the
 issue beneath it · **Builds on [ADR-0063](#adr-0063)** for the record-what-you-declined rule ·
-**Ships no code**: this ADR governs a later slice, and **nothing here is built** ·
+~~**Ships no code**: this ADR governs a later slice, and **nothing here is built**~~ ·
+⚠️ **THAT CLAUSE WAS TRUE WHEN WRITTEN AND IS NOW STALE — the implementing slice has landed, and
+this is a POINTER rather than a fresher status claim** (`CLAUDE.md`: *"When you find a status claim
+that has gone stale, do not write a fresher one; write the pointer"*). What exists is read off the
+tree: `internal/libsync/bookorbit.go`'s `mapComic` and its two parent builders for decisions 1–3,
+`internal/store/catalogue.go`'s `applyOneItem` step 0 and `parentBinding` for the two-level write and
+decision 5, and `cmd/usarr/import.go`'s `recordComicResidue` for decision 4. **The ADR's own
+done-check has NOT been run** — it needs a live import against a real BookOrbit, which no test in
+this repo can perform ·
 **No migration, no column, no DDL and no new wire field** ·
 ⚠️ **Measurements of BookOrbit cite a COMMIT, not a tag**: everything below was read from
 `bookorbit/bookorbit` at `73b7877d2fede2221b0ca360af9bfced7c3797f3`, the same commit

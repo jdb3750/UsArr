@@ -1471,7 +1471,14 @@ Tier 0 adapter, and ADR-0052 backs it.
       **What slice 1 deliberately does NOT do, in its own words:** **comics are SKIPPED AND COUNTED,
       never guessed at** — the unit-of-work question for comics is open, BookOrbit series have no
       library and a book can belong to several, and *"a wrong `work.kind` is written once at ingest
-      and can never be merged away"*; **no `CreditSource` and no `FileSource`**; **no `work.year`**,
+      and can never be merged away"*
+      ⚠️ **THAT CLAUSE IS DISCHARGED AND THE QUOTATION NO LONGER EXISTS IN THE FILE.**
+      [ADR-0068](./DECISIONS.md#adr-0068) gave comics a unit of work — one file is an ISSUE, minted
+      under a series work — and the adapter maps them. The §6.4 caution that made the clause right
+      still stands and is why the parent binding rests on a measurement of BookOrbit's source. **Read
+      the current behaviour off `internal/libsync/bookorbit.go`, not off this paragraph**, which
+      records what the slice-1 commit did.
+      Also not in slice 1: **no `CreditSource` and no `FileSource`**; **no `work.year`**,
       because `store.CatalogueItem` has no `Year` field even though BookOrbit puts `publishedYear`
       right on the card; and **no channel 3b, no channel 4, no cover fetch, and no migration.**
 

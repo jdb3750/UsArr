@@ -636,3 +636,110 @@ func TestEveryBookOrbitCassetteSaysItIsSynthetic(t *testing.T) {
 	}
 	t.Logf("checked the honesty label on %d bookorbit cassettes", seen)
 }
+
+// TestTheSeriesFieldsCrossAndCostNoExtraRequest is ADR-0068's acquisition cost,
+// asserted rather than assumed.
+//
+// The ADR's consequence is that "internal/bookorbit's allowlist widens by four
+// fields, and that is the acquisition cost in full … Zero extra HTTP". Both
+// halves are checked: the four fields arrive on the projection, and the walk that
+// brought them made exactly the requests it always did.
+func TestTheSeriesFieldsCrossAndCostNoExtraRequest(t *testing.T) {
+	f := newFake(t)
+	f.books = map[int64][]map[string]any{1: {
+		fakeCard(42, "Saga, Vol. 2", map[string]any{
+			"seriesId":    5,
+			"seriesName":  "  Saga  ",
+			"seriesIndex": 2.5,
+			"seriesMemberships": []map[string]any{
+				{"seriesId": 5, "seriesName": "Saga", "seriesIndex": 2.5,
+					"displayOrder": 0, "expectedBookCount": 11},
+				{"seriesId": 9, "seriesName": "Image Firsts", "seriesIndex": nil,
+					"displayOrder": 1, "expectedBookCount": nil},
+			},
+		}),
+	}}
+	c := f.client(t)
+
+	var got Book
+	if _, err := c.StreamBooks(context.Background(), 1, func(b Book) error { got = b; return nil }); err != nil {
+		t.Fatalf("StreamBooks: %v", err)
+	}
+	// ONE catalogue request for one short page, exactly as a walk with no series
+	// fields makes: no GET /series, and no per-book detail read.
+	var catalogue int
+	for _, r := range f.requests() {
+		if strings.Contains(r.Path, "/series") {
+			t.Errorf("the walk called %s; GET /series stays excluded, and ADR-0068 DEPENDS "+
+				"on that measurement rather than merely inheriting it", r.Path)
+		}
+		if strings.Contains(r.Path, "/books") {
+			catalogue++
+		}
+	}
+	if catalogue != 1 {
+		t.Errorf("the walk made %d catalogue requests, want 1 — the series facts ride the "+
+			"book stream already", catalogue)
+	}
+
+	if got.SeriesID != 5 {
+		t.Errorf("seriesId = %d, want 5 — the maintained displayOrder 0 primary", got.SeriesID)
+	}
+	if got.SeriesName != "Saga" {
+		t.Errorf("seriesName = %q, want the trimmed name", got.SeriesName)
+	}
+	// ⚠️ A POINTER, because 0 is a legal series index — a prequel numbered 0 is
+	// an ordinary shape — so "absent" and "zero" must not flatten together the
+	// way PageCount's do.
+	if got.SeriesIndex == nil || *got.SeriesIndex != 2.5 {
+		t.Errorf("seriesIndex = %v, want 2.5 — it is a REAL upstream and a fractional index "+
+			"is what a novella between two volumes looks like", got.SeriesIndex)
+	}
+	if len(got.SeriesMemberships) != 2 {
+		t.Fatalf("memberships = %+v, want both, INCLUDING the primary: the projection records "+
+			"what it declined to act on and does not pre-filter it", got.SeriesMemberships)
+	}
+	if got.SeriesMemberships[0].SeriesID != 5 || got.SeriesMemberships[0].DisplayOrder != 0 {
+		t.Errorf("memberships[0] = %+v, want the displayOrder 0 primary", got.SeriesMemberships[0])
+	}
+	if got.SeriesMemberships[0].ExpectedBookCount != 11 {
+		t.Errorf("expectedBookCount = %d, want 11", got.SeriesMemberships[0].ExpectedBookCount)
+	}
+	if got.SeriesMemberships[1].SeriesID != 9 || got.SeriesMemberships[1].SeriesIndex != nil {
+		t.Errorf("memberships[1] = %+v, want series 9 with a null index", got.SeriesMemberships[1])
+	}
+}
+
+// TestACardWithNoSeriesProjectsNoSeries pins the residue case's decode.
+//
+// `seriesId` and `seriesMemberships` are OPTIONAL on the wire (`?:` in BookCard),
+// so a card may omit them entirely or send null. Both must reach the projection
+// as "no primary series" — not as series 0, which would bind every unseriesed
+// comic in the library onto one imaginary parent.
+func TestACardWithNoSeriesProjectsNoSeries(t *testing.T) {
+	f := newFake(t)
+	f.books = map[int64][]map[string]any{1: {
+		fakeCard(1, "Null Series", map[string]any{"seriesId": nil, "seriesMemberships": nil}),
+		fakeCard(2, "Zero Series", map[string]any{"seriesId": 0}),
+	}}
+	c := f.client(t)
+
+	var got []Book
+	if _, err := c.StreamBooks(context.Background(), 1, func(b Book) error {
+		got = append(got, b)
+		return nil
+	}); err != nil {
+		t.Fatalf("StreamBooks: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("read %d books, want 2", len(got))
+	}
+	for _, b := range got {
+		if b.SeriesID != 0 || b.SeriesName != "" || b.SeriesIndex != nil {
+			t.Errorf("%q projected a series from nothing: %+v", b.Title, b)
+		}
+		if len(b.SeriesMemberships) != 0 {
+			t.Errorf("%q projected memberships from nothing: %+v", b.Title, b.SeriesMemberships)
+		}
+	}
+}

@@ -93,13 +93,13 @@ describe('left_out says the number and the why, on the row', () => {
 			skipped: {
 				state: 'left_out',
 				items: 42,
-				reason: 'UsArr maps prose books only',
+				reason: 'a file BookOrbit itself cannot classify has no row',
 				recorded_at: '2026-08-19T10:24:00Z'
 			}
 		});
 		expect(marks(l)).toContainEqual({
 			word: 'Some items were left out',
-			detail: '42 items were read and not mapped; UsArr maps prose books only'
+			detail: '42 items were read and not mapped; a file BookOrbit itself cannot classify has no row'
 		});
 	});
 

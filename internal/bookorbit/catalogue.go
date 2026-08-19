@@ -31,7 +31,10 @@ import (
 // series endpoints are excluded on a measurement rather than on a budget:
 // SeriesRepository.findAll projects id, name, bookCount, readCount and
 // lastAddedAt only, so there is no series watermark to walk, and every fact they
-// carry rides the book stream already.
+// carry rides the book stream already. ⚠️ ADR-0068 DEPENDS ON THAT MEASUREMENT
+// RATHER THAN MERELY INHERITING IT: comics bind to a parent series through
+// BookCard.seriesId, so if the series facts did NOT ride the book stream this
+// package would owe a second endpoint. They do, and it does not.
 //
 // ⚠️ THAT LIST USED TO READ *"the cover and thumbnail routes"*. The COVER route
 // is no longer excluded — Client.Cover is in cover.go, deliberately in its own
@@ -276,6 +279,28 @@ type bookCardDTO struct {
 	Authors   []string `json:"authors"`
 	Narrators []string `json:"narrators"`
 
+	// The FOUR SERIES FIELDS, and they are the whole acquisition cost of comics
+	// (ADR-0068's consequences: "the allowlist widens by four fields … Zero
+	// extra HTTP"). They are already on the wire in the walk that ships; this
+	// declaration is what stops encoding/json dropping them.
+	//
+	// ⚠️ SeriesID IS BOOKORBIT'S OWN MAINTAINED PRIMARY, not memberships[0] and
+	// not null under multi-membership. It is a real scalar column
+	// (bookMetadata.seriesId) that the card reads on a path independent of the
+	// membership join, and series-membership.service.ts keeps it equal to the
+	// displayOrder = 0 membership on EVERY membership write (replaceForBook →
+	// syncPrimaryMetadata). Measured at bookorbit/bookorbit commit
+	// 73b7877d2fede2221b0ca360af9bfced7c3797f3; ADR-0068 carries the citations.
+	// It is null only when the membership list is EMPTY.
+	//
+	// `seriesId` and `seriesMemberships` are OPTIONAL on the wire (`?:` in
+	// BookCard), so absent and null are both a nil pointer / nil slice here, and
+	// the projection treats them the same: no primary series.
+	SeriesID          *int64                    `json:"seriesId"`
+	SeriesName        *string                   `json:"seriesName"`
+	SeriesIndex       *float64                  `json:"seriesIndex"`
+	SeriesMemberships []bookSeriesMembershipDTO `json:"seriesMemberships"`
+
 	Files         []bookFileDTO `json:"files"`
 	PublishedYear *int64        `json:"publishedYear"`
 	Language      *string       `json:"language"`
@@ -299,6 +324,26 @@ type bookCardDTO struct {
 	// path is a change to the shared write path, not a field this DTO is waiting
 	// on.
 	HardcoverID *string `json:"hardcoverId"`
+}
+
+// bookSeriesMembershipDTO is BookSeriesMembership
+// (packages/types/src/book.ts:115-122).
+//
+// SeriesIndex is `number | null` and DisplayOrder is not: the primary slot is
+// displayOrder 0 and BookOrbit writes the whole list positionally, so a missing
+// key here would be a shape this route does not emit rather than a null to
+// carry.
+type bookSeriesMembershipDTO struct {
+	SeriesID     int64    `json:"seriesId"`
+	SeriesName   *string  `json:"seriesName"`
+	SeriesIndex  *float64 `json:"seriesIndex"`
+	DisplayOrder int      `json:"displayOrder"`
+
+	// ExpectedBookCount is series-level and shared by every book in the series.
+	// It is decoded because it is the one number that could ever answer "how
+	// many issues should this series have"; NOTHING READS IT YET and it is
+	// carried no further than BookSeriesMembership.
+	ExpectedBookCount *int64 `json:"expectedBookCount"`
 }
 
 // bookFileDTO is BookFileRef (packages/types/src/book.ts:75-80).
@@ -394,6 +439,30 @@ type Book struct {
 	Authors   []string `json:"authors,omitempty"`
 	Narrators []string `json:"narrators,omitempty"`
 
+	// SeriesID is BookOrbit's own maintained PRIMARY series id, 0 when the card
+	// reported none. See bookCardDTO.SeriesID for the measurement that makes
+	// "primary" a fact rather than a reading of the JSON.
+	SeriesID int64 `json:"series_id,omitempty"`
+
+	// SeriesName is the primary series' name, trimmed. Empty when there is no
+	// primary series, and — separately — when BookOrbit reported a series with
+	// no name, which the caller must not treat as "no series": SeriesID is the
+	// test for that.
+	SeriesName string `json:"series_name,omitempty"`
+
+	// SeriesIndex is the book's place in the primary series. A POINTER because
+	// 0 is a legal index — a prequel numbered 0 is an ordinary shape — so
+	// "absent" and "zero" cannot be flattened here the way PageCount's can.
+	SeriesIndex *float64 `json:"series_index,omitempty"`
+
+	// SeriesMemberships is EVERY series this book belongs to, in the upstream's
+	// order, INCLUDING the primary. It is RECORDED AND NOT RESOLVED (ADR-0068
+	// decision 3, on ADR-0063's record-what-you-declined precedent): the parent
+	// binding uses SeriesID and nothing else, and nothing here mints a second
+	// parent, a second membership or a work_relation edge. The tier that would
+	// adjudicate multi-series membership is v0.3.
+	SeriesMemberships []BookSeriesMembership `json:"series_memberships,omitempty"`
+
 	// PublishedYear is 0 when BookOrbit reported none. Year 0 is not a book.
 	PublishedYear int64 `json:"published_year,omitempty"`
 
@@ -414,6 +483,24 @@ type Book struct {
 	// hardcoverEditionId, which BookOrbit stores in its own column and this
 	// projection does not carry.
 	HardcoverID string `json:"hardcover_id,omitempty"`
+}
+
+// BookSeriesMembership is the allowlisted projection of one
+// BookSeriesMembership.
+//
+// ⚠️ IT EXISTS TO BE RECORDED, NOT ACTED ON. ADR-0068 binds the parent on the
+// scalar seriesId alone, and binding on the scalar and on
+// memberships[displayOrder = 0] are the same binding BY CONSTRUCTION — so this
+// slice is never needed to FIND a parent, which is precisely what keeps
+// recording it from silently becoming a resolution.
+type BookSeriesMembership struct {
+	SeriesID     int64    `json:"series_id"`
+	SeriesName   string   `json:"series_name,omitempty"`
+	SeriesIndex  *float64 `json:"series_index,omitempty"`
+	DisplayOrder int      `json:"display_order"`
+
+	// ExpectedBookCount is 0 when BookOrbit reported none.
+	ExpectedBookCount int64 `json:"expected_book_count,omitempty"`
 }
 
 // MediaKind is BookOrbit's own per-book media classification.
@@ -579,6 +666,27 @@ func toBook(d bookCardDTO) Book {
 	}
 	b.Authors = names(d.Authors)
 	b.Narrators = names(d.Narrators)
+
+	// The primary series. A seriesId of 0 or below is treated as absent for
+	// add()'s reason in bookOrbitExternalIDs: BookOrbit's ids are positive
+	// serials, so a 0 is a shape this route does not emit rather than a series.
+	if d.SeriesID != nil && *d.SeriesID > 0 {
+		b.SeriesID = *d.SeriesID
+		b.SeriesName = text(deref(d.SeriesName))
+		b.SeriesIndex = d.SeriesIndex
+	}
+	for _, m := range d.SeriesMemberships {
+		if m.SeriesID <= 0 {
+			continue
+		}
+		b.SeriesMemberships = append(b.SeriesMemberships, BookSeriesMembership{
+			SeriesID:          m.SeriesID,
+			SeriesName:        text(deref(m.SeriesName)),
+			SeriesIndex:       m.SeriesIndex,
+			DisplayOrder:      m.DisplayOrder,
+			ExpectedBookCount: derefInt(m.ExpectedBookCount),
+		})
+	}
 	return b
 }
 
