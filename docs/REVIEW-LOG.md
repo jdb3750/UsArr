@@ -21995,24 +21995,59 @@ was told, the tree is what is written down.
 
 ## LS-379 — a correlated `EXISTS` with a hard-coded inner alias silently stops filtering when the outer table shares that alias; three predicates had the shape, all three are now fixed
 
-🔻 **The mechanism, in one predicate.** A scope predicate that cannot compare a column directly has to
-reach its table through a correlated subquery, and the correlation is **by name**: the subquery's only
-tie to the caller's row is `<inner-alias>.<col> = <outer-qualifier>.<col>`. SQL resolves a qualifier
-to the **innermost** scope that offers it. So if the subquery's own alias equals the outer
-qualifier, the inner one shadows the outer, both sides of the correlation resolve to the same table,
-and the condition becomes `x.col = x.col` — trivially true for every row the subquery walks. The
-`EXISTS` stops asking *"is this row visible to this caller"* and starts asking *"does this caller see
-anything at all"*, which for any caller with a non-empty visible set is yes. **The read then returns
-every row, scope parameter and all.**
+🔻 **The mechanism is DECORRELATION, and naming it precisely matters — the first two accounts of this
+defect, including this entry's own first draft, got it wrong in the same way.** A scope predicate that
+cannot compare a column directly reaches its table through a correlated subquery, and the correlation
+is **by name**: the subquery's only tie to the caller's row is
+`<inner-alias>.<col> = <outer-qualifier>.<col>`. SQL resolves a qualifier to the **innermost** scope
+that offers it. So when the subquery's own alias equals the outer qualifier, **the outer reference
+silently resolves to an inner column** and the subquery is no longer correlated to anything. It stops
+being a question about the caller's row.
 
-⚠️ **It fails as a silent full leak, not as a syntax error.** The SQL is valid, it compiles, it
-returns rows, and every row is a real row of the shape the caller asked for. There is no error, no
-empty result, no plan anomaly. Nothing detects it except a test that plants a row **outside** the
-caller's scope and then goes looking for it; a suite that only asserts the in-scope rows come back
-passes cleanly against a predicate doing nothing whatever. This is the failure class of `LS-34`,
-whose applied fix is one of these very predicates — a `Scope` accepted and effectively ignored is
-indistinguishable from no scope — with the twist that here the ignoring is invisible in the function
-body and materialises only at a call site.
+⚠️ **What it degenerates INTO depends on which column names happen to collide, and `x = x` is the
+special case rather than the rule.** Rendered over an outer `library ls`, the library predicate
+produces:
+
+```sql
+NOT EXISTS (SELECT 1 FROM library_source ls WHERE ls.library_id = ls.id)
+```
+
+— a comparison between two **different columns of the inner table**, `library_source.library_id`
+against `library_source.id`, which is not a tautology and is not even a stable value. It is simply an
+unrelated question. The work predicate produced a literal `sil.work_id = sil.work_id` **only because
+the correlated column and the inner column share the name `work_id`** — a coincidence of naming, not
+the mechanism. Describing the class as "the correlation collapses to a tautology" therefore
+generalises a coincidence, and would send the next reader looking for `x = x` in a rendered statement
+that does not contain one. **The general form is: the outer reference resolves to an inner column.**
+
+⚠️ **It fails silently, never as a syntax error.** The SQL is valid, it compiles, it returns rows, and
+every row is a real row of the shape the caller asked for. There is no error, no plan anomaly. This is
+the failure class of `LS-34`, whose applied fix is one of these very predicates — a `Scope` accepted
+and effectively ignored is indistinguishable from no scope — with the twist that here the ignoring is
+invisible in the function body and materialises only at a call site.
+
+🚩 **AND IT HAS TWO DIRECTIONS, ONLY ONE OF WHICH IS A LEAK. THIS IS THE PART AN AUDIT WOULD HALF-MISS.**
+A decorrelated subquery under an `EXISTS` admits rows it should exclude — a leak, which is what
+everyone goes looking for. Under a `NOT EXISTS` it does the opposite: it **excludes rows it should
+admit**, and the symptom is a **disappearance**. Both live in the library predicate at once, in
+opposite arms of one disjunction, and the `OR` normally masks the second. **Someone auditing for
+leaks alone would have found half of this defect and closed the file.** The measured transcripts,
+verbatim, from the arms that isolate each:
+
+```
+EXISTS arm:      visible libraries [1 2 3], want [1 2]      (library 3 sourced only on instance 2)
+ORPHAN arm:      THE ORPHAN ARM DEGENERATED: visible libraries = [], want [4]
+search:          searchable documents [frieren piranesi], want [frieren]
+```
+
+🔍 **Isolating the disappearance took a deliberately odd scope, which is why it is easy to miss.**
+Library 4 has no `library_source` rows at all — it is §6.5 rule 5's retained orphan, and the
+`NOT EXISTS` arm exists precisely to keep it visible. Under an ordinary scope the `EXISTS` arm is true
+for enough libraries that the `OR` hides the damage. It only shows up under a scope naming an instance
+with **no `library_source` rows** — a newly configured service nobody has bound a library to yet —
+because then the `EXISTS` arm is legitimately false and the orphan arm is the only thing holding
+library 4 in. Shadowed, it drops it. The search transcript is the leak direction again: Piranesi is
+filed only in Novels, outside the scope, and came back under a rendered `sdl.doc_rowid = sdl.doc_rowid`.
 
 📌 **Why the collision was the likely case rather than the perverse one.** Each predicate hard-coded
 the alias that its own package gives that table everywhere else — `sil` for `service_item_link`, `ls`
@@ -22040,20 +22075,11 @@ return `(NOT EXISTS (SELECT 1 FROM library_source ls
                        AND ls.service_instance_id IN (` + placeholders(len(args)) + `)))`, args
 ```
 
-Both arms collapse together under a colliding outer alias, and **the disjunction makes it worse in a
-way this lane got only half right.** This entry originally recorded one direction: the `EXISTS` arm
-goes trivially true and the predicate degenerates to *"does this caller see any library source
-anywhere"*. `1c281ca` measured **both**, and they fail in **opposite** directions — the `NOT EXISTS`
-arm, the deliberate loophole for §6.5 rule 5's source-less retained orphan, becomes a question about
-`library_source` alone and **loses the very libraries it exists to admit.** So the defect is a leak
-*and* a disappearance at once, **normally masked by the `OR`**. Measured on `seedLibrariesCorpus`
-before the fix: library 3 came back under a scope holding only instance 1 (`[1 2 3]`, want `[1 2]`),
-and library 4 **vanished** under a scope holding only an instance with no sources (`[]`, want `[4]`).
-📌 **A disappearance is the failure mode a leak-hunting sweep is least likely to find**, because every
-instinct here is tuned to look for rows that should not be there. **`library_source ls` is a live
-outer alias in this package** — `librarySourcesSQL` and two further statements in `libraries.go`, plus
-one in `catalogue.go` — so the table this predicate must not collide with is aliased `ls` in four
-places already.
+Both arms decorrelate together under a colliding outer alias, in the **opposite directions** set out
+above — this is the predicate that carries the leak and the disappearance at once, and the arm that
+isolates each is quoted there. **`library_source ls` is a live outer alias in this package** —
+`librarySourcesSQL` and two further statements in `libraries.go`, plus one in `catalogue.go` — so the
+table this predicate must not collide with is aliased `ls` in four places already.
 
 🔻 **3. `searchScopePredicate` (`internal/store/searchlibrary.go`) — the identical trap, open at
 `4731c7d`, closed by `1c281ca`**, and it is a free function rather than a `Scope` method, which is why
@@ -22082,6 +22108,14 @@ asks "were the other two predicates checked?" needs the answer to be in the reco
 inferable from the fact that nobody complained. It also isolates the real precondition — the defect
 is a property of *correlated-subquery* predicates specifically, not of scope predicates generally.
 
+✅ **And the rest of the package's subqueries were swept too, with the same verdict: those three were
+the last of them.** Every other correlated subquery in `internal/store` is **statement-local** — its
+inner and outer aliases are written together in one SQL literal, by one author, with no
+caller-supplied column arriving from elsewhere. A collision there is not merely unlikely, it is not
+representable: there is no seam for a foreign qualifier to enter through. **Nothing else was
+touched**, and that restraint is the point — the fix belongs where the seam is, and a sweep that
+"hardened" statement-local queries too would have added risk and noise while proving nothing.
+
 ## What `8e6cbbf` actually did, read rather than taken on report
 
 ✅ **Content commit `8e6cbbf`** (*"fix: derive the scope EXISTS alias so an outer `sil` cannot shadow
@@ -22101,11 +22135,14 @@ defect rather than merely to pass; `TestScopeLinkAliasNeverEqualsTheOuterQualifi
 no-fixed-point property of the derivation itself. That is `docs/DEVELOPMENT.md` §11 rule 1 honoured —
 the guard was fired deliberately before being trusted.
 
-🔍 **A second-order detail the fix commit caught and that is easy to miss:** the plan guards in
-`recent`, `browse` and `libraries` had to derive the alias too, because **a literal `sil` is a prefix
-of every derived alias** and a plan assertion matching on the literal would have gone on matching
-while covering nothing. A guard that keeps passing across the change it was supposed to police is the
-same class of hazard as the defect itself.
+🔍 **A second-order detail the fixes caught, and it is easy to miss:** the plan guards had to derive
+their aliases too, because **a literal `sil` is a prefix of every derived alias** — and likewise `sdl`
+of `sdl_f` — so a plan assertion matching on the literal would have gone on matching while covering
+nothing. **A guard that keeps passing across the very change it was supposed to police is the same
+class of hazard as the defect itself**, and it is the reason `d6de958` (*"assert plan identifiers as
+whole tokens so a rename cannot rot a guard"*) and `7560190` (*"whole-token the last positive alias
+assertion in the completeness arm"*) exist as a follow-up sweep: substring matching on an identifier
+is the general form of the bug, and it was closed as such rather than patched per-site.
 
 ⏭️ **`worklinks.go`'s doc comment was updated by the same commit and now states the corrected
 position**, which is the right outcome for a warning whose subject has been repaired: it records that
@@ -22190,11 +22227,20 @@ prefix construction transfers directly to `ls` and `sdl`.
 guard** — accept the alias and reject a value colliding with the outer scope, so the failure is loud
 at the boundary instead of silent in the result set. Second choice on purpose: it converts the trap
 into an error rather than removing it. **It was not needed:** sites 2 and 3 correlate to a single
-caller-supplied column exactly as site 1 did, and `1c281ca` generalised the derivation into
-`derivedInnerAlias(prefix, column)` in `store.go`, keeping a per-table prefix so a query plan still
-names the table it is about. Its comment pins the load-bearing constraint — **the prefix must be a
-non-empty constant, because that is what makes the alias strictly longer than the qualifier it must
-never equal, and the length argument is the entire proof.**
+caller-supplied column exactly as site 1 did.
+
+✅ **The landed shape is one shared derivation with separate per-site prefixes, and the split is
+deliberate in both directions.** `1c281ca` generalised the construction into
+`derivedInnerAlias(prefix, column)` in `store.go`, with `scopeLinkAlias`, `librarySourceAlias` and
+`searchDocLibraryAlias` as one-liners over it. **The derivation is the security property, so it exists
+exactly once** — three copies of a proof are three chances to weaken one. **The prefix names the inner
+table, so it belongs to each site**: `sdl_f` reads correctly in an `EXPLAIN` plan as the
+`search_doc_library` it is, where a shared `sil_f` would be a lie about which table the reader is
+looking at. Each wrapper pins a non-empty **literal** prefix, which keeps the length proof local to
+the site, and the helper's comment states that the prefix **must never become caller-supplied** —
+because that would reintroduce exactly the alias-as-parameter trap ruled out above. The constraint is
+load-bearing: **the prefix being non-empty is what makes the alias strictly longer than the qualifier
+it must never equal, and that length argument is the entire proof.**
 
 ✅ **A drill was required at each site, and each site has one.** `scopealias_test.go` now carries
 eight arms: a leak arm per predicate that plants a row outside the caller's scope, aliases the outer
