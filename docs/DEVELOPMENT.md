@@ -1525,6 +1525,21 @@ paragraph describing a repo that no longer exists.
     moment at which such a read is safe, because it is only ever true of the tree as it was, and any
     concurrent lane can invalidate it before you land. **Only allocation fixes it**, because only the
     dispatcher sees every lane at once.
+
+    🔍 **A second instance, and it is the harder half of the class: the invalidating id may never
+    have been readable at all.** A lane was about to take *"the next free `SD-` id"* from the highest
+    one present in `docs/REVIEW-LOG.md`. `SD-04` already existed at that moment — as a commit in an
+    unlanded worktree, and so in no tree any reader could open. Unlike the migration case above,
+    where the slot was taken *afterwards*, this is not a stale read and it is not a race with a
+    window: there was **no moment at which a more careful or more recent read would have seen it**.
+    So the two halves close the class from both ends — **re-reading cannot fix an id that was never
+    readable, and it cannot fix one taken after you read** — and the ordinary remedy of re-reading
+    immediately before you push, the *a sequential id read out of a file is a race* bullet below, is
+    the right discipline for drift and no defence at all against invisibility. It also reaches
+    further than ADR and migration numbers: `SD-` is a `docs/REVIEW-LOG.md` entry prefix, so a
+    per-thread prefix removes the cross-thread collision without making the number after it
+    readable. **The trigger and the timing are stated by the lane that hit it; what is measured here
+    is only that `SD-04` is on `main`, landed by `60c9286`.**
 * **Key the worktree decision to the operation, not to the size of your change.** Any *whole-tree*
   git operation — `git add -A`, a `git commit` of an index somebody else may have added to,
   `git checkout <branch>` — belongs in a detached worktree of your own. Targeted single-path
@@ -1562,6 +1577,29 @@ paragraph describing a repo that no longer exists.
   end the worktree with `git worktree remove` rather than deleting the directory, so nothing is left
   registered or half-referenced. **The symptom is `lint-go` reporting issues at paths that do not
   exist**, on a tree where those same files lint clean.
+
+  ⚠️ **One shared binary, two failure modes — and isolating the cache fixes only the first.** The
+  contamination above is a cache-entry collision. The other is *contention*, and it reads as a broken
+  gate: `golangci-lint` takes a run lock at `filepath.Join(os.TempDir(), "golangci-lint.lock")` — a
+  fixed path derived from `TMPDIR`, **not** from `GOLANGCI_LINT_CACHE` (read in v2.12.2,
+  `pkg/commands/run.go`, `acquireFileLock`, over `gofrs/flock`; the same file the `computePkgHash`
+  keying above was read in). It retries once a second for five seconds, then gives up with
+
+  ```
+  Error: parallel golangci-lint is running
+  ```
+
+  and exit 3. Three agents hit that in one night here, each with its own cache directory, because the
+  remedy above does not and cannot avoid it — the contention is over the lock, not the cache. **Fired
+  deliberately, both halves**: with an unrelated `flock -x` holding `$TMPDIR/golangci-lint.lock` and
+  `GOLANGCI_LINT_CACHE` pointed at an empty private directory, the pinned `/root/go/bin/golangci-lint`
+  printed exactly that line and exited 3; the identical command after the lock released printed
+  `0 issues.` and exited 0. **This is the one gate red where re-running is the right response**, and
+  it needs saying in a section that otherwise treats a red as a fact to investigate: nothing is being
+  papered over, because nothing was measured — the run never started. Recognise it by that string,
+  retry, and only go hunting for a defect if it survives. The config-level answer is
+  `run.allow-serial-runners: true`, which makes the wait unbounded instead of failing at five seconds;
+  `.golangci.yml` does not set it, so retrying is the operating procedure today.
 * **A sequential id read out of a file is a race, not a lookup.** `M5-NN` entry ids, `M5.N` subsection
   numbers, ADR numbers and migration numbers are all allocated by reading the highest one already
   present, and **two agents that read at the same moment both get the right answer and both are wrong
@@ -1643,6 +1681,25 @@ paragraph describing a repo that no longer exists.
   it on `main`. Branches here are also pushed straight to `main` as often as they are merged, so
   plenty of commits are both — which is exactly why the one you cite has to be the one you looked
   at (`git log --first-parent` and `git log -1 --format=%p` settle it in two commands).
+* **A SHA read off a log is positional, and position is not authorship.** The bullet above says
+  which commit to cite; this says why the log will not hand it to you, in two shapes. **A merge
+  wears the change it landed**: `git show --stat` renders a merge against its *first* parent, so the
+  merge `7bd45e9` prints `Makefile | 26 ++…`, *1 file changed, 24 insertions(+), 2 deletions(-)* —
+  byte for byte the stat of `eb92062`, the commit that did the work. The `Merge:` header line is the
+  only tell and `git log --oneline` does not carry it. **A neighbour wears it too, with no merge in
+  the citation at all**: `0ca1be6` (05:03:47) reached `main` under merge `b2221df` (05:04:05), and
+  `bf66828` landed 31 seconds after that at 05:04:36, so a `git log --oneline` taken in that minute
+  showed `bf66828` on top with the rewrite two rows down behind a merge — and the SHA that arrived
+  *after* the change was read as the SHA that *was* it. The 🔍 note above carries that case and its
+  correction; do not re-derive it. Either citation is true in the reachability sense and false in
+  the this-commit-contains-it sense. **The discriminator is the path, and it is the actionable
+  half.** `git log --no-merges -- <path>` names the commit that contains the change and nothing
+  else; plain `git log -- <path>` is usually enough, because history simplification drops a merge
+  that is TREESAME to a parent for that path — it does prune `7bd45e9` from `git log -- Makefile` —
+  but it is **not** airtight: `cb0e37f` differs from *both* its parents in
+  `docs/reference/security.md` (`+10` against one, `+2/-1` against the other), so simplification
+  keeps it and it appears in that log looking exactly like an author. For one hunk rather than one
+  file, `git log -L 806,812:Makefile` answers `eb92062` on its own.
 
 Who leads which area, roughly. **The map is keyed by area of the repo, not by thread name**, and
 deliberately so: thread names churn — the three this table first named are now five, spread across
