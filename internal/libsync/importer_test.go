@@ -1,10 +1,13 @@
 package libsync
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -539,6 +542,129 @@ func TestReportDurationAndProgressShape(t *testing.T) {
 	}
 }
 
+// TestFullImportStampsFinishedAtOnTheReportTheCallerGets is the regression test
+// for a defect that survived this package's entire test suite: FullImport's
+// returns were UNNAMED, so its `defer func() { rep.FinishedAt = im.now() }()`
+// wrote a local the return value had already been copied from. Every caller got
+// the ZERO TIME in FinishedAt, Duration() returned 0 for all of them, and the
+// success log printed `duration=0s` on every import ever run.
+//
+// ⚠️ WHY THIS TEST RUNS ITS OWN TICKING CLOCK, and why an assertion on a
+// non-zero duration alone would not have been enough. Every other test here
+// builds its Importer through newImporter, whose clock returns the constant
+// testNow; under a constant clock the start and the finish are the SAME instant,
+// so a correctly stamped report and a never-stamped one BOTH yield
+// Duration() == 0 and the defect is invisible. The clock here ticks once — `base`
+// to the first caller, `base + 1h` to every caller after — which is the same
+// shape TestLastFullSyncAtIsTheRunStartNotItsFinishOrTheRowWrite uses and leaves
+// the batch-window arithmetic untouched, since every batch read of the clock
+// returns one value and `im.now().Sub(batchStarted)` is 0.
+//
+// THE MUTATION IT IS WRITTEN AGAINST: restore the unnamed returns and the
+// unguarded defer, and each of the three assertions below fails — FinishedAt is
+// the zero time, Duration() is 0, and the logged duration is 0s.
+func TestFullImportStampsFinishedAtOnTheReportTheCallerGets(t *testing.T) {
+	base := time.Date(2026, 8, 17, 14, 2, 0, 0, time.UTC)
+	finish := base.Add(time.Hour)
+
+	// The premise, asserted rather than assumed: a clock that did not move
+	// cannot tell a stamped report from an unstamped one.
+	if !finish.After(base) {
+		t.Fatalf("the test clock does not tick: base %v, finish %v", base, finish)
+	}
+
+	tickingClock := func() func() time.Time {
+		var ticks int
+		return func() time.Time {
+			ticks++
+			if ticks == 1 {
+				return base
+			}
+			return finish
+		}
+	}
+
+	t.Run("on success, and in the success log", func(t *testing.T) {
+		s := newTestStore(t)
+		inst := fixtureInstance(t, s)
+		src := &fakeSource{
+			containers: []store.CatalogueContainer{{RemoteID: "1", Name: "Manga", Kind: "comic"}},
+			items:      genItems(3, "1", "comic"),
+		}
+
+		var logged bytes.Buffer
+		im := newImporter(t, s, src)
+		im.Now = tickingClock()
+		im.Log = slog.New(slog.NewJSONHandler(&logged, nil))
+
+		rep, err := im.FullImport(t.Context(), inst)
+		if err != nil {
+			t.Fatalf("FullImport: %v", err)
+		}
+		if !rep.Completed {
+			t.Fatal("the import did not report itself complete")
+		}
+		if rep.FinishedAt.IsZero() {
+			t.Fatal("FinishedAt is the zero time on the report the caller received: " +
+				"the defer wrote a local, which is what naming the returns fixes")
+		}
+		if !rep.FinishedAt.Equal(finish) {
+			t.Errorf("FinishedAt = %v, want %v", rep.FinishedAt, finish)
+		}
+		if rep.Duration() != time.Hour {
+			t.Errorf("Duration = %v, want 1h", rep.Duration())
+		}
+		if got := loggedImportDuration(t, logged.Bytes()); got != time.Hour {
+			t.Errorf("the success log printed duration=%v, want 1h", got)
+		}
+	})
+
+	t.Run("on failure, because the Report is returned then too", func(t *testing.T) {
+		s := newTestStore(t)
+		inst := fixtureInstance(t, s)
+		src := &fakeSource{listErr: errors.New("kavita said no")}
+
+		im := newImporter(t, s, src)
+		im.Now = tickingClock()
+
+		rep, err := im.FullImport(t.Context(), inst)
+		if err == nil {
+			t.Fatal("a failing container list returned no error")
+		}
+		// Report's own doc: it is returned on failure too, describing how far
+		// the import got. "How far" includes when it stopped.
+		if !rep.FinishedAt.Equal(finish) {
+			t.Errorf("FinishedAt = %v, want %v", rep.FinishedAt, finish)
+		}
+		if rep.Duration() != time.Hour {
+			t.Errorf("Duration = %v, want 1h", rep.Duration())
+		}
+	})
+}
+
+// loggedImportDuration digs the `duration` attribute out of the "full import
+// finished" record. slog's JSON handler renders a time.Duration as a NUMBER OF
+// NANOSECONDS, so the assertion above compares nanoseconds and not a rendered
+// string like "0s" — a string comparison would tie the test to slog's
+// formatting rather than to the value.
+func loggedImportDuration(t *testing.T, out []byte) time.Duration {
+	t.Helper()
+	for _, line := range bytes.Split(bytes.TrimSpace(out), []byte("\n")) {
+		var rec struct {
+			Msg      string  `json:"msg"`
+			Duration float64 `json:"duration"`
+		}
+		if err := json.Unmarshal(line, &rec); err != nil {
+			t.Fatalf("parsing log line %q: %v", line, err)
+		}
+		if rec.Msg == "full import finished" {
+			return time.Duration(rec.Duration)
+		}
+	}
+	t.Fatal(`no "full import finished" record was logged`)
+	return 0
+}
+
 func TestFullImportSurvivesAContainerThatCannotBeBound(t *testing.T) {
 	// The IMPORT-LEVEL half of the store's bind-skip tests. BindContainers used
 	// to return an error for a container it could not create, FullImport
@@ -969,15 +1095,17 @@ func TestLastFullSyncAtIsTheRunStartNotItsFinishOrTheRowWrite(t *testing.T) {
 	}
 	// The premise of the whole test: the run really did span two instants.
 	//
-	// ⚠️ ASSERTED ON THE CLOCK AND ON rep.StartedAt, NEVER ON rep.FinishedAt,
-	// and that is not a stylistic choice. FullImport's returns are UNNAMED, so
-	// its `defer func() { rep.FinishedAt = im.now() }()` writes a local that the
-	// return value was already copied from: rep.FinishedAt is the ZERO TIME in
-	// every caller, and rep.Duration() is therefore always 0. That is a real
-	// defect and it is reported rather than repaired here — repairing it changes
-	// what the import's success log prints, which is outside this commit. A
-	// premise that read rep.FinishedAt would fail for that reason instead of for
-	// the reason this test is about.
+	// ASSERTED ON THE CLOCK AND ON rep.StartedAt, which is what this test is
+	// about: the STORED instant, not the returned one.
+	//
+	// ⚠️ This comment used to say rep.FinishedAt could not be read here because
+	// FullImport's returns were UNNAMED — the `defer func() { rep.FinishedAt =
+	// im.now() }()` wrote a local the return value had already been copied from,
+	// so FinishedAt was the zero time in every caller and Duration() was always
+	// 0. THAT DEFECT IS FIXED: the returns are named, and
+	// TestFullImportStampsFinishedAtOnTheReportTheCallerGets is the regression
+	// test for it. The premise here still reads StartedAt, because StartedAt is
+	// the value StampFullSync writes.
 	if !rep.StartedAt.Equal(base) {
 		t.Fatalf("StartedAt = %v, want %v", rep.StartedAt, base)
 	}

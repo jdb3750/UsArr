@@ -4190,9 +4190,22 @@ asserted:
   the full import, which calls `store.BindContainers` → `bindOneContainer`, which joins an existing
   library on the name key or creates one (`internal/store/catalogue.go`). **The Accept step below does
   not gate it, because the Accept step does not exist.** Rows appear; nothing asked.
-- **That is the only trigger.** `FullImport` is a Go method with no HTTP route and no CLI subcommand —
-  `internal/httpapi/server.go`'s route table registers nothing that reaches it — so on the shipped
-  binary an import happens on a first connect and on no other occasion. There is no "sync now".
+- **That is not the only trigger; the second one is a button.** ⚠️ This bullet used to read
+  *"`FullImport` is a Go method with no HTTP route and no CLI subcommand — `internal/httpapi/server.go`'s
+  route table registers nothing that reaches it — so on the shipped binary an import happens on a
+  first connect and on no other occasion. There is no 'sync now'."* **The CLI half is still true;
+  the HTTP half is not, and has not been since the route landed.** Measured at this commit:
+  **There IS an HTTP route.** `POST /api/v1/services/{id}/sync` is registered at
+  `internal/httpapi/server.go:274` — behind CSRF, authentication and sudo — and handled by
+  `handleSyncService` (`internal/httpapi/imports.go:68`), which reaches `fullImportLocked` through
+  `registry.StartImport` (`cmd/usarr/import.go`). It is §17.3's **Run full sync now**; its wire
+  contract is `docs/reference/http-api.md` §4; and the Services screen calls it —
+  `syncService` (`web/src/lib/api.ts:1508`) from `runFullSync`
+  (`web/src/routes/services/+page.svelte:738`). So "sync now" exists, on the screen and on the wire.
+  **There is still NO CLI subcommand.** `internal/config/flags.go` accepts exactly one positional
+  form — `usarr key rotate` — and errors on every other positional, so nothing on the command line
+  reaches an import. `cmd/usarr/import.go`'s own doc comment names the three triggers there are: on
+  connect, on demand through that route, and in process.
 - **The request destination has never been written by anything.** All four columns —
   `sink_service_instance_id`, `sink_quality_profile_id`, `sink_root_folder_path`, `sink_tag_ids`
   (migration `00005_library_sync.sql`) — appear in the schema, in `internal/db/testdata/schema.sql`
