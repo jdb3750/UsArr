@@ -88,6 +88,18 @@ type fakeBookOrbit struct {
 	// internal/bookorbit's own fake instead, with a generated library larger
 	// than one page.
 	books map[int][]map[string]any
+
+	// stats is what GET /libraries/{id}/stats answers for `totalBooks`, keyed by
+	// library id. A library with no entry answers its OWN declared bookCount,
+	// i.e. no content filter — so a test has to opt into a shortfall rather than
+	// stumble into one.
+	stats map[int]int
+
+	// statsStatus makes the stats route answer an error status instead, which is
+	// how the guard-later scenario is modelled: BookOrbit adds a
+	// @RequirePermission to a route that carries none today, and every probe
+	// starts answering 403.
+	statsStatus map[int]int
 }
 
 // boBook builds one BookCard. Field names and null-ability are
@@ -286,6 +298,41 @@ func newFakeBookOrbit(t *testing.T, token string) *fakeBookOrbit {
 		})
 	}))
 
+	// LibraryController's @Get(':id/stats').
+	//
+	// ⚠️ IT CARRIES @RequireLibraryAccess('viewer') AND NO @RequirePermission,
+	// which is the property the whole completeness check rests on — so the fake
+	// models exactly that: a bearer is required, a permission is not. `statsStatus`
+	// is how a test makes it behave like a route that HAS been guarded since.
+	//
+	// getStats takes neither a user nor a content filter (library.repository.ts
+	// getStats), so `totalBooks` here is the UNFILTERED present-book count and is
+	// deliberately not derived from whatever the listing reported.
+	mux.HandleFunc("GET /api/v1/libraries/{id}/stats", f.record(func(w http.ResponseWriter, r *http.Request) {
+		if !f.bearerOK(r) {
+			boNestError(w, r, http.StatusUnauthorized, "Unauthorized")
+			return
+		}
+		libID, err := strconv.Atoi(r.PathValue("id"))
+		if err != nil {
+			boNestError(w, r, http.StatusBadRequest, "Validation failed (numeric string is expected)")
+			return
+		}
+		if status, ok := f.statsStatus[libID]; ok {
+			// LibraryAccessGuard's own message for a viewer with no access row,
+			// and RolesGuard's for a missing permission, are both plain strings.
+			boNestError(w, r, status, "Forbidden resource")
+			return
+		}
+		total, ok := f.stats[libID]
+		if !ok {
+			total = f.declaredBookCount(libID)
+		}
+		boWriteJSON(w, http.StatusOK, map[string]any{
+			"totalBooks": total, "totalSizeBytes": 1234567, "formatCounts": map[string]int{"epub": total},
+		})
+	}))
+
 	mux.HandleFunc("/", f.record(func(w http.ResponseWriter, r *http.Request) {
 		boNestError(w, r, http.StatusNotFound, "Cannot "+r.Method+" "+r.URL.Path)
 	}))
@@ -296,6 +343,20 @@ func newFakeBookOrbit(t *testing.T, token string) *fakeBookOrbit {
 }
 
 func (f *fakeBookOrbit) URL() string { return f.srv.URL }
+
+// declaredBookCount is what this fake's own listing reported for one library —
+// the default the stats route answers when a test has not asked for a shortfall.
+func (f *fakeBookOrbit) declaredBookCount(libID int) int {
+	for _, l := range f.libraries {
+		id, _ := l["id"].(int)
+		if id != libID {
+			continue
+		}
+		n, _ := l["bookCount"].(int)
+		return n
+	}
+	return 0
+}
 
 // record captures every request BEFORE handing it on, including the body. The
 // body is the point: it is what lets a test prove the magic-link token travelled

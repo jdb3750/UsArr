@@ -222,7 +222,7 @@ func TestLibrariesResponseKeysAreTheAllowlist(t *testing.T) {
 	if got := keysOf(items[0]); strings.Join(got, ",") != strings.Join(wantRow, ",") {
 		t.Errorf("row keys = %v\n         want %v", got, wantRow)
 	}
-	allowedRow := append(append([]string{}, wantRow...), "orphaned_at")
+	allowedRow := append(append([]string{}, wantRow...), "orphaned_at", "completeness")
 	for i, item := range items {
 		for key := range item {
 			if !contains(allowedRow, key) {
@@ -352,5 +352,187 @@ func TestListLibrariesDropsAMalformedFormats(t *testing.T) {
 	// the whole response for it.
 	if got.Items[0].Name != "Ebooks" || got.Items[0].ItemCount != 3 {
 		t.Errorf("the row was damaged by the drop: %+v", got.Items[0])
+	}
+}
+
+// ─── the content-filter shortfall ────────────────────────────────────────────
+
+// seedCompleteness writes one content_completeness sync_report row against the
+// library_source whose (service_instance_id, container_ref) pair matches.
+//
+// It writes the ROW rather than calling the adapter, because what is under test
+// here is the read and the wire — the measurement is internal/libsync's and is
+// tested there.
+func seedCompleteness(t *testing.T, s *Server, instanceID int, ref, detail string) {
+	t.Helper()
+	if err := s.store.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO sync_report (service_instance_id, kind, remote_kind, remote_id, detail)
+			VALUES (?, ?, 'library', ?, ?)`,
+			instanceID, store.SyncReportContentCompleteness, ref, detail)
+		return err
+	}); err != nil {
+		t.Fatalf("seed completeness for %d/%s: %v", instanceID, ref, err)
+	}
+}
+
+// TestAContentFilterShortfallReachesTheLibrariesWire is the end of the chain
+// this feature exists for: a BookOrbit content filter shorts a library's book
+// count, the import records the subtraction, and the Libraries screen can say
+// so.
+//
+// ⚠️ IT ALSO PINS THE STATE THAT KEEPS THE OTHER TWO HONEST. `unverified` must
+// carry NO counts — not zeroes, no key at all — because the check rests on
+// BookOrbit's `GET /libraries/:id/stats` being unguarded, and on the day that
+// changes every verdict becomes this one. A response that served
+// `total_items: 0` there would report an empty library, and a response that
+// omitted the object entirely would report no problem at all.
+func TestAContentFilterShortfallReachesTheLibrariesWire(t *testing.T) {
+	s := newTestServer(t, nil)
+	seedLibrariesScreenCorpus(t, s)
+
+	// Library 1 (Manga) binds instance 1 / container '11': a real shortfall.
+	seedCompleteness(t, s, 1, "11", `{"state":"shortfall","container":"Manga",
+		"total_items":412,"visible_items":389,"hidden_items":23,
+		"covers":"c","does_not_cover":"d"}`)
+	// Library 3 (Loose Ends) has no sources at all, so nothing can be measured
+	// about it and nothing may be claimed.
+
+	_, body := callListLibraries(t, s, true)
+	var got librariesResponse
+	mustJSON(t, body, &got)
+
+	byName := map[string]libraryResponse{}
+	for _, l := range got.Items {
+		byName[l.Name] = l
+	}
+
+	manga := byName["Manga"].Completeness
+	if manga == nil {
+		t.Fatalf("Manga carries no completeness verdict; body = %s", body)
+	}
+	if manga.State != "shortfall" || manga.Total != 412 || manga.Visible != 389 || manga.Hidden != 23 {
+		t.Errorf("Manga's verdict = %+v, want shortfall 412/389/23", manga)
+	}
+	if manga.CheckedAt == nil {
+		t.Error("a stored measurement reached the wire with no checked_at; " +
+			"a shortfall with no age reads as a live fact rather than as a measurement")
+	}
+
+	// ⚠️ THE LIBRARY THAT WAS NEVER MEASURED CARRIES NOTHING. Ebooks' two
+	// sources have no completeness row, and the key must be ABSENT rather than
+	// an object saying complete — an unmeasured library that rendered as fine
+	// would be the exact defect this feature closes.
+	if c := byName["Ebooks"].Completeness; c != nil {
+		t.Errorf("Ebooks was never measured and still carries %+v", c)
+	}
+	if c := byName["Loose Ends"].Completeness; c != nil {
+		t.Errorf("a library with no sources carries %+v", c)
+	}
+}
+
+func TestAnUnverifiedCompletenessNeverPublishesACount(t *testing.T) {
+	s := newTestServer(t, nil)
+	seedLibrariesScreenCorpus(t, s)
+
+	// The guard-later scenario: BookOrbit put a permission guard on the stats
+	// route, so the probe refused and nothing could be compared.
+	seedCompleteness(t, s, 1, "11", `{"state":"unverified","container":"Manga",
+		"total_items":-1,"visible_items":389,"hidden_items":0,
+		"reason":"BookOrbit refused this account the library statistics UsArr compares against"}`)
+
+	_, body := callListLibraries(t, s, true)
+	var raw struct {
+		Items []map[string]json.RawMessage `json:"items"`
+	}
+	mustJSON(t, body, &raw)
+
+	var found bool
+	for _, item := range raw.Items {
+		if string(item["name"]) != `"Manga"` {
+			continue
+		}
+		found = true
+		blob, ok := item["completeness"]
+		if !ok {
+			t.Fatal("an unverified verdict was dropped from the wire; absence reads as " +
+				"'no problem', which is exactly what unverified must not mean")
+		}
+		var c map[string]json.RawMessage
+		mustJSON(t, string(blob), &c)
+		for _, key := range []string{"total_items", "visible_items", "hidden_items"} {
+			if _, present := c[key]; present {
+				t.Errorf("unverified carries %q = %s; a count nobody measured must not travel",
+					key, c[key])
+			}
+		}
+		if _, present := c["reason"]; !present {
+			t.Error("unverified carries no reason, so the screen cannot say why")
+		}
+		if string(c["state"]) != `"unverified"` {
+			t.Errorf("state = %s, want \"unverified\"", c["state"])
+		}
+	}
+	if !found {
+		t.Fatalf("Manga is not in the response: %s", body)
+	}
+}
+
+// TestAnUnverifiedContainerOutranksAShortfallInTheSameLibrary pins the fold.
+//
+// Ebooks binds TWO containers. One reports a clean shortfall and the other could
+// not be measured at all, and the library-level answer is `unverified` — because
+// a library-level "holds 412, sees 389" while a second container was never
+// looked at is a precise-sounding claim that is not true.
+func TestAnUnverifiedContainerOutranksAShortfallInTheSameLibrary(t *testing.T) {
+	s := newTestServer(t, nil)
+	seedLibrariesScreenCorpus(t, s)
+
+	seedCompleteness(t, s, 1, "12", `{"state":"shortfall","total_items":100,
+		"visible_items":90,"hidden_items":10}`)
+	seedCompleteness(t, s, 2, "21", `{"state":"unverified","total_items":-1,
+		"visible_items":40,"reason":"the statistics could not be read"}`)
+
+	_, body := callListLibraries(t, s, true)
+	var got librariesResponse
+	mustJSON(t, body, &got)
+	for _, l := range got.Items {
+		if l.Name != "Ebooks" {
+			continue
+		}
+		if l.Completeness == nil || l.Completeness.State != "unverified" {
+			t.Fatalf("Ebooks' folded verdict = %+v, want unverified", l.Completeness)
+		}
+		if l.Completeness.Total != 0 || l.Completeness.Hidden != 0 {
+			t.Errorf("a partial sum was published under an unverified label: %+v", l.Completeness)
+		}
+	}
+}
+
+// TestAnUnreadableCompletenessRowIsDroppedRatherThanGuessed covers the two ways
+// a stored verdict can be unusable. Both must render as "nothing was measured";
+// neither may be coerced to the nearest member.
+func TestAnUnreadableCompletenessRowIsDroppedRatherThanGuessed(t *testing.T) {
+	s := newTestServer(t, nil)
+	seedLibrariesScreenCorpus(t, s)
+
+	seedCompleteness(t, s, 1, "11", `not json at all`)
+	seedCompleteness(t, s, 1, "12", `{"state":"probably fine","total_items":9}`)
+
+	_, body := callListLibraries(t, s, true)
+	if strings.Contains(body, "probably fine") {
+		t.Errorf("an unknown state reached the browser: %s", body)
+	}
+	var got librariesResponse
+	mustJSON(t, body, &got)
+	for _, l := range got.Items {
+		if l.Completeness != nil {
+			t.Errorf("%s carries %+v from an unreadable row", l.Name, l.Completeness)
+		}
+		// And the row itself survived: a decoration that will not parse must not
+		// cost the library.
+		if l.Name == "" {
+			t.Error("a row was damaged by the drop")
+		}
 	}
 }

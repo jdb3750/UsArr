@@ -51,6 +51,18 @@
  *     it is not rendered as a column, because a column identical on every row is
  *     not data (DESIGN-DIRECTION §9.1).
  *
+ * ⚠️ AND ONE FIELD DESCRIBES A STATE THAT IS REACHABLE AND WHOSE ABSENCE IS
+ * STILL NOT A PASS. `items[].completeness` (§2.6) carries what the last import
+ * measured about how much of a library's upstream container UsArr's credential
+ * could see. It is ABSENT for every library nothing measured — every Kavita
+ * library today — so absence is a fact about UsArr rather than about the
+ * library, exactly as `missing_since`'s is. What is different is that when it IS
+ * present it has three values rather than two, and the third, `unverified`,
+ * RENDERS OUT LOUD: it is the state the whole check degrades into if the
+ * upstream route it depends on is ever guarded, and a screen that drew it as
+ * silence would report a service that had stopped being measurable as a service
+ * with nothing wrong.
+ *
  * WHAT IS NOT ON THIS WIRE AT ALL, so that nothing here codes against it: the
  * four `sink_*` request-destination columns (§17.8 defers the whole column to
  * the first service that can be a destination, and the screen says so once in
@@ -140,6 +152,65 @@ export interface Library {
 	orphanedAt?: string;
 	/** Always an array. `[]` is §17.8's orphaned state, never "unknown". */
 	sources: LibrarySource[];
+	/**
+	 * What the last import measured about how much of this library's upstream
+	 * containers UsArr's credential could actually see.
+	 *
+	 * ⚠️ ABSENT MEANS NOTHING WAS MEASURED, NEVER "COMPLETE". It is absent for
+	 * every library whose source runs no completeness check — today that is every
+	 * Kavita library — and for every library that has never been imported. It is
+	 * the one optional key on this wire whose absence is a fact about UsArr
+	 * rather than about the library, and `libraryStates` below emits nothing at
+	 * all for it, which is the same treatment `missingSince` gets for the same
+	 * reason.
+	 */
+	completeness?: LibraryCompleteness;
+}
+
+/**
+ * ONE LIBRARY'S COMPLETENESS VERDICT, as `libraryCompletenessResponse` in
+ * `internal/httpapi/libraries.go` spells it.
+ *
+ * # Why there are three states and not a boolean
+ *
+ * The measurement behind this is a subtraction between two counts an upstream
+ * publishes: what UsArr's credential was shown, and what the container holds
+ * with no content filter applied. On BookOrbit the second one comes from a route
+ * that carries no permission guard TODAY — a property of somebody else's service
+ * and not a promise to UsArr. If it is ever guarded, every probe refuses.
+ *
+ * A two-state design would report every library as complete on the day it
+ * stopped being able to tell. So `unverified` is a first-class state, this
+ * module never collapses it into either of the others, and the row it produces
+ * says so in words rather than rendering as silence.
+ *
+ * # And it is a BOOK-LEVEL check
+ *
+ * ⚠️ `complete` MEANS EVERY ITEM IN THIS CONTAINER ARRIVED. It says nothing
+ * about whether whole containers are hidden from UsArr's credential, which is a
+ * different question and is not answerable from a read-only account at all — the
+ * upstream returns the same refusal for a container that exists and one that
+ * does not. Nothing in this module may phrase a verdict as a statement about the
+ * service.
+ */
+export interface LibraryCompleteness {
+	state: 'complete' | 'shortfall' | 'unverified';
+	/**
+	 * ⚠️ ALL THREE COUNTS ARE ABSENT UNDER `unverified`, and the server omits
+	 * them rather than sending zeroes: in that state they are unknown, not small.
+	 * They are also NOT `itemCount` — that one counts what UsArr wrote, these
+	 * count what the upstream said it holds, and the two differ for reasons that
+	 * have nothing to do with a filter.
+	 */
+	total?: number;
+	visible?: number;
+	hidden?: number;
+	/** UsArr's own sentence about why the check could not be made. Present only
+	 * with `unverified`, and never upstream text. */
+	reason?: string;
+	/** RFC 3339 UTC: when the verdict was recorded. It is what makes a shortfall
+	 * read as a measurement rather than as a live fact. */
+	checkedAt?: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -242,7 +313,48 @@ export function toLibrary(value: unknown): Library | undefined {
 	if (formats !== undefined) library.formats = formats;
 	const orphanedAt = str(value.orphaned_at);
 	if (orphanedAt !== '') library.orphanedAt = orphanedAt;
+	const completeness = toCompleteness(value.completeness);
+	if (completeness !== undefined) library.completeness = completeness;
 	return library;
+}
+
+/**
+ * One completeness verdict, or `undefined` for anything this screen must not
+ * render.
+ *
+ * ⚠️ AN UNRECOGNISED `state` YIELDS `undefined`, WHICH RENDERS AS "NOTHING WAS
+ * MEASURED". It is not mapped to the nearest member and it is certainly not
+ * defaulted to `complete`: a fourth state written by some later adapter is a
+ * verdict this build cannot read, and the only honest rendering of an unreadable
+ * measurement is no measurement. The server refuses the same value on the way
+ * out (`CompletenessStateOf`), so this arm is the second of two rather than the
+ * only one — which is deliberate, because the two sides are deployed
+ * independently.
+ *
+ * The counts are read only for the two measured states. Under `unverified` the
+ * server omits them; if one arrived anyway it is DROPPED here rather than
+ * rendered, because a number under that label is a claim the label denies.
+ */
+export function toCompleteness(value: unknown): LibraryCompleteness | undefined {
+	if (!isRecord(value)) return undefined;
+	const state = str(value.state);
+	if (state !== 'complete' && state !== 'shortfall' && state !== 'unverified') return undefined;
+
+	const out: LibraryCompleteness = { state };
+	if (state === 'unverified') {
+		const reason = str(value.reason);
+		if (reason !== '') out.reason = reason;
+	} else {
+		const total = num(value.total_items);
+		const visible = num(value.visible_items);
+		const hidden = num(value.hidden_items);
+		if (total !== undefined) out.total = total;
+		if (visible !== undefined) out.visible = visible;
+		if (hidden !== undefined) out.hidden = hidden;
+	}
+	const checkedAt = str(value.checked_at);
+	if (checkedAt !== '') out.checkedAt = checkedAt;
+	return out;
 }
 
 /**
@@ -505,6 +617,39 @@ export function healthNote(read: HealthRead): string {
 		return 'Service health could not be read, so no source below says whether it is connected. The libraries themselves come from UsArr’s own database and are complete.';
 	}
 	return 'Each source carries what the Services screen last measured about it. A source that read does not mention says so, rather than being counted as connected.';
+}
+
+/**
+ * THE SENTENCE ABOVE THE TABLE FOR THE SHORTFALL, and the reason it is a
+ * sentence rather than a longer cell.
+ *
+ * §9.1: a fact identical on every affected row is stated ONCE above the table.
+ * The per-row mark carries the NUMBERS, which differ per library; this carries
+ * the FIX, which does not — the filter is on the service account, not in UsArr,
+ * so no control on this screen can change it and the copy has to say where to
+ * go. §13's rule for an error string applies to this one too: name the
+ * component, the observed symptom, and the next action.
+ *
+ * The two arms are independent and both can render. `unverified` is deliberately
+ * NOT phrased as a failure: nothing is broken, a measurement was not available,
+ * and the sentence exists so an absent warning is never read as a pass.
+ */
+export function completenessNote(libraries: readonly Library[]): string {
+	const short = libraries.filter((l) => l.completeness?.state === 'shortfall').length;
+	const unknown = libraries.filter((l) => l.completeness?.state === 'unverified').length;
+
+	const parts: string[] = [];
+	if (short > 0) {
+		parts.push(
+			`A content filter on the account UsArr connects with is hiding books from ${short === 1 ? 'a library' : `${short} libraries`}. The filter is set on that service, not in UsArr: widen it there and the next import picks the books up.`
+		);
+	}
+	if (unknown > 0) {
+		parts.push(
+			`UsArr could not check ${unknown === 1 ? 'one library' : `${unknown} libraries`} for hidden books. ${unknown === 1 ? 'It says so' : 'They say so'} below rather than being counted as complete.`
+		);
+	}
+	return parts.join(' ');
 }
 
 /** `''` when every service feeds a library, which is the ordinary case. */
@@ -917,7 +1062,65 @@ export function libraryStates(library: Library, read: HealthRead): LibraryStateM
 		}
 	}
 
-	return withVisibility(library, marks);
+	return withVisibility(library, completenessMarks(library, marks));
+}
+
+/**
+ * THE CONTENT-FILTER SHORTFALL, AS A ROW MARK.
+ *
+ * ⚠️ TWO ARMS AND NOT THREE. `complete` emits NOTHING, which keeps this
+ * function's standing invariant intact: nothing on this screen renders a
+ * positive claim. That is not a shortcut here — `complete` is a real,
+ * hard-earned measurement — it is that a green tick would fire on nearly every
+ * row, which is §17.4 rule 5, and that a positive mark in this column has meant
+ * "this library was measured and passed" nowhere else in the product.
+ *
+ * The two absences still read differently on the screen, which is the constraint
+ * the whole feature turns on: a library that was measured and is fine says
+ * nothing, and a library that COULD NOT BE MEASURED says exactly that in the
+ * `unverified` arm. Silence is only ever "nothing to report", never "checked and
+ * fine".
+ *
+ * ⚠️ AND NEITHER ARM IS PHRASED AS A STATEMENT ABOUT THE SERVICE. The check
+ * compares two counts inside one container UsArr can already see; whether whole
+ * libraries are hidden from the account is a different question and is not
+ * answerable read-only. Every word below is scoped to `this library`.
+ */
+function completenessMarks(library: Library, marks: LibraryStateMark[]): LibraryStateMark[] {
+	const c = library.completeness;
+	if (c === undefined) return marks;
+
+	if (c.state === 'shortfall') {
+		const total = c.total ?? 0;
+		const visible = c.visible ?? 0;
+		const mark: LibraryStateMark = {
+			key: 'books-hidden',
+			// The word is the state; the detail is the evidence. §9.1's split, and
+			// the same shape every other mark in this function uses.
+			word: 'Some books are hidden',
+			tone: 'warn',
+			detail: `this library holds ${COUNT.format(total)} ${total === 1 ? 'book' : 'books'}; the service account can see ${COUNT.format(visible)}`
+		};
+		if (c.checkedAt !== undefined) mark.at = c.checkedAt;
+		marks.push(mark);
+		return marks;
+	}
+	if (c.state === 'unverified') {
+		const mark: LibraryStateMark = {
+			key: 'completeness-unverified',
+			// GREY, NOT AMBER. Nothing is broken and nothing is known to be
+			// missing; a measurement was not available. Painting a missing
+			// measurement the same colour as a real shortfall would make the
+			// shortfalls harder to find, which is app.css's own argument for
+			// `.st--none`.
+			word: 'Completeness unverified',
+			tone: 'none',
+			detail: c.reason ?? 'UsArr could not check whether every book arrived'
+		};
+		if (c.checkedAt !== undefined) mark.at = c.checkedAt;
+		marks.push(mark);
+	}
+	return marks;
 }
 
 /** The instance kind health reported, for a sentence that names the application. */
@@ -956,7 +1159,7 @@ function withVisibility(library: Library, marks: LibraryStateMark[]): LibrarySta
  * a successful read of nothing, and it is the list's own `empty` state
  * (DESIGN-DIRECTION §10). What is here is the two ways the read did not happen.
  *
- * §2.6 gives the endpoint exactly two error statuses — `401 unauthorized` and
+ * §2.7 gives the endpoint exactly two error statuses — `401 unauthorized` and
  * `500 internal` — and there is no `400`, because the endpoint takes no input.
  * So the split below is not a taxonomy invented for the screen; it is the
  * server's own, plus the transport failure that produces neither.

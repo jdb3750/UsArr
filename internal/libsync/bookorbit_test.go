@@ -38,6 +38,15 @@ type fakeBookOrbitReader struct {
 	books    map[int64][]bookorbit.Book
 	walkErr  map[int64]error
 	walkedAt []int64
+
+	// stats is what GET /libraries/{id}/stats answers per library, and statsErr
+	// is the refusal that stands in for the guard-later scenario. A library in
+	// NEITHER map answers a total equal to its own bookCount, so the ordinary
+	// fixture — which says nothing about stats at all — produces `complete` and
+	// a test has to opt into a shortfall.
+	stats     map[int64]int64
+	statsErr  map[int64]error
+	statsSeen []int64
 }
 
 func (f *fakeBookOrbitReader) Authenticate(context.Context) (bookorbit.ScopeVerdict, error) {
@@ -61,6 +70,28 @@ func (f *fakeBookOrbitReader) StreamBooks(
 		page.Count++
 	}
 	return page, f.walkErr[libraryID]
+}
+
+func (f *fakeBookOrbitReader) LibraryStats(
+	_ context.Context, libraryID int64,
+) (bookorbit.LibraryStats, error) {
+	f.statsSeen = append(f.statsSeen, libraryID)
+	if err, ok := f.statsErr[libraryID]; ok {
+		return bookorbit.LibraryStats{}, err
+	}
+	if total, ok := f.stats[libraryID]; ok {
+		return bookorbit.LibraryStats{TotalBooks: total}, nil
+	}
+	// The unremarkable default: the unfiltered total equals what the credential
+	// was shown, i.e. no content filter. It is derived from the fixture's own
+	// bookCount rather than fixed, so a test that sets one gets agreement
+	// without also having to set a stats entry.
+	for _, l := range f.libs {
+		if l.ID == libraryID {
+			return bookorbit.LibraryStats{TotalBooks: l.BookCount}, nil
+		}
+	}
+	return bookorbit.LibraryStats{}, nil
 }
 
 func proseBook(id int64, title string) bookorbit.Book {

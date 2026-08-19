@@ -79,6 +79,18 @@ type BookOrbitReader interface {
 	// list libraries but not read the books in them does not exist — same
 	// controller, same credential.
 	StreamBooks(ctx context.Context, libraryID int64, fn func(bookorbit.Book) error) (bookorbit.BookPage, error)
+
+	// LibraryStats is GET /api/v1/libraries/{id}/stats — the unfiltered
+	// present-book count this adapter subtracts the credential's own bookCount
+	// from. It is on this interface even though it reads NO CATALOGUE DATA,
+	// because the completeness pass that calls it must be testable against a
+	// hand-built reader like everything else here, and because a client that
+	// could not be asked would make the check untestable rather than optional.
+	//
+	// ⚠️ IT IS THE ONE METHOD HERE WHOSE ROUTE MAY BE GUARDED LATER. See
+	// bookorbitcompleteness.go: an error from it is a verdict of `unverified`
+	// and never a failed import.
+	LibraryStats(ctx context.Context, libraryID int64) (bookorbit.LibraryStats, error)
 }
 
 // SkipTally is what one container's walk declined to map, by reason.
@@ -134,6 +146,14 @@ type BookOrbitSource struct {
 
 	// skips is the per-container tally, keyed by the container's remote id.
 	skips map[string]*SkipTally
+
+	// completeness is the per-container content-filter verdict, keyed by the
+	// container's remote id and written once by checkCompleteness.
+	//
+	// ⚠️ NIL AND EMPTY BOTH MEAN "NOT CHECKED", NEVER "ALL COMPLETE". Every
+	// container that WAS checked has an entry, including the ones that were fine
+	// — see bookorbitcompleteness.go for why the two absences must not collapse.
+	completeness map[string]ContainerCompleteness
 
 	// gateOnce makes the §14 consultation happen exactly once per source,
 	// whichever catalogue read comes first.
@@ -261,16 +281,33 @@ func (s *BookOrbitSource) Containers(ctx context.Context) ([]store.CatalogueCont
 	}
 	s.mu.Unlock()
 
+	// THE CONTENT-FILTER CHECK, HERE AND NOT IN StreamItems, and it cannot fail
+	// this call. bookCount — the "what UsArr can see" half of the subtraction —
+	// arrives on the listing above and nowhere else, and a container list bound
+	// without ever being graded is the state the check exists to prevent. See
+	// bookorbitcompleteness.go.
+	s.checkCompleteness(ctx, libs)
+
 	out := make([]store.CatalogueContainer, 0, len(libs))
 	for _, l := range libs {
 		out = append(out, store.CatalogueContainer{
-			RemoteID: strconv.FormatInt(l.ID, 10),
+			RemoteID: containerRef(l.ID),
 			Name:     l.Name,
 			Kind:     bookKind,
 		})
 	}
 	return out, nil
 }
+
+// containerRef is a BookOrbit library id as store.CatalogueContainer.RemoteID,
+// store.CatalogueItem.ContainerID and library_source.container_ref all spell it.
+//
+// It is one function rather than four `strconv.FormatInt(id, 10)` calls because
+// the string is a JOIN KEY: the completeness verdict this adapter records is
+// filed under it and read back by joining sync_report.remote_id to
+// library_source.container_ref, so a second formatting rule anywhere would be a
+// silently empty join rather than a compile error.
+func containerRef(id int64) string { return strconv.FormatInt(id, 10) }
 
 // StreamItems walks every container's books and hands the PROSE ones to fn.
 //
@@ -311,7 +348,7 @@ func (s *BookOrbitSource) StreamItems(ctx context.Context, fn func(store.Catalog
 
 	var read int
 	for _, l := range libs {
-		ref := strconv.FormatInt(l.ID, 10)
+		ref := containerRef(l.ID)
 		tally := s.tallyFor(ref)
 
 		page, err := s.Client.StreamBooks(ctx, l.ID, func(b bookorbit.Book) error {
@@ -374,7 +411,7 @@ func (s *BookOrbitSource) Skipped() []ContainerSkips {
 
 	byRef := map[string]string{}
 	for _, l := range s.containers {
-		byRef[strconv.FormatInt(l.ID, 10)] = l.Name
+		byRef[containerRef(l.ID)] = l.Name
 	}
 	out := make([]ContainerSkips, 0, len(s.skips))
 	for ref, t := range s.skips {

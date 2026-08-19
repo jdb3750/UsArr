@@ -8201,3 +8201,165 @@ grading that keeps a retrievable credential worth as little as possible — is
 tree under [ADR-0058](#adr-0058). **No test is owed here and none is claimed:** the facts in Context
 §1 and §2 are readings of two upstream repositories at pinned commits, which UsArr's suite cannot
 assert against and must not pretend to.
+
+---
+
+<a id="adr-xxxx"></a>
+## ADR-XXXX — Catalogue completeness is **measured and three-valued**: "not checked" is a state, not a zero
+
+⚠️ **NUMBER NOT YET ALLOCATED.** This ADR ships with the placeholder `ADR-XXXX` and **no index row**,
+because ADR numbers are allocated at dispatch rather than discovered from a tree that may be lagging.
+Whoever allocates the number replaces every `ADR-XXXX` in this file, in
+[`internal/bookorbit/stats.go`](../internal/bookorbit/stats.go),
+[`internal/libsync/bookorbitcompleteness.go`](../internal/libsync/bookorbitcompleteness.go) and
+[`reference/http-api.md`](./reference/http-api.md) §2.6, and adds the index row at the top of this
+document.
+
+**Status:** Accepted — 2026-08-19
+
+### Context
+
+#### 1 · The defect, verified at `bookorbit/bookorbit@73b7877d`
+
+A BookOrbit account can carry `contentFilters`. `LibraryRepository.findAllForUser`
+(`server/src/modules/library/library.repository.ts:30-51`) turns them into `filterClauses` and puts
+them in **`bookJoinOn` — the books `LEFT JOIN … ON` condition** — and the statement has **no
+`.where()` at all**. Library rows come from `.from(libraries)` INNER JOINed to `userLibraryAccess`
+(line 46), which the filter never touches.
+
+**So a content filter shorts each library's `bookCount` without dropping a library row.** That is
+the nastiest shape a replica can have: the library appears, the counts look plausible, and a slice
+of the books is simply absent, with nothing anywhere saying so.
+
+#### 2 · And the shortfall is a subtraction, not a guess
+
+`LibraryRepository.getStats(libraryId)` (`library.repository.ts:150-178`) takes **neither a user nor
+a filter set**; both of its selects are `where(libraryId AND status = 'present')`, and
+`LibraryService.getStats` (`library.service.ts:298-309`) passes it nothing else. The route is
+`@Get(':id/stats')` with `@RequireLibraryAccess('viewer')` and **no `@RequirePermission`**
+(`library.controller.ts:108-112`), so UsArr's shared viewer account with an empty permission set
+reaches it.
+
+Both sides of the pair therefore carry `status = 'present'`, applied server-side, and differ in
+exactly one term — the content filter. `totalBooks − bookCount` **is** the number of present books
+the filter hid.
+
+⚠️ **The paged read is NOT the other side of this pair, and pairing it would be wrong.**
+`book-query-builder.service.ts:55-90` builds **no status predicate at all** unless the caller
+supplies an explicit `isPresent` status rule (`statusRuleToSql:789`). A shortfall computed against
+`POST /libraries/{id}/books`'s `total` without that rule would be subtracting a
+filtered-and-unstatused count from an unfiltered-and-statused one. The listing's `bookCount` is used
+precisely because there is no predicate for a caller to forget.
+
+#### 3 · The dependency nobody promised us
+
+Fact §2 rests on an **unguarded upstream route**. That is a property of somebody else's service at
+one commit, not a contract with UsArr, and BookOrbit may add a `@RequirePermission` to it at any
+time. A design that did not plan for that would report every library as complete on the day it
+stopped being able to tell — which is the original defect, recreated inside its own fix.
+
+#### 4 · And there is a second axis this cannot reach
+
+Whether **whole libraries** are hidden from UsArr's account is **unanswerable from a read-only
+account**. `LibraryAccessGuard` (`common/guards/library-access.guard.ts`) throws an identical
+`ForbiddenException('No library access')` for *"the library exists and this account has no access
+row"* and for *"there is no such library"*. Probing ids would be enumeration against the operator's
+own service and would still not distinguish the two.
+
+### Decision
+
+**1 · UsArr measures catalogue completeness per container, at import, and records it.** The BookOrbit
+adapter calls `GET /api/v1/libraries/{id}/stats` once per library per import
+(`internal/bookorbit/stats.go`) and subtracts the listing's `bookCount` from its `totalBooks`
+(`internal/libsync/bookorbitcompleteness.go`). One extra request per library per import is the whole
+cost.
+
+**2 · The verdict is THREE-VALUED, and `unverified` is a first-class member.**
+
+| State | Means |
+| --- | --- |
+| `complete` | Measured; the two counts agree. |
+| `shortfall` | Measured; the credential was shown fewer items than the container holds. |
+| `unverified` | **Not measured.** Must never render as either of the other two. |
+
+⚠️ **A boolean is rejected explicitly.** "No shortfall" and "not checked" are different facts, and
+Context §3 is why: collapsing them makes an instance whose probes have all started failing
+indistinguishable from an instance with nothing wrong. The same rule is enforced one level down —
+`Total` is **−1**, never `0`, under `unverified`, because `0` is a legal total for an empty container.
+
+**3 · The named degradation condition is written down: if BookOrbit guards
+`GET /libraries/:id/stats`, every probe answers 403 and every verdict becomes `unverified`.** Any
+error at all — a 403, a timeout, an open breaker, a moved route, a body that is not a count — reads
+as `unverified` with a reason. This is stated in `internal/bookorbit/stats.go`, in
+`internal/libsync/bookorbitcompleteness.go`, in `reference/http-api.md` §2.6, and here.
+
+**4 · It never blocks or refuses a sync.** Not one path in the check can fail an import. **A partial
+replica that says it is partial beats no replica**: refusing would turn a reporting improvement into
+an outage, and the items that did import are correct either way.
+
+**5 · Every container gets a row, including the ones that were fine.** `sync_report.kind =
+'content_completeness'`, one row per container per import. This is the opposite of the neighbouring
+`items_skipped` rule and is deliberate: an absent skip row means nothing was skipped, an absent
+completeness row means nothing was **asked**, and the two absences must not look alike.
+
+**6 · The claim's SCOPE travels in the row.** Every row carries `covers` and `does_not_cover` in its
+own detail blob. The second is load-bearing: Context §4's axis is unanswerable, so `complete` on
+every library UsArr can see is **not** a statement that UsArr can see every library, and the row says
+so to anyone reading it out of the database or off the wire.
+
+**7 · It is surfaced on the Libraries screen (§17.8), from local SQLite.** The comparison is at
+import; the render is a `SELECT`. A `shortfall` row says *"Some books are hidden — this library holds
+412 books; the service account can see 389"* with the age of the measurement, and one sentence above
+the table names the fix, which is off this screen: the filter is on the service account. An
+`unverified` row says *"Completeness unverified"* in grey with the reason. **`complete` renders
+nothing**, which keeps this column's standing invariant — nothing on the Libraries screen renders a
+positive health claim — and is why `unverified` has to be loud.
+
+### Consequences
+
+- **One extra HTTP request per library per import.** Not per page and not per item; pinned by
+  `TestTheStatsProbeIsMadeOncePerLibraryAndNotPerBook`.
+- **No migration.** `sync_report` carries no `CHECK` over `kind` (migration `00005`), so the
+  vocabulary grows without DDL, and `detail` is already a JSON column. The verdict's three sides —
+  the adapter that measures it, `cmd/usarr` that writes it, the store read that folds it — share one
+  declaration in `internal/store/completeness.go` for exactly that reason: a typo would be a silently
+  missing verdict rather than a constraint violation.
+- **A multi-container library loses precision, deliberately.** The fold puts `unverified` **above**
+  `shortfall`, because `total_items` and `visible_items` are library-level once folded and an
+  unmeasured container makes both wrong. The shortfall on the other container is not lost — it is in
+  the log and in its own `sync_report` row.
+- **The Kavita adapter is untouched and serves no verdict**, which renders as an absent key. It is
+  the seam: an adapter that can make the comparison implements the same shape and the screen needs no
+  change.
+
+### Alternatives rejected
+
+**A boolean `complete`.** Rejected under Context §3 — see Decision 2.
+
+**Refuse the sync on a shortfall.** Rejected under Decision 4. A partial catalogue that says so is
+strictly better than none, and the failure mode is an outage rather than a report.
+
+**Compare against the paged walk's `total` instead of the listing's `bookCount`.** Rejected under
+Context §2: the paged read has no default status predicate, so the two sides would sit on different
+predicates unless every caller remembered to send an `isPresent` rule. Correctness that depends on a
+caller remembering is not correctness.
+
+**Probe library ids to find hidden libraries.** Rejected under Context §4. It is enumeration against
+the operator's own service and it does not work: the guard's two refusals are byte-identical.
+
+**Record only the shortfalls.** Rejected under Decision 5.
+
+### What is built
+
+`internal/bookorbit/stats.go` · `internal/libsync/bookorbitcompleteness.go` ·
+`internal/store/completeness.go` · `internal/store/libraries.go` (the third statement and the fold) ·
+`cmd/usarr/import.go` (`recordCompleteness`) · `internal/httpapi/libraries.go`
+(`libraryCompletenessResponse`) · `web/src/lib/libraries.ts` (`toCompleteness`, `completenessMarks`,
+`completenessNote`) · `web/src/routes/libraries/+page.svelte`. Wire contract in
+[`reference/http-api.md`](./reference/http-api.md) §2.6.
+
+**Guards:** `internal/libsync/bookorbitcompleteness_test.go`,
+`cmd/usarr/bookorbit_completeness_e2e_test.go`, `internal/httpapi/libraries_test.go` and
+`web/src/lib/completeness.test.ts`. The one that matters most is the guard-later drill —
+`TestAGuardedStatsRouteRecordsUnverifiedRatherThanComplete` — which serves a 403 from the fake
+BookOrbit's stats route and asserts the recorded verdict is `unverified` with `Total = -1`.

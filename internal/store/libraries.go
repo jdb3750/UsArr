@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 )
 
@@ -23,8 +24,12 @@ import (
 // replicated — so both halves carry the scope, and TestListLibrariesScopeActuallyFilters
 // breaks each of them and watches the assertion catch it.
 //
-// IT IS A LOCAL READ AND NOTHING ELSE (principle 1). Two statements against the
-// local file, no upstream call, no capability probe. In particular this is NOT
+// IT IS A LOCAL READ AND NOTHING ELSE (principle 1). Three statements against
+// the local file, no upstream call, no capability probe. ⚠️ THE THIRD ONE READS
+// A MEASUREMENT THAT WAS MADE UPSTREAM, and that is not a contradiction: the
+// completeness verdict is computed once at IMPORT and written to sync_report, so
+// what happens here is a SELECT over a row that already exists. Nothing on this
+// path may ever ask a service how complete a library is. In particular this is NOT
 // the connect probe: ADR-0048 puts the proposal set in the probe's response and
 // says a `library` row exists only once the user has accepted one, so everything
 // this read returns is, by that ADR's clause 4, an accepted library. A proposal
@@ -120,6 +125,67 @@ type Library struct {
 	// visible library sits on an instance the scope hides — which is the state
 	// the scope exists to produce and is why the library still lists.
 	Sources []LibrarySource
+
+	// Completeness is what the last import measured about how much of this
+	// library's upstream containers UsArr's credential could actually see.
+	//
+	// ⚠️ NIL IS "NOTHING WAS MEASURED", NEVER "COMPLETE". It is nil for every
+	// library whose sources come from an adapter that runs no completeness check
+	// — which today is every Kavita library and every library that has never
+	// been imported — and a renderer that painted a positive mark on nil would
+	// be reporting the absence of a check as a pass. That is the same defect
+	// this field exists to close, one level up. See completeness.go.
+	Completeness *LibraryCompleteness
+}
+
+// LibraryCompleteness is one library's verdict, folded from the per-container
+// verdicts its sources carry.
+//
+// # The fold, and why unverified wins
+//
+// A library can bind several containers. The states are combined WORST-FIRST
+// with `unverified` at the top, not `shortfall`:
+//
+//	any unverified → unverified
+//	else any shortfall → shortfall
+//	else → complete
+//
+// `unverified` outranks `shortfall` because Total and Visible are LIBRARY-LEVEL
+// numbers once folded, and an unmeasured container makes both of them wrong. A
+// library reading *"holds 412; the account can see 389"* while a second source
+// was never checked is a precise-looking claim that is not true. The shortfall
+// on the other container is not lost — it is in the process log and in its own
+// sync_report row, which is where a number that cannot be summed belongs.
+//
+// In v0.1 this fold is almost always over one container: catalogue.go's bind
+// path creates one library per upstream container (§17.8).
+type LibraryCompleteness struct {
+	// State is one of the three members in completeness.go.
+	State CompletenessState
+
+	// Total and Visible are summed over the containers that produced a
+	// measurement. Both are 0 when State is unverified, and a caller must read
+	// State before either of them: they are not a claim in that state.
+	Total   int64
+	Visible int64
+
+	// Hidden is Total - Visible, as measured. 0 unless State is a shortfall.
+	Hidden int64
+
+	// Reason is UsArr's own sentence about why the check could not be made.
+	// Non-empty only when State is unverified, and never upstream text.
+	Reason string
+
+	// CheckedAt is when the newest of the folded verdicts was recorded, in the
+	// store's own timestamp layout. It answers "how old is this claim", which is
+	// the question any stored measurement raises.
+	CheckedAt string
+
+	// Containers is how many container verdicts were folded into this one. It is
+	// on the struct because the fold above is lossy: a caller that wants to know
+	// whether a shortfall figure covers the whole library can compare this
+	// against the number of sources.
+	Containers int
 }
 
 // LibrarySource is one `library_source` row plus the two fields of its service
@@ -391,6 +457,16 @@ func (s *Store) ListLibraries(ctx context.Context, scope Scope) ([]Library, erro
 	if err := s.attachLibrarySources(ctx, scope, ids, index, out); err != nil {
 		return nil, err
 	}
+	// THE THIRD STATEMENT, and it is a third rather than a join onto the second
+	// for the reason the second is not a join onto the first: it fans out per
+	// SOURCE and has to be folded back to one verdict per library, which a
+	// caller cannot do to a number it did not compute. It reads sync_report,
+	// which is an operational log rather than catalogue state, so a library with
+	// no verdict is the ordinary case for every source that does not measure
+	// completeness at all.
+	if err := s.attachLibraryCompleteness(ctx, scope, ids, index, out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -419,6 +495,168 @@ func scanLibraries(rows *sql.Rows) ([]Library, error) {
 		return nil, fmt.Errorf("list libraries: %w", err)
 	}
 	return out, nil
+}
+
+// libraryCompletenessSQL renders the completeness statement.
+//
+// # The newest verdict per SOURCE, and how it is picked
+//
+// sync_report is append-only, so a container that has been imported five times
+// has five rows. The correlated `r.id = (SELECT … ORDER BY r2.id DESC LIMIT 1)`
+// takes the last one written for that (instance, container_ref) pair. The key is
+// `id` rather than `created_at` because created_at is second-granular text and
+// two runs inside one second would tie; `id` is the insert order by construction.
+//
+// ⚠️ IT IS NOT WINDOWED ON last_full_sync_at, AND THAT IS THE OPPOSITE CHOICE
+// FROM FileWalkFailuresByInstance ON PURPOSE. That read COUNTS accumulating
+// failures, so it has to exclude ones a later run already fixed. This one reads
+// the LATEST OBSERVATION, and every import writes a fresh row for every
+// container it saw — so the newest row is always the newest run's verdict, and
+// windowing it would delete the answer for an instance whose import has not
+// completed since. A stale-but-labelled measurement (CheckedAt travels) beats no
+// measurement.
+//
+// The join is `sync_report.remote_id = library_source.container_ref`, which is
+// the same string on both sides: internal/libsync's containerRef writes the
+// container id into CatalogueContainer.RemoteID, catalogue.go's bind path writes
+// that into container_ref, and cmd/usarr writes the same value into remote_id.
+// `remote_kind = 'library'` narrows it to container-grained rows, so an
+// item-grained kind that reused the column could not collide.
+//
+// THE SCOPE IS THE SOURCE'S, not the library's, and it is the same
+// instancePredicate librarySourcesSQL applies for the same reason: a verdict
+// names an instance through the source it hangs off, so publishing one for an
+// instance the caller cannot see would leak the topology the scope hides.
+// `si.deleted_at IS NULL` matches that read too — a soft-deleted instance is not
+// a service any more, and its last verdict is not news about a live library.
+func libraryCompletenessSQL(scope Scope, libraryIDs []int64) (string, []any) {
+	// ⚠️ THE KIND IS BOUND FIRST, BECAUSE `?` IS POSITIONAL AND THE CORRELATED
+	// SUBQUERY IS EARLIER IN THE TEXT THAN THE `IN` LIST. The other statements in
+	// this file happen to build their arguments in the same order their
+	// predicates read, so the hazard does not arise there; here the parameter
+	// that leads the SQL is the one that trails the logic, and getting it wrong
+	// produces an empty join rather than an error.
+	args := make([]any, 0, len(libraryIDs)+len(scope.InstanceIDs)+1)
+	args = append(args, SyncReportContentCompleteness)
+	for _, id := range libraryIDs {
+		args = append(args, id)
+	}
+	instPred, instArgs := scope.instancePredicate("ls.service_instance_id")
+	args = append(args, instArgs...)
+
+	return `
+		SELECT ls.library_id, r.detail, r.created_at
+		  FROM library_source ls
+		  JOIN service_instance si ON si.id = ls.service_instance_id
+		  JOIN sync_report r ON r.id = (
+		        SELECT r2.id FROM sync_report r2
+		         WHERE r2.service_instance_id = ls.service_instance_id
+		           AND r2.kind = ?
+		           AND r2.remote_kind = 'library'
+		           AND r2.remote_id = ls.container_ref
+		         ORDER BY r2.id DESC LIMIT 1)
+		 WHERE ls.library_id IN (` + placeholders(len(libraryIDs)) + `)
+		   AND si.deleted_at IS NULL
+		   AND ` + instPred + `
+		 ORDER BY ls.library_id, ls.id`, args
+}
+
+// attachLibraryCompleteness folds the per-source verdicts onto the rows.
+//
+// A ROW THIS CANNOT READ IS DROPPED, NOT DEFAULTED. A detail blob that will not
+// decode, or one carrying a state string no member of the vocabulary matches, is
+// skipped: the library then renders as unmeasured, which is the only reading of
+// an unreadable measurement that cannot overstate. Dropping it silently is
+// deliberate here, unlike libraryFormatsFor's logged drop, because this read has
+// no logger and the row is operational rather than user data — and because the
+// state it produces (nothing measured) is itself visible on the screen.
+func (s *Store) attachLibraryCompleteness(
+	ctx context.Context, scope Scope, ids []int64, index map[int64]int, out []Library,
+) error {
+	query, args := libraryCompletenessSQL(scope, ids)
+	rows, err := s.db.Read().QueryContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("list library completeness: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	for rows.Next() {
+		var libraryID int64
+		var detail sql.NullString
+		var createdAt string
+		if err := rows.Scan(&libraryID, &detail, &createdAt); err != nil {
+			return fmt.Errorf("list library completeness: scan: %w", err)
+		}
+		i, ok := index[libraryID]
+		if !ok {
+			return fmt.Errorf(
+				"list library completeness: a verdict belongs to library %d, which the "+
+					"library statement did not return", libraryID)
+		}
+		if !detail.Valid {
+			continue
+		}
+		var note CompletenessNote
+		if err := json.Unmarshal([]byte(detail.String), &note); err != nil {
+			continue
+		}
+		state, ok := CompletenessStateOf(note.State)
+		if !ok {
+			continue
+		}
+		out[i].Completeness = foldCompleteness(out[i].Completeness, state, note, createdAt)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("list library completeness: %w", err)
+	}
+	return nil
+}
+
+// foldCompleteness merges one container verdict into a library's running one.
+//
+// See LibraryCompleteness for why `unverified` outranks `shortfall` rather than
+// the other way round. The sums accumulate ONLY from measured verdicts, so an
+// unverified container contributes a state and no numbers — and because it also
+// wins the state, the numbers it did not contribute are never published.
+func foldCompleteness(
+	into *LibraryCompleteness, state CompletenessState, note CompletenessNote, createdAt string,
+) *LibraryCompleteness {
+	if into == nil {
+		into = &LibraryCompleteness{State: state}
+	}
+	into.Containers++
+	// Lexicographic max is chronological max: store.go's timeLayout is ordered
+	// that way on purpose, and the same property is what FileWalkFailuresByInstance's
+	// window relies on.
+	if createdAt > into.CheckedAt {
+		into.CheckedAt = createdAt
+	}
+
+	switch state {
+	case CompletenessUnverified:
+		into.State = CompletenessUnverified
+		if into.Reason == "" {
+			into.Reason = note.Reason
+		}
+		// The numbers are dropped rather than kept, because the state they would
+		// qualify is now one that makes no numeric claim at all.
+		into.Total, into.Visible, into.Hidden = 0, 0, 0
+		return into
+	case CompletenessShortfall, CompletenessComplete:
+		if into.State == CompletenessUnverified {
+			// An unverified container already won. Count this one and add
+			// nothing: a partial sum published under a total-shaped label is
+			// exactly the precision this fold refuses.
+			return into
+		}
+		if state == CompletenessShortfall {
+			into.State = CompletenessShortfall
+		}
+		into.Total += note.Total
+		into.Visible += note.Visible
+		into.Hidden += note.Hidden
+	}
+	return into
 }
 
 func (s *Store) attachLibrarySources(

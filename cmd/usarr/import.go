@@ -126,6 +126,11 @@ func (g *registry) runImport(ctx context.Context, instanceID int64) (libsync.Rep
 	// importer.go's recordFileWalkFailures states for a dropped file walk.
 	if bo, ok := src.(*libsync.BookOrbitSource); ok {
 		g.recordSkippedItems(ctx, instanceID, bo.Skipped(), log)
+		// Same rule, same reason: the completeness verdict is a fact about the
+		// run that has to outlive the run. It is recorded even for a failed
+		// import, because a shortfall measured against library one is still true
+		// when the walk dies on library three.
+		g.recordCompleteness(ctx, instanceID, bo.Completeness(), log)
 	}
 	return rep, importErr
 }
@@ -208,6 +213,70 @@ func (g *registry) recordSkippedItems(
 			syncReportItemsSkipped, "library", s.RemoteID, string(detail)); err != nil {
 			log.Warn("cannot record how many books were skipped; the import itself stands",
 				"library_id", s.RemoteID, "err", err)
+		}
+	}
+}
+
+// completenessCovers and completenessDoesNotCover are written into EVERY
+// completeness row, and the second one is the reason both exist.
+//
+// ⚠️ A CLEAN BOOK-LEVEL CHECK MUST NOT BE READ AS COMPLETENESS. The check
+// compares two counts INSIDE one container UsArr's credential can already see.
+// Whether whole containers are hidden from the account is a second axis and is
+// unanswerable read-only — BookOrbit's LibraryAccessGuard throws an identical
+// ForbiddenException for "the library exists and this account has no access row"
+// and for "there is no such library" — so `complete` on every library UsArr can
+// see is not a statement that UsArr can see every library.
+//
+// The scope travels IN THE ROW rather than only in a doc comment, because the
+// row is what an operator reads out of the database and what a browser renders,
+// and neither of those has this file open.
+const (
+	completenessCovers = "how many of this container's items UsArr's credential " +
+		"was shown, against the container's own unfiltered count"
+	completenessDoesNotCover = "whether whole containers are hidden from UsArr's " +
+		"credential — the upstream returns the same refusal for a container that " +
+		"exists and one that does not, so it cannot be measured from here"
+)
+
+// recordCompleteness writes the durable half of "UsArr may not be seeing all of
+// your books".
+//
+// ONE ROW PER CONTAINER, INCLUDING THE ONES THAT WERE FINE, which is the
+// opposite of recordSkippedItems above and is the whole design. A skip row that
+// is absent means nothing was skipped. A completeness row that is absent means
+// nothing was ASKED — the adapter does not check, or the import never reached
+// this container — and if the two absences looked alike, an instance whose
+// probes all started failing would read as an instance with nothing wrong. That
+// is the defect this feature exists to close, and writing rows only for
+// shortfalls would have recreated it inside the fix.
+//
+// A FAILURE TO RECORD DOES NOT FAIL THE IMPORT, on recordSkippedItems's
+// reasoning: the catalogue rows are already committed and correct, and losing
+// the note about how complete they are is worth a warning, not a rollback.
+func (g *registry) recordCompleteness(
+	ctx context.Context, instanceID int64, checks []libsync.ContainerCompleteness, log *slog.Logger,
+) {
+	for _, c := range checks {
+		note := store.CompletenessNote{
+			State:        string(c.State),
+			Container:    c.Name,
+			Total:        c.Total,
+			Visible:      c.Visible,
+			Hidden:       c.Hidden(),
+			Reason:       c.Reason,
+			Covers:       completenessCovers,
+			DoesNotCover: completenessDoesNotCover,
+		}
+		detail, err := json.Marshal(note)
+		if err != nil {
+			log.Warn("cannot encode the completeness note", "library_id", c.RemoteID, "err", err)
+			continue
+		}
+		if err := g.st.RecordSyncReport(ctx, instanceID,
+			store.SyncReportContentCompleteness, "library", c.RemoteID, string(detail)); err != nil {
+			log.Warn("cannot record how much of this library UsArr could see; the import itself stands",
+				"library_id", c.RemoteID, "err", err)
 		}
 	}
 }
