@@ -1367,7 +1367,8 @@ nowhere to go but a compressed corner or an icon.
 **The decision, in two halves:**
 
 > **Media type is the navigation axis** — a closed set of six (movies, TV, music, ebooks, audiobooks,
-> comics), one sidebar entry per type *that has content*, bounded at six by construction.
+> comics), one sidebar entry per type, **all six of them, always** (ADR-0053), bounded at six by
+> construction.
 >
 > **A library is a *scope*, not a place** — a multi-select chip pinned above the nav, reflected in
 > the URL as `?lib=`, on the routes that already exist. Libraries are unbounded in number and are
@@ -1393,10 +1394,39 @@ UsArr's neighbours already use, it is where the ecosystem puts status badges (§
 cleanly on a phone, and it scales to the eventual Home · six types · Search · Requests · Calendar ·
 Stats · Services · Settings · System set (§12) — which a horizontal strip does not.
 
-**The sidebar, with the scope chip and the six types.** Type entries are **data-driven**, not
-markup: §17.2's hard rule applies to the sidebar exactly as it does to Home — **a type the user does
-not have is not shown at all**, so a movies-only install renders two content nouns and a
-music-and-books install renders three. Nothing hard-codes a type.
+**The sidebar, with the scope chip and the six types. All six type entries render, unconditionally
+and in one fixed order, including the types this install has nothing in.** This section specified the
+opposite until 2026-08-19 — type entries **data-driven** rather than markup, §17.2's hard rule
+applied to the sidebar exactly as to Home, *"a type the user does not have is not shown at all"*, so
+a movies-only install rendered two content nouns — and **that shape is not buildable over the wire
+UsArr serves.** [`reference/http-api.md`](../reference/http-api.md) §7.1 closes the wire question:
+*"There are **no facet counts** beside the chips; each is its own aggregate and its own read."*
+Nothing on any read answers per-type presence, so a data-driven sidebar has no honest source, and
+both ways of faking one are worse than six rows. Six aggregates on every navigation put a count on
+the render path, which is what principle 1 exists to refuse. Hiding a type on a count nobody measured
+is worse still, and it is the option that looks like compliance: it fails **silently**, and it
+removes the one row that would have explained the absence, so a library that is really there becomes
+unreachable from the nav with nothing to say why.
+
+**So all six ship, no row carries a count, and an empty type says it is empty on its own screen —
+where the words can be true and can name their reason.** That is the decision of record, taken with
+the shipped shell and recorded as **ADR-0053**; it is not an unfinished state to be tidied back to
+the old spec. `browseEmptyState` (`web/src/lib/librarygrid.ts`) is where the honesty went: it words
+the empty grid from the services read, separating *"no library-bearing service is connected"* from
+*"this type has no rows yet"* from *"the library scope excludes everything"* (§10's `scope-empty`).
+A user who clicks an empty type is told which of the three is true, which is strictly more than a
+hidden row tells them.
+
+⚠️ **The condition under which per-type hiding returns is a single named one, and it is a read, not a
+rewrite: a facet read.** The day one statement answers *which of the six types have rows, under the
+current scope*, the data-driven sidebar becomes buildable and this decision should be reopened — the
+seam is one predicate on `TYPE_NAV` (`web/src/routes/+layout.svelte`), which is a `MEDIA_TYPES.map`
+with none today. ARCHITECTURE §13 has already priced the shape, budgeting a scope-chip toggle of
+*"1 keyset page + 6 sidebar `COUNT(*)` over `library_member ⋈ work`"* at **< 15 ms p50** — so the
+cost is not the obstacle; the absence of the read is. Nothing yet decides whether those counts ride
+the browse response or take their own endpoint, and ADR-0053 leaves that to whoever builds it.
+**Until such a read is published in `reference/http-api.md`, restoring "one sidebar entry per type
+that has content" would be re-specifying a screen the wire cannot serve.**
 
 ```
 ┌────────────────────────────┐
@@ -1406,12 +1436,12 @@ music-and-books install renders three. Nothing hard-codes a type.
 ├────────────────────────────┤
 │   Home                     │
 ├────────────────────────────┤
-│   Movies             1,204 │  ┐
-│   TV                   214 │  │  present media types only,
-│   Music              8,930 │  ├  fixed order, hard max 6,
-│   Audiobooks           412 │  │  counts respect the scope chip
-│   Ebooks             2,051 │  │
-│   Comics               733 │  ┘
+│   Movies                   │  ┐
+│   TV                       │  │  ALL SIX, always, whether or
+│   Music                    │  ├  not this install has any —
+│   Audiobooks               │  │  fixed order, no counts,
+│   Ebooks                   │  │  exactly six by construction
+│   Comics                   │  ┘  (ADR-0053)
 ├────────────────────────────┤
 │   Kids                     │  ┐  pinned libraries — opt-in, default none,
 │   Vinyl rips               │  ┘  capped, hidden group when empty
@@ -1449,8 +1479,10 @@ rule, just a smaller one than claimed:
 ```
 
 **Row budget, with the arithmetic, because "it fits" is not a design.** Fixed entries: Home, Search,
-Requests, Services, Settings, System = 6, plus Calendar and Stats later (§12) = 8. Types ≤ 6. Scope
-chip = 1. That is 15 before pins, so the **budget is 16 rows** and pins are capped at
+Requests, Services, Settings, System = 6, plus Calendar and Stats later (§12) = 8. Types = 6, always
+now rather than at most (ADR-0053) — the arithmetic already took six as its worst case, so the
+budget is unchanged and six is simply no longer a worst case. Scope chip = 1. That is 15 before pins,
+so the **budget is 16 rows** and pins are capped at
 `16 − fixed − types` — the cap shrinks automatically when Calendar and Stats arrive, and the excess
 goes under `More…`. At §5.3's 32 px sidebar row height, 16 rows plus 4 separators ≈ 528 px, which
 fits a 900 px viewport with the collapse toggle and without scrolling the nav. **INFERENCE:** the
