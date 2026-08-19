@@ -96,11 +96,14 @@
 		browseSortsFor,
 		emptyBrowseFeed,
 		fetchBrowsePage,
+		libraryScopeLine,
 		MAX_LIBRARY_SLUGS,
 		nextBrowsePage,
+		readLibraryNames,
 		sameBrowseQuery,
 		type BrowseFeed,
-		type BrowseQuery
+		type BrowseQuery,
+		type LibraryNames
 	} from '$lib/librarygrid';
 	import { formatWhen } from '$lib/requests';
 
@@ -352,6 +355,48 @@
 	});
 
 	/**
+	 * THE LIBRARY NAMES, AND THE GRID IS NEVER GATED ON THEM.
+	 *
+	 * ⚠️ THE SCOPE LINE RENDERS BEFORE THIS ANSWERS AND RENDERS WHETHER OR NOT IT
+	 * EVER DOES. `undefined` here is "no names yet", which `libraryScopeLine`
+	 * spells as the slug — so the line states a true scope from the first frame and
+	 * is REPLACED by a friendlier one, rather than waiting to be correct. Nothing
+	 * else on this screen reads this value: the table, its empty state and its
+	 * failure banner are all driven by the browse read alone, so a libraries read
+	 * that is slow or dead costs one word and never a row (ARCHITECTURE §17.7).
+	 *
+	 * `readLibraryNames` cannot reject, so there is no catch here and nothing to
+	 * report: a failure is indistinguishable from an install with no libraries, and
+	 * neither is news the catalogue screen owes the user.
+	 */
+	let names = $state<LibraryNames | undefined>(undefined);
+	/** One read per visit. Plain, not `$state`: it guards the read and must never
+	 * be a reason to re-render. */
+	let namesAsked = false;
+
+	/**
+	 * ⚠️ ASKED ONLY WHEN THE ADDRESS CARRIES A SCOPE, so the unscoped view — which
+	 * renders no scope line at all — costs no read. The effect rather than
+	 * `onMount` because the scope can arrive after mount: `pushState` moves the
+	 * address without remounting this component.
+	 */
+	$effect(() => {
+		if ((query?.libraries.length ?? 0) === 0 || namesAsked) return;
+		namesAsked = true;
+		untrack(() => void loadNames());
+	});
+
+	async function loadNames() {
+		names = await readLibraryNames();
+	}
+
+	/**
+	 * The line the toolbar prints, or `undefined` on an unscoped view — which is
+	 * the whole reason the markup renders nothing there rather than an empty span.
+	 */
+	const scopeLine = $derived(libraryScopeLine(query?.libraries ?? [], names));
+
+	/**
 	 * The services read, and it is allowed to fail. Nothing on this screen is
 	 * gated on it except the wording of an empty state, and `browseEmptyState`
 	 * has an answer for exactly this case: it says the reason is unknown rather
@@ -460,18 +505,23 @@
 		{#if query.libraries.length > 0}
 			<span class="toolbar__spacer"></span>
 			<!--
-				THE SCOPE NAMES ITS SLUGS RATHER THAN THE LIBRARIES' NAMES, because a
-				name would need a second read and this screen has the slug in hand. The
-				slug IS the library's durable URL identity (migration 0005 keeps it
-				across a rename), so it is the honest label for a scope that lives in
-				the address. The multi-select chip that WRITES this belongs above the
-				nav (DESIGN-DIRECTION §8.1) and is not built; the address is honoured
-				whether or not the control that sets it exists, and the Libraries screen
-				links here with one slug on it.
+				THE SCOPE NAMES THE LIBRARY, NOT ITS SLUG. ARCHITECTURE §17.8 never
+				renders a slug anywhere on the Libraries screen — *"The row's identifier
+				is not rendered as a path … Drop the slash and the mono face"* — so a
+				user arriving here on a `?lib=` link would otherwise be scoped by a
+				string the UI has never shown them. The name comes from
+				`GET /api/v1/libraries`, which publishes `name` and `slug` together
+				(`reference/http-api.md` §2.2), and the slug is the fallback whenever it
+				has not answered: a scoped view that cannot name its scope still says it
+				is scoped.
+
+				⚠️ THIS IS THE VIEW DESCRIBING ITSELF, NOT §8.1's ScopeChip. It states one
+				scope and clears it; it does not select, does not multi-select and claims
+				nothing about scope anywhere else. The chip stays unbuilt on a wire
+				precondition (DESIGN-DIRECTION §9.7), and the address is honoured whether
+				or not the control that writes it exists.
 			-->
-			<span class="toolbar__label">
-				Scoped to {query.libraries.join(', ')}
-			</span>
+			<span class="toolbar__label">{scopeLine}</span>
 			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- a ResolvedPathname cannot carry a query string; page.url.pathname is already resolved -->
 			<a class="btn btn--sm" href={clearScopeHref}>Show every library</a>
 		{/if}

@@ -82,6 +82,7 @@
  */
 
 import { getJson } from './api';
+import { fetchLibraries } from './libraries';
 import type { HomeMode } from './home';
 import {
 	isMediaType,
@@ -302,6 +303,100 @@ export function readLibraryScope(params: URLSearchParams): string[] {
 		.split(',')
 		.map((s) => s.trim())
 		.filter((s) => s !== '');
+}
+
+/* ── 2a. the scope line: a scoped view saying what it is scoped to ────────── */
+
+/**
+ * SLUG → THE LIBRARY'S OWN NAME.
+ *
+ * `GET /api/v1/libraries` publishes the pair, and publishes both halves
+ * unconditionally: `reference/http-api.md` §2.2 marks `items[].name` and
+ * `items[].slug` "always present". So a scope carried in the address can be
+ * stated in the words the user gave the library, and nothing here reconstructs
+ * a name from a slug.
+ *
+ * ⚠️ A SLUG MISSING FROM THIS MAP IS NOT AN ERROR. It means the read has not
+ * answered yet, or it failed, or the address names a library this install does
+ * not have. All three fall back to the slug, which is the URL identity migration
+ * 0005 keeps across a rename and is therefore true even when it is unfriendly.
+ */
+export type LibraryNames = ReadonlyMap<string, string>;
+
+/**
+ * No names at all — what a scoped view holds before the read answers, and what
+ * it keeps for ever if the read fails. Shared rather than allocated per render;
+ * nothing in this module writes to it.
+ */
+export const NO_LIBRARY_NAMES: LibraryNames = new Map<string, string>();
+
+/**
+ * The map, from the rows `GET /api/v1/libraries` served.
+ *
+ * A row whose name is blank or whitespace is DROPPED rather than stored, so the
+ * line falls back to the slug instead of rendering an empty label. Stating a
+ * scope as nothing at all is the one outcome a line whose whole job is to name
+ * the scope may not have.
+ */
+export function libraryNames(libraries: readonly { slug: string; name: string }[]): LibraryNames {
+	const names = new Map<string, string>();
+	for (const library of libraries) {
+		if (library.slug === '' || library.name.trim() === '') continue;
+		names.set(library.slug, library.name);
+	}
+	return names;
+}
+
+/**
+ * THE ENRICHMENT READ, AND IT CANNOT REJECT.
+ *
+ * ⚠️ THAT IS THE POINT OF THE FUNCTION RATHER THAN A CONVENIENCE. The name
+ * enriches a line that is already correct without it, and the catalogue below it
+ * must render whether or not this answers (ARCHITECTURE §17.7: the table does
+ * not grey out on a read that is not its own). A promise that rejects invites a
+ * caller to await it on the render path, or to raise a banner over a failure the
+ * screen has no reason to report, so the failure is absorbed here and the answer
+ * is "no names" — which the line already knows how to render.
+ *
+ * It is a local SQLite read with no upstream call behind it
+ * (`reference/http-api.md` §2), so it is cheap. It is still never waited on.
+ */
+export async function readLibraryNames(): Promise<LibraryNames> {
+	try {
+		return libraryNames(await fetchLibraries());
+	} catch {
+		return NO_LIBRARY_NAMES;
+	}
+}
+
+/**
+ * WHAT A SCOPED VIEW CALLS ITS OWN SCOPE, IN WORDS THE USER HAS SEEN BEFORE.
+ *
+ * `undefined` on an unscoped view, and that is the only nothing this returns: a
+ * scoped view always gets a sentence, because a view that cannot name its scope
+ * must still say that it is scoped.
+ *
+ * ⚠️ IT USED TO PRINT THE SLUG, AND THE SLUG IS A VALUE THE UI NEVER SHOWS.
+ * ARCHITECTURE §17.8 is emphatic that the Libraries screen does not render the
+ * identifier — *"The row's identifier is not rendered as a path … Drop the slash
+ * and the mono face"* — so a user could arrive here scoped by a string that
+ * appears nowhere they have been. The name closes that. The slug stays as the
+ * fallback because it is at least TRUE, and a name guessed by un-slugifying a
+ * slug is worse than an unfriendly fact.
+ *
+ * TWO OR MORE LIBRARIES ARE ALL NAMED, comma-separated, in the address's order.
+ * `?lib=a,b` is expressible in the URL although no control writes one, and the
+ * honest reading of a two-library scope is both libraries: a count would say
+ * less than the list does, and the list is bounded by `MAX_LIBRARY_SLUGS`.
+ * Resolution is per slug, so a scope where one name is known and another is not
+ * renders the name it has beside the slug it does not.
+ */
+export function libraryScopeLine(
+	slugs: readonly string[],
+	names: LibraryNames = NO_LIBRARY_NAMES
+): string | undefined {
+	if (slugs.length === 0) return undefined;
+	return `Scoped to ${slugs.map((slug) => names.get(slug) ?? slug).join(', ')}`;
 }
 
 /* ── 3. one query, and the route that produces it ─────────────────────────── */
