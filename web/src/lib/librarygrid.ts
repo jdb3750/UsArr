@@ -50,10 +50,15 @@
  *   5. AN UNKNOWN QUERY PARAMETER IS IGNORED, SILENTLY. `handleBrowseWorks`
  *      reads five names off `r.URL.Query()` and never enumerates it, so a typo
  *      answers 200 with an unfiltered page one, which reads as "your library
- *      has everything in it". ⚠️ NOTHING ON EITHER SIDE OF THE WIRE CATCHES IT:
- *      no server-side test pins the ignoring, and there is no round trip that
- *      could report it. `browseParams` is therefore the only builder, and
- *      `unknownBrowseParams` fails a typo loudly in dev.
+ *      has everything in it". ⚠️ THAT IS A DELIBERATE WIRE CONTRACT AND NOT AN
+ *      OVERSIGHT, so no amount of asking will make the server refuse:
+ *      `http-api.md`'s preamble makes ignore-unknown API-wide and
+ *      `TestUnrecognisedQueryParametersAreIgnoredNotRefused`
+ *      (`internal/httpapi/library_browse_test.go`) pins it. The client has to
+ *      notice for itself, and it notices from the ROUND TRIP rather than from a
+ *      list of names it holds: `browseParams` is the only builder, and
+ *      `browseEchoDrift` compares what it meant to send against the
+ *      `media_type`, `sort` and `lib` the envelope says were applied.
  *
  * AND ONE ASYMMETRY THAT IS EASY TO GET BACKWARDS: an EMPTY `media_type` is
  * silently unfiltered, an EMPTY `lib` is a 400 (§7.3 — "a scope was asked for
@@ -260,37 +265,12 @@ export function sameBrowseQuery(a: BrowseQuery, b: BrowseQuery): boolean {
 	);
 }
 
-/* ── 4. the request ───────────────────────────────────────────────────────── */
+/* ── 4. the request, and the guard on what came back ──────────────────────── */
 
 /** What one page request carries. `cursor` absent is "the start of this order". */
 export interface BrowsePageRequest {
 	limit: number;
 	cursor?: string;
-}
-
-/**
- * ⚠️ EVERY PARAMETER THIS ENDPOINT READS, AND NOTHING ELSE EXISTS.
- *
- * `handleBrowseWorks` reads `media_type`, `sort`, `lib`, `limit` and `cursor`,
- * and ignores everything else in silence. So `?mediatype=comics` is a 200 with
- * an unfiltered page one, and there is no error, no log line and no visible
- * symptom beyond a screen that shows the whole library under a heading that
- * says Comics. Nothing outside this module may build a query string for this
- * endpoint.
- */
-export const BROWSE_PARAMS = ['media_type', 'sort', 'lib', 'limit', 'cursor'] as const;
-
-/**
- * The parameter names in `params` that this endpoint does not read.
- *
- * Pure and exported for its own sake so a test can fire it at a typo as well as
- * at a correct query: a validator that only ever sees valid input passes a
- * suite that proves nothing. `gridTemplate`'s content-sized-track guard in
- * `$lib/list` is the same shape and exists for the same reason.
- */
-export function unknownBrowseParams(params: URLSearchParams): string[] {
-	const known = new Set<string>(BROWSE_PARAMS);
-	return [...params.keys()].filter((k) => !known.has(k));
 }
 
 /**
@@ -300,6 +280,9 @@ export function unknownBrowseParams(params: URLSearchParams): string[] {
  * does not remember them (§7.5) and because they are part of what the cursor
  * means. `lib` goes out only when there is a slug to put in it: see
  * `readLibraryScope` for why an empty one is a 400 rather than "no scope".
+ *
+ * It is the ONLY builder for this endpoint, and that is what `browseEchoDrift`
+ * below is able to assume when it treats these three as "what the client meant".
  */
 export function browseParams(query: BrowseQuery, request: BrowsePageRequest): URLSearchParams {
 	const params = new URLSearchParams({
@@ -316,39 +299,159 @@ export function browseParams(query: BrowseQuery, request: BrowsePageRequest): UR
 	return params;
 }
 
-/** The URL for one page, with the dev-only typo guard on the way out. */
+/** The URL for one page. Pure, and deliberately so: the guard is on what comes
+ * BACK (`browseEchoDrift`), not on what goes out. */
 export function browseRequestUrl(query: BrowseQuery, request: BrowsePageRequest): string {
-	const params = browseParams(query, request);
-	if (import.meta.env.DEV) warnUnknownParams(params);
-	return `${LIBRARY_BROWSE_URL}?${params.toString()}`;
+	return `${LIBRARY_BROWSE_URL}?${browseParams(query, request).toString()}`;
 }
 
 /**
- * The dev-only half: name the parameters, say why, and DO NOT THROW.
+ * WHAT THE SERVER SAID IT ACTUALLY APPLIED, read off one browse envelope (§7.4).
+ *
+ * ⚠️ EACH FIELD IS ABSENT EXACTLY WHEN THE SERVER APPLIED NOTHING, AND THE
+ * GUARD BELOW IS ONLY SOUND BECAUSE OF THAT. It is a property of the handler
+ * rather than a convenience of this parser: `handleBrowseWorks` fills
+ * `media_type` and `sort` only from its own closed allowlists and marks both
+ * `omitempty`, and `resolveBrowseLibraries` returns a nil slice ONLY when the
+ * request carried no `lib` at all, every other outcome being a 400 or a fully
+ * resolved non-empty list. So an absent key cannot mean "you asked and I
+ * declined". `TestBrowseEnvelopeOmitsLibOnlyWhenNoScopeWasApplied`
+ * (`internal/httpapi/library_browse_test.go`) fails if a third outcome ever
+ * appears, which is the day `browseEchoDrift` stops being sound rather than
+ * merely noisy.
+ */
+export interface BrowseEcho {
+	mediaType?: string;
+	sort?: string;
+	/** The `?lib=` slugs the server resolved, in the order sent. Absent means no
+	 * library scope was applied, and there is no second reading (§7.4). */
+	libraries?: string[];
+}
+
+/** The three echoed fields, read defensively: this runs on a response body, so
+ * a wrong shape must read as "the server applied nothing" and be reported, not
+ * throw on a render path. */
+export function readBrowseEcho(payload: unknown): BrowseEcho {
+	const echo: BrowseEcho = {};
+	if (typeof payload !== 'object' || payload === null) return echo;
+	const raw = payload as Record<string, unknown>;
+	if (typeof raw.media_type === 'string') echo.mediaType = raw.media_type;
+	if (typeof raw.sort === 'string') echo.sort = raw.sort;
+	// A non-string inside the list is DROPPED rather than coerced, so a malformed
+	// echo comes out unequal to the intent and drifts loudly, instead of being
+	// smoothed into something that matches.
+	if (Array.isArray(raw.lib)) {
+		echo.libraries = raw.lib.filter((s): s is string => typeof s === 'string');
+	}
+	return echo;
+}
+
+/**
+ * WHERE THE QUERY THIS CLIENT MEANT AND THE QUERY THE SERVER APPLIED DISAGREE,
+ * one sentence per disagreement, empty when they agree.
+ *
+ * ⚠️ THE SOURCE OF TRUTH IS THE SERVER'S OWN ANSWER, AND WHAT THIS REPLACED WAS
+ * NOT. A `BROWSE_PARAMS` allowlist plus an `unknownBrowseParams` filter used to
+ * compare the outgoing query string against a hard-coded list of parameter
+ * names. Both are gone, and the list was NOT kept as a cheaper second check,
+ * because it was not a second check:
+ *
+ *   It caught nothing this misses. §7.1 makes a recognised name with an
+ *   unrecognised value a 400, so the only thing a typo can silently lose is a
+ *   parameter WHOLE. Every such loss arrives here as an echo that is absent or
+ *   unequal. There was no drift the name list saw and this does not.
+ *
+ *   It went stale in the direction that gets guards deleted. The list rots when
+ *   the SERVER grows a parameter, not when this module does, so its next wrong
+ *   answer would have been a `console.error` on a perfectly correct query. A
+ *   guard that cries wolf on valid input is uninstalled by whoever meets it
+ *   third.
+ *
+ *   The hazard it was written against is structural now. `browseParams` is the
+ *   only builder, its keys are literals in one function in this file, and a
+ *   test asserts the whole query string it produces. An allowlist over input
+ *   that is itself a constant guards its own author.
+ *
+ * WHAT IS GIVEN UP, named rather than glossed: this fires one round trip later
+ * than the list did, and it says nothing about `limit` or `cursor`. Neither can
+ * be compared to an intent. `limit` is clamped by design (§1.2), so an unequal
+ * echo there is the contract rather than a defect; a dropped `cursor` is page
+ * one over again, which `nextBrowsePage`'s stop rule already reasons about.
+ *
+ * Pure and exported for its own sake so a test can fire it at a disagreeing
+ * echo as well as an agreeing one: a guard that only ever sees the happy case
+ * passes a suite that proves nothing.
+ */
+export function browseEchoDrift(query: BrowseQuery, echo: BrowseEcho): string[] {
+	const drift: string[] = [];
+	// `browseParams` sends both of these on every page, so intent is never
+	// "unset" and an absent echo is always a disagreement.
+	if (echo.mediaType !== query.mediaType) {
+		drift.push(
+			`media_type: this client asked for ${query.mediaType}, the server applied ` +
+				`${echo.mediaType ?? 'no type filter at all'}`
+		);
+	}
+	if (echo.sort !== query.sort) {
+		drift.push(
+			`sort: this client asked for ${query.sort}, the server applied ` +
+				`${echo.sort ?? 'its own default order'}`
+		);
+	}
+	const wanted = query.libraries;
+	const applied = echo.libraries;
+	if (wanted.length === 0) {
+		// An empty scope is sent as NO `lib` at all, so an echo here means the
+		// server scoped a page this client meant to be over every library.
+		if (applied !== undefined) {
+			drift.push(
+				`lib: this client asked for every library, the server scoped to ` +
+					`${applied.join(', ') || 'an empty list'}`
+			);
+		}
+	} else if (applied === undefined) {
+		drift.push(
+			`lib: this client asked for ${wanted.join(', ')}, the server applied no library scope`
+		);
+	} else if (applied.length !== wanted.length || applied.some((s, i) => s !== wanted[i])) {
+		drift.push(
+			`lib: this client asked for ${wanted.join(', ')}, the server applied ${applied.join(', ')}`
+		);
+	}
+	return drift;
+}
+
+/**
+ * The dev-only half: name the disagreement, say why it matters, and DO NOT
+ * THROW.
  *
  * Throwing would take down a screen over a query-string defect, and a guard
  * that can break the app is a guard people delete. `import.meta.env.DEV` is a
  * literal `false` in a production build, so Rollup drops this call and the
- * function with it.
+ * function with it, and no user-facing error path is added by any of it.
  */
-function warnUnknownParams(params: URLSearchParams): void {
-	const unknown = unknownBrowseParams(params);
-	if (unknown.length === 0) return;
+function warnBrowseEchoDrift(query: BrowseQuery, payload: unknown): void {
+	const drift = browseEchoDrift(query, readBrowseEcho(payload));
+	if (drift.length === 0) return;
 	console.error(
-		`[UsArr library] GET ${LIBRARY_BROWSE_URL} does not read: ${unknown.join(', ')}. ` +
-			'An unrecognised parameter is IGNORED by this endpoint rather than refused, so ' +
-			'the request answers 200 with an unfiltered first page and the screen looks ' +
-			`like it worked. It reads ${BROWSE_PARAMS.join(', ')} and nothing else.`
+		`[UsArr library] GET ${LIBRARY_BROWSE_URL} answered 200 without applying the query ` +
+			`this screen asked for, so the grid below is a corpus nobody selected: ` +
+			`${drift.join('; ')}. An unrecognised parameter is IGNORED by this endpoint ` +
+			'rather than refused, so a misspelt name looks exactly like this: a full page ' +
+			'under the wrong heading. The echoed fields are docs/reference/http-api.md §7.4.'
 	);
 }
 
-/** One page of the grid. A local SQLite read behind the endpoint: it makes no
- * upstream call and is never on a path that waits for a service. */
+/** One page of the grid, with the dev-only echo guard on the way back in. A
+ * local SQLite read behind the endpoint: it makes no upstream call and is never
+ * on a path that waits for a service. */
 export async function fetchBrowsePage(
 	query: BrowseQuery,
 	request: BrowsePageRequest
 ): Promise<RecentPage> {
-	return toRecentPage(await getJson(browseRequestUrl(query, request)), request.limit);
+	const payload = await getJson(browseRequestUrl(query, request));
+	if (import.meta.env.DEV) warnBrowseEchoDrift(query, payload);
+	return toRecentPage(payload, request.limit);
 }
 
 /* ── 5. the feed, and the cursor-reset rule ───────────────────────────────── */

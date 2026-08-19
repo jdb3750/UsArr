@@ -262,10 +262,12 @@ describe('the /library table can line its columns up', () => {
 
 describe('the /library screen is reachable', () => {
 	/*
-	 * A screen with no route into it is a screen that does not exist. The shell's
-	 * entry set is fixed and hand-written, so the entry and the title are two
-	 * facts that must agree; a row with no title renders an empty toolbar and an
-	 * empty h1, which is the shape of the bug this pair catches.
+	 * A screen with no route into it is a screen that does not exist. THIS entry
+	 * is hand-written rather than derived — unlike the six media-type rows, which
+	 * `TYPE_NAV` builds from `MEDIA_TYPES` and titles from the same list — so its
+	 * entry and its title are two facts that must agree; a row with no title
+	 * renders an empty toolbar and an empty h1, which is the shape of the bug
+	 * this pair catches.
 	 */
 	it('has a sidebar entry and a title', () => {
 		expect(

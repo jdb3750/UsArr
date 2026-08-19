@@ -16,16 +16,16 @@
  * emits no sort. So each one proves it looked.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from './api';
 import { userFacingMarkup } from './copyguard';
 import { cursorRejected, MEDIA_TYPES, type MediaType, type RecentPage } from './library';
 import { findContentSizedTracks } from './list';
 import {
 	appendBrowsePage,
+	browseEchoDrift,
 	browseEmptyState,
 	browseFeedFor,
-	BROWSE_PARAMS,
 	BROWSE_SORTS,
 	browseKindCount,
 	browseParams,
@@ -34,14 +34,15 @@ import {
 	browseSortsFor,
 	DEFAULT_BROWSE_SORT,
 	emptyBrowseFeed,
+	fetchBrowsePage,
 	LIBRARY_BROWSE_URL,
 	MAX_LIBRARY_SLUGS,
 	nextBrowsePage,
+	readBrowseEcho,
 	readBrowseSort,
 	readLibraryScope,
 	REFUSED_BROWSE_SORT,
 	sameBrowseQuery,
-	unknownBrowseParams,
 	type BrowseFeed,
 	type BrowseQuery
 } from './librarygrid';
@@ -80,6 +81,19 @@ const query = (over: Partial<BrowseQuery> = {}): BrowseQuery => ({
 });
 
 const page = (over: Partial<RecentPage> = {}): RecentPage => ({ items: [], limit: 50, ...over });
+
+/** Answers every request from one scripted body. Scoped to the echo guard, which
+ * is the only rule in this file that needs a round trip to observe at all. */
+function stubFetch(script: () => Response) {
+	vi.stubGlobal('fetch', () => Promise.resolve(script()));
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+	return new Response(JSON.stringify(body), {
+		status,
+		headers: { 'content-type': 'application/json' }
+	});
+}
 
 /** One `<Tag ... />` off the stripped markup, or a failure that says which. */
 function selfClosingTag(markup: string, tag: string): string {
@@ -236,19 +250,146 @@ describe('the request carries what the server does not remember', () => {
 		).toEqual(['kids', 'vinyl-rips']);
 	});
 
-	it('names every parameter this endpoint reads, and flags a typo', () => {
-		expect([...BROWSE_PARAMS].sort()).toEqual(
-			['cursor', 'lib', 'limit', 'media_type', 'sort'].sort()
-		);
+	/*
+	 * ⚠️ THIS REPLACED A GUARD THAT COMPARED THE OUTGOING QUERY AGAINST A
+	 * HARD-CODED `BROWSE_PARAMS` LIST. The list could only ever go stale in the
+	 * direction that makes a guard fire on a CORRECT query, and it caught nothing
+	 * the echo does not: §7.1 makes a recognised name with an unrecognised value
+	 * a 400, so the only thing a typo can silently lose is a whole parameter, and
+	 * a whole parameter lost is exactly an echo that comes back absent.
+	 * `browseEchoDrift`'s own header carries the argument.
+	 */
+	it('reads the three echoed fields, and reads an absent one as absent', () => {
+		expect(readBrowseEcho({ media_type: 'comics', sort: 'sort_title', lib: ['manga'] })).toEqual({
+			mediaType: 'comics',
+			sort: 'sort_title',
+			libraries: ['manga']
+		});
+		/*
+		 * §7.4: OMITTED MEANS THE SERVER APPLIED NOTHING, with no second reading,
+		 * and that is the property the whole comparison rests on. Server-side it
+		 * is pinned by TestBrowseEnvelopeOmitsLibOnlyWhenNoScopeWasApplied — for
+		 * any request that carried `lib`, the answer is a 400 or a 200 that
+		 * echoes it, and there is no third outcome.
+		 */
+		expect(readBrowseEcho({ items: [], limit: 50 })).toEqual({});
+		// A body that is not an envelope at all reads as "nothing was applied",
+		// so it drifts loudly rather than throwing on a render path.
+		expect(readBrowseEcho('not an envelope')).toEqual({});
+		expect(readBrowseEcho(null)).toEqual({});
+	});
+
+	it('says nothing when the server applied the query this client sent', () => {
+		const q = query({ mediaType: 'comics', sort: 'sort_title', libraries: ['manga', 'kids'] });
 		expect(
-			unknownBrowseParams(browseParams(query({ libraries: ['kids'] }), { limit: 50, cursor: 'c' })),
-			'the builder emits a parameter this endpoint does not read'
+			browseEchoDrift(q, {
+				mediaType: 'comics',
+				sort: 'sort_title',
+				libraries: ['manga', 'kids']
+			}),
+			'the guard accused a server that applied exactly what was asked of it'
 		).toEqual([]);
+		// The unscoped case agrees by ABSENCE, which is the half a naive
+		// comparison gets wrong: no `lib` was sent, so no `lib` must come back.
 		expect(
-			unknownBrowseParams(new URLSearchParams('mediatype=comics&sort=added_at')),
-			'a misspelt parameter was not flagged — this endpoint IGNORES it and answers 200 ' +
-				'with an unfiltered first page, so nothing else would notice'
-		).toEqual(['mediatype']);
+			browseEchoDrift(query(), { mediaType: 'movies', sort: 'added_at' }),
+			'an unscoped page was accused of losing a scope it never asked for'
+		).toEqual([]);
+	});
+
+	it('names each parameter the server did not apply, which is what a typo looks like', () => {
+		// A misspelt `media_type` is ignored, so the page comes back unfiltered
+		// and the envelope echoes no type at all.
+		const typeOnly = browseEchoDrift(query({ mediaType: 'comics' }), { sort: 'added_at' });
+		expect(
+			typeOnly,
+			'an unapplied media_type was not reported, so a typo in it is invisible'
+		).toHaveLength(1);
+		const [typeDrift] = typeOnly;
+		expect(typeDrift).toContain('media_type');
+		expect(typeDrift).toContain('comics');
+		expect(typeDrift).toContain('no type filter at all');
+
+		// A misspelt `sort` leaves the server on its own default order, which is
+		// a different corpus order under the same heading.
+		const sortOnly = browseEchoDrift(query({ sort: 'popularity' }), { mediaType: 'movies' });
+		expect(sortOnly, 'an unapplied sort was not reported').toHaveLength(1);
+		const [sortDrift] = sortOnly;
+		expect(sortDrift).toContain('sort');
+		expect(sortDrift).toContain('popularity');
+
+		// A misspelt `lib` is the dangerous one: the scope WIDENS to the whole
+		// catalogue and the screen looks like it worked.
+		const libOnly = browseEchoDrift(query({ libraries: ['kids'] }), {
+			mediaType: 'movies',
+			sort: 'added_at'
+		});
+		expect(
+			libOnly,
+			'a dropped library scope was not reported, and a dropped scope WIDENS the page'
+		).toHaveLength(1);
+		const [libDrift] = libOnly;
+		expect(libDrift).toContain('lib');
+		expect(libDrift).toContain('kids');
+		expect(libDrift).toContain('no library scope');
+
+		// Wrong is not the same as missing: a scope that came back as a DIFFERENT
+		// set is drift too, and so is one that arrived on an unscoped request.
+		expect(
+			browseEchoDrift(query({ libraries: ['kids'] }), {
+				mediaType: 'movies',
+				sort: 'added_at',
+				libraries: ['adults']
+			})
+		).toHaveLength(1);
+		expect(
+			browseEchoDrift(query(), { mediaType: 'movies', sort: 'added_at', libraries: ['kids'] })
+		).toHaveLength(1);
+
+		// All three at once are named at once, not one at a time.
+		expect(
+			browseEchoDrift(query({ mediaType: 'comics', sort: 'popularity', libraries: ['kids'] }), {})
+		).toHaveLength(3);
+	});
+
+	/*
+	 * ⚠️ THE GUARD IS FIRED HERE, NOT JUST DECLARED. `import.meta.env.DEV` is
+	 * true under vitest, so `fetchBrowsePage` really runs `warnBrowseEchoDrift`
+	 * in this suite; spying on console.error is what proves the WIRING exists
+	 * rather than only the predicate. `$lib/list`'s content-sized-track guard is
+	 * pinned the same way and for the same reason.
+	 */
+	it('shouts in dev when the answer disagrees with the request, and stays quiet when it agrees', async () => {
+		const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			// Agreement first, so the noisy case below cannot be a guard that has
+			// no off switch: a guard that cannot go quiet is as broken as one that
+			// cannot speak.
+			stubFetch(() =>
+				jsonResponse({ items: [], limit: 50, media_type: 'comics', sort: 'added_at' })
+			);
+			await fetchBrowsePage(query({ mediaType: 'comics' }), { limit: 50 });
+			expect(
+				spy,
+				'the guard fired on a response that applied the whole query'
+			).not.toHaveBeenCalled();
+
+			// Now the typo case: the envelope echoes nothing, because the server
+			// ignored a name it did not recognise and served page one unfiltered.
+			stubFetch(() => jsonResponse({ items: [], limit: 50 }));
+			await fetchBrowsePage(query({ mediaType: 'comics', libraries: ['kids'] }), { limit: 50 });
+			expect(spy, 'the guard is not wired into fetchBrowsePage at all').toHaveBeenCalledTimes(1);
+			const message = String(spy.mock.calls[0][0]);
+			expect(message).toContain(LIBRARY_BROWSE_URL);
+			expect(message).toContain('media_type');
+			expect(message).toContain('lib');
+			expect(message).toContain('kids');
+			// It must say WHY a 200 is the symptom, or the reader has no lead.
+			expect(message).toContain('IGNORED');
+		} finally {
+			spy.mockRestore();
+			vi.unstubAllGlobals();
+		}
 	});
 
 	it('builds the endpoint the route table registers', () => {
