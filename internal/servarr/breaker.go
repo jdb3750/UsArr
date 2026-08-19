@@ -12,10 +12,13 @@ import (
 // an injected sentinel". internal/bookorbit is that third client, so the
 // implementation moved to internal/breaker and what remains here is a wrapper.
 //
-// The wrapper is not ceremony. Allow() must return THIS package's
-// ErrBreakerOpen: internal/releases matches on it with errors.Is to render
-// OutcomeBreakerOpen, and internal/releases also builds its own per-indexer
-// breakers through NewBreaker. The sentinel is now an argument to
+// Allow() returns THIS package's ErrBreakerOpen, though nothing outside the
+// package matches on it today: internal/releases builds per-indexer breakers
+// through NewBreaker and renders OutcomeBreakerOpen from any non-nil Allow(),
+// without inspecting the sentinel. It stays because the sentinel is this
+// package's published error surface (errors.go), and because the precedent is
+// live next door — internal/kavita needs its own so internal/libsync can tell a
+// Kavita breaker from a Servarr one. The sentinel is now an argument to
 // internal/breaker.New instead of a reason to keep a second copy.
 
 // BreakerState is the circuit-breaker state per ARCHITECTURE.md §7.5.
