@@ -16855,6 +16855,17 @@ write is an ebook format, row 4's EXISTS goes true, row 5's stays false, and **n
 media types.** The movement is real as a **mechanism** and **zero on today's data**; it becomes live
 only when an audio-bearing adapter lands — Navidrome or Audiobookshelf.
 
+🔻 **Corrected 2026-08-19 — the *when* clause is now false; an audio-bearing adapter has landed.** Not
+Navidrome or Audiobookshelf but **BookOrbit**, in the files-and-credits slice (content commit
+`373df3f`, *"an audiobook renders as one"*). It ingests audio-format editions: `bookOrbitEditionFormat`
+(`internal/libsync/bookorbitfiles.go:144`) maps a primary file BookOrbit calls an audiobook — m4b,
+mp3, m4a, opus, ogg, flac, via `bookorbit.MediaKindAudiobook` — to `edition.format = 'audiobook'`, and
+`primaryEditionID` (`internal/store/files.go:425`) writes that edition. So **Row 5's
+`EXISTS (… e.format='audiobook')` now goes true on real data** — the mechanism narrowing above was
+right, but "zero on today's data … only when an audio-bearing adapter lands" no longer holds: one has.
+Nothing renders wrong today — qualification 1 still stands, Block A is `NOT DRAWN` — but the day it
+lands the Audiobooks row is live, not zero. The original observation is left intact as history.
+
 ### 📌 The lesson, which is the part to carry forward
 
 **One block's rendering rule was checked and generalised to a screen that had two.** The check was
