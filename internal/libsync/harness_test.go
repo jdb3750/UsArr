@@ -7,12 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"gopkg.in/dnaeon/go-vcr.v4/pkg/cassette"
-	"gopkg.in/dnaeon/go-vcr.v4/pkg/recorder"
-
 	"github.com/jdb3750/UsArr/internal/db"
 	"github.com/jdb3750/UsArr/internal/kavita"
 	"github.com/jdb3750/UsArr/internal/store"
+	"github.com/jdb3750/UsArr/internal/vcrscrub"
 )
 
 // ⚠️ EVERY CASSETTE THIS PACKAGE REPLAYS IS SYNTHETIC, and each one says so in
@@ -42,12 +40,14 @@ const (
 
 var testNow = time.Date(2026, 8, 17, 12, 0, 0, 0, time.UTC)
 
-// urlMatcher matches on method plus URL. go-vcr's default also compares every
-// request header, which cannot work alongside scrubbing: the saved x-api-key is
-// the placeholder and the live one is the fixture key.
-func urlMatcher(r *http.Request, i cassette.Request) bool {
-	return r.Method == i.Method && r.URL.String() == i.URL
-}
+// The matcher and the scrubbing hook come from internal/vcrscrub.
+//
+// ⚠️ THIS HARNESS PREVIOUSLY HAD NO BeforeSave HOOK AT ALL — it wired
+// recorder.New by hand and installed only a matcher. It never fired, because
+// the mode was hard-coded ModeReplayOnly, but it was the one cassette opener in
+// the tree that would have written a credential straight to disk the moment
+// anybody enabled recording. vcrscrub.New installs the hook rather than offering
+// it, so there is nothing left to forget.
 
 func newCassetteClient(t *testing.T, names ...string) *kavita.Client {
 	t.Helper()
@@ -84,11 +84,8 @@ func chainedDoer(t *testing.T, names []string) *chained {
 	t.Helper()
 	c := &chained{t: t, names: names}
 	for _, n := range names {
-		rec, err := recorder.New(
+		rec, err := vcrscrub.New(
 			filepath.Join("..", "..", "testdata", "cassettes", strings.TrimSuffix(n, ".yaml")),
-			recorder.WithMode(recorder.ModeReplayOnly),
-			recorder.WithMatcher(urlMatcher),
-			recorder.WithSkipRequestLatency(true),
 		)
 		if err != nil {
 			t.Fatalf("opening cassette %s: %v", n, err)

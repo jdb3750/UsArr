@@ -16,6 +16,7 @@
 > AND TO NOTHING ELSE:** prefer function and symbol names over `file:<n>` line citations for any
 > file that moves, Go and Svelte especially. A wrong line number still resolves to a plausible
 > line, so it fails invisibly and reads as checked. Line citations elsewhere in this file were
+> **neither swept nor vetted** by that pass — no sweep happened.
 >
 > **Extended 2026-08-19 by the Kavita-sunset pass, to exactly TWO further items and to nothing
 > else:** §2's **image-pipeline** item, whose `ARCHITECTURE.md:2649-2651` citation was **~40 lines
@@ -30,15 +31,21 @@
 > live in a thread, on the owner's box, or nowhere. A claim of the form *"X was never done"* needs a
 > source that **would have recorded X**, not merely a place where X is not.
 
-**Last re-derived against:** `origin/main` `5aee209` (2026-08-19).
-⚠️ **The baseline moved from `3c88b2e` by the probe-correction pass, which re-derived exactly ONE
-fact — that `kavita-cover-probe.sh` did run — and fired NO grep and NO check on this tree.** The
-**nine** commits it moved over touch `docs/` and `web/src/` only: **no Go, no migration**, so §2's fired Go and schema checks are not stale by it, and
-nothing else here was re-fired. Every check quoted below was
-**fired**, not inherited. Precisely: the Go, schema and `ARCHITECTURE.md` reads were fired at
-`d5ab034`, the tip when the Kavita-sunset pass started. `fc2b7c4` and `2ce8ed9` landed mid-pass —
-both touch **`docs/reference/` only**, change no Go and no migration, and both were read directly for
-what §2's obligation 3 says about them.
+**Last re-derived against:** `origin/main` `7bd45e9` (2026-08-19).
+⚠️ **The baseline moved from `5aee209` by the citation-repair pass, which re-derived exactly TWO
+things:** one grep on this tree — `grep -n -i kavita docs/RESEARCH.md`, quoted in §2's
+zero-external-providers item — and one **relayed** fact, LS-260's Q1 answer, whose source is the
+library-sync thread and **not this tree**. It fired **no Go check, no schema check and no screen
+check**, and it swept **no line citations**. The **eight** commits it moved over touch `CLAUDE.md`,
+`Makefile`, `docs/` and `docs/reference/` only — **no Go, no migration, no `web/src/`** — so §2's
+fired Go, schema and screen checks are not stale by it. **Everything below that this pass did not
+name is inherited, not re-fired.**
+⚠️ **Kept from the earlier riders, because the lines they attest to are unchanged:** the
+probe-correction pass re-derived exactly ONE fact — that `kavita-cover-probe.sh` did run — and fired
+NO grep and NO check on this tree. The Go, schema and `ARCHITECTURE.md` reads below were **fired**,
+not inherited, at `d5ab034` — the tip when the Kavita-sunset pass started. `fc2b7c4` and `2ce8ed9`
+landed mid-pass; both touch **`docs/reference/` only**, change no Go and no migration, and both were
+read directly for what §2's obligation 3 says about them.
 
 ---
 
@@ -166,11 +173,32 @@ stopped by the decision itself, not merely re-pointed by it.
       **Against LS-260's four questions that is *answered in part*, NOT *satisfied*:** it answers
       **Q3 in full** — content type, size, and the validator **fired** rather than reported, which is
       the standard LS-260 set for itself — and it meets **Q2's stated-in-advance criterion**,
-      *present **and** varied*, so `USABLE` rather than `POPULATED BUT USELESS`. 🔍 **Q1 (the
-      header-vs-query auth gate, which LS-260 calls *the* gate) and Q4 (what a cover-less series
-      returns) are NOT in the results summarised here, and this file cannot tell whether the raw
-      output answered them** — the thread is the source, not this line. **Do not record LS-260 as
-      discharged on the strength of this paragraph.**
+      *present **and** varied*, so `USABLE` rather than `POPULATED BUT USELESS`.
+      ⚠️ **Q1 — the header-vs-query auth gate, which LS-260 calls *the* gate — IS ANSWERED, AND IT
+      IS THE FAIL CASE.** This file used to record it as *"~~NOT in the results summarised here~~"*.
+      The owner's raw probe output, pasted in the library-sync thread 2026-08-19, carries this line
+      verbatim:
+      `x-api-key header only 400 / ?apiKey= query only (no header) 200 / neither 401`
+      — so on `GET /api/Image/series-cover` **header-only auth FAILS and query auth SUCCEEDS.** That
+      is exactly LS-260's *header-fail-query-succeed* outcome, which its own criterion marks a **fail
+      with consequences**: the credential lands in the upstream's access logs, scrubbing obligations
+      follow, and **no `go-vcr` fixture may be recorded that keeps it.**
+      ❓ **Q4 (what a cover-less series returns) is still unsettled** — nobody has read the full
+      paste on that point, and with **5 of 5** sampled series carrying covers, LS-260's own rule
+      would report `UNDETERMINED`.
+      **Do not record LS-260 as discharged on the strength of this paragraph.** The sync lane — whose
+      thread holds the paste, and whose record LS-260 is — should close it from the full output, not
+      from a relay.
+      ✅ **The durable part: the result retroactively justified the freeze on recording cassettes
+      against a live instance.** The freeze was imposed on a suspicion; it is now **measured**, on
+      the owner's own instance. **The freeze outlives Kavita as a convention**, so its evidence
+      should travel with it.
+      🛑 **DO NOT read the fail as newly-urgent work — nobody should now build query-auth
+      scrubbing for Kavita.** That cover path is stopped by the owner's decision (§1). The finding's
+      forward value is **as a template**: BookOrbit's cover auth must be asked the same question, and
+      the read at BookOrbit HEAD `73b7877` (§3) found its `/api/v1` covers **header-authenticated**,
+      with the HMAC-cover-token-in-the-query-string shape confined to **OPDS** — which is why an
+      adapter is confined to `/api/v1`.
       The script and its stated-in-advance criterion sit at the repo root; **nothing further is owed
       against them — because §1 stops the source, not because the probe never ran.** What is *not*
       stopped is everything source-independent — the encoder, the seven-width allowlist, the cache and
@@ -474,9 +502,16 @@ stopped by the decision itself, not merely re-pointed by it.
 - [ ] **The zero-external-providers evidence clause for Kavita.** §16 says v0.1 needs no TMDB account
       because the source carries its own metadata. That claim was evidenced against Radarr's
       `MovieResource` and Sonarr's `SeriesResource`, and **neither is in v0.1 any more**; the
-      equivalent primary-source check against Kavita's payloads is owed and has not been made.
+      equivalent primary-source check against Kavita's payloads is **owed and undischarged in the
+      repo.** ⚠️ **That is NOT the claim that the check was never made** — see the header's
+      **absence rule**: a check can have been run and never written up, exactly as the cover probe
+      was. What is readable is only the repo's silence, which is the weaker claim, and an
+      undischarged obligation is still owed, so this box stays open.
       *Authority:* §16 v0.1 entry, which flags it against itself.
-      *Done when:* `docs/RESEARCH.md` carries the citation.
+      *Done when:* `docs/RESEARCH.md` carries the citation. Fired at the baseline above:
+      `grep -n -i kavita docs/RESEARCH.md` returns 9 lines — the API surface, the auth scheme, the
+      `sortByLastModified` finding, and *"identifier matching is a paid subscription feature"* — and
+      **none of them evidences this clause** the way `MovieResource` and `SeriesResource` did.
 
 **Already discharged, listed so nobody re-opens them:** the Kavita `LastChapterAdded` watermark probe
 (ran 2026-08-17 against the owner's live instance and passed — [ADR-0035](./DECISIONS.md#adr-0035)

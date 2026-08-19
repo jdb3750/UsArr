@@ -588,12 +588,14 @@ this container — rather than the pinned binary the gate actually runs, `$(GOBI
 at the `GOLANGCI_VERSION ?= v2.12.2` of `Makefile:135`. A sound green was reported as broken on
 2026-08-18 on that mismatch alone, and the same misreading recurred on 2026-08-19.
 
-**The banner exists, so the rule points at something real.** `require_tool` (`Makefile:299`) tests
-the absolute path, asserts the pin, and only then prints the line that names both:
+**The banner exists, so the rule points at something real.** Line numbers below are as of
+`7bd45e9`; the Makefile moves, so re-resolve them by name rather than trusting the number.
+`require_tool` (`Makefile:299`) tests the absolute path, asserts the pin, and only then prints the
+line that names both:
 
 > `Makefile:320` — `echo "tool: $(1) — version $(2), $(call pin_note,$(4),version)"; \`
 
-`lint-go` calls it at `Makefile:785` as
+`lint-go` calls it at `Makefile:799` as
 `$(call require_tool,$(GOLANGCI_LINT),$(GOLANGCI_WANT),,$(GOLANGCI_PINVARS))`, and every other
 pinned step calls it the same way. The banner also carries `pin_note` (`Makefile:268`), which says
 whether the pin held or was overridden on the command line — a bare `--version` cannot report that

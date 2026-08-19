@@ -600,12 +600,31 @@ Loop:
 4. Commit the cassette. Every contributor — and any CI added later — now runs that test with no
    stack at all.
 
-**Scrubbing is mandatory and must be a recorder hook, not a manual step.** *Arr keys appear in three
-places — the `X-Api-Key` header, an `Authorization: Bearer` header, and the `?apikey=` /
-`?access_token=` query parameters. SABnzbd's key is *only* ever a query parameter. Jellyfin's token
-sits inside a structured `Authorization: MediaBrowser Token="…"` header. Register a `BeforeSave` hook
-rewriting all of them to a fixed placeholder, plus any `Set-Cookie` (qBittorrent's `SID`/`QBT_SID_*`)
-and the `X-Transmission-Session-Id` value.
+**Scrubbing is mandatory and must be a recorder hook, not a manual step — and it is already
+written.** `internal/vcrscrub` owns it: `vcrscrub.New(path)` is the ONLY supported way to open a
+cassette, and it installs the `BeforeSave` hook and the redacting matcher rather than offering them,
+so there is no wiring left for a caller to forget. It reads `USARR_RECORD` itself, so step 2 above
+works without any per-package mode handling. Do not write a second one.
+
+What it strips, and where the boundary sits:
+
+* Credential **query parameters**, in the request URL, in a form body, inside a URL embedded in a
+  response body, and as a JSON object key. The parameter NAMES come from `internal/ssrf`'s
+  `credentialParams` — the one deny-list — via `ssrf.IsCredentialParam`. Do not add names anywhere
+  else.
+* Credential **path segments**. Kavita's OPDS routes carry the Auth Key as a bare path segment,
+  where there is no name for a deny-list to match on.
+* The bearer headers: `X-Api-Key`, `Authorization`, `Proxy-Authorization`, `Cookie`/`Set-Cookie`
+  (qBittorrent's `SID`/`QBT_SID_*`), `X-Transmission-Session-Id`, and Kavita's `X-License-Key` /
+  `X-Anilist-Token`. `Location`, `Content-Location` and `Referer` are redacted rather than replaced,
+  because a redirect hop is what the cassette is recording.
+
+**`make secrets` is only half a backstop and it is worth knowing which half.** Drilled against this
+repo's `.gitleaks.toml` with a freshly generated uuid4: `?apiKey=<guid>` in a cassette scans **exit
+1**, the same guid as a bare path segment scans **exit 0**. gitleaks fires on the adjacent keyword,
+not on the credential, so it closes the labelled half of the class and misses the unlabelled half.
+`TestCassettesOnDiskCarryNoCredential` is the guard that covers the other half; it scans every
+committed cassette on every `make check`.
 
 **Scrubbing has to be fired before it is trusted, and the secrets gate is not a substitute for it.**
 A cassette records the request URL VERBATIM, so any credential an API accepts as a query parameter

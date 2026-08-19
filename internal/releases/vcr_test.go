@@ -3,17 +3,13 @@ package releases
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
 
-	"gopkg.in/dnaeon/go-vcr.v4/pkg/cassette"
-	"gopkg.in/dnaeon/go-vcr.v4/pkg/recorder"
-
 	"github.com/jdb3750/UsArr/internal/servarr"
+	"github.com/jdb3750/UsArr/internal/vcrscrub"
 )
 
 // One end-to-end test that drives the real servarr.Client over a cassette rather
@@ -28,38 +24,16 @@ const (
 	testAPIKey  = "0123456789abcdef0123456789abcdef"
 )
 
-var credentialQueryRe = regexp.MustCompile(`(?i)\b(apikey|api_key|access_token|token|sig)=([^&"'\s\\]+)`)
-
-// scrubInteraction is the mandatory BeforeSave hook. See
-// internal/servarr/vcr_test.go for the full rationale; it is duplicated rather
-// than shared because a scrubber that lives in non-test code would put a go-vcr
-// dependency in the shipped binary.
-func scrubInteraction(i *cassette.Interaction) error {
-	for _, h := range []string{"X-Api-Key", "Authorization", "Set-Cookie", "Cookie", "X-Transmission-Session-Id"} {
-		if _, ok := i.Request.Headers[http.CanonicalHeaderKey(h)]; ok {
-			i.Request.Headers.Set(h, servarr.RedactedPlaceholder)
-		}
-		if _, ok := i.Response.Headers[http.CanonicalHeaderKey(h)]; ok {
-			i.Response.Headers.Set(h, servarr.RedactedPlaceholder)
-		}
-	}
-	i.Request.URL = servarr.RedactURL(i.Request.URL)
-	i.Request.Body = credentialQueryRe.ReplaceAllString(i.Request.Body, "$1="+servarr.RedactedPlaceholder)
-	i.Response.Body = credentialQueryRe.ReplaceAllString(i.Response.Body, "$1="+servarr.RedactedPlaceholder)
-	return nil
-}
+// The scrubbing hook, the matcher and the recorder wiring live in
+// internal/vcrscrub. This file used to carry a third copy of all three,
+// justified in a comment that said sharing them "would put a go-vcr dependency
+// in the shipped binary" — an objection now answered by execution rather than by
+// duplication: vcrscrub's TestBinaryDoesNotLinkTheRecorder asks the go tool what
+// ./cmd/usarr actually links.
 
 func newCassetteClient(t *testing.T, name string) *servarr.Client {
 	t.Helper()
-	rec, err := recorder.New(
-		filepath.Join("..", "..", "testdata", "cassettes", name),
-		recorder.WithMode(recorder.ModeReplayOnly),
-		recorder.WithMatcher(func(r *http.Request, i cassette.Request) bool {
-			return r.Method == i.Method && r.URL.String() == i.URL
-		}),
-		recorder.WithHook(scrubInteraction, recorder.BeforeSaveHook),
-		recorder.WithSkipRequestLatency(true),
-	)
+	rec, err := vcrscrub.New(filepath.Join("..", "..", "testdata", "cassettes", name))
 	if err != nil {
 		t.Fatalf("opening cassette %s: %v", name, err)
 	}

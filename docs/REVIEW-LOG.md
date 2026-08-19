@@ -19437,3 +19437,265 @@ and neither is asserted beyond what a grep shows.
 credential-shaped string was added"* and nothing whatever about whether the prose above is correct.
 The claims that carry weight here are the ones with a command behind them: the fired round-trip
 guard, and the greps quoted with file and line.
+
+# Cassette credential scrubber — `internal/vcrscrub`, and both directions of the drill
+
+Trigger: a live probe against the owner's Kavita established that the `/api/Image/*` routes **refuse
+the `x-api-key` header (400) and accept the Auth Key only as `?apiKey=` (200)**. Recording a cover
+fetch therefore writes a full-admin credential into a cassette's `url:` line, and cassettes are
+committed. Every other thread was told to record nothing new until this landed.
+
+## LS-340 — the scrubber existed three times, and each copy was a second deny-list
+
+`internal/servarr/vcr_test.go`, `internal/kavita/vcr_test.go` and `internal/releases/vcr_test.go`
+each carried its own `scrubInteraction` **and** its own
+
+```go
+var credentialQueryRe = regexp.MustCompile(`(?i)\b(apikey|api_key|access_token|token|sig)=([^&"'\s\\]+)`)
+```
+
+Five names, against `internal/ssrf`'s twenty-one. **The drift was already real, not prospective:**
+`signature`, `secret`, `secret_key`, `auth_token`, the OpenSubsonic `p`/`t`/`s` triple and all seven
+private-tracker passkey names (`passkey`, `torrent_pass`, `torrentpass`, `rsskey`, `authkey`,
+`apipasskey`, `cookie`) were redacted by the logging path and **not** by the recording path. That is
+exactly what `internal/ssrf/redact.go` forbids in as many words — *"This is the ONE deny-list. There
+is deliberately no second copy anywhere"* — and a cassette is the worst place to lose the argument,
+because a cassette is committed to git and read forever.
+
+**Applied.** One package, `internal/vcrscrub`, and **no name list in it**. `Scrub` calls the newly
+exported `ssrf.IsCredentialParam` for every value that has a parameter name attached — query pairs,
+form values and JSON object keys alike. `TestRedactBodyAsksTheSharedDenyList` covers precisely the
+names the deleted regexes lacked.
+
+The header list that remains in `vcrscrub` is a list of **header names**, which is a different thing
+from a list of **parameter names**; `ssrf` redacts URLs and has no concept of a header. That is
+stated in the code so the next reader does not mistake it for a fourth copy.
+
+## LS-341 — `internal/libsync`'s cassette harness had no `BeforeSave` hook at all
+
+`harness_test.go` wired `recorder.New` by hand with a matcher and `WithSkipRequestLatency`, and **no
+hook**. It never fired, because the mode was hard-coded `ModeReplayOnly` — but it was the one
+cassette opener in the tree that would have written a credential straight to disk the moment anybody
+enabled recording, and it is the package that drives the Kavita adapter the cover fetch will live in.
+
+**Applied.** `vcrscrub.New` **installs** the hook rather than offering it as an option, and is now
+the only cassette opener in the tree. An option is one forgotten line away from a full-admin key in
+the repository; there is no longer a line to forget.
+
+## LS-342 — `USARR_RECORD` was documented in five places and implemented in none
+
+`internal/config` reads it into `Config.Record`. `docs/DEVELOPMENT.md` §7.2 step 2,
+`docs/CONFIGURATION.md`, and three package doc comments all instruct the reader to re-record with
+`USARR_RECORD=1`. **Every recorder in the tree hard-coded `recorder.ModeReplayOnly`, so nothing
+consumed it.**
+
+That is worse than a missing feature. The documented path did not exist, so the first person to
+actually re-record against a live instance would have had to wire their own recorder — and the
+`BeforeSave` hook is precisely the thing they would have wired it without. The urgency of this
+task and the absence of this switch are the same defect seen from two ends.
+
+**Applied.** `vcrscrub.Mode()` reads it (`1`/`true`/`yes`/`on`, trimmed and case-folded, matching
+`internal/config`'s own `truthy`), and `vcrscrub.New` uses it. `TestModeReadsUSARRRecord` pins both
+directions.
+
+## LS-343 — the matcher had to redact both sides, and every existing fixture was re-proved under it
+
+**The design constraint the brief named: a scrubbed cassette must still replay.** Three of the four
+call sites matched on `r.URL.String() == i.URL` — raw. Under raw comparison a scrubbed interaction is
+**unmatchable**: the stored URL says `?apiKey=REDACTED` and the live request carries the real key, so
+a cassette could only ever match by having **stored the credential** — the exact outcome the hook
+exists to prevent.
+
+`internal/kavita` had already solved this and was the odd one out, redacting both sides. The shared
+`vcrscrub.Matcher` adopts that, so recorded and live URLs agree **by construction** rather than by
+the recording having kept the secret.
+
+**This is a change to the matcher every existing fixture is read through, so it was proved rather
+than argued.** `go test ./internal/...` is green across all four cassette consumers —
+`internal/servarr`, `internal/kavita`, `internal/releases`, `internal/libsync` — on the 30 committed
+cassettes, none of which was edited. `TestScrubbedCassetteStillReplays` proves the property directly:
+it records against a local fake with the hook armed, replays the scrubbed file with a client sending
+the **real** key, and then asserts that the raw URLs are **unequal** while the redacted ones are
+**equal** — so the change is load-bearing rather than cosmetic.
+
+**Two consequences named in the code rather than discovered later.** `ssrf.RedactURL` re-encodes the
+query with `url.Values.Encode`, which **sorts** parameters — harmless for matching because both sides
+sort identically, but it is why a recorded `url:` line is not byte-identical to what the client sent.
+And two URLs differing **only** in a credential value collapse to the same string and become
+interchangeable at replay; no test in this tree records one endpoint twice under two different keys,
+and the alternative is storing the key.
+
+## LS-344 — ⚠️ a correction: `gitleaks` does **not** miss this class, it misses **half** of it
+
+The brief this thread was given asserted that `make secrets` would not catch a Kavita Auth Key in a
+cassette, because it is a bare GUID with no prefix. **That is false as stated**, and it was drilled
+rather than reasoned. Measured against this repository's own `.gitleaks.toml`, one freshly generated
+`uuid4` per probe, clean baseline in between:
+
+| probe, in a `testdata/cassettes/*.yaml` | gitleaks |
+| --- | --- |
+| *(baseline, no probe)* | exit **0**, `no leaks found` |
+| `url: …/api/Image/series-cover?seriesId=1&apiKey=<guid>` | exit **1**, `leaks found: 1` |
+| `url: …/api/Opds/<the same guid>/series` | exit **0**, `no leaks found` |
+
+**The sharper invariant, and the one that shaped the design: the gate fires on the adjacent
+`apiKey=` keyword, not on the credential.** It closes the **labelled** half of the class and misses
+the **unlabelled** half — and the unlabelled half is a shape Kavita actually uses, because its OPDS
+routes carry the Auth Key as a bare **path segment**.
+
+**Applied, in three places, because a guard that were green exactly where the gate is green would be
+two defences failing on the same half.** `vcrscrub.RedactURL` strips a GUID occupying a whole path
+segment before handing the URL to `ssrf.RedactRawURL`; the on-disk scan has a tier that looks at no
+names at all; and the record-time drill plants in **both** positions.
+
+`internal/ssrf`'s own path heuristic does not catch this and is **right not to** —
+`looksLikeCredential` rejects anything holding a separator, so a hyphenated GUID falls straight
+through. That calibration is deliberate there, because `ssrf` writes immutable `provenance` rows and
+is biased towards missing a passkey over eating a real path segment. **In a cassette the bias
+inverts**: an over-redaction shows up as `REDACTED` in a diff before the commit, which is loud and
+cheap, while an under-redaction is a full-admin credential in git history. The two live in different
+packages for that reason, and both say so.
+
+## LS-345 — the drill, both directions, kept as standing tests rather than as a commit message
+
+The repo's rule is that a guard which has never been fired is indistinguishable from no guard. Both
+directions were run against a **local fake server** — never the owner's instance — and both are now
+tests, so the demonstration repeats on every run.
+
+**Armed** (`TestScrubDrillArmed`), recorded cassette, verbatim:
+
+```yaml
+                form:
+                    apiKey:
+                        - <redacted>
+                headers:
+                    X-Api-Key:
+                        - <redacted>
+                url: http://127.0.0.1:44259/api/Image/series-cover?apiKey=REDACTED&seriesId=1
+                body: '{"refreshToken":"<redacted>","next":"/api/Image/series-cover?seriesId=2&apiKey=<redacted>"}'
+                url: http://127.0.0.1:44259/api/Opds/REDACTED/series
+```
+
+**Neutered** (`TestScrubDrillNeutered`) — identical wiring with the `BeforeSave` hook removed and
+nothing else changed. It **asserts the leak happens**, so if the scrubber ever became a no-op for a
+reason unrelated to the hook, this test would notice. `$G` below stands for that run's freshly
+generated uuid4 — see the note under the block, which is not housekeeping:
+
+```
+NEUTERED — leaked line: url: http://127.0.0.1:35145/api/Image/series-cover?seriesId=1&apiKey=$G
+NEUTERED — leaked line: url: http://127.0.0.1:35145/api/Opds/$G/series
+NEUTERED — leaked line: body: '{"refreshToken":"$G","next":"…&apiKey=$G"}'
+NEUTERED — leaked line: - $G      ← the X-Api-Key header
+```
+
+Both credential **positions** leak with the hook off and neither survives with it on.
+
+⚠️ **`$G` is a substitution, and the reason for it is a third measurement of `LS-344`.** This block
+was first written with the run's actual GUID pasted in verbatim, and `make secrets` **failed on this
+very file** — one finding, `generic-api-key`, `docs/REVIEW-LOG.md`, matching
+`apiKey=<guid>`. The `/api/Opds/<the same guid>/series` line two rows below it, and the bare
+`- <guid>` header line below that, **did not fire**. Same value, same file, same scan: caught where a
+keyword sat beside it, missed where none did. The gate found a dead probe from a local fake in a
+review log and would have missed a live Auth Key in a cassette path — which is the entire argument
+for `TestCassettesOnDiskCarryNoCredential` existing, arrived at by accident.
+
+The value was substituted rather than waived in `.gitleaks.toml`, because that file asks callers to
+make a fixture obviously fake instead of extending its list, and because a waiver keyed on a value
+that will never recur buys nothing.
+
+## LS-346 — the on-disk backstop, its two tiers, and firing it by planting
+
+`Scrub` stops a credential being **written**; `TestCassettesOnDiskCarryNoCredential` stops one being
+**committed**. They are separate mechanisms on purpose: the hook only protects a recording that went
+through `vcrscrub.New`, and the failure mode being defended against is someone wiring a recorder by
+hand — which is what all four call sites did until `New` existed (LS-341).
+
+**Tier 1 is name-based and has no false positives.** It asks `ssrf.IsCredentialParam` — the ONE
+deny-list — whether a `name=value` or `"name": "value"` pair names a credential, then demands the
+value be a placeholder. A parameter literally called `apiKey` has no business holding a live value in
+a fixture, whatever it looks like.
+
+**Tier 2 is shape-based** and exists for the credential with no name attached (LS-344): any canonical
+GUID or run of ≥32 hex characters, anywhere in the file, including a YAML comment. It reads the **raw
+text**, not go-vcr's parsed structs, because a parser only sees the fields it models and a leak does
+not agree to sit in one of them.
+
+**Two legitimate hex blobs already in the fixtures** would otherwise trip tier 2:
+`ReleaseResource.infoHash` (a BitTorrent infohash — SHA-1, public by construction, it is what you
+hand a DHT) and Kavita's `installId` (a GUID that authenticates nothing). They are exempted **by
+field name**, not by value. That polarity is the point: a value allowlist would need editing for
+every new fixture and would quietly grow to cover a real key, whereas a new field carrying a hex blob
+makes the suite red and someone has to look at it. Scanning the 30 committed cassettes returns **zero
+findings**, so the guard is not being tuned around noise.
+
+**Fired, by planting.** A `PLANTED_probe.yaml` was written into `testdata/cassettes/` with a freshly
+generated GUID in each position, and the two mechanisms were read side by side:
+
+| planted | `make secrets` (gitleaks) | `TestCassettesOnDiskCarryNoCredential` |
+| --- | --- | --- |
+| `?apiKey=<guid>` **and** `/api/Opds/<guid>/series` | exit 1, `leaks found: **1**` | **3 findings** — tier 1 on the query, tier 2 on both URLs |
+| `/api/Opds/<guid>/series` **only** | exit **0**, `no leaks found` | **FAIL** — 1 tier-2 finding |
+
+The second row is the whole justification for the test existing: on the unlabelled form the gate is
+green and the guard is red. The probe was removed and both readings restored to green;
+`git status --porcelain testdata/` is clean.
+
+## LS-347 — a response can carry a credential **back**, and one name was missing from the ONE list
+
+The brief asked whether a response body or header could carry a credential rather than assuming it
+could not. It can, and checking produced a real gap: Kavita's `UserDto` — the body of
+`POST /api/Plugin/authenticate` — carries **`token`, `refreshToken` and `apiKey` as siblings**
+(`api/specs/kavita-develop.json`, `components.schemas.UserDto`). Two of those three were on
+`ssrf.credentialParams` and **`refreshToken` was not**.
+
+**Applied by extending the one list, never by adding a second** — the precedent Round 2's `W-01` set.
+`refresh_token` and `refreshtoken` added to `ssrf.credentialParams`, with the provenance in the
+comment; `TestRefreshTokenIsRedacted` covers all three spellings through `RedactRawURL` and through
+the exported predicate.
+
+**The two doc mirrors the code comment names were updated in the same commit**, as it requires:
+`ARCHITECTURE.md` §14.5 item 5 and `reference/security.md` §5. ⚠️ **`CONFIGURATION.md` §2.1 remains
+stale** — it lists nine names against the code's twenty-three. That is `DS-06`, still **Open**, and
+it is not this thread's to close; it is noted here so the next person to touch the list knows there
+is a fourth copy.
+
+Response **headers** are handled too, and the distinction matters: the bearer headers are replaced
+wholesale, while `Location`, `Content-Location` and `Referer` are **redacted** rather than replaced,
+because a redirect hop is a thing the cassette is recording. `Location` is the one that bites — a 302
+off an authenticated endpoint hands the whole query string to the next hop.
+
+## LS-348 — choosing the probe value is part of the check, so it is generated rather than written down
+
+The drill's fixture credential is a canonical GUID **generated fresh on every run** and never
+committed. Two reasons, both measured:
+
+1. **A recognisable sample credential can be allowlisted upstream by a scanner**, and a guard drilled
+   with one then reports clean because the probe was ignored — "proving" a guard off while it is on.
+   This repository has been bitten by exactly that before. A value that did not exist before the
+   process started cannot be on anyone's list.
+2. **A GUID literal assigned to an identifier containing "Key" trips gitleaks under this repo's own
+   config** — verified: `const fixtureAuthKey = "<a fresh uuid4>"` in a `_test.go` scanned **exit 1,
+   `leaks found: 1`**, in both a `_test.go` and a plain `.go`. Generating it at runtime keeps
+   `make secrets` honest **without** extending `.gitleaks.toml`'s waiver list, which that file
+   explicitly asks callers not to do.
+
+An earlier draft of this work used `deadbeef-cafe-4bad-b0de-0123456789ab`. It is recorded here
+because it was wrong for reason 1 and would have looked fine.
+
+## LS-349 — the "go-vcr in the shipped binary" objection, answered by execution instead of by copying
+
+`internal/releases/vcr_test.go` justified its copy of the scrubber in a comment: *"it is duplicated
+rather than shared because a scrubber that lives in non-test code would put a go-vcr dependency in
+the shipped binary."* The concern is legitimate and the remedy was not — it bought a clean dependency
+graph with three drifting deny-lists (LS-340).
+
+**Applied.** `TestBinaryDoesNotLinkTheRecorder` asks the go tool what `./cmd/usarr` actually links —
+`go list -deps ../../cmd/usarr` — and fails if `go-vcr` or `internal/vcrscrub` appears. Nothing
+outside a `_test.go` imports the package, so the linker never reaches it, and `go.mod` carried go-vcr
+either way. The check is hermetic given a populated module cache and skips if no `go` is on `PATH`.
+
+**Not fixed, recorded as follow-up.** `vcrscrub`'s tier-2 shape rule matches a **canonical** GUID and
+a ≥32-character hex run. A credential that is base64, base32, hyphen-free-but-short, or a
+non-canonical GUID spelling still passes both the gate and the guard. That is the same residual
+`SR-13` records for `ssrf`'s path heuristic, and the durable close is the same: an explicit
+declaration of which positions in which upstream's URLs are secret.

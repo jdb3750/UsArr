@@ -186,3 +186,35 @@ func TestRedactTextHandlesTrailingPunctuation(t *testing.T) {
 		t.Fatalf("the sentence lost its full stop: %s", got)
 	}
 }
+
+// TestRefreshTokenIsRedacted covers the name added when the cassette scrubber
+// asked what a RESPONSE could carry back rather than what a request sends out.
+//
+// Kavita's UserDto — the body of POST /api/Plugin/authenticate — carries
+// `token`, `refreshToken` and `apiKey` as siblings. Two of the three were
+// already on the deny-list and the third was not.
+func TestRefreshTokenIsRedacted(t *testing.T) {
+	t.Parallel()
+
+	const secret = "REFRESHTOKENVALUE0123456789"
+	for _, spelling := range []string{"refresh_token", "refreshToken", "REFRESHTOKEN"} {
+		if got := RedactRawURL("https://kavita.example/x?" + spelling + "=" + secret); strings.Contains(got, secret) {
+			t.Errorf("RedactRawURL leaked %s: %q", spelling, got)
+		}
+		if !IsCredentialParam(spelling) {
+			t.Errorf("IsCredentialParam(%q) = false", spelling)
+		}
+	}
+	// The exported predicate is the ONE deny-list seen from outside; it must
+	// agree with the unexported one it wraps and must not be a fresh copy.
+	for _, name := range []string{"apikey", "PASSKEY", "p", "t", "s"} {
+		if !IsCredentialParam(name) {
+			t.Errorf("IsCredentialParam(%q) = false, but the deny-list holds it", name)
+		}
+	}
+	for _, name := range []string{"query", "seriesId", "link", "file", "id"} {
+		if IsCredentialParam(name) {
+			t.Errorf("IsCredentialParam(%q) = true — over-broad", name)
+		}
+	}
+}
