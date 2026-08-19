@@ -242,8 +242,8 @@ Other rules:
 - **`ANALYZE` after bulk import** — the planner is materially better with stats for multi-index
   intersections.
 - **Keep `tag_assignment` narrow.** It is the hot path; do not put timestamps in the hot index.
-- Add the chosen plan to the CI `EXPLAIN QUERY PLAN` assertions, so a future index change that
-  silently drops the intersection is caught.
+- Add the chosen plan to `internal/db/queryplan_test.go`'s `EXPLAIN QUERY PLAN` assertions, which
+  `make check` runs, so a future index change that silently drops the intersection is caught.
 
 ---
 

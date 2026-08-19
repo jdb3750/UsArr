@@ -772,7 +772,7 @@ the internet-exposure bullet. Each says which below.
   would be a privilege-escalation path.
 - **Supply chain:** base image pinned by digest, `--provenance=true --sbom=true`, cosign signing,
   gating vulnerability scanning in the pre-commit gate, and pinned tool versions. Enforcement lives
-  in the `Makefile` and CI, outside this document.
+  in the `Makefile`, outside this document.
   **Pinning a version is not the same as running it.** `make tools` installs into `$GOBIN`, which
   is very often not on `$PATH` — it is not on `$PATH` in this repo's own agent container — so a
   recipe that invokes a bare tool name runs whatever `$PATH` resolves first, and the pins decorate

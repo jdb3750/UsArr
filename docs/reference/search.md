@@ -83,11 +83,11 @@ below, which `alt_titles` never could — and the credit pass rebuilds the docum
 name changes. The exclusion above is untouched: a creator's *name* is on the *work's* document, and no
 `person` row enters the corpus. schema.md §1.1 owns the detail.
 
-CI asserts
+`make check` asserts
 `SELECT COUNT(*) FROM search_doc WHERE kind IN ('season','episode','track','comic_issue','person')`
-is 0, and `internal/store`'s `writeSearchDoc` now refuses all five at the writer as well — the CI
-query can only report a corpus that has already been corrupted, and the FTS tables carry no foreign
-key, so nothing cascades the bad rows away.
+is 0 — `internal/store`'s `TestPeopleNeverEnterTheSearchCorpus` — and `writeSearchDoc` now refuses
+all five at the writer as well. The query can only report a corpus that has already been corrupted,
+and the FTS tables carry no foreign key, so nothing cascades the bad rows away.
 
 **Permission filtering happens in the join, not after it**, and **the mechanism is a junction table,
 `search_doc_library(library_id, doc_rowid)` `PRIMARY KEY (library_id, doc_rowid) WITHOUT ROWID`** —
@@ -103,14 +103,16 @@ this paragraph states. The scoped fusion query joins against the caller's access
 … JOIN search_doc_library sdl ON sdl.doc_rowid = sd.rowid AND sdl.library_id IN (:scope…)
 ```
 
-a covered index seek per scoped library. **CI asserts `SEARCH sdl USING PRIMARY KEY` and the absence
-of `SCAN search_doc_library`**, so it cannot silently regress. Post-filtering FTS hits silently
+a covered index seek per scoped library. **`make check` asserts `SEARCH sdl USING PRIMARY KEY` and
+the absence of `SCAN search_doc_library`** — `internal/db`'s `TestScopedSearchIsASeekNotAScan` and
+`internal/store`'s `TestSearchLibraryPlanIsSeeks` — so it cannot silently regress. Post-filtering FTS hits silently
 breaks keyset page sizes and leaks existence through result counts and ranking positions.
 
 ⚠️ **A row visible through no library matches no scope and disappears from search for every user
 including the owner** — a state the old `instance_scope` could not reach, because every replicated
 row came from some instance. Reserved `library.id = 0` (*Unfiled*) upholds the invariant that every
-`search_doc` row has at least one `search_doc_library` row, and CI asserts that too. 🔍 That the
+`search_doc` row has at least one `search_doc_library` row, and `make check` asserts that too
+(`internal/store`'s `assertCorpusInvariants`). 🔍 That the
 library scope can fully replace the instance scope with no second column is **inference**, argued in
 ADR-0026 rather than measured, and it should be checked against the first real scoped query written.
 
@@ -198,7 +200,8 @@ ORDER BY rrf DESC LIMIT 200;
 > search_doc.rowid`, allocated by inserting into `search_doc` (an `INTEGER PRIMARY KEY` table)
 > first and then inserting **explicitly** into both FTS tables in the same transaction. One missed
 > explicit rowid silently fuses unrelated documents and produces plausible-looking wrong results —
-> the hardest class of bug to diagnose. CI asserts the row counts match.
+> the hardest class of bug to diagnose. `make check` asserts the counts and the rowids agree —
+> `internal/store`'s `assertCorpusInvariants` and `TestRRFFusesOnRowidAndTheRowidsAgree`.
 
 Then re-rank the ≤200 candidates in Go — sub-millisecond for 200 short strings. The score is a
 weighted sum of three signals, each normalised to `[0,1]` **over the candidate set of this one

@@ -164,8 +164,9 @@ which recomputes and rewrites it whole.
 **`ix_work_kind_sort` serves the keyset query; it does not cover it.** `EXPLAIN QUERY PLAN` on the
 §13 grid query yields `SEARCH work USING INDEX ix_work_kind_sort (kind=? AND sort_title>?)` — a
 search, because the SELECT list includes `title, year, poster_asset_id, have_count, want_count,
-availability`. 100 row lookups per page is fine; the CI assertion must assert `SEARCH … USING
-INDEX`, not `COVERING INDEX`.
+availability`. 100 row lookups per page is fine; the query-plan assertion in
+`internal/db/queryplan_test.go`, which `make check` runs, must pin `SEARCH … USING INDEX`, not
+`COVERING INDEX`.
 
 ### 1.1 Subtype tables · **v0.1 for movie/series/episode and for book/comic/comic_issue**
 
@@ -275,7 +276,9 @@ CREATE UNIQUE INDEX ux_track_pos ON work_track(edition_id, disc_number, track_po
 >    previous one instead — which is why the cascade is now `RESTRICT`.
 > 3. **`work_track.edition_id` must belong to the track's parent album.** SQLite cannot express it
 >    (the parent is `work.parent_work_id`, one join away), so it is an application-enforced
->    invariant with a CI assertion over a fixture:
+>    invariant owed an assertion over a fixture — it is not written yet, because `work_track` does
+>    not exist (`internal/db/queryplan_test.go` records why). It lands in `make check` with the
+>    migration that creates the table:
 >
 > ```sql
 > -- must return no rows
@@ -882,7 +885,7 @@ the raw name is not); **never overwrite provenance on upgrade** — insert a new
 `EXPLAIN QUERY PLAN` on `WHERE user_id = ? ORDER BY grabbed_at DESC, id DESC LIMIT 50` yields
 `SEARCH provenance USING INDEX ix_prov_user_grabbed (user_id=?)` with no temp b-tree — a search, not
 a covering index, because the SELECT list carries `release_title`, `indexer_name` and `size_bytes`;
-per §1 the CI assertion must pin `SEARCH … USING INDEX`, never `COVERING INDEX`. `id DESC` trails
+per §1 the query-plan assertion must pin `SEARCH … USING INDEX`, never `COVERING INDEX`. `id DESC` trails
 `grabbed_at` because `grabbed_at` has one-second resolution and keyset paging would otherwise repeat
 a row. **With the canonical `user_id IN (0, :uid)` predicate SQLite adds `USE TEMP B-TREE FOR ORDER
 BY`**: it cannot supply order from an index whose *leading* column is constrained by `IN`. The index
@@ -925,7 +928,7 @@ CREATE VIRTUAL TABLE search_trgm USING fts5(
 CREATE TABLE search_doc (
   rowid        INTEGER PRIMARY KEY,     -- THE allocator for all three tables
   work_id      INTEGER NOT NULL REFERENCES work(id) ON DELETE CASCADE,
-  kind         TEXT NOT NULL,           -- top-level kinds only; see the CI assertion below
+  kind         TEXT NOT NULL,           -- top-level kinds only; see invariant 3 below
   popularity   REAL NOT NULL DEFAULT 0,
   in_library   INTEGER NOT NULL DEFAULT 0,
   title_idf    REAL NOT NULL DEFAULT 0,
@@ -954,17 +957,18 @@ CREATE INDEX ix_sdl_doc ON search_doc_library(doc_rowid);
 >
 > With the junction table the scoped query is
 > `… JOIN search_doc_library sdl ON sdl.doc_rowid = sd.rowid AND sdl.library_id IN (…)`, which is a
-> covered index seek per scoped library. **CI asserts the plan** (§7 invariant 6) so it can never
-> silently regress to a scan.
+> covered index seek per scoped library. **`make check` asserts the plan** (§7 invariant 6) so it
+> can never silently regress to a scan.
 >
 > The `WITHOUT ROWID` primary key is `(library_id, doc_rowid)` in that order because the scope is
 > the outer filter and the doc set is the inner range. `ix_sdl_doc` serves the reverse — deleting a
 > `search_doc` row, and answering "which libraries can see this" for the item detail page.
 
-**Six invariants, all CI-asserted, all silent-corruption sources if broken.**
+**Six invariants, all silent-corruption sources if broken. Five are asserted by `make check`;
+invariant 4 is owed, and waits for the code it constrains.**
 
-⚠️ **CI-asserted is not schema-enforced, and two of the six are neither declarable nor enforced —
-which this list previously left a reader to assume the other way.** Both are stated plainly below,
+⚠️ **Asserted by the gate is not schema-enforced, and two of the six are neither declarable nor
+enforced — which this list previously left a reader to assume the other way.** Both are stated plainly below,
 each with the reason SQLite cannot hold it and the code that owes it. Neither is a defect to be
 fixed by a migration; both are debts to be paid by the document builder, and they are written down
 here so that whoever writes it inherits them rather than discovers them.
@@ -1182,7 +1186,7 @@ destroyed exactly the record the log exists for (security.md §6, "who deleted t
 attention block. `ix_audit_ts` orders the whole log and cannot filter it, so that read scanned a
 table that grows forever by design. The two equality columns lead and `ts DESC` trails them, so
 newest-first comes out of the index rather than a temp b-tree. `EXPLAIN QUERY PLAN` reports it as a
-*covering* index for a narrow SELECT list, and per §1 the CI assertion still pins only
+*covering* index for a narrow SELECT list, and per §1 the query-plan assertion still pins only
 `SEARCH … USING INDEX`: covering-ness depends on the SELECT list, so pinning it would fail the moment
 a caller selects one more column, which is a change to the query and not an index regression.
 
@@ -1246,7 +1250,7 @@ command UsArr ever issues. The three-state form
 `WHERE state IN ('pending','inflight','verifying') AND next_attempt_at <= ?` plans as
 `SEARCH write_queue USING COVERING INDEX ix_wq_runnable (state=? AND next_attempt_at<?)`. Both
 plans are measured and both are pinned by `TestWriteQueueRunnableNeedsTheVerbatimINList`, so the
-constraint is met in CI rather than in production. **Any narrower sweep must filter the extra
+constraint is met in `make check` rather than in production. **Any narrower sweep must filter the extra
 states in the SELECT list, not in the `WHERE` clause.**
 
 `ix_wq_runnable` is also the reconciliation guard's index. [`sync.md`](./sync.md) §4 states the guard,
@@ -1636,7 +1640,8 @@ the sidebar either wrong or dependent on the un-materialised join anyway. Keying
 `WITHOUT ROWID` table's primary-key columns are implicitly `NOT NULL`, so "no edition, the whole
 work" cannot be `NULL`. `0` carries it, matching the sentinel pattern already used for `user_id` and
 `service_instance_id`. The cost is that referential integrity for the non-zero case is maintained by
-the derivation rather than by SQLite, so it is a CI assertion instead:
+the derivation rather than by SQLite, so it is an assertion in `make check` instead
+(`TestLibraryMemberEditionsBelongToTheirWork`):
 
 ```sql
 -- must return no rows
@@ -1675,11 +1680,11 @@ SELECT m.work_id FROM library_member m
 --   two halves separately so a leading-column-only scan still fails.)
 ```
 
-**CI asserts that plan for both topologies — one library per kind *and* two libraries over one
-kind — because only the second is the interesting one.** ⚠️ Both are built with real rows in
+**`make check` asserts that plan for both topologies — one library per kind *and* two libraries
+over one kind — because only the second is the interesting one.** ⚠️ Both are built with real rows in
 `TestLibraryScopedKeysetIsASeek` and **both produce the same plan**, which is recorded rather than
 dressed up: `EXPLAIN QUERY PLAN` chooses from the schema, not the data, so with no `ANALYZE`
-statistics the topology changes selectivity and not the plan. What CI pins is that the seek is on
+statistics the topology changes selectivity and not the plan. What the gate pins is that the seek is on
 the primary key in both shapes; the row-count difference this paragraph is really worried about
 belongs to `make bench`, which is never a merge gate. The write cost is one extra column on a
 table that is already materialised and already flushed on the 250 ms batch, plus one rule: **a title
@@ -1760,7 +1765,7 @@ that `work.kind` is derived from the library's declared kind and never inherited
 the way to change it is to change the library's `kind` (§6.5 rule 4), which re-derives membership.
 Allowing both would give two mechanisms for one fact.
 
-### 13.5 The four tables' one CI assertion set
+### 13.5 The four tables' one assertion set
 
 ```sql
 -- 1. Identity never reads library state (ADR-0026; see §7 invariant 4 for the two-path form).

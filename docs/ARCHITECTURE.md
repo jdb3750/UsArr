@@ -388,8 +388,10 @@ impression the architecture exists to avoid. Four rules:
    effective ratio (~0.45 on the measured pair) by a mechanism no contrast check sees, so the year
    uses a real colour token. And **12 px semibold is normal text under WCAG, not large** (large is
    ≥18.66 px bold or ≥24 px), so 4.5:1 applies to both lines with no 3:1 shortcut.
-   **Asserted where the colour is produced:** a CI check over the fixture posters recomputes the
-   ratio for every `(dominant_color, foreground)` pair the pipeline emits and fails below 4.5:1.
+   **The assertion belongs where the colour is produced, and it is owed rather than written:**
+   nothing recomputes the ratio today, because nothing emits `dominant_color` yet. Whoever lands the
+   image pipeline owes `make check` a test that recomputes the ratio for every
+   `(dominant_color, foreground)` pair the pipeline emits and fails below 4.5:1.
    The mockups' own sample data already contains a failing pair — `#16130e` on `#7d6a4f` is
    **3.57:1** for the title and 3.12:1 for the year — which is what a mid-luminance fill does: with
    an average taken over arbitrary cover art, mid-luminance is common and *both* black and white
@@ -845,7 +847,7 @@ and `pdf` as comic/ebook file shapes, which the DDL currently lacks.
   synthesise one before a track row can exist. **It is resolved, never re-allocated** — the adapter
   looks up `edition WHERE work_id = ? AND is_primary = 1` and inserts only on a miss — and
   `work_track.edition_id` is `ON DELETE RESTRICT` rather than `CASCADE`, so an adapter that
-  re-synthesises cannot destroy the track set. Full rule and the CI invariant in
+  re-synthesises cannot destroy the track set. Full rule and the invariant in
   [`reference/schema.md`](./reference/schema.md) §1.1.
 - **`track_number` is `TEXT`, with a derived `track_position INTEGER` sort key.** Lidarr ships it as
   a string and keeps a separate integer alongside, because real track numbers are `A1`, `B2`,
@@ -1151,8 +1153,11 @@ nothing. **Read `internal/db/migrations` for whether they exist.** Full DDL, CHE
 2. **Library membership is never an input to identity.** jellyfin#10985 is the counter-example: the
    same film in three per-language libraries collapsed into one item and watch state leaked across
    all three (closed as not planned). UsArr's identity is `external_id` plus the §6.4 cascade,
-   computed with no knowledge of libraries. **CI asserts that no query in the identity path
-   references `library_member`, `library_source` or `library_override`.** The third name is not
+   computed with no knowledge of libraries. **No query in the identity path may reference
+   `library_member`, `library_source` or `library_override`** — an assertion that is owed rather
+   than written, because there is no identity cascade and no correction applier yet for it to read
+   ([`reference/schema.md`](./reference/schema.md) §13.5 tracks which of that set are live). It
+   lands in `make check` with the code it constrains. The third name is not
    redundant: `library_override`'s `relink` verb *does* feed identity by design, so the assertion is
    stated as two paths — the identity **cascade** references none of the three, and the correction
    **applier**, which runs after the cascade and overrides its output, references `library_override`
@@ -1178,7 +1183,7 @@ nothing. **Read `internal/db/migrations` for whether they exist.** Full DDL, CHE
    carries a user's name, its access grants, and the `exclude`/`include` corrections scoped to it;
    auto-deleting owned data to tidy up replicated data is the wrong trade. A **manual** delete does
    discard those scoped corrections, and §17.8's confirmation copy says so with the count.
-6. **Every replicated work is a member of at least one library, and CI asserts it.** A work in no
+6. **Every replicated work is a member of at least one library, and `make check` asserts it.** A work in no
    library is visible through no scope and therefore vanishes from search for every user *including
    the owner* — a failure state the previous `instance_scope` could not reach, because every
    replicated row came from some instance. Two paths reach it by design: a `root_folder`-scoped
@@ -1219,8 +1224,8 @@ per row returned, so ~1,800 probes for a 100-row page) or fetches every member a
 window can be cut. So **the denormalisation that was the fallback is now the default**: the sort key
 lives on `library_member`, keyed `(library_id, sort_title, work_id, edition_id)` `WITHOUT ROWID`,
 which makes the scoped keyset a single covered seek at any selectivity. The write cost is one column
-on an already-materialised table, plus the rule that a title change rewrites its member rows. **CI
-asserts the `EXPLAIN QUERY PLAN` for both topologies — one library per kind and two libraries over
+on an already-materialised table, plus the rule that a title change rewrites its member rows. **`make
+check` asserts the `EXPLAIN QUERY PLAN` for both topologies — one library per kind and two libraries over
 one kind — because only the second is the interesting one**, and `make bench` carries the wall
 clock.
 
@@ -1540,7 +1545,7 @@ statistics sweeps the list. Four things previously implicit, each a correctness 
 - **Both tables are `content='', contentless_delete=1`.** A plain contentless FTS5 table rejects
   `DELETE` and `UPDATE`, so deleted works stay indexed forever and every title edit accumulates a
   stale duplicate. Needs **SQLite ≥ 3.43**. Every work delete and title change issues the FTS delete
-  **in the same transaction**; CI asserts the counts match.
+  **in the same transaction**; `make check` asserts the counts match.
 - **The three tables share one rowid space, and that is an invariant** — allocated from `search_doc`
   and inserted explicitly into both FTS tables in one transaction. RRF fuses on `rowid`; one missed
   explicit rowid silently fuses unrelated documents.
@@ -1558,7 +1563,7 @@ statistics sweeps the list. Four things previously implicit, each a correctness 
   says so rather than implying otherwise.** The cheap candidate is to fold credited names into the
   FTS `alt_titles` column of the *works* they are credited on, so the query returns the books rather
   than the person — but that is a decision for whoever writes the FTS document builder, it is not
-  specified here, and it must not be assumed. CI asserts the exclusions.
+  specified here, and it must not be assumed. `make check` asserts the exclusions.
 
 Permission filtering happens **in the index join, not after it**, so a filtered search cannot
 silently break page sizes or leak existence through result counts. **The mechanism is a junction
@@ -1569,8 +1574,9 @@ a `TEXT` column cannot participate in an index join**. Filtering it needs `json_
 both of which are scans, so the column bought a full scan of the fused candidate set to satisfy the
 requirement it was written for. With the junction table the scoped query is
 `… JOIN search_doc_library sdl ON sdl.doc_rowid = sd.rowid AND sdl.library_id IN (…)`, a covered
-seek per scoped library, and **CI asserts `SEARCH sdl USING PRIMARY KEY` so it cannot silently
-regress** (§13 keeps `EXPLAIN QUERY PLAN` assertions). A second CI assertion guards the other half:
+seek per scoped library, and **`make check` asserts `SEARCH sdl USING PRIMARY KEY` so it cannot
+silently regress** (§13 keeps `EXPLAIN QUERY PLAN` assertions). A second assertion guards the other
+half:
 every `search_doc` row has at least one `search_doc_library` row, upheld by the reserved *Unfiled*
 library (§6.5 rule 6), because a row visible through no library is invisible to its own owner.
 
@@ -2209,7 +2215,7 @@ the driver.
 **Techniques.** Keyset pagination always (`OFFSET` is O(offset) in SQLite; cursor = base64 of
 `(sort_value, id)`) — note `ix_work_kind_sort` **serves** that query rather than covering it, because
 the SELECT list includes columns the index does not carry; 100 row lookups per page is fine, but
-"covered" was wrong and would mislead whoever writes the CI assertion. N+1 avoidance in priority
+"covered" was wrong and would mislead whoever writes the query-plan assertion. N+1 avoidance in priority
 order: denormalised rollups (§6.3), dataloader batching, then the `EXPLAIN QUERY PLAN` assertions.
 **HTTP/2 to the browser** where TLS is present, since HTTP/1.1 caps at 6 connections per origin and
 60 poster requests serialise. **ETags** on list responses. **Isolate background work** —
@@ -2304,7 +2310,7 @@ requirement from this side is that `service_instance.managed_by` can express `ui
 
 **Migrations and backup:** `goose` with embedded SQL, run at startup in a transaction **after an
 automatic pre-migration backup**; forward-only; additive-first; every migration tested against a
-fixture in CI. Nightly `VACUUM INTO`, keeping 7 daily + 4 weekly. `POST /api/v1/system/backup` and the
+fixture in `make check` (`internal/db/migrate_test.go`). Nightly `VACUUM INTO`, keeping 7 daily + 4 weekly. `POST /api/v1/system/backup` and the
 UI download are gated on `admin.system.backup`, audit-logged, rate-limited, and reachable **only**
 via the cookie-session path — never a `client_credential`, never a forwarded auth header. **Restore =
 stop, replace the file, start**, with the key as a separate, explicitly-named step.

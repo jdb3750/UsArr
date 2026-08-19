@@ -1043,7 +1043,7 @@ injection**. **There is no Tier 3.** An external engine is deferred behind the r
    sending ThumbHashes as raw bytes and capping at 25,000 items makes it ~1.5–2.1 MB and *true*.
 3. **Both FTS tables need `contentless_delete=1`** (SQLite ≥ 3.43) or deleted works stay in the index
    forever, and the three tables must share one rowid space or RRF silently fuses unrelated
-   documents. Both are now invariants with CI assertions.
+   documents. Both are now invariants asserted by `make check`.
 
 **Meilisearch is deferred, not rejected.** This ADR previously kept it as a named tier with config
 variables, a checklist row and a README row — implying someone would build and support it — while
@@ -2029,8 +2029,10 @@ catalogue comics with no sink at all beyond Prowlarr free-text.
   `work_id` / `link_id`**, with `target_identity_hash` as the durable key — an `ON DELETE CASCADE`
   would let a tombstone expiry destroy the correction, which *is* the failure being designed
   against.
-- **Library membership is never an input to identity**, enforced by a CI assertion that no query in
-  the identity path references `library_member`, `library_source` **or `library_override`**.
+- **Library membership is never an input to identity**, to be enforced by an assertion in
+  `make check` that no query in the identity path references `library_member`, `library_source`
+  **or `library_override`** — owed, not written: there is no identity cascade and no correction
+  applier yet for it to read (`reference/schema.md` §13.5).
   jellyfin#10985 is the counter-example — the same film in three per-language libraries collapsed
   into one item and watch state leaked across all three. The third table is named because it is the
   one library-named table that by design *does* feed identity: its `relink` verb repoints a
@@ -2079,8 +2081,8 @@ catalogue comics with no sink at all beyond Prowlarr free-text.
   invalidation problem. This is the honest cost.
 - ⚠️ **The library-scoped grid query is unmeasured** at the §13 reference library size. Mitigation in
   order: the common case is `work.kind = ?` with membership as a one-row lookup; failing that,
-  denormalise the sort key onto `library_member`. It is a CI `EXPLAIN QUERY PLAN` assertion and a
-  `make bench` line, not an assumption.
+  denormalise the sort key onto `library_member`. It is an `EXPLAIN QUERY PLAN` assertion in
+  `make check` and a `make bench` line, not an assumption.
 
 ### Alternatives rejected
 
