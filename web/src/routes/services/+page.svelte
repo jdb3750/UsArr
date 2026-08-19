@@ -1172,6 +1172,15 @@
 	{:else if column.id === 'items'}
 		{@const items = itemsCell(row)}
 		<span class:muted={items.muted}>{items.text}</span>
+		<!--
+			`file_read_failures`, and ONLY when it is non-zero (http-api.md §3.4).
+			The same muted second line the sync cell uses, with no tone class and no
+			icon: the import completed and these works are counted in the number
+			above, so a fault rendering here would be a false alarm on a healthy
+			row. `itemsCell` decides both the wording and the silence; this branch
+			must not learn either.
+		-->
+		{#if items.sub}<div class="cell-sub">{items.sub}</div>{/if}
 	{:else if column.id === 'problem'}
 		{@const problem = problemCell(row)}
 		{#if problem.muted}

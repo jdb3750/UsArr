@@ -64,6 +64,8 @@ function health(over: Partial<ServiceHealth> = {}): ServiceHealth {
 		// itemsCell() in ./services for what that number is scoped to.
 		lastFullSyncAt: null,
 		workCount: 0,
+		// Required too, and Home reads it no more than it reads the other two.
+		fileReadFailures: 0,
 		...over
 	};
 }

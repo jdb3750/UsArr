@@ -997,6 +997,31 @@ export interface ServiceHealth {
 	 * agree.
 	 */
 	workCount: number;
+
+	/**
+	 * How many DISTINCT items of this instance the file walk COULD NOT READ from
+	 * the service (internal/httpapi/services.go, `json:"file_read_failures"`; the
+	 * query is `COUNT(DISTINCT r.remote_id)` at
+	 * internal/store/catalogue.go:1449). Always present, and `0` is the positive
+	 * statement "the last walk read everything it asked for" rather than a
+	 * missing answer.
+	 *
+	 * ⚠️ SAME FACT AS THE IMPORTER'S PER-RUN COUNTER, OVER A WIDER WINDOW, and
+	 * that is why a reader can see a number here that disagrees with one they
+	 * watched during a run. `libsync.Report.FileReadFailures` — the count a run
+	 * reports to its own caller, and the one the import log line carries — is ONE
+	 * RUN's. This is every failure recorded since the last COMPLETED full sync
+	 * started, so it spans that run plus every partial run after it, and an
+	 * instance that has never completed one counts everything it holds
+	 * (docs/reference/http-api.md §3.4). Distinct items, never failure rows:
+	 * three partial runs that each failed on the same series report `1`.
+	 *
+	 * ⚠️ IT IS NOT A FAULT STATE. The import completed and the works imported;
+	 * what is incomplete is those items' FILE facts, which is why §1.4.1's
+	 * availability reads "not counted yet" for them. `itemsCell()` in ./services
+	 * owns the rendering, as a muted note and only when it is non-zero.
+	 */
+	fileReadFailures: number;
 }
 
 export interface ServicesHealth {
@@ -1102,7 +1127,13 @@ function toServiceHealth(value: unknown): ServiceHealth | undefined {
 		// positive workCount — that pair is a partial import, and it survives
 		// because the two fields are read together rather than merged here.
 		lastFullSyncAt: str(value.last_full_sync_at) ?? null,
-		workCount: num(value.work_count) ?? 0
+		workCount: num(value.work_count) ?? 0,
+		// `?? 0` is the older-server fallback and nothing more: the field carries no
+		// `omitempty`, so a server that sends it never omits it, and 0 from an
+		// absent key reads exactly as the wire's own 0 does — no item failed to be
+		// read. The window this number is counted over is on the interface above,
+		// and it is NOT the window the importer's identically-named counter uses.
+		fileReadFailures: num(value.file_read_failures) ?? 0
 	};
 }
 

@@ -116,6 +116,7 @@ function healthRow(over: Partial<ServiceHealth> = {}): ServiceHealth {
 		stale: false,
 		lastFullSyncAt: '2026-08-17T12:00:00Z',
 		workCount: 3,
+		fileReadFailures: 0,
 		...over
 	};
 }
