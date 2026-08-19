@@ -147,3 +147,75 @@ func (s *Store) CountCredentialsOutsideKEKIDIncludingDeleted(ctx context.Context
 	}
 	return n, nil
 }
+
+// StrandedCredential names one stored credential whose wrapping key id is not
+// one the caller holds.
+//
+// It carries a name rather than only a count because every caller of the
+// function below is telling an operator which credentials to re-enter, and "3
+// credentials are unopenable" is not an instruction anybody can act on.
+type StrandedCredential struct {
+	ID      int64
+	Name    string
+	KEKID   uint32
+	Deleted bool
+}
+
+// ListCredentialsOutsideKEKIDsIncludingDeleted returns every stored credential
+// whose kek_id is none of held, TOMBSTONES INCLUDED. See the note above the
+// three functions this joins.
+//
+// It takes a SET of ids rather than the single "keep" id
+// CountCredentialsOutsideKEKIDIncludingDeleted takes, because its two callers
+// are asking a different question. That one asks "how much rotation work
+// remains", which has exactly one answer key. These ask "which rows can nothing
+// I hold open", and what the caller holds is a keyring, which is plural by
+// construction — during an interrupted rotation it is the live key, its legacy
+// id and the pending one.
+//
+// An empty held set means nothing is holdable and every row is returned; that
+// is the honest reading and no caller passes it today.
+//
+// The result is unbounded on purpose. service_instance holds configured
+// services — a handful on any real install, and bounded by what an operator
+// typed — not catalogue rows, and both callers must name every affected
+// instance rather than a prefix of them.
+func (s *Store) ListCredentialsOutsideKEKIDsIncludingDeleted(
+	ctx context.Context, held []uint32,
+) ([]StrandedCredential, error) {
+	args := []any{crypto.MinEnvelopeLen}
+	clause := ""
+	if len(held) > 0 {
+		placeholders := make([]byte, 0, 2*len(held))
+		for _, id := range held {
+			if len(placeholders) > 0 {
+				placeholders = append(placeholders, ',')
+			}
+			placeholders = append(placeholders, '?')
+			args = append(args, id)
+		}
+		clause = " AND kek_id NOT IN (" + string(placeholders) + ")"
+	}
+	rows, err := s.db.Read().QueryContext(ctx, `
+		SELECT id, name, kek_id, deleted_at IS NOT NULL
+		  FROM service_instance
+		 WHERE length(api_key_enc) >= ?`+clause+`
+		 ORDER BY id ASC`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("read credentials outside the held key ids: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var out []StrandedCredential
+	for rows.Next() {
+		var c StrandedCredential
+		if err := rows.Scan(&c.ID, &c.Name, &c.KEKID, &c.Deleted); err != nil {
+			return nil, fmt.Errorf("read credentials outside the held key ids: scan: %w", err)
+		}
+		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read credentials outside the held key ids: %w", err)
+	}
+	return out, nil
+}

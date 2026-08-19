@@ -50,6 +50,15 @@ const LegacyKEKID uint32 = 1
 // claim it. The substitute is LegacyKEKID rather than an arbitrary value: on the
 // 2^-32 occasion it fires, the key registers at the id it would already have
 // been registered at anyway, and nothing special-cases it.
+//
+// THAT BRANCH HAS NO TEST, and as written it cannot have one. Reaching it needs
+// a 32-byte KEK whose sha256("usarr/kek-id/v1" || kek) begins with four zero
+// bytes, which is a 2^32 search nobody is going to run in a unit test, and the
+// digest is not injectable — the whole point of the function is that the id is
+// derived from the key and from nothing else. Making it testable would mean
+// taking the hash as a parameter, which trades a frozen definition (see
+// ADR-0049) for coverage of two lines. The branch is left untested and said so
+// here rather than left looking covered. See REVIEW-LOG.md RK-07.
 func KeyID(kek []byte) uint32 {
 	h := sha256.New()
 	h.Write([]byte(keyIDInfo))

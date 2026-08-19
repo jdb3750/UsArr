@@ -17753,12 +17753,355 @@ thread that owns the startup path and can test the failure modes; it does not be
    left off."* An unbounded retry against a busy server would spin forever; a single pass would
    promote over a row it had missed.
 3. **Promotion is gated on a full verify pass**, not on the count alone: every row must name the new
-   id, the envelope's own id must agree with the column, and the wrapped DEK must unwrap under it. A
-   row concurrently re-sealed under the old key fails that check and aborts the rotation **before any
-   key file is touched**.
-4. **`CONFIGURATION.md` §3.4 tells the operator to stop the server first**, and says why, citing
+   id, the envelope's own id must agree with the column, and the wrapped DEK must unwrap under it.
+   ⚠️ **This clause used to claim more than it delivers, and the overstatement is corrected here.** It
+   read: *"A row concurrently re-sealed under the old key fails that check and aborts the rotation
+   before any key file is touched."* That is true **only of a write that lands before the verify pass
+   reads the row**. The verify pass is a read of the table at one instant; a row sealed under the old
+   key **after** it — during the promote itself, or at any time afterwards while the server keeps
+   running — is not in what it read and nothing aborts. The window is **narrowed to the verify→promote
+   gap and everything past it**, not closed.
+4. **A post-promote re-count now catches what falls in that remaining window** (RK-02): after the
+   rename, the command re-reads which rows sit outside the new id, names each affected instance, and
+   **exits non-zero** telling the operator to restart the server and re-enter those credentials. It
+   does not roll the rotation back — at that point the rotation is sound and the key file is the one
+   to back up — so this is a loud report, not a repair.
+5. **Startup reports stranded rows too** (RK-02), so a credential sealed into that window surfaces on
+   the next start rather than as a red connection test months later.
+6. **`CONFIGURATION.md` §3.4 tells the operator to stop the server first**, and says why, citing
    FI-06 by name.
 
-So the window FI-06 describes is **detected and refused** rather than closed. That is strictly weaker
-than a lock and is not offered as a substitute for one: FI-06 remains **Open**, with its fix shape
-unchanged.
+So the window FI-06 describes is **narrowed, detected and reported** rather than closed. That is
+strictly weaker than a lock and is not offered as a substitute for one: FI-06 remains **Open**, with
+its fix shape unchanged.
+
+---
+
+# `usarr key rotate` — the adversarial review of the shipped command
+
+**Date:** 2026-08-19. **Target:** `850f205` on `origin/main`, the merge of
+*"feat: implement `usarr key rotate`, on content-derived key ids"* (`4c63076`).
+**Input:** one adversarial review of the merged command, in which every claim was **executed** —
+reproduced against a scratch config directory, or drilled by neutering the guard in the tree and
+watching the suite — rather than read off a comment.
+
+Ids carry the `RK-` prefix, continuing from RK-01 above (`DEVELOPMENT.md` §11: an entry id is a fact
+about its author, not a claim on a global counter). Five defects and three low-severity
+inaccuracies, plus the two coverage gaps the review left implied and this pass writes down.
+
+| Id | Severity | One line | Disposition |
+|---|---|---|---|
+| RK-02 | Medium | A rotation run against a live server strands that server's new credentials and exits 0 | **Applied** |
+| RK-03 | Medium | The documented remedy for an unreadable `secret.key.new` destroys credentials | **Applied** |
+| RK-04 | Medium | Four refuse-to-promote guards had no test; neutering any of them stayed green | **Applied** |
+| RK-05 | Medium (honesty) | The FI-06 note claimed the concurrent-write window was closed; it is narrowed | **Applied** |
+| RK-06 | Low | ADR-0049 said the key id is "logged at startup". It was not | **Applied — claim made true** |
+| RK-07 | Low | `crypto.KeyID`'s forced-nonzero branch has no test and cannot get one as written | **Recorded, not fixed** |
+| RK-08 | Low | `audit.go` claimed a prepare row with no rewrap row means nothing was re-wrapped | **Applied** |
+| RK-09 | Low | `key rotate` on an empty config dir generated a master key, then rotated it away | **Applied** |
+| RK-10 | Coverage | The verify→promote insertion window was reasoned about and never executed | **Applied — now executed** |
+
+---
+
+## RK-02 — a rotation that finishes while the server is up strands credentials, and says "rotation complete"
+
+**Medium. Found by reproduction, not by reading.** With the server running against the same config
+directory, `usarr key rotate` ran to completion and **exited 0**. A service added through that
+still-running server during the rotation was sealed under the **retired** key, because the server's
+own keyring still had the old key as primary and nothing told it otherwise. After a restart that
+credential was unopenable:
+
+```
+crypto: envelope names a key id not in the keyring
+```
+
+The rotation reported unqualified success in the same run that produced it. Two independent failures,
+and both are fixed.
+
+**Half one: the command's report was wrong.** The verify pass is a read of the table at one instant.
+It closes the window for every row that existed when it ran, and for nothing after — see RK-05, which
+is the same fact stated as a documentation defect. There is no single-instance lock (FI-06), so a
+running server can seal a row under the old key during the promote itself or at any point after it.
+
+**The fix is a post-promote re-count, and it deliberately does not block promotion.** After the
+rename, `runKeyRotate` re-reads which rows sit outside the new id. If any do, `strandedAfterPromote`
+names each affected instance, and the command exits **non-zero**:
+
+```
+!! the rotation completed, but 1 credential(s) were written under another key WHILE it ran
+   service_instance 2 "Radarr" is at kek id 4205839355, not 43708734
+usarr: 1 credential(s) were sealed under a superseded key while the rotation ran and cannot be
+opened by /config/keys/secret.key — a UsArr server was running against /config. The rotation itself
+is complete and every other credential survived it: back up /config/keys/secret.key. Then stop the
+server, start it again, and re-enter the API key for the instance(s) listed above
+```
+
+**Why it does not roll back, stated so nobody "fixes" it later.** At that point the rotation is sound
+and complete: every pre-existing row is re-wrapped and verified, and the new key file is the one the
+operator must now back up. Undoing that to protect a row written by a process the operator was told
+to stop would put the whole install back on a key they rotated *because it was compromised*. The
+rotation stands; the command fails loudly.
+
+**The promote audit row does not carry the number, and that is a decision.** It records what
+*promotion* did — the rename, and which ids left the ring — all of which was true the moment
+`promoteRotation` returned. The stranded count is a different actor's writes observed afterwards, and
+folding it in would make one entry answer two questions. The durable record is the row itself:
+`service_instance.kek_id` names an id no key derives, and startup now reports it.
+
+**Half two: nothing said so until somebody used the credential.** A stranded row surfaced as a red
+connection test, one instance at a time, with nothing saying how many others were in the same state.
+`warnStrandedCredentials` (`cmd/usarr/app.go`) now runs on **every** start and logs one warning per
+affected instance plus a total.
+
+**It warns; it does not refuse, and the code comment carries the argument.** A stranded row is a
+per-row condition, not a broken install: every other credential still works, and the repair is to
+re-enter the affected API key **through the UI**, which requires the server to be running. Refusing
+would make the one action that repairs the condition impossible. It would also do so on state that
+can be entirely stale — `service_instance` never hard-deletes and a tombstone keeps its ciphertext
+forever, so a service deleted two years ago would hold the process down. The missing-key and
+missing-salt ladders in `buildApp` *do* refuse, and the difference is the point: there the whole
+keyring is absent and continuing would seal **new** rows under material that opens nothing, which no
+UI action can undo. A failure of the query itself is still fatal — that is a database error, not a
+key one.
+
+**Drilled, both halves** (transcript in RK-04): removing the post-promote check turns
+`TestKeyRotateReportsCredentialsSealedWhileItRan` red; removing the startup call turns
+`TestStartupReportsStrandedCredentials` red.
+
+---
+
+## RK-03 — the startup error for an unreadable `secret.key.new` told the operator to destroy credentials
+
+**Medium. Reproduced on a genuine partial rotation**, not on a synthetic one: prepare wrote the
+pending key, the re-wrap pass moved rows to it, and the run was killed. Corrupting the file then made
+startup refuse with:
+
+> an interrupted key rotation left …/keys/secret.key.new in place and it could not be read: … **Restore or remove it** before starting; see docs/CONFIGURATION.md §3.4
+
+Taking the second half of that advice removed the only remaining source of the key those rows name.
+The server then started **with no warning at all** and 500 credentials were permanently dead. The
+error was confidently wrong for the case in which it does the most damage, and §3.4 — which it cites
+by name — said nothing about the unreadable-file case at all.
+
+**The two states are not distinguishable by looking, so they are counted.** A rotation that died in
+*prepare* has the file and no rows behind it, and removal really is safe; one that died *during the
+re-wrap pass* has rows that name a key id existing nowhere else on disk. `buildKeyring` now takes the
+store, counts rows outside the live key's ids, and writes a different remedy for each:
+
+| Rows outside the live key | What the error says |
+|---|---|
+| 0 | *"No stored credential is wrapped under it, so restoring or removing it are both safe"* |
+| N > 0 | *"N stored credential(s) are wrapped under the key in that file and nothing else on disk can open them, so **RESTORING IT IS THE ONLY SAFE ROUTE** — removing it destroys those credentials permanently"* |
+
+**A failure to count is not allowed to soften the message.** If the query itself errors, the operator
+gets the cautious form, because "remove it" is unrecoverable and "restore it" is not.
+
+`CONFIGURATION.md` §3.4 gained a subsection for the case, as a two-row table keyed on which sentence
+the error printed, plus the flat statement that removing the file makes the *error* go away and takes
+the credentials with it.
+
+**The no-warning half is closed by RK-02's startup diagnostic**: had it existed, the reproduction
+would have printed 500 warnings on the next start instead of nothing.
+
+---
+
+## RK-04 — the four refuse-to-promote guards were the only untested code in the command
+
+**Medium, and the sharpest finding here, because it was found by mutation rather than by reading.**
+Reverting RK-01's tombstone fix goes red. Breaking `crypto.Keyring.Verify` goes red. But **neutering
+any of the three per-row checks in `verifyEverything`, or the same-key refusal in `prepareRotation`,
+left `go test ./cmd/usarr/` entirely green** — and `rotateExtraPasses`'s exhaustion branch was
+reached by no test at all.
+
+Those checks are the only evidence that the key about to become authoritative works. A rotation that
+promotes past any one of them replaces the key file over ciphertext nothing can open.
+
+**Why the existing end-to-end test could not catch them.** `TestKeyRotateKeepsEveryCredentialOpenable`
+runs a rotation that *works*. Every guard is a branch that a working rotation never takes, so the test
+exercises the happy path through all four and asserts the outcome the guards exist to prevent — an
+outcome that a rotation with no guards at all also produces on clean input.
+
+**The fix: six tests, each constructed so exactly one guard catches its case.** That construction is
+the whole trick. A case that trips two checks still goes green with either of them removed, so each
+row below is deranged in a way the other two checks find acceptable — which is possible only because
+mid-rotation the keyring holds **both** keys, so an old-id envelope still verifies:
+
+| Case | Row shape | Which check is the only one that sees it |
+|---|---|---|
+| the re-wrap pass never reached it | column and envelope both at the old id | `c.KEKID != newID` — the other two agree with each other and the old key is in the ring |
+| a half-applied re-wrap | column advanced to the new id, envelope untouched | `inEnvelope != c.KEKID` — `Verify` passes, because the old key still opens it |
+| key material corrupted in flight | correctly re-wrapped, one byte of the wrapped DEK flipped | `keyring.Verify` — both ids agree on the new id; only RFC 3394's integrity check notices |
+
+`TestKeyRotateRefusesAPendingKeyIdenticalToTheLiveOne` covers the fourth: an operator who `cp`s
+`secret.key` to `secret.key.new` by hand. Without the refusal the command runs to completion and
+reports a successful rotation **that changed nothing**, which is the worst available outcome — the
+reason to rotate is that the old key is compromised, and the operator now believes it is not.
+
+`TestKeyRotateGivesUpWhenRowsKeepAppearingAtTheOldKey` reaches the exhaustion branch with a SQLite
+trigger that drags one row back to the old key id every time another advances — a deterministic
+stand-in for the running server FI-06 describes, with no goroutine and no race. Recursive triggers
+are off by default, so the trigger's own `UPDATE` does not re-fire it and the two rows ping-pong for
+as long as the loop keeps passing. The test asserts the refusal **and** that `secret.key` is
+unchanged and `secret.key.new` survives, because failing closed is only worth anything if the state
+left behind is resumable.
+
+### The guards were fired
+
+Each guard was neutered in the tree, the suite run, and the file restored byte-for-byte from a copy
+(`diff -q` against the pre-mutation original, both files clean). `go1.25.13`, `-count=1`:
+
+```
+M1  verifyEverything: `if c.KEKID != newID` → `if false`
+    --- FAIL: …/the_kek_id_column_never_moved
+        verify PASSED on a row the re-wrap pass never reached (1 row(s) verified);
+        promotion would have replaced the key file over a row it had not proven
+
+M2  verifyEverything: `if inEnvelope != c.KEKID` → `if false`
+    --- FAIL: …/the_column_says_new_but_the_envelope_still_says_old
+        verify PASSED on a half-applied re-wrap: metadata moved, ciphertext did not
+
+M3  verifyEverything: `if err := keyring.Verify(c.Envelope); err != nil` → `if err := error(nil); …`
+    --- FAIL: …/the_wrapped_DEK_does_not_unwrap
+        verify PASSED on an envelope whose key material was corrupted in flight
+
+M4  prepareRotation: `if subtle.ConstantTimeCompare(newKEK, oldKEK) == 1` → `if false && …`
+    --- FAIL: TestKeyRotateRefusesAPendingKeyIdenticalToTheLiveOne
+        key rotate SUCCEEDED on a pending key identical to the live one;
+        it reported a rotation that changed nothing
+
+M5  rewrapEverything: `if pass >= rotateExtraPasses` → `if false`
+    panic: test timed out after 1m0s        (the bound removed, the loop does not terminate)
+
+M5b rewrapEverything: the branch returns nil instead of the refusal — the DANGEROUS mutation,
+    because it promotes rather than hanging
+    --- FAIL: TestKeyRotateGivesUpWhenRowsKeepAppearingAtTheOldKey
+
+M6  runKeyRotate: the post-promote stranded check (RK-02) → `if false && len(stranded) > 0`
+    --- FAIL: TestKeyRotateReportsCredentialsSealedWhileItRan
+        key rotate reported success with a credential stranded under the retired key
+
+M7  buildApp: the warnStrandedCredentials call (RK-02) removed
+    --- FAIL: TestStartupReportsStrandedCredentials
+        startup did not name the stranded instance
+
+M8  buildKeyring: the unreadable-secret.key.new count (RK-03) → always take the "both safe" arm
+    --- FAIL: …/rows_depend_on_it
+        the error does not say restoring is the only safe route
+```
+
+**M5 is reported as a timeout on purpose rather than dressed up.** Removing the bound removes
+termination, so the honest failure is a hang; M5b is the mutation that matters, because a branch that
+gives up *quietly* promotes over rows still at the old key, and that one fails in 0.12s on an
+assertion about `secret.key` being unchanged.
+
+---
+
+## RK-05 — the FI-06 note claimed the concurrent-write window was closed; it is narrowed
+
+**Medium, honesty.** Clause 3 of the FI-06 note read:
+
+> A row concurrently re-sealed under the old key fails that check and aborts the rotation **before any
+> key file is touched**.
+
+That is true only of a write that lands **before the verify pass reads the row**. The verify pass is a
+read of the table at one instant; a row sealed under the old key after it — during the promote, or at
+any time afterwards while the server keeps running — is not in what it read, and nothing aborts. The
+claim covered the entire failure RK-02 then reproduced, which is the practical test of whether an
+overstatement matters.
+
+**Applied.** The clause now says what it delivers, marks the previous wording, and states that the
+window is narrowed to the verify→promote gap and everything past it rather than closed. Two new
+clauses point at RK-02's post-promote re-count and its startup diagnostic, and the note's conclusion
+changed from *"detected and refused"* to *"narrowed, detected and reported"*. FI-06 itself remains
+**Open** with its fix shape unchanged — none of this is a substitute for the lock.
+
+---
+
+## RK-06 — ADR-0049 said the key id is "logged at startup". It was not
+
+**Low.** ADR-0049's *"What this publishes, and why it is nothing"* section closes: *"it is printed by
+`usarr key rotate`, logged at startup, and written into audit metadata."* The first and third were
+true. The second was not: the only startup path that logged a key id was `buildKeyring`'s
+interrupted-rotation warning — the one start where the id is *least* representative, since it fires
+only when a `secret.key.new` is present.
+
+**Applied by making the claim true**, which is the better of the two available fixes: `buildApp` now
+logs `keyring ready` with the primary id and the whole active set on every start. The ADR's sentence
+now names where to find it, and carries a ⚠️ marking that the startup half was aspirational when the
+ADR landed. `TestStartupReportsStrandedCredentials` asserts the line is present, so the claim cannot
+quietly become false again.
+
+---
+
+## RK-07 — `crypto.KeyID`'s forced-nonzero fallback has no test, and cannot get one as written
+
+**Low, and recorded rather than fixed — this is a coverage gap the review left implied, written down
+so the branch stops looking covered.**
+
+`KeyID` forces its result nonzero because `0` is the placeholder `CreateServiceInstanceSealed` writes
+into `kek_id` between its insert and its seal. Reaching that branch needs a 32-byte KEK whose
+`sha256("usarr/kek-id/v1" || kek)` begins with four zero bytes — a 2^32 search nobody runs in a unit
+test — and the digest is **not injectable**, because the entire point of the function is that the id
+is derived from the key and from nothing else.
+
+**Making it testable would cost more than it buys.** Taking the hash as a parameter trades a frozen,
+content-derived definition (ADR-0049's clause 1, the whole safety argument) for coverage of two
+lines. The branch stays untested, and `internal/crypto/keyid.go` now says so at the point where
+someone would otherwise assume it was covered.
+
+---
+
+## RK-08 — a killed run falsified `audit.go`'s claim about what a prepare row means
+
+**Low.** The comment above the key-rotation audit vocabulary said the phases let an operator
+reconstruct an interrupted rotation, and gave this reading: *"a prepare with no rewrap after it says
+the new key file was written **and nothing else happened**."*
+
+**A killed run falsified it: 500 rows were already re-wrapped**, with no rewrap audit row anywhere.
+The rewrap row is appended **once, after the whole pass**, so a run killed part-way through leaves
+rows moved to the new id and no audit row naming a single one of them. An operator who trusted the
+comment would conclude no row had moved and reach for exactly the remedy RK-03 shows is destructive.
+
+**Applied.** The comment now states what each phase's row does and does *not* tell you: a prepare row
+says the key file was written and nothing about how many rows moved afterwards — reconstruct that
+from `service_instance.kek_id`. The other half of the original claim survives inspection and is kept:
+*a rewrap with no promote* really does mean the key files were never touched, because promotion and
+its audit row are adjacent.
+
+---
+
+## RK-09 — `key rotate` on an empty config directory generated a master key and rotated it away
+
+**Low.** The command falls through to `buildApp`, whose ladder **generates** a master key when the
+file is absent and nothing is sealed — correct for a first server start, wrong here. On a fresh
+directory the command printed the one-line *"a new master key was generated — back up the whole
+`keys/` directory"* notice and then rotated that key away in the same run, so the notice named
+material that was already superseded by the time the operator read it.
+
+**Applied: it refuses.** There is nothing to rotate until the server has run once.
+`os.Stat(cfg.SecretKeyPath())` rather than `ResolveMasterKey`, because the only question is whether
+the file this command manages exists — a file that exists but holds a bad value is `buildApp`'s error
+to report, in `buildApp`'s words. `TestKeyRotateRefusesAnEmptyConfigDirectory` also asserts that no
+key file was left behind on the way past.
+
+---
+
+## RK-10 — the verify→promote insertion window was reasoned about and never executed
+
+**Coverage gap, recorded because the review left it implied.** The original work argued about what
+happens to a row inserted between the verify pass and the rename, and the argument was right — but
+nothing in the suite ever put a row there. RK-02 is what that unexecuted window turned out to be
+worth in practice.
+
+**Now executed.** `TestKeyRotateReportsCredentialsSealedWhileItRan` fires a SQLite trigger on the
+insert of the `key.rotate.promote` audit row — the last write the command makes before it re-counts —
+so a row lands in exactly that window, deterministically, with no goroutine and no sleep. Neutering
+the post-promote check turns it red (M6 above).
+
+**What it does NOT prove, stated so the coverage is not read as wider than it is.** The trigger is a
+stand-in for a second process, not a second process. The test proves the command *detects and reports*
+a row that appears in that window; it does not prove anything about two real UsArr processes sharing
+a config directory, which is FI-06's territory and stays open. The genuine two-process sequence was
+reproduced by hand against a scratch config directory, not in the suite — there is no Docker and no
+supervisor in the gate, and a test that raced a real server against a real rotation would be the
+flaky kind LS-250 warns about.

@@ -187,8 +187,13 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 		log.Warn(masterKey.BackupNotice())
 	}
 
-	keyring, err := buildKeyring(cfg, masterKey, salt, log)
+	keyring, err := buildKeyring(ctx, cfg, st, masterKey, salt, log)
 	if err != nil {
+		_ = database.Close()
+		return nil, err
+	}
+	log.Info("keyring ready", "primary_kek_id", keyring.PrimaryID(), "active_kek_ids", keyring.IDs())
+	if err := warnStrandedCredentials(ctx, st, keyring, log); err != nil {
 		_ = database.Close()
 		return nil, err
 	}
@@ -289,7 +294,16 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 // a rotation is an operator action with an audit trail, and a startup path that
 // silently re-wrapped every row would do it unattended, unlogged by the
 // operator, and on a restart loop.
-func buildKeyring(cfg *config.Config, masterKey *config.MasterKey, salt []byte, log *slog.Logger) (*crypto.Keyring, error) {
+//
+// It takes the store only for the fatal branch below: an unreadable
+// secret.key.new has two remedies with opposite consequences, and which one is
+// safe depends on how many rows are wrapped under the key in that file.
+// warnStrandedCredentials, not this function, reports rows no key opens — that
+// is a diagnostic about the ring this returns, so it runs after it.
+func buildKeyring(
+	ctx context.Context, cfg *config.Config, st *store.Store,
+	masterKey *config.MasterKey, salt []byte, log *slog.Logger,
+) (*crypto.Keyring, error) {
 	kek, err := crypto.DeriveKEK(masterKey.Key, salt)
 	if err != nil {
 		return nil, err
@@ -313,8 +327,36 @@ func buildKeyring(cfg *config.Config, masterKey *config.MasterKey, salt []byte, 
 		// A secret.key.new that exists but cannot be read is fatal. Continuing
 		// would leave whichever rows the interrupted rotation already re-wrapped
 		// unopenable, and report nothing worse than a red connection test.
+		//
+		// The REMEDY is not one sentence, and the shorter version of it was a
+		// data-loss instruction. This used to say "restore or remove it"
+		// unconditionally, and on a rotation interrupted after its re-wrap pass
+		// had moved rows, removing the file destroys every one of them
+		// permanently — the file is the only remaining source of the key those
+		// rows name. Which of the two states this is cannot be guessed, so it is
+		// counted: rows outside the live key's ids are rows that need the
+		// unreadable file.
+		//
+		// A failure to count is not allowed to soften the message. The generic
+		// advice is what gets printed only when the count says zero rows are at
+		// stake; when the count itself is unavailable the operator gets the
+		// cautious form, because "remove it" is unrecoverable and "restore it"
+		// is not.
+		stranded, countErr := st.ListCredentialsOutsideKEKIDsIncludingDeleted(ctx, keyring.IDs())
+		if countErr == nil && len(stranded) == 0 {
+			return nil, fmt.Errorf("an interrupted key rotation left %s in place and it could not be read: %w. "+
+				"No stored credential is wrapped under it, so restoring or removing it are both safe; "+
+				"see docs/CONFIGURATION.md §3.4", cfg.NewSecretKeyPath(), err)
+		}
+		count := "an unknown number of"
+		if countErr == nil {
+			count = fmt.Sprintf("%d", len(stranded))
+		}
 		return nil, fmt.Errorf("an interrupted key rotation left %s in place and it could not be read: %w. "+
-			"Restore or remove it before starting; see docs/CONFIGURATION.md §3.4", cfg.NewSecretKeyPath(), err)
+			"%s stored credential(s) are wrapped under the key in that file and nothing else on disk can "+
+			"open them, so RESTORING IT IS THE ONLY SAFE ROUTE — removing it destroys those credentials "+
+			"permanently and they can only be re-entered by hand. "+
+			"See docs/CONFIGURATION.md §3.4", cfg.NewSecretKeyPath(), err, count)
 	}
 
 	pendingKEK, err := crypto.DeriveKEK(pending, salt)
@@ -330,6 +372,51 @@ func buildKeyring(cfg *config.Config, masterKey *config.MasterKey, salt []byte, 
 		"pending_key_file", cfg.NewSecretKeyPath(),
 		"active_kek_ids", keyring.IDs(), "primary_kek_id", keyring.PrimaryID())
 	return keyring, nil
+}
+
+// warnStrandedCredentials reports, at startup, every stored credential whose
+// kek_id no key in the ring holds.
+//
+// WHY IT EXISTS. Such a row is unopenable, and until this ran the only way to
+// find that out was to use the credential: a connection test or a search went
+// red with `crypto: envelope names a key id not in the keyring`, one instance at
+// a time, with nothing saying how many others were in the same state. The two
+// ways to get there are both real and both silent — a `usarr key rotate` that
+// ran while a server was up (see strandedAfterPromote), and a secret.key.new
+// deleted rather than restored after an interrupted rotation.
+//
+// WHY IT WARNS RATHER THAN REFUSING. A stranded row is a per-row condition, not
+// a broken install: every other credential still works, and the fix is to
+// re-enter the affected API keys through the UI — which requires the server to
+// be running. Refusing would make the one action that repairs the condition
+// impossible, and it would do so on a state that can be entirely stale, since
+// service_instance never hard-deletes and a tombstoned row keeps its ciphertext
+// forever. A row deleted two years ago would then hold the process down. The
+// missing-key and missing-salt ladders in buildApp refuse instead, and the
+// difference is deliberate: there the WHOLE keyring is absent and continuing
+// would seal new rows under material that opens nothing, which is not
+// recoverable through the UI or through anything else.
+//
+// A failure to run the query IS fatal, because it is a database error rather
+// than a key one, and a startup that cannot read service_instance has a problem
+// this diagnostic is not the right place to swallow.
+func warnStrandedCredentials(ctx context.Context, st *store.Store, keyring *crypto.Keyring, log *slog.Logger) error {
+	stranded, err := st.ListCredentialsOutsideKEKIDsIncludingDeleted(ctx, keyring.IDs())
+	if err != nil {
+		return err
+	}
+	if len(stranded) == 0 {
+		return nil
+	}
+	for _, c := range stranded {
+		log.Warn("this service's stored credential cannot be opened by any key this process holds; "+
+			"re-enter its API key to repair it",
+			"service_instance", c.ID, "name", c.Name, "kek_id", c.KEKID, "deleted", c.Deleted)
+	}
+	log.Warn("stored credentials name a key id no key on disk derives — they were sealed under a key "+
+		"that has since been rotated away or deleted, and re-entering each API key is the only repair",
+		"count", len(stranded), "active_kek_ids", keyring.IDs())
+	return nil
 }
 
 // Close releases the database. The HTTP server is drained by the caller first.

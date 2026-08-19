@@ -183,3 +183,96 @@ func TestRotationReadSkipsNonEnvelopes(t *testing.T) {
 		t.Fatalf("the placeholder row was skipped by rotation but must still exist: %v", err)
 	}
 }
+
+// TestStrandedListSeesTombstonesAndSkipsHeldKeys drills
+// ListCredentialsOutsideKEKIDsIncludingDeleted, which is what both the
+// post-promote report and the startup diagnostic read.
+//
+// The tombstone is the case that matters and is the reason this function is in
+// the deleted_at-ignoring group with the other three: a soft-deleted row keeps
+// its ciphertext forever, so it can be stranded exactly like a live one, and a
+// version of this built on the visible-row helpers would report an install as
+// healthy while a tombstone sat under a key nothing holds. See REVIEW-LOG.md
+// RK-01 for why that grouping exists and RK-02 for what reads it.
+func TestStrandedListSeesTombstonesAndSkipsHeldKeys(t *testing.T) {
+	ctx := t.Context()
+	s := newTestStore(t)
+	kr := newTestKeyring(t)
+	heldID := kr.PrimaryID()
+
+	held := sealInstance(t, s, kr, "Radarr", "http://radarr.lan:7878")
+	strandedLive := sealInstance(t, s, kr, "Sonarr", "http://sonarr.lan:8989")
+	strandedDead := sealInstance(t, s, kr, "Old Lidarr", "http://lidarr.lan:8686")
+	if err := s.SoftDeleteServiceInstance(ctx, strandedDead, testNow); err != nil {
+		t.Fatalf("SoftDeleteServiceInstance: %v", err)
+	}
+
+	// Move two rows to an id the ring does not hold. The envelope is left alone
+	// on purpose: this function reads the kek_id column, which is what makes it
+	// usable at startup before anything has been opened.
+	const goneID uint32 = 424242
+	for _, id := range []int64{strandedLive, strandedDead} {
+		env := envelopeFor(t, s, id)
+		if err := s.RewrapCredentialsIncludingDeleted(ctx,
+			[]CredentialRewrite{{ID: id, Envelope: env, KEKID: goneID}}); err != nil {
+			t.Fatalf("move service_instance %d: %v", id, err)
+		}
+	}
+
+	got, err := s.ListCredentialsOutsideKEKIDsIncludingDeleted(ctx, []uint32{heldID})
+	if err != nil {
+		t.Fatalf("ListCredentialsOutsideKEKIDsIncludingDeleted: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d stranded row(s), want the live one and the tombstone: %+v", len(got), got)
+	}
+	seen := map[int64]StrandedCredential{}
+	for _, c := range got {
+		seen[c.ID] = c
+	}
+	if _, ok := seen[held]; ok {
+		t.Error("a row at a held key id was reported as stranded")
+	}
+	if c, ok := seen[strandedLive]; !ok || c.Deleted || c.Name != "Sonarr" || c.KEKID != goneID {
+		t.Errorf("the live stranded row is wrong or missing: %+v (present=%v)", c, ok)
+	}
+	if c, ok := seen[strandedDead]; !ok || !c.Deleted || c.Name != "Old Lidarr" {
+		t.Errorf("the TOMBSTONED stranded row is wrong or missing: %+v (present=%v)", c, ok)
+	}
+
+	// Holding both ids leaves nothing stranded, which is the healthy install.
+	rest, err := s.ListCredentialsOutsideKEKIDsIncludingDeleted(ctx, []uint32{heldID, goneID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rest) != 0 {
+		t.Errorf("rows reported stranded while every id they name is held: %+v", rest)
+	}
+
+	// An empty held set means nothing is holdable, so everything is stranded.
+	// It is the honest reading and no caller passes it; asserting it stops a
+	// future caller from discovering it means "nothing is wrong" instead.
+	all, err := s.ListCredentialsOutsideKEKIDsIncludingDeleted(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 3 {
+		t.Errorf("an empty held set reported %d stranded row(s), want all 3", len(all))
+	}
+}
+
+// envelopeFor reads one row's stored envelope, tombstones included.
+func envelopeFor(t *testing.T, s *Store, id int64) []byte {
+	t.Helper()
+	rows, err := s.ListCredentialEnvelopesIncludingDeleted(t.Context(), 0, 0)
+	if err != nil {
+		t.Fatalf("read credentials: %v", err)
+	}
+	for _, c := range rows {
+		if c.ID == id {
+			return c.Envelope
+		}
+	}
+	t.Fatalf("service_instance %d is not in the table", id)
+	return nil
+}
