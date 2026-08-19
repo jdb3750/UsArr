@@ -21595,3 +21595,150 @@ arriving a second time in the same area.
 **No ADR.** Nothing here closes off an alternative: one document was brought level with code that
 already had its reasoning written down, and one guard was written for a claim two existing guards
 could not reach.
+
+---
+
+# Batch header, as drafted — ADR-0057 and ADR-0058, the two decisions slice 0 took and did not record
+
+**`LS-376` and `LS-377`, allocated by the coordinator.** ⚠️ The gap either side of them is
+deliberate — `LS-375` is the high-water on `main` and the next lane starts at `LS-378` — so **nobody
+renumbers these to close it**. Nothing in this batch touches the `SD-`, `DS-` or `RK-` series.
+
+`568ddbc` — the BookOrbit adapter's slice 0 — took two decisions that close off alternatives and
+wrote neither of them into `DECISIONS.md`. Both are now recorded, as
+[ADR-0057](./DECISIONS.md#adr-0057) and [ADR-0058](./DECISIONS.md#adr-0058), at `24c4a4d`.
+
+**The brief that ordered the ADRs came with the claims to be written, and required them verified
+against the tree before they were repeated.** **One of the brief's claims did not survive the check**
+— the line ledger — and while checking the one beside it, **a second overstatement was found in the
+tree itself**, in a comment the lift had just written. A third correction was to the ADR's own draft
+wording. All three are corrected in what landed rather than restated, and all three are the
+substance of `LS-376` below. Everything else in the brief held, which `LS-377` records rather than
+passes over.
+
+## LS-376 — ⚠️ ADR-0057's supporting claims were re-measured: the line ledger was wrong in the direction that flatters the change, and a comment written by the same commit overstates its own justification
+
+**What was asked to be written.** The brief for ADR-0057 supplied two supporting facts: that the
+lift removed **"net −347 lines of duplicated state machine"**, and that `internal/kavita` and
+`internal/servarr` keeping their exported names as aliases left `internal/releases` and
+`internal/libsync` untouched. It also required each claim to be verified against the tree, and any
+that did not hold to be reported rather than repeated. Both were checked. The second is true. The
+first is not, in the form it was given.
+
+**Claim 1, the line ledger, measured on `568ddbc`'s own `--numstat`:**
+
+| File | + | − |
+| --- | --- | --- |
+| `internal/breaker/breaker.go` | 245 | 0 |
+| `internal/breaker/breaker_test.go` | 103 | 0 |
+| `internal/kavita/breaker.go` | 27 | 177 |
+| `internal/kavita/client_test.go` | 4 | 1 |
+| `internal/servarr/breaker.go` | 26 | 169 |
+
+📌 **Dated note, 2026-08-19 — the sha in the sentence above is the merge; the content commit is [`c324cbf`](https://github.com/jdb3750/UsArr/commit/c324cbf).** The sentence and the table stand as written; what is corrected is only where to run the measurement. `568ddbc` is *"Merge remote-tracking branch 'origin/main' into worktree-agent-ad1278a29632c4c71"*, and its own `--numstat` is seventeen files of library-screen, search and docs work containing **no breaker file at all**. The five rows above are `c324cbf`'s — *"feat(bookorbit): slice 0 — the client and the credential path"*, `568ddbc`'s first parent — and `git show --numstat c324cbf` reproduces all five exactly, re-measured here rather than inferred. ⚠️ **[ADR-0057](./DECISIONS.md#adr-0057) carries the same misattribution**, in its index row's *"neither appears in `568ddbc`'s diff at all"*; it is **recorded here and not corrected there**, because `DECISIONS.md` is not this lane's file to edit. ✅ **The claim itself is unaffected either way**: `internal/releases` and `internal/libsync` appear in the diff of neither commit.
+
+**347 is the commit's whole deletion count, not a net figure**, and it is not all state machine:
+346 lines come from the two copied breakers and the 347th is the single test line in
+`client_test.go`. The two client files go from **202** and **192** lines to **52** and **49** — so
+394 lines of duplication become 101 lines of alias wrapper — against a **245**-line new package and
+a **103**-line new test. **Counted honestly the tree is larger, not smaller.** The ADR states the
+table's numbers and says so in as many words: what the lift buys is *one* state machine instead of
+two, which is what the instruction in `internal/kavita/breaker.go` actually asked for. It never
+claimed a line saving, and the ADR does not claim one on its behalf.
+
+⚠️ **This is worth an entry rather than a silent fix**, because "−347 lines" is the kind of figure
+that gets quoted forward out of a commit message into a design document, where nobody re-derives it.
+It is *true of the diff* and false as a description of the change.
+
+**Claim 2, the untouched consumers: confirmed, and by the stronger evidence.** `568ddbc` touches
+**five** Go files outside `internal/bookorbit`, all in `internal/breaker`, `internal/kavita` or
+`internal/servarr`; `internal/releases` and `internal/libsync` appear nowhere in the diff, and
+`internal/servarr/breaker_test.go` — five tests, including the jitter bound and the independence
+check — was not touched either and passes unchanged against the shared implementation. The one test
+change outside the new package is `internal/kavita/client_test.go:339-343`,
+`BreakerConfig{}.withDefaults()` → `.WithDefaults()`, plus three comment lines saying why the method
+is exported now.
+
+**🚩 A third claim was found while checking the second, and it is in the tree rather than in the
+brief.** `internal/servarr/breaker.go`'s own file comment — written by the lift — says the wrapper
+exists because *"`internal/releases` matches on it with `errors.Is` to render
+`OutcomeBreakerOpen`"*. **It does not.** `runLeg` (`internal/releases/search.go:604-614`) sets
+`OutcomeBreakerOpen` from `br.Allow() != nil` without inspecting the sentinel at all, and the only
+`errors.Is` against `servarr.ErrBreakerOpen` anywhere in that package is in
+`grab_outcome_test.go:176`. The wrapper's *reason* is still sound — `internal/libsync` matches
+`kavita.ErrBreakerOpen` with `errors.Is` in production code (`credits.go:385`, `files.go:261`) — so
+ADR-0057 rests the sentinel argument there instead, and records the overstatement inline so the next
+reader of that comment is not misled by it.
+
+⏭️ **Open, and deliberately not fixed here:** the comment in `internal/servarr/breaker.go` still
+says it. Correcting a code comment was outside the ADR lane's file ownership. It is a one-line
+change and it belongs to whoever next edits that file.
+
+✅ **Closed 2026-08-19 by [`7c8b53c`](https://github.com/jdb3750/UsArr/commit/7c8b53c)**, *"docs: breaker.go's sentinel rationale states a check the code does not make"* — read on `main` rather than taken on report. **The ⏭️ Open verdict above stands as written**: it was true of the tree when this entry was drafted, and the newer verdict sits beside it rather than over it. `internal/servarr/breaker.go`'s comment now states what the code does — *"Allow() returns THIS package's ErrBreakerOpen, though nothing outside the package matches on it today: internal/releases builds per-indexer breakers through NewBreaker and renders OutcomeBreakerOpen from any non-nil Allow(), without inspecting the sentinel"* — and keeps the wrapper's real reason beside it, that the sentinel is this package's published error surface and that `internal/kavita`'s equivalent really is matched by `internal/libsync`. It landed **comment-only**, seven lines added and four removed, which is the shape this residual predicted. ℹ️ **One knock-on to the ledger above:** those three net comment lines take `internal/servarr/breaker.go` from **49** lines to **52**, so the alias wrappers total **104** lines on `main` today rather than 101. The finding's direction is unchanged — counted honestly the tree is still larger, not smaller.
+
+**🔍 The third correction was to the ADR's own draft, and is recorded because the draft was
+plausible.** It first said the §7.5 tuning is *"now pinned by three suites rather than two, because
+each client's defaults test deliberately stays in that client's package"*. **`internal/servarr` has
+no defaults test.** The numbers are asserted explicitly in three places — `internal/breaker`'s
+`TestDefaultsAreTheArchitectureNumbers`, and a client-side assertion in
+`internal/kavita/client_test.go` and `internal/bookorbit/client_test.go` — while `internal/servarr`
+pins the same numbers **behaviourally**, through `TestBreakerOpensAfterFiveFailures`,
+`TestBreakerBackoffDoublesAndCaps` and `TestBreakerJitterStaysWithinTwentyPercent`, which exercise
+5 / 5 s / 15 m / ±20% without ever naming them. The count *"three"* survived; the reason given for
+it did not, and the ADR now names which three and what the fourth does instead. The distinction
+matters to anyone deciding whether it is safe to delete one of them.
+
+## LS-377 — ADR-0058's claims held, and the one that most needed checking is the one a test already enforces
+
+**Every figure in the brief for ADR-0058 was checked against `internal/bookorbit/scope.go` and its
+tests, and all of them hold.** Recorded because a clean check is evidence too, and because the
+counts are the kind that drift:
+
+| Claim | Measured |
+| --- | --- |
+| 23 members in BookOrbit's `Permission` enum | ✅ `allPermissions` has 23 |
+| every member classified elevated or unneeded | ✅ 14 + 9 = 23, no overlap |
+| unrecognised permission grades **elevated** | ✅ `classifyScope`'s `default:` branch |
+| superuser / non-`shared` provisioning / inactive are separate findings | ✅ three appends before the permission loop, and **not all the same severity** — superuser is `ScopeElevated`, the other two are `ScopeUnneeded` |
+| zero extra requests | ✅ `classifyScope` takes an `AccountView` built from the login response; it makes no call, and `TestScopeIsPopulatedByTheMintAtNoExtraCost` pins that |
+| reports and warns, does not refuse | ✅ `auth.go` logs at WARN on a non-minimal verdict and returns the session; no path refuses on scope |
+
+⚠️ **One thing in the brief was stated more loosely than the code, and the ADR follows the code.**
+"The superuser flag, a non-`shared` `provisioningMethod` and an inactive account are separate
+findings" is true, but reads as though all three are the same weight. They are not: only the
+superuser flag is elevated. Grading them by severity rather than by category is what keeps
+`ScopeVerdict.Elevated()` — the predicate ADR-0052's gate turns on — meaning exactly one thing, so
+the distinction is load-bearing and the ADR spells it out.
+
+**The decision that most deserved an ADR is the one that looks like a default.**
+`unrecognised → ELEVATED` is three lines in a `switch` and is easy to read as tidiness. It is the
+mechanism that makes the whole classification survive BookOrbit shipping a 24th permission: the
+alternative — grading an unknown grant harmless — produces no output, no failing test and no log
+line on exactly the day the classification exists for. ADR-0058 records it in *Consequences* with
+its cost stated rather than argued away: **a genuinely harmless upstream addition will grade
+elevated until a human classifies it**, so the grading is a maintenance obligation, not a
+self-maintaining mechanism. `TestEveryBookOrbitPermissionIsClassified` is the other half — it goes
+red on a 24th member — and the two together are why the enumeration is in code and not in prose.
+
+✅ **The §14 gate ADR-0052 named is discharged, and the distinction was made deliberately.** A
+discharged gate is **a task finished, not a claim falsified**, so ADR-0052 gains a *dated inline
+note* pointing at ADR-0058 and **none of the three amendment marks** — no index-row flag, no
+`Status:` flag, no amendment block — and **no sentence in it is struck**. The note also records that
+discharged is not vacated: ADR-0052's condition is on the **catalogue read**, so slice 1's first
+`StreamItems` must consult `ScopeVerdict.Elevated()`, and if a catalogue read ever lands without
+consulting it the gate is open again.
+
+## What a green gate is worth on this batch
+
+`make check` was run green twice on the ADR tree — before the merge of `origin/main` and again after
+it, at `48d8cce`. **The work is docs-only, so most of the gate attests nothing about it**: `gofumpt`,
+`golangci-lint`, `build-tagged`, `modverify`, the Go and web suites and `govulncheck` all measured a
+Go and Svelte tree that this change does not touch. **`gitleaks` is the one arm that reads the
+diff**, and it was fired deliberately rather than trusted: two planted credentials in a scratch file
+under `docs/` took `make secrets` red (*"leaks found: 2"*, exit 1), and the arm returned to green
+once the file was removed.
+
+🔍 **The drill's first attempt failed and that is worth recording**, because it is a trap for the
+next person who runs one. A planted `AKIAIOSFODNN7EXAMPLE` — AWS's own documentation key — scanned
+**clean**: gitleaks allowlists it. A drill using a well-known example credential proves the guard is
+*off*, not that it is on. The successful drill used non-example values.
