@@ -18,14 +18,20 @@
 // below STRUCTURALLY — no adapter, no wrapper, nothing between them, and
 // TestTheRealClientSatisfiesCoverSource is a compile-time proof of it.
 //
-// ⚠️ AND THERE IS NO CALLER. That is measured, not suspected. The work↔book-id
-// pairing exists in exactly ONE lexical scope in this tree — applyOneItem
-// (internal/store/catalogue.go), which IS the import pass — there is no
-// work_id → remote_id read in the other direction, no single-work store read, no
-// per-work HTTP route and no work-detail screen. So the honest end state of this
-// package is: complete, tested, and waiting on ONE call site that is a shape
-// decision about UsArr rather than either lane's to pick. Poster is per-work
-// precisely so that decision is not forced to be the import's batch gate.
+// ⚠️ THIS PARAGRAPH SAID "AND THERE IS NO CALLER", measured rather than
+// suspected, and named the shape the call site would have to take: "waiting on
+// ONE call site that is a shape decision about UsArr rather than either lane's
+// to pick. Poster is per-work precisely so that decision is not forced to be the
+// import's batch gate." THE CALL SITE NOW EXISTS and it took that shape.
+// internal/libsync/covers.go is phase D of a full import: a loop over Poster
+// that runs BETWEEN committed batches, never inside one, keyed by the same
+// (instance, remote kind, remote id) triple this package takes. It owns the
+// concurrency bound this package declines to build — see Poster — and its gate
+// refuses rather than queueing.
+//
+// What has NOT changed is the status above it: the pipeline has still never
+// been run against a real cover. It now has a caller that would, on an install
+// with a BookOrbit; nothing in this repository's tests supplies one.
 //
 // # What is deliberately NOT here
 //
@@ -303,6 +309,12 @@ var ErrRemoteIDNotABookID = errors.New("imagepipeline: remote id is not a BookOr
 // it in a loop is serial by construction; calling it from N goroutines opens N
 // connections, and NOTHING HERE STOPS THAT. Whoever writes the loop owns the
 // bound, and owes it a test that N+1 is refused.
+//
+// ⚠️ THAT DEBT IS NOW PAID BY ONE CALLER AND IS NOT PAID BY THIS PACKAGE.
+// internal/libsync's coverGate is a min(NumCPU, 4) semaphore over Poster calls,
+// process-wide, with libsync.AcquireCover exported so a test can fill it and
+// watch the refusal. Every sentence above still holds HERE: a second caller
+// inherits nothing, and owes its own bound.
 //
 // # The order of the two writes, which is not arbitrary
 //

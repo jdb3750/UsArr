@@ -255,11 +255,40 @@ func TestAddingABookOrbitProducesACatalogue(t *testing.T) {
 	// The credit and file passes issue NO requests of their own. Anything else
 	// would mean the card was read twice, which is the premise this whole slice
 	// rests on.
+	//
+	// ⚠️ THIS LOOP USED TO REFUSE EVERY `/books/` PATH, and that was right when
+	// nothing anywhere fetched a cover. internal/libsync's phase D now issues one
+	// GET /api/v1/books/{id}/cover per mapped book, so the assertion is narrowed
+	// to the claim it was really making — THE CARD IS NOT READ TWICE — rather than
+	// widened into a green by deletion. A cover is not the card: it is a different
+	// route, in a different pass, after the item stream has closed, and it can
+	// never carry a title, a credit or a year.
+	//
+	// The cover reads are COUNTED below rather than merely permitted, so a pass
+	// that started making two per book, or one per book on a re-import, still
+	// fails here.
+	covers := 0
 	for _, r := range bo.requests() {
+		if strings.HasSuffix(r.Path, "/cover") {
+			covers++
+			continue
+		}
 		if strings.Contains(r.Path, "/books/") {
 			t.Errorf("the import made a per-book read (%s %s); credits, files and the year "+
 				"all ride the card the walk already fetched", r.Method, r.Path)
 		}
+	}
+	if covers != 3 {
+		t.Errorf("cover reads = %d, want 3 — one per MAPPED book, and never one for a "+
+			"book the walk skipped", covers)
+	}
+	// ⚠️ AND NOTHING WAS RECORDED FROM THEM. This fake answers 404 on the cover
+	// route (its catch-all), which BookOrbit returns for a book with no cover
+	// file, a book that does not exist AND a book the credential cannot see — so
+	// no durable verdict may be derived from one. The import is still green and
+	// the catalogue is still complete, which is the whole behaviour.
+	if n := countIn(t, env, `SELECT COUNT(*) FROM image_asset`); n != 0 {
+		t.Errorf("image_asset rows = %d, want 0: a 404 must not be cached as 'no cover'", n)
 	}
 
 	// has_file comes from books.status, which is a first-class three-valued

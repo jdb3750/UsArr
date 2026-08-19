@@ -223,7 +223,7 @@ func buildApp(ctx context.Context, cfg *config.Config, log *slog.Logger, build h
 		log.Info("USARR_TRUSTED_PROXIES is empty: no forwarded header is believed and the peer IP is used as-is")
 	}
 
-	reg := newRegistry(st, keyring, log, build.Version)
+	reg := newRegistry(st, keyring, log, build.Version, cfg.ImageCacheDir())
 
 	var spa http.Handler
 	if web.Built() {

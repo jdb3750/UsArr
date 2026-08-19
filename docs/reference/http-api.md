@@ -954,16 +954,19 @@ rather than a verdict of record, and §4.3's table remains the only way to answe
 poll `last_full_sync_at`, which is written on success alone. The defect this closes is
 [`REVIEW-LOG.md` LS-152](../REVIEW-LOG.md); the producer is LS-180.
 
-### 5.2 There are five phases on a healthy run, and they are not a progress scale
+### 5.2 There are six phases on a healthy run, and they are not a progress scale
 
-⚠️ **This subsection used to say "exactly four phases" and list `containers` · `items` · `credits` ·
-`done`.** The `files` phase shipped with `streamAndApplyFiles` and this page was not updated with it;
-the SPA has had a `files` arm in `progressCounts` for longer than the paragraph above it was wrong.
-The correction is `REVIEW-LOG.md` LS-270; the four line numbers this paragraph used to carry were
-already stale before that, which is why none are cited now.
+⚠️ **This subsection has been wrong about the count twice, and the mechanism was the same both
+times.** It first said "exactly four phases" and listed `containers` · `items` · `credits` · `done`;
+the `files` phase had shipped with `streamAndApplyFiles` and this page was not updated with it
+(`REVIEW-LOG.md` LS-270). It then said **five** and named four publishing functions, all in
+`internal/libsync/importer.go` — and the `covers` phase shipped in `internal/libsync/covers.go`,
+which is a **different file in the same package**. The list is now read off the package rather than
+off one file: `web/src/lib/api.test.ts` scans every non-test `.go` file in `internal/libsync` for a
+`Phase:` publish site and fails when the client's known set and the producer's disagree in either
+direction. **Do not re-derive this list by reading `importer.go`.**
 
-`containers` · `items` · `credits` · `files` · `done`, published from four functions in
-`internal/libsync/importer.go`:
+`containers` · `items` · `credits` · `files` · `covers` · `done`:
 
 | `phase` | Published by | How often |
 | --- | --- | --- |
@@ -971,11 +974,12 @@ already stale before that, which is why none are cited now.
 | `items` | `streamAndApply`'s `flush` | Once per **committed** batch — and **none at all** when nothing was read, because `flush` returns early on an empty batch. |
 | `credits` | `streamAndApplyCredits`'s `flush` | Once per committed credit batch. **Skipped entirely** when the Source is not a `CreditSource`, or when no item committed. |
 | `files` | `streamAndApplyFiles`'s `flush` | Once per committed file batch. **Skipped entirely** when the Source is not a `FileSource`, or when no item committed. |
+| `covers` | `fetchCovers`'s `publishCoverProgress` (`covers.go`) | Once per 50 items settled, plus a final frame. **Skipped entirely** when the Importer has no `PosterFetcher`, or when no item committed. Unlike the three above it, its beat is a stride rather than a committed batch — the cover pass commits per item, so a frame each would be one per book. |
 | `done` | `FullImport` | Exactly once, and on success only — after `StampFullSync`. |
 
-🚩 **Five is a ceiling, not a shape.** Three of the five are conditional, so a wholly healthy run over
-a source that implements neither optional interface publishes `containers` and `done` and nothing
-between them. A client that blocks waiting for a phase it was never going to be sent waits for ever;
+🚩 **Six is a ceiling, not a shape.** Four of the six are conditional, so a wholly healthy run over
+a source that implements no optional interface and has no cover fetcher publishes `containers` and
+`done` and nothing between them. A client that blocks waiting for a phase it was never going to be sent waits for ever;
 the phases are ordered, and that is the only sequencing promise on offer.
 
 A phase is carried as the string the server sent. A client that has not heard of a phase should say
@@ -983,16 +987,17 @@ less about the frame, not drop it — which `progressCounts`
 (`web/src/lib/services.ts`) already does, rendering an unrecognised phase's counts under a `default`
 arm that declines to name it. **§5.5's `stopped` is a sixth phase value and is emitted today**, but
 from `cmd/usarr` rather than from any of the sites above — which is why a healthy run still shows
-only these five, and why a client must handle both a `stopped` that arrives and one that never does
+only these six, and why a client must handle both a `stopped` that arrives and one that never does
 (§5.1's three silences).
 
-### 5.3 Only the two per-item passes send a `total` — `credits` and `files`
+### 5.3 Only the three per-item passes send a `total` — `credits`, `files` and `covers`
 
-⚠️ **This subsection used to read "Only `credits` ever sends a `total`" and cite one line number for
-it.** The `files` publish sets one too, on the same terms (LS-270).
+⚠️ **This subsection has understated the set twice.** It read "Only `credits` ever sends a `total`"
+and cited one line number for it; the `files` publish sets one too, on the same terms (LS-270). The
+`covers` publish is the third, on the same terms again.
 
-`total` is `omitempty`, and the only two sites that set it are the `credits` and `files` publishes
-inside `streamAndApplyCredits` and `streamAndApplyFiles`. Both set it to the length of the request
+`total` is `omitempty`, and the only three sites that set it are the `credits`, `files` and `covers`
+publishes inside `streamAndApplyCredits`, `streamAndApplyFiles` and `fetchCovers`. All set it to the length of the request
 list the pass was handed — **the items that reached a committed batch**, which is UsArr's own count
 of the work that pass has to do, not a figure the upstream reported. `containers`, `items` and `done`
 send no total at all, because Kavita reports its own item total in a `Pagination` header that is
@@ -1010,7 +1015,16 @@ sentence with real counts rather than a bar.
 | `items` | catalogue items read from the source | catalogue items in a **committed** batch | absent |
 | `credits` | credit sets read | **credit rows written** | credit *requests*, i.e. **items** |
 | `files` | file sets read | **file rows written** | file *requests*, i.e. **items** |
+| `covers` | items **settled** — fetched, skipped as already-postered, answered 404 or 403, or failed | **covers fetched, rendered and recorded** | cover *requests*, i.e. **items** |
 | `done` | catalogue items read, final | catalogue items applied, final | absent |
+
+⚠️ **`covers` is the one phase where `items_read` and `applied` legitimately differ by a lot, and a
+client must not read the gap as failure.** On a re-import of a library that already has its artwork,
+every item is settled and *none* is fetched — `items_read` reaches `total` while `applied` stays `0`,
+and that is the correct, fully successful outcome. A book the credential gets a **404** for is also
+settled and not fetched: BookOrbit answers 404 for a missing cover file, a missing book **and** a
+book its content filters hide, so nothing durable is recorded from one and the next import asks
+again. **A blank poster is never evidence that a book has no artwork.**
 
 **`items_read` is a RUNNING count in every streaming phase, not a figure settled when the phase
 ends.** It is incremented per item handed over, so a frame published part-way through a phase

@@ -68,9 +68,15 @@ import (
 //     built is the WIRING of §4.4's fetch half. ⚠️ "nothing writes
 //     `image_asset`" was true when this bullet was written and is not any more:
 //     internal/imagepipeline fetches, renders and records a poster, and
-//     internal/store's PutPosterAsset writes the row. What is still true of a
-//     real install is that no import calls it yet, so the key is absent on
-//     every row and every /img request still answers not_cached.
+//     internal/store's PutPosterAsset writes the row. ⚠️ AND THE THIRD CLAUSE —
+//     "no import calls it yet, so the key is absent on every row" — IS FALSE
+//     NOW TOO: internal/libsync's phase D (covers.go) calls it once per
+//     imported book on a BookOrbit import, so `poster_key` is populated for
+//     works whose cover that pass got. What is STILL unbuilt is every other
+//     source of a poster: no other adapter fetches one, nothing backfills a
+//     work imported before the pass existed, and a 404 is deliberately left
+//     un-recorded, so an absent key is an ordinary answer rather than evidence
+//     of a broken route.
 //   - No Block A. It is §17.2's per-type rollup row. ⚠️ THIS BULLET USED TO
 //     READ "No Block A and no Block B ... and server.go routes neither", AND
 //     BOTH HALVES OF THAT WERE WRONG BY THE TIME IT WAS READ. Block A's
@@ -491,9 +497,12 @@ func posterKeyFor(s *Server, workID int64, key sql.NullString) string {
 // response carries `poster_key`, the `image_asset.cache_key` that route takes.
 // What is unbuilt is the WIRING of §4.4's fetch half. ⚠️ "nothing writes
 // `image_asset`" is no longer true — internal/imagepipeline renders a poster and
-// internal/store's PutPosterAsset records it — but nothing CALLS it during an
-// import, so on a real install the key is still absent on every row and every
-// /img request still answers not_cached.
+// internal/store's PutPosterAsset records it. ⚠️ NOR IS "nothing CALLS it during
+// an import": internal/libsync's phase D (covers.go) does, once per imported
+// book on a BookOrbit import. An absent `poster_key` is therefore an ordinary
+// answer — a work from another adapter, a work imported before that pass
+// existed, or a book the credential got a 404 for, which is deliberately not
+// recorded as a verdict — and not evidence that the route is unbuilt.
 //
 // ⚠️ THE FACET COUNTS ARE BUILT — they are just not on THIS response. See
 // facets.go and http-api.md §8: GET /api/v1/library/facets answers all six in
