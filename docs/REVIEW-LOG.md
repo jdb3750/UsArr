@@ -22309,3 +22309,193 @@ prior mentions in this file — `LS-34`'s finding and its guard-1 narrative, and
 bullet in the search-scope entry — none concerning the alias; `alias`, `a7ea2bc` and `worklinks`
 returned nothing bearing on it. This is a new finding, not an amendment to `LS-34`, whose subject is
 the absence of a predicate rather than the shadowing of one.
+
+---
+
+# SD-11 — `00008`'s ADR-0039 comment has dated; the pointer, and the line between an obligation that may stand and a behaviour that may not
+
+**Applied as a pointer. This is the fourth member of an existing family, not a new convention**, and
+it is worth being blunt about that before anything else: the rule that a false sentence in a merged
+migration is corrected *elsewhere* rather than in the migration was settled here already, three
+times. `LS-321` is the governing entry — *"`00005`'s `source_url` comment cites `security.md §6` and
+the rule is §5; the migration is not edited and this entry is the pointer"* — and it names the two
+prior instances itself: `docs/reference/schema.md:684-685`, which leaves a superseded `00005` comment
+standing and corrects it in the doc *"because it transcribes migration 0005's own SQL, and a merged
+migration is never edited"*, and **`LS-297`**, whose wording is the family's canonical form —
+*"`00003` is not edited — a merged migration is never edited — and this entry is the pointer."*
+**Nothing below reopens any of that.** What this entry adds is one distinction those three did not
+need and this occasion does: **not every dated sentence in a merged migration is equally safe to
+leave standing, and the difference is whether it states an obligation or a behaviour.**
+
+## The occasion
+
+`internal/db/migrations/00008_image_asset_format.sql:150-152`, verbatim:
+
+```
+-- PROMISE WAS MADE IT WAS NEVER KEPT. ADR-0039's outstanding debt is that the
+-- Go validator it promised for write_queue.state was never written, so that
+-- vocabulary is enforced nowhere that runs.
+```
+
+`007e58e` — *"feat: `write_queue.state`'s Go validator, which ADR-0039 has been owed since 0005"* —
+discharged that debt. It is on `origin/main` (`git merge-base --is-ancestor 007e58e origin/main`
+exits 0), and `ValidWriteQueueState` is live at `internal/store/writequeue.go:91`. So the sentence
+above is now false in its central clause, in a file this project does not edit.
+
+**`CLAUDE.md:160`: *"goose migrations. **A merged migration is never edited** — write a new one."***
+Seconded unqualified at `docs/DEVELOPMENT.md:537`. `LS-321` already established that **no document
+scopes that rule to DDL**, and that `TestMigrationRoundTrip` gives it a mechanism rather than only a
+convention — comment text inside a `CREATE TABLE` is stored verbatim in `sqlite_schema.sql` and
+checked in byte-for-byte under `internal/db/testdata/`. `00008` is untouched by this entry. That
+refusal *is* the ruling.
+
+## 🚩 The argument survives. Only the fact dated. This is the half a reader must not get wrong
+
+That sentence is not decorative prose that happened to go stale. **It is the load-bearing
+justification for `00008` shipping `ValidImageFormat` and its AST guard at all** — cited as the
+negative precedent `00008` was designed not to repeat, which is why the comment is headed *"WHERE THE
+GO-SIDE VALIDATION LIVES, NAMED HERE BECAUSE THE LAST TIME THIS PROMISE WAS MADE IT WAS NEVER KEPT."*
+`LS-285` records the same reasoning from the review side: *"Making the same trade with the same
+promise would have been worse than just writing a `CHECK`."*
+
+📌 **`00008` was right, and is more right now, not less.** Its argument was *a promise to validate in
+Go is worth less than shipped validation*, and the evidence for it was that the one prior instance of
+that promise had gone two migrations unkept. The debt being paid at `007e58e` — after `00005`,
+`00006`, `00007` and `00008` — does not refute the argument; it dates the tally the argument cited.
+A reader arriving at `00008:150` must come away thinking *"the number in that sentence moved"*, never
+*"that migration's reasoning was wrong."*
+
+## What is actually true of the validator, in three clauses — and the third is not optional
+
+An entry that dropped clause 3 would be false, so all three are stated:
+
+1. **A validator exists**, `store.ValidWriteQueueState` (`internal/store/writequeue.go:91`), and it
+   is the single Go home for the vocabulary.
+2. **The tree's only `write_queue` writer routes through it** — `internal/db/spike/fixture.go`,
+   behind `//go:build bench`.
+3. 🚩 **There is still no production writer.** At runtime nothing validates anything, because nothing
+   writes anything.
+
+**`internal/httpapi/grabs.go:57-61` already states clauses 2 and 3 in the tree** and is cited rather
+than re-derived: *"The vocabulary is `store.ValidWriteQueueState`'s and nowhere else's … Nothing in
+v0.1 writes `write_queue`; the one writer in the tree is the bench fixture behind `//go:build
+bench`."*
+
+ℹ️ **So the strongest true claim is not *"the vocabulary is validated."*** It is: **the first
+production writer cannot be written without validating, and the guard proving that has already caught
+a real writer.** `TestWriteQueueWritesValidateTheStateVocabulary`
+(`internal/store/writequeuelint_test.go:80`) AST-walks production code and fails the build if
+anything writes `write_queue` while nothing references the validator. 🔥 **It fired unplanted**
+against the bench fixture, and turning it green required changing the code rather than the test —
+`fixture.go:249` now carries the note that the guard fails the build if that write stops going
+through the validator.
+
+⚠️ **One consequence for the dated sentence itself, and it cuts finer than "false".** Clause by
+clause: *"the Go validator … was never written"* is now **false**. *"that vocabulary is enforced
+nowhere that runs"* is, by clause 3, **still true** — nothing writes, so nothing is enforced at
+runtime. The sentence has not gone uniformly wrong; its historical premise has, while its
+present-tense tail survives. That is exactly the shape the next section is about.
+
+## The rule this entry adds, which `LS-321` had no occasion to state
+
+`LS-321`, `LS-297` and `schema.md:684-685` all establish *where* the correction goes. None of them
+says **whether a given dated sentence needs one at all**, because in all three cases the answer was
+plainly yes. Here it is not, and the distinction that decides it is this:
+
+- **A dated-false OBLIGATION claim may stand.** *"X is owed"*, *"the validator was never written"*,
+  *"this vocabulary is enforced nowhere"* — a reader who acts on one either writes a duplicate of
+  something that already exists, or proceeds believing something is unchecked when it is checked.
+  **Both errors surface on the first grep.** `grep -rn ValidWriteQueueState` answers the question the
+  sentence provoked, immediately and at the point of action. The claim is self-correcting because
+  acting on it *is* the check.
+- **A dated-false BEHAVIOUR claim has no such backstop.** *"the system does X"* invites no grep — it
+  invites being repeated. **Behaviour claims propagate into copy**, and this repo has the receipt.
+  📌 **The precedent is the false-403 diagnosis, `2f02767`** (*"fix(bookorbit): the password-change
+  403 is unreachable, not a diagnosis"*, on `origin/main`). A comment on
+  `ErrPasswordChangeRequired` claimed the 403 precisely diagnosed a magic link minted against a
+  `createUser` account; it could not reach the client at all. Its own commit message states the
+  damage: *"Two user-facing messages repeated the unfounded half and would have sent a user to fix an
+  account state the mint path cannot produce"* — `cmd/usarr/services.go`'s `bookOrbitTestAction` and
+  `web/src/lib/services.ts`'s BookOrbit 401/403 hint list, plus `internal/bookorbit/resources.go`'s
+  `AccountView` doc. **A wrong explanation in a comment reached two user-facing strings before anyone
+  re-derived it.**
+
+**For a behaviour claim in a merged migration, therefore, a correction carried in the header of the
+next migration that is written anyway becomes near-mandatory**, because a pointer that lives only in
+this log is a pointer a reader of the SQL will not meet. For an obligation claim, the log entry is
+enough. `00008:150-152` is an obligation claim with a still-true behaviour tail, which is why it is
+left standing and this entry is the whole remedy.
+
+## ⚠️ The weaker reasoning is true and proves too much, which is why it is not the reason
+
+There is an easier defence available for leaving `00008` alone: **the file is historical by the same
+rule that forbids editing it, so of course it may carry a sentence that has dated.** That is true. It
+is also **not what is being relied on here, because it would license any false sentence whatsoever**
+— including a behaviour claim of the `2f02767` shape, which is precisely the one that must not be
+left to rot. A rule that cannot distinguish between the two is not a convention; it is a blanket
+excuse wearing one. **The asymmetry above is the entire content of this entry.** Recorded explicitly
+so that a later reader who finds only the weaker argument knows it was considered and declined.
+
+## The never-mint supplement
+
+**A new migration MAY carry corrections to older migrations' prose, when one is being written
+anyway.** That is the cheap half of the ruling above and it costs nothing: the header is being typed
+regardless.
+
+🚩 **It is never a reason to mint one.** A migration written to fix a comment is a schema change with
+no schema in it — and this project cannot un-merge one. The asymmetry between the two costs is the
+whole reason the supplement is safe to state: opportunistic correction is free, and a migration
+minted for it is permanent. Anyone reading this entry as a licence to write `00009` because
+`00008:150` is stale has inverted it.
+
+## Two things stated plainly
+
+**1. The comment was true when it was written.** ADR-0039 recorded the validator as owed — its
+Decision 1 still reads *"declaring and validating it in Go is **owed by whoever writes the first
+`write_queue` writer**"* — `00008` said so, and `007e58e` discharged it. **Nothing was wrong.** The
+file simply cannot follow the tree. **The convention is about the medium, not about anyone's care**,
+and an entry that reads as a criticism of `00008`'s author has been misread.
+
+**2. On the refusal to edit it: *"it is only a comment"* is exactly how a never-edit rule acquires
+its first exception.** The rule in `CLAUDE.md:160` and `DEVELOPMENT.md:537` is unqualified, `LS-321`
+established that no document narrows it, and the one recorded exception turned on `0001` **not being
+merged yet**. A carve-out for prose is a carve-out, and the next one is argued from this one.
+
+## Routed, not fixed here
+
+ℹ️ **ADR-0039's own Decision 1 carries the same dated obligation** (`docs/DECISIONS.md:4129`), and
+`DECISIONS.md` **is** editable — unlike `00008`. It is not touched by this entry because another lane
+holds that file. By this entry's own rule it is the safe class: an obligation claim, correctable in
+place by whoever owns it, whose reader-facing failure mode is a grep that answers itself. Noted here
+so the correction is routed rather than assumed done.
+
+## Id allocation
+
+**`SD-11` is the next free id after `SD-10`, and it was checked rather than assumed.** Measured at
+`f89ad9e`: `SD-08` at `:21385`, `SD-10` at `:21516`, `SD-09` at `:21799`, and `grep -n 'SD-11'`
+returning nothing. `SD-10` records why this file re-checks — *"the merge that invalidates the answer
+lands between the read and the commit"* — and its own ⚠️ note is the worked example, an entry
+prepared as `SD-08` and filed as `SD-10` after a different lane landed a real `SD-08` while it was
+held. **The number was allocated centrally and the allocation was verified against the file, not
+bumped**, which is the only discipline that keeps a central allocator meaningful. The `LS-`, `DS-` and
+`RK-` series are untouched: this entry cites `LS-285`, `LS-297` and `LS-321` and allocates none.
+
+## What a green gate is worth on this entry
+
+**Almost nothing, and the reason is `SD-07`'s and `SD-08`'s unchanged.** The only file this entry
+writes is `docs/REVIEW-LOG.md`, and `make check` reaches `docs/` through **`gitleaks` alone** —
+`fmt-check`'s prettier half runs `--dir web`, so no Markdown under `docs/` is formatter-gated, and no
+lint, compile or test arm opens a `.md` file. A green attests *"no credential-shaped string was
+added"* and **nothing whatever** about whether any sentence above is true.
+
+🔍 **What is re-runnable is the evidence, and it is listed so it can be repeated:**
+`sed -n '150,152p' internal/db/migrations/00008_image_asset_format.sql` for the verbatim comment;
+`git merge-base --is-ancestor 007e58e origin/main` for the discharge;
+`grep -n ValidWriteQueueState internal/store/writequeue.go` for `:91`;
+`grep -rn TestWriteQueueWritesValidateTheStateVocabulary --include='*.go' .` for the guard and for
+`fixture.go:249`; `head -3 internal/db/spike/fixture.go` for the `//go:build bench` tag;
+`sed -n '57,61p' internal/httpapi/grabs.go` for clauses 2 and 3 already stated in the tree; and
+`git log -1 --format=%B 2f02767` for the two user-facing strings the false-403 comment reached.
+📌 **The one arm that could have had an opinion is the round-trip test, and it has one only in the
+negative**: `00008` is unmodified, so `internal/db/testdata/schema.sql` is unmodified, so
+`TestMigrationRoundTrip` passes for exactly the reason this entry exists.
