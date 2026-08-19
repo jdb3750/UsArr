@@ -1707,7 +1707,12 @@ paragraph describing a repo that no longer exists.
   but it is **not** airtight: `cb0e37f` differs from *both* its parents in
   `docs/reference/security.md` (`+10` against one, `+2/-1` against the other), so simplification
   keeps it and it appears in that log looking exactly like an author. For one hunk rather than one
-  file, `git log -L 806,812:Makefile` answers `eb92062` on its own.
+  file, `git log -L 806,812:Makefile` answers `eb92062` on its own; and when you do not know *which*
+  file moved — the usual case, when someone hands you a SHA and nothing else —
+  `git log -S '<distinctive symbol or string>'` needs no path and names the commit whose diff
+  contains the change in one command: `-S 'BROWSE_AZ_UNAVAILABLE_MULTI_KIND'` answers `b811616`,
+  reported on 2026-08-19 as the merge `81108d9` that carried it (it matches on occurrence *count*,
+  so prose quoting the symbol answers too).
 
 Who leads which area, roughly. **The map is keyed by area of the repo, not by thread name**, and
 deliberately so: thread names churn — the three this table first named are now five, spread across
