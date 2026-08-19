@@ -1,0 +1,163 @@
+-- Migration 0011 — ix_sync_report_container_latest, the index that takes the
+-- sort out of the Libraries screen's newest-verdict pick.
+--
+-- SCOPE. Exactly one index, and nothing else:
+--
+--   ix_sync_report_container_latest
+--
+-- No table, no ALTER, no rebuild, no CHECK, no other object, and in particular
+-- NO DROP of the index that already exists on this table. This is the third
+-- index-only migration in a row — 00009 added one, 00010 added three — and it is
+-- here for the same kind of reason both of those were: a measured read wants a
+-- b-tree the schema does not offer, and one CREATE INDEX is the whole cost of
+-- serving it.
+--
+-- WHY THE READ NEEDS IT. internal/store/libraries.go's libraryCompletenessSQL
+-- renders the per-library completeness verdict on the Libraries screen. It picks
+-- the newest sync_report row per (instance, container_ref) pair with a
+-- correlated subquery:
+--
+--   SELECT r2.id FROM sync_report r2
+--    WHERE r2.service_instance_id = ls.service_instance_id
+--      AND r2.kind = ?                 -- 'content_completeness'
+--      AND r2.remote_kind = 'library'
+--      AND r2.remote_id = ls.container_ref
+--    ORDER BY r2.id DESC LIMIT 1
+--
+-- Four equality predicates and a descending pick on the primary key. The only
+-- index on the table is 00005's ix_sync_report_instance —
+-- (service_instance_id, created_at DESC) — which serves the FIRST predicate and
+-- none of the other three, and whose sort key is the wrong column entirely. So
+-- the newest-verdict pick could not come off it. Measured on the real schema,
+-- this engine (github.com/ncruces/go-sqlite3, SQLite 3.53.4), no ANALYZE, owner
+-- scope, before this migration:
+--
+--   CORRELATED SCALAR SUBQUERY 1
+--     SEARCH r2 USING INDEX ix_sync_report_instance (service_instance_id=?)
+--     USE TEMP B-TREE FOR ORDER BY          ← per library_source row
+--
+-- and after it:
+--
+--   CORRELATED SCALAR SUBQUERY 1
+--     SEARCH r2 USING COVERING INDEX ix_sync_report_container_latest
+--                     (service_instance_id=? AND kind=? AND remote_kind=? AND remote_id=?)
+--
+-- Four columns constrained instead of one, no row fetch, and THE SORT IS GONE.
+-- Per library_source row, SQLite previously walked every sync_report row for
+-- that instance, filtered kind/remote_kind/remote_id with no index help, then
+-- MATERIALISED AND SORTED the survivors to take one. sync_report is append-only
+-- and this kind writes one row per container per import, so the walked-and-
+-- sorted set grew with IMPORT COUNT, forever, on a render path — principle 1
+-- says every user-facing read renders from local SQLite, and it says nothing
+-- about that read being allowed to get slower every time an import runs.
+--
+-- ⚠️ DROPPING ix_sync_report_instance IS NOT THE ALTERNATIVE, and this was
+-- measured too, because it is the obvious lever and it is a trap. With that
+-- index dropped and no replacement, the subquery plans as a bare `SCAN r2` and
+-- the temp b-tree DISAPPEARS — a table scan visits rows in rowid order, which is
+-- `id` order, so `ORDER BY r2.id DESC` comes free off a full scan. The two
+-- shapes trade a bounded walk for a sort and NEITHER is what this read wants.
+-- The fix had to be a new b-tree; it could not be the absence of an old one.
+--
+-- BOTH INDEXES STAY, because they serve different reads and neither subsumes the
+-- other. ix_sync_report_instance is (service_instance_id, created_at DESC) and
+-- serves 00005's stated reader — "this instance's recent reports, newest first"
+-- on the Services screen — which this index cannot serve at all, since
+-- created_at is not in it and the three columns between the instance and any
+-- ordering are equalities the Services read does not carry. Conversely this
+-- index serves the four-equality probe that one cannot. A later tidy-up that
+-- reads "two indexes on one small table" and drops either is a regression in one
+-- of the two reads; internal/store/libraries_test.go's
+-- TestLibraryCompletenessPlanGuardFires arm 1 drops THIS one and watches the
+-- sort come back, so at least that half is executed rather than asserted here.
+--
+-- COLUMN ORDER IS THE DECISION. The three columns after service_instance_id are
+-- the equalities the subquery always carries — `kind` first because it is the
+-- one bound parameter and the most selective (the vocabulary grows as channels
+-- are built, and 'content_completeness' is one member of it), then remote_kind,
+-- then remote_id. Any order among the four equality columns would serve THIS
+-- probe equally, since all four are equalities; service_instance_id leads so the
+-- index is also usable by a future instance-scoped read that carries fewer of
+-- the other three, which is the same shape ix_sync_report_instance already bets
+-- on.
+--
+-- 🔍 THE TRAILING `id` IS REDUNDANT, EXPLICIT ON PURPOSE, AND MEASURED TO BE
+-- BOTH. `sync_report.id` is INTEGER PRIMARY KEY, so it is the rowid, and SQLite
+-- appends the rowid to every index key implicitly — the four-column index
+-- produces a BYTE-IDENTICAL plan to this five-column one, `COVERING` and all.
+-- It is written out anyway because the ordering guarantee this migration exists
+-- to buy then lives in the DDL rather than resting on an unstated identity
+-- between `id` and the rowid: if `sync_report` is ever rebuilt with a different
+-- primary key, a four-column index would lose the sort SILENTLY, where this one
+-- keeps it. The cost of the explicit column is that the value is stored twice in
+-- each index entry. That is the trade, stated so nobody "optimises" it back out
+-- without knowing what it was for. TestMigrate0011IndexShape pins all five.
+--
+-- NOT PARTIAL. `sync_report` has no soft-delete column and no tombstone
+-- predicate — it is an append-only operational log — so there is nothing to make
+-- this partial on. `remote_kind` and `remote_id` are both nullable and NULL rows
+-- are indexed like any other; a report that names no container is a real row
+-- (00005's `id_reused` shape carries one, other kinds do not) and it must stay
+-- visible to the Services read that walks the table.
+--
+-- NO 12-STEP REBUILD, for 00009's reason exactly: CREATE INDEX is not one of the
+-- ALTER forms SQLite's "making other kinds of table schema changes" procedure
+-- covers. No column is added, dropped, renamed or retyped, no CHECK moves, and
+-- no data is copied, so there is no window in which a row could be lost.
+-- TestMigrate0011DownAndUp says that rather than claiming data survived a copy
+-- that never happened.
+--
+-- PRAGMA foreign_keys=OFF is not written, for the reason 00005, 00006, 00007,
+-- 00009 and 00010 each give: goose runs each migration inside a transaction,
+-- SQLite documents the pragma as a no-op there, and there is no rebuild for it
+-- to protect.
+--
+-- THE COST, WHICH IS A WRITE COST AND IS BOUNDED. One more b-tree page set to
+-- maintain per sync_report insert. sync_report is written by the import sweep,
+-- never by a render path, and at one row per container per import the table is
+-- the smallest thing the sweep touches — 00009's flagship topology measures
+-- 58,500 edition rows against a container count in the tens. No read path
+-- writes a report.
+--
+-- DDL convention follows 00005's `sync_report` block and 00009: index names are
+-- `ix_<table>_<what>`, and the index is created beside the statement of what
+-- reads it.
+--
+-- A merged migration is NEVER edited. Write a new one.
+
+-- +goose Up
+-- +goose StatementBegin
+
+-- ─── The newest verdict per container · internal/store/libraries.go ──────────
+--
+-- (service_instance_id, kind, remote_kind, remote_id, id), in that order. See
+-- the header: the first four are the subquery's equalities and the fifth is the
+-- `ORDER BY r2.id DESC LIMIT 1` that used to cost a temp b-tree per
+-- library_source row. The plan this buys is pinned, both scopes, by
+-- TestLibraryCompletenessPlanIsSeeksAndOneSort in internal/store — which
+-- EXPLAINs the shipped statement rather than a copy of its text — and fired by
+-- TestLibraryCompletenessPlanGuardFires.
+CREATE INDEX ix_sync_report_container_latest
+  ON sync_report(service_instance_id, kind, remote_kind, remote_id, id);
+
+-- +goose StatementEnd
+
+-- +goose Down
+-- Downgrades are not a supported user path (docs/CONFIGURATION.md §6.3). This
+-- block exists so a migration can be tested locally, and for nothing else.
+--
+-- One DROP and no rebuild. An index holds no data of its own, so this loses
+-- nothing that a re-Up does not rebuild from `sync_report` itself. Nothing in
+-- the schema refers to an index by name, so no other object needs recreating.
+--
+-- ⚠️ WHAT THIS DOWN DOES NOT UNDO, stated because it is invisible: nothing. The
+-- newest-verdict subquery keeps returning the same verdict without this index —
+-- it returns it by walking ix_sync_report_instance and sorting, which is exactly
+-- the plan measured before this migration — so a rollback is a performance
+-- regression and never a wrong answer. Same property 00009's Down has, and the
+-- same reason it is safe in a way 00005's, 00006's, 00007's and 00008's are not.
+-- +goose StatementBegin
+
+DROP INDEX IF EXISTS ix_sync_report_container_latest;
+
+-- +goose StatementEnd

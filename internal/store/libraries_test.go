@@ -800,17 +800,64 @@ func TestListLibrariesOrderingSortIsIntentional(t *testing.T) {
 // one this read wants; whoever scopes the index above should know that dropping
 // the existing one is not the alternative.
 //
-// This is PINNED, NOT FIXED. The fix is an index leading with
-// (service_instance_id, kind, remote_kind, remote_id) and trailing id, which is
-// a new migration and a scoping decision that is not a test's to take. What the
-// guard buys meanwhile is that the plan cannot get WORSE than the paragraph
-// above without a test going red.
+// This was PINNED, NOT FIXED when it was first measured. The fix named there was
+// an index leading with (service_instance_id, kind, remote_kind, remote_id) and
+// trailing id — "a new migration and a scoping decision that is not a test's to
+// take". What the guard bought meanwhile was that the plan could not get WORSE
+// than the paragraphs above without a test going red.
 //
-// WHAT IS DELIBERATELY NOT ASSERTED: the absence of the two sorts, because they
-// are really there and forbidding them would fail on the first honest run — the
-// same posture TestSearchLibraryPlanIsSeeks takes for its two. They are asserted
-// as EXPECTED and counted, so if either disappears the plan changed shape and
-// this comment must be re-read rather than left silently wrong.
+// ─── RESOLVED by migration 0011, 2026-08-19 ─────────────────────────────────
+//
+// Everything above is the finding as it was measured, and it is kept verbatim so
+// the history stays readable: what was measured, what was done about it, and
+// when. What follows is what was done.
+//
+// internal/db/migrations/00011_sync_report_container_latest_index.sql creates
+// exactly the index the paragraph above scoped:
+//
+//	CREATE INDEX ix_sync_report_container_latest
+//	  ON sync_report(service_instance_id, kind, remote_kind, remote_id, id);
+//
+// RE-MEASURED, same engine, same schema, same corpus, still NO ANALYZE. Owner
+// scope:
+//
+//	SEARCH ls USING COVERING INDEX sqlite_autoindex_library_source_1 (library_id=?)
+//	SEARCH si USING INTEGER PRIMARY KEY (rowid=?)
+//	SEARCH r USING INTEGER PRIMARY KEY (rowid=?)
+//	CORRELATED SCALAR SUBQUERY 1
+//	  SEARCH r2 USING COVERING INDEX ix_sync_report_container_latest (service_instance_id=? AND kind=? AND remote_kind=? AND remote_id=?)
+//	USE TEMP B-TREE FOR LAST TERM OF ORDER BY
+//
+// Instance scope differs in the same three places it always did: si leads, ls
+// picks up its second key column, and the outer sort is a full
+// `USE TEMP B-TREE FOR ORDER BY`.
+//
+// ✅ THE SUBQUERY'S SORT IS GONE, AND SO IS ITS ROW FETCH. Four columns
+// constrained instead of one, a COVERING seek instead of a seek plus a fetch,
+// and no temp b-tree under CORRELATED SCALAR SUBQUERY 1 at all. The
+// walked-and-sorted set that grew with import COUNT is now a single index seek
+// straight to the newest row. ONE temp b-tree remains and it is the outer
+// `ORDER BY ls.library_id, ls.id`, which is bounded by the number of library
+// sources on the screen and was never the problem.
+//
+// ⚠️ THE COUNT ASSERTION THEREFORE FLIPPED FROM 2 TO 1, DELIBERATELY. It was not
+// weakened to accommodate whatever plan appeared: the new plan was measured
+// first and is now asserted exactly, positionally, and the "any SCAN anywhere is
+// a fault" clause is unchanged. A count of 2 now means the subquery started
+// sorting again — which is what arm 1 below produces on purpose.
+//
+// 🔍 AND THE OLD LEVER IS NOW MEASURABLY IRRELEVANT TO THIS READ. Dropping
+// ix_sync_report_instance used to change this plan (it is what the ⚠️ paragraph
+// above is about); with 0011 in place it changes NOTHING here, because the
+// subquery no longer touches that index. That is asserted below rather than
+// merely claimed — it is what killed the original arm 1, and the assertion is
+// where the dead arm went.
+//
+// WHAT IS STILL DELIBERATELY NOT ASSERTED: the absence of the ONE remaining
+// sort, because it is really there and forbidding it would fail on the first
+// honest run — the same posture TestSearchLibraryPlanIsSeeks takes for its two.
+// It is asserted as EXPECTED and counted, so if it disappears the plan changed
+// shape and this comment must be re-read rather than left silently wrong.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // seedCompletenessReports gives sync_report rows for every source in the corpus,
@@ -822,6 +869,14 @@ func TestListLibrariesOrderingSortIsIntentional(t *testing.T) {
 // rows, at 240 rows, and at 240 rows after `ANALYZE`, since with no sqlite_stat1
 // the planner chooses from the schema, and this schema offers it no alternative
 // to choose. That null result is recorded here so nobody re-derives it.
+//
+// ✅ RE-CONFIRMED AFTER MIGRATION 0011, which changed the plan but not this: the
+// post-0011 plan is likewise identical over an empty sync_report, over the
+// corpus below, and over the corpus after `ANALYZE`, and it is identical whether
+// the index is created before the rows or after them. These guards pin the
+// NO-ANALYZE planner by convention (internal/store/browse.go:244) and that
+// convention costs nothing here, because there is nothing for statistics to
+// change their mind about.
 func seedCompletenessReports(t *testing.T, s *Store) {
 	t.Helper()
 	sources := []struct {
@@ -908,42 +963,123 @@ func libraryCompletenessPlanFaults(plan []string) []string {
 		faults = append(faults, "the plan contains a SCAN; every leg of this read is a seek")
 	}
 
-	// The subquery, BY POSITION: its sync_report leg must be the index seek, and
-	// the step under it must be the one measured sort rather than a second one.
+	// The subquery, BY POSITION: its sync_report leg must be the covering seek on
+	// migration 0011's index, and it must be the subquery's ONLY step — the sort
+	// that used to hang under it is what 0011 exists to remove.
 	i := indexOfPlanStep(plan, "CORRELATED SCALAR SUBQUERY 1")
 	switch {
 	case i < 0:
 		faults = append(faults,
 			"the newest-verdict pick is no longer a correlated scalar subquery, so this "+
 				"guard is asserting against a statement it does not describe")
-	case i+2 >= len(plan):
-		faults = append(faults, "the correlated subquery has fewer than two steps under it")
+	case i+1 >= len(plan):
+		faults = append(faults, "the correlated subquery has no step under it at all")
 	default:
-		const wantSeek = "SEARCH r2 USING INDEX ix_sync_report_instance (service_instance_id=?)"
+		const wantSeek = "SEARCH r2 USING COVERING INDEX ix_sync_report_container_latest " +
+			"(service_instance_id=? AND kind=? AND remote_kind=? AND remote_id=?)"
 		if plan[i+1] != wantSeek {
 			faults = append(faults, fmt.Sprintf(
-				"the subquery's sync_report leg is %q, not %q — without that index the "+
-					"newest-verdict pick reads the whole table once per library source",
-				plan[i+1], wantSeek))
+				"the subquery's sync_report leg is %q, not %q — migration 0011 exists to "+
+					"make this a four-column covering seek, and without it the newest-verdict "+
+					"pick either walks one instance's whole report history and SORTS it "+
+					"(ix_sync_report_instance) or reads the entire table (no index), once per "+
+					"library source", plan[i+1], wantSeek))
 		}
-		if plan[i+2] != "USE TEMP B-TREE FOR ORDER BY" {
+		// ⚠️ POSITIONALLY, the seek must be the LAST step before the single outer
+		// sort. db.QueryPlan drops the parent column, so "the subquery has no sort
+		// under it" is expressible only as "nothing sits between its seek and the
+		// end except the one top-level ORDER BY".
+		switch {
+		case len(plan) != i+3:
 			faults = append(faults, fmt.Sprintf(
-				"the step under the subquery's seek is %q, not the one measured sort "+
-					"(`USE TEMP B-TREE FOR ORDER BY`). If that sort VANISHED the plan "+
-					"improved, and the block comment above seedCompletenessReports is then "+
-					"wrong; fix both in the same change", plan[i+2]))
+				"the correlated subquery has %d step(s) under it, want exactly 1 (its "+
+					"covering seek). A second step here is the per-library_source SORT that "+
+					"migration 0011 removed, coming back: %q",
+				len(plan)-i-1, strings.Join(plan[i+1:], " | ")))
+		case !strings.HasPrefix(plan[i+2], "USE TEMP B-TREE"):
+			faults = append(faults, fmt.Sprintf(
+				"the step after the subquery is %q, not the outer `ORDER BY "+
+					"ls.library_id, ls.id`", plan[i+2]))
 		}
 	}
 
-	// Exactly two, both accounted for: the subquery's `ORDER BY r2.id DESC` and
-	// the outer `ORDER BY ls.library_id, ls.id`. A third is a sort nobody wrote
-	// down.
-	if n := strings.Count(joined, "USE TEMP B-TREE"); n != 2 {
+	// Exactly ONE, and it is accounted for: the outer `ORDER BY ls.library_id,
+	// ls.id`. It was TWO before migration 0011, when the subquery sorted per
+	// library_source row; the flip from 2 to 1 is the measured improvement, not a
+	// relaxation. A second temp b-tree is that sort returning.
+	if n := strings.Count(joined, "USE TEMP B-TREE"); n != 1 {
 		faults = append(faults, fmt.Sprintf(
-			"the plan has %d temp b-trees, want exactly 2 (the subquery's `ORDER BY "+
-				"r2.id DESC` and the outer `ORDER BY ls.library_id, ls.id`)", n))
+			"the plan has %d temp b-trees, want exactly 1 (the outer `ORDER BY "+
+				"ls.library_id, ls.id`). Before migration 0011 there were 2, the second "+
+				"being the subquery's `ORDER BY r2.id DESC` — if that one is back, "+
+				"ix_sync_report_container_latest is gone or unusable", n))
 	}
 	return faults
+}
+
+// dropIndexesAndConfirm drops indexes on the WRITE connection and then proves,
+// on the READ pool, that the drop is visible there — before any EXPLAIN runs.
+//
+// ⚠️ THIS IS NOT CEREMONY, IT IS THE ARM'S CORRECTNESS. `EXPLAIN QUERY PLAN` on
+// the read pool is STALE after a `DROP INDEX` issued on the write connection.
+// MEASURED on this tree, in this order, and reproduced deliberately rather than
+// taken on report:
+//
+//  1. EXPLAIN on the read pool          → seeks ix_sync_report_container_latest
+//  2. DROP INDEX on the write connection
+//  3. EXPLAIN on the read pool          → STILL seeks the dropped index
+//  4. EXPLAIN on the read pool again    → STILL seeks the dropped index
+//  5. unrelated read on the pool
+//     (sqlite_master)                   → correctly reports the index gone
+//  6. EXPLAIN on the read pool          → falls back, and the sort returns
+//
+// Steps 3 and 4 are the hazard: deterministic, and not shaken loose by repeating
+// the EXPLAIN. Step 5 is the cure, and it is the read this helper performs.
+//
+// 🔍 The mechanism is inference — most likely a WAL read snapshot pinned on the
+// pooled connection. The behaviour above is what was measured; the cause is not.
+// Measured too, and the reason the arms here were not already broken: a pool
+// that has NEVER planned the statement sees the drop immediately, so priming is
+// what arms the trap.
+//
+// The consequence is the one failure mode a firing arm exists to rule out: an
+// arm that drops on the writer and EXPLAINs on a reader without this step
+// re-prints the HEALTHY plan, finds no faults, and goes SILENTLY GREEN — a guard
+// that has never been triggered, wearing a passing test as a disguise. The
+// sqlite_master read below is both the proof the drop landed AND the unrelated
+// read that clears the staleness, so it fixes the hazard and detects it in one
+// step. Every arm that removes an index goes through here.
+//
+// The same hazard is why every guard in this file builds its own Store: it was
+// first hit in the other direction, with a CREATE INDEX that a
+// previously-planned read connection went on ignoring.
+func dropIndexesAndConfirm(t *testing.T, s *Store, names ...string) {
+	t.Helper()
+	if err := s.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
+		for _, n := range names {
+			if _, err := tx.ExecContext(ctx, `DROP INDEX `+n); err != nil {
+				return fmt.Errorf("drop %s: %w", n, err)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("drop indexes on the write connection: %v", err)
+	}
+
+	for _, n := range names {
+		var count int
+		if err := s.DB().Read().QueryRowContext(t.Context(),
+			`SELECT count(*) FROM sqlite_master WHERE type = 'index' AND name = ?`, n,
+		).Scan(&count); err != nil {
+			t.Fatalf("confirming %s is gone, on the read pool: %v", n, err)
+		}
+		if count != 0 {
+			t.Fatalf("%s is still visible to the READ pool after being dropped on the "+
+				"write connection. Everything this arm goes on to EXPLAIN would describe "+
+				"a schema that no longer exists, and the arm would pass without ever "+
+				"measuring the break it claims to measure.", n)
+		}
+	}
 }
 
 func indexOfPlanStep(plan []string, step string) int {
@@ -955,7 +1091,7 @@ func indexOfPlanStep(plan []string, step string) int {
 	return -1
 }
 
-func TestLibraryCompletenessPlanIsSeeksAndTwoSorts(t *testing.T) {
+func TestLibraryCompletenessPlanIsSeeksAndOneSort(t *testing.T) {
 	s := newTestStore(t)
 	seedLibrariesCorpus(t, s)
 	seedCompletenessReports(t, s)
@@ -993,40 +1129,143 @@ func TestLibraryCompletenessPlanIsSeeksAndTwoSorts(t *testing.T) {
 	}
 }
 
-// FIRING THE PLAN GUARD. Three arms, each breaking a different thing it
-// protects, each running the SAME libraryCompletenessPlanFaults the test above
-// runs.
+// TestLibraryCompletenessDoesNotDependOnTheInstanceIndex is where the ORIGINAL
+// arm 1 went, and it is the assertion that arm turned into.
+//
+// Before migration 0011, dropping ix_sync_report_instance changed this plan — it
+// was the whole subject of the ⚠️ paragraph in the block comment above, and
+// TestLibraryCompletenessPlanGuardFires arm 1 dropped it and watched the guard
+// go red. With 0011 in place that arm is DEAD: the subquery seeks on
+// ix_sync_report_container_latest and never looks at the instance index, so
+// dropping it produces a byte-identical plan and the guard stays green. An arm
+// that cannot fire is not an arm.
+//
+// Rather than delete the coverage, it is inverted. The migration header claims
+// the two indexes serve different reads and that neither subsumes the other;
+// this is the half of that claim visible from internal/store — that the
+// completeness read does not depend on ix_sync_report_instance AT ALL. The other
+// half (that the Services screen's read still needs it, and still does not sort)
+// is TestMigrate0011KeepsTheInstanceIndex in internal/db.
+//
+// Together they are what stops a later "two indexes on one small table" tidy-up
+// from dropping the wrong one silently.
+func TestLibraryCompletenessDoesNotDependOnTheInstanceIndex(t *testing.T) {
+	s := newTestStore(t)
+	seedLibrariesCorpus(t, s)
+	seedCompletenessReports(t, s)
+
+	// ⚠️ THIS TEST IS THE ONE THE READ-POOL STALENESS HAZARD WOULD DESTROY, and
+	// it is the reason dropIndexesAndConfirm exists. Every other arm asserts that
+	// something CHANGED, so a stale plan makes it fail loudly. This one asserts
+	// that nothing changed — so a stale plan is indistinguishable from the result
+	// it is looking for, and it would pass while measuring absolutely nothing.
+	// dropIndexesAndConfirm proves on the READ pool that the drop landed before
+	// any EXPLAIN runs here.
+	dropIndexesAndConfirm(t, s, "ix_sync_report_instance")
+
+	for _, tc := range []struct {
+		name  string
+		scope Scope
+	}{
+		{"owner", OwnerScope(0)},
+		{"instance", Scope{UserID: 0, InstanceIDs: []int64{1, 2}}},
+	} {
+		plan := libraryCompletenessPlan(t, s, tc.scope)
+		if faults := libraryCompletenessPlanFaults(plan); len(faults) > 0 {
+			t.Errorf("the %s plan degraded when ix_sync_report_instance was dropped:\n"+
+				"  plan: %s\n  %s\n"+
+				"Migration 0011's header states this read does not touch that index. If "+
+				"that is no longer true, the header is wrong and so is "+
+				"TestMigrate0011KeepsTheInstanceIndex's reasoning.",
+				tc.name, strings.Join(plan, "\n        "), strings.Join(faults, "\n  "))
+		}
+	}
+}
+
+// FIRING THE PLAN GUARD. Four arms, each breaking a different thing it protects,
+// each running the SAME libraryCompletenessPlanFaults the test above runs.
+//
+// ⚠️ ARM 1 IS NOT THE ARM IT USED TO BE. It dropped ix_sync_report_instance,
+// which was the regression that mattered before migration 0011. With 0011 in
+// place that drop changes nothing about this plan, so the arm went dead and was
+// REPOINTED at ix_sync_report_container_latest — the index this read now
+// actually depends on. The fact it used to assert is not lost: it became
+// TestLibraryCompletenessDoesNotDependOnTheInstanceIndex above, where "dropping
+// it changes nothing" is the point rather than the failure.
 func TestLibraryCompletenessPlanGuardFires(t *testing.T) {
-	// Arm 1 — ix_sync_report_instance is dropped outright, the shape a later
-	// migration's tidy-up would take. This is the regression that matters most:
-	// sync_report is append-only, so without the index the newest-verdict
-	// subquery reads the WHOLE table once per library source, on a screen that
-	// renders from local SQLite precisely so that it never waits.
-	t.Run("ix_sync_report_instance dropped", func(t *testing.T) {
+	// Arm 1 — ix_sync_report_container_latest is dropped outright. This is
+	// EXACTLY migration 0011's Down block, so the arm is a live rehearsal of the
+	// rollback, and it is the regression that matters most: the subquery falls
+	// back to ix_sync_report_instance and the per-library_source SORT returns,
+	// which is the pre-0011 plan the block comment above records verbatim.
+	// sync_report is append-only and this kind writes one row per container per
+	// import, so that sorted set grows with import count forever, on a screen
+	// that renders from local SQLite precisely so that it never waits.
+	t.Run("ix_sync_report_container_latest dropped", func(t *testing.T) {
 		s := newTestStore(t)
 		seedLibrariesCorpus(t, s)
 		seedCompletenessReports(t, s)
-		if err := s.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
-			_, err := tx.ExecContext(ctx, `DROP INDEX ix_sync_report_instance`)
-			return err
-		}); err != nil {
-			t.Fatalf("drop index: %v", err)
-		}
+		dropIndexesAndConfirm(t, s, "ix_sync_report_container_latest")
 
 		plan := libraryCompletenessPlan(t, s, OwnerScope(0))
 		faults := libraryCompletenessPlanFaults(plan)
 		if len(faults) == 0 {
-			t.Fatalf("the guard passed a plan with ix_sync_report_instance dropped:\n  %s",
-				strings.Join(plan, "\n  "))
+			t.Fatalf("the guard passed a plan with ix_sync_report_container_latest "+
+				"dropped:\n  %s", strings.Join(plan, "\n  "))
 		}
-		t.Logf("guard fired with ix_sync_report_instance dropped:\n  plan:   %s\n  faults: %v",
+		// The sort must be what came back, not merely "something differed".
+		if n := strings.Count(strings.Join(plan, " | "), "USE TEMP B-TREE"); n != 2 {
+			t.Errorf("dropping 0011's index produced %d temp b-trees, want the 2 of the "+
+				"pre-0011 plan:\n  %s", n, strings.Join(plan, "\n  "))
+		}
+		t.Logf("guard fired with ix_sync_report_container_latest dropped:\n"+
+			"  plan:   %s\n  faults: %v", strings.Join(plan, "\n          "), faults)
+	})
+
+	// Arm 2 — BOTH indexes dropped, so the subquery has nothing at all and plans
+	// as a bare `SCAN r2`.
+	//
+	// ⚠️ THIS ARM EXISTS BECAUSE THE TEMP-B-TREE COUNT CANNOT CATCH IT. A full
+	// table scan visits rows in rowid order, which is `id` order, so
+	// `ORDER BY r2.id DESC` comes free off it and the count stays at 1 — the
+	// healthy number. This is the trap the block comment's ⚠️ paragraph records:
+	// the worst plan available and the best plan available have the same sort
+	// count. It is the "any SCAN anywhere is a fault" clause that catches it, and
+	// this arm is that clause being executed rather than written down.
+	t.Run("both sync_report indexes dropped", func(t *testing.T) {
+		s := newTestStore(t)
+		seedLibrariesCorpus(t, s)
+		seedCompletenessReports(t, s)
+		dropIndexesAndConfirm(t, s,
+			"ix_sync_report_container_latest", "ix_sync_report_instance")
+
+		plan := libraryCompletenessPlan(t, s, OwnerScope(0))
+		joined := strings.Join(plan, " | ")
+		if !strings.Contains(joined, "SCAN r2") {
+			t.Fatalf("dropping both indexes did not produce the bare `SCAN r2` this arm "+
+				"is built on:\n  %s", strings.Join(plan, "\n  "))
+		}
+		if n := strings.Count(joined, "USE TEMP B-TREE"); n != 1 {
+			t.Errorf("the scan plan has %d temp b-trees, want 1 — the premise of this arm "+
+				"is that a scan sorts for FREE and so the count alone cannot catch it:\n  %s",
+				n, strings.Join(plan, "\n  "))
+		}
+		faults := libraryCompletenessPlanFaults(plan)
+		if len(faults) == 0 {
+			t.Fatalf("the guard passed a plan that SCANS sync_report once per library "+
+				"source:\n  %s", strings.Join(plan, "\n  "))
+		}
+		t.Logf("guard fired on a bare SCAN of sync_report:\n  plan:   %s\n  faults: %v",
 			strings.Join(plan, "\n          "), faults)
 	})
 
-	// Arm 2 — the index survives but is disqualified from the subquery with
-	// SQLite's unary plus (<https://sqlite.org/optoverview.html>), which is the
-	// shape a rewritten predicate would take. This arm proves the guard names
-	// the index it means rather than merely noticing that the table has one.
+	// Arm 3 — both indexes survive but the subquery is disqualified from using
+	// either, with SQLite's unary plus (<https://sqlite.org/optoverview.html>) on
+	// its leading equality. That is the shape a rewritten predicate would take,
+	// and it degrades to the same `SCAN r2` as arm 2 by a completely different
+	// route: the schema is intact and the STATEMENT is what broke. This arm
+	// proves the guard reads the plan rather than merely noticing that the table
+	// has the indexes it expects.
 	t.Run("the subquery loses its index", func(t *testing.T) {
 		s := newTestStore(t)
 		seedLibrariesCorpus(t, s)
@@ -1050,9 +1289,11 @@ func TestLibraryCompletenessPlanGuardFires(t *testing.T) {
 			strings.Join(plan, "\n          "), faults)
 	})
 
-	// Arm 3 — the outer library_source seek is disqualified, so the read walks
-	// every source in the install and runs the subquery against each. The scan
-	// half of the guard is executed rather than merely written down.
+	// Arm 4 — the outer library_source seek is disqualified, so the read walks
+	// every source in the install and runs the subquery against each. This is the
+	// one arm whose fault is OUTSIDE the subquery: the sync_report leg stays a
+	// healthy covering seek throughout, so it proves the guard is still watching
+	// the join it was watching before 0011 and did not narrow to the index.
 	t.Run("the source leg degrades to a scan", func(t *testing.T) {
 		s := newTestStore(t)
 		seedLibrariesCorpus(t, s)

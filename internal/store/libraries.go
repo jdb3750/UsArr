@@ -530,14 +530,35 @@ func scanLibraries(rows *sql.Rows) ([]Library, error) {
 // `si.deleted_at IS NULL` matches that read too — a soft-deleted instance is not
 // a service any more, and its last verdict is not news about a live library.
 //
-// ⚠️ THE PLAN IS MEASURED, AND IT CARRIES A SORT INSIDE THE CORRELATED SUBQUERY.
-// ix_sync_report_instance is (service_instance_id, created_at DESC), so the
-// `ORDER BY r2.id DESC LIMIT 1` above cannot come off it: per library_source
-// row, SQLite seeks the instance, filters kind/remote_kind/remote_id unindexed,
-// and sorts the survivors. The measured plan, both scopes, and the reasoning
-// about what it costs are in TestLibraryCompletenessPlanIsSeeksAndTwoSorts —
-// which EXPLAINs THIS function rather than a copy of its text, and is fired by
-// TestLibraryCompletenessPlanGuardFires.
+// ⚠️ THE PLAN IS MEASURED, AND IT ONCE CARRIED A SORT INSIDE THE CORRELATED
+// SUBQUERY. ix_sync_report_instance is (service_instance_id, created_at DESC),
+// so the `ORDER BY r2.id DESC LIMIT 1` above could not come off it: per
+// library_source row, SQLite seeked the instance, filtered
+// kind/remote_kind/remote_id unindexed, and sorted the survivors — a
+// walked-and-sorted set that grew with IMPORT COUNT, on a render path.
+//
+// ✅ RESOLVED BY MIGRATION 0011 (2026-08-19), which is why the paragraph above
+// is in the past tense and why it is still here. ix_sync_report_container_latest
+// is (service_instance_id, kind, remote_kind, remote_id, id) — the subquery's
+// four equalities and then its ordering column — so the pick is now a single
+// COVERING seek with no sort and no row fetch:
+//
+//	CORRELATED SCALAR SUBQUERY 1
+//	  SEARCH r2 USING COVERING INDEX ix_sync_report_container_latest
+//	          (service_instance_id=? AND kind=? AND remote_kind=? AND remote_id=?)
+//
+// The one temp b-tree left in this statement is the outer
+// `ORDER BY ls.library_id, ls.id`, which is bounded by what is on the screen.
+//
+// ⚠️ THE ORDER BY MUST STAY `r2.id`, AND THE FOUR PREDICATES MUST STAY
+// EQUALITIES. Both are what the index is shaped for — turning any of the four
+// into a range, or ordering by created_at instead, drops this back to the sorted
+// plan above. The measured plan, both scopes, the pre-0011 plan it replaced, and
+// the reasoning about what each costs are in
+// TestLibraryCompletenessPlanIsSeeksAndOneSort — which EXPLAINs THIS function
+// rather than a copy of its text, and is fired by
+// TestLibraryCompletenessPlanGuardFires, whose arm 1 drops 0011's index and
+// watches the sort come back.
 func libraryCompletenessSQL(scope Scope, libraryIDs []int64) (string, []any) {
 	// ⚠️ THE KIND IS BOUND FIRST, BECAUSE `?` IS POSITIONAL AND THE CORRELATED
 	// SUBQUERY IS EARLIER IN THE TEXT THAN THE `IN` LIST. The other statements in
