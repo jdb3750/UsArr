@@ -1,0 +1,116 @@
+---
+# SYNTHETIC — hand-authored from bookorbit/bookorbit@73b7877d
+# (auth.controller.ts's @Post('magic-links/login') and
+# AuthService.issueTokensForUser, book.controller.ts's
+# BookController.getCover :335-360, common/image-content-type.ts's
+# imageContentTypeFromPath). NOT a wire capture, and no live BookOrbit was
+# contacted — ADR-0052 records that this project has never probed one, and
+# inventing a capture would be worse than saying so.
+#
+# THE RESPONSE BODY IS A REAL 74-BYTE PNG, base64 under YAML's !!binary tag
+# rather than a text placeholder, because the whole subject of Client.Cover is
+# that it returns BYTES. A cassette whose "image" was ASCII would let a method
+# that mangled a non-UTF-8 body pass.
+#
+# 🚩 Content-Type IS image/png AND THAT IS THE POINT OF THE FIXTURE.
+# imageContentTypeFromPath derives the header from the stored file's EXTENSION
+# — .jpg/.jpeg → image/jpeg, .png → image/png, plus .gif, .webp, .bmp, .avif,
+# and image/jpeg as the fallback for anything unmapped — so the header varies per
+# book and Client.Cover must hand it through rather than assume a type. The
+# paired fixture bookorbit_book_cover_absent.yaml carries the other arm.
+#
+# NO QUERY STRING ON THE COVER REQUEST, deliberately. The route accepts an
+# OPTIONAL `t` PARAMETER, and it selects a Cache-Control value —
+# `t ? 'public, max-age=31536000, immutable' : 'private, max-age=86400'`
+# (book.controller.ts:348). It is not a token, nothing authenticates with it, and
+# UsArr has no value to put in it. The bearer is in the Authorization header, as
+# it is on every /api/v1 route.
+#
+# 🚩 THAT PARAGRAPH NAMES THE PARAMETER WITHOUT SPELLING IT AS A QUERY STRING ON
+# PURPOSE. The first draft wrote it question-mark-t-equals, and internal/vcrscrub's
+# on-disk scanner read the characters after it as the parameter's VALUE and
+# reported an unredacted credential in a committed fixture. The scanner was right
+# to: it cannot tell a cassette's prose from its recorded URLs, and a rule that
+# could is a rule a comment could hide behind. cover.go explains the parameter in
+# full; a fixture header does not need to spell it.
+#
+# TWO INTERACTIONS, in the order the client produces them: the mint, then the
+# read. Both credentials replay as `<redacted>` and that is the scrubber working
+# — see bookorbit_app_info.yaml's header for the whole argument.
+version: 2
+interactions:
+    - id: 0
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        host: bookorbit.test:3000
+        headers:
+            Accept:
+                - application/json
+            Content-Type:
+                - application/json
+        url: http://bookorbit.test:3000/api/v1/auth/magic-links/login
+        method: POST
+        body: '{"token":"<redacted>"}'
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Content-Type:
+                - application/json; charset=utf-8
+        status: 200 OK
+        code: 200
+        duration: 1ms
+        body: |-
+            {
+              "accessToken": "<redacted>",
+              "user": {
+                "id": 7,
+                "username": "usarr",
+                "name": "UsArr service account",
+                "email": null,
+                "active": true,
+                "isSuperuser": false,
+                "isDefaultPassword": false,
+                "settings": {},
+                "avatarUrl": null,
+                "provisioningMethod": "shared",
+                "permissions": []
+              }
+            }
+    - id: 1
+      request:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: 0
+        host: bookorbit.test:3000
+        headers:
+            Accept:
+                - image/*
+            Authorization:
+                - <redacted>
+        url: http://bookorbit.test:3000/api/v1/books/101/cover
+        method: GET
+      response:
+        proto: HTTP/1.1
+        proto_major: 1
+        proto_minor: 1
+        content_length: -1
+        headers:
+            Cache-Control:
+                - private, max-age=86400
+            Content-Type:
+                - image/png
+            ETag:
+                - '"1755500000000"'
+        status: 200 OK
+        code: 200
+        duration: 3ms
+        body: !!binary |
+            iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEUlEQVR4nGO4oW4vqGTMAKEAGnwD
+            Sb75MIAAAAAASUVORK5CYII=
