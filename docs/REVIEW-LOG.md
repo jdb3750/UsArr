@@ -22997,3 +22997,185 @@ site — by text, not by line; and
 `git grep -n 'image_asset' -- web/src` for the five sites owned elsewhere. ⚠️ **The commit shas above
 are content shas, never merges** — `2ae7830` is the content commit and `1288282` is only the merge
 that carried it.
+
+## LS-382 — two comments asserted BookOrbit's *intent*; the grep found four sites carrying the claim, not two, and the brief's "information survives" premise is false on the one route the comments are about
+
+**`LS-382`, allocated by the coordinator, and re-checked rather than taken on report.** The
+allocation was measured at `e43e236`; it was re-run at this lane's own tip (`e320adf`), where
+`git grep -n 'LS-382' origin/main` returns nothing, `git grep -n 'LS-382' HEAD` returns nothing,
+`grep -rn 'LS-382' .` over the working tree returns nothing, and `git log --all --grep='LS-382'`
+returns no commit. **`LS-382` was free and is taken; no id was bumped.** Nothing here touches the
+`SD-`, `DS-`, `RK-`, `FI-` or `ADR-` series.
+
+ℹ️ **This entry does not cite its own commit sha, deliberately.** The entry lives in the commit it
+would be citing, so any sha written here is either a guess or invalidated by the amend that inserts
+it. The change is instead identified by its shape — **five files, comment and prose only, with no
+executable line, no status code, no body literal and no assertion touched** — and the sha is reported
+to the coordinator, where it can be true.
+
+### The defect, in one line
+
+Two comments told the reader what **somebody else's code meant to do**. `internal/bookorbit/errors.go:15-19`
+said `MagicLinkService.loginWithToken` collapses five conditions into one message *"deliberately"*;
+`cmd/usarr/fakebookorbit_test.go:188-189` said the same *"on purpose"*. Neither the enumeration nor
+the intent can be checked from this tree. Both have been rewritten to state **UsArr's own
+status→sentinel mapping**, which can.
+
+### ✅ The two pins that hold — measured, with before and after
+
+**Pre-edit line numbers are as the brief gave them and all three verified exactly.** They move in this
+same commit, so both are given.
+
+| Fact | Pre-edit | Post-edit | What it says |
+|---|---|---|---|
+| The 401 arm | `errors.go:209-210` | `:231-232` | `case status == 401:` / `e.Err = ErrUnauthorized` — **branches on nothing** |
+| The sentinel string | `errors.go:24` | `:46` | *"bad, revoked or expired magic-link token"* — **three conditions, not five** |
+| The 403 contrast | `errors.go:217` | `:239` | `strings.EqualFold(e.Message, passwordChangeRequiredMessage)` — **one status, two sentinels** |
+
+🚩 **The 403 contrast is the sharpest fact available and is why the rewrite has anything to say at
+all.** The mechanism for splitting one status by its message exists **in the same function**, eight
+lines below the 401 arm, and is not applied to 401. That is a property of this tree, checkable by
+anyone, and it replaces an appeal to a stranger's intentions. ✅ **`ErrUnauthorized` is confirmed the
+only 401 sentinel in the file** — `grep -n '401\|Unauthorized' internal/bookorbit/errors.go` returns
+the two doc mentions, the definition, one cross-reference from `ErrForbidden`'s doc, and the switch
+arm; there is no second.
+
+### ⚠️ CORRECTED PREMISE — the spec's original pin does not carry the claim
+
+**Attributed to the probe, not recorded as a defect in the tree.** The finding arrived pinned to
+`internal/bookorbit/doc.go:27-30`. **That site does not carry the intent claim and never did.** It reads:
+
+> `// Verified from source at bookorbit/bookorbit@73b7877d — auth.controller.ts,`
+> `// magic-link.service.ts, auth.service.ts, jwt.strategy.ts,`
+> `// common/guards/jwt-auth.guard.ts, config/config.ts, app.module.ts, main.ts.`
+
+It is a **provenance citation**: one commit and **eight upstream files**, under the heading
+*"Authentication: a magic link is exchanged for a short-lived bearer"*. 📌 **It is the opposite of the
+defect** — it is the one site that says where its facts came from, and it is left untouched.
+
+📌 **And it turns out to be load-bearing for the fix.** `doc.go:61-62` — *"MagicLinkService.loginWithToken
+hashes, looks up, and checks in order: row exists, not revoked, isActive, not expired, user exists
+and is active"* — is the **actual source of the "five"**, under `:27-30`'s provenance. So the
+enumeration is not baseless; it is **sourced, to a named commit, in one place**. The rewrites now
+point at `doc.go` for it instead of restating it, which is the difference between one citation and
+four copies.
+
+### The three tree facts the entry rests on
+
+**1. ⚠️ The two comments disagreed about what the fifth condition was.** `errors.go:16` said the token
+*"belongs to an inactive user"*; `fakebookorbit_test.go:189` said *"orphaned"*. ✅ **And `doc.go:61-62`
+explains the split rather than adjudicating it**: its final check is *"user exists **and** is active"*
+— two conditions in one clause. **Each comment copied one half and dropped the other**, then both
+called the total five. 🚩 **Two copies of a claim that disagree are evidence the claim was copied and
+not checked**, which is the whole reason the propagation grep below is not optional.
+
+**2. The sentinel's own message names three conditions, not five.** `errors.go:24` (now `:46`) is
+*"bad, revoked or expired magic-link token"*. It is unchanged — it is a sentinel string and changing
+it is a behaviour change — but the rewritten comment now says outright that it is **not** the
+enumeration's source, so the next reader does not try to reconcile three against five.
+
+**3. Upstream is not checkable from this tree, and this was verified rather than assumed.**
+BookOrbit's **server** source is **not vendored**. What is vendored is `packages/types` only, under
+`api/specs/bookorbit-types/` (68 files, ADR-0064). `magic-link.service.ts` is **not in this repo at
+any path**. So `loginWithToken`'s behaviour cannot be re-read here, and the five-condition
+enumeration is only as good as `doc.go`'s 2026-08-19 reading of `73b7877d`.
+
+### ⚠️ REFUSED — "the entry deliberately cites no third site"
+
+**The brief required this entry to record that it cites no third site. It is refused, because the tree
+refutes it: there are four sites, not two.** The propagation grep found two more comments making the
+**same intent claim**, both inside `internal/bookorbit` itself:
+
+| Site | The words | Verdict |
+|---|---|---|
+| `internal/bookorbit/auth.go:184-187` | *"…into one 401 with one message. Say what the operator can act on rather than inventing a distinction BookOrbit **deliberately** does not draw."* | ✅ **Corrected** — same defect, same word |
+| `internal/bookorbit/client_test.go:268-270` | *"loginWithToken collapses **five** distinct causes into one 401 with one message, **deliberately**"* | ✅ **Corrected** — same defect, same word, same count |
+
+📌 **Recording "no third site" as instructed would have made this entry the fifth copy of the error it
+was written to fix.** The instruction was a claim about the tree, and a claim about the tree is
+checkable; it was checked and it failed.
+
+### 🚩 REFUTED — the "information is not actually lost" premise, on the one route that matters
+
+**The brief asserted that `APIError.Message` is populated from the response body before the switch and
+rendered by `Error()`, so the upstream wire text survives even though the sentinel does not vary — and
+asked for it to be kept if true. It is true in general and FALSE on the magic-link login route.**
+
+- ✅ **True in general.** `parseErrorBody` fills `e.Message` from the body **before** the `switch`
+  (`errors.go`, the `trimmed`/`nestError` block immediately above it), and `(*APIError).Error()`
+  renders it after the status line. On every route, the wire text reaches the caller.
+- 🚩 **False on the login route.** `internal/bookorbit/auth.go` **overwrites it**, immediately after
+  calling `parseErrorBody` and only when `status == http.StatusUnauthorized`:
+  `apiErr.Message = "BookOrbit rejected the magic-link token: it is unknown, revoked, deactivated, expired, or its account is inactive — BookOrbit does not say which"`.
+
+⚠️ **So the one route both original comments were about is the one route where upstream's words do NOT
+survive.** Writing the premise as given would have installed a fresh false sentence in place of the old
+one. The rewrite states the general rule **and names its exception**, and `auth.go`'s rewritten comment
+now identifies itself as that exception, so the two sites point at each other instead of contradicting
+each other silently. ℹ️ **The substituted string itself is unchanged** — `client_test.go` asserts
+`strings.Contains(err.Error(), "BookOrbit does not say which")`, and this lane changed no assertion.
+
+### Intent is recorded as UNKNOWN, not softened
+
+🚩 **"Appears deliberate" was available and was not taken.** A hedge on an unverifiable claim keeps the
+claim. All four rewritten comments do the same three things: they **attribute** *"deliberately"* /
+*"on purpose"* as **the former comments' words**, they state that upstream's intent is **UNKNOWN**, and
+they say where the enumeration's one citation lives (`doc.go`) rather than repeating it. ⚠️ **No
+rewritten comment asserts UsArr's intent either** — the 403 contrast is stated as *"the mechanism
+exists in this same function, and is not applied to 401"*, which is a fact, not a motive.
+
+ℹ️ **One line number was removed from a comment during this work.** The first draft of `errors.go`'s
+rewrite cited the 401 arm as `(:209-210)` — **stale the moment it was written**, because the rewrite
+itself pushed the switch down twenty-two lines. It now cites the arm **by name**, with the reason
+recorded inline. 📌 **This is `LS-381`'s lesson arriving one entry later**: a line citation into a file
+the same commit is editing is wrong on arrival.
+
+### The propagation grep — the full population, and what was NOT touched
+
+**Grepped across `cmd/`, `web/src/` and `internal/`** for `loginWithToken`, `revoked`, `deactivated`,
+`orphaned`, `inactive user`, `Invalid or expired magic link`, and `magic.link` case-insensitively.
+**Four sites carried the intent claim and all four are fixed.** ⚠️ **Nine further sites carry the
+ambiguity or the enumeration WITHOUT asserting intent, and none was touched** — they are listed so the
+next lane does not re-grep for them:
+
+| Site | Why untouched |
+|---|---|
+| `internal/bookorbit/doc.go:61-62` | The **ordered check list**, under `:27-30`'s provenance. This is the citation the four rewrites now point at — the one copy that should exist |
+| `cmd/usarr/services.go:715-717` | *"checks the hash, the revocation, the activation, the expiry and the user, and 401s on all five with one message"* — enumeration, **no intent claim**, consistent with `doc.go:61` |
+| `cmd/usarr/services.go:722`, `:767-768`, `:1210`, `:1256` | Ambiguity restated in passing; **no intent claim**. `:767` is the fifth-condition wording *"orphaned"*, matching the fake rather than `errors.go` — recorded, not edited, as it makes no claim about upstream's reasons |
+| `cmd/usarr/services.go:943` | ⚠️ **User-facing remediation string** — *"this one is unknown, revoked, deactivated or expired"*. **Four** conditions, no intent claim, and **editing it is a behaviour change**. Left |
+| `web/src/lib/services.ts:691` | ⚠️ **The user-facing string the brief warned had already been propagated into.** *"The magic-link token is revoked, expired, deactivated — or it is not the token you think it is."* ✅ **It carries no intent claim and needs no fix**; it is a behaviour change either way. Left |
+| `cmd/usarr/bookorbit_e2e_test.go:441` | *"A link revoked, deactivated or expired since then 401s on a guarded route"* — a different point (post-mint refusal), no intent claim |
+| `internal/bookorbit/fake_test.go:246` | ⚠️ **The in-package fake emits the identical literal** `"Invalid or expired magic link"` and carries **no comment at all**. Clean; nothing to correct |
+| `internal/web/spa/_app/immutable/chunks/*.js` | **Build output.** Regenerated from `web/src`, never hand-edited |
+
+ℹ️ **`orphaned` is a homonym in this repo and the grep is noisy because of it.** The overwhelming
+majority of its hits — `internal/store/libraries.go`, `internal/httpapi/libraries.go`,
+`web/src/lib/libraries.ts` and the migrations — are §17.8's **orphaned-library** state and have nothing
+to do with BookOrbit. They were read and discarded, not skipped.
+
+### What a green gate is worth on this entry
+
+`make check` was run green on the tree carrying this change, and **it attests almost nothing about
+it.** Every changed line in the four Go files is inside a comment block, and **a comment is invisible
+to every arm of the gate**; the fifth file is `docs/`, which `make check` reaches through `gitleaks`
+alone. What the green means is *"nothing credential-shaped was added, and the four Go files still
+build, vet, lint and pass their tests"* — and **nothing about whether any sentence above is true**.
+✅ **The one thing the gate does attest here is the constraint that mattered most**: `go test`
+re-ran `TestBadMagicLinkSaysWhatBookOrbitWillNotSay` and the `cmd/usarr` fake's login path against
+**unchanged** assertions, so the "change no behaviour" requirement is machine-checked rather than
+asserted. Independently, `git diff -U0 | grep -vE '^[+-][[:space:]]*//'` over the four Go files
+returns **no changed non-comment line**.
+
+🔍 **The verification is otherwise manual, and is listed so it can be repeated at any tip:**
+`git grep -n 'LS-382' origin/main` and `git log --all --grep='LS-382'` for the tripwire;
+`sed -n '27,30p;61,62p' internal/bookorbit/doc.go` for the provenance and the ordered check list;
+`grep -n 'case status == 401' -A1 internal/bookorbit/errors.go` and
+`grep -n 'strings.EqualFold(e.Message, passwordChangeRequiredMessage)' internal/bookorbit/errors.go`
+for the two arms and the contrast between them;
+`grep -n 'apiErr.Message = ' internal/bookorbit/auth.go` for the overwrite that refutes the
+"information survives" premise;
+`ls api/specs/bookorbit-types/src/` and `find . -name 'magic-link.service.ts'` for the fact that only
+`packages/types` is vendored and the server source is not; and
+`git grep -n 'loginWithToken' -- cmd/ web/src/ internal/` for the four claim sites plus `doc.go`'s
+citation. ⚠️ **Any commit sha reported for this entry is a content sha, never a merge.**

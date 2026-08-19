@@ -181,10 +181,20 @@ func (c *Client) mint(ctx context.Context) (session, error) {
 	}
 	if status < 200 || status >= 300 {
 		apiErr := parseErrorBody("MagicLinkLogin", http.MethodPost, magicLinkLoginPath, status, body)
-		// MagicLinkService.loginWithToken collapses "not found", "revoked",
-		// "deactivated", "expired" and "user inactive" into one 401 with one
-		// message. Say what the operator can act on rather than inventing a
-		// distinction BookOrbit deliberately does not draw.
+		// This is the ONE place UsArr replaces an upstream message instead of
+		// passing it through, and so it is the exception errors.go's
+		// ErrUnauthorized comment points at. The reason is that the sentinel
+		// cannot carry a cause — parseErrorBody maps every 401 to
+		// ErrUnauthorized and branches on nothing — while the operator still
+		// needs a sentence naming what to go and check.
+		//
+		// ⚠️ The condition list below is doc.go's, read from
+		// bookorbit@73b7877d. BookOrbit's server source is not vendored here,
+		// so it is not re-checkable from this tree. This comment used to add
+		// that BookOrbit "deliberately" draws no distinction; that was its
+		// word and it is dropped rather than hedged, because upstream's intent
+		// is UNKNOWN. The sentence below claims only that UsArr cannot tell
+		// the causes apart, which is a fact about this client.
 		if status == http.StatusUnauthorized {
 			apiErr.Message = "BookOrbit rejected the magic-link token: it is unknown, revoked, deactivated, expired, " +
 				"or its account is inactive — BookOrbit does not say which"
