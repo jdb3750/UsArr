@@ -1559,6 +1559,15 @@
 					magic-link token a superuser mints against a shared account —
 					<strong>64 lowercase hex characters</strong>, and a superuser can list them all back
 					later, raw value included.
+					<!--
+						"list them all back later, raw value included" is measured, not
+						promised: MagicLinkRepository.findAll selects `rawToken` for every
+						row behind GET /api/v1/auth/magic-links, at bookorbit/bookorbit
+						73b7877d2fede2221b0ca360af9bfced7c3797f3 (ADR-0060 is the record).
+						⚠️ WHAT WOULD MAKE IT WRONG: BookOrbit dropping `rawToken` from that
+						list route while keeping it in the create response — the clause would
+						then describe a screen that shows a label and never a token.
+					-->
 				</span>
 			</div>
 
@@ -1639,7 +1648,7 @@
 						: editing !== 'add'
 							? 'Leave blank to keep the stored key'
 							: fKind === 'bookorbit'
-								? 'Paste the magic-link token — the 64 hex characters only'
+								? 'Paste the magic link, or just the token inside it'
 								: "Paste the key from the application's General settings"}
 					aria-invalid={reentry ? 'true' : undefined}
 					aria-describedby="f-apikey-help"
@@ -1648,18 +1657,20 @@
 					Stored encrypted and never sent back to the browser. An *Arr API key is a full-admin
 					credential.
 					<!--
-						The shape warning is BookOrbit's alone because the trap is
-						BookOrbit's alone: its Magic Links settings screen copies
-						`<origin>/magic?token=<raw>`, so the button the user is told to
-						press yields a URL while the login route accepts only the token
-						inside it. A pasted URL is a valid string that 401s exactly like a
-						revoked token, which is why this is named here rather than left to
-						the failure panel to explain afterwards.
+						BookOrbit is the one kind where TWO pastes are correct, and this
+						says so rather than warning about one of them. Its Magic Links
+						screen copies `<origin>/magic?token=<raw>` and offers nothing else
+						— the table never renders the raw value — and that URL is a real
+						artefact of the product, consumed by BookOrbit's own public /magic
+						route. UsArr does the same reduction that route does
+						(serviceCredential, ADR-0067), so telling the operator to hand-edit
+						the link before pasting it would be asking them to do work UsArr
+						has already done.
 					-->
 					{#if fKind === 'bookorbit'}
-						BookOrbit's own <em>copy</em> button gives you the whole magic-link URL. Paste only the
-						part after <span class="mono">token=</span> — 64 lowercase hex characters, with no scheme,
-						host or path.
+						BookOrbit's <em>copy</em> button gives you the whole magic link — paste it as it is, or
+						paste just the <span class="mono">token=</span> value from inside it (64 lowercase hex characters).
+						Anything else is refused before it is stored.
 					{/if}
 				</span>
 				{#if escapeArmed}

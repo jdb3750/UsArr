@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -1071,65 +1072,150 @@ func knownKinds() string {
 // re-readable, and sending the user to mint a new one made them rotate a working
 // credential instead of comparing the one they had.
 //
-// The shape clause is the other half, and it is what actually bit: BookOrbit's
-// settings screen copies a magic-link URL rather than the token. See
-// serviceCredential.
+// ⚠️ WHAT WOULD MAKE THE LINE BELOW WRONG, stated where the next reader meets
+// it: BookOrbit dropping `rawToken` from `findAll`'s select while keeping it in
+// the create response. The advice would then name a screen that can no longer
+// show the value, and "compare them" would have to become "mint a new one" —
+// the very sentence ADR-0060 falsified. It is measured at
+// 73b7877d2fede2221b0ca360af9bfced7c3797f3, re-read 2026-08-19; it is not a
+// property BookOrbit has promised anyone.
+//
+// The other half of this string is the SHAPE, and it says both shapes are fine
+// because both are things BookOrbit's own UI hands out. See serviceCredential.
 func credentialAction(kind string) string {
 	switch kind {
 	case "kavita":
 		return "Paste the Auth Key from Kavita's User Settings → Manage Auth Keys"
 	case "bookorbit":
-		return "Paste the magic-link token a BookOrbit superuser minted for a shared account — " +
-			"64 lowercase hex characters, and NOT the URL BookOrbit's copy button gives you. " +
-			"A superuser can list the tokens back under Settings → Magic Links and compare them"
+		return "Paste the magic link a BookOrbit superuser minted for a shared account — " +
+			"the whole link from Settings → Magic Links is fine, or the 64-character token " +
+			"inside it. A superuser can list the links back on that screen and compare them"
 	}
 	return "Paste the key from the service's Settings → General"
 }
 
-// serviceCredential trims a submitted credential and refuses one whose SHAPE
-// says the wrong thing was pasted. Every path that sends a credential upstream
-// or seals it goes through here — create, PATCH and both connection tests.
+// serviceCredential normalises a submitted credential and, for BookOrbit,
+// reduces the TWO shapes BookOrbit's own UI hands an operator to the one its
+// login route takes. Every path that sends a credential upstream or seals it
+// goes through here — create, PATCH and both connection tests.
 //
 // TRIMMING IS NOT COSMETIC. This was the one form field that was not normalised:
 // name, base_url and url_base all were, while the credential reached the
 // connection test and the sealer exactly as it arrived — and create and PATCH
 // disagreed, so the same paste was refused on create and silently accepted on
 // edit. A stray newline sealed into the envelope cannot be seen afterwards from
-// any screen, because the value is never returned to the browser.
+// any screen, because the value is never returned to the browser. It runs BEFORE
+// the shape check, because a paste's whitespace is not part of its shape.
 //
-// THE BOOKORBIT CLAUSE IS MEASURED, NOT DEFENSIVE. `getMagicUrl` in
-// client/src/features/settings/MagicLinksSettings.vue, at bookorbit/bookorbit
-// 73b7877, builds `<origin>/magic?token=<raw>` — so the copy button on the
-// screen the user is told to use yields a URL, while
-// POST /api/v1/auth/magic-links/login wants the bare token. The URL is a valid
-// string, passes the DTO validation, misses the hash lookup and returns 401,
-// which is indistinguishable on the wire from a revoked or expired token — so
-// once the value has been sent, nothing downstream can tell the two apart. This
-// check is where the distinction is still available, because it is upstream of
-// the send; it is not a claim that no other check could ever be written.
+// THE BOOKORBIT CLAUSE FLIPPED ONCE IN ONE DAY, AND THE REASON IS RECORDED IN
+// ADR-0067 rather than here. The short form: this first REFUSED a pasted
+// magic-link URL and named the half to paste, on the premise that BookOrbit's
+// copy button handed out something BookOrbit's own API could not consume. That
+// premise is false. `client/src/router/index.ts` declares a public `/magic`
+// route named `magic-link-login`; `MagicLinkLoginView.vue` reads
+// `route.query.token`, strips it from history, and hands it to `useAuth`'s
+// `loginWithMagicLink`, which POSTs `{"token": raw}` to
+// /api/v1/auth/magic-links/login. URL in, bare token out is an IMPLEMENTED
+// adapter upstream, so the URL is the artefact the product means to give its
+// operator — and `MagicLinksSettings.vue` offers no other one: the table renders
+// the label, the account, the expiry and the use count, never the raw value, and
+// the only affordance is `copyMagicUrl`. All measured at bookorbit/bookorbit
+// 73b7877d2fede2221b0ca360af9bfced7c3797f3, read 2026-08-19.
 //
-// IT REFUSES RATHER THAN EXTRACTING. Parsing the token out would be one line and
-// is deliberately not done: guessing which half of a pasted string is the secret
-// is the "inventing configuration on the user's behalf" that
-// normalizeServiceURLBase already declines, and a credential is the worst field
-// to start guessing in — a URL carrying two `token=` parameters, or a shortener,
-// has no single right answer.
+// So UsArr does the same reduction BookOrbit's own login page does. Refusing
+// would be asking the operator to hand-edit the only thing the upstream UI will
+// give them.
+//
+// ⚠️ THE ACCEPTANCE RULE IS A WHITELIST, WHICH IS THE PRICE. Anything that is
+// neither shape is refused, so a BookOrbit that changed its token format —
+// longer, base64, prefixed — would have UsArr refuse a valid credential rather
+// than pass it through to a 401. That is a deliberate trade (an actionable
+// refusal beats an indistinguishable 401, ADR-0067) and it is the one thing to
+// re-measure if a BookOrbit upgrade makes adding a service impossible:
+// `MagicLinkRepository.create` mints `randomBytes(32).toString('hex')`, which is
+// where the 64 lowercase hex characters come from and the only place they are
+// defined.
 func serviceCredential(kind, raw string) (string, error) {
 	v := strings.TrimSpace(raw)
 	if kind != "bookorbit" || v == "" {
 		return v, nil
 	}
-	// A bare 64-hex token can contain neither, so this cannot reject a correct
-	// value. Both are checked because the copy button's URL survives being
-	// pasted without its scheme.
-	if strings.Contains(v, "://") || strings.Contains(v, "token=") {
-		return "", errStatus(http.StatusBadRequest, CodeBadRequest,
-			"that is a magic-link URL, not a magic-link token: BookOrbit's copy button gives the "+
-				"whole link, and its login route accepts only the token inside it").
-			withAction("Paste only the value after token= — 64 lowercase hex characters, " +
-				"with no scheme, host or path")
+	if isMagicLinkToken(v) {
+		return v, nil
 	}
-	return v, nil
+	if token, ok := magicLinkTokenFromURL(v); ok {
+		return token, nil
+	}
+	// ⚠️ THE SUBMITTED VALUE IS NOT QUOTED BACK, and must never be. A pasted
+	// magic link carries the operator's own BookOrbit hostname, which is exactly
+	// the kind of value §14 keeps out of error strings, audit metadata and log
+	// attributes — and an error string is the one place a credential travels
+	// back to a browser that is otherwise never sent one. The message says what
+	// was EXPECTED; it says nothing about what arrived.
+	return "", errStatus(http.StatusBadRequest, CodeBadRequest,
+		"a BookOrbit credential is a magic-link token — 64 lowercase hex characters — or the "+
+			"whole magic link that contains one, and this is neither").
+		withAction("Paste the link BookOrbit's Settings → Magic Links copy button gives you, " +
+			"or just the 64-character token from inside it")
+}
+
+// magicLinkTokenLen is BookOrbit's magic-link token length, and it is not a
+// guess: `MagicLinkRepository.create` mints `randomBytes(32).toString('hex')` at
+// 73b7877d2fede2221b0ca360af9bfced7c3797f3. Node's hex encoding is lowercase, so
+// an uppercase paste is not the same string and would miss the hash lookup —
+// which is why case is not folded here.
+const magicLinkTokenLen = 64
+
+func isMagicLinkToken(v string) bool {
+	if len(v) != magicLinkTokenLen {
+		return false
+	}
+	for i := 0; i < len(v); i++ {
+		c := v[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// magicLinkTokenFromURL pulls the token out of a pasted magic link, and reports
+// false for anything it cannot resolve to exactly one token — the caller then
+// refuses rather than passing the string through.
+//
+// PARSED, NOT CUT. `net/url` is used instead of string surgery so the query
+// value is percent-decoded once, by the same rules BookOrbit's browser applies,
+// rather than by whatever `strings.Index` would have implied. A scheme is not
+// required: a link pasted without one still parses, with the host landing in
+// Path, and the query is all this reads.
+//
+// THE HOST IS READ AND DISCARDED, DELIBERATELY. The service's base_url is
+// configured separately and is what every request goes to; a host inside the
+// pasted link is not consulted, not compared and not stored, so this cannot
+// become a way to point UsArr somewhere new (internal/ssrf still owns where
+// requests may go). Nor is it echoed back — see the refusal above.
+//
+// TWO DIFFERENT `token` VALUES ARE A REFUSAL, not a first-wins guess. That was
+// the strongest argument the refuse-everything rule had, and it survives here
+// intact: where a paste has no single right answer, UsArr does not invent one.
+func magicLinkTokenFromURL(raw string) (string, bool) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", false
+	}
+	values, ok := u.Query()["token"]
+	if !ok || len(values) == 0 {
+		return "", false
+	}
+	for _, other := range values[1:] {
+		if other != values[0] {
+			return "", false
+		}
+	}
+	if !isMagicLinkToken(values[0]) {
+		return "", false
+	}
+	return values[0], true
 }
 
 func boolOr(p *bool, def bool) bool {

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -142,62 +143,94 @@ func TestCredentialIsTrimmedOnEveryPathThatSendsOrSealsIt(t *testing.T) {
 	})
 }
 
-// magicLinkPastes are the shapes BookOrbit's own settings screen hands the user.
-// `getMagicUrl` in client/src/features/settings/MagicLinksSettings.vue (measured
-// at bookorbit/bookorbit@73b7877) builds `<origin>/magic?token=<raw>`, so the
-// COPY BUTTON yields a URL while POST /api/v1/auth/magic-links/login wants the
-// bare token. The URL is a valid string, passes BookOrbit's DTO validation,
-// misses the hash lookup, and comes back 401 — identical on the wire to a
-// revoked token, which is why the owner's first BookOrbit spent a connection
-// test being told to mint a replacement for a token that was fine.
+// magicLinkPastes are what BookOrbit's own settings screen hands an operator.
+// `getMagicUrl` in client/src/features/settings/MagicLinksSettings.vue builds
+// `<origin>/magic?token=<raw>`, and the copy button beside every row is the ONLY
+// way that screen surfaces a token at all — the table shows the label, the
+// account, the expiry and the use count, never the raw value. So the URL is not
+// a mis-paste to be corrected; it is the artefact the product means to give out,
+// and BookOrbit's own public `/magic` route (router/index.ts →
+// MagicLinkLoginView.vue → useAuth.loginWithMagicLink) does exactly the
+// reduction below before POSTing `{"token": raw}`. Measured at
+// bookorbit/bookorbit@73b7877d2fede2221b0ca360af9bfced7c3797f3, 2026-08-19.
+// ADR-0067 records why this file once asserted the opposite.
 var magicLinkPastes = []struct {
 	name string
 	in   string
+	want string
 }{
-	{"the copy button's whole URL", "https://books.example.net/magic?token=" + strings.Repeat("a", 64)},
-	{"over plain http", "http://10.0.0.9:3000/magic?token=" + strings.Repeat("b", 64)},
-	{"pasted without the scheme", "books.example.net/magic?token=" + strings.Repeat("c", 64)},
-	{"with the whitespace a paste brings", "  https://books.example.net/magic?token=" + strings.Repeat("d", 64) + "\n"},
+	{
+		"the copy button's whole URL",
+		"https://books.example.net/magic?token=" + strings.Repeat("a", 64),
+		strings.Repeat("a", 64),
+	},
+	{
+		"over plain http",
+		"http://10.0.0.9:3000/magic?token=" + strings.Repeat("b", 64),
+		strings.Repeat("b", 64),
+	},
+	{
+		"pasted without the scheme",
+		"books.example.net/magic?token=" + strings.Repeat("c", 64),
+		strings.Repeat("c", 64),
+	},
+	{
+		"with the whitespace a paste brings",
+		"  https://books.example.net/magic?token=" + strings.Repeat("d", 64) + "\n",
+		strings.Repeat("d", 64),
+	},
+	{
+		// Percent-decoding is why net/url does this rather than strings.Index:
+		// a link that has been through something that re-encodes query values
+		// still carries the same token, and cutting the string would hand the
+		// escapes to the login route verbatim.
+		"a token that arrived percent-encoded",
+		"https://books.example.net/magic?token=" + strings.Repeat("%61", 64),
+		strings.Repeat("a", 64),
+	},
+	{
+		"a fragment after the token",
+		"https://books.example.net/magic?token=" + strings.Repeat("f", 64) + "#done",
+		strings.Repeat("f", 64),
+	},
 }
 
 // The bare token still has to get through, or the guard has replaced one
 // unusable service with another.
 const bareMagicLinkToken = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
-func TestBookOrbitRefusesAMagicLinkURLBySHAPEAndSaysWhichHalfToPaste(t *testing.T) {
+// What is sealed and what is sent must both be the BARE TOKEN. Sealing the URL
+// would store a credential that 401s for ever, invisibly: the value is never
+// returned to the browser, so nothing on any screen could show that the wrong
+// half is in the envelope.
+func TestBookOrbitAcceptsAPastedMagicLinkAndSealsOnlyTheToken(t *testing.T) {
 	for _, tc := range magicLinkPastes {
 		t.Run(tc.name, func(t *testing.T) {
 			s, rt := newCredentialServer(t)
 			code, body := asOwner(t, s, s.handleCreateService, http.MethodPost, "/api/v1/services",
 				`{"kind":"bookorbit","name":"BookOrbit","base_url":"http://books:3000",`+
 					`"api_key":`+quoteJSON(tc.in)+`}`, 0)
-			if code != http.StatusBadRequest {
-				t.Fatalf("create with %q = %d, want 400: %s", tc.in, code, body)
+			if code != http.StatusCreated {
+				t.Fatalf("create with a pasted magic link = %d, want 201: %s", code, body)
 			}
-			// The message has to name the operation, not merely refuse. §17.3
-			// has no unactionable errors, and "invalid credential" would send
-			// the user back to BookOrbit to mint a replacement — the exact wrong
-			// move, and the one the old wording recommended.
-			if !strings.Contains(body, "token=") {
-				t.Errorf("the refusal must name the query parameter to cut after: %s", body)
+			if got := rt.last(t); got != tc.want {
+				t.Errorf("the connection test was sent %q, want the bare token %q", got, tc.want)
 			}
-			if !strings.Contains(strings.ToLower(body), "magic-link url") {
-				t.Errorf("the refusal must say what was pasted: %s", body)
-			}
-			// And nothing may have gone upstream. A URL that reaches the login
-			// route is precisely the 401 this guard exists to prevent.
-			if seen := rt.seen(); len(seen) != 0 {
-				t.Errorf("a shape-refused credential was still sent to the connection test: %q", seen)
+			if got := openStoredCredential(t, s, 1); got != tc.want {
+				t.Errorf("the SEALED credential is %q, want the bare token %q — a URL in the "+
+					"envelope 401s for ever and cannot be read back from any screen", got, tc.want)
 			}
 		})
 	}
 }
 
-// Every endpoint that accepts a credential enforces the shape, for the same
-// reason TestEveryEndpointTakingURLBaseValidatesIt exists: a rule enforced on
-// three of four paths is a rule with a hole in it.
-func TestEveryEndpointTakingACredentialRefusesAMagicLinkURL(t *testing.T) {
+// Every endpoint that accepts a credential does the same reduction, for the same
+// reason TestEveryEndpointTakingURLBaseValidatesIt exists: a rule applied on
+// three of four paths is a rule with a hole in it. Here the hole would be worse
+// than an inconsistency — PATCH would seal a URL that create refuses to.
+func TestEveryEndpointTakingACredentialStripsAPastedMagicLink(t *testing.T) {
 	paste := magicLinkPastes[0].in
+	want := magicLinkPastes[0].want
 
 	cases := []struct {
 		name    string
@@ -205,42 +238,172 @@ func TestEveryEndpointTakingACredentialRefusesAMagicLinkURL(t *testing.T) {
 		method  string
 		body    string
 		seeded  bool
+		code    int
 	}{
 		{
-			name: "POST /api/v1/services", method: http.MethodPost,
+			name: "POST /api/v1/services", method: http.MethodPost, code: http.StatusCreated,
 			handler: func(s *Server) handler { return s.handleCreateService },
 			body: `{"kind":"bookorbit","name":"BookOrbit","base_url":"http://books:3000",` +
 				`"api_key":` + quoteJSON(paste) + `}`,
 		},
 		{
-			name: "PATCH /api/v1/services/{id}", method: http.MethodPatch,
+			name: "PATCH /api/v1/services/{id}", method: http.MethodPatch, code: http.StatusOK,
 			handler: func(s *Server) handler { return s.handleUpdateService },
 			body:    `{"api_key":` + quoteJSON(paste) + `}`, seeded: true,
 		},
 		{
-			name: "POST /api/v1/services/test", method: http.MethodPost,
+			name: "POST /api/v1/services/test", method: http.MethodPost, code: http.StatusOK,
 			handler: func(s *Server) handler { return s.handleTestUnsaved },
 			body: `{"kind":"bookorbit","base_url":"http://books:3000",` +
 				`"api_key":` + quoteJSON(paste) + `}`,
 		},
 		{
-			name: "POST /api/v1/services/{id}/test", method: http.MethodPost,
+			name: "POST /api/v1/services/{id}/test", method: http.MethodPost, code: http.StatusOK,
 			handler: func(s *Server) handler { return s.handleTestService },
 			body:    `{"api_key":` + quoteJSON(paste) + `}`, seeded: true,
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			s, _ := newCredentialServer(t)
+			s, rt := newCredentialServer(t)
 			var id int64
 			if tc.seeded {
 				id = seedBookOrbitInstance(t, s)
 			}
 			code, body := asOwner(t, s, tc.handler(s), tc.method, "/api/v1/services", tc.body, id)
-			if code != http.StatusBadRequest || !strings.Contains(body, "token=") {
-				t.Fatalf("%s = %d, want 400 naming token=: %s", tc.name, code, body)
+			if code != tc.code {
+				t.Fatalf("%s = %d, want %d: %s", tc.name, code, tc.code, body)
+			}
+			if got := rt.last(t); got != want {
+				t.Errorf("%s sent %q upstream, want the bare token", tc.name, got)
 			}
 		})
+	}
+}
+
+// notAMagicLinkCredential is everything the two accepted shapes do not cover.
+// The refusal is the FALLBACK the accept path leans on: without it a mistyped
+// value goes upstream and comes back 401, which is byte-identical to a revoked
+// token and sends the operator to mint a replacement for a credential that was
+// never the problem — the failure that started all of this.
+var notAMagicLinkCredential = []struct {
+	name string
+	in   string
+}{
+	{"one character short", strings.Repeat("a", 63)},
+	{"uppercase, which is not what Node's hex encoder mints", strings.ToUpper(bareMagicLinkToken)},
+	{"a link with no token at all", "https://books.example.net/magic"},
+	{"a link whose token is not one", "https://books.example.net/magic?token=hunter2"},
+	{"a different query parameter", "https://books.example.net/magic?t=" + strings.Repeat("a", 64)},
+	{
+		// The strongest argument the refuse-everything rule had, kept: where a
+		// paste has no single right answer, UsArr does not invent one.
+		"two different tokens in one link",
+		"https://books.example.net/magic?token=" + strings.Repeat("a", 64) +
+			"&token=" + strings.Repeat("b", 64),
+	},
+}
+
+func TestBookOrbitRefusesACredentialThatIsNeitherShape(t *testing.T) {
+	for _, tc := range notAMagicLinkCredential {
+		t.Run(tc.name, func(t *testing.T) {
+			s, rt := newCredentialServer(t)
+			code, body := asOwner(t, s, s.handleCreateService, http.MethodPost, "/api/v1/services",
+				`{"kind":"bookorbit","name":"BookOrbit","base_url":"http://books:3000",`+
+					`"api_key":`+quoteJSON(tc.in)+`}`, 0)
+			if code != http.StatusBadRequest {
+				t.Fatalf("create with %q = %d, want 400: %s", tc.name, code, body)
+			}
+			// §17.3 has no unactionable errors, and "invalid credential" would
+			// send the operator back to BookOrbit to mint a replacement — the
+			// exact wrong move. Asserted on the decoded MESSAGE rather than on
+			// the whole body: `action` names the screen too, so a body-wide
+			// substring check passes even when the message says nothing, which
+			// is a guard that cannot fail.
+			var eb errorBody
+			if err := json.Unmarshal([]byte(body), &eb); err != nil {
+				t.Fatalf("decode the refusal: %v: %s", err, body)
+			}
+			msg := strings.ToLower(eb.Message)
+			if !strings.Contains(msg, "magic link") || !strings.Contains(msg, "64") {
+				t.Errorf("the refusal message must name both shapes that would work: %q", eb.Message)
+			}
+			if eb.Action == "" {
+				t.Errorf("the refusal must carry an action: %s", body)
+			}
+			// And nothing may have gone upstream. A value that reaches the login
+			// route is precisely the 401 this fallback exists to prevent.
+			if seen := rt.seen(); len(seen) != 0 {
+				t.Errorf("a shape-refused credential was still sent to the connection test: %q", seen)
+			}
+		})
+	}
+}
+
+// safeBuf is a log sink a test can read while the server writes to it.
+type safeBuf struct {
+	mu  sync.Mutex
+	buf strings.Builder
+}
+
+func (b *safeBuf) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *safeBuf) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// A REFUSED CREDENTIAL IS NEVER QUOTED BACK, anywhere. A pasted magic link
+// carries two secrets at once — the token, and the operator's own BookOrbit
+// hostname — and the refusal is the one place a credential could travel back to
+// a browser that is otherwise never sent one (§14; the api_key is write-only on
+// every shape in this file). Three sinks are checked because a message that is
+// clean in the response and dirty in the audit trail has leaked just the same,
+// and the audit row is the one that persists.
+func TestARefusedCredentialIsNeverEchoedBack(t *testing.T) {
+	const host = "books.private.example"
+	paste := "https://" + host + "/magic?token=hunter2"
+
+	logs := &safeBuf{}
+	rt := &recordingTester{}
+	s := newTestServer(t, func(c *Config) {
+		c.Tester = rt
+		c.Logger = slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	})
+
+	code, body := asOwner(t, s, s.handleCreateService, http.MethodPost, "/api/v1/services",
+		`{"kind":"bookorbit","name":"BookOrbit","base_url":"http://books:3000",`+
+			`"api_key":`+quoteJSON(paste)+`}`, 0)
+	if code != http.StatusBadRequest {
+		t.Fatalf("create = %d, want 400: %s", code, body)
+	}
+
+	for _, sink := range []struct{ what, text string }{
+		{"the response body", body},
+		{"the log", logs.String()},
+	} {
+		for _, secret := range []string{paste, host, "hunter2"} {
+			if strings.Contains(sink.text, secret) {
+				t.Errorf("%s quotes %q back: %s", sink.what, secret, sink.text)
+			}
+		}
+	}
+
+	rows, err := s.store.ListAuditLog(t.Context(), store.OwnerScope(1), store.AuditQuery{})
+	if err != nil {
+		t.Fatalf("ListAuditLog: %v", err)
+	}
+	for _, row := range rows {
+		for _, secret := range []string{paste, host, "hunter2"} {
+			if strings.Contains(row.MetadataJSON, secret) {
+				t.Errorf("audit row %q quotes %q back: %s", row.Action, secret, row.MetadataJSON)
+			}
+		}
 	}
 }
 
@@ -262,8 +425,10 @@ func TestBookOrbitAcceptsTheBareToken(t *testing.T) {
 	}
 }
 
-// And the shape rule is BookOrbit's alone. A Prowlarr key is opaque to UsArr and
-// nothing here knows enough about one to refuse it.
+// And the shape rule is BookOrbit's alone — both halves of it. A Prowlarr key is
+// opaque to UsArr: nothing here knows enough about one to refuse it, and nothing
+// here may rewrite one either. A key that happens to contain `token=` must reach
+// the wire byte for byte.
 func TestTheMagicLinkShapeRuleIsBookOrbitOnly(t *testing.T) {
 	s, rt := newCredentialServer(t)
 	weird := magicLinkPastes[0].in

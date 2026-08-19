@@ -658,14 +658,21 @@ export function likelyCauses(message: string, kind: string): string[] {
 			// rotate — minting a replacement destroys the evidence of what went
 			// wrong and, when the real fault was a mis-paste, changes nothing.
 			//
-			// The first bullet also names the mis-paste, because BookOrbit's copy
-			// button yields `<origin>/magic?token=<raw>` (getMagicUrl in
-			// client/src/features/settings/MagicLinksSettings.vue) and a pasted URL
-			// 401s exactly like a revoked token. serviceCredential
-			// (internal/httpapi/services.go) now refuses that shape before it is
-			// sent, so a URL should no longer reach this panel — the bullet keeps
-			// the clause for the credential that was stored before that guard
-			// landed.
+			// ⚠️ WHAT WOULD MAKE THE FIRST BULLET WRONG: BookOrbit dropping
+			// `rawToken` from `findAll`'s select while keeping it in the create
+			// response. "A superuser can list every magic link back" would then
+			// name a screen that no longer shows the value, and the only honest
+			// advice left would be the one ADR-0060 falsified. The behaviour is
+			// measured, not promised — re-read it at the commit before trusting
+			// this string against a newer BookOrbit.
+			//
+			// The first bullet also allows for the WRONG TOKEN rather than a bad
+			// one, which is a distinct failure with the same 401. It no longer
+			// covers a pasted magic-link URL: serviceCredential
+			// (internal/httpapi/services.go) strips the token out of one before
+			// anything is sent or sealed, because the URL is what BookOrbit's own
+			// UI hands out and its own /magic route consumes (ADR-0067). A URL
+			// therefore cannot be what is stored, and cannot be what 401s here.
 			//
 			// The two bullets are the two failures that reach here, in that order:
 			// the mint 401, and the 401/403 on the app-info read behind it. The
