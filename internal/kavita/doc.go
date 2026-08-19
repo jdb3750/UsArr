@@ -43,6 +43,50 @@
 //     is true on both — that it is a small set, not the whole API — rather than
 //     either count.
 //
+// # What the two-spec pin can and cannot attest
+//
+// Both vendored documents are pinned and drift-checked, and that pin is worth
+// what an OpenAPI document is worth, which is a narrower thing than it looks. It
+// attests THE SHAPE THE VENDOR PUBLISHED — which routes exist, what names they
+// take, what they claim to return. It cannot attest how a controller BINDS those
+// parameters at runtime, because the document is generated from attributes and
+// the binding is what the method body does with whatever arrived. Two instances,
+// both measured rather than reasoned:
+//
+//   - The `/api/Image/*` cover routes. api/specs/kavita-v0.9.0.2.json — the
+//     release the owner runs — declares `apiKey` there as an ordinary OPTIONAL
+//     query parameter, under the same global `x-api-key` header requirement every
+//     other route carries. A live probe against that instance found the reverse:
+//     header-only 400, query-only 200. The optional parameter is the required
+//     one, and the required header does nothing. (The develop document does not
+//     agree with the stable one about this either — it drops the parameter
+//     entirely. Two documents, three stories.)
+//   - GET /api/Plugin/version carries the same global header requirement in the
+//     document and is [AllowAnonymous] in the source, validating the query key
+//     itself.
+//
+// So a contract test against these specs pins what this client sends and how it
+// parses what comes back, and stops there. Where BEHAVIOUR is the question — an
+// authentication path, a status code, an ordering guarantee — the controller
+// source at the pinned commit is the evidence (DEVELOPMENT.md §5), and a live
+// probe beats both.
+//
+// One consequence of the first instance is not about specs at all. ONCE A
+// CREDENTIAL IS REQUIRED IN A URL, THE DISCLOSURE SURFACE IS EVERYTHING THAT
+// PRINTS A URL — a debug log line, an error string, a bug report pasted into an
+// issue, a screenshot of devtools. The go-vcr cassette internal/vcrscrub scrubs
+// is one instance of that shape rather than the class, which is why the fix
+// belongs at the point a URL is RECORDED rather than at each place it might
+// later be shown. internal/ssrf's redactors carry `apikey` case-insensitively,
+// so the log and error paths look covered by construction — that is a claim
+// someone OWES a drill against the real cover-fetch error shapes when the fetch
+// path is built, not one to bank from reading the deny-list. And the browser
+// must never see a keyed URL at all: ARCHITECTURE.md §4.4 serves images from
+// UsArr's own cache under UsArr's own path and attaches credentials at request
+// time, so a design that proxied or redirected the upstream Kavita URL to the
+// client would put a full-admin key in devtools — the one place no redactor can
+// reach it.
+//
 // The Auth Key is a user-scoped credential and, for the admin account UsArr will
 // normally be given, a full-admin one. Same rules as an *Arr key: encrypted at
 // rest under the versioned AAD-bound envelope, never logged, never sent to the

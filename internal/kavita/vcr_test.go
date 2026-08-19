@@ -4,12 +4,12 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
 	"gopkg.in/dnaeon/go-vcr.v4/pkg/cassette"
-	"gopkg.in/dnaeon/go-vcr.v4/pkg/recorder"
+
+	"github.com/jdb3750/UsArr/internal/vcrscrub"
 )
 
 // ⚠️ THE KAVITA CASSETTES IN testdata/cassettes ARE SYNTHETIC. Every one of them
@@ -73,89 +73,26 @@ func cassettePath(name string) string {
 	return filepath.Join("..", "..", "testdata", "cassettes", name)
 }
 
-// urlMatcher matches an interaction on method plus REDACTED URL, and nothing
-// else.
+// The matcher, the scrubbing hook and the recorder wiring all moved to
+// internal/vcrscrub, which now owns them for every cassette in the tree.
 //
-// go-vcr's default matcher also compares every request header — which cannot work
-// alongside scrubbing, because the recorded x-api-key is the placeholder while the
-// live request carries the real key.
+// 🚩 THE REDACTION ON BOTH SIDES OF THE MATCH IS NOT COSMETIC and it is why the
+// shared matcher had to be the redacting one rather than this package's being
+// the odd one out. Kavita's GET /api/Plugin/version carries the Auth Key IN THE
+// URL, so the saved interaction's URL is scrubbed to `?apiKey=REDACTED` while
+// the live request carries the real key. Comparing raw URLs would mean a
+// cassette could only match by STORING the credential — precisely what the
+// scrubbing hook exists to prevent.
 //
-// 🚩 THE REDACTION ON BOTH SIDES IS NOT COSMETIC, and it is the one place this
-// package's matcher has to differ from internal/servarr's. Kavita's
-// GET /api/Plugin/version carries the Auth Key IN THE URL, so the saved
-// interaction's URL is scrubbed to `?apiKey=REDACTED` while the live request
-// carries the real key. Comparing raw URLs would mean a cassette could only match
-// by storing the credential — which is precisely what the scrubbing hook exists
-// to prevent. Redacting the incoming URL too makes the two agree, and it is a
-// no-op for every URL that carries no credential.
-//
-// The POST body is deliberately not matched on either: SeriesFilter's exact bytes
-// are pinned by TestOutboundBodiesAreSpecLegal against the SPEC, which is a
-// stronger check than pinning them against a fixture this repo also wrote.
-func urlMatcher(r *http.Request, i cassette.Request) bool {
-	return r.Method == i.Method && RedactURL(r.URL.String()) == RedactURL(i.URL)
-}
-
-// credentialQueryRe matches a credential carried in a query string. Kavita's
-// GET /api/Plugin/version takes the Auth Key as ?apiKey= because the controller
-// reads it from the query and offers no header path, so this has to run over URLs
-// and over bodies.
-var credentialQueryRe = regexp.MustCompile(`(?i)\b(apikey|api_key|access_token|token|sig)=([^&"'\s\\]+)`)
-
-// scrubbedHeaders are rewritten wholesale.
-var scrubbedHeaders = []string{
-	"x-api-key",
-	"Authorization",
-	"Set-Cookie",
-	"Cookie",
-	// Kavita's own outbound-to-Kavita+ credentials, in case a capture ever picks
-	// one up from a proxied response.
-	"x-license-key",
-	"x-anilist-token",
-}
-
-// scrubInteraction is the BeforeSave hook. Scrubbing is MANDATORY and must be a
-// hook rather than a manual step: a manual step is one forgotten commit away from
-// putting a full-admin Auth Key in the repository, and `make secrets` is only the
-// mechanical backstop.
-//
-// In replay-only runs this never fires, which is exactly why TestScrubInteraction
-// exercises it directly.
-func scrubInteraction(i *cassette.Interaction) error {
-	for _, h := range scrubbedHeaders {
-		if _, ok := i.Request.Headers[http.CanonicalHeaderKey(h)]; ok {
-			i.Request.Headers.Set(h, RedactedPlaceholder)
-		}
-		if _, ok := i.Response.Headers[http.CanonicalHeaderKey(h)]; ok {
-			i.Response.Headers.Set(h, RedactedPlaceholder)
-		}
-	}
-	i.Request.URL = RedactURL(i.Request.URL)
-	i.Request.Body = credentialQueryRe.ReplaceAllString(i.Request.Body, "$1="+RedactedPlaceholder)
-	i.Response.Body = credentialQueryRe.ReplaceAllString(i.Response.Body, "$1="+RedactedPlaceholder)
-	if f := i.Request.Form; f != nil {
-		for k := range f {
-			// The parsed form is a second copy of the query string, so it needs the
-			// same treatment. Reuse the URL redactor rather than a second list.
-			if RedactURL("http://x/?"+k+"=probe") != "http://x/?"+k+"=probe" {
-				f.Set(k, RedactedPlaceholder)
-			}
-		}
-	}
-	return nil
-}
+// This package also used to carry a five-name `credentialQueryRe`, a SECOND
+// deny-list beside internal/ssrf's. It is gone; vcrscrub asks
+// ssrf.IsCredentialParam.
 
 // newTestClient builds a Client wired to a cassette.
 func newTestClient(t *testing.T, cassetteName string) *Client {
 	t.Helper()
 
-	rec, err := recorder.New(
-		cassettePath(cassetteName),
-		recorder.WithMode(recorder.ModeReplayOnly),
-		recorder.WithMatcher(urlMatcher),
-		recorder.WithHook(scrubInteraction, recorder.BeforeSaveHook),
-		recorder.WithSkipRequestLatency(true),
-	)
+	rec, err := vcrscrub.New(cassettePath(cassetteName))
 	if err != nil {
 		t.Fatalf("opening cassette %s: %v", cassetteName, err)
 	}
@@ -185,6 +122,9 @@ func assertNoCredential(t *testing.T, what, s string) {
 	}
 }
 
+// TestScrubInteraction keeps KAVITA's shapes under test against the shared
+// scrubber: the Auth Key in the URL query, and the Pagination header that must
+// survive. internal/vcrscrub owns the generic behaviour.
 func TestScrubInteraction(t *testing.T) {
 	i := &cassette.Interaction{
 		Request: cassette.Request{
@@ -203,7 +143,7 @@ func TestScrubInteraction(t *testing.T) {
 		},
 	}
 
-	if err := scrubInteraction(i); err != nil {
+	if err := vcrscrub.Scrub(i); err != nil {
 		t.Fatalf("scrub: %v", err)
 	}
 
@@ -212,8 +152,8 @@ func TestScrubInteraction(t *testing.T) {
 	assertNoCredential(t, "request form", i.Request.Form.Get("apiKey"))
 	assertNoCredential(t, "request body", i.Request.Body)
 
-	if got := i.Response.Headers.Get("Set-Cookie"); got != RedactedPlaceholder {
-		t.Errorf("Set-Cookie = %q, want %q", got, RedactedPlaceholder)
+	if got := i.Response.Headers.Get("Set-Cookie"); got != vcrscrub.Placeholder {
+		t.Errorf("Set-Cookie = %q, want %q", got, vcrscrub.Placeholder)
 	}
 	// The Pagination header must survive: it is the only custom response header
 	// Kavita sets on an /api/* response, it is not in the OpenAPI document, and a
