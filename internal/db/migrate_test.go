@@ -60,7 +60,7 @@ func TestMigrationRoundTrip(t *testing.T) {
 // asserted rather than derived so that adding a migration is a deliberate edit
 // here too — a version the tests do not know about is a migration nobody
 // round-tripped.
-const latestSchemaVersion int64 = 10
+const latestSchemaVersion int64 = 11
 
 // Down is not a supported user path, but it must work, because it is the
 // cheapest way to test a migration locally. A Down that leaves objects behind
@@ -3468,6 +3468,258 @@ func TestMigrate0010DownAndUp(t *testing.T) {
 	}
 	if again != at10 {
 		t.Error("a Down followed by an Up did not reproduce the schema 0010 creates")
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Migration 0011 — ix_sync_report_container_latest.
+//
+// The index that takes the per-library_source sort out of
+// libraryCompletenessSQL's newest-verdict subquery. What it buys is a PLAN, and
+// a plan is not a schema fact, so it is pinned where it can be measured against
+// the shipped statement: internal/store's
+// TestLibraryCompletenessPlanIsSeeksAndOneSort asserts the plan and
+// TestLibraryCompletenessPlanGuardFires drops this index and watches the sort
+// come back. What THESE tests own is the schema half — that the index exists,
+// that it is on the columns the plan depends on in the order it depends on, that
+// the index it sits BESIDE is still there, and that the Down block takes nothing
+// else with it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// TestMigrate0011IndexShape pins all five columns AND their order.
+//
+// The order is the decision, the same way it was for 0009 and 0010: the first
+// four are the subquery's equality predicates and the fifth is the `ORDER BY
+// r2.id DESC LIMIT 1` the temp b-tree used to serve. A test that asserted only
+// "an index named ix_sync_report_container_latest exists on sync_report" would
+// stay green through a reordering that moved `id` into the middle — and that
+// reordering was tried while writing this: it drops the seek from four
+// constrained columns to two, which is the regression this pins.
+func TestMigrate0011IndexShape(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	var unique int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT "unique" FROM pragma_index_list('sync_report')
+		  WHERE name = 'ix_sync_report_container_latest'`,
+	).Scan(&unique); err != nil {
+		t.Fatalf("ix_sync_report_container_latest is not an index on sync_report: %v", err)
+	}
+	if unique != 0 {
+		t.Error("ix_sync_report_container_latest is UNIQUE. sync_report is APPEND-ONLY and " +
+			"every import writes a fresh row for the same (instance, kind, remote_kind, " +
+			"remote_id) tuple — uniqueness here would reject the second import, which is " +
+			"the exact history the newest-verdict subquery reads.")
+	}
+
+	const wantCols = "service_instance_id,kind,remote_kind,remote_id,id"
+	got := strings.Join(indexColumns(t, ctx, d, "ix_sync_report_container_latest"), ",")
+	if got != wantCols {
+		t.Errorf("ix_sync_report_container_latest is on (%s), want (%s).\n"+
+			"The first four are libraryCompletenessSQL's equality predicates and the "+
+			"fifth is its ORDER BY. See the migration header.", got, wantCols)
+	}
+
+	// 🔍 THE TRAILING `id` IS REDUNDANT AND EXPLICIT ON PURPOSE — `id` is INTEGER
+	// PRIMARY KEY, so SQLite appends it as the rowid anyway, and the four-column
+	// index measures a byte-identical plan, `COVERING` and all. It is pinned
+	// above so the ordering guarantee lives in the DDL rather than resting on
+	// that unstated identity. This asserts the identity the redundancy depends
+	// on, so a future rebuild that breaks it fails HERE, naming the reason,
+	// rather than as a mystery sort in a store-package plan guard.
+	var typ string
+	var pk int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT type, pk FROM pragma_table_info('sync_report') WHERE name = 'id'`,
+	).Scan(&typ, &pk); err != nil {
+		t.Fatal(err)
+	}
+	if typ != "INTEGER" || pk != 1 {
+		t.Errorf("sync_report.id is %s (pk=%d), not the INTEGER PRIMARY KEY the migration "+
+			"header reasons from. The trailing `id` column stops being redundant the "+
+			"moment that changes — re-read the header before touching the index.", typ, pk)
+	}
+
+	// NOT PARTIAL — and unlike 0010's two `work` indexes, that is the right call
+	// here rather than an oversight: sync_report has no soft-delete column, and
+	// remote_kind / remote_id are both nullable, so a report naming no container
+	// is a real row that must stay indexed.
+	var ddl string
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT sql FROM sqlite_master
+		  WHERE type = 'index' AND name = 'ix_sync_report_container_latest'`,
+	).Scan(&ddl); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(strings.ToUpper(ddl), " WHERE ") {
+		t.Errorf("ix_sync_report_container_latest is partial: %s\n"+
+			"It must index every sync_report row, NULL remote_kind/remote_id included.", ddl)
+	}
+}
+
+// TestMigrate0011KeepsTheInstanceIndex executes the migration header's loudest
+// claim: 0011 ADDS an index and removes NOTHING.
+//
+// ix_sync_report_instance is (service_instance_id, created_at DESC) and serves
+// 00005's stated reader — the Services screen's "this instance's recent reports,
+// newest first" — which ix_sync_report_container_latest cannot serve at all,
+// because created_at is not in it and three equality columns sit between the
+// instance and any ordering. A later tidy-up that reads "two indexes on one
+// small table" and drops either one is a regression in one of the two reads, and
+// only one of those two halves is visible from internal/store. This is the other
+// half; internal/store's TestLibraryCompletenessDoesNotDependOnTheInstanceIndex
+// is its counterpart.
+func TestMigrate0011KeepsTheInstanceIndex(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	names := map[string]bool{}
+	rows, err := d.Read().QueryContext(ctx, `SELECT name FROM pragma_index_list('sync_report')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		names[n] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"ix_sync_report_instance", "ix_sync_report_container_latest"} {
+		if !names[want] {
+			t.Errorf("sync_report has no %s. BOTH indexes ship: the 0011 header says which "+
+				"read each one serves and why neither subsumes the other.", want)
+		}
+	}
+
+	// And the Services read still seeks, and still does not sort. This is the
+	// half 0011's own plan guard cannot see, because that guard EXPLAINs a
+	// different statement.
+	plan, err := QueryPlan(ctx, d.Read(),
+		`SELECT id, kind, detail, created_at FROM sync_report
+		  WHERE service_instance_id = ? ORDER BY created_at DESC LIMIT 20`, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(plan, " | ")
+	if !strings.Contains(joined, "USING INDEX ix_sync_report_instance") {
+		t.Errorf("the Services screen's recent-reports read no longer seeks on "+
+			"ix_sync_report_instance:\n  %s\n"+
+			"0011 adds an index BESIDE that one and must not have changed this plan.",
+			strings.Join(plan, "\n  "))
+	}
+	if strings.Contains(joined, "USE TEMP B-TREE") {
+		t.Errorf("the Services screen's recent-reports read now SORTS:\n  %s\n"+
+			"ix_sync_report_instance's trailing `created_at DESC` exists precisely so "+
+			"that it does not.", strings.Join(plan, "\n  "))
+	}
+}
+
+// TestMigrate0011DownAndUp round-trips the migration.
+//
+// One DROP INDEX, and this checks the header's claim that nothing else is owed:
+// after Down ix_sync_report_container_latest is gone and NOTHING ELSE changed —
+// asserted over the whole schema dump rather than over the one name, because a
+// Down that also took ix_sync_report_instance with it would pass a one-name
+// check, and dropping that OTHER index is the specific mistake the header warns
+// about.
+//
+// ⚠️ An index Down cannot lose data, which the migration header states and this
+// test is the execution of: the sync_report row count is taken before and after,
+// and it does not move.
+func TestMigrate0011DownAndUp(t *testing.T) {
+	ctx := t.Context()
+	d := openTestDB(t)
+
+	if err := d.Write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		for _, s := range []string{
+			`INSERT INTO service_instance (id, kind, name, base_url, api_key_enc)
+			   VALUES (1, 'sonarr', 'Sonarr', 'http://sonarr:8989', x'00')`,
+			`INSERT INTO sync_report (id, service_instance_id, kind, remote_kind, remote_id, detail)
+			   VALUES (1, 1, 'content_completeness', 'library', '11', '{}')`,
+			// A row with NULL remote_kind/remote_id — the not-partial claim, made
+			// executable below.
+			`INSERT INTO sync_report (id, service_instance_id, kind, detail)
+			   VALUES (2, 1, 'items_skipped', '{}')`,
+		} {
+			if _, err := tx.ExecContext(ctx, s); err != nil {
+				return fmt.Errorf("%s: %w", s, err)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+
+	// NOT PARTIAL, executed rather than inferred from the absence of a WHERE
+	// clause: forcing the index must still find the NULL-container row.
+	var n int
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT count(*) FROM sync_report INDEXED BY ix_sync_report_container_latest
+		  WHERE service_instance_id = 1 AND kind = 'items_skipped'`).Scan(&n); err != nil {
+		t.Fatalf("reading NULL-container reports through the index: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("the index reports %d NULL-container rows, want 1 — a report that names "+
+			"no container is a real row and 0011 must index it", n)
+	}
+
+	at11, err := dumpSchema(ctx, d.Read())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	migrateDownTo(t, ctx, d, 10)
+	if err := d.Read().QueryRowContext(ctx,
+		`SELECT count(*) FROM sqlite_master
+		  WHERE type = 'index' AND name = 'ix_sync_report_container_latest'`,
+	).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Error("ix_sync_report_container_latest survived the Down block")
+	}
+	if err := d.Read().QueryRowContext(ctx, `SELECT count(*) FROM sync_report`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Errorf("%d sync_report rows after the Down, want 2 — an index rollback must not "+
+			"touch a row", n)
+	}
+
+	at10, err := dumpSchema(ctx, d.Read())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, obj := range strings.Split(at11, "\n\n") {
+		if obj == "" || strings.Contains(obj, "ix_sync_report_container_latest") {
+			continue
+		}
+		if !strings.Contains(at10, obj) {
+			t.Errorf("0011's Down block removed or changed an object it did not create:\n%s", obj)
+		}
+	}
+
+	if err := d.Migrate(ctx); err != nil {
+		t.Fatalf("Migrate 10 to latest: %v", err)
+	}
+	again, err := dumpSchema(ctx, d.Read())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != at11 {
+		t.Error("a Down followed by an Up did not reproduce the schema 0011 creates")
+	}
+	if err := d.Read().QueryRowContext(ctx, `SELECT count(*) FROM sync_report`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Errorf("%d sync_report rows after the re-Up, want 2", n)
 	}
 }
 

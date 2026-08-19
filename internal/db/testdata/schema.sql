@@ -96,6 +96,10 @@ CREATE INDEX ix_sil_container ON service_item_link(service_instance_id, remote_l
 -- index ix_sil_work
 CREATE INDEX ix_sil_work ON service_item_link(work_id) WHERE deleted_at IS NULL;
 
+-- index ix_sync_report_container_latest
+CREATE INDEX ix_sync_report_container_latest
+  ON sync_report(service_instance_id, kind, remote_kind, remote_id, id);
+
 -- index ix_sync_report_instance
 CREATE INDEX ix_sync_report_instance ON sync_report(service_instance_id, created_at DESC);
 
