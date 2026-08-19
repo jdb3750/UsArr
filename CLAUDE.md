@@ -84,13 +84,18 @@ in writing in `docs/REVIEW-LOG.md`. Findings are never silently dropped.
 **Verify, don't assert.** Every claim about an external API, rate limit, licensing term, port,
 endpoint or field name cites a primary source: official docs, the OpenAPI spec, or the
 service's own source code. Training data about this ecosystem is stale and actively wrong in
-the ways listed below. Where you are reasoning rather than citing, mark it as inference.
+the ways listed below. Where you are reasoning rather than citing, mark it as inference. The same
+holds inside the repo: a docstring, a code comment or a doc sentence describing behaviour is a
+claim, not a specification — check it against the code before relying on it, and when one is
+wrong, fix or delete it rather than annotating it.
 
 **The same standard applies to the repo's own gates.** Report what you measured, not just the
 verdict — the binary, its version and the commit — because a green that names neither its tool nor
 its tree is a rumour, and fire a guard deliberately before trusting it, since one that probes a
 proxy for its condition or has never been triggered is indistinguishable from no guard.
-`docs/DEVELOPMENT.md` §11 carries the mechanics.
+`docs/DEVELOPMENT.md` §11 carries the mechanics. One class of defect no gate catches at all:
+**a wire vocabulary and a storage vocabulary never share a term** — §11 carries that rule as
+well, and the three instances that earned it, every one of which compiled clean.
 
 **No invented status.** Never document a feature as existing when it does not.
 `docs/ARCHITECTURE.md` §16 is authoritative for what lands in which milestone; the README's
@@ -107,9 +112,10 @@ plan.
 **Build the base with intentional space for what comes later.** Several deferred features have
 an obvious seam in the current design: the provider registry is an interface a plugin host
 could implement, the search retriever is pluggable behind one boundary, `work_relation` is designed
-to carry confidence and evidence columns. Keep those seams — they cost almost nothing now and
-are expensive to retrofit. This is not a licence to build the deferred feature early: the seam
-ships, the feature does not.
+to carry confidence and evidence columns — its DDL is `docs/reference/schema.md` §11, the table
+itself is deferred to v0.3, and `TestDeferredTablesAreAbsent` fails if a migration creates it
+early. Keep those seams — they cost almost nothing now and are expensive to retrofit. This is
+not a licence to build the deferred feature early: the seam ships, the feature does not.
 
 ## Ecosystem facts that stale training data gets wrong
 
@@ -185,13 +191,16 @@ See `docs/ARCHITECTURE.md` §14 for the full threat model.
 | Document | What it holds |
 | --- | --- |
 | `docs/ARCHITECTURE.md` | The design. §16 is the authoritative roadmap. |
+| `docs/ROADMAP.md` | A working checklist of what v0.1 still needs, each item with a check you can run. Authoritative for neither scope (§16 is) nor status (the tree is). |
 | `docs/DECISIONS.md` | ADRs. **Add one for any decision that closes off an alternative.** |
 | `docs/FUTURE.md` | Deferred features, and the seam each one is designed against. |
 | `docs/RESEARCH.md` | Ecosystem findings with primary-source citations. |
 | `docs/CONFIGURATION.md` | Every configuration key and its semantics. |
 | `docs/DEVELOPMENT.md` | Local setup, workflow, the make targets. |
 | `docs/REVIEW-LOG.md` | Adversarial-review findings, each applied or rebutted. |
-| `docs/reference/` | Vendored upstream specs and captured API reference material. |
+| `docs/design/` | The visual system: DESIGN-DIRECTION.md, tokens.css (canonical values) and the v0.1 mockups. §17 stays authoritative over all three. |
+| `docs/reference/` | The long-form companions to `ARCHITECTURE.md`, one per area: the DDL of record, UsArr's own HTTP contract, the security model, captured *Arr API facts. Prose only — no specs live here. |
+| `api/specs/` | The vendored upstream specs the contract tests read, and `SOURCES.md`, which records each file's origin, commit and hash. |
 
 Do not duplicate design detail into this file. Link to the document that owns it.
 
