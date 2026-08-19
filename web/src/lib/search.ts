@@ -28,9 +28,14 @@
  * ⚠️ THE ITEM SHAPE IS `$lib/library`'s AND IS NOT RE-DECLARED. §6.2: "The item
  * keys are §1.3's item keys plus `score`, deliberately, so one row component
  * renders both Home's recently-added table and a search result", and
- * `TestSearchResponseKeysAreTheAllowlist` in `internal/httpapi` pins that on
- * the server side. `score` (§6.2.1) is the one key Home has no analogue for, it
- * is READ BY NOTHING HERE, and that is correct rather than an omission: it is
+ * `TestSearchItemKeysAreRecentWorkKeysPlusScore` in `internal/httpapi` pins THAT
+ * RELATIONSHIP on the server side — the per-response allowlist tests beside it
+ * (`TestSearchResponseKeysAreTheAllowlist`,
+ * `TestRecentWorksResponseKeysAreTheAllowlist`) each pin one shape and cannot
+ * see the two drift apart, which is the failure that would break this import.
+ *
+ * `score` (§6.2.1) is the one key Home has no analogue for, it is READ BY
+ * NOTHING HERE, and that is correct rather than an omission: it is
  * for the GROUPED presentation §17.4 rule 2 specifies, which is not built, and
  * §6.2.1's first forbidden use is a client re-sorting the rows by it — the
  * server's order already carries a media-type diversity guarantee that sorting
