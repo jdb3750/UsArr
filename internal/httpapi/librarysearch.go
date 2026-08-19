@@ -43,9 +43,18 @@ import (
 //     different commit; the seam is that the scope is an argument to the store
 //     call, not part of the SQL string.
 //   - No paging. See searchLimit.
-//   - No score on the wire. The ORDER is the contract; a published score is a
-//     number a client would start comparing across queries, and it is
-//     normalised per query so that comparison would be meaningless.
+//
+// THE SCORE IS ON THE WIRE AS OF THIS COMMIT, AND THE ORDER IS STILL THE
+// CONTRACT. This comment used to read "No score on the wire … a published score
+// is a number a client would start comparing across queries, and it is
+// normalised per query so that comparison would be meaningless" — the second
+// half of which is TRUE and survives, as the reason §6.2.1 forbids exactly that
+// comparison. What forced the reversal is that ARCHITECTURE §17.4 rule 2 orders
+// grouped results "by the group's best-scoring hit", which no client can compute
+// from a bare ordering: a row's ordinal position says nothing about how far the
+// best row of one group sits from the best row of another. Withholding the
+// number did not stop a client comparing scores; it stopped a client building
+// the screen. ADR-0054 records the decision and the alternatives it closes.
 
 // searchHitResponse is one search result as it crosses to a browser.
 //
@@ -55,11 +64,17 @@ import (
 // no instance is named, no remote_path is read — for the reasons
 // recentWorkResponse states at length.
 //
-// THE KEYS ARE recentWorkResponse's KEYS. A search result row and a
-// recently-added row render identically (§17.2's Type / title / year / Have
-// grammar), so a client reuses one row component across Home and Search. The two
-// structs are separate because the two reads are separate; the key set is the
-// same on purpose and TestSearchResponseKeysMatchRecentWorks pins it.
+// THE RENDERING KEYS ARE recentWorkResponse's KEYS, PLUS `score`. A search
+// result row and a recently-added row render identically (§17.2's Type / title /
+// year / Have grammar), so a client reuses one row component across Home and
+// Search. The two structs are separate because the two reads are separate; the
+// rendering key set is the same on purpose and
+// TestSearchResponseKeysAreTheAllowlist pins it.
+//
+// `score` is the one key Home has no analogue for and cannot have one for: Home
+// orders by date, so there is no relevance for it to carry. A client reusing the
+// row component ignores it, which costs nothing — it is read by the grouping
+// layer above the row, not by the row.
 type searchHitResponse struct {
 	ID int64 `json:"id"`
 
@@ -99,6 +114,20 @@ type searchHitResponse struct {
 	// column is NULL (silently, it is a legitimate state) and absent when the
 	// stored text is unusable (logged, because that is a writer bug).
 	Availability json.RawMessage `json:"availability,omitempty"`
+
+	// Score is store.SearchHit.Score, forwarded unrounded, and §6.2.1 is its
+	// whole contract. It is UNCONDITIONAL — never omitempty — because every hit
+	// has one: rerank writes it for every candidate and the rrf component is
+	// strictly positive for any row a leg retrieved, so a `0` here would be a
+	// server bug rather than a legitimately absent value, and a key that
+	// disappeared on a bug is a key a client learns to treat as optional.
+	//
+	// IT IS NOT ROUNDED. Rounding would manufacture ties the server did not
+	// have, and the one comparison §6.2.1 permits — this hit against that hit,
+	// in this response — is the comparison ties break. The digits past the
+	// fourth carry no information a client should read anything into; they are
+	// not precision worth trusting, and they are not worth destroying either.
+	Score float64 `json:"score"`
 }
 
 type searchResponse struct {
@@ -165,6 +194,11 @@ func (s *Server) handleLibrarySearch(w http.ResponseWriter, r *http.Request) err
 		Limit:     limit,
 		Truncated: res.Truncated,
 	}
+	// STORE ORDER, PRESERVED EXACTLY. The store sorts by score and then
+	// diversify promotes rows past better-scoring ones, so this loop must not
+	// re-sort — least of all by the `score` it is publishing, which would undo
+	// the media-type diversity guarantee row by row. §6.2.1 tells a client the
+	// same thing; TestSearchOrderIsTheServersAndIsNotScoreOrder holds it here.
 	for _, hit := range res.Hits {
 		out.Items = append(out.Items, s.toSearchHitResponse(hit))
 	}
@@ -232,6 +266,7 @@ func (s *Server) toSearchHitResponse(h store.SearchHit) searchHitResponse {
 		Title:     h.Title,
 		HaveCount: h.HaveCount,
 		WantCount: h.WantCount,
+		Score:     h.Score,
 	}
 	if h.Year.Valid {
 		year := h.Year.Int64

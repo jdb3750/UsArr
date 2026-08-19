@@ -451,16 +451,20 @@ stopped by the decision itself, not merely re-pointed by it.
       *Done when:* an image route is registered in `internal/httpapi/server.go`'s mux **and** the
       browse response carries an id that resolves through it.
 
-- [ ] **A relevance score on the wire.** §17.4 rule 2 orders grouped results *"by the group's
-      best-scoring hit, descending"*, and §6.2 publishes no score — *"**`items` is ordered by
-      relevance and the ORDER IS THE CONTRACT.** No score is published"* — deliberately, because it
-      is normalised per query and publishing it would freeze §6.6's ranking. §17.4's grouped card
-      therefore cannot be built over the response as specified. 🔍 Inference: which way that
-      resolves — a published score, server-side grouping, or an amended §17.4 — is decided nowhere,
-      so it closes off an alternative and needs an ADR.
+- [x] **A relevance score on the wire.**
+      **Landed 2026-08-19.** Resolved the first of the three ways this item named — a published
+      score — by [ADR-0054](./DECISIONS.md#adr-0054), which also records why the other two lost:
+      server-side grouping needs `work_relation`, a table v0.3 owns and no migration creates, and
+      amending §17.4 rule 2 to a fixed type order deletes the finding the rule was written from.
+      `items[].score` is `store.SearchHit.Score` — the re-rank's own output, three signals
+      normalised over that answer's candidate set — which the store already computed per hit and
+      **discarded at the boundary**; no migration, no column and no new query.
+      ⚠️ **The order is still the contract and is NOT score order**: diversity injection promotes a
+      row without re-scoring it, so a client sorting by the number gets a worse list than the one it
+      was handed. `reference/http-api.md` §6.2.1 is the semantics — two permitted uses, five
+      forbidden ones, each with its mechanism — and the guards are the `TestSearchScore*` family in
+      `internal/store` and `internal/httpapi`.
       *Authority:* §17.4 rule 2, `reference/http-api.md` §6.2 and §6.6, §16 v0.1 entry.
-      *Done when:* the search response carries a field §6.2 documents for grouping, **or** an ADR
-      records the alternative.
 
 - [ ] **System tags `type:`, `format:`, `source:`, `quality:`, `indexer:` with the `downloadId`
       provenance join.**
