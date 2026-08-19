@@ -443,8 +443,8 @@ else on the endpoint.**
 The rest of the row's contract has not been settled here; read `internal/httpapi/services.go`'s
 `serviceHealthResponse` for it. The first two are what the Services screen's
 `Last successful sync` and `Items` columns render, and both were hardcoded client-side before they
-existed on the wire. The third (§3.4) has **no consumer yet** — it is on the wire and nothing reads
-it; §3.4 says what a consumer has to do with it.
+existed on the wire. The third (§3.4) rides on the same `Items` cell as a muted second line, shown
+only when it is non-zero; §3.4 says what it means and what a consumer must not do with it.
 
 Like every read on this screen it is served **entirely from SQLite** (principle 1): no \*Arr call,
 no probe issued on the request path. Requires an authenticated session.
@@ -559,13 +559,13 @@ upstream body echoing a bare key is exactly the shape `RESEARCH.md` R-08 measure
 The import completed; `last_full_sync_at` is stamped; the works imported. What is incomplete is
 those items' **file** facts. The honest sentence is about the items, not about the service.
 
-**What a consumer has to do.** Nothing reads this field today — `web/src/lib/services.ts` models
-`last_full_sync_at` and `work_count` and stops there. A consuming thread has to: add
-`fileReadFailures: num(value.file_read_failures) ?? 0` to the `ServiceHealth` mapper in
-`web/src/lib/api.ts` beside `workCount`; render the count on the Services row **only when it is
-non-zero**, as a note rather than a fault state; and pin it the way
-`services-screen.test.ts` pins the four-state pair — a test that passes on the constant `0` passes
-on the bug.
+**What a consumer has to do.** As of 2026-08-19 the Services screen is the one that does (885dac0):
+`web/src/lib/api.ts`'s `ServiceHealth` mapper carries the field as `fileReadFailures`, and
+`web/src/lib/services.ts`'s `fileReadNote` renders it as *"File list not read for N items"* on the
+`Items` cell's muted second line, **only when it is non-zero** and never as a fault state. Any
+further consumer owes the same three things: map the field rather than defaulting it; render the
+non-zero case only, as a note; and pin both halves the way `services.test.ts` and
+`services-screen.test.ts` pin them — a test that passes on the constant `0` passes on the bug.
 
 ---
 
