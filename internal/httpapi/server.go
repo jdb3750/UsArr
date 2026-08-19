@@ -78,8 +78,11 @@ type Config struct {
 	// serves rendered artwork out of. Empty is honest rather than fatal —
 	// principle 3 — and means this process has no image cache, so every /img
 	// request answers not_cached. That is the same answer an install with an
-	// empty cache directory gives, which is every install today: nothing in the
-	// tree writes an image yet.
+	// empty cache directory gives. ⚠️ THIS USED TO ADD "which is every install
+	// today: nothing in the tree writes an image yet", FALSIFIED 2026-08-19 BY
+	// `c4a3277`: internal/libsync's phase D (covers.go) fetches covers during a
+	// BookOrbit import, so a cache directory can now be non-empty. An empty one
+	// is still ordinary — see internal/httpapi/images.go's header.
 	ImageCacheDir string
 
 	// SPA is the embedded frontend handler (internal/web.Handler). Nil serves a

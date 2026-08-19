@@ -81,11 +81,14 @@ func seedLibraryCorpus(t *testing.T, s *Server) {
 		`INSERT INTO edition (id, work_id, format) VALUES (1, 3, 'ebook')`,
 		`INSERT INTO edition (id, work_id, format) VALUES (2, 4, 'audiobook')`)
 
-	// ONE POSTER, ON BERSERK. Written here rather than by the import because no
+	// ONE POSTER, ON BERSERK. Written here rather than by an import because this
+	// test seeds rows directly and runs none. ⚠️ THE REASON GIVEN USED TO BE "no
 	// import CALLS the fetch half — internal/imagepipeline exists and nothing
-	// invokes it — so without this every row's poster_key is legitimately absent
-	// and every assertion about it would pass VACUOUSLY, which is the
-	// empty-green the seed above already has a paragraph about.
+	// invokes it", FALSIFIED 2026-08-19 BY `c4a3277`, which added phase D
+	// (internal/libsync/covers.go). The insert is still required for the same
+	// outcome: without it every row's poster_key is legitimately absent and every
+	// assertion about it would pass VACUOUSLY, which is the empty-green the seed
+	// above already has a paragraph about.
 	//
 	// ⚠️ THIS INSERT IS TEST-ONLY. internal/store's format lint exempts
 	// `_test.go`, so this does not satisfy it; the ValidImageFormat call and the
