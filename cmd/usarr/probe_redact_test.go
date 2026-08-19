@@ -37,7 +37,18 @@ func TestProbeErrorIsRedactedBeforeItIsStored(t *testing.T) {
 	const apiKey = "prowlarrKEY7f3c9a2b5e8d1046c7b2f9e3"
 
 	prowlarr := newFakeProwlarr(t, apiKey)
-	env := newTestApp(t)
+
+	// ⚠️ NO BACKGROUND PROBER (RK-11). This test flips the double and then calls
+	// registry.probe ITSELF, so it must be the only writer of that snapshot.
+	// With the prober running, POST /api/v1/services queues a probe of its own
+	// through ProbeNow; if that queued probe read /system/status while the
+	// double was still healthy and its recordProbe lands after this one's, the
+	// assertions below run against the HEALTHY snapshot and the test fails
+	// having proved nothing about redaction. That is not a hypothesis: held
+	// open deterministically, the snapshot came back AppVersion:2.1.3.5150 with
+	// an empty Error. Nothing about what this test asserts changes — it drove
+	// the real probe by hand before and it still does.
+	env := newTestApp(t, withoutProber)
 
 	var sess sessionBody
 	env.do(t, "GET", "/api/v1/auth/session", nil, &sess)
