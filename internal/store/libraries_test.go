@@ -692,12 +692,18 @@ func TestListLibrariesPlanGuardFires(t *testing.T) {
 	t.Run("ux_libmem_identity dropped", func(t *testing.T) {
 		s := newTestStore(t)
 		seedLibrariesCorpus(t, s)
-		if err := s.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
-			_, err := tx.ExecContext(ctx, `DROP INDEX ux_libmem_identity`)
-			return err
-		}); err != nil {
-			t.Fatalf("drop index: %v", err)
-		}
+		// ⚠️ dropIndexesAndConfirm, never a bare DROP: listLibrariesPlan below
+		// EXPLAINs on the READ pool, and MEASURED on this tree, a read-pool
+		// connection that has already planned this statement keeps answering
+		// with the PRE-DROP plan indefinitely — repeating the EXPLAIN does not
+		// shake it loose. This arm survives a bare drop today only because
+		// nothing plans before it; that is an accident of ordering, and one seed
+		// refactor that plans on its way past turns this arm into a measurement
+		// of a schema that no longer exists. The confirming read inside is both
+		// the proof and the cure. Undocumented behaviour, characterised
+		// empirically — the helper in store_test.go carries the measurement and
+		// its caveats.
+		dropIndexesAndConfirm(t, s, "ux_libmem_identity")
 
 		joined := listLibrariesPlan(t, s, OwnerScope(0))
 		faults := listLibrariesPlanFaults(joined)
@@ -1015,71 +1021,6 @@ func libraryCompletenessPlanFaults(plan []string) []string {
 				"ix_sync_report_container_latest is gone or unusable", n))
 	}
 	return faults
-}
-
-// dropIndexesAndConfirm drops indexes on the WRITE connection and then proves,
-// on the READ pool, that the drop is visible there — before any EXPLAIN runs.
-//
-// ⚠️ THIS IS NOT CEREMONY, IT IS THE ARM'S CORRECTNESS. `EXPLAIN QUERY PLAN` on
-// the read pool is STALE after a `DROP INDEX` issued on the write connection.
-// MEASURED on this tree, in this order, and reproduced deliberately rather than
-// taken on report:
-//
-//  1. EXPLAIN on the read pool          → seeks ix_sync_report_container_latest
-//  2. DROP INDEX on the write connection
-//  3. EXPLAIN on the read pool          → STILL seeks the dropped index
-//  4. EXPLAIN on the read pool again    → STILL seeks the dropped index
-//  5. unrelated read on the pool
-//     (sqlite_master)                   → correctly reports the index gone
-//  6. EXPLAIN on the read pool          → falls back, and the sort returns
-//
-// Steps 3 and 4 are the hazard: deterministic, and not shaken loose by repeating
-// the EXPLAIN. Step 5 is the cure, and it is the read this helper performs.
-//
-// 🔍 The mechanism is inference — most likely a WAL read snapshot pinned on the
-// pooled connection. The behaviour above is what was measured; the cause is not.
-// Measured too, and the reason the arms here were not already broken: a pool
-// that has NEVER planned the statement sees the drop immediately, so priming is
-// what arms the trap.
-//
-// The consequence is the one failure mode a firing arm exists to rule out: an
-// arm that drops on the writer and EXPLAINs on a reader without this step
-// re-prints the HEALTHY plan, finds no faults, and goes SILENTLY GREEN — a guard
-// that has never been triggered, wearing a passing test as a disguise. The
-// sqlite_master read below is both the proof the drop landed AND the unrelated
-// read that clears the staleness, so it fixes the hazard and detects it in one
-// step. Every arm that removes an index goes through here.
-//
-// The same hazard is why every guard in this file builds its own Store: it was
-// first hit in the other direction, with a CREATE INDEX that a
-// previously-planned read connection went on ignoring.
-func dropIndexesAndConfirm(t *testing.T, s *Store, names ...string) {
-	t.Helper()
-	if err := s.DB().Write(t.Context(), func(ctx context.Context, tx *sql.Tx) error {
-		for _, n := range names {
-			if _, err := tx.ExecContext(ctx, `DROP INDEX `+n); err != nil {
-				return fmt.Errorf("drop %s: %w", n, err)
-			}
-		}
-		return nil
-	}); err != nil {
-		t.Fatalf("drop indexes on the write connection: %v", err)
-	}
-
-	for _, n := range names {
-		var count int
-		if err := s.DB().Read().QueryRowContext(t.Context(),
-			`SELECT count(*) FROM sqlite_master WHERE type = 'index' AND name = ?`, n,
-		).Scan(&count); err != nil {
-			t.Fatalf("confirming %s is gone, on the read pool: %v", n, err)
-		}
-		if count != 0 {
-			t.Fatalf("%s is still visible to the READ pool after being dropped on the "+
-				"write connection. Everything this arm goes on to EXPLAIN would describe "+
-				"a schema that no longer exists, and the arm would pass without ever "+
-				"measuring the break it claims to measure.", n)
-		}
-	}
 }
 
 func indexOfPlanStep(plan []string, step string) int {
