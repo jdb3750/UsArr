@@ -231,7 +231,7 @@ These are not new. They are restated because every decision below is downstream 
 | **ARCHITECTURE §17.1 / §4.4.1** | **No skeleton shimmer.** The image placeholder is a `dominant_color` block — the cover's own average colour, reserved at the right aspect before the image arrives. Informative, not decorative, and it never pulses. **The title sits below it, not in it** (§9.2) |
 | **ARCHITECTURE §2.3 / §5.5 / §17.7** | Degraded ≠ blocked. A small **non-modal** banner. **The catalogue never greys out and never shows a spinner** |
 | **ARCHITECTURE §13** | Client-side prefix filter p50 < 5 ms, p99 < 16 ms — one frame. The UI's own budget, not the server's |
-| **ARCHITECTURE §16** (amended by ADR-0032, then by ADR-0035, then re-sequenced by ADR-0041 and ADR-0045) | **v0.1 connects two services: Kavita and Prowlarr.** The six media types stay in the model and the navigation, but **v0.1 has no catalogue source for movies, TV, music or audiobooks** — Kavita is v0.1's one catalogue source ([ADR-0041](../DECISIONS.md#adr-0041)) and its adapter emits exactly two `work.kind` values, `comic` and `book`, so ebooks and comics are the two types v0.1 catalogues and the other four wait. **Sonarr and Radarr are v0.2** ([ADR-0045](../DECISIONS.md#adr-0045)); **Navidrome, Audiobookshelf and Komga** sequence after v0.1 one at a time, in §16.1's order, which does not fix which release each lands in. ⚠️ This row used to read *"v0.1 connects three services: Sonarr, Radarr and Prowlarr"* with the \*Arr library sync proving the replica thesis first; ADR-0041 moved the sync core onto Kavita because the owner runs Kavita and runs neither \*Arr, and **re-sequenced rather than cut** — both \*Arrs still arrive. Of the comics pair, **Kavita ships and Komga follows it**: ADR-0032 cut Kavita and **ADR-0035 reversed that**, because it is the install the owner actually runs and it covers books, comics and manga in one source. ARCHITECTURE §16 is authoritative for which milestone each lands in. The **command sinks are all out of v0.1** — including the minimal \*Arr write path, which [ADR-0042](../DECISIONS.md#adr-0042) re-sequenced out with the \*Arrs — and they do not all land together: **LazyLibrarian is v0.3** (the first Tier 1 manifest, request sink only), while **Lidarr, Mylar3 and Kapowarr are v1.0**. Requests in v0.1 is the **Prowlarr Search-and-Grab path only — for all six types**, which is what keeps the four sourceless types navigable |
+| **ARCHITECTURE §16** (amended by ADR-0032, then by ADR-0035, then re-sequenced by ADR-0041 and ADR-0045, then re-sourced by ADR-0052) | **v0.1 connects two services: BookOrbit and Prowlarr** ([ADR-0052](../DECISIONS.md#adr-0052), which replaced Kavita in that slot on the owner's decision to sunset it). The six media types stay in the model and the navigation, but **v0.1 has no catalogue source for movies, TV, music or audiobooks** — §16.1 gives v0.1's one catalogue source the same three media types Kavita had, books, comics and manga, so ebooks and comics are the two types v0.1 catalogues and the other four wait. ⚠️ **That pair used to be read off the adapter**, and it no longer can be: *"its adapter emits exactly two `work.kind` values, `comic` and `book`"* is measured on `mapLibraryType` (`internal/libsync/kavita.go`), and **BookOrbit's adapter is not written yet**, so the pair now rests on §16.1's media types rather than on code. **Sonarr and Radarr are v0.2** ([ADR-0045](../DECISIONS.md#adr-0045)); **Navidrome, Audiobookshelf and Komga** sequence after v0.1 one at a time, in §16.1's order, which does not fix which release each lands in. ⚠️ This row used to read *"v0.1 connects three services: Sonarr, Radarr and Prowlarr"* with the \*Arr library sync proving the replica thesis first; ADR-0041 moved the sync core onto Kavita because the owner runs Kavita and runs neither \*Arr, and **re-sequenced rather than cut** — both \*Arrs still arrive. Of the comics pair, this row then read *"**Kavita ships and Komga follows it**"*: ADR-0032 cut Kavita and **ADR-0035 reversed that**, because it was the install the owner actually ran and it covered books, comics and manga in one source. **ADR-0052 ended that placement.** Kavita left v0.1 with it and is **not** added back to §16.1's post-v0.1 sequence, on [ADR-0042](../DECISIONS.md#adr-0042)'s refusal-to-invent-a-milestone precedent — so Komga is that sequence's third entry with nothing of Kavita's ahead of it. ⚠️ **Sunset is not deleted:** `internal/kavita` and `internal/libsync/kavita.go` stay in the tree and stay green; what stops is investment. ARCHITECTURE §16 is authoritative for which milestone each lands in. The **command sinks are all out of v0.1** — including the minimal \*Arr write path, which [ADR-0042](../DECISIONS.md#adr-0042) re-sequenced out with the \*Arrs — and they do not all land together: **LazyLibrarian is v0.3** (the first Tier 1 manifest, request sink only), while **Lidarr, Mylar3 and Kapowarr are v1.0**. Requests in v0.1 is the **Prowlarr Search-and-Grab path only — for all six types**, which is what keeps the four sourceless types navigable |
 | **ARCHITECTURE §6.5 / ADR-0026** | **User-defined libraries exist and are configured separately from services.** They are a *scope*, never a navigation axis (§8.1) |
 
 One more, from the ecosystem rather than from the repo: in this software family **stability of
@@ -1606,12 +1606,19 @@ Its height is **O(1) in the number of media types**.
 
 ⚠️ **The wireframe below draws the *full stack* — Sonarr, Radarr, Prowlarr, Navidrome,
 Audiobookshelf and Kavita — because six populated types is what this layout has to be judged on.**
-**That is not the v0.1 install.** v0.1 connects Kavita and Prowlarr only (ADR-0041); the remaining
+**That is not the v0.1 install.** **v0.1 connects BookOrbit and Prowlarr only**
+([ADR-0052](../DECISIONS.md#adr-0052), which replaced Kavita in that slot; this sentence read
+*"v0.1 connects Kavita and Prowlarr only (ADR-0041)"*). The remaining
 catalogue sources sequence after it, one at a time, so on a v0.1 install movies, TV, music and
 audiobooks have **no catalogue source** and Block A renders those four rows in the per-type
 `unconfigured` state, naming the service that will populate each and the milestone it arrives in
 (ARCHITECTURE §17.2, and rule 13 in §13 below for why four stateful rows are not an empty section).
-Both installs are real screens the design owes; neither is the other's placeholder.
+**Which four types those are is unchanged** — BookOrbit's media types are Kavita's, books, comics
+and manga (§16.1) — so the wireframe below is right about the *shape* while its v0.1 counterpart in
+`design/mockups/` still **draws** Kavita by name. That re-draw is owed and is not done here:
+ADR-0052 lists it among the documents it deliberately did not sweep, calling it a design-asset
+change rather than a prose one. Both installs are real screens the design owes; neither is the
+other's placeholder.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────────────┐
@@ -2342,8 +2349,12 @@ document reviewable.
 ⚠️ **The label has to name the milestone as well as the fabrication, and this is where the exception
 nearly swallowed the rule.** The mockups draw two installs behind a switcher: a **full stack** with
 every catalogue source connected, six media types populated, which is the default because six
-populated types is what the layout must survive; and the **v0.1 install** — Kavita and Prowlarr,
-per [ADR-0041](../DECISIONS.md#adr-0041) — beside it. A reader who meets the default and is told
+populated types is what the layout must survive; and the **v0.1 install** beside it, drawn as
+Kavita and Prowlarr per [ADR-0041](../DECISIONS.md#adr-0041). ⚠️ **v0.1's catalogue source is
+BookOrbit as of [ADR-0052](../DECISIONS.md#adr-0052)**, and the strings below are quoted as the
+assets **render** them rather than corrected in place: re-drawing that install is a design-asset
+change ADR-0052 names and does not make, and a quotation that no longer matches the asset would
+make this section unreviewable against it. A reader who meets the default and is told
 only *"this data is invented"* has been told the numbers are made up and left to assume the
 **stack** is real for the milestone being discussed, which is `CLAUDE.md`'s "no invented status"
 failure reached by omission rather than by assertion. So: **the switcher's own option labels place each stack against a milestone**, not merely
@@ -2355,7 +2366,10 @@ states which install is drawn and changes with the selection**; and the switcher
 notice**, because it is not a product control and drawing it in the product chrome would fabricate a
 setting. "A later milestone" rather than a number is deliberate — ARCHITECTURE §16 sequences the
 catalogue sources one at a time after v0.1 and has not fixed which release each lands in, so a
-number here would invent exactly the status the rule forbids. `check.mjs` §8b enforces all four.
+number here would invent exactly the status the rule forbids. `check.mjs` §8b enforces all four — and note what it enforces, because it is what makes the
+stale name a scope error rather than a gate failure: §8b asserts that each label matches
+`/v0\.1|milestone/i`, not which service it names, so `v0.1: BookOrbit, Prowlarr` will pass it
+unchanged whenever the re-draw lands.
 
 ### 9.7 The minimum component set, and where per-type divergence is allowed
 
@@ -2837,6 +2851,20 @@ the feature does not.** These are layout obligations, not v0.1 work.
   v0.1 (ADR-0032). §17.2's rule — a type the user does not have is not shown at all — means the
   *presence* of each is a data change rather than a layout change, **provided nothing hard-codes a
   type list anywhere**. That is now a live requirement rather than a future-proofing note.
+  ⚠️ **The rule was narrowed on 2026-08-19 and this bullet kept the un-narrowed form**, so the
+  seam it describes is real for two of the three places and not for the third.
+  [ADR-0053](../DECISIONS.md#adr-0053) carves **the sidebar** out of *"not shown at all"* and leaves
+  Block A and search groups under it: **nothing UsArr serves answers per-type presence**
+  ([`reference/http-api.md`](../reference/http-api.md) §7.1 — *"no facet counts … each is its own
+  aggregate and its own read"*), so the shipped shell renders **all six entries unconditionally**,
+  no row carries a count, and an empty type says it is empty on its own screen (§8.1). **Per-type
+  hiding is closed, not abandoned, and it reopens on one named condition — a facet read**: one
+  statement answering which of the six types have rows under the current scope, published on
+  `reference/http-api.md`. Until then the sidebar half of this bullet is a screen the wire cannot
+  serve, and ADR-0053 is the record that says so, so a later pass does not "restore" it as though
+  it had been dropped by accident. **The seam itself survives intact** — hard-coding a type list is
+  still forbidden, because the facet read turns the sidebar back into a data change without a
+  layout change, which is exactly what this bullet exists to protect.
 - **Libraries grow without bound and the layout must not care.** The scope chip (§8.1) is the seam:
   a library is `?lib=` on an existing route, so a user with thirty libraries costs zero new page
   types and zero sidebar rows.
