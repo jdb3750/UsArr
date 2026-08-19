@@ -261,6 +261,16 @@ type request struct {
 	// which is @Public() at class level, and POST /api/v1/auth/magic-links/login,
 	// which is @Public() on the action and is where the bearer comes FROM.
 	anonymous bool
+
+	// accept overrides the Accept header. Empty means application/json, which is
+	// every route in this package but one: the cover route answers a
+	// createReadStream, and asking an image endpoint for JSON is a claim about
+	// this client's expectations that is simply false. Nothing upstream negotiates
+	// on it today — Fastify's reply.send(stream) ignores Accept, and BookOrbit has
+	// no ReturnHttpNotAcceptable equivalent (doc.go) — so this is honesty rather
+	// than a workaround, and it is the field that stops the day a Nest interceptor
+	// does start negotiating from being a mystery.
+	accept string
 }
 
 // newRequest builds the outbound *http.Request.
@@ -291,7 +301,11 @@ func (c *Client) newRequest(ctx context.Context, r request, bearer string) (*htt
 		return nil, &APIError{Op: r.op, Method: r.method, Path: r.path, Message: "building request", Err: ErrInvalidRequest}
 	}
 
-	req.Header.Set("Accept", "application/json")
+	accept := r.accept
+	if accept == "" {
+		accept = "application/json"
+	}
+	req.Header.Set("Accept", accept)
 	req.Header.Set("User-Agent", c.ua)
 	if hasBody {
 		req.Header.Set("Content-Type", "application/json")
@@ -302,17 +316,22 @@ func (c *Client) newRequest(ctx context.Context, r request, bearer string) (*htt
 	return req, nil
 }
 
-// doRaw performs one request and returns the answered status and body without
-// classifying either. It handles the deadline, the bearer and the 401 re-mint
-// retry; it does NOT decide what a status means.
+// doRaw performs one request and returns the answered status, the response
+// HEADERS and the body without classifying any of them. It handles the deadline,
+// the bearer and the 401 re-mint retry; it does NOT decide what a status means.
 //
 // It is separate from do because Health needs a 503 to reach it as a DIAGNOSIS
 // rather than as a transport failure: Terminus answers 503 with a fully-formed
 // body naming the indicator that is down, and collapsing that into ErrServer
 // would throw away the one thing the probe exists to report.
 //
+// The header is returned rather than dropped because Cover needs Content-Type
+// and the alternative was a second buffered-request path beside this one. It is
+// the header of the LAST exchange, which is the answering one after a re-mint
+// retry. Callers that want only a body ignore it, and every one of them does.
+//
 // err is non-nil only for a failure that happened before a status existed.
-func (c *Client) doRaw(ctx context.Context, r request) (int, []byte, error) {
+func (c *Client) doRaw(ctx context.Context, r request) (int, http.Header, []byte, error) {
 	timeout := r.timeout
 	if timeout <= 0 {
 		timeout = c.timeouts.Default
@@ -329,13 +348,13 @@ func (c *Client) doRaw(ctx context.Context, r request) (int, []byte, error) {
 		var err error
 		bearer, err = c.accessToken(ctx, "")
 		if err != nil {
-			return 0, nil, err
+			return 0, nil, nil, err
 		}
 	}
 
-	status, body, err := c.roundTrip(ctx, r, bearer)
+	status, header, body, err := c.roundTrip(ctx, r, bearer)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
 
 	// The re-mint retry. A 401 on an authenticated route means the held access
@@ -345,17 +364,17 @@ func (c *Client) doRaw(ctx context.Context, r request) (int, []byte, error) {
 	if status == http.StatusUnauthorized && !r.anonymous && bearer != "" {
 		fresh, mintErr := c.accessToken(ctx, bearer)
 		if mintErr != nil {
-			return 0, nil, mintErr
+			return 0, nil, nil, mintErr
 		}
 		if fresh != bearer {
-			status, body, err = c.roundTrip(ctx, r, fresh)
+			status, header, body, err = c.roundTrip(ctx, r, fresh)
 			if err != nil {
-				return 0, nil, err
+				return 0, nil, nil, err
 			}
 		}
 	}
 
-	return status, body, nil
+	return status, header, body, nil
 }
 
 // roundTrip is ONE wire exchange, and it is the only place the circuit breaker
@@ -365,19 +384,19 @@ func (c *Client) doRaw(ctx context.Context, r request) (int, []byte, error) {
 // CALL can be two exchanges — a mint followed by the real request — and gating
 // the call would consume the half-open probe slot on the mint and then refuse
 // the request it was minted for. One exchange, one Allow, one recordStatus.
-func (c *Client) roundTrip(ctx context.Context, r request, bearer string) (int, []byte, error) {
+func (c *Client) roundTrip(ctx context.Context, r request, bearer string) (int, http.Header, []byte, error) {
 	if err := c.breaker.Allow(); err != nil {
-		return 0, nil, &APIError{Op: r.op, Method: r.method, Path: r.path, Err: err}
+		return 0, nil, nil, &APIError{Op: r.op, Method: r.method, Path: r.path, Err: err}
 	}
 
 	req, err := c.newRequest(ctx, r, bearer)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, nil, err
 	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return 0, nil, c.transportError(r, err)
+		return 0, nil, nil, c.transportError(r, err)
 	}
 	defer func() {
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
@@ -393,22 +412,22 @@ func (c *Client) roundTrip(ctx context.Context, r request, bearer string) (int, 
 	if err != nil {
 		if lb.exceeded {
 			c.recordStatus(resp.StatusCode)
-			return 0, nil, &APIError{
+			return 0, nil, nil, &APIError{
 				Op: r.op, Method: r.method, Path: r.path, Status: resp.StatusCode,
 				Message: fmt.Sprintf("response exceeded the %d-byte buffered limit", maxBufferedBody),
 				Err:     ErrResponseTooLarge,
 			}
 		}
-		return 0, nil, c.transportError(r, err)
+		return 0, nil, nil, c.transportError(r, err)
 	}
 	c.recordStatus(resp.StatusCode)
-	return resp.StatusCode, body, nil
+	return resp.StatusCode, resp.Header, body, nil
 }
 
 // do is doRaw plus status classification and a JSON decode. out may be nil to
 // discard the body.
 func (c *Client) do(ctx context.Context, r request, out any) error {
-	status, body, err := c.doRaw(ctx, r)
+	status, _, body, err := c.doRaw(ctx, r)
 	if err != nil {
 		return err
 	}
@@ -531,7 +550,7 @@ func (l *limitedBody) Read(p []byte) (int, error) {
 func (c *Client) Health(ctx context.Context) (HealthReport, error) {
 	r := request{op: "Health", method: http.MethodGet, path: apiPrefix + "/health", anonymous: true}
 
-	status, body, err := c.doRaw(ctx, r)
+	status, _, body, err := c.doRaw(ctx, r)
 	if err != nil {
 		return HealthReport{}, err
 	}

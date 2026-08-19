@@ -158,7 +158,7 @@ func (c *Client) mint(ctx context.Context) (session, error) {
 	}
 
 	var out magicLinkLoginResponse
-	status, body, err := c.roundTrip(ctx, request{
+	status, _, body, err := c.roundTrip(ctx, request{
 		op:        "MagicLinkLogin",
 		method:    http.MethodPost,
 		path:      magicLinkLoginPath,

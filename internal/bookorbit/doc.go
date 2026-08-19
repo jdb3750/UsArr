@@ -124,6 +124,12 @@
 // through NARROW ALLOWLIST DTOs (catalogue.go), which is what keeps per-user
 // reading state out of this process entirely.
 //
+// It also fetches ONE BINARY: Client.Cover is GET /api/v1/books/{id}/cover,
+// returning the status, the bytes and the Content-Type BookOrbit claimed, and
+// classifying none of the three. There is no allowlist DTO because there is no
+// document — cover.go carries the argument, including why a 404 is a STATUS here
+// and not an error.
+//
 // ⚠️ THIS SECTION USED TO BE HEADED *"this is the client, and slice 0 of it"*
 // AND TO SAY THE PACKAGE *"does NOT: read a catalogue, know what a library is …
 // There is no GET /libraries call in this package and that absence is
@@ -138,8 +144,18 @@
 // it, and the second time it went stale is why the correction is written this
 // way.
 //
-// It still does NOT: fetch a cover, write a schema row, or import anything. No
-// file here touches internal/store or internal/db; the mapping onto UsArr's
-// schema is internal/libsync/bookorbit.go's, and this package deals only in
-// BookOrbit's own nouns.
+// It still does NOT: write a schema row, or import anything. No file here
+// touches internal/store or internal/db; the mapping onto UsArr's schema is
+// internal/libsync/bookorbit.go's, and this package deals only in BookOrbit's
+// own nouns — a cover leaves here as bytes and a status, and nothing in this
+// package decides whether, where or in what format they are kept.
+//
+// ⚠️ THAT SENTENCE USED TO OPEN *"It still does NOT: fetch a cover, write a
+// schema row, or import anything"*. cover.go falsified the first clause and only
+// the first: Client.Cover exists. This is the THIRD time a sentence in this doc
+// has outlived the tree, which is why the paragraph above is written as a
+// standing warning rather than as a one-off correction, and the record is kept
+// here for the same reason it is kept there — the exclusion was right for as
+// long as nothing consumed a cover, and what changed is that the cover-image
+// pipeline's writer exists to consume one.
 package bookorbit

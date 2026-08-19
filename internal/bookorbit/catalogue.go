@@ -27,11 +27,18 @@ import (
 // WHAT IS NOT HERE, so the absence reads as a decision rather than an oversight:
 // GET /books/:id (the per-book detail read — description, folderPath, the twelve
 // further provider ids and the comic roles, one request per book with no batch
-// route anywhere in the controller), the cover and thumbnail routes, and
-// GET /series. The series endpoints are excluded on a measurement rather than on
-// a budget: SeriesRepository.findAll projects id, name, bookCount, readCount and
+// route anywhere in the controller), the thumbnail route, and GET /series. The
+// series endpoints are excluded on a measurement rather than on a budget:
+// SeriesRepository.findAll projects id, name, bookCount, readCount and
 // lastAddedAt only, so there is no series watermark to walk, and every fact they
 // carry rides the book stream already.
+//
+// ⚠️ THAT LIST USED TO READ *"the cover and thumbnail routes"*. The COVER route
+// is no longer excluded — Client.Cover is in cover.go, deliberately in its own
+// file because it is the one read in this package that returns bytes rather than
+// a projected document, and the allowlist-DTO discipline this file is built on
+// has nothing to say about an image. The THUMBNAIL route is still excluded, and
+// cover.go says why.
 
 // ─── GET /api/v1/libraries ───────────────────────────────────────────────────
 
