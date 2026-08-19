@@ -3669,6 +3669,14 @@ func TestMigrate0011DownAndUp(t *testing.T) {
 			"no container is a real row and 0011 must index it", n)
 	}
 
+	// ⚠️ TO VERSION 11 FIRST — a no-op today and armed the moment 0012 lands.
+	// openTestDB migrates to LATEST, so without this the dump below captures
+	// whatever landed AFTER 0011, and the "removed an object it did not create"
+	// comparison then blames THIS Down block for rolling back a later one.
+	// 0009's round-trip lacked this line and 0010 broke it; 0010's test carries
+	// the same warning.
+	migrateDownTo(t, ctx, d, 11)
+
 	at11, err := dumpSchema(ctx, d.Read())
 	if err != nil {
 		t.Fatal(err)
@@ -3708,6 +3716,9 @@ func TestMigrate0011DownAndUp(t *testing.T) {
 	if err := d.Migrate(ctx); err != nil {
 		t.Fatalf("Migrate 10 to latest: %v", err)
 	}
+	// TO VERSION 11 AGAIN, for the same reason: Migrate returns the DB to head,
+	// and `again` must be read at 0011 to be comparable with at11.
+	migrateDownTo(t, ctx, d, 11)
 	again, err := dumpSchema(ctx, d.Read())
 	if err != nil {
 		t.Fatal(err)
