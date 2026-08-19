@@ -1237,6 +1237,41 @@ an unnecessary read transaction is noise that hides the necessary ones, and ever
 lock the WAL checkpointer has to wait behind. The full sweep of this codebase's read paths, with the
 reason each one is safe, is the consistency audit in `docs/REVIEW-LOG.md`.
 
+### A wire vocabulary and a storage vocabulary never share a term
+
+Three instances of this, and **every one of them compiled clean** — which is the whole reason it is
+a convention. A collision the build catches needs no rule. This class is invisible to `go build`, to
+`go vet` and to a reading eye, because both sides are spelled correctly and only the meaning differs.
+
+* **Two constants, one name, two values.** `internal/httpapi` carried `outcomeSentUnknown` twice
+  after a merge: `grab.go:214`'s is `audit_log.metadata_json`'s vocabulary (`"sent_unknown"`),
+  `grabs.go`'s was the published shape of `GET /api/v1/grabs/recent` (`"sent_outcome_unknown"`).
+  `go build` named two of the three uses; the third — `outcomeFor`'s unconfirmed arm — rebound to
+  the audit spelling and compiled green, which would have shipped an unrecognised string to
+  `web/src/lib/requests.ts`. Repaired in `0cb1a18` by prefixing the wire set
+  (`wireOutcomeSentUnknown`, `internal/httpapi/grabs.go:206`), leaving both strings as each side
+  ships them.
+* **A parameter named for the wrong vocabulary.** `ARCHITECTURE.md:2120` still budgets
+  `GET /api/v1/library?kind=movie`. `kind` is a real column that ships on that endpoint's wire under
+  its own name in every row, while the parameter's vocabulary is §17.2's six-value media-type enum —
+  so the row names one vocabulary and spends the other. Corrected to `?media_type=movies` on the
+  unmerged browse branch (`claude/hearth-thread-rd9ukh`, `f80097f`). Prose is compiled by nothing at
+  all, so nothing was ever going to catch it.
+* **Two spellings of one concept, each legal in its own set.** `series` is a `work.kind`, `tv` is a
+  media type, and a filter that accepted either would silently mean the other.
+  `TestBrowseWorksUnknownMediaTypeIsAnError` (`internal/store/browse_test.go`, same branch) asserts
+  that `MediaType: "series"` is refused, because nothing in the type system does.
+
+So, two rules:
+
+* **Before naming a new enum member, check it against every existing enum**, not only the one you
+  are extending. The collision that matters is between vocabularies, not within one: a duplicate
+  inside one set is a build error, and a duplicate across two sets is a green build.
+* **When two vocabularies must coexist, prefix them distinctly** — `wireOutcome…` against
+  `outcome…` — so a mismatch is a build error rather than a silent rebind. Do not repair a collision
+  by making the values agree instead: two vocabularies that match today are free to diverge
+  tomorrow, and one shared identifier turns a change to an internal record into a change on the wire.
+
 ### Working alongside other threads
 
 Several threads work this repo in parallel, on branches cut from the same base. The collisions that
