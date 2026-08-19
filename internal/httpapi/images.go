@@ -14,14 +14,14 @@ import (
 // the route a browser puts in an <img src>, and the only way artwork reaches a
 // client.
 //
-// ⚠️ THE OTHER HALF IS NOT BUILT AND THIS FILE DOES NOT PRETEND OTHERWISE.
-// Nothing in the tree fetches an image, encodes one, or writes an `image_asset`
-// row — the fetcher needs catalogue rows carrying cover URLs and no adapter
-// produces them yet. So on today's tree every request here resolves to a
-// not-cached answer, and that is an honest empty cache rather than a bug. What
-// this route buys is that the fetch half becomes a small piece the moment an
-// adapter produces rows: the key, the authorization, the cache lookup, the
-// Content-Type and the wire field are all already here and all already tested.
+// ⚠️ THE OTHER HALF IS BUILT AND IS NOT CALLED, AND THIS FILE DOES NOT PRETEND
+// EITHER WAY. This paragraph used to say "nothing in the tree fetches an image,
+// encodes one, or writes an `image_asset` row"; internal/imagepipeline does all
+// three and internal/store's PutPosterAsset records the row. What no code does
+// is CALL it during an import, and it has never been run against a cover from a
+// running service — only against images its own tests fabricated. So on a real
+// install every request here still resolves to a not-cached answer, and that is
+// still an honest empty cache rather than a bug.
 //
 // THREE RULES THAT ARE NOT OBVIOUS, each of them from reference/security.md §4:
 //

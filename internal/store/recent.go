@@ -123,8 +123,9 @@ type RecentWork struct {
 
 	// PosterKey is `image_asset.cache_key` for the work's poster — the key
 	// `GET /img/{key}` addresses — and it is INVALID when the work has no
-	// poster asset, which is every work on this tree because nothing writes
-	// `image_asset` yet.
+	// poster asset. ⚠️ That used to be every work, because nothing wrote
+	// `image_asset`; imagewrite.go does, so an invalid PosterKey now means what
+	// it says rather than describing the tree.
 	//
 	// It is here rather than on a second read for the reason §4.5's "never load
 	// full item records" rule does NOT forbid: it is one correlated primary-key

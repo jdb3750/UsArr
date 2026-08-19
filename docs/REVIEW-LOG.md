@@ -434,7 +434,7 @@ redirect rule and numeric caps (S-28), the Jellyfin-client diagram node (P-24), 
 | **S-17** | Distroless vs a root PUID entrypoint; tsnet vs the healthcheck; an unauthenticated admin listener | **Applied.** Distroless non-root decided explicitly, `chown` documented instead, health-only loopback listener, `--start-period=60s` |
 | **S-18** | The WASM sandbox is asserted, not specified | **Applied** by deferring the tier, with the full specification it *would* need written out in `FUTURE.md` §1 so it is not rediscovered |
 | **S-19** | OPDS authentication is never specified | **Applied.** HTTP Basic named, TLS required or warned, `Authorization` stripped before any redirect, client-forwarding behaviour listed as an ⚠️ test case |
-| **S-20** | Provider keys persist in `image_asset.source_url` and the HTTP cache | **Applied.** Credential-stripped URLs, `cache_key` derived from the stripped form, an ingest assertion, and stored URLs added to the redaction scope |
+| **S-20** | Provider keys persist in `image_asset.source_url` and the HTTP cache | **Applied.** Credential-stripped URLs, `cache_key` derived from the stripped form, an ingest assertion, and stored URLs added to the redaction scope. 🔻 **Corrected 2026-08-19 — "an ingest assertion" was DESIGNED, not applied, and stayed that way for the whole life of this row.** There was no ingest path: measured repeatedly, no production Go wrote `image_asset` at all, so the assertion this cell reported as **Applied** existed in no code and was tested against nothing. `security.md` §5 had already been corrected to say the guard was *owed*; this row was the third and last copy of the claim that it was not. 🔻 **Now genuinely applied**, in `7e5934d` (*"feat: the image pipeline's writer — fetch, render, record, tested against a fake"*), which lands `internal/imagepipeline`: `store.PutPosterAsset` (`internal/store/imagewrite.go`) refuses — never strips — any row whose `source_url` carries a credential parameter or userinfo, via `checkImageSourceURL`, which consults `internal/ssrf`'s `IsCredentialParam` rather than a second deny-list; and `imagecache.Key` applies the same refusal at the point the `cache_key` is derived, so there is no way to obtain a key for a credentialled URL at all. Drilled rather than asserted: deleting `checkImageSourceURL`'s call turns `TestPutPosterAssetRejectsACredentialInTheSourceURL` (7 subtests) and `TestPutPosterAssetDoesNotSilentlyStrip` red; deleting `Key`'s turns `TestKeyRefusesACredentialledURL` and `TestPosterRefusesACredentialledCoverURL` red. ⚠️ **Its limit, stated rather than left to be discovered:** the refusal covers a credential in a query PARAMETER or in userinfo — which is what §5's bullet states — and NOT one hidden in a path segment |
 | **S-21** | No secret-scanning gate; `services.yaml` / `config.yaml` not gitignored | **Delegated** to `.gitignore` and the `Makefile` |
 | **S-22** | `/img/{cache_key}` has no auth and is served `public` | **Applied.** Authenticated and authorized, `Cache-Control: private`, public provider artwork moved to a structurally distinct path |
 
@@ -16843,6 +16843,12 @@ screen, two blocks, one work, two answers.
    `CREATE INDEX ix_edition_format ON edition(format, work_id)` *"is owed alongside it"* and tells the
    reader to check the migrations; `grep -rn 'ix_edition_format' internal/db/` returns **nothing**.
    Recorded as an adjacent fact, not as this finding — but whoever builds Block A owes it.
+   🔻 **Corrected 2026-08-19 — this qualification is STALE and the index SHIPS.** It landed in
+   `f80097f` (*"feat: the library browse read, ?media_type= and ?lib= scoped, three orders"*) as
+   `internal/db/migrations/00009_edition_format_index.sql:93`, `CREATE INDEX ix_edition_format ON
+   edition(format, work_id)` — the exact statement §17.2 named — with the `DROP INDEX` in its Down
+   block at `:116`. The grep quoted above was true when it was run and has not been true since. The
+   original is left verbatim above as the record of what was measured, and of when.
 
 ### The narrowing: real as a mechanism, zero on today's data
 
@@ -18173,6 +18179,12 @@ whether `jpeg` was the right call. There is no link checker and no prose test in
 **What it does not attest:** anything about an image pipeline, because there is not one. Nothing
 fetches, downscales, encodes or serves an image, and nothing writes `image_asset` at all. This commit
 is a decision, a column, a vocabulary and two guards. Read `internal/` for what exists.
+
+🔻 **Still accurate about the commit it reviews; no longer accurate about the tree (2026-08-19).**
+`7e5934d` built the pipeline — `internal/imagepipeline` and `store.PutPosterAsset` — so the
+vocabulary guard this review watched fail on purpose now runs its load-bearing branch on every
+`make check`. Left verbatim, because a review record is a statement about a commit and not about
+today. Read `internal/` for what exists, as it says.
 
 ---
 

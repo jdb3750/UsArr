@@ -11,12 +11,15 @@ package store
 // write_queue.state, and image_asset's own `role` and `state` columns already
 // carry no CHECK.
 //
-// WHY THIS FILE EXISTS AT ALL BEFORE THERE IS A WRITER. ADR-0039 promised the
-// Go validation and it was never written, so write_queue.state is enforced
-// nowhere that runs; that is the failure this file refuses to repeat. The
-// declaration and the check ship WITH the column, and
+// WHY THIS FILE SHIPPED BEFORE THERE WAS A WRITER. ADR-0039 promised the Go
+// validation and it was never written, so write_queue.state is enforced nowhere
+// that runs; that is the failure this file refuses to repeat. The declaration
+// and the check shipped WITH the column, and
 // TestImageWritesValidateTheFormatVocabulary fails the moment a writer lands
 // without calling ValidImageFormat.
+//
+// THE WRITER HAS NOW LANDED — imagewrite.go's PosterAsset.validate — so that
+// guard is no longer vacuous, and this file is no longer a promise held open.
 
 // Image format tokens — the values image_asset.format may hold.
 //

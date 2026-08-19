@@ -65,11 +65,12 @@ import (
 //     BOTH HALVES ARE NOW FALSE. `GET /img/{key}` is routed (images.go), and
 //     both this response and the grid's carry `poster_key` —
 //     `image_asset.cache_key`, which resolves through that route. What is not
-//     built is the FETCH half of §4.4's pipeline: nothing writes `image_asset`,
-//     so the key is legitimately absent on every row of every real install and
-//     every /img request answers not_cached. The wire is ahead of the bytes,
-//     deliberately, so the fetcher is a small piece when a catalogue adapter
-//     starts producing cover URLs.
+//     built is the WIRING of §4.4's fetch half. ⚠️ "nothing writes
+//     `image_asset`" was true when this bullet was written and is not any more:
+//     internal/imagepipeline fetches, renders and records a poster, and
+//     internal/store's PutPosterAsset writes the row. What is still true of a
+//     real install is that no import calls it yet, so the key is absent on
+//     every row and every /img request still answers not_cached.
 //   - No Block A. It is §17.2's per-type rollup row. ⚠️ THIS BULLET USED TO
 //     READ "No Block A and no Block B ... and server.go routes neither", AND
 //     BOTH HALVES OF THAT WERE WRONG BY THE TIME IT WAS READ. Block A's
@@ -166,8 +167,9 @@ type recentWorkResponse struct {
 	// client. A client builds `/img/{poster_key}?w=342` from it; see
 	// images.go for the route and internal/imagecache for the width allowlist.
 	//
-	// ABSENT rather than empty when the work has no poster asset — which is
-	// every work on this tree, because nothing writes `image_asset` yet. `""`
+	// ABSENT rather than empty when the work has no poster asset. ⚠️ That used
+	// to be every work; internal/imagepipeline writes posters now, though no
+	// import calls it yet, so on a real install it is still every work. `""`
 	// would read as a key whose value is unknown, and a renderer that built a
 	// URL from it would request `/img/` on every row.
 	//
@@ -487,9 +489,11 @@ func posterKeyFor(s *Server, workID int64, key sql.NullString) string {
 // poster_asset_id would be an id the client cannot turn into anything)", AND
 // BOTH HALVES ARE FALSE NOW. `GET /img/{key}` is routed (images.go) and this
 // response carries `poster_key`, the `image_asset.cache_key` that route takes.
-// What is unbuilt is §4.4's FETCH half: nothing writes `image_asset`, so the key
-// is absent on every row of every real install and every /img request answers
-// not_cached.
+// What is unbuilt is the WIRING of §4.4's fetch half. ⚠️ "nothing writes
+// `image_asset`" is no longer true — internal/imagepipeline renders a poster and
+// internal/store's PutPosterAsset records it — but nothing CALLS it during an
+// import, so on a real install the key is still absent on every row and every
+// /img request still answers not_cached.
 //
 // ⚠️ THE FACET COUNTS ARE BUILT — they are just not on THIS response. See
 // facets.go and http-api.md §8: GET /api/v1/library/facets answers all six in
