@@ -1252,14 +1252,28 @@ under-reports without saying so, and neither can tell you whether what it did no
 or merely invisible from where it was standing.
 
 * **`lint-go`'s banner counts different packages than the linter opens.** The recipe derives it from
-  `@n=$$($(GO) list ./... | wc -l);` — untagged — while `golangci-lint run` reads `.golangci.yml`,
-  whose `run.build-tags` is `[upstream, bench]`. Measured on `a2cbee3`: `go list ./...` gives **13**
-  packages, `go list -tags upstream,bench ./...` gives **14**, and diffing the two lists puts the
-  whole delta on one package, `internal/db/spike`. So the banner under-reports, and it is doing
-  rule 4's job — refusing to pass while it sees nothing — rather than describing the run. **A
-  package count cannot distinguish a package that was opened from one that was skipped**, which is
-  the same shape as a check whose success condition is an absence: both report the same number
-  whether the work happened or not. Quote it as a floor guard, never as the scope of a lint run.
+  `@n=$$($(GO) list ./... | wc -l);` (`Makefile:786`) — untagged — and then runs `$(GOLANGCI_LINT)
+  run` (`Makefile:790`) **with no path arguments**, so golangci-lint resolves its own package set
+  from `.golangci.yml`, whose `run.build-tags` is `[upstream, bench]`. The count is echoed; it is
+  never passed to the linter. Measured on `a2cbee3`: `go list ./...` gives **13** packages, `go list
+  -tags upstream,bench ./...` gives **14**, and diffing the two lists puts the whole delta on one
+  package, `internal/db/spike`. So the banner under-reports, and it is doing rule 4's job — refusing
+  to pass while it sees nothing — rather than describing the run. **The gate does nevertheless lint
+  the tagged package: this is a mislabel, not a coverage hole.** Reported from another lane and
+  **not re-measured here**, because reproducing it means writing defects into a source file: two
+  real defects planted in `internal/db/spike/workload.go` — a bare `defer stmt.Close()` in place of
+  the checked form, and an unused package-level var — were both reported **by name**, `errcheck` and
+  `unused`, and the run exited **2**. That file is plain `//go:build bench`, so it is reachable
+  under the configured tags. **And a compile count is never evidence of lint coverage.** With both
+  defects still planted, `make build-tagged` was **green, exit 0**: `go build -tags=bench ./...` and
+  `go vet -tags=upstream ./...` (`Makefile:862-868`) pass over an unchecked error return and an
+  unused variable alike, while that step prints `build-tagged: compiling 14 Go packages with
+  -tags=bench` (`Makefile:865`). Two steps in `check` print package counts, only one of them lints,
+  and the one that lints prints the **smaller** number — so a tree where `lint-go` had genuinely
+  skipped a package would still print `14` here and look covered. **A package count cannot
+  distinguish a package that was opened from one that was skipped**, which is the same shape as a
+  check whose success condition is an absence: both report the same number whether the work happened
+  or not. Quote either count as a floor guard, never as the scope of a lint run.
 * **`git rev-list --count` measures the clone's visible depth, not the commit.** One tip, `2ce8ed9`,
   counted in three containers on one night: **811** in a clone that is not shallow, **366** in one
   reported shallow with two graft points, and **146** in one reported shallow with four. Only the
