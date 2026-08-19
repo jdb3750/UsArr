@@ -213,7 +213,7 @@ func TestIndexerCatalogReadUsesTheInstanceIndex(t *testing.T) {
 	}
 	joined := strings.Join(plan, " | ")
 
-	if !strings.Contains(joined, "ix_indexer_catalog_instance") {
+	if !planHas(joined, "ix_indexer_catalog_instance") {
 		t.Fatalf("the catalogue read does not use ix_indexer_catalog_instance:\n  %s\n"+
 			"Migration 0004 added that index for this read and nothing else uses it.", joined)
 	}

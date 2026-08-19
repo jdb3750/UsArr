@@ -97,8 +97,10 @@ const SuperuserPermission Permission = "*"
 
 // allPermissions is the whole vocabulary. It exists so
 // TestEveryBookOrbitPermissionIsClassified can iterate it: a 24th permission
-// upstream makes that test RED, which is the only mechanism in this package that
-// notices BookOrbit growing one.
+// upstream makes that test RED, which is the only mechanism IN THE GATE that
+// notices BookOrbit growing one. TestSpecDriftBookOrbitTypesStillMatchUpstream
+// notices too, but only when a person runs `make spec-drift` with network
+// access and USARR_SPEC_DRIFT=1 set. See scope_test.go's header.
 var allPermissions = []Permission{
 	PermLibraryDownload, PermLibraryUpload, PermLibraryEditMetadata, PermLibraryDeleteBooks,
 	PermBookDockAccess, PermDemoRestricted,

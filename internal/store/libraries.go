@@ -349,11 +349,36 @@ func (s Scope) libraryVisibilityPredicate(column string) (string, []any) {
 	for _, id := range s.InstanceIDs {
 		args = append(args, id)
 	}
-	return `(NOT EXISTS (SELECT 1 FROM library_source ls
-	                      WHERE ls.library_id = ` + column + `)
-	         OR EXISTS (SELECT 1 FROM library_source ls
-	                     WHERE ls.library_id = ` + column + `
-	                       AND ls.service_instance_id IN (` + placeholders(len(args)) + `)))`, args
+	ls := librarySourceAlias(column)
+	return `(NOT EXISTS (SELECT 1 FROM library_source ` + ls + `
+	                      WHERE ` + ls + `.library_id = ` + column + `)
+	         OR EXISTS (SELECT 1 FROM library_source ` + ls + `
+	                     WHERE ` + ls + `.library_id = ` + column + `
+	                       AND ` + ls + `.service_instance_id IN (` + placeholders(len(args)) + `)))`, args
+}
+
+// librarySourceAlias names the inner library_source of BOTH arms of the
+// predicate above, derived from the outer library-id column they correlate to.
+// See scopeLinkAlias for the whole argument and derivedInnerAlias for the
+// construction; docs/REVIEW-LOG.md LS-379 is where the class was found.
+//
+// WHY BOTH ARMS MATTER HERE, and why this predicate is the worse of the two
+// cases. An outer aliased `ls` shadowed the inner in each arm, and they
+// degenerate in OPPOSITE directions, so neither symptom looks like the other:
+//
+//   - the EXISTS arm decorrelates to "is ANY library sourced on a visible
+//     instance", which is true as soon as one is, so every library leaks;
+//   - the NOT EXISTS orphan arm decorrelates to "is library_source EMPTY",
+//     which is false as soon as one row exists anywhere, so it stops admitting
+//     the source-less libraries it exists to admit — a DISAPPEARANCE rather
+//     than a leak, and normally masked by the arm above it.
+//
+// Measured on seedLibrariesCorpus before the fix: library 3, sourced only on
+// instance 2, came back under a scope holding only instance 1; and under a
+// scope holding only an instance with no sources bound, source-less library 4
+// vanished. TestLibraryVisibilityPredicateSurvivesAnOuterLsAlias holds both.
+func librarySourceAlias(column string) string {
+	return derivedInnerAlias("ls", column)
 }
 
 // listLibrariesSQL renders the library statement and its arguments.
