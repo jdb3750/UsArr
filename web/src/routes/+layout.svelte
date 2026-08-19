@@ -17,9 +17,12 @@
 	 *     Navidrome's LibrarySelector returns null. At zero libraries the correct
 	 *     rendering is no control, so the seam is here and the widget is not.
 	 *
-	 * What ships is the fixed entry set — Home · Search · Requests · Services ·
-	 * Libraries · Settings — grouped as the mockup groups them: content nouns
-	 * first, configuration last.
+	 * What ships is the fixed entry set — Home · Recently added · Search ·
+	 * Requests · Services · Libraries · Settings — grouped as the mockup groups
+	 * them: content nouns first, configuration last. `Recently added` sits at the
+	 * head of the content group, which is the slot the media-type rows are
+	 * reserved for: it is the catalogue entry point, and it keeps that slot until
+	 * there is per-type data to drive rows of their own.
 	 *
 	 * THE SESSION GUARD IS UNCHANGED. Every /api/v1 route except the auth
 	 * bootstrap sits behind `authenticated` (internal/httpapi/server.go), so the
@@ -88,11 +91,26 @@
 	 * which is the shape Sonarr, Radarr and Prowlarr already trained
 	 * self-hosters on.
 	 */
-	type NavRoute = '/' | '/search' | '/requests' | '/services' | '/libraries' | '/settings';
+	type NavRoute =
+		'/' | '/library' | '/search' | '/requests' | '/services' | '/libraries' | '/settings';
 
 	const NAV_GROUPS: { id: NavRoute; label: string }[][] = [
 		[{ id: '/', label: 'Home' }],
 		[
+			/**
+			 * ⚠️ `Recently added`, NOT `Library`, AND THE LABEL IS WHAT THE SCREEN IS
+			 * RATHER THAN WHAT THE ROUTE IS CALLED. `/library` renders one unified
+			 * newest-first table over the whole catalogue and nothing else: no
+			 * per-type grid, no covers, no filter and no sort, because every one of
+			 * those needs a browse read the API has not got (the route's own header
+			 * names the four handlers). A row labelled `Library` would promise the
+			 * screen §16 specifies and open the screen that exists, and it would sit
+			 * two rows above `Libraries`, which is a different noun entirely: a
+			 * library is a SCOPE the user defines over a service's containers
+			 * (ADR-0027), not this catalogue. The label becomes `Library` when the
+			 * screen becomes one.
+			 */
+			{ id: '/library', label: 'Recently added' },
 			{ id: '/search', label: 'Search' },
 			{ id: '/requests', label: 'Requests' }
 		],
@@ -112,6 +130,7 @@
 	 */
 	const TITLES = new Map<string, string>([
 		[resolve('/'), 'Home'],
+		[resolve('/library'), 'Recently added'],
 		[resolve('/search'), 'Search'],
 		[resolve('/requests'), 'Requests'],
 		[resolve('/services'), 'Services'],
